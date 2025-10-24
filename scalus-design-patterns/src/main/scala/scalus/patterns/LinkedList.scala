@@ -4,6 +4,7 @@ import scalus.Compiler.compile
 import scalus.Compiler.compileWithOptions
 import scalus.builtin.Builtins
 import scalus.builtin.ByteString
+import scalus.builtin.ByteString.hex
 import scalus.builtin.ByteString.fromString
 import scalus.builtin.Data
 import scalus.builtin.Data.FromData
@@ -263,7 +264,7 @@ object LinkedList extends DataParameterizedValidator:
       * @param key
       *   Optional node key argument for the non-head nodes.
       */
-    def nodeToken(key: TokenName = fromString("")): TokenName =
+    def nodeToken(key: TokenName = hex""): TokenName =
         fromString("LAN") ++ key // FIXME: utf8"LAN" syntax
 
     /** Node token validation.
@@ -341,13 +342,14 @@ object LinkedList extends DataParameterizedValidator:
           "Nodes must be ordered by keys"
         )
         value.flatten match
-            case List.Cons(adaPolicyTokenAmount, List.Cons(policyTokenAmount, List.Nil)) =>
-                val (adaPolicy, adaToken, _amount) = adaPolicyTokenAmount
+            case List.Cons(
+                  (adaPolicy, adaToken, _amount),
+                  List.Cons((policyId, token, amount), List.Nil)
+                ) =>
                 require(
                   adaPolicy === Value.adaPolicyId && adaToken === Value.adaTokenName,
                   "There's must be a lovelace value for each policy output"
                 )
-                val (policyId, token, amount) = policyTokenAmount
                 require(
                   policyId === policy,
                   "There's must be a token key for the policy output"
@@ -439,12 +441,12 @@ object LinkedList extends DataParameterizedValidator:
     /** Deinitialize an empty unordered list.
       */
     def deinit(common: Common): Unit = common.inputs match
-        case List.Cons(Node(_, Cons(_, None)), List.Nil) =>
+        case List.Cons(Node(_value, Cons(_key, None)), List.Nil) =>
             require(
               common.outputs.isEmpty,
               "Must not produce nodes"
             )
-            require( // NEW: headNode.value.quantityOf(common.policy, nodeToken()) == BigInt(1)
+            require( // NEW: _value.quantityOf(common.policy, nodeToken()) == BigInt(1)
               common.mint.flatten === List.single(
                 (common.policy, nodeToken(), BigInt(-1))
               ),
@@ -456,8 +458,6 @@ object LinkedList extends DataParameterizedValidator:
                   "Head node input must be single\n" +
                   "Linked list must be empty"
             )
-
-    import Cons.cons
 
     /** Insert a node `insertKey` at covering `cell` at the linked list.
       *
@@ -487,11 +487,7 @@ object LinkedList extends DataParameterizedValidator:
                     ) // NEW: cell.key === parent.cell.key
                     require(
                       common.mint.flatten === List.single(
-                        (
-                          common.policy,
-                          nodeToken(key),
-                          BigInt(1)
-                        )
+                        (common.policy, nodeToken(key), BigInt(1))
                       ),
                       "Must mint an NFT value for the inserted key for this linked list"
                     )
