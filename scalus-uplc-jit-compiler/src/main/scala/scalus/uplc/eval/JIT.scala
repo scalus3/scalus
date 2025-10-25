@@ -115,6 +115,7 @@ object JIT {
                           $params.machineCosts.varCost,
                           Nil
                         )
+
                         $lambda
                     }
                 case Term.Apply(f, arg) =>
@@ -126,6 +127,7 @@ object JIT {
                           $params.machineCosts.applyCost,
                           Nil
                         )
+
                         ${ func }.asInstanceOf[Any => Any].apply($a)
                     }
                 case Term.Force(term) =>
