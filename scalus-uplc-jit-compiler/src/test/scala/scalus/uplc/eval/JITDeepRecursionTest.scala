@@ -158,6 +158,12 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     val jitResult =
                         JIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
                     info(s"JIT succeeded at depth $n, result: $jitResult")
+                    // Verify the result is correct
+                    val expectedValue = BigInt(n) * BigInt(n + 1) / 2 // sum formula: n*(n+1)/2
+                    assert(
+                      jitResult == expectedValue,
+                      s"Expected $expectedValue but got $jitResult"
+                    )
                 } catch {
                     case e: StackOverflowError =>
                         info(
@@ -174,7 +180,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         var depth = 1000
         var maxWorkingDepth = 0
 
-        while depth <= 20000 do
+        while depth <= 200000 do
             try {
                 testDepth(depth)
                 maxWorkingDepth = depth
