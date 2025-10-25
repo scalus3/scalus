@@ -160,7 +160,9 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     info(s"JIT succeeded at depth $n, result: $jitResult")
                 } catch {
                     case e: StackOverflowError =>
-                        info(s"JIT StackOverflowError at depth $n - trampoline not working properly")
+                        info(
+                          s"JIT StackOverflowError at depth $n - trampoline not working properly"
+                        )
                         throw e // Re-throw to mark the boundary
                     case e: RuntimeException if e.getMessage.contains("not yet supported") =>
                         info(s"JIT doesn't support some builtins: ${e.getMessage}")
