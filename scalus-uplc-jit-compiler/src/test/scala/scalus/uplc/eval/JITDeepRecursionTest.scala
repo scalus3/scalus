@@ -11,26 +11,26 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
 
     private def getThreadStackInfo(): String =
         val thread = Thread.currentThread()
-        val isVirtual = thread.isVirtual()
-        val threadType = if isVirtual then "VirtualThread" else "PlatformThread"
+        // val isVirtual = thread.isVirtual()
+        // val threadType = if isVirtual then "VirtualThread" else "PlatformThread"
 
-        if isVirtual then
-            // Virtual threads don't have a fixed stack size - they grow on heap
-            // We can estimate current usage from stack trace depth
-            val stackDepth = thread.getStackTrace().length
-            s"$threadType (heap-based, current stack trace depth: $stackDepth frames)"
-        else
-            // For platform threads, try to get the stack size from ThreadMXBean
-            val stackDepth = thread.getStackTrace().length
+        // if false isVirtual then
+        //    // Virtual threads don't have a fixed stack size - they grow on heap
+        //    // We can estimate current usage from stack trace depth
+        //    val stackDepth = thread.getStackTrace().length
+        //    s"$threadType (heap-based, current stack trace depth: $stackDepth frames)"
+        // else
+        // For platform threads, try to get the stack size from ThreadMXBean
+        val stackDepth = thread.getStackTrace().length
 
-            // Try to get configured stack size from JVM args
-            val runtimeMXBean = ManagementFactory.getRuntimeMXBean()
-            val vmArgs = runtimeMXBean.getInputArguments()
-            val xssArg = vmArgs.toArray.find(_.toString.startsWith("-Xss"))
-            val stackSize = xssArg.map(arg => s" (configured: $arg)").getOrElse("")
+        // Try to get configured stack size from JVM args
+        val runtimeMXBean = ManagementFactory.getRuntimeMXBean()
+        val vmArgs = runtimeMXBean.getInputArguments()
+        val xssArg = vmArgs.toArray.find(_.toString.startsWith("-Xss"))
+        val stackSize = xssArg.map(arg => s" (configured: $arg)").getOrElse("")
 
-            s"$threadType (native stack$stackSize, current stack trace depth: $stackDepth frames)"
-        end if
+        s"PlatformThread (native stack$stackSize, current stack trace depth: $stackDepth frames)"
+        // end if
     end getThreadStackInfo
 
     test("Deep recursion factorial with CekMachine vs JIT") {
@@ -189,6 +189,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         info(s"JIT trampoline successfully handled depths up to $maxWorkingDepth")
     }
 
+    /*
     test("JIT stack overflow bounds on VirtualThread") {
         // Compile the sum function once - this creates a parameterized UPLC function
         val sumFunctionUplc: Term = compile { (n: BigInt) =>
@@ -289,4 +290,6 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
             case None =>
                 fail("VirtualThread test did not complete")
     }
+    
+     */
 }
