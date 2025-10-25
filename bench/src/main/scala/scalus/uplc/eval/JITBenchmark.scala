@@ -58,7 +58,9 @@ private object Test {
     private val builtins = collect(program.term).toSeq.sorted
 
     def getJitted(): (Logger, BudgetSpender, MachineParams) => Any = {
+        println(s"Starting JIT compilation at ${System.currentTimeMillis()}")
         val start = System.currentTimeMillis()
+        println("Calling JIT.jitUplc...")
         val r = JIT.jitUplc(program.term)
         val end = System.currentTimeMillis()
         println(s"JIT completed in ${end - start} ms")

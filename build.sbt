@@ -366,6 +366,10 @@ lazy val scalusUplcJitCompiler = project
       scalaVersion := scalaVersion.value,
       scalacOptions ++= commonScalacOptions,
       Test / fork := true,
+      Test / javaOptions ++= Seq(
+        "-Xss64m", // Increase stack size to 64MB for JIT compilation of deeply nested UPLC terms
+        "-Xmx4g" // Increase heap to 4GB for large compilations
+      ),
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test",
