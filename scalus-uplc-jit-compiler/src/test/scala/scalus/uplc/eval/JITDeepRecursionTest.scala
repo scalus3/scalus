@@ -126,7 +126,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         }
     }
 
-    test("JIT stack overflow bounds - CekMachine works but JIT overflows") {
+    test("JIT trampoline handles deep recursion - should work up to high depths") {
         info(s"Running on: ${getThreadStackInfo()}")
 
         // Compile the sum function once
@@ -152,7 +152,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     false
 
             if cekSuccess then
-                // Try JIT - it should overflow at some point due to native stack usage
+                // Try JIT - with trampoline it should handle deep recursion
                 val logger = Log()
                 try {
                     val jitResult =
@@ -160,34 +160,31 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     info(s"JIT succeeded at depth $n, result: $jitResult")
                 } catch {
                     case e: StackOverflowError =>
-                        info(s"JIT StackOverflowError at depth $n (CekMachine still works)")
+                        info(s"JIT StackOverflowError at depth $n - trampoline not working properly")
                         throw e // Re-throw to mark the boundary
                     case e: RuntimeException if e.getMessage.contains("not yet supported") =>
                         info(s"JIT doesn't support some builtins: ${e.getMessage}")
                 }
         }
 
-        // Start testing from a known working depth and increase
-        // We expect JIT to overflow somewhere between 1000-10000
+        // Test at depths that require trampolining
+        // MAX_STACK_DEPTH is 500, so these depths should trigger trampoline
         var depth = 1000
-        var foundOverflow = false
         var maxWorkingDepth = 0
 
-        while !foundOverflow && depth <= 20000 do
+        while depth <= 20000 do
             try {
                 testDepth(depth)
                 maxWorkingDepth = depth
                 depth = (depth * 1.5).toInt // Increase by 50%
             } catch {
                 case e: StackOverflowError =>
-                    foundOverflow = true
-                    info(
-                      s"Found JIT stack overflow boundary: CekMachine works but JIT overflows at depth $depth"
+                    fail(
+                      s"JIT stack overflow at depth $depth - trampoline should prevent this. Maximum working depth: $maxWorkingDepth"
                     )
-                    info(s"Maximum working depth for JIT: $maxWorkingDepth")
             }
 
-        assert(foundOverflow, s"Did not find stack overflow up to depth $depth")
+        info(s"JIT trampoline successfully handled depths up to $maxWorkingDepth")
     }
 
     test("JIT stack overflow bounds on VirtualThread") {
