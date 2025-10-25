@@ -499,8 +499,13 @@ object JIT {
       *   if the term contains unsupported constructs or if compilation fails
       */
     def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any =
-        staging.run { (quotes: Quotes) ?=>
+        println("JIT: Entering staging.run")
+        val result = staging.run { (quotes: Quotes) ?=>
+            println("JIT: Inside staging context, calling genCodeFromTerm")
             val expr = genCodeFromTerm(term)
+            println("JIT: genCodeFromTerm completed, expr constructed")
             expr
         }
+        println("JIT: staging.run completed successfully")
+        result
 }
