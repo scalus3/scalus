@@ -83,7 +83,8 @@ object JIT {
             env: List[(String, quotes.reflect.Term)],
             logger: Expr[Logger],
             budget: Expr[BudgetSpender],
-            params: Expr[MachineParams]
+            params: Expr[MachineParams],
+            runtimeJitContext: Expr[RuntimeJitContext]
         ): Expr[Any] = {
             term match
                 case Term.Var(name) =>
@@ -99,39 +100,87 @@ object JIT {
                       Symbol.spliceOwner,
                       mtpe,
                       { case (methSym, args) =>
-                          genCode(
+                          val body = genCode(
                             term,
                             (name -> args.head.asInstanceOf[quotes.reflect.Term]) :: env,
                             logger,
                             budget,
                             params,
+                            runtimeJitContext
                           ).asTerm
-                              .changeOwner(methSym)
+                          val wrapped = '{
+                              val bodyDelayed = () => {
+                                  ${ runtimeJitContext }.stackDepth += 1
+                                  if ${
+                                          runtimeJitContext
+                                      }.stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH
+                                  then
+                                      val bodyDelayed2 = () => ${ body.asExprOf[Any] }
+                                      throw CallCCTrampolineException("lambda", bodyDelayed2)
+                                  else
+                                      val r = ${ body.asExprOf[Any] }
+                                      ${ runtimeJitContext }.stackDepth -= 1
+                                      r
+                              }
+                              ${ runtimeJitContext }.stackDepth += 1
+                              if ${
+                                      runtimeJitContext
+                                  }.stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH
+                              then throw CallCCTrampolineException("lambda", bodyDelayed)
+                              else
+                                  val r = bodyDelayed.apply()
+                                  ${ runtimeJitContext }.stackDepth -= 1
+                                  r
+                          }
+                          wrapped.asTerm.changeOwner(methSym)
                       }
                     ).asExprOf[Any]
                     '{
                         $budget.spendBudget(
                           Step(StepKind.LamAbs),
-                          $params.machineCosts.varCost,
+                          $params.machineCosts.lamCost,
                           Nil
                         )
-
                         $lambda
                     }
-                case Term.Apply(f, arg) =>
-                    val func = genCode(f, env, logger, budget, params)
-                    val a = genCode(arg, env, logger, budget, params)
+                case Term.Apply(fun, arg) =>
+                    val funExpr = genCode(fun, env, logger, budget, params, runtimeJitContext)
+                    val argExpr = genCode(arg, env, logger, budget, params, runtimeJitContext)
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Apply),
                           $params.machineCosts.applyCost,
                           Nil
                         )
-
-                        ${ func }.asInstanceOf[Any => Any].apply($a)
+                        val fDelayed = () => ${ funExpr }.asInstanceOf[Any => Any]
+                        val argDelayed = () => ${ argExpr }
+                        // val f = CallCCTrampolineException.eval(fDelayed, ${runtimeJitContext})
+                        // val arg = CallCCTrampolineException.eval(argDelayed, ${runtimeJitContext})
+                        val f =
+                            try fDelayed.apply()
+                            catch
+                                case ecc1: CallCCTrampolineException =>
+                                    throw ecc1.map { fResult =>
+                                        val a =
+                                            try {
+                                                argDelayed.apply()
+                                            } catch {
+                                                case ecc2: CallCCTrampolineException =>
+                                                    throw ecc2.map(argResult =>
+                                                        fResult.asInstanceOf[Any => Any](argResult)
+                                                    )
+                                            }
+                                        fResult.asInstanceOf[Any => Any](a)
+                                    }
+                        val a =
+                            try argDelayed.apply()
+                            catch
+                                case ecc: CallCCTrampolineException =>
+                                    throw ecc.map(argResult => f(argResult))
+                        f.asInstanceOf[Any => Any](a)
                     }
                 case Term.Force(term) =>
-                    val expr = genCode(term, env, logger, budget, params)
+                    val expr = genCode(term, env, logger, budget, params, runtimeJitContext)
                     '{
                         val forceTerm = ${ expr }.asInstanceOf[() => Any]
                         $budget.spendBudget(
@@ -148,7 +197,7 @@ object JIT {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        () => ${ genCode(term, env, logger, budget, params) }
+                        () => ${ genCode(term, env, logger, budget, params, runtimeJitContext) }
                     }
                 case Term.Const(const) =>
                     val expr = constantToExpr(const)
@@ -428,7 +477,7 @@ object JIT {
                 case Term.Constr(tag, args) =>
                     val expr = Expr.ofTuple(
                       Expr(tag.value) -> Expr.ofList(
-                        args.map(a => genCode(a, env, logger, budget, params))
+                        args.map(a => genCode(a, env, logger, budget, params, runtimeJitContext))
                       )
                     )
                     '{
@@ -441,12 +490,12 @@ object JIT {
                     }
                 case Term.Case(arg, cases) =>
                     val constr =
-                        genCode(arg, env, logger, budget, params)
+                        genCode(arg, env, logger, budget, params, runtimeJitContext)
                             .asExprOf[(Long, List[Any])]
                     val caseFuncs =
                         Expr.ofList(
                           cases.map(c =>
-                              genCode(c, env, logger, budget, params)
+                              genCode(c, env, logger, budget, params, runtimeJitContext)
                                   .asExprOf[Any => Any]
                           )
                         )
@@ -460,11 +509,16 @@ object JIT {
         }
 
         val retval = '{ (logger: Logger, budget: BudgetSpender, params: MachineParams) =>
+            val runtimeJitContext = new RuntimeJitContext()
             budget.spendBudget(Startup, params.machineCosts.startupCost, Nil)
-            ${ genCode(term, Nil, 'logger, 'budget, 'params) }
+            try {
+                ${ genCode(term, Nil, 'logger, 'budget, 'params, 'runtimeJitContext) }
+            } catch {
+                case cc: CallCCTrampolineException =>
+                    runtimeJitContext.stackDepth = 0
+                    CallCCTrampolineException.eval(cc.cont, runtimeJitContext)
+            }
         }
-
-        // println(retval.show)
 
         retval
     }
@@ -499,13 +553,9 @@ object JIT {
       *   if the term contains unsupported constructs or if compilation fails
       */
     def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any =
-        println("JIT: Entering staging.run")
         val result = staging.run { (quotes: Quotes) ?=>
-            println("JIT: Inside staging context, calling genCodeFromTerm")
             val expr = genCodeFromTerm(term)
-            println("JIT: genCodeFromTerm completed, expr constructed")
             expr
         }
-        println("JIT: staging.run completed successfully")
         result
 }
