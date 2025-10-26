@@ -5,8 +5,7 @@ class RuntimeJitContext {
 
     final def withCheckOverflow(vDelayed: => Any): Any = {
         stackDepth += 1
-        if stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH then
-            throw CallCCTrampolineException("lambda", () => vDelayed)
+        if stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH then CallCCTrampoline(() => vDelayed)
         else {
             val r = vDelayed
             stackDepth -= 1
@@ -14,37 +13,40 @@ class RuntimeJitContext {
         }
     }
 
-    final def trampolinedApply(fDelayed: => Any => Any, argDelayed: => Any): Any = {
+    final def trampolinedApply(fDelayed: => Any, argDelayed: => Any): Any = {
         stackDepth += 1
-        val f =
-            try fDelayed
-            catch
-                case ecc1: CallCCTrampolineException =>
-                    throw ecc1.map { fResult =>
-                        val a =
-                            try {
-                                argDelayed
-                            } catch {
-                                case ecc2: CallCCTrampolineException =>
-                                    throw ecc2.map(argResult =>
-                                        fResult.asInstanceOf[Any => Any](argResult)
-                                    )
-                            }
-                        fResult.asInstanceOf[Any => Any](a)
+        if stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH then
+            CallCCTrampoline(() => trampolinedApply(fDelayed, argDelayed))
+        else
+            val f = fDelayed
+            val a = argDelayed
+            (f, a) match
+                case (cc: CallCCTrampoline, _) =>
+                    stackDepth -= 1
+                    cc.map { fv =>
+                        fv match
+                            case fvcc: CallCCTrampoline =>
+                                fvcc.map(fvFinal => fvFinal.asInstanceOf[Any => Any](a))
+                            case _ =>
+                                fv.asInstanceOf[Any => Any](a)
                     }
-        val a =
-            try argDelayed
-            catch
-                case ecc: CallCCTrampolineException =>
-                    throw ecc.map(argResult => f(argResult))
-        val r = f.asInstanceOf[Any => Any](a)
-        stackDepth -= 1
-        r
+                case (_, acc: CallCCTrampoline) =>
+                    stackDepth -= 1
+                    acc.map { av =>
+                        av match
+                            case avcc: CallCCTrampoline =>
+                                avcc.map(avFinal => f.asInstanceOf[Any => Any](avFinal))
+                            case _ =>
+                                f.asInstanceOf[Any => Any](av)
+                    }
+                case _ =>
+                    stackDepth -= 1
+                    f.asInstanceOf[Any => Any](a)
     }
 
 }
 
 object RuntimeJitContext {
-    final val MAX_STACK_DEPTH: Int = 500
+    final val MAX_STACK_DEPTH: Int = 1000
 
 }
