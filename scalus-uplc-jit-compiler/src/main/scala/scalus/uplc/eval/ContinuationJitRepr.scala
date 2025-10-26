@@ -5,12 +5,19 @@ package scalus.uplc.eval
   * All continuations are processed in a top-level loop, avoiding stack overflow. No recursive calls -
   * everything is flattened to heap-allocated continuation nodes.
   */
-sealed trait ContinuationJitRepr
-
-object ContinuationJitRepr {
+enum ContinuationJitRepr {
 
     /** A computed value - terminal continuation */
-    case class Return(value: Any) extends ContinuationJitRepr
+    case Return(value: Any)
+
+    /** Apply function to argument - both must be evaluated first */
+    case Apply(func: ContinuationJitRepr, arg: ContinuationJitRepr)
+
+    /** Force a delayed computation */
+    case Force(delayed: ContinuationJitRepr)
+}
+
+object ContinuationJitRepr {
 
     object Return {
 
@@ -20,24 +27,18 @@ object ContinuationJitRepr {
         def delayed(body: => ContinuationJitRepr): Return = Return(() => body)
     }
 
-    /** Apply function to argument - both must be evaluated first */
-    case class Apply(func: ContinuationJitRepr, arg: ContinuationJitRepr)
-        extends ContinuationJitRepr
-
-    /** Force a delayed computation */
-    case class Force(delayed: ContinuationJitRepr) extends ContinuationJitRepr
-
     /** Stack frames for the evaluator */
-    sealed trait Frame
+    enum Frame {
 
-    /** After evaluating function in Apply, evaluate argument */
-    case class ApplyFuncFrame(arg: ContinuationJitRepr) extends Frame
+        /** After evaluating function in Apply, evaluate argument */
+        case ApplyFuncFrame(arg: ContinuationJitRepr)
 
-    /** After evaluating argument in Apply, apply function to it */
-    case class ApplyArgFrame(func: Any) extends Frame
+        /** After evaluating argument in Apply, apply function to it */
+        case ApplyArgFrame(func: Any)
 
-    /** After evaluating delayed computation, force it */
-    case object ForceFrame extends Frame
+        /** After evaluating delayed computation, force it */
+        case ForceFrame
+    }
 
     /** Top-level evaluator - processes continuations iteratively without recursion.
       *
@@ -49,6 +50,9 @@ object ContinuationJitRepr {
       *   - Each iteration is simple and JIT-friendly
       */
     def eval(cont: ContinuationJitRepr): Any = {
+        import Frame.*
+        import ContinuationJitRepr.*
+
         var current = cont
         // Array-based stack for better performance than List
         var stack = new Array[Frame](32) // Initial capacity
