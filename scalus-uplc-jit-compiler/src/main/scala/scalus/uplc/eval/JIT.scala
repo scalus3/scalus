@@ -57,7 +57,9 @@ object JIT {
             case Constant.Bool(value)       => Expr(value)
             case Constant.Data(value)       => Expr(value)
             case Constant.List(elemType, value) =>
-                '{ ListJitRepr(${ Expr(elemType) }, ${ Expr.ofList(value.map(constantToExpr)) }) }
+                // Lists are represented as plain Scala List[Any] at runtime
+                // No need to track element type - only used for serialization
+                '{ ${ Expr.ofList(value.map(constantToExpr)) } }
             case Constant.Pair(a, b) =>
                 '{ BuiltinPair(${ constantToExpr(a) }, ${ constantToExpr(b) }) }
                 // Expr.ofTuple(constantToExpr(a), constantToExpr(b))
@@ -356,13 +358,13 @@ object JIT {
                     }) }
                 case Term.Builtin(DefaultFun.ChooseList) =>
                     '{ Return(() => () => (l: Any) => (e: Any) => (ne: Any) => {
-                        val lv = l.asInstanceOf[ListJitRepr]
+                        val lv = l.asInstanceOf[List[?]]
                         $budget.spendBudget(
                           Step(StepKind.Builtin),
                           $params.builtinCostModel.chooseList.constantCost,
                           Nil
                         )
-                        if lv.elements.isEmpty then e else ne
+                        if lv.isEmpty then e else ne
                     }) }
                 case Term.Builtin(DefaultFun.Sha2_256) =>
                     '{ Return((bs: Any) => {
@@ -377,23 +379,23 @@ object JIT {
                     }) }
                 case Term.Builtin(DefaultFun.HeadList) =>
                     '{ Return(() => (y: Any) => {
-                        val yv = y.asInstanceOf[ListJitRepr]
+                        val yv = y.asInstanceOf[List[?]]
                         $budget.spendBudget(
                           Step(StepKind.Builtin),
                           $params.builtinCostModel.headList.constantCost,
                           Nil
                         )
-                        yv.elements.head
+                        yv.head
                     }) }
                 case Term.Builtin(DefaultFun.TailList) =>
                     '{ Return(() => (x: Any) => {
-                        val xv = x.asInstanceOf[ListJitRepr]
+                        val xv = x.asInstanceOf[List[?]]
                         $budget.spendBudget(
                           Step(StepKind.Builtin),
                           $params.builtinCostModel.tailList.constantCost,
                           Nil
                         )
-                        ListJitRepr(xv.elementType, xv.elements.tail)
+                        xv.tail
                     }) }
                 case Term.Builtin(DefaultFun.UnConstrData) =>
                     '{ Return((x: Any) => {
