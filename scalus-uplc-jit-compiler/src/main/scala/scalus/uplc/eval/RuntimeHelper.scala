@@ -14,7 +14,7 @@ object RuntimeHelper {
             case p: BuiltinPair[?, ?] =>
                 Constant.Pair(anyUplcConstant(p.fst), anyUplcConstant(p.snd))
             case p: Tuple2[?, ?] => Constant.Pair(anyUplcConstant(p._1), anyUplcConstant(p._2))
-            case l: List[?] =>
+            case l: List[?]      =>
                 // List element type is lost at runtime, assume Data for now
                 // This is only used for debugging/serialization
                 val constElems = l.map(anyUplcConstant)

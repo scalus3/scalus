@@ -75,7 +75,7 @@ object ContinuationJitRepr {
             if current.isInstanceOf[Return] && stackSize == 0 then {
                 return current.asInstanceOf[Return].value
             }
-            
+
             current match {
                 case Return(value) =>
                     // We have a value and frames to process
