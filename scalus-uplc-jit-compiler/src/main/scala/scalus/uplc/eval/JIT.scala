@@ -192,9 +192,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.addInteger
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
