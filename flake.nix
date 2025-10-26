@@ -148,6 +148,7 @@
                 echo "${pkgs.secp256k1}"
                 echo "${pkgs.libsodium}"
                 echo "${tiny_keccak_wrapper}"
+                echo "${pkgs.async-profiler}"
                 export DYLD_LIBRARY_PATH="${tiny_keccak_wrapper}/lib:$DYLD_LIBRARY_PATH"
                 export LIBRARY_PATH="${tiny_keccak_wrapper}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
                 export LD_LIBRARY_PATH="${tiny_keccak_wrapper}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"

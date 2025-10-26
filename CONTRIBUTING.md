@@ -101,7 +101,7 @@ sbt 'bench/jmh:run -prof "async:event=cycles;=dir=target/async-reports;interval=
 On MacOS use this command in sbt shell:
 
 ```bash
-bench/jmh:run -prof "async:event=itimer;dir=target/async-reports;interval=1000000;output=flamegraph;libPath=/nix/store/mr0adcvnv8pkalfbhsgm9p762rs2pyzg-async-profiler-3.0/lib/libasyncProfiler.dylib" -jvmArgsAppend "-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints"   -f 1 -wi 1 -i 1 -t 1 .*
+bench/jmh:run -prof "async:event=itimer;dir=target/async-reports;interval=1000000;output=flamegraph;libPath=/nix/store/w1pihmrx6ivkk4njx85m659gh55cjbck-async-profiler-4.0/lib/libasyncProfiler.dylib" -jvmArgsAppend "-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints"   -f 1 -wi 1 -i 1 -t 1 .*
 ```
 
 Resulting interactive flame graphs will be stored in the `bench/target/async-reports` subdirectory
