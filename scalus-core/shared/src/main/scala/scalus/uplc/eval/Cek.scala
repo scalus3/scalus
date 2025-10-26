@@ -6,7 +6,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 
-import scala.annotation.tailrec
+import scala.annotation.{switch, tailrec}
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.{immutable, mutable}
@@ -467,11 +467,12 @@ private enum Context {
     case NoFrame
 }
 
-private enum CekState {
-    case Return(ctx: Context, env: CekValEnv, value: CekValue)
-    case Compute(ctx: Context, env: CekValEnv, term: Term)
-    case Done(term: Term)
-}
+//private enum CekState {
+//    case Return(ctx: Context, env: CekValEnv, value: CekValue)
+//    case Compute(ctx: Context, env: CekValEnv, term: Term)
+//    case Done(term: Term)
+//}
+private type CekState = Int
 
 trait Logger {
     def log(msg: String): Unit
@@ -599,9 +600,14 @@ class CekMachine(
     logger: Logger,
     getBuiltinRuntime: DefaultFun => BuiltinRuntime
 ) {
-    import CekState.*
+//    import CekState.*
     import CekValue.*
     import Context.*
+
+    private var ctx: Context = NoFrame
+    private var env: CekValEnv = ArraySeq.empty
+    private var value: CekValue | Null = null
+    private var term: Term | Null = null
 
     /** Evaluates a UPLC term.
       *
@@ -614,14 +620,31 @@ class CekMachine(
     def evaluateTerm(term: Term): Term = {
         @tailrec
         def loop(state: CekState): Term = {
-            state match
-                case Compute(ctx, env, term) => loop(computeCek(ctx, env, term))
-                case Return(ctx, env, value) => loop(returnCek(ctx, env, value))
-                case Done(term)              => term
+            (state: @switch) match
+                case 0 => loop(computeCek(ctx, env, this.term))
+                case 1 => loop(returnCek(ctx, env, value))
+                case 2 => this.term
         }
 
         spendBudget(ExBudgetCategory.Startup, params.machineCosts.startupCost, ArraySeq.empty)
         loop(Compute(NoFrame, ArraySeq.empty, term))
+    }
+
+    private inline def Compute(ctx: Context, env: CekValEnv, term: Term): Int = {
+        this.ctx = ctx
+        this.env = env
+        this.term = term
+        0
+    }
+    private inline def Return(ctx: Context, env: CekValEnv, value: CekValue): Int = {
+        this.ctx = ctx
+        this.env = env
+        this.value = value
+        1
+    }
+    private inline def Done(term: Term): Int = {
+        this.term = term
+        2
     }
 
     private final def computeCek(ctx: Context, env: CekValEnv, term: Term): CekState = {
