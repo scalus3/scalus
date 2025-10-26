@@ -14,7 +14,11 @@ object RuntimeHelper {
             case p: BuiltinPair[?, ?] =>
                 Constant.Pair(anyUplcConstant(p.fst), anyUplcConstant(p.snd))
             case p: Tuple2[?, ?] => Constant.Pair(anyUplcConstant(p._1), anyUplcConstant(p._2))
-            case l: ListJitRepr  => l.toConstant
+            case l: List[?] =>
+                // List element type is lost at runtime, assume Data for now
+                // This is only used for debugging/serialization
+                val constElems = l.map(anyUplcConstant)
+                Constant.List(DefaultUni.Data, constElems)
             case _ => throw new IllegalArgumentException(s"Unsupported type: ${in.getClass}")
     }
 
@@ -27,25 +31,22 @@ object RuntimeHelper {
             case Constant.Data(d)        => d
             case Constant.Pair(fst, snd) =>
                 BuiltinPair(uplcToJitAny(fst), uplcToJitAny(snd))
-            case l @ Constant.List(elemType, v) =>
-                ListJitRepr.fromConstantList(l)
+            case Constant.List(elemType, v) =>
+                v.map(uplcToJitAny)
             case _ => throw new IllegalArgumentException(s"Unsupported Constant type: ${in.tpe}")
     }
 
-    final def unConstrData(d: Data): BuiltinPair[BigInt, ListJitRepr] = {
+    final def unConstrData(d: Data): BuiltinPair[BigInt, List[Data]] = {
         d match {
             case Data.Constr(index, fields) =>
-                BuiltinPair(
-                  BigInt(index),
-                  ListJitRepr(DefaultUni.Data, fields)
-                )
+                BuiltinPair(BigInt(index), fields)
             case _ =>
                 throw new IllegalArgumentException("Data is not a Constr")
         }
     }
 
-    final def unListData(d: Data): ListJitRepr = d match
-        case Data.List(values) => ListJitRepr(DefaultUni.Data, values)
+    final def unListData(d: Data): List[Data] = d match
+        case Data.List(values) => values
         case _                 => throw new Exception(s"not a list but $d")
 
 }
