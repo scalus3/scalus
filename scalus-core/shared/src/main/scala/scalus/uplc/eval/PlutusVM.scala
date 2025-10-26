@@ -1,6 +1,6 @@
 package scalus.uplc.eval
 
-import scalus.builtin.{PlatformSpecific, platform, given}
+import scalus.builtin.{platform, PlatformSpecific, given}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.uplc.*
 
