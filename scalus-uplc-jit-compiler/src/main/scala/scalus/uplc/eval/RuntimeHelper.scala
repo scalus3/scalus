@@ -48,4 +48,58 @@ object RuntimeHelper {
         case Data.List(values) => ListJitRepr(DefaultUni.Data, values)
         case _                 => throw new Exception(s"not a list but $d")
 
+    final def binaryOp[A <: Matchable, B <: Matchable](
+        x: Any,
+        y: Any,
+        f: (A, B) => Any
+    ): Any = {
+        x match
+            case xcc: CallCCTrampoline =>
+                y match
+                    case ycc: CallCCTrampoline =>
+                        xcc.map(x1 => ycc.map(y1 => f(x1.asInstanceOf[A], y1.asInstanceOf[B])))
+                    case yv: B =>
+                        xcc.map(x1 => f(x1.asInstanceOf[A], yv))
+                    case _ =>
+                        throw IllegalStateException(s"unexpected type for y: ${y.getClass}")
+            case xv: A =>
+                y match
+                    case ycc: CallCCTrampoline =>
+                        ycc.map(y1 => f(xv, y1.asInstanceOf[B]))
+                    case yv: B =>
+                        f(xv, yv)
+                    case _ =>
+                        throw IllegalStateException(s"unexpected type for y: ${y.getClass}")
+            case _ =>
+                throw IllegalStateException(s"unexpected type for x: ${x.getClass}")
+    }
+
+    final def integerOp(x: Any, y: Any, f: (BigInt, BigInt) => Any): Any = {
+        binaryOp[BigInt, BigInt](x, y, f)
+    }
+
+    final def unaryOp[A <: Matchable](x: Any, f: A => Any): Any = {
+        x match
+            case xcc: CallCCTrampoline =>
+                xcc.map(x1 => f(x1.asInstanceOf[A]))
+            case xv: A =>
+                f(xv)
+            case _ =>
+                throw IllegalStateException(s"unexpected type: ${x.getClass}")
+    }
+
+    final def unwrapList(xs: List[Any]): Any = {
+        def go(remaining: List[Any], acc: List[Any]): Any = {
+            remaining match
+                case Nil => acc.reverse
+                case head :: tail =>
+                    head match
+                        case cc: CallCCTrampoline =>
+                            cc.map(unwrapped => go(unwrapped :: tail, acc))
+                        case v =>
+                            go(tail, v :: acc)
+        }
+        go(xs, Nil)
+    }
+
 }
