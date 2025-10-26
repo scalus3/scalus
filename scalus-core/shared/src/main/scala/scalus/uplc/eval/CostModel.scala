@@ -517,7 +517,7 @@ case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends 
         constantCost
     }
 
-    def constantCost: ExBudget = ExBudget(ExCPU(cpu), ExMemory(memory))
+    val constantCost: ExBudget = ExBudget(ExCPU(cpu), ExMemory(memory))
 
     inline def toDefaultFun[M <: CostModel]: DefaultCostingFun[M] = {
         inline erasedValue[M] match {
