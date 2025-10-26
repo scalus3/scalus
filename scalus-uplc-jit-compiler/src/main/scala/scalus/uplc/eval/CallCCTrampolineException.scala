@@ -41,44 +41,4 @@ object CallCCTrampolineException {
         r
     }
 
-    final def runApply(fun: () => Any => Any, arg: () => Any): Any = {
-        val f =
-            try {
-                val result = fun.apply()
-                result
-            } catch
-                case ecc: CallCCTrampolineException =>
-                    throw ecc.map { funResult =>
-                        val argValue =
-                            try {
-                                val argRes = arg.apply()
-                                argRes
-                            } catch {
-                                case ecc1: CallCCTrampolineException =>
-                                    // We need to throw an exception that will:
-                                    // 1. Evaluate arg's continuation to get argResult
-                                    // 2. Apply funResult to argResult
-                                    // We do this by mapping arg's exception with the application
-                                    throw ecc1.map(argResult => {
-                                        val applied = funResult.asInstanceOf[Any => Any](argResult)
-                                        applied
-                                    })
-                            }
-                        val applied = funResult.asInstanceOf[Any => Any](argValue)
-                        applied
-                    }
-        val a =
-            try {
-                val result = arg.apply()
-                result
-            } catch
-                case ecc: CallCCTrampolineException =>
-                    throw ecc.map(argResult => {
-                        val applied = f(argResult)
-                        applied
-                    })
-        val result = f(a)
-        result
-    }
-
 }
