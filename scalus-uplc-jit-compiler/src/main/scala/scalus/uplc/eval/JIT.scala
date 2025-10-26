@@ -76,11 +76,15 @@ object JIT {
     private def genCodeFromTerm(
         term: Term
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
-        import quotes.reflect.{Lambda, MethodType, Symbol, TypeRepr, asTerm}
+        import quotes.reflect.asTerm
+        import ContinuationJitRepr.{Apply, Force, Return}
 
         val debugMode = false // Set to true to enable exception tracking
 
-        def wrapWithDebug(code: Expr[Any], termDescription: String): Expr[Any] = {
+        def wrapWithDebug(
+            code: Expr[ContinuationJitRepr],
+            termDescription: String
+        ): Expr[ContinuationJitRepr] = {
             if debugMode then
                 val desc = Expr(termDescription)
                 '{
@@ -109,9 +113,8 @@ object JIT {
             env: List[(String, quotes.reflect.Term)],
             logger: Expr[Logger],
             budget: Expr[BudgetSpender],
-            params: Expr[MachineParams],
-            runtimeJitContext: Expr[RuntimeJitContext]
-        ): Expr[Any] = {
+            params: Expr[MachineParams]
+        ): Expr[ContinuationJitRepr] = {
             val termDesc = term.getClass.getSimpleName match {
                 case "Var"     => s"Var(${term.asInstanceOf[Term.Var].name})"
                 case "Builtin" => s"Builtin(${term.asInstanceOf[Term.Builtin].bn})"
@@ -122,51 +125,42 @@ object JIT {
                     val vr = env.find(_._1 == name.name).get._2.asExprOf[Any]
                     '{
                         $budget.spendBudget(Step(StepKind.Var), $params.machineCosts.varCost, Nil)
-                        $vr
+                        Return($vr)
                     }
+
                 case Term.LamAbs(name, term) =>
-                    // auction:  177653 ms
-                    '{ (arg: Any) =>
-                        ${ runtimeJitContext }.withCheckOverflow(
-                          ${
-                              genCode(
-                                term,
-                                (name -> 'arg.asTerm) :: env,
-                                logger,
-                                budget,
-                                params,
-                                runtimeJitContext
-                              )
-                          }
+                    // Lambda returns a function wrapped in Return
+                    // No stack overflow check needed - continuations are on the heap!
+                    '{
+                        Return((arg: Any) =>
+                            ${ genCode(term, (name -> 'arg.asTerm) :: env, logger, budget, params) }
                         )
                     }
+
                 case Term.Apply(fun, arg) =>
+                    // Create Apply continuation - flattened to the top-level loop
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Apply),
                           $params.machineCosts.applyCost,
                           Nil
                         )
-                        ${ runtimeJitContext }.trampolinedApply(
-                          ${ genCode(fun, env, logger, budget, params, runtimeJitContext) },
-                          ${ genCode(arg, env, logger, budget, params, runtimeJitContext) }
+                        Apply(
+                          ${ genCode(fun, env, logger, budget, params) },
+                          ${ genCode(arg, env, logger, budget, params) }
                         )
                     }
+
                 case Term.Force(term) =>
-                    val in = genCode(term, env, logger, budget, params, runtimeJitContext)
                     '{
-                        RuntimeHelper.unaryOp[() => Any](
-                          ${ in.asExprOf[Any] },
-                          { forceTerm =>
-                              $budget.spendBudget(
-                                Step(StepKind.Force),
-                                $params.machineCosts.forceCost,
-                                Nil
-                              )
-                              forceTerm.apply()
-                          }
+                        $budget.spendBudget(
+                          Step(StepKind.Force),
+                          $params.machineCosts.forceCost,
+                          Nil
                         )
+                        Force(${ genCode(term, env, logger, budget, params) })
                     }
+
                 case Term.Delay(term) =>
                     '{
                         $budget.spendBudget(
@@ -174,11 +168,9 @@ object JIT {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        () =>
-                            ${
-                                genCode(term, env, logger, budget, params, runtimeJitContext)
-                            }
+                        Return.delayed(${ genCode(term, env, logger, budget, params) })
                     }
+
                 case Term.Const(const) =>
                     val expr = constantToExpr(const)
                     '{
@@ -187,335 +179,368 @@ object JIT {
                           $params.machineCosts.constCost,
                           Nil
                         )
-                        $expr
+                        Return($expr)
                     }
                 case Term.Builtin(DefaultFun.AddInteger) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.integerOp(
-                          xIn,
-                          yIn,
-                          { (x: BigInt, y: BigInt) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.addInteger
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x + y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            (y: Any) => {
+                                val xv = x.asInstanceOf[BigInt]
+                                val yv = y.asInstanceOf[BigInt]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.addInteger
+                                      .calculateCost(
+                                        CekValue.VCon(asConstant(xv)),
+                                        CekValue.VCon(asConstant(yv))
+                                      ),
+                                  Nil
+                                )
+                                xv + yv
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.SubtractInteger) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.integerOp(
-                          xIn,
-                          yIn,
-                          { (x: BigInt, y: BigInt) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.subtractInteger
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x - y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            (y: Any) => {
+                                val xv = x.asInstanceOf[BigInt]
+                                val yv = y.asInstanceOf[BigInt]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.subtractInteger
+                                      .calculateCost(
+                                        CekValue.VCon(asConstant(xv)),
+                                        CekValue.VCon(asConstant(yv))
+                                      ),
+                                  Nil
+                                )
+                                xv - yv
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.MultiplyInteger) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.integerOp(
-                          xIn,
-                          yIn,
-                          { (x: BigInt, y: BigInt) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.multiplyInteger
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x * y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            (y: Any) => {
+                                val xv = x.asInstanceOf[BigInt]
+                                val yv = y.asInstanceOf[BigInt]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.multiplyInteger
+                                      .calculateCost(
+                                        CekValue.VCon(asConstant(xv)),
+                                        CekValue.VCon(asConstant(yv))
+                                      ),
+                                  Nil
+                                )
+                                xv * yv
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.EqualsData) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.binaryOp[Data, Data](
-                          xIn,
-                          yIn,
-                          { (x: Data, y: Data) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.equalsData
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              Builtins.equalsData(x, y)
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return((y: Any) =>
+                                Return {
+                                    val xv = x.asInstanceOf[Data]
+                                    val yv = y.asInstanceOf[Data]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.equalsData
+                                          .calculateCost(
+                                            CekValue.VCon(asConstant(xv)),
+                                            CekValue.VCon(asConstant(yv))
+                                          ),
+                                      Nil
+                                    )
+                                    Builtins.equalsData(xv, yv)
+                                }
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.LessThanInteger) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.integerOp(
-                          xIn,
-                          yIn,
-                          { (x: BigInt, y: BigInt) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.lessThanInteger
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x < y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return((y: Any) =>
+                                Return {
+                                    val xv = x.asInstanceOf[BigInt]
+                                    val yv = y.asInstanceOf[BigInt]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.lessThanInteger
+                                          .calculateCost(
+                                            CekValue.VCon(asConstant(xv)),
+                                            CekValue.VCon(asConstant(yv))
+                                          ),
+                                      Nil
+                                    )
+                                    xv < yv
+                                }
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.LessThanEqualsInteger) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.integerOp(
-                          xIn,
-                          yIn,
-                          { (x: BigInt, y: BigInt) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.lessThanEqualsInteger
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x <= y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return((y: Any) =>
+                                Return {
+                                    val xv = x.asInstanceOf[BigInt]
+                                    val yv = y.asInstanceOf[BigInt]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.lessThanEqualsInteger
+                                          .calculateCost(
+                                            CekValue.VCon(asConstant(xv)),
+                                            CekValue.VCon(asConstant(yv))
+                                          ),
+                                      Nil
+                                    )
+                                    xv <= yv
+                                }
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.EqualsInteger) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.integerOp(
-                          xIn,
-                          yIn,
-                          { (x: BigInt, y: BigInt) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.equalsInteger
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x == y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return((y: Any) =>
+                                Return {
+                                    val xv = x.asInstanceOf[BigInt]
+                                    val yv = y.asInstanceOf[BigInt]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.equalsInteger
+                                          .calculateCost(
+                                            CekValue.VCon(asConstant(xv)),
+                                            CekValue.VCon(asConstant(yv))
+                                          ),
+                                      Nil
+                                    )
+                                    xv == yv
+                                }
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.EqualsByteString) =>
-                    '{ (xIn: Any) => (yIn: Any) =>
-                        RuntimeHelper.binaryOp[ByteString, ByteString](
-                          xIn,
-                          yIn,
-                          { (x: ByteString, y: ByteString) =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.equalsByteString
-                                    .calculateCost(
-                                      CekValue.VCon(asConstant(x)),
-                                      CekValue.VCon(asConstant(y))
-                                    ),
-                                Nil
-                              )
-                              x == y
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return((y: Any) =>
+                                Return {
+                                    val xv = x.asInstanceOf[ByteString]
+                                    val yv = y.asInstanceOf[ByteString]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.equalsByteString
+                                          .calculateCost(
+                                            CekValue.VCon(asConstant(xv)),
+                                            CekValue.VCon(asConstant(yv))
+                                          ),
+                                      Nil
+                                    )
+                                    xv == yv
+                                }
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.IfThenElse) =>
-                    '{ () => (cIn: Any) => (t: Any) => (f: Any) =>
-                        RuntimeHelper.unaryOp[Boolean](
-                          cIn,
-                          { c =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.ifThenElse.constantCost,
-                                Nil
-                              )
-                              if c then t else f
-                          }
+                    '{
+                        Return(() =>
+                            Return((c: Any) =>
+                                Return((t: Any) =>
+                                    Return((f: Any) =>
+                                        Return {
+                                            val cv = c.asInstanceOf[Boolean]
+                                            $budget.spendBudget(
+                                              Step(StepKind.Builtin),
+                                              $params.builtinCostModel.ifThenElse.constantCost,
+                                              Nil
+                                            )
+                                            if cv then t else f
+                                        }
+                                    )
+                                )
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.Trace) =>
-                    '{ () => (sIn: Any) => (a: Any) =>
-                        RuntimeHelper.unaryOp[String](
-                          sIn,
-                          { s =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.trace.constantCost,
-                                Nil
-                              )
-                              ${ logger }.log(s); a
-                          }
+                    '{
+                        Return(() =>
+                            Return((s: Any) =>
+                                Return((a: Any) =>
+                                    Return {
+                                        val sv = s.asInstanceOf[String]
+                                        $budget.spendBudget(
+                                          Step(StepKind.Builtin),
+                                          $params.builtinCostModel.trace.constantCost,
+                                          Nil
+                                        )
+                                        ${ logger }.log(sv)
+                                        a
+                                    }
+                                )
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.FstPair) =>
-                    '{ () => () =>
-                        { (xIn: Any) =>
-                            RuntimeHelper.unaryOp[BuiltinPair[?, ?]](
-                              xIn,
-                              { x =>
-                                  $budget.spendBudget(
-                                    Step(StepKind.Builtin),
-                                    $params.builtinCostModel.fstPair.constantCost,
-                                    Nil
-                                  )
-                                  Builtins.fstPair(x)
-                              }
+                    '{
+                        Return(() =>
+                            Return(() =>
+                                Return((x: Any) =>
+                                    Return {
+                                        val xv = x.asInstanceOf[BuiltinPair[?, ?]]
+                                        $budget.spendBudget(
+                                          Step(StepKind.Builtin),
+                                          $params.builtinCostModel.fstPair.constantCost,
+                                          Nil
+                                        )
+                                        Builtins.fstPair(xv)
+                                    }
+                                )
                             )
-                        }
+                        )
                     }
                 case Term.Builtin(DefaultFun.SndPair) =>
-                    '{ () => () =>
-                        { (xIn: Any) =>
-                            RuntimeHelper.unaryOp[BuiltinPair[?, ?]](
-                              xIn,
-                              { x =>
-                                  $budget.spendBudget(
-                                    Step(StepKind.Builtin),
-                                    $params.builtinCostModel.sndPair.constantCost,
-                                    Nil
-                                  )
-                                  Builtins.sndPair(x)
-                              }
+                    '{
+                        Return(() =>
+                            Return(() =>
+                                Return((x: Any) =>
+                                    Return {
+                                        val xv = x.asInstanceOf[BuiltinPair[?, ?]]
+                                        $budget.spendBudget(
+                                          Step(StepKind.Builtin),
+                                          $params.builtinCostModel.sndPair.constantCost,
+                                          Nil
+                                        )
+                                        Builtins.sndPair(xv)
+                                    }
+                                )
                             )
-                        }
+                        )
                     }
                 case Term.Builtin(DefaultFun.ChooseList) =>
-                    '{ () => () => (laIn: Any) => (e: Any) => (ne: Any) =>
-                        RuntimeHelper.unaryOp[ListJitRepr](
-                          laIn,
-                          { l =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.chooseList.constantCost,
-                                Nil
-                              )
-                              if l.elements.isEmpty then e else ne
-                          }
+                    '{
+                        Return(() =>
+                            Return(() =>
+                                Return((l: Any) =>
+                                    Return((e: Any) =>
+                                        Return((ne: Any) =>
+                                            Return {
+                                                val lv = l.asInstanceOf[ListJitRepr]
+                                                $budget.spendBudget(
+                                                  Step(StepKind.Builtin),
+                                                  $params.builtinCostModel.chooseList.constantCost,
+                                                  Nil
+                                                )
+                                                if lv.elements.isEmpty then e else ne
+                                            }
+                                        )
+                                    )
+                                )
+                            )
                         )
                     }
                 case Term.Builtin(DefaultFun.Sha2_256) =>
-                    '{ (bsIn: Any) =>
-                        RuntimeHelper.unaryOp[ByteString](
-                          bsIn,
-                          { bs =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.sha2_256
-                                    .calculateCost(CekValue.VCon(asConstant(bs))),
-                                Nil
-                              )
-                              Builtins.sha2_256(bs)
-                          }
+                    '{
+                        Return((bs: Any) =>
+                            Return {
+                                val bsv = bs.asInstanceOf[ByteString]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.sha2_256
+                                      .calculateCost(CekValue.VCon(asConstant(bsv))),
+                                  Nil
+                                )
+                                Builtins.sha2_256(bsv)
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.HeadList) =>
-                    '{ () =>
-                        { (yIn: Any) =>
-                            RuntimeHelper.unaryOp[ListJitRepr](
-                              yIn,
-                              { y =>
-                                  $budget.spendBudget(
-                                    Step(StepKind.Builtin),
-                                    $params.builtinCostModel.headList.constantCost,
-                                    Nil
-                                  )
-                                  y.elements.head
-                              }
+                    '{
+                        Return(() =>
+                            Return((y: Any) =>
+                                Return {
+                                    val yv = y.asInstanceOf[ListJitRepr]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.headList.constantCost,
+                                      Nil
+                                    )
+                                    yv.elements.head
+                                }
                             )
-                        }
+                        )
                     }
                 case Term.Builtin(DefaultFun.TailList) =>
-                    '{ () =>
-                        { (xIn: Any) =>
-                            RuntimeHelper.unaryOp[ListJitRepr](
-                              xIn,
-                              { x =>
-                                  $budget.spendBudget(
-                                    Step(StepKind.Builtin),
-                                    $params.builtinCostModel.tailList.constantCost,
-                                    Nil
-                                  )
-                                  ListJitRepr(x.elementType, x.elements.tail)
-                              }
+                    '{
+                        Return(() =>
+                            Return((x: Any) =>
+                                Return {
+                                    val xv = x.asInstanceOf[ListJitRepr]
+                                    $budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      $params.builtinCostModel.tailList.constantCost,
+                                      Nil
+                                    )
+                                    ListJitRepr(xv.elementType, xv.elements.tail)
+                                }
                             )
-                        }
+                        )
                     }
                 case Term.Builtin(DefaultFun.UnConstrData) =>
-                    '{ (xIn: Any) =>
-                        RuntimeHelper.unaryOp[Data](
-                          xIn,
-                          { x =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.unConstrData.constantCost,
-                                Nil
-                              )
-                              RuntimeHelper.unConstrData(x)
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return {
+                                val xv = x.asInstanceOf[Data]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.unConstrData.constantCost,
+                                  Nil
+                                )
+                                RuntimeHelper.unConstrData(xv)
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.UnListData) =>
-                    '{ (xIn: Any) =>
-                        RuntimeHelper.unaryOp[Data](
-                          xIn,
-                          { x =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.unListData.constantCost,
-                                Nil
-                              )
-                              RuntimeHelper.unListData(x)
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return {
+                                val xv = x.asInstanceOf[Data]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.unListData.constantCost,
+                                  Nil
+                                )
+                                RuntimeHelper.unListData(xv)
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.UnIData) =>
-                    '{ (xIn: Any) =>
-                        RuntimeHelper.unaryOp[Data](
-                          xIn,
-                          { x =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.unIData.constantCost,
-                                Nil
-                              )
-                              Builtins.unIData(x)
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return {
+                                val xv = x.asInstanceOf[Data]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.unIData.constantCost,
+                                  Nil
+                                )
+                                Builtins.unIData(xv)
+                            }
                         )
                     }
                 case Term.Builtin(DefaultFun.UnBData) =>
-                    '{ (xIn: Any) =>
-                        RuntimeHelper.unaryOp[Data](
-                          xIn,
-                          { x =>
-                              $budget.spendBudget(
-                                Step(StepKind.Builtin),
-                                $params.builtinCostModel.unBData.constantCost,
-                                Nil
-                              )
-                              Builtins.unBData(x)
-                          }
+                    '{
+                        Return((x: Any) =>
+                            Return {
+                                val xv = x.asInstanceOf[Data]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.unBData.constantCost,
+                                  Nil
+                                )
+                                Builtins.unBData(xv)
+                            }
                         )
                     }
                 case Term.Builtin(bi) =>
@@ -525,60 +550,44 @@ object JIT {
                 case Term.Error =>
                     '{ throw new RuntimeException("UPLC Error term evaluated") }
                 case Term.Constr(tag, args) =>
-                    val argsExprs = args.map(a =>
-                        genCode(a, env, logger, budget, params, runtimeJitContext).asExprOf[Any]
-                    )
+                    // TODO: Implement Constr with continuation support
+                    // For now, fall back to simple evaluation
+                    val argsExprs = args.map(a => genCode(a, env, logger, budget, params))
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Constr),
                           $params.machineCosts.constrCost,
                           Nil
                         )
-                        RuntimeHelper.unwrapList(List(${ Expr.ofSeq(argsExprs) }*)) match
-                            case unwrappedArgs: List[Any] =>
-                                (${ Expr(tag.value) }, unwrappedArgs)
-                            case cc: CallCCTrampoline =>
-                                cc.map { unwrappedArgs =>
-                                    (${ Expr(tag.value) }, unwrappedArgs.asInstanceOf[List[Any]])
-                                }
+                        // Evaluate all args first, then construct
+                        val evaluatedArgs = List(${
+                            Expr.ofSeq(argsExprs.map(e => '{ ContinuationJitRepr.eval($e) }))
+                        }*)
+                        Return((${ Expr(tag.value) }, evaluatedArgs))
                     }
                 case Term.Case(arg, cases) =>
-                    val constrIn =
-                        genCode(arg, env, logger, budget, params, runtimeJitContext)
-                    val caseFuncs =
-                        Expr.ofList(
-                          cases.map(c =>
-                              genCode(c, env, logger, budget, params, runtimeJitContext)
-                                  .asExprOf[Any => Any]
-                          )
-                        )
+                    // TODO: Implement Case with continuation support
+                    // For now, fall back to simple evaluation
+                    val constrCont = genCode(arg, env, logger, budget, params)
+                    val caseFuncs = Expr.ofList(
+                      cases.map(c => genCode(c, env, logger, budget, params))
+                    )
                     '{
                         $budget.spendBudget(Step(StepKind.Case), $params.machineCosts.caseCost, Nil)
-                        RuntimeHelper.unaryOp[(Long, List[Any])](
-                          ${ constrIn.asExprOf[Any] },
-                          { constr =>
-                              val (tag, args) = constr
-                              args.foldLeft[Any]($caseFuncs(tag.toInt))((f, a) => {
-                                  val result = f.asInstanceOf[Any => Any](a)
-                                  result match
-                                      case cc: CallCCTrampoline => cc
-                                      case _                    => result.asInstanceOf[Any => Any]
-                              })
-                          }
-                        )
+                        val constr =
+                            ContinuationJitRepr.eval($constrCont).asInstanceOf[(Long, List[Any])]
+                        val (tag, args) = constr
+                        val caseFunc = $caseFuncs(tag.toInt)
+                        // Apply all args to the case function
+                        args.foldLeft[ContinuationJitRepr](caseFunc)((f, a) => Apply(f, Return(a)))
                     }
             wrapWithDebug(result, termDesc)
         }
 
         val retval = '{ (logger: Logger, budget: BudgetSpender, params: MachineParams) =>
-            val runtimeJitContext = new RuntimeJitContext()
             budget.spendBudget(Startup, params.machineCosts.startupCost, Nil)
-            val result = ${ genCode(term, Nil, 'logger, 'budget, 'params, 'runtimeJitContext) }
-            result match
-                case cc: CallCCTrampoline =>
-                    runtimeJitContext.stackDepth = 0
-                    CallCCTrampoline.eval(cc.cont, runtimeJitContext)
-                case v => v
+            val initialCont = ${ genCode(term, Nil, 'logger, 'budget, 'params) }
+            ContinuationJitRepr.eval(initialCont)
         }
 
         retval
