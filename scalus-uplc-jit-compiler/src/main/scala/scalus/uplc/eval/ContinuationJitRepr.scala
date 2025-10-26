@@ -44,30 +44,50 @@ object ContinuationJitRepr {
       * This is the core of the minimal continuation approach:
       *   - No call stack recursion - everything goes through this loop
       *   - Stack frames are on the heap, not the JVM call stack
+      *   - Array-based stack for efficient push/pop operations
       *   - Each iteration is simple and JIT-friendly
       */
     def eval(cont: ContinuationJitRepr): Any = {
         var current = cont
-        var stack: List[Frame] = Nil
+        // Array-based stack for better performance than List
+        var stack = new Array[Frame](32) // Initial capacity
+        var stackSize = 0
+
+        @inline def pushFrame(frame: Frame): Unit = {
+            if stackSize >= stack.length then {
+                // Grow array if needed (rare)
+                val newStack = new Array[Frame](stack.length * 2)
+                System.arraycopy(stack, 0, newStack, 0, stack.length)
+                stack = newStack
+            }
+            stack(stackSize) = frame
+            stackSize += 1
+        }
+
+        @inline def popFrame(): Frame = {
+            stackSize -= 1
+            stack(stackSize)
+        }
 
         while true do {
             current match {
                 case Return(value) =>
                     // We have a value - process next frame or return
-                    stack match {
-                        case Nil =>
-                            // No more frames - we're done
-                            return value
+                    if stackSize == 0 then {
+                        // No more frames - we're done
+                        return value
+                    }
 
-                        case (frame: ApplyFuncFrame) :: rest =>
+                    val frame = popFrame()
+                    frame match {
+                        case ApplyFuncFrame(arg) =>
                             // We evaluated the function, now evaluate the argument
-                            stack = ApplyArgFrame(value) :: rest
-                            current = frame.arg
+                            pushFrame(ApplyArgFrame(value))
+                            current = arg
 
-                        case (frame: ApplyArgFrame) :: rest =>
+                        case ApplyArgFrame(func) =>
                             // We have both function and argument - apply!
-                            stack = rest
-                            val result = frame.func.asInstanceOf[Any => Any](value)
+                            val result = func.asInstanceOf[Any => Any](value)
                             // Result might be a continuation, continue evaluation
                             // Avoid creating new Return if result is already one
                             current = result match {
@@ -75,9 +95,8 @@ object ContinuationJitRepr {
                                 case v                         => Return(v)
                             }
 
-                        case ForceFrame :: rest =>
+                        case ForceFrame =>
                             // Force the delayed computation
-                            stack = rest
                             val result = value.asInstanceOf[() => Any]()
                             // Result might be a continuation, continue evaluation
                             // Avoid creating new Return if result is already one
@@ -89,12 +108,12 @@ object ContinuationJitRepr {
 
                 case Apply(func, arg) =>
                     // Push frame to evaluate arg after func, then evaluate func
-                    stack = ApplyFuncFrame(arg) :: stack
+                    pushFrame(ApplyFuncFrame(arg))
                     current = func
 
                 case Force(delayed) =>
                     // Push frame to force after evaluation, then evaluate
-                    stack = ForceFrame :: stack
+                    pushFrame(ForceFrame)
                     current = delayed
             }
         }
