@@ -510,8 +510,8 @@ case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends Costing
         ExBudget(cpu, mem)
     }
 
-    /** Calculate cost from pre-computed memory usage values.
-      * Useful for JIT to avoid CekValue wrapper allocation.
+    /** Calculate cost from pre-computed memory usage values. Useful for JIT to avoid CekValue
+      * wrapper allocation.
       */
     def calculateCostFromMemory(argsCostingInteger: Seq[CostingInteger]): ExBudget = {
         val cpu = ExCPU(this.cpu.calculateCost(argsCostingInteger))
@@ -519,7 +519,6 @@ case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends Costing
         ExBudget(cpu, mem)
     }
 }
-
 
 case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends CostingFun {
 

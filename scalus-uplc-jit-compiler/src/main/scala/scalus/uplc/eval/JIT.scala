@@ -213,9 +213,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.subtractInteger
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -232,9 +234,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.multiplyInteger
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -251,9 +255,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.equalsData
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -270,9 +276,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.lessThanInteger
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -289,9 +297,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.lessThanEqualsInteger
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -308,9 +318,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.equalsInteger
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -327,9 +339,11 @@ object JIT {
                                 $budget.spendBudget(
                                   Step(StepKind.Builtin),
                                   $params.builtinCostModel.equalsByteString
-                                      .calculateCost(
-                                        CekValue.VCon(asConstant(xv)),
-                                        CekValue.VCon(asConstant(yv))
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
                                       ),
                                   Nil
                                 )
@@ -423,7 +437,9 @@ object JIT {
                             $budget.spendBudget(
                               Step(StepKind.Builtin),
                               $params.builtinCostModel.sha2_256
-                                  .calculateCost(CekValue.VCon(asConstant(bsv))),
+                                  .calculateCostFromMemory(
+                                    Seq(MemoryUsageJit.memoryUsage(bsv))
+                                  ),
                               Nil
                             )
                             Builtins.sha2_256(bsv)
