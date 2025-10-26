@@ -78,6 +78,32 @@ object JIT {
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
         import quotes.reflect.{Lambda, MethodType, Symbol, TypeRepr, asTerm}
 
+        val debugMode = false // Set to true to enable exception tracking
+
+        def wrapWithDebug(code: Expr[Any], termDescription: String): Expr[Any] = {
+            if debugMode then
+                val desc = Expr(termDescription)
+                '{
+                    try {
+                        $code
+                    } catch {
+                        case e: ClassCastException =>
+                            println("[DEBUG] ClassCastException in generated code for: " + $desc)
+                            println("[DEBUG] Exception: " + e.getMessage)
+                            println("[DEBUG] Stack trace:")
+                            e.getStackTrace().take(10).foreach(st => println("  " + st))
+                            throw e
+                        case e: Throwable =>
+                            println("[DEBUG] Exception in generated code for: " + $desc)
+                            println(
+                              "[DEBUG] Exception: " + e.getClass.getName + ": " + e.getMessage
+                            )
+                            throw e
+                    }
+                }
+            else code
+        }
+
         def genCode(
             term: Term,
             env: List[(String, quotes.reflect.Term)],
@@ -86,7 +112,12 @@ object JIT {
             params: Expr[MachineParams],
             runtimeJitContext: Expr[RuntimeJitContext]
         ): Expr[Any] = {
-            term match
+            val termDesc = term.getClass.getSimpleName match {
+                case "Var"     => s"Var(${term.asInstanceOf[Term.Var].name})"
+                case "Builtin" => s"Builtin(${term.asInstanceOf[Term.Builtin].bn})"
+                case other     => other
+            }
+            val result = term match
                 case Term.Var(name) =>
                     val vr = env.find(_._1 == name.name).get._2.asExprOf[Any]
                     '{
@@ -109,90 +140,6 @@ object JIT {
                           }
                         )
                     }
-                    /*
-                    val mtpe =
-                        MethodType(List(name))(_ => List(TypeRepr.of[Any]), _ => TypeRepr.of[Any])
-                    val lambda = Lambda(
-                      Symbol.spliceOwner,
-                      mtpe,
-                      { case (methSym, args) =>
-                      // COMMENTED OUT: FULL TRAMPOLINING CODE
-                      /*
-                          val wrapped = '{
-                              val bodyDelayed = () => {
-                                  ${ runtimeJitContext }.stackDepth += 1
-                                  if ${
-                                          runtimeJitContext
-                                      }.stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH
-                                  then
-                                      val bodyDelayed2 = () => ${ body.asExprOf[Any] }
-                                      throw CallCCTrampolineException("lambda", bodyDelayed2)
-                                  else
-                                      val r = ${ body.asExprOf[Any] }
-                                      ${ runtimeJitContext }.stackDepth -= 1
-                                      r
-                              }
-                              ${ runtimeJitContext }.stackDepth += 1
-                              if ${
-                                      runtimeJitContext
-                                  }.stackDepth >= RuntimeJitContext.MAX_STACK_DEPTH
-                              then throw CallCCTrampolineException("lambda", bodyDelayed)
-                              else
-                                  val r = bodyDelayed.apply()
-                                  ${ runtimeJitContext }.stackDepth -= 1
-                                  r
-                          }
-                          wrapped.asTerm.changeOwner(methSym)
-                     */
-                      // TEST: Minimal wrapper - just val bodyDelayed = () => $body
-                      //  compiled auctiin: 260343
-                      // val wrapped = '{
-                      //    val bodyDelayed = () => ${ body.asExprOf[Any] }
-                      //    bodyDelayed()
-                      // }
-                      // wrapped.asTerm.changeOwner(methSym)
-                      //  asTerm: 262401
-                      //  asExpr: 323768, 266960
-                      //   moved body to be generated inside wrapper: 270947
-                      //  low-level generation of internal lambda: 263192
-                      /*
-                          val bodyDelayedMte =
-                              MethodType(List.empty)(_ => List.empty, _ => TypeRepr.of[Any])
-                          val bodyDelayedLambda = Lambda(
-                            methSym,
-                            bodyDelayedMte,
-                            { case (delayedOwner, _) =>
-                                genCode(
-                                  term,
-                                  (name -> args.head.asInstanceOf[quotes.reflect.Term]) :: env,
-                                  logger,
-                                  budget,
-                                  params,
-                                  runtimeJitContext
-                                ).asTerm.changeOwner(delayedOwner)
-                            }
-                          ).asExprOf[() => Any]
-                          val wrapped = '{
-                              ${ runtimeJitContext }.withCheckOverflow($bodyDelayedLambda)
-                          }
-                          wrapped.asTerm.changeOwner(methSym)
-                     */
-                      //
-                      // TEST: working - just boddy
-                      // compiled 143560
-                      // body.changeOwner(methSym)
-                      }
-                    ).asExprOf[Any]
-                    '{
-                        $budget.spendBudget(
-                          Step(StepKind.LamAbs),
-                          $params.machineCosts.lamCost,
-                          Nil
-                        )
-                        $lambda
-                    }
-                    
-                     */
                 case Term.Apply(fun, arg) =>
                     '{
                         $budget.spendBudget(
@@ -200,32 +147,25 @@ object JIT {
                           $params.machineCosts.applyCost,
                           Nil
                         )
-                        // TRAMPOLINING CODE
-                        // val funDelayed = () =>
-                        //    ${ genCode(fun, env, logger, budget, params, runtimeJitContext) }
-                        //        .asInstanceOf[Any => Any]
-                        // val argDelayed = () =>
-                        //    ${ genCode(arg, env, logger, budget, params, runtimeJitContext) }
                         ${ runtimeJitContext }.trampolinedApply(
-                          ${ genCode(fun, env, logger, budget, params, runtimeJitContext) }
-                              .asInstanceOf[Any => Any],
+                          ${ genCode(fun, env, logger, budget, params, runtimeJitContext) },
                           ${ genCode(arg, env, logger, budget, params, runtimeJitContext) }
                         )
                     }
-                    // SIMPLIFIED VERSION WITHOUT TRAMPOLINING
-                    // val f = ${ funExpr }.asInstanceOf[Any => Any]
-                    // val a = ${ argExpr }
-                    // f(a)
                 case Term.Force(term) =>
-                    val expr = genCode(term, env, logger, budget, params, runtimeJitContext)
+                    val in = genCode(term, env, logger, budget, params, runtimeJitContext)
                     '{
-                        val forceTerm = ${ expr.asExprOf[Any] }.asInstanceOf[() => Any]
-                        $budget.spendBudget(
-                          Step(StepKind.Force),
-                          $params.machineCosts.forceCost,
-                          Nil
+                        RuntimeHelper.unaryOp[() => Any](
+                          ${ in.asExprOf[Any] },
+                          { forceTerm =>
+                              $budget.spendBudget(
+                                Step(StepKind.Force),
+                                $params.machineCosts.forceCost,
+                                Nil
+                              )
+                              forceTerm.apply()
+                          }
                         )
-                        forceTerm.apply()
                     }
                 case Term.Delay(term) =>
                     '{
@@ -250,264 +190,333 @@ object JIT {
                         $expr
                     }
                 case Term.Builtin(DefaultFun.AddInteger) =>
-                    '{ (x: BigInt) => (y: BigInt) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.addInteger
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x + y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.integerOp(
+                          xIn,
+                          yIn,
+                          { (x: BigInt, y: BigInt) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.addInteger
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x + y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.SubtractInteger) =>
-                    '{ (x: BigInt) => (y: BigInt) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.subtractInteger
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x - y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.integerOp(
+                          xIn,
+                          yIn,
+                          { (x: BigInt, y: BigInt) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.subtractInteger
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x - y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.MultiplyInteger) =>
-                    '{ (x: BigInt) => (y: BigInt) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.multiplyInteger
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x * y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.integerOp(
+                          xIn,
+                          yIn,
+                          { (x: BigInt, y: BigInt) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.multiplyInteger
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x * y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.EqualsData) =>
-                    '{ (x: Data) => (y: Data) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.equalsData
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            Builtins.equalsData(x, y)
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.binaryOp[Data, Data](
+                          xIn,
+                          yIn,
+                          { (x: Data, y: Data) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.equalsData
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              Builtins.equalsData(x, y)
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.LessThanInteger) =>
-                    '{ (x: BigInt) => (y: BigInt) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.lessThanInteger
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x < y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.integerOp(
+                          xIn,
+                          yIn,
+                          { (x: BigInt, y: BigInt) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.lessThanInteger
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x < y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.LessThanEqualsInteger) =>
-                    '{ (x: BigInt) => (y: BigInt) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.lessThanEqualsInteger
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x <= y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.integerOp(
+                          xIn,
+                          yIn,
+                          { (x: BigInt, y: BigInt) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.lessThanEqualsInteger
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x <= y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.EqualsInteger) =>
-                    '{ (x: BigInt) => (y: BigInt) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.equalsInteger
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x == y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.integerOp(
+                          xIn,
+                          yIn,
+                          { (x: BigInt, y: BigInt) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.equalsInteger
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x == y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.EqualsByteString) =>
-                    '{ (x: ByteString) => (y: ByteString) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.equalsByteString
-                                  .calculateCost(
-                                    CekValue.VCon(asConstant(x)),
-                                    CekValue.VCon(asConstant(y))
-                                  ),
-                              Nil
-                            )
-                            x == y
-                        }
+                    '{ (xIn: Any) => (yIn: Any) =>
+                        RuntimeHelper.binaryOp[ByteString, ByteString](
+                          xIn,
+                          yIn,
+                          { (x: ByteString, y: ByteString) =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.equalsByteString
+                                    .calculateCost(
+                                      CekValue.VCon(asConstant(x)),
+                                      CekValue.VCon(asConstant(y))
+                                    ),
+                                Nil
+                              )
+                              x == y
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.IfThenElse) =>
-                    '{ () => (c: Boolean) => (t: Any) => (f: Any) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.ifThenElse.constantCost,
-                              Nil
-                            )
-                            if c then t else f
-                        }
+                    '{ () => (cIn: Any) => (t: Any) => (f: Any) =>
+                        RuntimeHelper.unaryOp[Boolean](
+                          cIn,
+                          { c =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.ifThenElse.constantCost,
+                                Nil
+                              )
+                              if c then t else f
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.Trace) =>
-                    '{ () => (s: String) => (a: Any) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.trace.constantCost,
-                              Nil
-                            )
-                            ${ logger }.log(s); a
-                        }
+                    '{ () => (sIn: Any) => (a: Any) =>
+                        RuntimeHelper.unaryOp[String](
+                          sIn,
+                          { s =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.trace.constantCost,
+                                Nil
+                              )
+                              ${ logger }.log(s); a
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.FstPair) =>
                     '{ () => () =>
-                        { (x: BuiltinPair[?, ?]) =>
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.fstPair.constantCost,
-                              Nil
+                        { (xIn: Any) =>
+                            RuntimeHelper.unaryOp[BuiltinPair[?, ?]](
+                              xIn,
+                              { x =>
+                                  $budget.spendBudget(
+                                    Step(StepKind.Builtin),
+                                    $params.builtinCostModel.fstPair.constantCost,
+                                    Nil
+                                  )
+                                  Builtins.fstPair(x)
+                              }
                             )
-                            Builtins.fstPair(x)
                         }
                     }
                 case Term.Builtin(DefaultFun.SndPair) =>
                     '{ () => () =>
-                        { (x: BuiltinPair[?, ?]) =>
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.sndPair.constantCost,
-                              Nil
+                        { (xIn: Any) =>
+                            RuntimeHelper.unaryOp[BuiltinPair[?, ?]](
+                              xIn,
+                              { x =>
+                                  $budget.spendBudget(
+                                    Step(StepKind.Builtin),
+                                    $params.builtinCostModel.sndPair.constantCost,
+                                    Nil
+                                  )
+                                  Builtins.sndPair(x)
+                              }
                             )
-                            Builtins.sndPair(x)
                         }
                     }
                 case Term.Builtin(DefaultFun.ChooseList) =>
-                    '{ () => () => (la: Any) => (e: Any) => (ne: Any) =>
-                        {
-                            la match
-                                case l: ListJitRepr =>
-                                    $budget.spendBudget(
-                                      Step(StepKind.Builtin),
-                                      $params.builtinCostModel.chooseList.constantCost,
-                                      Nil
-                                    )
-                                    if l.elements.isEmpty then e else ne
-                                case _ =>
-                                    // TODO: diagnostic
-                                    throw new IllegalArgumentException(
-                                      s"chooseList expected ListJitRepr but got ${la.getClass}"
-                                    )
-                        }
+                    '{ () => () => (laIn: Any) => (e: Any) => (ne: Any) =>
+                        RuntimeHelper.unaryOp[ListJitRepr](
+                          laIn,
+                          { l =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.chooseList.constantCost,
+                                Nil
+                              )
+                              if l.elements.isEmpty then e else ne
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.Sha2_256) =>
-                    '{ (bs: ByteString) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.sha2_256
-                                  .calculateCost(CekValue.VCon(asConstant(bs))),
-                              Nil
-                            )
-                            Builtins.sha2_256(bs)
-                        }
+                    '{ (bsIn: Any) =>
+                        RuntimeHelper.unaryOp[ByteString](
+                          bsIn,
+                          { bs =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.sha2_256
+                                    .calculateCost(CekValue.VCon(asConstant(bs))),
+                                Nil
+                              )
+                              Builtins.sha2_256(bs)
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.HeadList) =>
                     '{ () =>
-                        { (y: ListJitRepr) =>
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.headList.constantCost,
-                              Nil
+                        { (yIn: Any) =>
+                            RuntimeHelper.unaryOp[ListJitRepr](
+                              yIn,
+                              { y =>
+                                  $budget.spendBudget(
+                                    Step(StepKind.Builtin),
+                                    $params.builtinCostModel.headList.constantCost,
+                                    Nil
+                                  )
+                                  y.elements.head
+                              }
                             )
-                            y.elements.head
                         }
                     }
                 case Term.Builtin(DefaultFun.TailList) =>
                     '{ () =>
-                        { (x: ListJitRepr) =>
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.tailList.constantCost,
-                              Nil
+                        { (xIn: Any) =>
+                            RuntimeHelper.unaryOp[ListJitRepr](
+                              xIn,
+                              { x =>
+                                  $budget.spendBudget(
+                                    Step(StepKind.Builtin),
+                                    $params.builtinCostModel.tailList.constantCost,
+                                    Nil
+                                  )
+                                  ListJitRepr(x.elementType, x.elements.tail)
+                              }
                             )
-                            ListJitRepr(x.elementType, x.elements.tail)
                         }
                     }
                 case Term.Builtin(DefaultFun.UnConstrData) =>
-                    '{ (x: Data) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.unConstrData.constantCost,
-                              Nil
-                            )
-                            RuntimeHelper.unConstrData(x)
-                        }
+                    '{ (xIn: Any) =>
+                        RuntimeHelper.unaryOp[Data](
+                          xIn,
+                          { x =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.unConstrData.constantCost,
+                                Nil
+                              )
+                              RuntimeHelper.unConstrData(x)
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.UnListData) =>
-                    '{ (x: Data) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.unListData.constantCost,
-                              Nil
-                            )
-                            RuntimeHelper.unListData(x)
-                        }
+                    '{ (xIn: Any) =>
+                        RuntimeHelper.unaryOp[Data](
+                          xIn,
+                          { x =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.unListData.constantCost,
+                                Nil
+                              )
+                              RuntimeHelper.unListData(x)
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.UnIData) =>
-                    '{ (x: Data) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.unIData.constantCost,
-                              Nil
-                            )
-                            Builtins.unIData(x)
-                        }
+                    '{ (xIn: Any) =>
+                        RuntimeHelper.unaryOp[Data](
+                          xIn,
+                          { x =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.unIData.constantCost,
+                                Nil
+                              )
+                              Builtins.unIData(x)
+                          }
+                        )
                     }
                 case Term.Builtin(DefaultFun.UnBData) =>
-                    '{ (x: Data) =>
-                        {
-                            $budget.spendBudget(
-                              Step(StepKind.Builtin),
-                              $params.builtinCostModel.unBData.constantCost,
-                              Nil
-                            )
-                            Builtins.unBData(x)
-                        }
+                    '{ (xIn: Any) =>
+                        RuntimeHelper.unaryOp[Data](
+                          xIn,
+                          { x =>
+                              $budget.spendBudget(
+                                Step(StepKind.Builtin),
+                                $params.builtinCostModel.unBData.constantCost,
+                                Nil
+                              )
+                              Builtins.unBData(x)
+                          }
+                        )
                     }
                 case Term.Builtin(bi) =>
                     sys.error(
@@ -516,12 +525,8 @@ object JIT {
                 case Term.Error =>
                     '{ throw new RuntimeException("UPLC Error term evaluated") }
                 case Term.Constr(tag, args) =>
-                    val expr = Expr.ofTuple(
-                      Expr(tag.value) -> Expr.ofList(
-                        args.map(a =>
-                            genCode(a, env, logger, budget, params, runtimeJitContext).asExprOf[Any]
-                        )
-                      )
+                    val argsExprs = args.map(a =>
+                        genCode(a, env, logger, budget, params, runtimeJitContext).asExprOf[Any]
                     )
                     '{
                         $budget.spendBudget(
@@ -529,12 +534,17 @@ object JIT {
                           $params.machineCosts.constrCost,
                           Nil
                         )
-                        $expr
+                        RuntimeHelper.unwrapList(List(${ Expr.ofSeq(argsExprs) }*)) match
+                            case unwrappedArgs: List[Any] =>
+                                (${ Expr(tag.value) }, unwrappedArgs)
+                            case cc: CallCCTrampoline =>
+                                cc.map { unwrappedArgs =>
+                                    (${ Expr(tag.value) }, unwrappedArgs.asInstanceOf[List[Any]])
+                                }
                     }
                 case Term.Case(arg, cases) =>
-                    val constr =
+                    val constrIn =
                         genCode(arg, env, logger, budget, params, runtimeJitContext)
-                            .asExprOf[(Long, List[Any])]
                     val caseFuncs =
                         Expr.ofList(
                           cases.map(c =>
@@ -544,23 +554,31 @@ object JIT {
                         )
                     '{
                         $budget.spendBudget(Step(StepKind.Case), $params.machineCosts.caseCost, Nil)
-                        val (tag, args) = $constr
-                        args.foldLeft($caseFuncs(tag.toInt))((f, a) =>
-                            f(a).asInstanceOf[Any => Any]
+                        RuntimeHelper.unaryOp[(Long, List[Any])](
+                          ${ constrIn.asExprOf[Any] },
+                          { constr =>
+                              val (tag, args) = constr
+                              args.foldLeft[Any]($caseFuncs(tag.toInt))((f, a) => {
+                                  val result = f.asInstanceOf[Any => Any](a)
+                                  result match
+                                      case cc: CallCCTrampoline => cc
+                                      case _                    => result.asInstanceOf[Any => Any]
+                              })
+                          }
                         )
                     }
+            wrapWithDebug(result, termDesc)
         }
 
         val retval = '{ (logger: Logger, budget: BudgetSpender, params: MachineParams) =>
             val runtimeJitContext = new RuntimeJitContext()
             budget.spendBudget(Startup, params.machineCosts.startupCost, Nil)
-            try {
-                ${ genCode(term, Nil, 'logger, 'budget, 'params, 'runtimeJitContext) }
-            } catch {
-                case cc: CallCCTrampolineException =>
+            val result = ${ genCode(term, Nil, 'logger, 'budget, 'params, 'runtimeJitContext) }
+            result match
+                case cc: CallCCTrampoline =>
                     runtimeJitContext.stackDepth = 0
-                    CallCCTrampolineException.eval(cc.cont, runtimeJitContext)
-            }
+                    CallCCTrampoline.eval(cc.cont, runtimeJitContext)
+                case v => v
         }
 
         retval
