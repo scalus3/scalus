@@ -45,6 +45,7 @@ object ContinuationJitRepr {
       *   - No call stack recursion - everything goes through this loop
       *   - Stack frames are on the heap, not the JVM call stack
       *   - Array-based stack for efficient push/pop operations
+      *   - Fast path for common case (Return with empty stack)
       *   - Each iteration is simple and JIT-friendly
       */
     def eval(cont: ContinuationJitRepr): Any = {
@@ -70,14 +71,14 @@ object ContinuationJitRepr {
         }
 
         while true do {
+            // Fast path: Return with empty stack (common final case)
+            if current.isInstanceOf[Return] && stackSize == 0 then {
+                return current.asInstanceOf[Return].value
+            }
+            
             current match {
                 case Return(value) =>
-                    // We have a value - process next frame or return
-                    if stackSize == 0 then {
-                        // No more frames - we're done
-                        return value
-                    }
-
+                    // We have a value and frames to process
                     val frame = popFrame()
                     frame match {
                         case ApplyFuncFrame(arg) =>
