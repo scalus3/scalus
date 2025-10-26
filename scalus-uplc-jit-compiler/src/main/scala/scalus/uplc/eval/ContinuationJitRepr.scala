@@ -71,13 +71,13 @@ object ContinuationJitRepr {
         }
 
         while true do {
-            // Fast path: Return with empty stack (common final case)
-            if current.isInstanceOf[Return] && stackSize == 0 then {
-                return current.asInstanceOf[Return].value
-            }
-
             current match {
                 case Return(value) =>
+                    // Check if we're done (no more frames)
+                    if stackSize == 0 then {
+                        return value
+                    }
+
                     // We have a value and frames to process
                     val frame = popFrame()
                     frame match {
