@@ -1,8 +1,10 @@
 package scalus.uplc.eval
 
-import scalus.builtin.{platform, PlatformSpecific, given}
+import scalus.builtin.{PlatformSpecific, platform, given}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.uplc.*
+
+import scala.collection.mutable
 
 /** Plutus VM facade.
   *
@@ -106,7 +108,12 @@ class PlutusVM(
         budgetSpender: BudgetSpender = NoBudgetSpender,
         logger: Logger = NoLogger
     ): Term = {
-        val cek = new CekMachine(machineParams, budgetSpender, logger, builtins.BuiltinMeanings)
+        val cek = new CekMachine(
+          machineParams,
+          budgetSpender,
+          logger,
+          builtins.BuiltinMeanings.to(mutable.HashMap)
+        )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
     }
 
