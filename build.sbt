@@ -12,7 +12,7 @@ import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleMet
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.12.0"
+val scalusStableVersion = "0.13.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
@@ -484,47 +484,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.Interop.getScriptInfoFromScriptRef"
-        ),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptInfo"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptInfo$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV1"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV1$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV2"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV2$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV3"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV3$"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.bloxbean.TxEvaluator$RestrictingBudgetSpenderWithScripDump"
-        ),
-        // SlotConfig moved from scalus.bloxbean to scalus.cardano.ledger
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.SlotConfig"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.SlotConfig$"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getInterval"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getScriptContextV2"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getScriptContextV3"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV1"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV2"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV3"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.getSlotConfig"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.slotConfig"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.TxEvaluator.this"),
-        ProblemFilters
-            .exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.TxEvaluator.slotConfig")
-      ),
+      mimaBinaryIssueFilters ++= Seq(),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
