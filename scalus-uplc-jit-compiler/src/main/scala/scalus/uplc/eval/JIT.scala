@@ -94,20 +94,30 @@ object JIT {
                         $vr
                     }
                 case Term.LamAbs(name, term) =>
+                    // auction:  177653 ms
+                    '{ (arg: Any) =>
+                        ${ runtimeJitContext }.withCheckOverflow(
+                          ${
+                              genCode(
+                                term,
+                                (name -> 'arg.asTerm) :: env,
+                                logger,
+                                budget,
+                                params,
+                                runtimeJitContext
+                              )
+                          }
+                        )
+                    }
+                    /*
                     val mtpe =
                         MethodType(List(name))(_ => List(TypeRepr.of[Any]), _ => TypeRepr.of[Any])
                     val lambda = Lambda(
                       Symbol.spliceOwner,
                       mtpe,
                       { case (methSym, args) =>
-                          val body = genCode(
-                            term,
-                            (name -> args.head.asInstanceOf[quotes.reflect.Term]) :: env,
-                            logger,
-                            budget,
-                            params,
-                            runtimeJitContext
-                          ).asTerm
+                      // COMMENTED OUT: FULL TRAMPOLINING CODE
+                      /*
                           val wrapped = '{
                               val bodyDelayed = () => {
                                   ${ runtimeJitContext }.stackDepth += 1
@@ -133,6 +143,44 @@ object JIT {
                                   r
                           }
                           wrapped.asTerm.changeOwner(methSym)
+                     */
+                      // TEST: Minimal wrapper - just val bodyDelayed = () => $body
+                      //  compiled auctiin: 260343
+                      // val wrapped = '{
+                      //    val bodyDelayed = () => ${ body.asExprOf[Any] }
+                      //    bodyDelayed()
+                      // }
+                      // wrapped.asTerm.changeOwner(methSym)
+                      //  asTerm: 262401
+                      //  asExpr: 323768, 266960
+                      //   moved body to be generated inside wrapper: 270947
+                      //  low-level generation of internal lambda: 263192
+                      /*
+                          val bodyDelayedMte =
+                              MethodType(List.empty)(_ => List.empty, _ => TypeRepr.of[Any])
+                          val bodyDelayedLambda = Lambda(
+                            methSym,
+                            bodyDelayedMte,
+                            { case (delayedOwner, _) =>
+                                genCode(
+                                  term,
+                                  (name -> args.head.asInstanceOf[quotes.reflect.Term]) :: env,
+                                  logger,
+                                  budget,
+                                  params,
+                                  runtimeJitContext
+                                ).asTerm.changeOwner(delayedOwner)
+                            }
+                          ).asExprOf[() => Any]
+                          val wrapped = '{
+                              ${ runtimeJitContext }.withCheckOverflow($bodyDelayedLambda)
+                          }
+                          wrapped.asTerm.changeOwner(methSym)
+                     */
+                      //
+                      // TEST: working - just boddy
+                      // compiled 143560
+                      // body.changeOwner(methSym)
                       }
                     ).asExprOf[Any]
                     '{
@@ -143,46 +191,35 @@ object JIT {
                         )
                         $lambda
                     }
+                    
+                     */
                 case Term.Apply(fun, arg) =>
-                    val funExpr = genCode(fun, env, logger, budget, params, runtimeJitContext)
-                    val argExpr = genCode(arg, env, logger, budget, params, runtimeJitContext)
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Apply),
                           $params.machineCosts.applyCost,
                           Nil
                         )
-                        val fDelayed = () => ${ funExpr }.asInstanceOf[Any => Any]
-                        val argDelayed = () => ${ argExpr }
-                        // val f = CallCCTrampolineException.eval(fDelayed, ${runtimeJitContext})
-                        // val arg = CallCCTrampolineException.eval(argDelayed, ${runtimeJitContext})
-                        val f =
-                            try fDelayed.apply()
-                            catch
-                                case ecc1: CallCCTrampolineException =>
-                                    throw ecc1.map { fResult =>
-                                        val a =
-                                            try {
-                                                argDelayed.apply()
-                                            } catch {
-                                                case ecc2: CallCCTrampolineException =>
-                                                    throw ecc2.map(argResult =>
-                                                        fResult.asInstanceOf[Any => Any](argResult)
-                                                    )
-                                            }
-                                        fResult.asInstanceOf[Any => Any](a)
-                                    }
-                        val a =
-                            try argDelayed.apply()
-                            catch
-                                case ecc: CallCCTrampolineException =>
-                                    throw ecc.map(argResult => f(argResult))
-                        f.asInstanceOf[Any => Any](a)
+                        // TRAMPOLINING CODE
+                        // val funDelayed = () =>
+                        //    ${ genCode(fun, env, logger, budget, params, runtimeJitContext) }
+                        //        .asInstanceOf[Any => Any]
+                        // val argDelayed = () =>
+                        //    ${ genCode(arg, env, logger, budget, params, runtimeJitContext) }
+                        ${ runtimeJitContext }.trampolinedApply(
+                          ${ genCode(fun, env, logger, budget, params, runtimeJitContext) }
+                              .asInstanceOf[Any => Any],
+                          ${ genCode(arg, env, logger, budget, params, runtimeJitContext) }
+                        )
                     }
+                    // SIMPLIFIED VERSION WITHOUT TRAMPOLINING
+                    // val f = ${ funExpr }.asInstanceOf[Any => Any]
+                    // val a = ${ argExpr }
+                    // f(a)
                 case Term.Force(term) =>
                     val expr = genCode(term, env, logger, budget, params, runtimeJitContext)
                     '{
-                        val forceTerm = ${ expr }.asInstanceOf[() => Any]
+                        val forceTerm = ${ expr.asExprOf[Any] }.asInstanceOf[() => Any]
                         $budget.spendBudget(
                           Step(StepKind.Force),
                           $params.machineCosts.forceCost,
@@ -197,7 +234,10 @@ object JIT {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        () => ${ genCode(term, env, logger, budget, params, runtimeJitContext) }
+                        () =>
+                            ${
+                                genCode(term, env, logger, budget, params, runtimeJitContext)
+                            }
                     }
                 case Term.Const(const) =>
                     val expr = constantToExpr(const)
@@ -473,11 +513,14 @@ object JIT {
                     sys.error(
                       s"Builtin $bi is not yet supported by the JIT compiler. Please add implementation in the Builtin pattern matching section."
                     )
-                case Term.Error => '{ throw new RuntimeException("UPLC Error term evaluated") }
+                case Term.Error =>
+                    '{ throw new RuntimeException("UPLC Error term evaluated") }
                 case Term.Constr(tag, args) =>
                     val expr = Expr.ofTuple(
                       Expr(tag.value) -> Expr.ofList(
-                        args.map(a => genCode(a, env, logger, budget, params, runtimeJitContext))
+                        args.map(a =>
+                            genCode(a, env, logger, budget, params, runtimeJitContext).asExprOf[Any]
+                        )
                       )
                     )
                     '{
