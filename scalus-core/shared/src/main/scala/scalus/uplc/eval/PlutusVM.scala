@@ -30,12 +30,14 @@ class PlutusVM(
     val semanticVariant: BuiltinSemanticsVariant,
     platformSpecific: PlatformSpecific
 ) {
-    private lazy val builtins =
-        new CardanoBuiltins(
+    private val builtins = {
+        val builtins = new CardanoBuiltins(
           machineParams.builtinCostModel,
           platformSpecific,
           semanticVariant
         )
+        builtins.BuiltinMeanings.to(mutable.HashMap)
+    }
 
     /** Evaluates a Plutus script according to the Plutus specification.
       *
@@ -112,7 +114,7 @@ class PlutusVM(
           machineParams,
           budgetSpender,
           logger,
-          builtins.BuiltinMeanings.to(mutable.HashMap)
+          builtins
         )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
     }

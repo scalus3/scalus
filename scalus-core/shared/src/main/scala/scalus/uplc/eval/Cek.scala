@@ -600,7 +600,6 @@ class CekMachine(
     logger: Logger,
     getBuiltinRuntime: DefaultFun => BuiltinRuntime
 ) {
-//    import CekState.*
     import CekValue.*
     import Context.*
 
