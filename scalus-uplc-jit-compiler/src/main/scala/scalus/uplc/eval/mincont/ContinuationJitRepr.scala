@@ -94,7 +94,11 @@ object ContinuationJitRepr {
 
                         case ApplyArgFrame(func) =>
                             // We have both function and argument - apply!
-                            val result = func.asInstanceOf[Any => Any](value)
+                            // Special case: if func is Function0 and arg is Unit, just call the Function0
+                            val result = func match {
+                                case f0: Function0[?] => f0()
+                                case f1               => f1.asInstanceOf[Any => Any](value)
+                            }
                             // Result might be a continuation, continue evaluation
                             // Avoid creating new Return if result is already one
                             current = result match {

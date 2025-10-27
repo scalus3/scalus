@@ -375,7 +375,7 @@ object JIT {
                     }
                 case Term.Builtin(DefaultFun.IfThenElse) =>
                     '{
-                        Return((unitArg: Any) =>
+                        Return(() =>
                             (c: Any) =>
                                 (t: Any) =>
                                     (f: Any) => {
