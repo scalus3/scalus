@@ -4,26 +4,37 @@ import org.openjdk.jmh.annotations.*
 import scalus.*
 import scalus.uplc.{DeBruijnedProgram, DefaultFun, Program, Term}
 
-import java.nio.file.{Files, Paths}
+import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
 @State(Scope.Benchmark)
 class JITBenchmark:
+    @Param(
+      Array(
+        "auction_1-1.flat",
+        "auction_1-2.flat",
+        "auction_1-3.flat",
+        "auction_1-4.flat"
+      )
+    )
+    private var file: String = ""
+    private var path: Path = null
     private var program: DeBruijnedProgram | Null = null
-    private val jitted = Test.getJitted()
+    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
     private val params = MachineParams.defaultPlutusV2PostConwayParams
 
     @Setup
     def readProgram(): Unit = {
-        val path = Paths.get(s"src/main/resources/data/auction_1-1.flat")
+        path = Paths.get(s"src/main/resources/data/$file")
         val bytes = Files.readAllBytes(path)
         program = DeBruijnedProgram.fromFlatEncoded(bytes)
+        jitted = Test.getJitted()
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    def benchJIT_auction_1_1(): Unit = {
+    def benchJIT(): Unit = {
         jitted(NoLogger, NoBudgetSpender, params)
     }
 
