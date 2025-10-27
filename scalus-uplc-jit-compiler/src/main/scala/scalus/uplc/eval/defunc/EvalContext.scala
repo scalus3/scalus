@@ -167,7 +167,9 @@ private[eval] class EvalContext(
                 case OP_EXEC_SNIPPET =>
                     // Execute JIT snippet directly (bypasses switch!)
                     if instr.snippet != null then {
+                        logger.log(s"OP_EXEC_SNIPPET: executing, acc=$acc")
                         acc = instr.snippet.execute(acc, dataStack, budget, logger, params)
+                        logger.log(s"OP_EXEC_SNIPPET: result=$acc")
                         ip += 1
                     } else {
                         throw new IllegalStateException(
@@ -331,15 +333,19 @@ private[eval] class EvalContext(
                             
                             logger.log(s"FRAME_RESTORE_ENV: Popped, valuesToPop=$valuesToPop, returnAddr=${frame.returnAddr}, caseStack.size=${caseStack.size}")
                             
-                            // Pop values pushed by the closure body (keep result in acc)
-                            var i = 0
-                            while i < valuesToPop do {
-                                dataStack.pop()
-                                i += 1
-                            }
-                            
                             // Check if we're in the middle of case argument application
                             if caseStack.nonEmpty then {
+                                // Don't pop dataStack yet - we might still need values for remaining args
+                                // Only pop if returnAddr is not -1 (which means "continue with case stack")
+                                if frame.returnAddr != -1 then {
+                                    // Pop values pushed by the closure body (keep result in acc)
+                                    var i = 0
+                                    while i < valuesToPop do {
+                                        dataStack.pop()
+                                        i += 1
+                                    }
+                                }
+                                
                                 // Continue applying remaining args
                                 val caseState = caseStack.last
                                 val remainingArgs = caseState.remainingArgs
@@ -369,7 +375,7 @@ private[eval] class EvalContext(
                                                 frameStack.push(FRAME_RESTORE_ENV, 1, -1) // Will re-enter here
                                                 ip = closure.bodyInstrIdx
                                                 allApplied = true // Exit loop, let VM continue
-                                                return
+                                                // Don't return - just exit the while loop and let VM continue
                                                 
                                             case f: Function1[?, ?] =>
                                                 funcValue = f.asInstanceOf[Any => Any](arg)
@@ -407,6 +413,12 @@ private[eval] class EvalContext(
                                 }
                             } else {
                                 // Normal case - just continue to return address
+                                // Pop values from dataStack
+                                var i = 0
+                                while i < valuesToPop do {
+                                    dataStack.pop()
+                                    i += 1
+                                }
                                 ip = frame.returnAddr
                             }
 
