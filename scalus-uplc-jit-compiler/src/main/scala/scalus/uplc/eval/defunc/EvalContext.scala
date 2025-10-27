@@ -172,6 +172,11 @@ private[eval] class EvalContext(
 
                     // Pop frame and continue
                     val frame = frameStack.pop()
+                    
+                    // Debug logging
+                    if logger != NoLogger then {
+                        logger.log(s"RETURN: popped frame type=${frame.frameType}, acc=${acc.getClass.getSimpleName}")
+                    }
 
                     (frame.frameType: @switch) match {
                         case FRAME_APPLY_ARG =>
@@ -200,6 +205,9 @@ private[eval] class EvalContext(
 
                                 case f: Function1[?, ?] =>
                                     acc = f.asInstanceOf[Any => Any](argValue)
+                                    if logger != NoLogger then {
+                                        logger.log(s"Applied Function1 to $argValue, result=${acc.getClass.getSimpleName}")
+                                    }
                                     ip = frame.returnAddr // Return to caller
 
                                 case snippet: Snippet =>
