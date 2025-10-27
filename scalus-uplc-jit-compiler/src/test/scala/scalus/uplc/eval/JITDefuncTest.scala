@@ -126,5 +126,24 @@ class JITDefuncTest extends AnyFunSuite {
 
       assert(result == BigInt(42))
     }
+    
+    runTest("Force/Delay: Force (Delay 42) = 42") {
+      // Test: Force (Delay 42)
+      // Expected: 42
+      val term = Term.Force(
+        Term.Delay(
+          Term.Const(Constant.Integer(42))
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == BigInt(42))
+    }
   }
 }

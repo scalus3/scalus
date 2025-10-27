@@ -182,31 +182,25 @@ object JITCompiler {
                 )
 
             case Term.Delay(body) =>
-                // Delay: Create snippet that returns a thunk
-                val bodyIdx = compileTerm(body, env)
-                val snippet = staging.run { (quotes: Quotes) ?=>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = { () =>
-                                {
-                                    // TODO: Execute body
-                                    throw new UnsupportedOperationException(
-                                      "Delay execution not yet implemented"
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                summon[CompileContext].emit(
-                  Instruction(opcode = JIT.OP_EXEC_SNIPPET, snippet = snippet)
+                // Delay: Similar to lambda with no parameters
+                // Returns a thunk that will evaluate the body when forced
+                // We compile the body and create a Closure pointing to it
+                
+                // Emit OP_LAMBDA-like instruction but return a Function0 instead of Closure
+                val delayIdx = summon[CompileContext].emit(
+                  Instruction(opcode = JIT.OP_LAMBDA, data = null) // Will be filled with body index
                 )
+                
+                // Emit RETURN after delay so we don't fall through to the body
+                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
+                
+                // Compile the body
+                val bodyIdx = compileTerm(body, env)
+                
+                // Update the delay instruction with the body index
+                summon[CompileContext].updateInstruction(delayIdx, bodyIdx)
+                
+                delayIdx
 
             case Term.Builtin(bi) =>
                 // Builtins: Create JIT snippets for direct execution

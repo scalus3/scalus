@@ -235,6 +235,12 @@ private[eval] class EvalContext(
                                     acc = thunk()
                                     ip = frame.returnAddr // Return to caller
 
+                                case closure: Closure =>
+                                    // Delay creates a Closure with no arguments
+                                    // Jump to body without pushing arguments
+                                    frameStack.push(FRAME_RESTORE_ENV, 0, frame.returnAddr)
+                                    ip = closure.bodyInstrIdx
+
                                 case snippet: Snippet =>
                                     acc = snippet.execute(
                                       null,
