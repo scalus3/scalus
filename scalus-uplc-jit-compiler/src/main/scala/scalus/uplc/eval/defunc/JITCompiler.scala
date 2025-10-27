@@ -439,170 +439,19 @@ object JITCompiler {
     }
 
     /** Compile a builtin to a JIT snippet (direct bytecode execution). */
+    /** Get the pre-compiled snippet for a builtin. 
+      * No staging needed - snippets are created once in BuiltinSnippets.
+      */
     private def compileBuiltin(bi: DefaultFun): Snippet = {
-        staging.run { (quotes: Quotes) ?=>
-            bi match {
-                case DefaultFun.AddInteger =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                // Return curried function
-                                (x: Any) => (y: Any) =>
-                                    {
-                                        val xv = x.asInstanceOf[BigInt]
-                                        val yv = y.asInstanceOf[BigInt]
-                                        budget.spendBudget(
-                                          ExBudgetCategory.Step(StepKind.Builtin),
-                                          params.builtinCostModel.addInteger
-                                              .calculateCostFromMemory(
-                                                Seq(
-                                                  MemoryUsageJit.memoryUsage(xv),
-                                                  MemoryUsageJit.memoryUsage(yv)
-                                                )
-                                              ),
-                                          Nil
-                                        )
-                                        xv + yv
-                                    }
-                            }
-                        }
-                    }
-
-                case DefaultFun.SubtractInteger =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = { (x: Any) => (y: Any) =>
-                                {
-                                    val xv = x.asInstanceOf[BigInt]
-                                    val yv = y.asInstanceOf[BigInt]
-                                    budget.spendBudget(
-                                      ExBudgetCategory.Step(StepKind.Builtin),
-                                      params.builtinCostModel.subtractInteger
-                                          .calculateCostFromMemory(
-                                            Seq(
-                                              MemoryUsageJit.memoryUsage(xv),
-                                              MemoryUsageJit.memoryUsage(yv)
-                                            )
-                                          ),
-                                      Nil
-                                    )
-                                    xv - yv
-                                }
-                            }
-                        }
-                    }
-
-                case DefaultFun.MultiplyInteger =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = { (x: Any) => (y: Any) =>
-                                {
-                                    val xv = x.asInstanceOf[BigInt]
-                                    val yv = y.asInstanceOf[BigInt]
-                                    budget.spendBudget(
-                                      ExBudgetCategory.Step(StepKind.Builtin),
-                                      params.builtinCostModel.multiplyInteger
-                                          .calculateCostFromMemory(
-                                            Seq(
-                                              MemoryUsageJit.memoryUsage(xv),
-                                              MemoryUsageJit.memoryUsage(yv)
-                                            )
-                                          ),
-                                      Nil
-                                    )
-                                    xv * yv
-                                }
-                            }
-                        }
-                    }
-
-                case DefaultFun.EqualsData =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = { (x: Any) => (y: Any) =>
-                                {
-                                    val xv = x.asInstanceOf[Data]
-                                    val yv = y.asInstanceOf[Data]
-                                    budget.spendBudget(
-                                      ExBudgetCategory.Step(StepKind.Builtin),
-                                      params.builtinCostModel.equalsData.calculateCostFromMemory(
-                                        Seq(
-                                          MemoryUsageJit.memoryUsage(xv),
-                                          MemoryUsageJit.memoryUsage(yv)
-                                        )
-                                      ),
-                                      Nil
-                                    )
-                                    Builtins.equalsData(xv, yv)
-                                }
-                            }
-                        }
-                    }
-
-                case DefaultFun.IfThenElse =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = { () => (c: Any) => (t: Any) => (f: Any) =>
-                                {
-                                    val cv = c.asInstanceOf[Boolean]
-                                    budget.spendBudget(
-                                      ExBudgetCategory.Step(StepKind.Builtin),
-                                      params.builtinCostModel.ifThenElse.constantCost,
-                                      Nil
-                                    )
-                                    if cv then t else f
-                                }
-                            }
-                        }
-                    }
-
-                case _ =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                throw new UnsupportedOperationException(
-                                  s"Builtin not yet implemented: ${${ Expr(bi.toString) }}"
-                                )
-                            }
-                        }
-                    }
-            }
+        bi match {
+            case DefaultFun.AddInteger      => BuiltinSnippets.addInteger
+            case DefaultFun.SubtractInteger => BuiltinSnippets.subtractInteger
+            case DefaultFun.MultiplyInteger => BuiltinSnippets.multiplyInteger
+            case DefaultFun.EqualsData      => BuiltinSnippets.equalsData
+            case _ =>
+                throw new UnsupportedOperationException(
+                  s"Builtin not yet implemented: ${bi.toString}"
+                )
         }
     }
 }
