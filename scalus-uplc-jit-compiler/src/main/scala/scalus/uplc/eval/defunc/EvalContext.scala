@@ -58,13 +58,12 @@ private[eval] class DataStack(capacity: Int = 4096) {
 
 /** Manages the continuation stack using a single array of Frame objects.
   *
-  * This replaces the previous approach of 3 parallel arrays (frameTypes, frameData,
-  * frameReturnAddrs) with a single array for better cache locality and cleaner code.
-  *
   * Frames are allocated lazily on demand in blocks - only when needed. Once allocated, frames are
   * reused by mutating their fields (zero allocation in steady state).
+  *
+  * TODO: check heapSize when grow to prevent OutOfMemoryErrors
   */
-private[eval] class FrameStack(capacity: Int = 1024, blockSize: Int = 64) {
+private[eval] class FrameStack(capacity: Int = 1024000, blockSize: Int = 64) {
     private val frames = new Array[Frame](capacity)
     private var fp = 0 // Frame pointer (current stack depth)
     private var allocatedCount = 0 // Number of frames already allocated
@@ -78,6 +77,8 @@ private[eval] class FrameStack(capacity: Int = 1024, blockSize: Int = 64) {
         // Allocate frames in blocks if we need more
         if fp >= allocatedCount then {
             // Allocate a block of frames
+            if fp >= capacity then
+                throw IllegalStateException(s"frameStack is overflowed: capacity $capacity")
             val blockEnd = math.min(allocatedCount + blockSize, capacity)
             var i = allocatedCount
             while i < blockEnd do {
@@ -133,8 +134,9 @@ private[eval] class EvalContext(
 ) {
 
     // Mutable state - hidden from external API
-    private val dataStack = new DataStack(4096) // Value stack for intermediate results
-    private val frameStack = new FrameStack(1024) // Continuation stack
+    // TODO: get capacity from java heap size
+    private val dataStack = new DataStack(4096000) // Value stack for intermediate results
+    private val frameStack = new FrameStack(1024000) // Continuation stack
     private var ip = program.entryPoint // Instruction pointer
     private var acc: Any = null // Accumulator
 
@@ -151,9 +153,9 @@ private[eval] class EvalContext(
                     // Create a closure - no need to capture environment
                     // De Bruijn indices already encode variable positions
                     val bodyIdx = instr.data.asInstanceOf[Int]
-                    
+
                     // Just store the body index - environment is implicit in the stack
-                    acc = Closure(bodyIdx, Array.empty)  // Empty env - we'll use current stack
+                    acc = Closure(bodyIdx, Array.empty) // Empty env - we'll use current stack
                     ip += 1
 
                 case OP_EXEC_SNIPPET =>
@@ -171,7 +173,9 @@ private[eval] class EvalContext(
 
                 case OP_RETURN =>
                     // Return from current context - pure frame-based, no caseStack
-                    logger.log(s"OP_RETURN: frameStack.isEmpty=${frameStack.isEmpty}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
+                    logger.log(s"OP_RETURN: frameStack.isEmpty=${frameStack.isEmpty}, acc=${
+                            if acc == null then "null" else acc.getClass.getSimpleName
+                        }")
 
                     if frameStack.isEmpty then {
                         // Top level - done!
@@ -179,205 +183,230 @@ private[eval] class EvalContext(
                     } else {
                         // Pop frame and continue
                         val frame = frameStack.pop()
-                        
+
                         // Debug logging
-                        logger.log(s"RETURN: popped frame type=${frame.frameType}, acc=${acc.getClass.getSimpleName}")
+                        logger.log(
+                          s"RETURN: popped frame type=${frame.frameType}, acc=${acc.getClass.getSimpleName}"
+                        )
 
                         (frame.frameType: @switch) match {
-                        case FRAME_APPLY_ARG =>
-                            // We have function in acc, now evaluate argument
-                            // Push new frame to apply after arg evaluation
-                            val funcValue = acc
-                            val argInstrIdx = frame.data.asInstanceOf[Int]
-                            
-                            logger.log(s"FRAME_APPLY_ARG: funcValue=${funcValue.getClass.getSimpleName}, argIdx=$argInstrIdx, returnAddr=${frame.returnAddr}")
-                            
-                            frameStack.push(FRAME_APPLY_EXEC, funcValue, frame.returnAddr)
-                            ip = argInstrIdx
+                            case FRAME_APPLY_ARG =>
+                                // We have function in acc, now evaluate argument
+                                // Push new frame to apply after arg evaluation
+                                val funcValue = acc
+                                val argInstrIdx = frame.data.asInstanceOf[Int]
 
-                        case FRAME_APPLY_EXEC =>
-                            // We have both function and argument, execute application
-                            val funcValue = frame.data
-                            val argValue = acc
-                            
-                            logger.log(s"FRAME_APPLY_EXEC: funcValue=${funcValue.getClass.getSimpleName}, argValue=$argValue, returnAddr=${frame.returnAddr}")
+                                logger.log(
+                                  s"FRAME_APPLY_ARG: funcValue=${funcValue.getClass.getSimpleName}, argIdx=$argInstrIdx, returnAddr=${frame.returnAddr}"
+                                )
 
-                            // Execute function application
-                            funcValue match {
-                                case closure: Closure =>
-                                    // Apply closure by pushing argument and jumping to body
-                                    // The De Bruijn indices in the body will reference the stack correctly
-                                    dataStack.push(argValue)
-                                    
-                                    // Push frame to pop the argument after body evaluation
-                                    frameStack.push(FRAME_RESTORE_ENV, 1, frame.returnAddr)  // Pop 1 value
-                                    ip = closure.bodyInstrIdx
+                                frameStack.push(FRAME_APPLY_EXEC, funcValue, frame.returnAddr)
+                                ip = argInstrIdx
 
-                                case f: Function1[?, ?] =>
-                                    acc = f.asInstanceOf[Any => Any](argValue)
-                                    logger.log(s"Applied Function1 to $argValue, result=${acc.getClass.getSimpleName}")
-                                    ip = frame.returnAddr // Return to caller
+                            case FRAME_APPLY_EXEC =>
+                                // We have both function and argument, execute application
+                                val funcValue = frame.data
+                                val argValue = acc
 
-                                case snippet: Snippet =>
-                                    // Function is a snippet - execute it
-                                    acc = snippet.execute(
-                                      argValue,
-                                      dataStack,
-                                      budget,
-                                      logger,
-                                      params
-                                    )
-                                    ip = frame.returnAddr // Return to caller
+                                logger.log(
+                                  s"FRAME_APPLY_EXEC: funcValue=${funcValue.getClass.getSimpleName}, argValue=$argValue, returnAddr=${frame.returnAddr}"
+                                )
 
-                                case _ =>
-                                    throw new IllegalStateException(
-                                      s"Cannot apply non-function: ${funcValue.getClass}"
-                                    )
-                            }
+                                // Execute function application
+                                funcValue match {
+                                    case closure: Closure =>
+                                        // Apply closure by pushing argument and jumping to body
+                                        // The De Bruijn indices in the body will reference the stack correctly
+                                        dataStack.push(argValue)
 
-                        case FRAME_FORCE =>
-                            // Force a delayed computation
-                            acc match {
-                                case thunk: Function0[?] =>
-                                    acc = thunk()
-                                    ip = frame.returnAddr // Return to caller
+                                        // Push frame to pop the argument after body evaluation
+                                        frameStack.push(
+                                          FRAME_RESTORE_ENV,
+                                          1,
+                                          frame.returnAddr
+                                        ) // Pop 1 value
+                                        ip = closure.bodyInstrIdx
 
-                                case closure: Closure =>
-                                    // Delay creates a Closure with no arguments
-                                    // Jump to body without pushing arguments
-                                    frameStack.push(FRAME_RESTORE_ENV, 0, frame.returnAddr)
-                                    ip = closure.bodyInstrIdx
+                                    case f: Function1[?, ?] =>
+                                        acc = f.asInstanceOf[Any => Any](argValue)
+                                        logger.log(
+                                          s"Applied Function1 to $argValue, result=${acc.getClass.getSimpleName}"
+                                        )
+                                        ip = frame.returnAddr // Return to caller
 
-                                case snippet: Snippet =>
-                                    acc = snippet.execute(
-                                      null,
-                                      dataStack,
-                                      budget,
-                                      logger,
-                                      params
-                                    )
-                                    ip = frame.returnAddr // Return to caller
+                                    case snippet: Snippet =>
+                                        // Function is a snippet - execute it
+                                        acc = snippet.execute(
+                                          argValue,
+                                          dataStack,
+                                          budget,
+                                          logger,
+                                          params
+                                        )
+                                        ip = frame.returnAddr // Return to caller
 
-                                case _ =>
-                                    throw new IllegalStateException(
-                                      s"Cannot force non-delayed value: ${acc.getClass}"
-                                    )
-                            }
+                                    case _ =>
+                                        throw new IllegalStateException(
+                                          s"Cannot apply non-function: ${funcValue.getClass}"
+                                        )
+                                }
 
-                        case FRAME_RESTORE_ENV =>
-                            // Restore environment after closure body evaluation - pure frame-based
-                            val valuesToPop = frame.data.asInstanceOf[Int]
+                            case FRAME_FORCE =>
+                                // Force a delayed computation
+                                acc match {
+                                    case thunk: Function0[?] =>
+                                        acc = thunk()
+                                        ip = frame.returnAddr // Return to caller
 
-                            logger.log(s"FRAME_RESTORE_ENV: Popped, valuesToPop=$valuesToPop, returnAddr=${frame.returnAddr}")
+                                    case closure: Closure =>
+                                        // Delay creates a Closure with no arguments
+                                        // Jump to body without pushing arguments
+                                        frameStack.push(FRAME_RESTORE_ENV, 0, frame.returnAddr)
+                                        ip = closure.bodyInstrIdx
 
-                            // Pop values from dataStack
-                            var i = 0
-                            while i < valuesToPop do {
-                                dataStack.pop()
-                                i += 1
-                            }
-                            ip = frame.returnAddr
+                                    case snippet: Snippet =>
+                                        acc = snippet.execute(
+                                          null,
+                                          dataStack,
+                                          budget,
+                                          logger,
+                                          params
+                                        )
+                                        ip = frame.returnAddr // Return to caller
 
-                        case FRAME_CONSTR_ARG =>
-                            // Finished evaluating one constructor argument
-                            // data = (tag, argIndices, evaluatedArgs, currentIndex)
-                            val (tag, argIndices, evaluatedArgs, currentIdx) = 
-                                frame.data.asInstanceOf[(Long, Array[Int], List[Any], Int)]
-                            
-                            // Add evaluated arg to list
-                            val newEvaluatedArgs = acc :: evaluatedArgs
-                            val nextIdx = currentIdx + 1
-                            
-                            if nextIdx >= argIndices.length then {
-                                // All arguments evaluated - build tuple
-                                acc = (tag, newEvaluatedArgs.reverse)
+                                    case _ =>
+                                        throw new IllegalStateException(
+                                          s"Cannot force non-delayed value: ${acc.getClass}"
+                                        )
+                                }
+
+                            case FRAME_RESTORE_ENV =>
+                                // Restore environment after closure body evaluation - pure frame-based
+                                val valuesToPop = frame.data.asInstanceOf[Int]
+
+                                logger.log(
+                                  s"FRAME_RESTORE_ENV: Popped, valuesToPop=$valuesToPop, returnAddr=${frame.returnAddr}"
+                                )
+
+                                // Pop values from dataStack
+                                var i = 0
+                                while i < valuesToPop do {
+                                    dataStack.pop()
+                                    i += 1
+                                }
                                 ip = frame.returnAddr
-                            } else {
-                                // More arguments to evaluate
-                                frameStack.push(
-                                  FRAME_CONSTR_ARG,
-                                  (tag, argIndices, newEvaluatedArgs, nextIdx),
-                                  frame.returnAddr
-                                )
-                                ip = argIndices(nextIdx)
-                            }
 
-                        case FRAME_CASE_APPLY =>
-                            // Scrutinee evaluated, now select and apply case
-                            val caseIndices = frame.data.asInstanceOf[Array[Int]]
-                            
-                            logger.log(s"FRAME_CASE_APPLY: acc=${acc}, accType=${acc.getClass.getSimpleName}")
-                            
-                            // acc should be a tuple (tag, args)
-                            val (tag, args) = acc.asInstanceOf[(Long, List[Any])]
-                            
-                            // Select the appropriate case function
-                            val tagInt = tag.toInt
-                            if tagInt < 0 || tagInt >= caseIndices.length then {
-                                throw new IllegalStateException(
-                                  s"Case tag $tagInt out of bounds [0, ${caseIndices.length})"
-                                )
-                            }
-                            
-                            val caseFuncIdx = caseIndices(tagInt)
+                            case FRAME_CONSTR_ARG =>
+                                // Finished evaluating one constructor argument
+                                // data = (tag, argIndices, evaluatedArgs, currentIndex)
+                                val (tag, argIndices, evaluatedArgs, currentIdx) =
+                                    frame.data.asInstanceOf[(Long, Array[Int], List[Any], Int)]
 
-                            // Like CEK's transferArgStack: push FrameAwaitFunValue for each arg
-                            // Push cleanup frame first (will be popped last)
-                            frameStack.push(FRAME_RESTORE_ENV, args.length, frame.returnAddr)
+                                // Add evaluated arg to list
+                                val newEvaluatedArgs = acc :: evaluatedArgs
+                                val nextIdx = currentIdx + 1
 
-                            // Push arg application frames in reverse order so first arg is applied first
-                            // Each frame will apply function (in acc) to arg (in frame.data)
-                            for (arg <- args.reverse) {
-                                frameStack.push(FRAME_CASE_APPLY_ARG, arg, -1)  // -1 means continue to next frame
-                            }
-
-                            // Evaluate the case function
-                            ip = caseFuncIdx
-
-                        case FRAME_CASE_APPLY_ARG =>
-                            // Like CEK's FrameAwaitFunValue: function in acc, arg in frame.data
-                            val arg = frame.data
-                            val funcValue = acc
-
-                            logger.log(s"FRAME_CASE_APPLY_ARG: funcValue=${funcValue.getClass.getSimpleName}, arg=$arg")
-
-                            // Apply function to arg (like CEK's applyEvaluate)
-                            funcValue match {
-                                case closure: Closure =>
-                                    // Apply closure by pushing arg and evaluating body
-                                    dataStack.push(arg)
-                                    // Don't pop this arg yet - nested lambdas may need to access it
-                                    // We'll pop all args at once when case finishes
-                                    ip = closure.bodyInstrIdx
-
-                                case f: Function1[?, ?] =>
-                                    acc = f.asInstanceOf[Any => Any](arg)
+                                if nextIdx >= argIndices.length then {
+                                    // All arguments evaluated - build tuple
+                                    acc = (tag, newEvaluatedArgs.reverse)
                                     ip = frame.returnAddr
-
-                                case snippet: Snippet =>
-                                    acc = snippet.execute(arg, dataStack, budget, logger, params)
-                                    ip = frame.returnAddr
-
-                                case _ =>
-                                    throw new IllegalStateException(
-                                      s"Cannot apply non-function in case: ${funcValue.getClass}"
+                                } else {
+                                    // More arguments to evaluate
+                                    frameStack.push(
+                                      FRAME_CONSTR_ARG,
+                                      (tag, argIndices, newEvaluatedArgs, nextIdx),
+                                      frame.returnAddr
                                     )
-                            }
+                                    ip = argIndices(nextIdx)
+                                }
 
-                        case _ =>
-                            throw new IllegalStateException(
-                              s"Unknown frame type: ${frame.frameType}"
-                            )
+                            case FRAME_CASE_APPLY =>
+                                // Scrutinee evaluated, now select and apply case
+                                val caseIndices = frame.data.asInstanceOf[Array[Int]]
+
+                                logger.log(
+                                  s"FRAME_CASE_APPLY: acc=${acc}, accType=${acc.getClass.getSimpleName}"
+                                )
+
+                                // acc should be a tuple (tag, args)
+                                val (tag, args) = acc.asInstanceOf[(Long, List[Any])]
+
+                                // Select the appropriate case function
+                                val tagInt = tag.toInt
+                                if tagInt < 0 || tagInt >= caseIndices.length then {
+                                    throw new IllegalStateException(
+                                      s"Case tag $tagInt out of bounds [0, ${caseIndices.length})"
+                                    )
+                                }
+
+                                val caseFuncIdx = caseIndices(tagInt)
+
+                                // Like CEK's transferArgStack: push FrameAwaitFunValue for each arg
+                                // Push cleanup frame first (will be popped last)
+                                frameStack.push(FRAME_RESTORE_ENV, args.length, frame.returnAddr)
+
+                                // Push arg application frames in reverse order so first arg is applied first
+                                // Each frame will apply function (in acc) to arg (in frame.data)
+                                for arg <- args.reverse do {
+                                    frameStack.push(
+                                      FRAME_CASE_APPLY_ARG,
+                                      arg,
+                                      -1
+                                    ) // -1 means continue to next frame
+                                }
+
+                                // Evaluate the case function
+                                ip = caseFuncIdx
+
+                            case FRAME_CASE_APPLY_ARG =>
+                                // Like CEK's FrameAwaitFunValue: function in acc, arg in frame.data
+                                val arg = frame.data
+                                val funcValue = acc
+
+                                logger.log(
+                                  s"FRAME_CASE_APPLY_ARG: funcValue=${funcValue.getClass.getSimpleName}, arg=$arg"
+                                )
+
+                                // Apply function to arg (like CEK's applyEvaluate)
+                                funcValue match {
+                                    case closure: Closure =>
+                                        // Apply closure by pushing arg and evaluating body
+                                        dataStack.push(arg)
+                                        // Don't pop this arg yet - nested lambdas may need to access it
+                                        // We'll pop all args at once when case finishes
+                                        ip = closure.bodyInstrIdx
+
+                                    case f: Function1[?, ?] =>
+                                        acc = f.asInstanceOf[Any => Any](arg)
+                                        ip = frame.returnAddr
+
+                                    case snippet: Snippet =>
+                                        acc =
+                                            snippet.execute(arg, dataStack, budget, logger, params)
+                                        ip = frame.returnAddr
+
+                                    case _ =>
+                                        throw new IllegalStateException(
+                                          s"Cannot apply non-function in case: ${funcValue.getClass}"
+                                        )
+                                }
+
+                            case _ =>
+                                throw new IllegalStateException(
+                                  s"Unknown frame type: ${frame.frameType}"
+                                )
+                        }
                     }
-                }
 
                 case OP_APPLY =>
                     // Apply: evaluate function, then argument
                     // Push frame to evaluate argument after function
                     val funcInstrIdx = instr.data.asInstanceOf[(Int, Int)]._1
                     val argInstrIdx = instr.data.asInstanceOf[(Int, Int)]._2
-                    
-                    logger.log(s"OP_APPLY: ip=$ip, funIdx=$funcInstrIdx, argIdx=$argInstrIdx, frameStack.size=${frameStack.size}")
+
+                    logger.log(
+                      s"OP_APPLY: ip=$ip, funIdx=$funcInstrIdx, argIdx=$argInstrIdx, frameStack.size=${frameStack.size}"
+                    )
 
                     frameStack.push(FRAME_APPLY_ARG, argInstrIdx, ip + 1)
 
@@ -397,13 +426,13 @@ private[eval] class EvalContext(
                     // Build constructor tuple (tag, args)
                     // data = (tag: Long, argInstrIndices: Array[Int])
                     val (tag, argIndices) = instr.data.asInstanceOf[(Long, Array[Int])]
-                    
+
                     budget.spendBudget(
                       ExBudgetCategory.Step(StepKind.Constr),
                       params.machineCosts.constrCost,
                       Nil
                     )
-                    
+
                     if argIndices.isEmpty then {
                         // No arguments - create tuple immediately
                         acc = (tag, Nil)
@@ -412,8 +441,8 @@ private[eval] class EvalContext(
                         // Evaluate arguments left-to-right
                         // Push frame with: (tag, remaining args, evaluated args so far)
                         frameStack.push(
-                          FRAME_CONSTR_ARG, 
-                          (tag, argIndices, List.empty[Any], 0), 
+                          FRAME_CONSTR_ARG,
+                          (tag, argIndices, List.empty[Any], 0),
                           ip + 1
                         )
                         // Start evaluating first argument
@@ -424,13 +453,13 @@ private[eval] class EvalContext(
                     // Pattern match on constructor
                     // data = (scrutInstrIdx: Int, caseInstrIndices: Array[Int])
                     val (scrutIdx, caseIndices) = instr.data.asInstanceOf[(Int, Array[Int])]
-                    
+
                     budget.spendBudget(
                       ExBudgetCategory.Step(StepKind.Case),
                       params.machineCosts.caseCost,
                       Nil
                     )
-                    
+
                     // Evaluate scrutinee first, then select case
                     frameStack.push(FRAME_CASE_APPLY, caseIndices, ip + 1)
                     ip = scrutIdx
@@ -442,7 +471,9 @@ private[eval] class EvalContext(
 
         // Shouldn't reach here
         // If we exit the loop without returning, something went wrong
-        logger.log(s"EXITED LOOP: ip=$ip, frameStack.isEmpty=${frameStack.isEmpty}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
+        logger.log(s"EXITED LOOP: ip=$ip, frameStack.isEmpty=${frameStack.isEmpty}, acc=${
+                if acc == null then "null" else acc.getClass.getSimpleName
+            }")
         throw new IllegalStateException("Program terminated without returning")
     }
 }

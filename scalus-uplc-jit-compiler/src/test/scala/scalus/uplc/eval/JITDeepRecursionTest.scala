@@ -10,6 +10,9 @@ import java.lang.management.ManagementFactory
 class JITDeepRecursionTest extends AnyFunSuiteLike {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
+    // Test both JIT implementations for deep recursion
+    private val jitImplementations = JITImplementation.implemented
+
     private def getThreadStackInfo(): String =
         val thread = Thread.currentThread()
         // val isVirtual = thread.isVirtual()
@@ -34,69 +37,72 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         // end if
     end getThreadStackInfo
 
-    test("Deep recursion factorial with CekMachine vs JIT") {
-        val uplc: Term = compile {
-            def factorial(n: BigInt): BigInt =
-                if n <= 1 then 1
-                else n * factorial(n - 1)
+    for (jit <- jitImplementations) {
+        test(s"[${jit.name}] Deep recursion factorial with CekMachine vs JIT") {
+            val uplc: Term = compile {
+                def factorial(n: BigInt): BigInt =
+                    if n <= 1 then 1
+                    else n * factorial(n - 1)
 
-            factorial(20)
-        }.toUplc(true)
+                factorial(20)
+            }.toUplc(true)
 
-        // Evaluate with CekMachine
-        val cekResult = uplc.evaluateDebug
-        val cekValue = cekResult match
-            case Result.Success(term, _, _, _) => term
-            case Result.Failure(e, _, _, _)    => fail(s"CekMachine evaluation failed: $e")
+            // Evaluate with CekMachine
+            val cekResult = uplc.evaluateDebug
+            val cekValue = cekResult match
+                case Result.Success(term, _, _, _) => term
+                case Result.Failure(e, _, _, _)    => fail(s"CekMachine evaluation failed: $e")
 
-        // Evaluate with JIT (will fail if builtin not supported, so we catch that)
-        val logger = Log()
-        try {
-            val jitResult =
-                MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
-            // JIT returns raw value, CekMachine returns Term.Const
-            val expectedValue = BigInt(2432902008176640000L)
-            assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
-            assert(jitResult == expectedValue)
-        } catch {
-            case e: RuntimeException if e.getMessage.contains("not yet supported") =>
-                info(s"JIT doesn't support some builtins yet: ${e.getMessage}")
-                assert(cekValue == Term.Const(Constant.Integer(2432902008176640000L)))
+            // Evaluate with JIT (will fail if builtin not supported, so we catch that)
+            val logger = Log()
+            try {
+                val jitResult = jit.eval(uplc, logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                // JIT returns raw value, CekMachine returns Term.Const
+                val expectedValue = BigInt(2432902008176640000L)
+                assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
+                assert(jitResult == expectedValue)
+            } catch {
+                case e: RuntimeException if e.getMessage.contains("not yet supported") =>
+                    info(s"${jit.name} doesn't support some builtins yet: ${e.getMessage}")
+                    assert(cekValue == Term.Const(Constant.Integer(2432902008176640000L)))
+            }
         }
     }
 
-    test("Deep recursion Fibonacci with CekMachine vs JIT") {
-        val uplc: Term = compile {
-            def fib(n: BigInt): BigInt =
-                if n <= 1 then n
-                else fib(n - 1) + fib(n - 2)
+    for (jit <- jitImplementations) {
+        test(s"[${jit.name}] Deep recursion Fibonacci with CekMachine vs JIT") {
+            val uplc: Term = compile {
+                def fib(n: BigInt): BigInt =
+                    if n <= 1 then n
+                    else fib(n - 1) + fib(n - 2)
 
-            fib(15)
-        }.toUplc(true)
+                fib(15)
+            }.toUplc(true)
 
-        // Evaluate with CekMachine
-        val cekResult = uplc.evaluateDebug
-        val cekValue = cekResult match
-            case Result.Success(term, _, _, _) => term
-            case Result.Failure(e, _, _, _)    => fail(s"CekMachine evaluation failed: $e")
+            // Evaluate with CekMachine
+            val cekResult = uplc.evaluateDebug
+            val cekValue = cekResult match
+                case Result.Success(term, _, _, _) => term
+                case Result.Failure(e, _, _, _)    => fail(s"CekMachine evaluation failed: $e")
 
-        // Evaluate with JIT (will fail if builtin not supported, so we catch that)
-        val logger = Log()
-        try {
-            val jitResult =
-                MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
-            // JIT returns raw value, CekMachine returns Term.Const
-            val expectedValue = BigInt(610)
-            assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
-            assert(jitResult == expectedValue)
-        } catch {
-            case e: RuntimeException if e.getMessage.contains("not yet supported") =>
-                info(s"JIT doesn't support some builtins yet: ${e.getMessage}")
-                assert(cekValue == Term.Const(Constant.Integer(610)))
+            // Evaluate with JIT (will fail if builtin not supported, so we catch that)
+            val logger = Log()
+            try {
+                val jitResult = jit.eval(uplc, logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                // JIT returns raw value, CekMachine returns Term.Const
+                val expectedValue = BigInt(610)
+                assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
+                assert(jitResult == expectedValue)
+            } catch {
+                case e: RuntimeException if e.getMessage.contains("not yet supported") =>
+                    info(s"${jit.name} doesn't support some builtins yet: ${e.getMessage}")
+                    assert(cekValue == Term.Const(Constant.Integer(610)))
+            }
         }
     }
 
-    test("Deep recursion sum with CekMachine vs JIT") {
+    for (jit <- jitImplementations) {
+        test(s"[${jit.name}] Deep recursion sum with CekMachine vs JIT") {
         val uplc: Term = compile {
             def sumToN(n: BigInt): BigInt =
                 if n <= 0 then 0
@@ -114,67 +120,67 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         // Evaluate with JIT (will fail if builtin not supported, so we catch that)
         val logger = Log()
         try {
-            val jitResult =
-                MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+            val jitResult = jit.eval(uplc, logger, NoBudgetSpender, summon[PlutusVM].machineParams)
             // JIT returns raw value, CekMachine returns Term.Const
             val expectedValue = BigInt(5050)
             assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
             assert(jitResult == expectedValue)
         } catch {
             case e: RuntimeException if e.getMessage.contains("not yet supported") =>
-                info(s"JIT doesn't support some builtins yet: ${e.getMessage}")
+                info(s"${jit.name} doesn't support some builtins yet: ${e.getMessage}")
                 assert(cekValue == Term.Const(Constant.Integer(5050)))
+        }
         }
     }
 
-    test("JIT trampoline handles deep recursion - should work up to high depths") {
-        info(s"Running on: ${getThreadStackInfo()}")
+    for (jit <- jitImplementations) {
+        test(s"[${jit.name}] JIT handles deep recursion - should work up to high depths") {
+            info(s"Running on: ${getThreadStackInfo()}")
 
-        // Compile the sum function once
-        val sumFunctionUplc: Term = compile { (n: BigInt) =>
-            def sumToN(n: BigInt): BigInt =
-                if n <= 0 then 0
-                else n + sumToN(n - 1)
-            sumToN(n)
-        }.toUplc(true)
+            // Compile the sum function once
+            val sumFunctionUplc: Term = compile { (n: BigInt) =>
+                def sumToN(n: BigInt): BigInt =
+                    if n <= 0 then 0
+                    else n + sumToN(n - 1)
+                sumToN(n)
+            }.toUplc(true)
 
-        def testDepth(n: Int): Unit = {
-            // Apply the compiled function to a constant argument
-            val uplc: Term = sumFunctionUplc $ Term.Const(Constant.Integer(BigInt(n)))
+            def testDepth(n: Int): Unit = {
+                // Apply the compiled function to a constant argument
+                val uplc: Term = sumFunctionUplc $ Term.Const(Constant.Integer(BigInt(n)))
 
-            // CekMachine should handle this fine (it's iterative)
-            val cekResult = uplc.evaluateDebug
-            val cekSuccess = cekResult match
-                case Result.Success(term, _, _, _) =>
-                    info(s"CekMachine succeeded at depth $n")
-                    true
-                case Result.Failure(e, _, _, _) =>
-                    info(s"CekMachine failed at depth $n: ${e.getMessage}")
-                    false
+                // CekMachine should handle this fine (it's iterative)
+                val cekResult = uplc.evaluateDebug
+                val cekSuccess = cekResult match
+                    case Result.Success(term, _, _, _) =>
+                        info(s"  + CekMachine succeeded at depth $n")
+                        true
+                    case Result.Failure(e, _, _, _) =>
+                        info(s"  - CekMachine failed at depth $n: ${e.getMessage}")
+                        false
 
-            if cekSuccess then
-                // Try JIT - with trampoline it should handle deep recursion
-                val logger = Log()
-                try {
-                    val jitResult =
-                        MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
-                    info(s"JIT succeeded at depth $n, result: $jitResult")
-                    // Verify the result is correct
-                    val expectedValue = BigInt(n) * BigInt(n + 1) / 2 // sum formula: n*(n+1)/2
-                    assert(
-                      jitResult == expectedValue,
-                      s"Expected $expectedValue but got $jitResult"
-                    )
-                } catch {
-                    case e: StackOverflowError =>
-                        info(
-                          s"JIT StackOverflowError at depth $n - trampoline not working properly"
+                if cekSuccess then
+                    // Try JIT - should handle deep recursion without stack overflow
+                    val logger = Log()
+                    try {
+                        val jitResult = jit.eval(uplc, logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                        info(s"  + ${jit.name} succeeded at depth $n, result: $jitResult")
+                        // Verify the result is correct
+                        val expectedValue = BigInt(n) * BigInt(n + 1) / 2 // sum formula: n*(n+1)/2
+                        assert(
+                          jitResult == expectedValue,
+                          s"Expected $expectedValue but got $jitResult"
                         )
-                        throw e // Re-throw to mark the boundary
-                    case e: RuntimeException if e.getMessage.contains("not yet supported") =>
-                        info(s"JIT doesn't support some builtins: ${e.getMessage}")
-                }
-        }
+                    } catch {
+                        case e: StackOverflowError =>
+                            info(
+                              s"  ❌ ${jit.name} StackOverflowError at depth $n - FAILED!"
+                            )
+                            throw e // Re-throw to mark the boundary
+                        case e: RuntimeException if e.getMessage.contains("not yet supported") =>
+                            info(s"  - ${jit.name} doesn't support some builtins: ${e.getMessage}")
+                    }
+            }
 
         // Test at depths that require trampolining
         // MAX_STACK_DEPTH is 500, so these depths should trigger trampoline
@@ -189,11 +195,12 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
             } catch {
                 case e: StackOverflowError =>
                     fail(
-                      s"JIT stack overflow at depth $depth - trampoline should prevent this. Maximum working depth: $maxWorkingDepth"
+                      s"${jit.name} stack overflow at depth $depth - should handle deep recursion! Maximum working depth: $maxWorkingDepth"
                     )
             }
 
-        info(s"JIT trampoline successfully handled depths up to $maxWorkingDepth")
+        info(s"${jit.name} successfully handled depths up to $maxWorkingDepth")
+        }
     }
 
     /*
