@@ -2,7 +2,7 @@ package scalus.uplc.eval.defunc
 
 import scala.annotation.switch
 import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
-import scalus.uplc.eval.defunc.{CompiledProgram, Snippet}
+import scalus.uplc.eval.defunc.{Closure, CompiledProgram, Snippet}
 import scalus.uplc.eval.defunc.JIT.*
 
 /** A single frame on the continuation stack.
@@ -143,6 +143,15 @@ private[eval] class EvalContext(
             // Switch on opcode (control flow)
             (instr.opcode: @switch) match {
 
+                case OP_LAMBDA =>
+                    // Create a closure - no need to capture environment
+                    // De Bruijn indices already encode variable positions
+                    val bodyIdx = instr.data.asInstanceOf[Int]
+                    
+                    // Just store the body index - environment is implicit in the stack
+                    acc = Closure(bodyIdx, Array.empty)  // Empty env - we'll use current stack
+                    ip += 1
+
                 case OP_EXEC_SNIPPET =>
                     // Execute JIT snippet directly (bypasses switch!)
                     if instr.snippet != null then {
@@ -180,6 +189,15 @@ private[eval] class EvalContext(
 
                             // Execute function application
                             funcValue match {
+                                case closure: Closure =>
+                                    // Apply closure by pushing argument and jumping to body
+                                    // The De Bruijn indices in the body will reference the stack correctly
+                                    dataStack.push(argValue)
+                                    
+                                    // Push frame to pop the argument after body evaluation
+                                    frameStack.push(FRAME_RESTORE_ENV, 1, frame.returnAddr)  // Pop 1 value
+                                    ip = closure.bodyInstrIdx
+
                                 case f: Function1[?, ?] =>
                                     acc = f.asInstanceOf[Any => Any](argValue)
                                     ip = frame.returnAddr // Return to caller
@@ -223,6 +241,18 @@ private[eval] class EvalContext(
                                       s"Cannot force non-delayed value: ${acc.getClass}"
                                     )
                             }
+
+                        case FRAME_RESTORE_ENV =>
+                            // Restore environment after closure body evaluation
+                            val valuesToPop = frame.data.asInstanceOf[Int]
+                            // Pop values pushed by the closure body (keep result in acc)
+                            var i = 0
+                            while i < valuesToPop do {
+                                dataStack.pop()
+                                i += 1
+                            }
+                            // Continue to actual return address
+                            ip = frame.returnAddr
 
                         case _ =>
                             throw new IllegalStateException(

@@ -25,12 +25,14 @@ object JIT {
   private[eval] val OP_APPLY = 1         // Apply function to argument
   private[eval] val OP_FORCE = 2         // Force a delayed computation
   private[eval] val OP_EXEC_SNIPPET = 3  // Execute a JIT-compiled snippet
+  private[eval] val OP_LAMBDA = 4        // Create a closure (data = body instruction index)
 
   // Frame types for continuation stack
   private[eval] val FRAME_DONE = 0           // Top level - evaluation complete
   private[eval] val FRAME_APPLY_ARG = 1      // Have function, need to evaluate argument
   private[eval] val FRAME_APPLY_EXEC = 2     // Have function and argument, execute application
   private[eval] val FRAME_FORCE = 3          // Force delayed computation
+  private[eval] val FRAME_RESTORE_ENV = 4    // Restore environment after closure evaluation
 
   // ============================================
   // External API (Functional - IFO Pattern)

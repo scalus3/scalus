@@ -3,7 +3,7 @@ package scalus.uplc.eval.defunc
 import scalus.builtin.{BuiltinPair, Builtins, ByteString, Data}
 import scalus.uplc.{Constant, DefaultFun, DefaultUni, NamedDeBruijn, Term}
 import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams, MemoryUsageJit, RuntimeHelper, StepKind}
-import scalus.uplc.eval.defunc.{CompiledProgram, Instruction, Snippet}
+import scalus.uplc.eval.defunc.{Closure, CompiledProgram, Instruction, Snippet}
 import scalus.uplc.eval.defunc.JIT.{*, given}
 import scala.annotation.switch
 import scala.quoted.*
@@ -46,6 +46,11 @@ object JITCompiler {
             instructions += instr
             nextInstrIdx += 1
             idx
+        }
+
+        /** Update an instruction's data field (for back-patching). */
+        def updateInstruction(idx: Int, bodyIdx: Int): Unit = {
+            instructions(idx) = instructions(idx).copy(data = bodyIdx)
         }
 
         /** Get all emitted instructions. */
@@ -94,14 +99,17 @@ object JITCompiler {
                     snippet = snippet
                   )
                 )
-                // Emit RETURN after snippet so we don't fall through
+                // Emit RETURN after snippet so control returns to caller
                 summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
                 idx
 
             case Term.Var(name) =>
-                // Variables: Look up from environment
-                // For now, create a snippet that throws (will implement env lookup properly)
+                // Variables: Look up from environment (data stack)
+                // The environment is maintained on the dataStack
+                // DeBruijn index tells us how far back to look
+                val index = name.index
                 val snippet = staging.run { (quotes: Quotes) ?=>
+                    val idx = Expr(index)
                     '{
                         new Snippet {
                             def execute(
@@ -111,9 +119,9 @@ object JITCompiler {
                                 logger: Logger,
                                 params: MachineParams
                             ): Any = {
-                                throw new UnsupportedOperationException(
-                                  s"Variable lookup not yet implemented: ${${ Expr(name.name) }}"
-                                )
+                                // Look up variable from data stack using DeBruijn index
+                                // index 0 = top of stack, 1 = second from top, etc.
+                                dataStack.peek($idx)
                             }
                         }
                     }
@@ -123,32 +131,28 @@ object JITCompiler {
                 )
 
             case Term.LamAbs(name, body) =>
-                // Lambda: Create a snippet that returns a function
-                // The function captures the environment
-                val bodyIdx = compileTerm(body, (name -> 0) :: env) // Simplification
-                val snippet = staging.run { (quotes: Quotes) ?=>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = { (arg: Any) =>
-                                {
-                                    // TODO: Execute body with arg in environment
-                                    throw new UnsupportedOperationException(
-                                      "Lambda execution not yet implemented"
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                summon[CompileContext].emit(
-                  Instruction(opcode = JIT.OP_EXEC_SNIPPET, snippet = snippet)
+                // Lambda: Create a closure using OP_LAMBDA instruction
+                // The body will be compiled and stored after this instruction
+                
+                // Emit OP_LAMBDA with placeholder for body index
+                val lambdaIdx = summon[CompileContext].emit(
+                  Instruction(opcode = JIT.OP_LAMBDA, data = null) // Will be filled with body index
                 )
+                
+                // Emit RETURN after lambda so we don't fall through to the body
+                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
+                
+                // Now compile the body - it starts at the next instruction
+                val bodyIdx = summon[CompileContext].getInstructions.length
+                compileTerm(body, (name -> 0) :: env.map { case (n, i) => (n, i + 1) })
+                
+                // Emit RETURN after body
+                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
+                
+                // Update the lambda instruction with the body index
+                summon[CompileContext].updateInstruction(lambdaIdx, bodyIdx)
+                
+                lambdaIdx
 
             case Term.Apply(fun, arg) =>
                 // Apply: Use defunctionalized control flow
