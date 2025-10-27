@@ -299,6 +299,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       PluginDependency,
       libraryDependencies += "org.typelevel" %%% "cats-core" % "2.13.0",
       libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
+      libraryDependencies += "org.typelevel" %% "spire" % "0.18.0",
       libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.3.2",
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.3",
