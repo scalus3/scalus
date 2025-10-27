@@ -1,5 +1,7 @@
 package scalus.uplc.eval
 
+import scalus.uplc.eval.mincont.{JIT as MincontJIT}
+
 import scalus.*
 import scalus.uplc.{DeBruijnedProgram, Term}
 import java.nio.file.{Files, Paths}
@@ -63,7 +65,7 @@ object AnalyzeJITBytecode {
 
         println("  Compiling with JIT...")
         val start = System.nanoTime()
-        val jitted = JIT.jitUplc(term)
+        val jitted = MincontJIT.jitUplc(term)
         val compileTime = (System.nanoTime() - start) / 1_000_000.0
         println(s"  Compilation took: ${compileTime}ms")
 
@@ -91,7 +93,7 @@ object AnalyzeJITBytecode {
 
         println("  Compiling with JIT...")
         val start = System.nanoTime()
-        val jitted = JIT.jitUplc(program.term)
+        val jitted = MincontJIT.jitUplc(program.term)
         val compileTime = (System.nanoTime() - start) / 1_000_000.0
         println(s"  Compilation took: ${compileTime}ms")
 
@@ -119,7 +121,7 @@ object AnalyzeJITBytecode {
         )
 
         val params = MachineParams.defaultPlutusV2PostConwayParams
-        val jitted = JIT.jitUplc(term)
+        val jitted = MincontJIT.jitUplc(term)
 
         // Warm up
         for (i <- 1 to 1000) {

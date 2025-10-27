@@ -1,4 +1,4 @@
-package scalus.uplc.eval
+package scalus.uplc.eval.mincont
 
 /** Minimal continuation representation for JIT-compiled code.
   *
@@ -26,6 +26,8 @@ object ContinuationJitRepr {
           */
         def delayed(body: => ContinuationJitRepr): Return = Return(() => body)
     }
+
+
 
     /** Stack frames for the evaluator */
     enum Frame {

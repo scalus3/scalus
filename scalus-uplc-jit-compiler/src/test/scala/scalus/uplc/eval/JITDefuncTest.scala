@@ -6,66 +6,76 @@ import scalus.uplc.{Constant, DefaultFun, Term}
 
 class JITDefuncTest extends AnyFunSuite {
 
-  test("Simple constant evaluation") {
-    // Test: Const(42)
-    val term = Term.Const(Constant.Integer(42))
+  // Test against all JIT implementations
+  JITImplementation.all.foreach { jit =>
+    def runTest(testName: String)(testBody: => Unit): Unit = {
+      if (jit.isImplemented) {
+        test(s"[${jit.name}] $testName")(testBody)
+      } else {
+        test(s"[${jit.name}] $testName") {
+          pending // Mark as pending for unimplemented JIT
+        }
+      }
+    }
 
-    val program = JITDefuncCompiler.compile(term)
-    val result = JITDefunc.eval(
-      program,
-      NoBudgetSpender,
-      NoLogger,
-      MachineParams.defaultPlutusV2PostConwayParams
-    )
+    runTest("Simple constant evaluation") {
+      // Test: Const(42)
+      val term = Term.Const(Constant.Integer(42))
 
-    assert(result == BigInt(42))
-  }
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
 
-  test("Simple addition: 5 + 10") {
-    // Test: (AddInteger 5) 10
-    val term = Term.Apply(
-      Term.Apply(
-        Term.Builtin(DefaultFun.AddInteger),
-        Term.Const(Constant.Integer(5))
-      ),
-      Term.Const(Constant.Integer(10))
-    )
+      assert(result == BigInt(42))
+    }
 
-    val program = JITDefuncCompiler.compile(term)
-    val result = JITDefunc.eval(
-      program,
-      NoBudgetSpender,
-      NoLogger,
-      MachineParams.defaultPlutusV2PostConwayParams
-    )
-
-    assert(result == BigInt(15))
-  }
-
-  test("Multiple operations: (5 + 10) * 2") {
-    // Test: ((MultiplyInteger (AddInteger 5 10)) 2)
-    val term = Term.Apply(
-      Term.Apply(
-        Term.Builtin(DefaultFun.MultiplyInteger),
+    runTest("Simple addition: 5 + 10") {
+      // Test: (AddInteger 5) 10
+      val term = Term.Apply(
         Term.Apply(
+          Term.Builtin(DefaultFun.AddInteger),
+          Term.Const(Constant.Integer(5))
+        ),
+        Term.Const(Constant.Integer(10))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == BigInt(15))
+    }
+
+    runTest("Multiple operations: (5 + 10) * 2") {
+      // Test: ((MultiplyInteger (AddInteger 5 10)) 2)
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Builtin(DefaultFun.MultiplyInteger),
           Term.Apply(
-            Term.Builtin(DefaultFun.AddInteger),
-            Term.Const(Constant.Integer(5))
-          ),
-          Term.Const(Constant.Integer(10))
-        )
-      ),
-      Term.Const(Constant.Integer(2))
-    )
+            Term.Apply(
+              Term.Builtin(DefaultFun.AddInteger),
+              Term.Const(Constant.Integer(5))
+            ),
+            Term.Const(Constant.Integer(10))
+          )
+        ),
+        Term.Const(Constant.Integer(2))
+      )
 
-    val program = JITDefuncCompiler.compile(term)
-    val result = JITDefunc.eval(
-      program,
-      NoBudgetSpender,
-      NoLogger,
-      MachineParams.defaultPlutusV2PostConwayParams
-    )
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
 
-    assert(result == BigInt(30))
+      assert(result == BigInt(30))
+    }
   }
 }

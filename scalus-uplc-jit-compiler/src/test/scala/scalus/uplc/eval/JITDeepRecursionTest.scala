@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
 import scalus.uplc.{Constant, Term}
+import scalus.uplc.eval.mincont.{JIT as MincontJIT}
 import java.lang.management.ManagementFactory
 
 class JITDeepRecursionTest extends AnyFunSuiteLike {
@@ -52,7 +53,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         val logger = Log()
         try {
             val jitResult =
-                JIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
             // JIT returns raw value, CekMachine returns Term.Const
             val expectedValue = BigInt(2432902008176640000L)
             assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
@@ -83,7 +84,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         val logger = Log()
         try {
             val jitResult =
-                JIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
             // JIT returns raw value, CekMachine returns Term.Const
             val expectedValue = BigInt(610)
             assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
@@ -114,7 +115,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         val logger = Log()
         try {
             val jitResult =
-                JIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
             // JIT returns raw value, CekMachine returns Term.Const
             val expectedValue = BigInt(5050)
             assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
@@ -156,7 +157,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                 val logger = Log()
                 try {
                     val jitResult =
-                        JIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
+                        MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
                     info(s"JIT succeeded at depth $n, result: $jitResult")
                     // Verify the result is correct
                     val expectedValue = BigInt(n) * BigInt(n + 1) / 2 // sum formula: n*(n+1)/2
@@ -217,7 +218,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                 val uplc = sumFunctionUplc $ Term.Const(Constant.Integer(BigInt(depth)))
                 try {
                     // JIT compile on main thread - this returns a compiled function
-                    val compiledFn = JIT.jitUplc(uplc)
+                    val compiledFn = MincontJIT.jitUplc(uplc)
                     // Create a wrapper that calls the compiled function with the necessary parameters
                     val jitFn =
                         () => compiledFn(logger, NoBudgetSpender, summon[PlutusVM].machineParams)

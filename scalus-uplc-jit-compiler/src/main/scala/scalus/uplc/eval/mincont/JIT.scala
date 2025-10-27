@@ -1,10 +1,11 @@
-package scalus.uplc.eval
+package scalus.uplc.eval.mincont
 
 import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, BuiltinPair, Builtins, ByteString, Data}
 import scalus.uplc.{Constant, DefaultFun, Term}
 import scalus.uplc.DefaultUni.asConstant
 import scalus.*
 import scalus.uplc.eval.ExBudgetCategory.{Startup, Step}
+import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams, MemoryUsageJit, RuntimeHelper, StepKind}
 
 import scala.quoted.*
 

@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
 import scalus.uplc.Term
+import scalus.uplc.eval.mincont.{JIT as MincontJIT}
 
 import scala.util.Try
 
@@ -17,7 +18,7 @@ class JITTest extends AnyFunSuiteLike {
 
         assert(uplc.evaluateDebug.isFailure)
         val logger = Log()
-        val r = Try(JIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams))
+        val r = Try(MincontJIT.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams))
         assert(r.isFailure)
         assert(logger.getLogs.mkString == "Not implemented")
     }

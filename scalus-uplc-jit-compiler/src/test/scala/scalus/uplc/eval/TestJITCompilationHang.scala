@@ -2,6 +2,7 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.DeBruijnedProgram
+import scalus.uplc.eval.mincont.{JIT as MincontJIT}
 
 import java.nio.file.{Files, Paths}
 
@@ -17,8 +18,8 @@ object TestJITCompilationHang {
         println(s"Starting JIT compilation at ${System.currentTimeMillis()}")
 
         val start = System.currentTimeMillis()
-        println("Calling JIT.jitUplc...")
-        val jitted = JIT.jitUplc(program.term)
+        println("Calling MincontJIT.jitUplc...")
+        val jitted = MincontJIT.jitUplc(program.term)
         val end = System.currentTimeMillis()
 
         println(s"JIT compilation completed in ${end - start} ms")
