@@ -103,11 +103,6 @@ class JITDefuncTest extends AnyFunSuite {
         MachineParams.defaultPlutusV2PostConwayParams
       )
 
-      println(s"[${jit.name}] Result: $result (class: ${result.getClass.getName})")
-      result match {
-        case f: Function1[_, _] => println(s"  It's a Function1, trying to apply to 1: ${Try(f.asInstanceOf[Any => Any](1))}")
-        case _ => ()
-      }
       assert(result == BigInt(6))
     }
 

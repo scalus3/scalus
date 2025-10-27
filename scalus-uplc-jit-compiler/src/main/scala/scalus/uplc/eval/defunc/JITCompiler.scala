@@ -126,9 +126,12 @@ object JITCompiler {
                         }
                     }
                 }
-                summon[CompileContext].emit(
+                val idx = summon[CompileContext].emit(
                   Instruction(opcode = JIT.OP_EXEC_SNIPPET, snippet = snippet)
                 )
+                // Emit RETURN after snippet so control returns to caller
+                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
+                idx
 
             case Term.LamAbs(name, body) =>
                 // Lambda: Create a closure using OP_LAMBDA instruction
