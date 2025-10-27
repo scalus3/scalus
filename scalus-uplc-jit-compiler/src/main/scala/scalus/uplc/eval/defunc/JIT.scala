@@ -36,8 +36,8 @@ object JIT {
   private[eval] val FRAME_FORCE = 3          // Force delayed computation
   private[eval] val FRAME_RESTORE_ENV = 4    // Restore environment after closure evaluation
   private[eval] val FRAME_CONSTR_ARG = 5     // Evaluating constructor arguments
-  private[eval] val FRAME_CASE_APPLY = 6     // Applying case function to arguments
-  private[eval] val FRAME_CASE_APPLY_REST = 7 // Apply remaining args after first application
+  private[eval] val FRAME_CASE_APPLY = 6     // Select case branch after scrutinee evaluation
+  private[eval] val FRAME_CASE_APPLY_ARG = 7 // Apply case function (in acc) to arg (in frame.data)
 
   // ============================================
   // External API (Functional - IFO Pattern)

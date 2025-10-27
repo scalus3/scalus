@@ -56,16 +56,6 @@ private[eval] class DataStack(capacity: Int = 4096) {
     def pointer: Int = sp
 }
 
-/** State for case application - tracking remaining args to apply.
-  *
-  * When applying constructor arguments to a case function, we may need
-  * to pause for VM evaluation (e.g., closure application), then resume.
-  */
-private[eval] class CaseAppState(
-    val remainingArgs: List[Any],
-    val returnAddr: Int
-)
-
 /** Manages the continuation stack using a single array of Frame objects.
   *
   * This replaces the previous approach of 3 parallel arrays (frameTypes, frameData,
@@ -145,7 +135,6 @@ private[eval] class EvalContext(
     // Mutable state - hidden from external API
     private val dataStack = new DataStack(4096) // Value stack for intermediate results
     private val frameStack = new FrameStack(1024) // Continuation stack
-    private val caseStack = mutable.ArrayBuffer[CaseAppState]() // Case application state stack
     private var ip = program.entryPoint // Instruction pointer
     private var acc: Any = null // Accumulator
 
@@ -181,79 +170,10 @@ private[eval] class EvalContext(
                     }
 
                 case OP_RETURN =>
-                    // Return from current context
-                    
-                    logger.log(s"OP_RETURN: frameStack.isEmpty=${frameStack.isEmpty}, caseStack.size=${caseStack.size}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
-                    
-                    // First check if we're in the middle of case argument application
-                    // We need to handle case application even when frameStack is not empty (nested cases)
-                    // BUT only if the case function has been evaluated (not during scrutinee evaluation)
-                    if caseStack.nonEmpty then {
-                        // Check if we're returning from evaluating the case function (ready to apply args)
-                        // vs returning from evaluating the scrutinee (not ready yet)
-                        // If frameStack has FRAME_CASE_APPLY on top, we're returning from scrutinee eval
-                        val returningFromCaseFunc = frameStack.isEmpty || 
-                            frameStack.peek().frameType != FRAME_CASE_APPLY
-                        
-                        if returningFromCaseFunc then {
-                            // Case function finished - start applying args
-                            val caseState = caseStack.last
-                            val remainingArgs = caseState.remainingArgs
-                            val finalReturnAddr = caseState.returnAddr
-                            
-                            logger.log(s"OP_RETURN: Case active, remainingArgs.size=${remainingArgs.size}")
-                            
-                            if remainingArgs.isEmpty then {
-                                // No args to apply - just return
-                                caseStack.remove(caseStack.length - 1)
-                                logger.log(s"OP_RETURN: No args, returning acc=$acc")
-                                return acc
-                            }
-                        
-                        // Apply args
-                        var funcValue = acc
-                        var currentArgs = remainingArgs
-                        var hitClosure = false
-                        
-                        while currentArgs.nonEmpty && !hitClosure do {
-                            val arg :: rest = currentArgs: @unchecked
-                            funcValue match {
-                                case closure: Closure =>
-                                    // Need VM evaluation
-                                    caseStack(caseStack.length - 1) = CaseAppState(rest, finalReturnAddr)
-                                    dataStack.push(arg)
-                                    frameStack.push(FRAME_RESTORE_ENV, 1, -1)
-                                    ip = closure.bodyInstrIdx
-                                    hitClosure = true // Exit while loop, let VM continue
-                                    
-                                case f: Function1[?, ?] =>
-                                    funcValue = f.asInstanceOf[Any => Any](arg)
-                                    currentArgs = rest
-                                    
-                                case snippet: Snippet =>
-                                    funcValue = snippet.execute(arg, dataStack, budget, logger, params)
-                                    currentArgs = rest
-                                    
-                                case _ =>
-                                    throw new IllegalStateException(
-                                      s"Cannot apply non-function in case: ${funcValue.getClass}"
-                                    )
-                            }
-                        }
-                        
-                        // If all args applied without hitting closure
-                        if !hitClosure then {
-                            caseStack.remove(caseStack.length - 1)
-                            acc = funcValue
-                            return acc
-                        }
-                        // Otherwise fall through to continue VM loop
-                    }
-                    // If shouldApplyArgs is false, fall through to normal frame handling
-                }
-                
-                // Normal return handling
-                if frameStack.isEmpty then {
+                    // Return from current context - pure frame-based, no caseStack
+                    logger.log(s"OP_RETURN: frameStack.isEmpty=${frameStack.isEmpty}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
+
+                    if frameStack.isEmpty then {
                         // Top level - done!
                         return acc
                     } else {
@@ -345,99 +265,18 @@ private[eval] class EvalContext(
                             }
 
                         case FRAME_RESTORE_ENV =>
-                            // Restore environment after closure body evaluation
+                            // Restore environment after closure body evaluation - pure frame-based
                             val valuesToPop = frame.data.asInstanceOf[Int]
-                            
-                            logger.log(s"FRAME_RESTORE_ENV: Popped, valuesToPop=$valuesToPop, returnAddr=${frame.returnAddr}, caseStack.size=${caseStack.size}")
-                            
-                            // Check if we're in the middle of case argument application
-                            if caseStack.nonEmpty then {
-                                // Don't pop dataStack yet - we might still need values for remaining args
-                                // Only pop if returnAddr is not -1 (which means "continue with case stack")
-                                if frame.returnAddr != -1 then {
-                                    // Pop values pushed by the closure body (keep result in acc)
-                                    var i = 0
-                                    while i < valuesToPop do {
-                                        dataStack.pop()
-                                        i += 1
-                                    }
-                                }
-                                
-                                // Continue applying remaining args
-                                val caseState = caseStack.last
-                                val remainingArgs = caseState.remainingArgs
-                                val finalReturnAddr = caseState.returnAddr
-                                
-                                logger.log(s"FRAME_RESTORE_ENV: caseStack active, remainingArgs.size=${remainingArgs.size}, acc=${acc}, accType=${acc.getClass.getSimpleName}")
-                                
-                                // Apply next arg
-                                if remainingArgs.nonEmpty then {
-                                    val nextArg :: restArgs = remainingArgs: @unchecked
-                                    var funcValue = acc
-                                    
-                                    logger.log(s"FRAME_RESTORE_ENV: Starting to apply ${remainingArgs.size} args")
-                                    
-                                    // Try to apply as many non-closure args as possible
-                                    var currentArgs = remainingArgs
-                                    var allApplied = false
-                                    while currentArgs.nonEmpty && !allApplied do {
-                                        val arg :: rest = currentArgs: @unchecked
-                                        logger.log(s"FRAME_RESTORE_ENV: Applying arg=$arg to funcValue=${funcValue.getClass.getSimpleName}")
-                                        funcValue match {
-                                            case closure: Closure =>
-                                                // Need VM evaluation - update state and break
-                                                logger.log(s"FRAME_RESTORE_ENV: Hit closure, updating caseStack with ${rest.size} remaining args")
-                                                caseStack(caseStack.length - 1) = CaseAppState(rest, finalReturnAddr)
-                                                dataStack.push(arg)
-                                                frameStack.push(FRAME_RESTORE_ENV, 1, -1) // Will re-enter here
-                                                ip = closure.bodyInstrIdx
-                                                allApplied = true // Exit loop, let VM continue
-                                                // Don't return - just exit the while loop and let VM continue
-                                                
-                                            case f: Function1[?, ?] =>
-                                                funcValue = f.asInstanceOf[Any => Any](arg)
-                                                currentArgs = rest
-                                                logger.log(s"FRAME_RESTORE_ENV: Applied Function1, result=${funcValue.getClass.getSimpleName}")
-                                                
-                                            case snippet: Snippet =>
-                                                funcValue = snippet.execute(arg, dataStack, budget, logger, params)
-                                                currentArgs = rest
-                                                logger.log(s"FRAME_RESTORE_ENV: Applied Snippet, result=${funcValue.getClass.getSimpleName}")
-                                                
-                                            case _ =>
-                                                throw new IllegalStateException(
-                                                  s"Cannot apply non-function in case: ${funcValue.getClass}"
-                                                )
-                                        }
-                                    }
-                                    
-                                    // All args applied (or hit closure)
-                                    if currentArgs.isEmpty then {
-                                        // Done with this case application
-                                        logger.log(s"FRAME_RESTORE_ENV: All args applied, final result=${funcValue.getClass.getSimpleName}")
-                                        caseStack.remove(caseStack.length - 1)
-                                        acc = funcValue
-                                        ip = finalReturnAddr
-                                    } else {
-                                        acc = funcValue
-                                        // Closure case handled above with return
-                                    }
-                                } else {
-                                    // No more args - case application finished
-                                    logger.log(s"FRAME_RESTORE_ENV: No more args, removing caseStack, acc=${acc.getClass.getSimpleName}, finalReturnAddr=$finalReturnAddr")
-                                    caseStack.remove(caseStack.length - 1)
-                                    ip = finalReturnAddr
-                                }
-                            } else {
-                                // Normal case - just continue to return address
-                                // Pop values from dataStack
-                                var i = 0
-                                while i < valuesToPop do {
-                                    dataStack.pop()
-                                    i += 1
-                                }
-                                ip = frame.returnAddr
+
+                            logger.log(s"FRAME_RESTORE_ENV: Popped, valuesToPop=$valuesToPop, returnAddr=${frame.returnAddr}")
+
+                            // Pop values from dataStack
+                            var i = 0
+                            while i < valuesToPop do {
+                                dataStack.pop()
+                                i += 1
                             }
+                            ip = frame.returnAddr
 
                         case FRAME_CONSTR_ARG =>
                             // Finished evaluating one constructor argument
@@ -481,13 +320,50 @@ private[eval] class EvalContext(
                             }
                             
                             val caseFuncIdx = caseIndices(tagInt)
-                            
-                            // Push case state onto case stack
-                            caseStack += CaseAppState(args, frame.returnAddr)
-                            
+
+                            // Like CEK's transferArgStack: push FrameAwaitFunValue for each arg
+                            // Push cleanup frame first (will be popped last)
+                            frameStack.push(FRAME_RESTORE_ENV, args.length, frame.returnAddr)
+
+                            // Push arg application frames in reverse order so first arg is applied first
+                            // Each frame will apply function (in acc) to arg (in frame.data)
+                            for (arg <- args.reverse) {
+                                frameStack.push(FRAME_CASE_APPLY_ARG, arg, -1)  // -1 means continue to next frame
+                            }
+
                             // Evaluate the case function
                             ip = caseFuncIdx
-                            
+
+                        case FRAME_CASE_APPLY_ARG =>
+                            // Like CEK's FrameAwaitFunValue: function in acc, arg in frame.data
+                            val arg = frame.data
+                            val funcValue = acc
+
+                            logger.log(s"FRAME_CASE_APPLY_ARG: funcValue=${funcValue.getClass.getSimpleName}, arg=$arg")
+
+                            // Apply function to arg (like CEK's applyEvaluate)
+                            funcValue match {
+                                case closure: Closure =>
+                                    // Apply closure by pushing arg and evaluating body
+                                    dataStack.push(arg)
+                                    // Don't pop this arg yet - nested lambdas may need to access it
+                                    // We'll pop all args at once when case finishes
+                                    ip = closure.bodyInstrIdx
+
+                                case f: Function1[?, ?] =>
+                                    acc = f.asInstanceOf[Any => Any](arg)
+                                    ip = frame.returnAddr
+
+                                case snippet: Snippet =>
+                                    acc = snippet.execute(arg, dataStack, budget, logger, params)
+                                    ip = frame.returnAddr
+
+                                case _ =>
+                                    throw new IllegalStateException(
+                                      s"Cannot apply non-function in case: ${funcValue.getClass}"
+                                    )
+                            }
+
                         case _ =>
                             throw new IllegalStateException(
                               s"Unknown frame type: ${frame.frameType}"
@@ -566,7 +442,7 @@ private[eval] class EvalContext(
 
         // Shouldn't reach here
         // If we exit the loop without returning, something went wrong
-        logger.log(s"EXITED LOOP: ip=$ip, frameStack.isEmpty=${frameStack.isEmpty}, caseStack.size=${caseStack.size}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
+        logger.log(s"EXITED LOOP: ip=$ip, frameStack.isEmpty=${frameStack.isEmpty}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
         throw new IllegalStateException("Program terminated without returning")
     }
 }

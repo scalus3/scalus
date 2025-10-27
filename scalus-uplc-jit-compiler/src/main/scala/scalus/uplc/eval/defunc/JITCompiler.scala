@@ -260,9 +260,10 @@ object JITCompiler {
                     data = (argIdx, caseIdxs.toArray)
                   )
                 )
-                
-                // Note: OP_CASE handles its own control flow, returning when done
-                // No explicit RETURN needed here as the case branches handle returns
+
+                // Emit RETURN so the case result is properly returned to caller
+                // This is needed when Case is used as a sub-expression (e.g., nested cases)
+                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
                 caseIdx
         }
     }

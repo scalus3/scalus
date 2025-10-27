@@ -535,7 +535,7 @@ class JITDefuncTest extends AnyFunSuite {
 
     runTest("Case: nested case") {
       // Test: case (case Constr(0, [1]) of { 0 -> \x -> Constr(1, [x]); 1 -> \x -> Constr(0, [x]) })
-      //       of { 0 -> 100; 1 -> 200 }
+      //       of { 0 -> \x -> 100; 1 -> \x -> 200 }
       val innerCase = Term.Case(
         Term.Constr(Word64(0), List(Term.Const(Constant.Integer(1)))),
         List(
@@ -555,8 +555,10 @@ class JITDefuncTest extends AnyFunSuite {
       val term = Term.Case(
         innerCase,
         List(
-          Term.Const(Constant.Integer(100)), // case 0
-          Term.Const(Constant.Integer(200))  // case 1
+          // case 0: \x -> 100 (lambda required per UPLC spec when constructor has args)
+          Term.LamAbs("x", Term.Const(Constant.Integer(100))),
+          // case 1: \x -> 200 (lambda required per UPLC spec when constructor has args)
+          Term.LamAbs("x", Term.Const(Constant.Integer(200)))
         )
       )
 
