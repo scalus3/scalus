@@ -517,9 +517,15 @@ class JITDefuncTest extends AnyFunSuite {
         )
       )
 
+      // Use PrintLogger to see what's happening
+      class PrintLogger extends Logger {
+        override def log(msg: String): Unit = println(s"[${jit.name}] $msg")
+        override def getLogs: Array[String] = Array.empty
+      }
+
       val result = jit.eval(
         term,
-        NoLogger,
+        new PrintLogger(),
         NoBudgetSpender,
         MachineParams.defaultPlutusV3Params
       )

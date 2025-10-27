@@ -178,6 +178,8 @@ private[eval] class EvalContext(
                 case OP_RETURN =>
                     // Return from current context
                     
+                    logger.log(s"OP_RETURN: frameStack.isEmpty=${frameStack.isEmpty}, caseStack.size=${caseStack.size}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
+                    
                     // First check if we're in the middle of case argument application
                     if caseStack.nonEmpty && frameStack.isEmpty then {
                         // Case function finished - start applying args
@@ -185,9 +187,12 @@ private[eval] class EvalContext(
                         val remainingArgs = caseState.remainingArgs
                         val finalReturnAddr = caseState.returnAddr
                         
+                        logger.log(s"OP_RETURN: Case active, remainingArgs.size=${remainingArgs.size}")
+                        
                         if remainingArgs.isEmpty then {
                             // No args to apply - just return
                             caseStack.remove(caseStack.length - 1)
+                            logger.log(s"OP_RETURN: No args, returning acc=$acc")
                             return acc
                         }
                         
@@ -323,6 +328,9 @@ private[eval] class EvalContext(
                         case FRAME_RESTORE_ENV =>
                             // Restore environment after closure body evaluation
                             val valuesToPop = frame.data.asInstanceOf[Int]
+                            
+                            logger.log(s"FRAME_RESTORE_ENV: Popped, valuesToPop=$valuesToPop, returnAddr=${frame.returnAddr}, caseStack.size=${caseStack.size}")
+                            
                             // Pop values pushed by the closure body (keep result in acc)
                             var i = 0
                             while i < valuesToPop do {
@@ -337,19 +345,25 @@ private[eval] class EvalContext(
                                 val remainingArgs = caseState.remainingArgs
                                 val finalReturnAddr = caseState.returnAddr
                                 
+                                logger.log(s"FRAME_RESTORE_ENV: caseStack active, remainingArgs.size=${remainingArgs.size}, acc=${acc}, accType=${acc.getClass.getSimpleName}")
+                                
                                 // Apply next arg
                                 if remainingArgs.nonEmpty then {
                                     val nextArg :: restArgs = remainingArgs: @unchecked
                                     var funcValue = acc
+                                    
+                                    logger.log(s"FRAME_RESTORE_ENV: Starting to apply ${remainingArgs.size} args")
                                     
                                     // Try to apply as many non-closure args as possible
                                     var currentArgs = remainingArgs
                                     var allApplied = false
                                     while currentArgs.nonEmpty && !allApplied do {
                                         val arg :: rest = currentArgs: @unchecked
+                                        logger.log(s"FRAME_RESTORE_ENV: Applying arg=$arg to funcValue=${funcValue.getClass.getSimpleName}")
                                         funcValue match {
                                             case closure: Closure =>
                                                 // Need VM evaluation - update state and break
+                                                logger.log(s"FRAME_RESTORE_ENV: Hit closure, updating caseStack with ${rest.size} remaining args")
                                                 caseStack(caseStack.length - 1) = CaseAppState(rest, finalReturnAddr)
                                                 dataStack.push(arg)
                                                 frameStack.push(FRAME_RESTORE_ENV, 1, -1) // Will re-enter here
@@ -360,10 +374,12 @@ private[eval] class EvalContext(
                                             case f: Function1[?, ?] =>
                                                 funcValue = f.asInstanceOf[Any => Any](arg)
                                                 currentArgs = rest
+                                                logger.log(s"FRAME_RESTORE_ENV: Applied Function1, result=${funcValue.getClass.getSimpleName}")
                                                 
                                             case snippet: Snippet =>
                                                 funcValue = snippet.execute(arg, dataStack, budget, logger, params)
                                                 currentArgs = rest
+                                                logger.log(s"FRAME_RESTORE_ENV: Applied Snippet, result=${funcValue.getClass.getSimpleName}")
                                                 
                                             case _ =>
                                                 throw new IllegalStateException(
@@ -375,6 +391,7 @@ private[eval] class EvalContext(
                                     // All args applied (or hit closure)
                                     if currentArgs.isEmpty then {
                                         // Done with this case application
+                                        logger.log(s"FRAME_RESTORE_ENV: All args applied, final result=${funcValue.getClass.getSimpleName}")
                                         caseStack.remove(caseStack.length - 1)
                                         acc = funcValue
                                         ip = finalReturnAddr
@@ -383,9 +400,10 @@ private[eval] class EvalContext(
                                         // Closure case handled above with return
                                     }
                                 } else {
-                                    // No more args - shouldn't happen but handle it
+                                    // No more args - case application finished
+                                    logger.log(s"FRAME_RESTORE_ENV: No more args, removing caseStack, acc=${acc.getClass.getSimpleName}, finalReturnAddr=$finalReturnAddr")
                                     caseStack.remove(caseStack.length - 1)
-                                    ip = frame.returnAddr
+                                    ip = finalReturnAddr
                                 }
                             } else {
                                 // Normal case - just continue to return address
@@ -516,6 +534,8 @@ private[eval] class EvalContext(
         }
 
         // Shouldn't reach here
+        // If we exit the loop without returning, something went wrong
+        logger.log(s"EXITED LOOP: ip=$ip, frameStack.isEmpty=${frameStack.isEmpty}, caseStack.size=${caseStack.size}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
         throw new IllegalStateException("Program terminated without returning")
     }
 }
