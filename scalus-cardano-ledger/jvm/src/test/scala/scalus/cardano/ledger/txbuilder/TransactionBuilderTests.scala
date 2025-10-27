@@ -160,7 +160,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         Context.empty(Mainnet).toTuple
             |> transactionL
                 .andThen(txBodyL.refocus(_.inputs))
-                .replace(TaggedOrderedSet(input1))
+                .replace(TaggedSortedSet(input1))
             |> expectedSignersL
                 .modify(
                   _ + ExpectedSigner(
@@ -282,11 +282,11 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       ),
       expected = Context.empty(Mainnet).toTuple
           |> (transactionL >>> txInputsL)
-              .replace(TaggedOrderedSet(script1Utxo.input))
+              .replace(TaggedSortedSet(script1Utxo.input))
           |> (transactionL >>> txReferenceInputsL)
-              .replace(TaggedOrderedSet(utxoWithScript1ReferenceScript.input))
+              .replace(TaggedSortedSet(utxoWithScript1ReferenceScript.input))
           |> (transactionL >>> txRequiredSignersL)
-              .replace(TaggedOrderedSet.from(psRefWitnessExpectedSigners.map(_.hash)))
+              .replace(TaggedSortedSet.from(psRefWitnessExpectedSigners.map(_.hash)))
           |> (transactionL >>> txRedeemersL)
               .replace(redeemers(unitRedeemer(RedeemerTag.Spend, 0)))
           |> expectedSignersL.replace(psRefWitnessExpectedSigners)
@@ -318,12 +318,12 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                   // We spend two inputs: the script1Utxo (at the script address), and the UTxO carrying the reference
                   // script at the Pubkey Address
                   .replace(
-                    TaggedOrderedSet(utxoWithScript1ReferenceScript.input, script1Utxo.input)
+                    TaggedSortedSet(utxoWithScript1ReferenceScript.input, script1Utxo.input)
                   )
               |> (transactionL >>> txRequiredSignersL)
                   // We add the required signers for script1
                   .replace(
-                    TaggedOrderedSet.from(psRefWitnessExpectedSigners.map(_.hash))
+                    TaggedSortedSet.from(psRefWitnessExpectedSigners.map(_.hash))
                   )
               |> expectedSignersL
                   // Add the expected signers for the script and the expected signer for spending the utxo with the script
@@ -347,7 +347,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           // generated, and because the inputs are in sorted order, it may come before or after the
           // script input.
           val redeemerIndex: Int = ctx1 |> (transactionL >>> txInputsL).get |>
-              ((inputs: TaggedOrderedSet[TransactionInput]) =>
+              ((inputs: TaggedSortedSet[TransactionInput]) =>
                   inputs.toSeq.indexOf(script1Utxo.input)
               )
 
@@ -555,7 +555,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               |> transactionL.refocus(_.witnessSet.plutusV1Scripts).modify(_ + script1)
               |> (transactionL >>> txBodyL
                   .refocus(_.requiredSigners))
-                  .replace(TaggedOrderedSet.from(mintSigners.map(_.hash)))
+                  .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
               |> expectedSignersL.replace(mintSigners)
     )
 
@@ -569,7 +569,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               |> transactionL.refocus(_.witnessSet.plutusV1Scripts).modify(_ + script1)
               |> (transactionL >>> txBodyL
                   .refocus(_.requiredSigners))
-                  .replace(TaggedOrderedSet.from(mintSigners.map(_.hash)))
+                  .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
               |> expectedSignersL.replace(mintSigners)
     )
 
@@ -582,7 +582,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           |> transactionL.refocus(_.witnessSet.plutusV1Scripts).modify(_ + script1)
           |> (transactionL >>> txBodyL
               .refocus(_.requiredSigners))
-              .replace(TaggedOrderedSet.from(mintSigners.map(_.hash)))
+              .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
           |> expectedSignersL.replace(mintSigners)
           |> transactionL
               .refocus(_.witnessSet.redeemers)
@@ -619,7 +619,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           |> transactionL.refocus(_.witnessSet.plutusV1Scripts).modify(_ + script1)
           |> (transactionL >>> txBodyL
               .refocus(_.requiredSigners))
-              .replace(TaggedOrderedSet.from(mintSigners.map(_.hash)))
+              .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
           |> expectedSignersL.replace(mintSigners)
           |> transactionL
               .refocus(_.witnessSet.redeemers)
@@ -665,7 +665,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
         assert(
           (built.toTuple |> transactionL.andThen(txBodyL).refocus(_.referenceInputs).get) ==
-              TaggedOrderedSet.from(List(script1Utxo.input))
+              TaggedSortedSet.from(List(script1Utxo.input))
         )
     }
 
@@ -682,7 +682,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
         assert(
           (built.toTuple |> transactionL.andThen(txBodyL).refocus(_.collateralInputs).get) ==
-              TaggedOrderedSet.from(List(pkhUtxo.input))
+              TaggedSortedSet.from(List(pkhUtxo.input))
         )
     }
 
@@ -720,7 +720,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               .andThen(txBodyL)
               .refocus(_.certificates)
               .replace(
-                TaggedSet(
+                TaggedOrderedSet(
                   Certificate.UnregCert(Credential.ScriptHash(script1.scriptHash), coin = None)
                 )
               )

@@ -22,13 +22,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.from(Set(input1, input2)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -83,13 +83,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.from(Set(input1, input2)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -147,13 +147,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -212,13 +212,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -270,9 +270,9 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = Some(
                     VotingProcedures(
                       SortedMap(
@@ -294,9 +294,9 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -327,9 +327,9 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = Some(
                     VotingProcedures(
                       SortedMap(
@@ -351,9 +351,9 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -382,11 +382,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = Some(
                     Withdrawals(
                       SortedMap(
@@ -415,7 +415,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -444,11 +444,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = Some(
                     Withdrawals(
                       SortedMap(
@@ -477,7 +477,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -507,11 +507,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet(
+                  certificates = TaggedOrderedSet(
                     Certificate
                         .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -571,7 +571,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                     )
                   ),
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -601,11 +601,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet(
+                  certificates = TaggedOrderedSet(
                     Certificate
                         .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -665,7 +665,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                     )
                   ),
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
@@ -691,13 +691,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.from(
+                  requiredSigners = TaggedSortedSet.from(
                     Set(
                       Hash(platform.blake2b_224(publicKey1)),
                       Hash(platform.blake2b_224(publicKey2))
@@ -731,13 +731,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.from(
+                  requiredSigners = TaggedSortedSet.from(
                     Set(
                       Hash(platform.blake2b_224(publicKey1)),
                       Hash(platform.blake2b_224(publicKey2))

@@ -15,8 +15,8 @@ import scalus.|>
 private def addInput(input: TransactionInput): Transaction => Transaction =
     txBodyL
         .refocus(_.inputs)
-        .modify((is: TaggedOrderedSet[TransactionInput]) =>
-            TaggedOrderedSet.from(
+        .modify((is: TaggedSortedSet[TransactionInput]) =>
+            TaggedSortedSet.from(
               is.toSortedSet + input
             )
         )
@@ -26,7 +26,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     val oneInput: Transaction = {
         val l1 = txBodyL
             .refocus(_.inputs)
-            .replace(TaggedOrderedSet(input1))
+            .replace(TaggedSortedSet(input1))
         val l2 = Focus[Transaction](_.witnessSet.redeemers)
             .replace(
               Some(
@@ -50,7 +50,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     }
 
     test("attach one input to the end") {
-        val tx1 = txBodyL.refocus(_.inputs).replace(TaggedOrderedSet(input1, input2))(anyNetworkTx)
+        val tx1 = txBodyL.refocus(_.inputs).replace(TaggedSortedSet(input1, input2))(anyNetworkTx)
         val expectedTx = tx1 |> Focus[Transaction](_.witnessSet.redeemers)
             .replace(
               Some(
@@ -71,8 +71,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           editTransaction(
             txBodyL
                 .refocus(_.inputs)
-                .modify((i: TaggedOrderedSet[TransactionInput]) =>
-                    TaggedOrderedSet.from(i.toSeq :+ input2)
+                .modify((i: TaggedSortedSet[TransactionInput]) =>
+                    TaggedSortedSet.from(i.toSeq :+ input2)
                 )
           )(
             oneInput
@@ -87,7 +87,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                     .replace(Some(KeepRaw(Redeemers(unitRedeemer.focus(_.index).replace(1)))))
             val l2 = txBodyL
                 .refocus(_.inputs)
-                .replace(TaggedOrderedSet(input0, input1, input2))
+                .replace(TaggedSortedSet(input0, input1, input2))
             anyNetworkTx |> l1 |> l2
         }
         val tx2 = {
@@ -95,13 +95,13 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 .replace(Some(KeepRaw(Redeemers(unitRedeemer))))
             val l2 = txBodyL
                 .refocus(_.inputs)
-                .replace(TaggedOrderedSet(input1))
+                .replace(TaggedSortedSet(input1))
             anyNetworkTx |> l1 |> l2
         }
 
         assert(
           editTransactionSafe(
-            txBodyL.refocus(_.inputs).replace(TaggedOrderedSet(input1))
+            txBodyL.refocus(_.inputs).replace(TaggedSortedSet(input1))
           )(tx1) == Right(tx2)
         )
     }
@@ -132,7 +132,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 )
             val l2 = txBodyL
                 .refocus(_.inputs)
-                .replace(TaggedOrderedSet(input0, input1, input2))
+                .replace(TaggedSortedSet(input0, input1, input2))
             anyNetworkTx |> l1 |> l2
         }
         val tx2 = {
@@ -154,13 +154,13 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             val l2 =
                 txBodyL
                     .refocus(_.inputs)
-                    .replace(TaggedOrderedSet(input1))
+                    .replace(TaggedSortedSet(input1))
 
             anyNetworkTx |> l1 |> l2
         }
         assert(
           editTransactionSafe(
-            txBodyL.refocus(_.inputs).replace(TaggedOrderedSet(input1))
+            txBodyL.refocus(_.inputs).replace(TaggedSortedSet(input1))
           )(tx1) == Right(tx2)
         )
     }
@@ -185,7 +185,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 )
             val l2 = txBodyL
                 .refocus(_.inputs)
-                .replace(TaggedOrderedSet(input1, input2))
+                .replace(TaggedSortedSet(input1, input2))
             anyNetworkTx |> l1 |> l2
         }
 
@@ -214,14 +214,14 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             val l2 =
                 txBodyL
                     .refocus(_.inputs)
-                    .replace(TaggedOrderedSet(input0, input2))
+                    .replace(TaggedSortedSet(input0, input2))
             anyNetworkTx |> l1 |> l2
         }
         assert(
           (tx1 |> editTransactionSafe(
             txBodyL
                 .refocus(_.inputs)
-                .replace(TaggedOrderedSet(input0, input2))
+                .replace(TaggedSortedSet(input0, input2))
                 .compose(
                   Focus[Transaction](_.witnessSet.redeemers)
                       .replace(

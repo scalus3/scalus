@@ -683,7 +683,7 @@ object LedgerToPlutusTranslation {
           id = v3.TxId(tx.id),
           votes = getVotingProcedures(body.votingProcedures),
           proposalProcedures = prelude.List.from(
-            body.proposalProcedures.toSortedSet.view.map(getProposalProcedureV3)
+            body.proposalProcedures.toIndexedSeq.view.map(getProposalProcedureV3)
           ),
           currentTreasuryAmount = body.currentTreasuryValue
               .map(coin => prelude.Option.Some(BigInt(coin.value)))
@@ -786,7 +786,7 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Withdrawal not found: $index")
 
             case RedeemerTag.Proposing =>
-                val proposals = body.proposalProcedures.toSeq
+                val proposals = body.proposalProcedures.toIndexedSeq
                 if proposals.isDefinedAt(index) then
                     v3.ScriptPurpose.Proposing(index, getProposalProcedureV3(proposals(index)))
                 else throw new IllegalStateException(s"Proposal not found: $index")

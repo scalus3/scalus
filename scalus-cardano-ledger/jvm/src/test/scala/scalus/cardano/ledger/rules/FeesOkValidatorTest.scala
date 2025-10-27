@@ -25,8 +25,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -37,14 +37,14 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
@@ -130,8 +130,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -142,14 +142,14 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(1L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
@@ -230,19 +230,19 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = None,
                   totalCollateral = None,
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
@@ -323,8 +323,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -343,14 +343,14 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
@@ -431,8 +431,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -443,14 +443,14 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
@@ -531,8 +531,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -543,14 +543,14 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(50000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
@@ -625,19 +625,19 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
                   collateralReturnOutput = None,
                   totalCollateral = None,
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,

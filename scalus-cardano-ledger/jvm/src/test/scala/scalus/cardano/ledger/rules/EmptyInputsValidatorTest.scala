@@ -12,7 +12,7 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   )
                 )
@@ -33,7 +33,7 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty
+                  inputs = TaggedSortedSet.empty
                 )
               )
             )

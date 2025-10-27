@@ -19,7 +19,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -49,7 +49,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -86,7 +86,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -122,7 +122,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -151,7 +151,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -181,7 +181,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq(
                 Sized(
                   TransactionOutput(
@@ -222,7 +222,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -256,7 +256,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )

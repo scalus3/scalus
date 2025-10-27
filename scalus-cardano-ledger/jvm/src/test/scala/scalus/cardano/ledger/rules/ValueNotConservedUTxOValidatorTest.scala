@@ -14,7 +14,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val tx = randomValidTransaction.copy(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.empty,
+              inputs = TaggedSortedSet.empty,
               outputs = IndexedSeq.empty,
               fee = Coin.zero,
             )
@@ -46,7 +46,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
             randomValidTransaction.body.value.copy(
               fee = Coin.zero,
               mint = None,
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq(Sized(output))
             )
           )

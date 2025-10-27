@@ -12,13 +12,13 @@ class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTest
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  collateralInputs = TaggedOrderedSet.from(
+                  collateralInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  referenceInputs = TaggedOrderedSet.from(
+                  referenceInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   )
                 )
@@ -48,13 +48,13 @@ class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTest
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  collateralInputs = TaggedOrderedSet.from(
+                  collateralInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  referenceInputs = TaggedOrderedSet.from(
+                  referenceInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   )
                 )

@@ -177,7 +177,7 @@ object AllNeededScriptHashes {
     def allNeededProposalProceduresScriptIndexHashesView(
         transaction: Transaction
     ): View[(Int, ScriptHash)] = {
-        val govActions = transaction.body.value.proposalProcedures.toSortedSet.view
+        val govActions = transaction.body.value.proposalProcedures.toIndexedSeq.view
             .map(_.govAction)
 
         for

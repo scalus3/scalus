@@ -12,10 +12,10 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  referenceInputs = TaggedOrderedSet.empty
+                  referenceInputs = TaggedSortedSet.empty
                 )
               )
             )
@@ -37,8 +37,8 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(inputs),
-                  referenceInputs = TaggedOrderedSet.from(inputs)
+                  inputs = TaggedSortedSet.from(inputs),
+                  referenceInputs = TaggedSortedSet.from(inputs)
                 )
               )
             )

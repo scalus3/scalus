@@ -20,7 +20,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         )
         val transaction = Transaction(
           body = TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero
           ),
@@ -45,7 +45,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
           ),
@@ -75,7 +75,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
             mint = Some(
@@ -115,7 +115,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
           ),
@@ -150,7 +150,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
             mint = Some(
@@ -188,7 +188,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         )
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
             mint = Some(
@@ -257,7 +257,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
 
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(inputsSet),
+            inputs = TaggedSortedSet.from(inputsSet),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
           ),

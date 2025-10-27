@@ -61,7 +61,7 @@ object Transaction {
 
     /** An empty transaction */
     def empty: Transaction = Transaction(
-      TransactionBody(TaggedOrderedSet.empty, IndexedSeq.empty, Coin.zero),
+      TransactionBody(TaggedSortedSet.empty, IndexedSeq.empty, Coin.zero),
       TransactionWitnessSet.empty,
     )
 

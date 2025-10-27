@@ -515,8 +515,12 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       genSetOfSizeFromArbitrary(1, 3).map(TaggedSet.from)
     )
 
-    given [A: Arbitrary: Ordering]: Arbitrary[TaggedOrderedSet[A]] = Arbitrary(
+    given [A: Arbitrary]: Arbitrary[TaggedOrderedSet[A]] = Arbitrary(
       genSetOfSizeFromArbitrary(1, 3).map(TaggedOrderedSet.from)
+    )
+
+    given [A: Arbitrary: Ordering]: Arbitrary[TaggedSortedSet[A]] = Arbitrary(
+      genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedSet.from)
     )
 
     given Arbitrary[TransactionWitnessSet] = {
@@ -626,30 +630,30 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[TransactionBody] = Arbitrary {
         for
-            inputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(TaggedOrderedSet.from)
+            inputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(TaggedSortedSet.from)
             outputs <- genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](0, 4)
             fee <- arbitrary[Coin]
             ttl <- Gen.option(Gen.choose(0L, Long.MaxValue))
-            certificates <- genSetOfSizeFromArbitrary[Certificate](0, 4).map(TaggedSet.from)
+            certificates <- genSetOfSizeFromArbitrary[Certificate](0, 4).map(TaggedOrderedSet.from)
             withdrawals <- arbitrary[Option[Withdrawals]]
             auxiliaryDataHash <- arbitrary[Option[AuxiliaryDataHash]]
             validityStartSlot <- Gen.option(Gen.choose(0L, Long.MaxValue))
             mint <- arbitrary[Option[Mint]]
             scriptDataHash <- arbitrary[Option[ScriptDataHash]]
             collateralInputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(
-              TaggedOrderedSet.from
+              TaggedSortedSet.from
             )
             requiredSigners <- genSetOfSizeFromArbitrary[AddrKeyHash](0, 4).map(set =>
-                TaggedOrderedSet.from(set)
+                TaggedSortedSet.from(set)
             )
             networkId <- Gen.option(Gen.oneOf(Gen.const(0), Gen.const(1)))
             collateralReturnOutput <- arbitrary[Option[Sized[TransactionOutput]]]
             totalCollateral <- arbitrary[Option[Coin]]
             referenceInputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(
-              TaggedOrderedSet.from
+              TaggedSortedSet.from
             )
             votingProcedures <- arbitrary[Option[VotingProcedures]]
-            proposalProcedures <- genSetOfSizeFromArbitrary[ProposalProcedure](0, 4).map(
+            proposalProcedures <- genVectorOfSizeFromArbitrary[ProposalProcedure](0, 4).map(
               TaggedOrderedSet.from
             )
             currentTreasuryValue <- arbitrary[Option[Coin]]

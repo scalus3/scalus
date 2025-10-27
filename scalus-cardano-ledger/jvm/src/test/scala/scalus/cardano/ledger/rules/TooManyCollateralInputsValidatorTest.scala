@@ -20,7 +20,7 @@ class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTe
         val tx = randomValidTransaction.copy(
           body = KeepRaw(
             randomValidTransaction.body.value.copy(
-              collateralInputs = TaggedOrderedSet.from(collateralInputs)
+              collateralInputs = TaggedSortedSet.from(collateralInputs)
             )
           )
         )
@@ -42,7 +42,7 @@ class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTe
         val tx = randomValidTransaction.copy(
           body = KeepRaw(
             randomValidTransaction.body.value.copy(
-              collateralInputs = TaggedOrderedSet.from(collateralInputs)
+              collateralInputs = TaggedSortedSet.from(collateralInputs)
             )
           )
         )

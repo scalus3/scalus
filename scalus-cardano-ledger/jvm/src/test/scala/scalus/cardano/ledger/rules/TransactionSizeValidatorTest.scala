@@ -27,9 +27,9 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               body = KeepRaw(
                 tx.body.value.copy(
                   inputs =
-                      TaggedOrderedSet.from(Set(Arbitrary.arbitrary[TransactionInput].sample.get)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                      TaggedSortedSet.from(Set(Arbitrary.arbitrary[TransactionInput].sample.get)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq(
                     Sized(
                       TransactionOutput(
@@ -41,9 +41,9 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   proposalProcedures = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   mint = None,
-                  requiredSigners = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty,
                   collateralReturnOutput = None
                 )
               )
@@ -65,7 +65,7 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet(inputs)
+                  inputs = TaggedSortedSet(inputs)
                 )
               )
             )

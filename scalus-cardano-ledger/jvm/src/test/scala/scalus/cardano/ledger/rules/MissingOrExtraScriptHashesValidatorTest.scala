@@ -31,9 +31,9 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.from(Set(referenceInput)),
+                  inputs = TaggedSortedSet.from(Set(input)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
                   mint = Some(
                     Mint(
                       MultiAsset(
@@ -95,7 +95,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                           )
                     )
                   ),
-                  certificates = TaggedSet(
+                  certificates = TaggedOrderedSet(
                     Certificate
                         .StakeDelegation(credential3, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
