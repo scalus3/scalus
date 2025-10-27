@@ -87,7 +87,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     test("MinTransactionFee should return the same after setting fee") {
         val emptyTx = Transaction(
           body = TransactionBody(
-            inputs = TaggedOrderedSet.empty,
+            inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq.empty,
             fee = Coin(0L)
           ),
