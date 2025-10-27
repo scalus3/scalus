@@ -29,23 +29,25 @@ object Value {
         } catch {
             case e: ArithmeticError => Left(e)
         }
-        
+
         def unsafeToValue: Value = {
-            val lovelace = try {
-                this.lovelace.unsafeToCoin
-            } catch {
-                case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
-            }
-            
-            val assets = try {
-                this.assets.unsafeToMultiAsset
-            } catch {
-                case e : MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
-            }
-            
+            val lovelace =
+                try {
+                    this.lovelace.unsafeToCoin
+                } catch {
+                    case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
+                }
+
+            val assets =
+                try {
+                    this.assets.unsafeToMultiAsset
+                } catch {
+                    case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
+                }
+
             Value(lovelace, assets)
         }
-        
+
         def scale(s: SafeLong): Unbounded = Unbounded.ops.timesl(s, this)
 
         def scale(s: BigDecimal): Fractional =
@@ -85,7 +87,7 @@ object Value {
     ) {
         def round(mode: RoundingMode): Unbounded =
             Unbounded(this.lovelace.round(mode), this.assets.round(mode))
-        
+
         def toValue(mode: RoundingMode): Either[ArithmeticError, Value] = try {
             Right(this.unsafeToValue(mode))
         } catch {
@@ -93,17 +95,19 @@ object Value {
         }
 
         def unsafeToValue(mode: RoundingMode): Value = {
-            val lovelace = try {
-                this.lovelace.unsafeToCoin(mode)
-            } catch {
-                case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
-            }
+            val lovelace =
+                try {
+                    this.lovelace.unsafeToCoin(mode)
+                } catch {
+                    case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
+                }
 
-            val assets = try {
-                this.assets.unsafeToMultiAsset(mode)
-            } catch {
-                case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
-            }
+            val assets =
+                try {
+                    this.assets.unsafeToMultiAsset(mode)
+                } catch {
+                    case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
+                }
 
             Value(lovelace, assets)
         }

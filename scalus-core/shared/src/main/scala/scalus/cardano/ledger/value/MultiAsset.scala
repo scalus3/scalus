@@ -241,8 +241,8 @@ object MultiAsset {
                 // If only the right key exists, compare the right value against zero.
                 SortedMapPartialOrder[TokenName, Coin.Unbounded, Int](
                   compareBoth = coinOrder.compare,
-                  compareLeft = _.signum,
-                  compareRight = -_.signum
+                  compareLeft = _.convert.signum,
+                  compareRight = -_.convert.signum
                 )
 
             given ops: CModule[Unbounded, SafeLong] with {
@@ -305,8 +305,8 @@ object MultiAsset {
                 // If only the right key exists, compare it against zero.
                 SortedMapPartialOrder[TokenName, Coin.Fractional, Int](
                   compareBoth = coinOrder.compare,
-                  compareLeft = _.signum,
-                  compareRight = -_.signum
+                  compareLeft = _.convert.signum,
+                  compareRight = -_.convert.signum
                 )
 
             given ops: VectorSpace[Fractional, BigDecimal] with
