@@ -11,6 +11,7 @@ import scalus.testutil.ArbitraryDerivation.autoDerived
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 import scala.math.pow
+import TransactionWitnessSet.given
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
@@ -523,14 +524,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedSet.from)
     )
 
-    given Arbitrary[TransactionWitnessSet] = {
-        given [A: Arbitrary]: Arbitrary[immutable.Set[A]] = Arbitrary(
-          genSetOfSizeFromArbitrary(1, 3)
-        )
-
-        val result: Arbitrary[TransactionWitnessSet] = autoDerived
-        result
-    }
+    given Arbitrary[TransactionWitnessSet] = autoDerived
 
     given Arbitrary[UnitInterval] = Arbitrary {
         for

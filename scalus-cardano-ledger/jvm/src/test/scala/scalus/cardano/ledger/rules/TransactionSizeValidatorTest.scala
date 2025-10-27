@@ -4,6 +4,7 @@ package rules
 import org.scalacheck.Arbitrary
 import scalus.cardano.address.ByronAddress
 import org.scalatest.funsuite.AnyFunSuite
+import TransactionWitnessSet.given
 
 import scala.collection.immutable.SortedSet
 
@@ -14,12 +15,12 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             val tx = randomValidTransaction
             tx.copy(
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = None
               ),

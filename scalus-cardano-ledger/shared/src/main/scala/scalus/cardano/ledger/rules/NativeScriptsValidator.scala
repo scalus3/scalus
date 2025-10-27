@@ -61,7 +61,7 @@ object NativeScriptsValidator extends STS.Validator {
 
     private def extractValidatorKeys(
         event: Event
-    ): Set[AddrKeyHash] = event.witnessSet.vkeyWitnesses.map(_.vkeyHash)
+    ): Set[AddrKeyHash] = event.witnessSet.vkeyWitnesses.toSortedSet.map(_.vkeyHash)
 
     private def invalidNativeScriptHashes(
         nativeScripts: Set[Script.Native],

@@ -23,10 +23,10 @@ object AllWitnessesScripts {
     def allWitnessesScriptsView(transaction: Transaction): View[Script] = {
         val witnessSet = transaction.witnessSet
 
-        witnessSet.nativeScripts.view ++
-            witnessSet.plutusV1Scripts.view ++
-            witnessSet.plutusV2Scripts.view ++
-            witnessSet.plutusV3Scripts.view
+        witnessSet.nativeScripts.toSortedSet.view ++
+            witnessSet.plutusV1Scripts.toSortedSet.view ++
+            witnessSet.plutusV2Scripts.toSortedSet.view ++
+            witnessSet.plutusV3Scripts.toSortedSet.view
 
     }
 
@@ -52,16 +52,18 @@ object AllWitnessesScripts {
     ): View[PlutusScript] = {
         val witnessSet = transaction.witnessSet
 
-        witnessSet.plutusV1Scripts.view ++
-            witnessSet.plutusV2Scripts.view ++
-            witnessSet.plutusV3Scripts.view
+        witnessSet.plutusV1Scripts.toSortedSet.view ++
+            witnessSet.plutusV2Scripts.toSortedSet.view ++
+            witnessSet.plutusV3Scripts.toSortedSet.view
     }
 
     def allWitnessesNativeScriptsMap(transaction: Transaction): Map[ScriptHash, Script.Native] =
-        transaction.witnessSet.nativeScripts.view.map(script => script.scriptHash -> script).toMap
+        transaction.witnessSet.nativeScripts.toSortedSet.view
+            .map(script => script.scriptHash -> script)
+            .toMap
 
     def allWitnessesNativeScripts(transaction: Transaction): Set[Script.Native] =
-        transaction.witnessSet.nativeScripts
+        transaction.witnessSet.nativeScripts.toSortedSet
 
     def allWitnessesNativeScriptHashes(transaction: Transaction): Set[ScriptHash] = {
         allWitnessesNativeScriptHashesView(transaction).toSet

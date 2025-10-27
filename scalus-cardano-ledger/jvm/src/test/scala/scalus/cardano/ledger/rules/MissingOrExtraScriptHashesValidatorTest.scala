@@ -7,6 +7,7 @@ import scalus.builtin.platform
 import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 
 import scala.collection.immutable.SortedMap
+import TransactionWitnessSet.given
 
 class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("MissingOrExtraScriptHashesValidator rule success") {
@@ -158,13 +159,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
                 ),
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set(plutusV1Script),
-                plutusV2Scripts = Set(plutusV2Script),
-                plutusV3Scripts = Set(plutusV3Script)
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet(plutusV1Script),
+                plutusV2Scripts = TaggedSortedSet(plutusV2Script),
+                plutusV3Scripts = TaggedSortedSet(plutusV3Script)
               )
             )
         }

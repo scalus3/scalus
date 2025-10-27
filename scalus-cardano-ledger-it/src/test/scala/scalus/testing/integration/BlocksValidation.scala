@@ -454,10 +454,10 @@ class BlocksValidation extends AnyFunSuite {
                     (txb, w) <- block.transactionBodies.view
                         .map(_.value)
                         .zip(block.transactionWitnessSets)
-                    native <- w.nativeScripts
+                    native <- w.nativeScripts.toSortedSet
                 do
                     val scriptHash = native.scriptHash
-                    val keyHashes = w.vkeyWitnesses.map { w =>
+                    val keyHashes = w.vkeyWitnesses.toSortedSet.map { w =>
                         val key = w.vkey
                         AddrKeyHash(platform.blake2b_224(key))
                     }
@@ -535,9 +535,9 @@ class BlocksValidation extends AnyFunSuite {
                                     .get
 
                             val desc =
-                                (if w.plutusV1Scripts.nonEmpty then "v1" else "")
-                                    ++ (if w.plutusV2Scripts.nonEmpty then "v2" else "")
-                                    ++ (if w.plutusV3Scripts.nonEmpty then "v3" else "")
+                                (if w.plutusV1Scripts.toSortedSet.nonEmpty then "v1" else "")
+                                    ++ (if w.plutusV2Scripts.toSortedSet.nonEmpty then "v2" else "")
+                                    ++ (if w.plutusV3Scripts.toSortedSet.nonEmpty then "v3" else "")
                                     ++ (if w.plutusData.value.toIndexedSeq.nonEmpty then "D"
                                         else "")
                                     ++ (if w.redeemers.nonEmpty then "R" else "")
@@ -572,11 +572,11 @@ class BlocksValidation extends AnyFunSuite {
         val interestingBlocks = blocks.filter { path =>
             val blockBytes = Files.readAllBytes(path)
             val block = BlockFile.fromCborArray(blockBytes).block
-            block.transactionWitnessSets.exists { _.plutusV1Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV2Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV3Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.nativeScripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.vkeyWitnesses.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV1Scripts.toSortedSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV2Scripts.toSortedSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV3Scripts.toSortedSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.nativeScripts.toSortedSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSortedSet.nonEmpty } &&
             block.transactionWitnessSets.exists { _.plutusData.value.toIndexedSeq.nonEmpty }
         }
         println(s"Interesting blocks ${interestingBlocks.size} of ${blocks.size}")

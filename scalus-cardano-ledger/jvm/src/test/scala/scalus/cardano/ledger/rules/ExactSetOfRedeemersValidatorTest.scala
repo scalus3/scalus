@@ -5,7 +5,7 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
-
+import TransactionWitnessSet.given
 import scala.collection.immutable.SortedMap
 
 class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
@@ -164,7 +164,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             ),
           ),
           TransactionWitnessSet(
-            plutusV2Scripts = Set(plutusScript),
+            plutusV2Scripts = TaggedSortedSet(plutusScript),
             redeemers = None // no redeemer
           )
         )
@@ -202,7 +202,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             ),
           ),
           TransactionWitnessSet(
-            nativeScripts = Set(Script.Native(nativeScript)),
+            nativeScripts = TaggedSortedSet(Script.Native(nativeScript)),
             redeemers = None
           ),
         )

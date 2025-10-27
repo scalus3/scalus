@@ -5,6 +5,7 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.platform
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
+import TransactionWitnessSet.given
 
 class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("NativeScriptsValidator rule success") {
@@ -50,17 +51,19 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 ),
-                nativeScripts = Set(
-                  signatureTimelock1,
-                  signatureTimelock2,
-                  allOfTimelock,
-                  anyOfTimelock,
-                  mOfTimelock
-                ).map(Script.Native.apply)
+                nativeScripts = TaggedSortedSet.from(
+                  Set(
+                    signatureTimelock1,
+                    signatureTimelock2,
+                    allOfTimelock,
+                    anyOfTimelock,
+                    mOfTimelock
+                  ).map(Script.Native.apply)
+                )
               )
             )
         }
@@ -185,8 +188,8 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                nativeScripts = Set(Script.Native(timeExpireTimelock))
+                vkeyWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet(Script.Native(timeExpireTimelock))
               )
             )
         }

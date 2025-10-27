@@ -27,6 +27,7 @@ import scalus.cardano.txbuilder.SomeBuildError.{BalancingError, SomeStepError, V
 import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TransactionBuilder.{Operation, WitnessKind}
 import scalus.cardano.txbuilder.modifyWs
+import TransactionWitnessSet.given
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]
@@ -1643,7 +1644,7 @@ object TransactionBuilder:
                       // Add the native script to the witness set
                       unsafeCtxWitnessL
                           .refocus(_.nativeScripts)
-                          .modify(s => appendDistinct(ns, s.toList).toSet)
+                          .modify(s => TaggedSortedSet.from(appendDistinct(ns, s.toSeq)))
                     )
                 // Script should already be attached, see [[assertAttachedScriptExists]]
                 case ScriptSource.NativeScriptAttached => pure0(())
@@ -1691,19 +1692,19 @@ object TransactionBuilder:
                             modify0(
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV1Scripts)
-                                  .modify(s => Set.from(appendDistinct(v1, s.toSeq)))
+                                  .modify(s => TaggedSortedSet.from(appendDistinct(v1, s.toSeq)))
                             )
                         case v2: Script.PlutusV2 =>
                             modify0(
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV2Scripts)
-                                  .modify(s => Set.from(appendDistinct(v2, s.toSeq)))
+                                  .modify(s => TaggedSortedSet.from(appendDistinct(v2, s.toSeq)))
                             )
                         case v3: Script.PlutusV3 =>
                             modify0(
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV3Scripts)
-                                  .modify(s => Set.from(appendDistinct(v3, s.toSeq)))
+                                  .modify(s => TaggedSortedSet.from(appendDistinct(v3, s.toSeq)))
                             )
                     }
                 // Script should already be attached, see [[assertAttachedScriptExists]]
@@ -2045,14 +2046,18 @@ def txBodyL: Lens[Transaction, TransactionBody] = {
 
 /** add at most 256 keys */
 def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
-    tx.focus(_.witnessSet.vkeyWitnesses).modify(_ ++ generateUniqueKeys(numberOfKeys))
+    tx.focus(_.witnessSet.vkeyWitnesses)
+        .modify(s => TaggedSortedSet.from(s.toSortedSet ++ generateUniqueKeys(numberOfKeys)))
 }
 
 /** remove at most 256 keys, must be used in conjunction with addDummyVKeys */
 def removeDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
     modifyWs(
       tx,
-      ws => ws.copy(vkeyWitnesses = ws.vkeyWitnesses -- generateUniqueKeys(numberOfKeys))
+      ws =>
+          ws.copy(vkeyWitnesses =
+              TaggedSortedSet.from(ws.vkeyWitnesses.toSortedSet -- generateUniqueKeys(numberOfKeys))
+          )
     )
 }
 

@@ -5,6 +5,7 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
+import TransactionWitnessSet.given
 
 class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
@@ -55,7 +56,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = Set(plutusScript),
+            plutusV1Scripts = TaggedSortedSet(plutusScript),
             plutusData = KeepRaw(
               TaggedSet.from(
                 Set(KeepRaw(datum))
@@ -92,7 +93,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV2Scripts = Set(plutusScript),
+            plutusV2Scripts = TaggedSortedSet(plutusScript),
             plutusData = KeepRaw(
               TaggedSet.from(
                 Set(KeepRaw(datum))
@@ -128,7 +129,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = Set(plutusScript)
+            plutusV1Scripts = TaggedSortedSet(plutusScript)
           )
         )
         val context = Context()
@@ -157,7 +158,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = Set(plutusScript)
+            plutusV1Scripts = TaggedSortedSet(plutusScript)
           )
         )
         val context = Context()
@@ -262,7 +263,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            nativeScripts = Set(Script.Native(nativeScript))
+            nativeScripts = TaggedSortedSet(Script.Native(nativeScript))
           )
         )
         val context = Context()

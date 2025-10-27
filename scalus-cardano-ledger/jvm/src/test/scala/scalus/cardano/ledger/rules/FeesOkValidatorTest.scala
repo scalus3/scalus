@@ -5,6 +5,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.builtin.platform
 import org.scalatest.funsuite.AnyFunSuite
+import TransactionWitnessSet.given
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator rule success") {
@@ -49,12 +50,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -154,12 +155,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -247,12 +248,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -355,12 +356,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -455,12 +456,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -555,12 +556,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -642,12 +643,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedSet.empty,
+                plutusV1Scripts = TaggedSortedSet.empty,
+                plutusV2Scripts = TaggedSortedSet.empty,
+                plutusV3Scripts = TaggedSortedSet.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(

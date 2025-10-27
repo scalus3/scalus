@@ -18,7 +18,7 @@ object AllWitnessesKeyHashes {
     }
 
     def allVkeyWitnessesKeyHashesView(transaction: Transaction): View[AddrKeyHash] = {
-        transaction.witnessSet.vkeyWitnesses.view.map(_.vkeyHash)
+        transaction.witnessSet.vkeyWitnesses.toSortedSet.view.map(_.vkeyHash)
     }
 
     def allBootstrapWitnessesKeyHashes(transaction: Transaction): Set[AddrKeyHash] = {

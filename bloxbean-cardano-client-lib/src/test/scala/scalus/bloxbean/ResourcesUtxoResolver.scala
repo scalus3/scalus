@@ -84,10 +84,10 @@ private[scalus] class ResourcesUtxoResolver {
 
         // Collect witness scripts
         val witnessSet = transaction.witnessSet
-        val witnessScripts = witnessSet.nativeScripts ++
-            witnessSet.plutusV1Scripts ++
-            witnessSet.plutusV2Scripts ++
-            witnessSet.plutusV3Scripts
+        val witnessScripts = witnessSet.nativeScripts.toSortedSet ++
+            witnessSet.plutusV1Scripts.toSortedSet ++
+            witnessSet.plutusV2Scripts.toSortedSet ++
+            witnessSet.plutusV3Scripts.toSortedSet
 
         witnessScripts.foreach { script =>
             scripts.put(script.scriptHash, script)
