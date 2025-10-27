@@ -3,10 +3,14 @@ package scalus.examples.htlc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.ByteString
+import scalus.builtin.ToData.*
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.BuilderContext
+import scalus.cardano.ledger.utils.ScriptFeeComparison
+import scalus.cardano.ledger.utils.ScriptFeeComparison.FeeComparison
+import scalus.cardano.txbuilder.{BuilderContext, Datum}
 import scalus.examples.TestUtil
+import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
 import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
@@ -167,5 +171,18 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(result.isFailure)
         assert(result.logs.last.contains(HtlcValidator.UnsignedCommitterTransaction))
+    }
+
+    test("fee cost comparison") {
+        ScriptFeeComparison.compareFees(
+          HtlcContract.releaseCompiledContract.script,
+          Reveal(ByteString.fromHex("a".repeat(32))).toData,
+          Datum.DatumInlined,
+          BuilderContext(env, TestUtil.createTestWallet(receiverAddress, amount))
+        ) match {
+            case Right(FeeComparison(direct, ref)) =>
+                assert(ref < direct)
+            case _ => fail("could not compare script fees for HTLC reveal")
+        }
     }
 }

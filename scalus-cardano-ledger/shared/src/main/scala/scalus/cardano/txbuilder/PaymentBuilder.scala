@@ -6,7 +6,6 @@ import scalus.cardano.ledger.*
 
 case class PaymentBuilder(
     context: BuilderContext,
-    wallet: Wallet,
     payments: Seq[(Address, Value, Option[DatumOption])] = Seq.empty,
     scriptInputs: Set[(TransactionUnspentOutput, Witness)] = Set.empty,
     collateral: Option[(TransactionUnspentOutput, Witness)] = None,
@@ -153,5 +152,5 @@ case class PaymentBuilder(
 
 object PaymentBuilder {
     def apply(context: BuilderContext): PaymentBuilder =
-        new PaymentBuilder(context, context.wallet)
+        new PaymentBuilder(context)
 }
