@@ -50,22 +50,21 @@ object JITDefuncCompiler {
 
   /** Compile a UPLC term to a CompiledProgram. */
   def compile(term: Term): CompiledProgram = {
-    staging.run { (quotes: Quotes) ?=>
-      given ctx: CompileContext = new CompileContext()
+    // Build instructions at runtime
+    val ctx = new CompileContext()
 
-      // Compile the term
-      val entryIdx = compileTerm(term, Nil)(using quotes, ctx)
+    // Compile the term
+    val entryIdx = compileTerm(term, Nil)(using ctx)
 
-      // Emit final RETURN
-      ctx.emit(Instruction(opcode = OP_RETURN))
+    // Emit final RETURN
+    ctx.emit(Instruction(opcode = JITDefunc.OP_RETURN))
 
-      val instructions = ctx.getInstructions
+    val instructions = ctx.getInstructions
 
-      CompiledProgram(
-        instructions = instructions,
-        entryPoint = entryIdx
-      )
-    }
+    CompiledProgram(
+      instructions = instructions,
+      entryPoint = entryIdx
+    )
   }
 
   /** Compile a term to instructions, returning the entry instruction index.
@@ -77,51 +76,55 @@ object JITDefuncCompiler {
   private def compileTerm(
       term: Term,
       env: List[(String, Int)]
-  )(using Quotes, CompileContext): Int = {
-    import quotes.reflect.asTerm
-
+  )(using CompileContext): Int = {
     term match {
       case Term.Const(const) =>
         // Constants: Create JIT snippet that returns the constant
-        val snippetExpr = compileConstant(const)
+        val snippet = compileConstant(const)
         val idx = summon[CompileContext].emit(
           Instruction(
             opcode = JITDefunc.OP_EXEC_SNIPPET,
-            snippet = snippetExpr
+            snippet = snippet
           )
         )
+        // Emit RETURN after snippet so we don't fall through
+        summon[CompileContext].emit(Instruction(opcode = JITDefunc.OP_RETURN))
         idx
 
       case Term.Var(name) =>
         // Variables: Look up from environment
         // For now, create a snippet that throws (will implement env lookup properly)
-        val snippetExpr = '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              throw new UnsupportedOperationException(s"Variable lookup not yet implemented: ${${ Expr(name.name) }}")
+        val snippet = staging.run { (quotes: Quotes) ?=>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                throw new UnsupportedOperationException(s"Variable lookup not yet implemented: ${${ Expr(name.name) }}")
+              }
             }
           }
         }
         summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
 
       case Term.LamAbs(name, body) =>
         // Lambda: Create a snippet that returns a function
         // The function captures the environment
         val bodyIdx = compileTerm(body, (name -> 0) :: env)  // Simplification
-        val snippetExpr = '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              (arg: Any) => {
-                // TODO: Execute body with arg in environment
-                throw new UnsupportedOperationException("Lambda execution not yet implemented")
+        val snippet = staging.run { (quotes: Quotes) ?=>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                (arg: Any) => {
+                  // TODO: Execute body with arg in environment
+                  throw new UnsupportedOperationException("Lambda execution not yet implemented")
+                }
               }
             }
           }
         }
         summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
 
       case Term.Apply(fun, arg) =>
@@ -129,12 +132,15 @@ object JITDefuncCompiler {
         val funIdx = compileTerm(fun, env)
         val argIdx = compileTerm(arg, env)
 
-        summon[CompileContext].emit(
+        val applyIdx = summon[CompileContext].emit(
           Instruction(
-            opcode = OP_APPLY,
+            opcode = JITDefunc.OP_APPLY,
             data = (funIdx, argIdx)
           )
         )
+        // Emit RETURN after Apply
+        summon[CompileContext].emit(Instruction(opcode = JITDefunc.OP_RETURN))
+        applyIdx
 
       case Term.Force(body) =>
         // Force: Use defunctionalized control flow
@@ -142,7 +148,7 @@ object JITDefuncCompiler {
 
         summon[CompileContext].emit(
           Instruction(
-            opcode = OP_FORCE,
+            opcode = JITDefunc.OP_FORCE,
             data = bodyIdx
           )
         )
@@ -150,296 +156,311 @@ object JITDefuncCompiler {
       case Term.Delay(body) =>
         // Delay: Create snippet that returns a thunk
         val bodyIdx = compileTerm(body, env)
-        val snippetExpr = '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              () => {
-                // TODO: Execute body
-                throw new UnsupportedOperationException("Delay execution not yet implemented")
+        val snippet = staging.run { (quotes: Quotes) ?=>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                () => {
+                  // TODO: Execute body
+                  throw new UnsupportedOperationException("Delay execution not yet implemented")
+                }
               }
             }
           }
         }
         summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
 
       case Term.Builtin(bi) =>
         // Builtins: Create JIT snippets for direct execution
-        val snippetExpr = compileBuiltin(bi)
-        summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+        val snippet = compileBuiltin(bi)
+        val idx = summon[CompileContext].emit(
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
+        // Emit RETURN after snippet
+        summon[CompileContext].emit(Instruction(opcode = JITDefunc.OP_RETURN))
+        idx
 
       case Term.Error =>
-        val snippetExpr = '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              throw new RuntimeException("UPLC Error term evaluated")
+        val snippet = staging.run { (quotes: Quotes) ?=>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                throw new RuntimeException("UPLC Error term evaluated")
+              }
             }
           }
         }
         summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
 
       case Term.Constr(tag, args) =>
         // Constructor: Create snippet
         val argIdxs = args.map(a => compileTerm(a, env))
-        val snippetExpr = '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              // TODO: Evaluate args and create tuple
-              throw new UnsupportedOperationException("Constr not yet implemented")
+        val snippet = staging.run { (quotes: Quotes) ?=>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                // TODO: Evaluate args and create tuple
+                throw new UnsupportedOperationException("Constr not yet implemented")
+              }
             }
           }
         }
         summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
 
       case Term.Case(arg, cases) =>
         // Case: Create snippet
         val argIdx = compileTerm(arg, env)
         val caseIdxs = cases.map(c => compileTerm(c, env))
-        val snippetExpr = '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              // TODO: Evaluate scrutinee and select case
-              throw new UnsupportedOperationException("Case not yet implemented")
+        val snippet = staging.run { (quotes: Quotes) ?=>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                // TODO: Evaluate scrutinee and select case
+                throw new UnsupportedOperationException("Case not yet implemented")
+              }
             }
           }
         }
         summon[CompileContext].emit(
-          Instruction(opcode = OP_EXEC_SNIPPET, snippet = snippetExpr)
+          Instruction(opcode = JITDefunc.OP_EXEC_SNIPPET, snippet = snippet)
         )
     }
   }
 
   /** Compile a constant to a JIT snippet. */
-  private def compileConstant(const: Constant)(using Quotes): Expr[Snippet] = {
-    const match {
-      case Constant.Integer(value) =>
-        val v = Expr(value)
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              budget.spendBudget(
-                ExBudgetCategory.Step(StepKind.Const),
-                params.machineCosts.constCost,
-                Nil
-              )
-              $v
+  private def compileConstant(const: Constant): Snippet = {
+    staging.run { (quotes: Quotes) ?=>
+      const match {
+        case Constant.Integer(value) =>
+          val v = Expr(value)
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                budget.spendBudget(
+                  ExBudgetCategory.Step(StepKind.Const),
+                  params.machineCosts.constCost,
+                  Nil
+                )
+                $v
+              }
             }
           }
-        }
 
-      case Constant.ByteString(value) =>
-        val v = Expr(value)
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              budget.spendBudget(
-                ExBudgetCategory.Step(StepKind.Const),
-                params.machineCosts.constCost,
-                Nil
-              )
-              $v
+        case Constant.ByteString(value) =>
+          val v = Expr(value)
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                budget.spendBudget(
+                  ExBudgetCategory.Step(StepKind.Const),
+                  params.machineCosts.constCost,
+                  Nil
+                )
+                $v
+              }
             }
           }
-        }
 
-      case Constant.String(value) =>
-        val v = Expr(value)
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              budget.spendBudget(
-                ExBudgetCategory.Step(StepKind.Const),
-                params.machineCosts.constCost,
-                Nil
-              )
-              $v
+        case Constant.String(value) =>
+          val v = Expr(value)
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                budget.spendBudget(
+                  ExBudgetCategory.Step(StepKind.Const),
+                  params.machineCosts.constCost,
+                  Nil
+                )
+                $v
+              }
             }
           }
-        }
 
-      case Constant.Bool(value) =>
-        val v = Expr(value)
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              budget.spendBudget(
-                ExBudgetCategory.Step(StepKind.Const),
-                params.machineCosts.constCost,
-                Nil
-              )
-              $v
+        case Constant.Bool(value) =>
+          val v = Expr(value)
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                budget.spendBudget(
+                  ExBudgetCategory.Step(StepKind.Const),
+                  params.machineCosts.constCost,
+                  Nil
+                )
+                $v
+              }
             }
           }
-        }
 
-      case Constant.Unit =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              budget.spendBudget(
-                ExBudgetCategory.Step(StepKind.Const),
-                params.machineCosts.constCost,
-                Nil
-              )
-              ()
+        case Constant.Unit =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                budget.spendBudget(
+                  ExBudgetCategory.Step(StepKind.Const),
+                  params.machineCosts.constCost,
+                  Nil
+                )
+                ()
+              }
             }
           }
-        }
 
-      case Constant.Data(value) =>
-        val v = Expr(value)
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              budget.spendBudget(
-                ExBudgetCategory.Step(StepKind.Const),
-                params.machineCosts.constCost,
-                Nil
-              )
-              $v
+        case Constant.Data(value) =>
+          val v = Expr(value)
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                budget.spendBudget(
+                  ExBudgetCategory.Step(StepKind.Const),
+                  params.machineCosts.constCost,
+                  Nil
+                )
+                $v
+              }
             }
           }
-        }
 
-      case _ =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              throw new UnsupportedOperationException(s"Constant type not yet implemented: ${${ Expr(const.toString) }}")
+        case _ =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                throw new UnsupportedOperationException(s"Constant type not yet implemented: ${${ Expr(const.toString) }}")
+              }
             }
           }
-        }
+      }
     }
   }
 
   /** Compile a builtin to a JIT snippet (direct bytecode execution). */
-  private def compileBuiltin(bi: DefaultFun)(using Quotes): Expr[Snippet] = {
-    bi match {
-      case DefaultFun.AddInteger =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              // Return curried function
-              (x: Any) => (y: Any) => {
-                val xv = x.asInstanceOf[BigInt]
-                val yv = y.asInstanceOf[BigInt]
-                budget.spendBudget(
-                  ExBudgetCategory.Step(StepKind.Builtin),
-                  params.builtinCostModel.addInteger.calculateCostFromMemory(
-                    Seq(
-                      MemoryUsageJit.memoryUsage(xv),
-                      MemoryUsageJit.memoryUsage(yv)
-                    )
-                  ),
-                  Nil
-                )
-                xv + yv
+  private def compileBuiltin(bi: DefaultFun): Snippet = {
+    staging.run { (quotes: Quotes) ?=>
+      bi match {
+        case DefaultFun.AddInteger =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                // Return curried function
+                (x: Any) => (y: Any) => {
+                  val xv = x.asInstanceOf[BigInt]
+                  val yv = y.asInstanceOf[BigInt]
+                  budget.spendBudget(
+                    ExBudgetCategory.Step(StepKind.Builtin),
+                    params.builtinCostModel.addInteger.calculateCostFromMemory(
+                      Seq(
+                        MemoryUsageJit.memoryUsage(xv),
+                        MemoryUsageJit.memoryUsage(yv)
+                      )
+                    ),
+                    Nil
+                  )
+                  xv + yv
+                }
               }
             }
           }
-        }
 
-      case DefaultFun.SubtractInteger =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              (x: Any) => (y: Any) => {
-                val xv = x.asInstanceOf[BigInt]
-                val yv = y.asInstanceOf[BigInt]
-                budget.spendBudget(
-                  ExBudgetCategory.Step(StepKind.Builtin),
-                  params.builtinCostModel.subtractInteger.calculateCostFromMemory(
-                    Seq(
-                      MemoryUsageJit.memoryUsage(xv),
-                      MemoryUsageJit.memoryUsage(yv)
-                    )
-                  ),
-                  Nil
-                )
-                xv - yv
+        case DefaultFun.SubtractInteger =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                (x: Any) => (y: Any) => {
+                  val xv = x.asInstanceOf[BigInt]
+                  val yv = y.asInstanceOf[BigInt]
+                  budget.spendBudget(
+                    ExBudgetCategory.Step(StepKind.Builtin),
+                    params.builtinCostModel.subtractInteger.calculateCostFromMemory(
+                      Seq(
+                        MemoryUsageJit.memoryUsage(xv),
+                        MemoryUsageJit.memoryUsage(yv)
+                      )
+                    ),
+                    Nil
+                  )
+                  xv - yv
+                }
               }
             }
           }
-        }
 
-      case DefaultFun.MultiplyInteger =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              (x: Any) => (y: Any) => {
-                val xv = x.asInstanceOf[BigInt]
-                val yv = y.asInstanceOf[BigInt]
-                budget.spendBudget(
-                  ExBudgetCategory.Step(StepKind.Builtin),
-                  params.builtinCostModel.multiplyInteger.calculateCostFromMemory(
-                    Seq(
-                      MemoryUsageJit.memoryUsage(xv),
-                      MemoryUsageJit.memoryUsage(yv)
-                    )
-                  ),
-                  Nil
-                )
-                xv * yv
+        case DefaultFun.MultiplyInteger =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                (x: Any) => (y: Any) => {
+                  val xv = x.asInstanceOf[BigInt]
+                  val yv = y.asInstanceOf[BigInt]
+                  budget.spendBudget(
+                    ExBudgetCategory.Step(StepKind.Builtin),
+                    params.builtinCostModel.multiplyInteger.calculateCostFromMemory(
+                      Seq(
+                        MemoryUsageJit.memoryUsage(xv),
+                        MemoryUsageJit.memoryUsage(yv)
+                      )
+                    ),
+                    Nil
+                  )
+                  xv * yv
+                }
               }
             }
           }
-        }
 
-      case DefaultFun.EqualsData =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              (x: Any) => (y: Any) => {
-                val xv = x.asInstanceOf[Data]
-                val yv = y.asInstanceOf[Data]
-                budget.spendBudget(
-                  ExBudgetCategory.Step(StepKind.Builtin),
-                  params.builtinCostModel.equalsData.calculateCostFromMemory(
-                    Seq(
-                      MemoryUsageJit.memoryUsage(xv),
-                      MemoryUsageJit.memoryUsage(yv)
-                    )
-                  ),
-                  Nil
-                )
-                Builtins.equalsData(xv, yv)
+        case DefaultFun.EqualsData =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                (x: Any) => (y: Any) => {
+                  val xv = x.asInstanceOf[Data]
+                  val yv = y.asInstanceOf[Data]
+                  budget.spendBudget(
+                    ExBudgetCategory.Step(StepKind.Builtin),
+                    params.builtinCostModel.equalsData.calculateCostFromMemory(
+                      Seq(
+                        MemoryUsageJit.memoryUsage(xv),
+                        MemoryUsageJit.memoryUsage(yv)
+                      )
+                    ),
+                    Nil
+                  )
+                  Builtins.equalsData(xv, yv)
+                }
               }
             }
           }
-        }
 
-      case DefaultFun.IfThenElse =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              () => (c: Any) => (t: Any) => (f: Any) => {
-                val cv = c.asInstanceOf[Boolean]
-                budget.spendBudget(
-                  ExBudgetCategory.Step(StepKind.Builtin),
-                  params.builtinCostModel.ifThenElse.constantCost,
-                  Nil
-                )
-                if (cv) t else f
+        case DefaultFun.IfThenElse =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                () => (c: Any) => (t: Any) => (f: Any) => {
+                  val cv = c.asInstanceOf[Boolean]
+                  budget.spendBudget(
+                    ExBudgetCategory.Step(StepKind.Builtin),
+                    params.builtinCostModel.ifThenElse.constantCost,
+                    Nil
+                  )
+                  if (cv) t else f
+                }
               }
             }
           }
-        }
 
-      case _ =>
-        '{
-          new Snippet {
-            def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
-              throw new UnsupportedOperationException(s"Builtin not yet implemented: ${${ Expr(bi.toString) }}")
+        case _ =>
+          '{
+            new Snippet {
+              def execute(acc: Any, stack: Array[Any], sp: Int, budget: BudgetSpender, logger: Logger, params: MachineParams): Any = {
+                throw new UnsupportedOperationException(s"Builtin not yet implemented: ${${ Expr(bi.toString) }}")
+              }
             }
           }
-        }
+      }
     }
   }
 }

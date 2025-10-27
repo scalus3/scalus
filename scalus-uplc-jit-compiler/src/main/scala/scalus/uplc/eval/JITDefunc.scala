@@ -8,7 +8,7 @@ import scala.quoted.*
 /** Hybrid JIT compiler using defunctionalized control flow + JIT snippets for operations.
   *
   * Architecture:
-  *   - Control flow (Apply, Force, Return): Defunctionalized with opcodes + mutable arrays (zero allocations)
+  *   - Control flow (Apply, Force, Return): Defunctionalized with opcodes + mutable arrays 
   *   - Operations (builtins, constants): JIT-compiled snippets (direct bytecode execution)
   *
   * This gives us:
@@ -21,11 +21,12 @@ object JITDefunc {
   // ============================================
   // Control Flow Opcodes (Defunctionalized)
   // ============================================
+  // These are package-private so the compiler can access them
 
-  private val OP_RETURN = 0        // Return with value in accumulator
-  private val OP_APPLY = 1         // Apply function to argument
-  private val OP_FORCE = 2         // Force a delayed computation
-  private val OP_EXEC_SNIPPET = 3  // Execute a JIT-compiled snippet
+  private[eval] val OP_RETURN = 0        // Return with value in accumulator
+  private[eval] val OP_APPLY = 1         // Apply function to argument
+  private[eval] val OP_FORCE = 2         // Force a delayed computation
+  private[eval] val OP_EXEC_SNIPPET = 3  // Execute a JIT-compiled snippet
 
   // Frame types for continuation stack
   private val FRAME_DONE = 0           // Top level - evaluation complete
@@ -105,13 +106,14 @@ object JITDefunc {
   ) {
 
     // Mutable state - hidden from external API
-    private val stack = new Array[Any](4096)        // Value stack
-    private val frameTypes = new Array[Int](1024)   // Frame type tags
-    private val frameData = new Array[Any](1024)    // Frame data
-    private var sp = 0                              // Stack pointer
-    private var fp = 0                              // Frame pointer
-    private var ip = program.entryPoint             // Instruction pointer
-    private var acc: Any = null                     // Accumulator
+    private val stack = new Array[Any](4096)           // Value stack
+    private val frameTypes = new Array[Int](1024)      // Frame type tags
+    private val frameData = new Array[Any](1024)       // Frame data
+    private val frameReturnAddrs = new Array[Int](1024) // Return addresses
+    private var sp = 0                                 // Stack pointer
+    private var fp = 0                                 // Frame pointer
+    private var ip = program.entryPoint                // Instruction pointer
+    private var acc: Any = null                        // Accumulator
 
     /** Execute the program (imperative loop with mutable state). */
     def run(): Any = {
@@ -141,6 +143,7 @@ object JITDefunc {
             // Pop frame and continue
             fp -= 1
             val frameType = frameTypes(fp)
+            val returnAddr = frameReturnAddrs(fp)
 
             (frameType: @switch) match {
               case FRAME_APPLY_ARG =>
@@ -150,6 +153,7 @@ object JITDefunc {
                 val argInstrIdx = frameData(fp).asInstanceOf[Int]
                 frameTypes(fp) = FRAME_APPLY_EXEC
                 frameData(fp) = funcValue
+                frameReturnAddrs(fp) = returnAddr  // Keep same return address
                 fp += 1
                 ip = argInstrIdx
 
@@ -162,12 +166,12 @@ object JITDefunc {
                 funcValue match {
                   case f: Function1[?, ?] =>
                     acc = f.asInstanceOf[Any => Any](argValue)
-                    ip += 1
+                    ip = returnAddr  // Return to caller
 
                   case snippet: Snippet =>
                     // Function is a snippet - execute it
                     acc = snippet.execute(argValue, stack, sp, budget, logger, params)
-                    ip += 1
+                    ip = returnAddr  // Return to caller
 
                   case _ =>
                     throw new IllegalStateException(
@@ -180,11 +184,11 @@ object JITDefunc {
                 acc match {
                   case thunk: Function0[?] =>
                     acc = thunk()
-                    ip += 1
+                    ip = returnAddr  // Return to caller
 
                   case snippet: Snippet =>
                     acc = snippet.execute(null, stack, sp, budget, logger, params)
-                    ip += 1
+                    ip = returnAddr  // Return to caller
 
                   case _ =>
                     throw new IllegalStateException(
@@ -204,6 +208,7 @@ object JITDefunc {
 
             frameTypes(fp) = FRAME_APPLY_ARG
             frameData(fp) = argInstrIdx
+            frameReturnAddrs(fp) = ip + 1  // Return to next instruction after completion
             fp += 1
 
             // Start evaluating function
@@ -215,6 +220,7 @@ object JITDefunc {
 
             frameTypes(fp) = FRAME_FORCE
             frameData(fp) = null
+            frameReturnAddrs(fp) = ip + 1  // Return to next instruction
             fp += 1
 
             // Evaluate the delayed computation

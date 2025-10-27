@@ -359,7 +359,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 // Scalus UPLC JIT Compiler - experimental JIT compiler for UPLC
 lazy val scalusUplcJitCompiler = project
     .in(file("scalus-uplc-jit-compiler"))
-    .dependsOn(scalus.jvm)
+    .dependsOn(scalus.jvm % "compile->compile")
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-uplc-jit-compiler",
@@ -370,6 +370,9 @@ lazy val scalusUplcJitCompiler = project
         "-Xss64m", // Increase stack size to 64MB for JIT compilation of deeply nested UPLC terms
         "-Xmx4g" // Increase heap to 4GB for large compilations
       ),
+      // Skip scalus.jvm compilation when -DskipScalusRecompile=true
+      scalus.jvm / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
+      scalus.jvm / Test / skip := sys.props.get("skipScalusRecompile").contains("true"),
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test",
