@@ -145,5 +145,71 @@ class JITDefuncTest extends AnyFunSuite {
 
       assert(result == BigInt(42))
     }
+    
+    runTest("ByteString constant") {
+      val bytes = scalus.builtin.ByteString.fromArray(Array[Byte](1, 2, 3, 4, 5))
+      val term = Term.Const(Constant.ByteString(bytes))
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == bytes)
+    }
+    
+    runTest("String constant") {
+      val term = Term.Const(Constant.String("Hello, World!"))
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == "Hello, World!")
+    }
+    
+    runTest("Bool constant: true") {
+      val term = Term.Const(Constant.Bool(true))
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == true)
+    }
+    
+    runTest("Bool constant: false") {
+      val term = Term.Const(Constant.Bool(false))
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == false)
+    }
+    
+    runTest("Unit constant") {
+      val term = Term.Const(Constant.Unit)
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == ())
+    }
   }
 }

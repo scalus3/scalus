@@ -283,152 +283,123 @@ object JITCompiler {
         }
     }
 
-    /** Compile a constant to a JIT snippet. */
+    /** Compile a constant to a JIT snippet.
+      * No staging needed - just wrap the constant value in a Snippet.
+      */
     private def compileConstant(const: Constant): Snippet = {
-        staging.run { (quotes: Quotes) ?=>
-            const match {
-                case Constant.Integer(value) =>
-                    val v = Expr(value)
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                budget.spendBudget(
-                                  ExBudgetCategory.Step(StepKind.Const),
-                                  params.machineCosts.constCost,
-                                  Nil
-                                )
-                                $v
-                            }
-                        }
+        const match {
+            case Constant.Integer(value) =>
+                new Snippet {
+                    def execute(
+                        acc: Any,
+                        dataStack: DataStack,
+                        budget: BudgetSpender,
+                        logger: Logger,
+                        params: MachineParams
+                    ): Any = {
+                        budget.spendBudget(
+                          ExBudgetCategory.Step(StepKind.Const),
+                          params.machineCosts.constCost,
+                          Nil
+                        )
+                        value
                     }
+                }
 
-                case Constant.ByteString(value) =>
-                    val v = Expr(value)
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                budget.spendBudget(
-                                  ExBudgetCategory.Step(StepKind.Const),
-                                  params.machineCosts.constCost,
-                                  Nil
-                                )
-                                $v
-                            }
-                        }
+            case Constant.ByteString(value) =>
+                new Snippet {
+                    def execute(
+                        acc: Any,
+                        dataStack: DataStack,
+                        budget: BudgetSpender,
+                        logger: Logger,
+                        params: MachineParams
+                    ): Any = {
+                        budget.spendBudget(
+                          ExBudgetCategory.Step(StepKind.Const),
+                          params.machineCosts.constCost,
+                          Nil
+                        )
+                        value
                     }
+                }
 
-                case Constant.String(value) =>
-                    val v = Expr(value)
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                budget.spendBudget(
-                                  ExBudgetCategory.Step(StepKind.Const),
-                                  params.machineCosts.constCost,
-                                  Nil
-                                )
-                                $v
-                            }
-                        }
+            case Constant.String(value) =>
+                new Snippet {
+                    def execute(
+                        acc: Any,
+                        dataStack: DataStack,
+                        budget: BudgetSpender,
+                        logger: Logger,
+                        params: MachineParams
+                    ): Any = {
+                        budget.spendBudget(
+                          ExBudgetCategory.Step(StepKind.Const),
+                          params.machineCosts.constCost,
+                          Nil
+                        )
+                        value
                     }
+                }
 
-                case Constant.Bool(value) =>
-                    val v = Expr(value)
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                budget.spendBudget(
-                                  ExBudgetCategory.Step(StepKind.Const),
-                                  params.machineCosts.constCost,
-                                  Nil
-                                )
-                                $v
-                            }
-                        }
+            case Constant.Bool(value) =>
+                new Snippet {
+                    def execute(
+                        acc: Any,
+                        dataStack: DataStack,
+                        budget: BudgetSpender,
+                        logger: Logger,
+                        params: MachineParams
+                    ): Any = {
+                        budget.spendBudget(
+                          ExBudgetCategory.Step(StepKind.Const),
+                          params.machineCosts.constCost,
+                          Nil
+                        )
+                        value
                     }
+                }
 
-                case Constant.Unit =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                budget.spendBudget(
-                                  ExBudgetCategory.Step(StepKind.Const),
-                                  params.machineCosts.constCost,
-                                  Nil
-                                )
-                                ()
-                            }
-                        }
+            case Constant.Unit =>
+                new Snippet {
+                    def execute(
+                        acc: Any,
+                        dataStack: DataStack,
+                        budget: BudgetSpender,
+                        logger: Logger,
+                        params: MachineParams
+                    ): Any = {
+                        budget.spendBudget(
+                          ExBudgetCategory.Step(StepKind.Const),
+                          params.machineCosts.constCost,
+                          Nil
+                        )
+                        ()
                     }
+                }
 
-                case Constant.Data(value) =>
-                    val v = Expr(value)
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                budget.spendBudget(
-                                  ExBudgetCategory.Step(StepKind.Const),
-                                  params.machineCosts.constCost,
-                                  Nil
-                                )
-                                $v
-                            }
-                        }
+            case Constant.Data(value) =>
+                new Snippet {
+                    def execute(
+                        acc: Any,
+                        dataStack: DataStack,
+                        budget: BudgetSpender,
+                        logger: Logger,
+                        params: MachineParams
+                    ): Any = {
+                        budget.spendBudget(
+                          ExBudgetCategory.Step(StepKind.Const),
+                          params.machineCosts.constCost,
+                          Nil
+                        )
+                        value
                     }
+                }
 
-                case _ =>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                throw new UnsupportedOperationException(
-                                  s"Constant type not yet implemented: ${${ Expr(const.toString) }}"
-                                )
-                            }
-                        }
-                    }
-            }
+            case _ =>
+                throw new UnsupportedOperationException(
+                  s"Constant type not yet implemented: ${const.toString}"
+                )
         }
     }
 
