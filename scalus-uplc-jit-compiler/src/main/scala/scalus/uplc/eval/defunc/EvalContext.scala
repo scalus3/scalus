@@ -122,6 +122,9 @@ private[eval] class FrameStack(capacity: Int = 1024, blockSize: Int = 64) {
     /** Check if the stack is empty. */
     def isEmpty: Boolean = fp == 0
 
+    /** Peek at the top frame without popping it. */
+    def peek(): Frame = frames(fp - 1)
+
     /** Get the current stack depth. */
     def size: Int = fp
 }
@@ -183,20 +186,29 @@ private[eval] class EvalContext(
                     logger.log(s"OP_RETURN: frameStack.isEmpty=${frameStack.isEmpty}, caseStack.size=${caseStack.size}, acc=${if acc == null then "null" else acc.getClass.getSimpleName}")
                     
                     // First check if we're in the middle of case argument application
-                    if caseStack.nonEmpty && frameStack.isEmpty then {
-                        // Case function finished - start applying args
-                        val caseState = caseStack.last
-                        val remainingArgs = caseState.remainingArgs
-                        val finalReturnAddr = caseState.returnAddr
+                    // We need to handle case application even when frameStack is not empty (nested cases)
+                    // BUT only if the case function has been evaluated (not during scrutinee evaluation)
+                    if caseStack.nonEmpty then {
+                        // Check if we're returning from evaluating the case function (ready to apply args)
+                        // vs returning from evaluating the scrutinee (not ready yet)
+                        // If frameStack has FRAME_CASE_APPLY on top, we're returning from scrutinee eval
+                        val returningFromCaseFunc = frameStack.isEmpty || 
+                            frameStack.peek().frameType != FRAME_CASE_APPLY
                         
-                        logger.log(s"OP_RETURN: Case active, remainingArgs.size=${remainingArgs.size}")
-                        
-                        if remainingArgs.isEmpty then {
-                            // No args to apply - just return
-                            caseStack.remove(caseStack.length - 1)
-                            logger.log(s"OP_RETURN: No args, returning acc=$acc")
-                            return acc
-                        }
+                        if returningFromCaseFunc then {
+                            // Case function finished - start applying args
+                            val caseState = caseStack.last
+                            val remainingArgs = caseState.remainingArgs
+                            val finalReturnAddr = caseState.returnAddr
+                            
+                            logger.log(s"OP_RETURN: Case active, remainingArgs.size=${remainingArgs.size}")
+                            
+                            if remainingArgs.isEmpty then {
+                                // No args to apply - just return
+                                caseStack.remove(caseStack.length - 1)
+                                logger.log(s"OP_RETURN: No args, returning acc=$acc")
+                                return acc
+                            }
                         
                         // Apply args
                         var funcValue = acc
@@ -236,7 +248,12 @@ private[eval] class EvalContext(
                             return acc
                         }
                         // Otherwise fall through to continue VM loop
-                    } else if frameStack.isEmpty then {
+                    }
+                    // If shouldApplyArgs is false, fall through to normal frame handling
+                }
+                
+                // Normal return handling
+                if frameStack.isEmpty then {
                         // Top level - done!
                         return acc
                     } else {
@@ -449,6 +466,8 @@ private[eval] class EvalContext(
                         case FRAME_CASE_APPLY =>
                             // Scrutinee evaluated, now select and apply case
                             val caseIndices = frame.data.asInstanceOf[Array[Int]]
+                            
+                            logger.log(s"FRAME_CASE_APPLY: acc=${acc}, accType=${acc.getClass.getSimpleName}")
                             
                             // acc should be a tuple (tag, args)
                             val (tag, args) = acc.asInstanceOf[(Long, List[Any])]
