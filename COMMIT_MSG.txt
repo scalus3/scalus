@@ -1,0 +1,8 @@
+feat(jit): improve JIT compiler trampolining with RuntimeJitContext
+
+Refactor JIT compiler to use centralized trampolining logic in RuntimeJitContext:
+- Move trampolined apply logic from CallCCTrampolineException to RuntimeJitContext.trampolinedApply()
+- Add RuntimeJitContext.withCheckOverflow() for consistent stack depth checking
+- Simplify JIT code generation by delegating trampolining to runtime context
+- Add test for auction_1-1.flat JIT compilation
+

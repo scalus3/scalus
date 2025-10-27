@@ -1,0 +1,54 @@
+package scalus.sir
+
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.Compile
+import scalus.Compiler
+import scalus.serialization.flat
+import scalus.serialization.flat.*
+import scalus.serialization.flat.FlatInstances.given
+
+@Compile
+object SirModuleFlatTestModule {
+    def add(a: BigInt, b: BigInt): BigInt = a + b
+    def multiply(x: BigInt, y: BigInt): BigInt = x * y
+    val constant: BigInt = 42
+}
+
+class SirModuleFlatTest extends AnyFunSuite {
+
+    test("round-trip SIR module serialization") {
+        val sir = Compiler.compile(SirModuleFlatTestModule.add)
+        val module = sir.module
+
+        // Serialize to bytes
+        val enc = EncoderState()
+        flat.encode(module, enc)
+        val encoded = enc.result
+
+        // Deserialize from bytes
+        val dec = DecoderState(encoded)
+        val decodedModule = flat.decode[Module](dec)
+
+        // Verify the module structure
+        assert(decodedModule.name == module.name, "module name should match")
+        assert(decodedModule.version == module.version, "module version should match")
+        assert(decodedModule.defs.nonEmpty, "module should have definitions")
+        assert(decodedModule.defs.length == module.defs.length, "should have same number of definitions")
+
+        // Verify definition names are preserved
+        val originalNames = module.defs.map(_.name).toSet
+        val decodedNames = decodedModule.defs.map(_.name).toSet
+        assert(originalNames == decodedNames, "definition names should match")
+    }
+
+    test("serialized SIR module has non-empty definitions") {
+        val sir = Compiler.compile(SirModuleFlatTestModule.multiply)
+        val module = sir.module
+        assert(module.defs.nonEmpty, "compiled module should have definitions")
+
+        // Verify we have the expected definitions
+        val defNames = module.defs.map(_.name)
+        assert(defNames.exists(_.contains("multiply")), "should contain 'multiply' definition")
+    }
+
+}

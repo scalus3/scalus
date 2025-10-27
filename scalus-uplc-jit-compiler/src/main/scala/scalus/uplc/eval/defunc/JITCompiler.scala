@@ -142,12 +142,10 @@ object JITCompiler {
                 // Emit RETURN after lambda so we don't fall through to the body
                 summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
                 
-                // Now compile the body - it starts at the next instruction
-                val bodyIdx = summon[CompileContext].getInstructions.length
-                compileTerm(body, (name -> 0) :: env.map { case (n, i) => (n, i + 1) })
+                // Now compile the body - compileTerm returns the index of the body's first instruction
+                val bodyIdx = compileTerm(body, (name -> 0) :: env.map { case (n, i) => (n, i + 1) })
                 
-                // Emit RETURN after body
-                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
+                // Body already emits its own RETURN, no need for another
                 
                 // Update the lambda instruction with the body index
                 summon[CompileContext].updateInstruction(lambdaIdx, bodyIdx)

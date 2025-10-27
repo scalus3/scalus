@@ -1,0 +1,20 @@
+{
+  "name": "scala-cli",
+  "argv": [
+    "/usr/local/bin/scala-cli",
+    "bsp",
+    "--json-options",
+    "/Users/rssh/packages/nau/scalus/bench/src/main/scala/scalus/uplc/eval/.scala-build/ide-options-v2.json",
+    "--json-launcher-options",
+    "/Users/rssh/packages/nau/scalus/bench/src/main/scala/scalus/uplc/eval/.scala-build/ide-launcher-options.json",
+    "--envs-file",
+    "/Users/rssh/packages/nau/scalus/bench/src/main/scala/scalus/uplc/eval/.scala-build/ide-envs.json",
+    "/Users/rssh/packages/nau/scalus/bench/src/main/scala/scalus/uplc/eval/JITBenchmark.scala"
+  ],
+  "version": "1.7.1",
+  "bspVersion": "2.1.1",
+  "languages": [
+    "scala",
+    "java"
+  ]
+}

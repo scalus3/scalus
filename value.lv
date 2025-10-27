@@ -1,0 +1,145 @@
+let scalus.bugtracking.Min20250702$.validate39=(lam param18:Data -> Unit[(Constant -> Constant)].
+    let $1$36=Constr(scala.Tuple2[Int, Int],
+        MkCons(cast.repr.proxy(
+          q134(=
+            HeadList(
+              _match_data_list33(=
+                App((lam xIn23:(scala.Tuple2[Int, Int] -> Int -> scala.Tuple2[Int, Int]) -> scala.Tuple2[Int, Int][((ProdDataList -> (Constant -> ProdDataList)) -> ProdDataList)].
+                    SndPair(
+                      UnConstrData(
+                        repr.proxy(
+                          App(App((lam xIn19:B#239668 -> (B#491 -> Int -> B#491) -> B#239668[(TypeVar -> ((TypeVar -> (Constant -> TypeVar)) -> TypeVar))].
+                                (lam xIn20:(B#491 -> Int -> B#491) -> B#239668[((TypeVar -> (Constant -> TypeVar)) -> TypeVar)].
+                                  App(App(App(scalus.prelude.List$.foldLeft1 cast.repr.proxy(
+                                          cast.repr.proxy(
+                                            [(builtin mkNilData) (con unit ())]
+                                          :scalus.prelude.List[*][SumDataList])
+                                        :scalus.prelude.List[Int][SumDataList])) xIn19)
+                                  (lam xIn21:B#239668 -> Int -> B#491[(TypeVar -> (TypeVar -> TypeVar))].
+                                      (lam xIn22:Int -> B#491[(TypeVar -> TypeVar)].
+                                        App(App(xIn20 xIn21) UnIData( xIn22 ))
+                                      )
+                                    ))
+                                )
+                              ) ConstrData((con integer 0) Constr(scala.Tuple2[Int, Int],
+                                MkCons(repr.proxy( (con integer 0) [PackedData]) MkCons(repr.proxy(
+                                  (con integer 0)
+                                [PackedData]) [(builtin mkNilData) (con unit ())]))
+                              ))) repr.proxy(
+                              (lam xIn24:B#491 -> Int -> scala.Tuple2[Int, Int][(TypeVar -> (Constant -> ProdDataConstr))].
+                                (lam xIn25:Int -> scala.Tuple2[Int, Int][(Constant -> ProdDataConstr)].
+                                  ConstrData((con integer 0) App(App(xIn23 SndPair(
+                                        UnConstrData( repr.proxy( xIn24 [ProdDataConstr]) )
+                                      )) xIn25))
+                                )
+                              )
+                            [(TypeVar -> (Constant -> TypeVar))]))
+                        [ProdDataConstr])
+                      )
+                    )
+                  )
+                (lam x$126:scala.Tuple2[Int, Int] -> Int -> scala.Tuple2[Int, Int][(ProdDataList -> (Constant -> ProdDataList))].
+                  (lam x$227:Int -> scala.Tuple2[Int, Int][(Constant -> ProdDataList)].
+                    Constr(scala.Tuple2[Int, Int],
+                      MkCons(repr.proxy( (con integer 0) [PackedData]) MkCons(cast.repr.proxy(
+                        value30(=
+                          HeadList(
+                            _match_data_list28_b()(=
+                              TailList(
+                                _match_data_list28(=
+                                  Constr(scala.Tuple2[scala.Tuple2[Int, Int], Int],
+                                    MkCons(ConstrData((con integer 0) x$126) MkCons(repr.proxy(
+                                      x$227
+                                    [PackedData]) [(builtin mkNilData) (con unit ())]))
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        )
+                      :Int[PackedData]) [(builtin mkNilData) (con unit ())]))
+                    )
+                  )
+                )) :scala.Tuple2[Int, Int][ProdDataList] 
+              )
+            )
+          )
+        :Int[PackedData]) MkCons(cast.repr.proxy(
+          q235(=
+            HeadList(
+              _match_data_list33_b()(=
+                TailList(
+                  _match_data_list33(=
+                    App((lam xIn23:(scala.Tuple2[Int, Int] -> Int -> scala.Tuple2[Int, Int]) -> scala.Tuple2[Int, Int][((ProdDataList -> (Constant -> ProdDataList)) -> ProdDataList)].
+                        SndPair(
+                          UnConstrData(
+                            repr.proxy(
+                              App(App((lam xIn19:B#239668 -> (B#491 -> Int -> B#491) -> B#239668[(TypeVar -> ((TypeVar -> (Constant -> TypeVar)) -> TypeVar))].
+                                    (lam xIn20:(B#491 -> Int -> B#491) -> B#239668[((TypeVar -> (Constant -> TypeVar)) -> TypeVar)].
+                                      App(App(App(scalus.prelude.List$.foldLeft1 cast.repr.proxy(
+                                              cast.repr.proxy(
+                                                [(builtin mkNilData) (con unit ())]
+                                              :scalus.prelude.List[*][SumDataList])
+                                            :scalus.prelude.List[Int][SumDataList])) xIn19)
+                                      (lam xIn21:B#239668 -> Int -> B#491[(TypeVar -> (TypeVar -> TypeVar))].
+                                          (lam xIn22:Int -> B#491[(TypeVar -> TypeVar)].
+                                            App(App(xIn20 xIn21) UnIData( xIn22 ))
+                                          )
+                                        ))
+                                    )
+                                  ) ConstrData((con integer 0) Constr(scala.Tuple2[Int, Int],
+                                    MkCons(repr.proxy( (con integer 0) [PackedData])
+                                    MkCons(repr.proxy( (con integer 0) [PackedData]) [
+                                      (builtin mkNilData) (con unit ())
+                                    ]))
+                                  ))) repr.proxy(
+                                  (lam xIn24:B#491 -> Int -> scala.Tuple2[Int, Int][(TypeVar -> (Constant -> ProdDataConstr))].
+                                    (lam xIn25:Int -> scala.Tuple2[Int, Int][(Constant -> ProdDataConstr)].
+                                      ConstrData((con integer 0) App(App(xIn23 SndPair(
+                                            UnConstrData( repr.proxy( xIn24 [ProdDataConstr]) )
+                                          )) xIn25))
+                                    )
+                                  )
+                                [(TypeVar -> (Constant -> TypeVar))]))
+                            [ProdDataConstr])
+                          )
+                        )
+                      )
+                    (lam x$126:scala.Tuple2[Int, Int] -> Int -> scala.Tuple2[Int, Int][(ProdDataList -> (Constant -> ProdDataList))].
+                      (lam x$227:Int -> scala.Tuple2[Int, Int][(Constant -> ProdDataList)].
+                        Constr(scala.Tuple2[Int, Int],
+                          MkCons(repr.proxy( (con integer 0) [PackedData]) MkCons(cast.repr.proxy(
+                            value30(=
+                              HeadList(
+                                _match_data_list28_b()(=
+                                  TailList(
+                                    _match_data_list28(=
+                                      Constr(scala.Tuple2[scala.Tuple2[Int, Int], Int],
+                                        MkCons(ConstrData((con integer 0) x$126) MkCons(repr.proxy(
+                                          x$227
+                                        [PackedData]) [(builtin mkNilData) (con unit ())]))
+                                      )
+                                    )
+                                  )
+                                )
+                              )
+                            )
+                          :Int[PackedData]) [(builtin mkNilData) (con unit ())]))
+                        )
+                      )
+                    )) :scala.Tuple2[Int, Int][ProdDataList] 
+                  )
+                )
+              )
+            )
+          )
+        :Int[PackedData]) [(builtin mkNilData) (con unit ())]))
+      )in 
+      let q137=HeadList( $1$36 )in 
+        let q238=HeadList( $1$36_tail_1(= TailList( $1$36 ) ) )in  (con unit ()) 
+      
+    
+  )in 
+  (lam param40:Data -> Unit[(Constant -> Constant)].
+    App(scalus.bugtracking.Min20250702$.validate39 param40)
+  )

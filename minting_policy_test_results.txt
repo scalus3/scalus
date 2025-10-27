@@ -1,0 +1,777 @@
+OpenJDK 64-Bit Server VM warning: Option UseCompressedClassPointers was deprecated in version 25.0 and will likely be removed in a future release.
+OpenJDK 64-Bit Server VM warning: Option UseCompressedClassPointers was deprecated in version 25.0 and will likely be removed in a future release.
+[info] welcome to sbt 1.11.6 (Homebrew Java 25)
+[info] loading global plugins from /Users/rssh/.sbt/1.0/plugins
+[info] loading settings for project scalus-build-build-build from metals.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project/project/project
+[info] loading settings for project scalus-build-build from metals.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project/project
+[success] Generated .bloop/scalus-build-build.json
+[success] Total time: 1 s, completed 22 Oct 2025, 15:59:40
+[info] loading settings for project scalus-build from metals.sbt, plugins.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project
+[success] Generated .bloop/scalus-build.json
+[success] Total time: 1 s, completed 22 Oct 2025, 15:59:42
+[info] loading settings for project root from build.sbt...
+[info] resolving key references (22098 settings) ...
+[info] 
+[info]   ███████╗ ██████╗ █████╗ ██╗     ██╗   ██╗███████╗
+[info]   ██╔════╝██╔════╝██╔══██╗██║     ██║   ██║██╔════╝
+[info]   ███████╗██║     ███████║██║     ██║   ██║███████╗
+[info]   ╚════██║██║     ██╔══██║██║     ██║   ██║╚════██║
+[info]   ███████║╚██████╗██║  ██║███████╗╚██████╔╝███████║
+[info]   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝
+[info] 
+[info]   Version: 0.12.1+239-17dffb13+20251022-1559-SNAPSHOT Scala 3.3.7
+[info] 
+[info] Useful sbt tasks:
+[info] a. ~compile - Compile with file-watch enabled
+[info] b. quick - Format all, compile and quick test everything on JVM
+[info] c. precommit - Format all, clean compile and test everything on JVM
+[info] d. ci - Clean compile, check formatting and test everything, build docs, run MiMa
+[info] e. benchmark - Run benchmarks
+[info] f. mima - Check binary compatibility with the previous version using MiMa
+[info] g. docs/docusaurusCreateSite - Generate Scalus documentation website
+[info] Copied shared files to target /Users/rssh/packages/nau/scalus/scalus-plugin/src/main/shared/scala
+[info] Copied shared files to target /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala
+[info] compiling 181 Scala sources to /Users/rssh/packages/nau/scalus/scalus-core/jvm/target/scala-3.3.7/classes ...
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/cardano/blueprint/ScriptDefinition.scala:25:8 
+[warn] 25 |        _version: String,
+[warn]    |        ^^^^^^^^
+[warn]    |        unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/cardano/ledger/Block.scala:65:27 
+[warn] 65 |    def transactions(using OriginalCborByteArray): Seq[Transaction] =
+[warn]    |                           ^
+[warn]    |                           unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/cardano/ledger/Types.scala:558:12 
+[warn] 558 |    given [A: Encoder]: Encoder[KeepRaw[A]] = (w: Writer, value: KeepRaw[A]) => {
+[warn]     |            ^
+[warn]     |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/cardano/ledger/Types.scala:582:29 
+[warn] 582 |    given [A: Decoder](using OriginalCborByteArray): Decoder[Sized[A]] =
+[warn]     |                             ^
+[warn]     |                             unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/package.scala:42:12 
+[warn] 42 |            backend: Compiler.TargetLoweringBackend = options.targetLoweringBackend,
+[warn]    |            ^^^^^^^
+[warn]    |            unused explicit parameter in extension method toUplc
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/package.scala:83:12 
+[warn] 83 |            generateErrorTraces: Boolean = options.generateErrorTraces,
+[warn]    |            ^^^^^^^^^^^^^^^^^^^
+[warn]    |            unused explicit parameter in extension method toLoweredValue
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/package.scala:84:12 
+[warn] 84 |            debug: Boolean = options.debug
+[warn]    |            ^^^^^
+[warn]    |            unused explicit parameter in extension method toLoweredValue
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/AssocMap.scala:27:38 
+[warn] 27 |    given AssocMapFromData[A: FromData: Eq, B: FromData]: FromData[AssocMap[A, B]] =
+[warn]    |                                      ^
+[warn]    |                                      unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/Show.scala:26:24 
+[warn] 26 |    given Show[Unit] = (x: Unit) => "()"
+[warn]    |                        ^
+[warn]    |                        unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatInstances.scala:412:61 
+[warn] 412 |        def fromData(a: SIRType) = new SIRTypeHashConsedRef((s, l, p) => a, a)
+[warn]     |                                                             ^
+[warn]     |                                             unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatInstances.scala:412:64 
+[warn] 412 |        def fromData(a: SIRType) = new SIRTypeHashConsedRef((s, l, p) => a, a)
+[warn]     |                                                                ^
+[warn]     |                                             unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatInstances.scala:412:67 
+[warn] 412 |        def fromData(a: SIRType) = new SIRTypeHashConsedRef((s, l, p) => a, a)
+[warn]     |                                                                   ^
+[warn]     |                                             unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/serialization/flat/FlatInstances.scala:419:12 
+[warn] 419 |            hs0: HashConsed.State,
+[warn]     |            ^^^
+[warn]     |            unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/serialization/flat/HashConsed.scala:261:34 
+[warn] 261 |    def finishCallbacks(s: State, debug: Boolean = false): Unit =
+[warn]     |                                  ^^^^^
+[warn]     |                                  unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValueRepresentation.scala:12:23 
+[warn] 12 |    def isCompatibleOn(tp: SIRType, repr: LoweredValueRepresentation, pos: SIRPosition)(using
+[warn]    |                       ^^
+[warn]    |                       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValueRepresentation.scala:12:70 
+[warn] 12 |    def isCompatibleOn(tp: SIRType, repr: LoweredValueRepresentation, pos: SIRPosition)(using
+[warn]    |                                                                      ^^^
+[warn]    |                                               unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValueRepresentation.scala:13:8 
+[warn] 13 |        lctx: LoweringContext
+[warn]    |        ^^^^
+[warn]    |        unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/Lowering.scala:38:58 
+[warn] 38 |                lctx.decls.put(data.name, data).foreach { decl =>
+[warn]    |                                                          ^^^^
+[warn]    |                                               unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/Lowering.scala:181:18 
+[warn] 181 |                  _id => {
+[warn]     |                  ^^^
+[warn]     |                  unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/typegens/SumCaseSirTypeGenerator.scala:218:12 
+[warn] 218 |    )(using LoweringContext): List[SIR.Case] = {
+[warn]     |            ^
+[warn]     |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Constant.scala:32:37 
+[warn] 32 |    given tupleLiftValue[A: LiftValue: DefaultUni.Lift, B: LiftValue: DefaultUni.Lift]
+[warn]    |                                     ^
+[warn]    |                                     unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Constant.scala:32:68 
+[warn] 32 |    given tupleLiftValue[A: LiftValue: DefaultUni.Lift, B: LiftValue: DefaultUni.Lift]
+[warn]    |                                                                    ^
+[warn]    |                                               unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/DefaultUni.scala:38:37 
+[warn] 38 |    def defaultUniFromValue[A: Lift](value: A): DefaultUni = summon[Lift[A]].defaultUni
+[warn]    |                                     ^^^^^
+[warn]    |                                     unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Term.scala:107:15 
+[warn] 107 |        def vr(args: Any*): Term = Term.Var(NamedDeBruijn(sc.parts.head))
+[warn]     |               ^^^^
+[warn]     |               unused explicit parameter in extension method vr
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/transform/Inliner.scala:29:26 
+[warn] 29 |    def inlineConstAndVar(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
+[warn]    |                          ^^^^
+[warn]    |                          unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/transform/Inliner.scala:29:40 
+[warn] 29 |    def inlineConstAndVar(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
+[warn]    |                                        ^^^^
+[warn]    |                                        unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/transform/Inliner.scala:29:68 
+[warn] 29 |    def inlineConstAndVar(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
+[warn]    |                                                                    ^^^^^^^^^^
+[warn]    |                                               unused explicit parameter
+[warn] -- [E194] Potential Issue Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/Ord.scala:30:25 
+[warn] 30 |        inline infix def <(inline other: BigInt): Boolean = lessThanInteger(self, other)
+[warn]    |                         ^
+[warn]    |Extension method < will never be selected from type BigInt
+[warn]    |because BigInt already has a member with the same name and compatible parameter types.
+[warn]    |----------------------------------------------------------------------------
+[warn]    | Explanation (enabled by `-explain`)
+[warn]    |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[warn]    | Although extensions can be overloaded, they do not overload existing member methods.
+[warn]    | An extension method can be invoked as a regular method, but if that is the intended usage,
+[warn]    | it should not be defined as an extension.
+[warn]    |
+[warn]    | The extension may be invoked as though selected from an arbitrary type if conversions are in play.
+[warn]     ----------------------------------------------------------------------------
+[warn] -- [E194] Potential Issue Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/Ord.scala:31:25 
+[warn] 31 |        inline infix def <=(inline other: BigInt): Boolean = lessThanEqualsInteger(self, other)
+[warn]    |                         ^
+[warn]    |Extension method <= will never be selected from type BigInt
+[warn]    |because BigInt already has a member with the same name and compatible parameter types.
+[warn]    |----------------------------------------------------------------------------
+[warn]    | Explanation (enabled by `-explain`)
+[warn]    |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[warn]    | Although extensions can be overloaded, they do not overload existing member methods.
+[warn]    | An extension method can be invoked as a regular method, but if that is the intended usage,
+[warn]    | it should not be defined as an extension.
+[warn]    |
+[warn]    | The extension may be invoked as though selected from an arbitrary type if conversions are in play.
+[warn]     ----------------------------------------------------------------------------
+[warn] -- [E194] Potential Issue Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/Ord.scala:32:25 
+[warn] 32 |        inline infix def >(inline other: BigInt): Boolean = lessThanInteger(other, self)
+[warn]    |                         ^
+[warn]    |Extension method > will never be selected from type BigInt
+[warn]    |because BigInt already has a member with the same name and compatible parameter types.
+[warn]    |----------------------------------------------------------------------------
+[warn]    | Explanation (enabled by `-explain`)
+[warn]    |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[warn]    | Although extensions can be overloaded, they do not overload existing member methods.
+[warn]    | An extension method can be invoked as a regular method, but if that is the intended usage,
+[warn]    | it should not be defined as an extension.
+[warn]    |
+[warn]    | The extension may be invoked as though selected from an arbitrary type if conversions are in play.
+[warn]     ----------------------------------------------------------------------------
+[warn] -- [E194] Potential Issue Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/Ord.scala:33:25 
+[warn] 33 |        inline infix def >=(inline other: BigInt): Boolean = lessThanEqualsInteger(other, self)
+[warn]    |                         ^
+[warn]    |Extension method >= will never be selected from type BigInt
+[warn]    |because BigInt already has a member with the same name and compatible parameter types.
+[warn]    |----------------------------------------------------------------------------
+[warn]    | Explanation (enabled by `-explain`)
+[warn]    |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[warn]    | Although extensions can be overloaded, they do not overload existing member methods.
+[warn]    | An extension method can be invoked as a regular method, but if that is the intended usage,
+[warn]    | it should not be defined as an extension.
+[warn]    |
+[warn]    | The extension may be invoked as though selected from an arbitrary type if conversions are in play.
+[warn]     ----------------------------------------------------------------------------
+[info] skipping empty Scalus module ParameterizedValidator in 43ms
+[info] skipping empty Scalus module DataParameterizedValidator in 35ms
+[info] skipping empty Scalus module Validator in 46ms
+[warn] 31 warnings found
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1488:12 
+[warn] 1488 |            lctx: LoweringContext
+[warn]      |            ^^^^
+[warn]      |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1496:16 
+[warn] 1496 |        )(using lctx: LoweringContext): ConstantLoweredValue = {
+[warn]      |                ^^^^
+[warn]      |                unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1504:12 
+[warn] 1504 |            lctx: LoweringContext
+[warn]      |            ^^^^
+[warn]      |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1513:12 
+[warn] 1513 |            lctx: LoweringContext
+[warn]      |            ^^^^
+[warn]      |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1527:12 
+[warn] 1527 |            lctx: LoweringContext
+[warn]      |            ^^^^
+[warn]      |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1556:12 
+[warn] 1556 |            lctx: LoweringContext
+[warn]      |            ^^^^
+[warn]      |            unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1663:16 
+[warn] 1663 |        )(using lctx: LoweringContext): LoweredValue = {
+[warn]      |                ^^^^
+[warn]      |                unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:1670:16 
+[warn] 1670 |        )(using lctx: LoweringContext): LoweredValue = {
+[warn]      |                ^^^^
+[warn]      |                unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/simple/LetFloating.scala:576:23 
+[warn] 576 |                .map { info =>
+[warn]     |                       ^^^^
+[warn]     |                       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:62:11 
+[warn] 62 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]    |           ^^^^^^
+[warn]    |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:73:11 
+[warn] 73 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]    |           ^^^^^^
+[warn]    |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:84:11 
+[warn] 84 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]    |           ^^^^^^
+[warn]    |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:95:11 
+[warn] 95 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]    |           ^^^^^^
+[warn]    |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:106:11 
+[warn] 106 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:117:11 
+[warn] 117 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:128:11 
+[warn] 128 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:139:11 
+[warn] 139 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:150:11 
+[warn] 150 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:161:11 
+[warn] 161 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:172:11 
+[warn] 172 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:183:11 
+[warn] 183 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:202:11 
+[warn] 202 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:214:11 
+[warn] 214 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:225:11 
+[warn] 225 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:235:11 
+[warn] 235 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:246:11 
+[warn] 246 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:257:11 
+[warn] 257 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:268:11 
+[warn] 268 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:278:11 
+[warn] 278 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:288:11 
+[warn] 288 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:298:11 
+[warn] 298 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:308:11 
+[warn] 308 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:320:11 
+[warn] 320 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:332:11 
+[warn] 332 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:344:11 
+[warn] 344 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:355:11 
+[warn] 355 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:366:11 
+[warn] 366 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:376:11 
+[warn] 376 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:386:11 
+[warn] 386 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:398:11 
+[warn] 398 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:421:11 
+[warn] 421 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:432:11 
+[warn] 432 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:446:11 
+[warn] 446 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:457:11 
+[warn] 457 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:475:11 
+[warn] 475 |          (logger: Logger, args: Seq[CekValue]) => VCon(args(0).asList.head),
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:483:11 
+[warn] 483 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:495:11 
+[warn] 495 |          (logger: Logger, args: Seq[CekValue]) => VCon(asConstant(args(0).asList.isEmpty)),
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:507:11 
+[warn] 507 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:517:11 
+[warn] 517 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:531:11 
+[warn] 531 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:550:11 
+[warn] 550 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:563:11 
+[warn] 563 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:573:11 
+[warn] 573 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:586:11 
+[warn] 586 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:598:11 
+[warn] 598 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:617:11 
+[warn] 617 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:629:11 
+[warn] 629 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:641:11 
+[warn] 641 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:653:11 
+[warn] 653 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:669:11 
+[warn] 669 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:681:11 
+[warn] 681 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:692:11 
+[warn] 692 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:701:7 
+[warn] 701 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:711:11 
+[warn] 711 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:720:7 
+[warn] 720 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:736:7 
+[warn] 736 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:748:7 
+[warn] 748 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:761:7 
+[warn] 761 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:777:7 
+[warn] 777 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:789:7 
+[warn] 789 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:798:7 
+[warn] 798 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:808:7 
+[warn] 808 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:824:7 
+[warn] 824 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:836:7 
+[warn] 836 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:849:7 
+[warn] 849 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:865:7 
+[warn] 865 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:877:7 
+[warn] 877 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:886:7 
+[warn] 886 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:896:7 
+[warn] 896 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:912:7 
+[warn] 912 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:928:7 
+[warn] 928 |      (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |       ^^^^^^
+[warn]     |       unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:945:11 
+[warn] 945 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:957:11 
+[warn] 957 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:968:11 
+[warn] 968 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:980:11 
+[warn] 980 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:992:11 
+[warn] 992 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]     |           ^^^^^^
+[warn]     |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1004:11 
+[warn] 1004 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1014:11 
+[warn] 1014 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1027:11 
+[warn] 1027 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1042:11 
+[warn] 1042 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1053:11 
+[warn] 1053 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1064:11 
+[warn] 1064 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1075:11 
+[warn] 1075 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1085:11 
+[warn] 1085 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Builtin.scala:1095:11 
+[warn] 1095 |          (logger: Logger, args: Seq[CekValue]) =>
+[warn]      |           ^^^^^^
+[warn]      |           unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Expr.scala:38:14 
+[warn] 38 |    def error(msg: String): Expr[Delayed[Nothing]] = Expr(Term.Delay(Term.Error)) // TODO: add trace
+[warn]    |              ^^^
+[warn]    |              unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Expr.scala:39:12 
+[warn] 39 |    def err(msg: String): Expr[Nothing] = Expr(Term.Error) // TODO: add trace
+[warn]    |            ^^^
+[warn]    |            unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/uplc/Expr.scala:123:28 
+[warn] 123 |    inline def fieldAsData[A: Data.ToData](inline expr: A => Any): Expr[Data] => Expr[Data] = ${
+[warn]     |                            ^
+[warn]     |                            unused implicit parameter
+[warn] 129 warnings found
+[info] done compiling
+[info] compiling 10 Scala sources to /Users/rssh/packages/nau/scalus/scalus-testkit/jvm/target/scala-3.3.7/classes ...
+[info] compiling 22 Scala sources to /Users/rssh/packages/nau/scalus/scalus-cardano-ledger/jvm/target/scala-3.3.7/classes ...
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/ScriptDataHashGenerator.scala:3:51 
+[warn] 3 |import scalus.builtin.{platform, ByteString, Data, PlatformSpecific, given}
+[warn]   |                                                   ^^^^^^^^^^^^^^^^
+[warn]   |                                                   unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/ScriptDataHashGenerator.scala:5:24 
+[warn] 5 |import scala.collection.immutable
+[warn]   |                        ^^^^^^^^^
+[warn]   |                        unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/ScriptDataHashGenerator.scala:54:8 
+[warn] 54 |        witnessSet: TransactionWitnessSet,
+[warn]    |        ^^^^^^^^^^
+[warn]    |        unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:23:57 
+[warn] 23 |import scalus.cardano.ledger.rules.{Context as SContext, STS, State as SState, UtxoEnv}
+[warn]    |                                                         ^^^
+[warn]    |                                                         unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilder.scala:2051:54 
+[warn] 2051 |    val replace: A => KeepRaw[A] => KeepRaw[A] = a => kr => KeepRaw(a)
+[warn]      |                                                      ^^
+[warn]      |                                           unused explicit parameter
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 4 Scala sources to /Users/rssh/packages/nau/scalus/bloxbean-cardano-client-lib/target/scala-3.3.7/classes ...
+[info] done compiling
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala/scalus/prelude/StdlibTestKit.scala:172:8 
+[warn] 172 |        config: PropertyCheckConfiguration,
+[warn]     |        ^^^^^^
+[warn]     |        unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala/scalus/prelude/StdlibTestKit.scala:203:8 
+[warn] 203 |        config: PropertyCheckConfiguration,
+[warn]     |        ^^^^^^
+[warn]     |        unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala/scalus/prelude/StdlibTestKit.scala:240:8 
+[warn] 240 |        config: PropertyCheckConfiguration,
+[warn]     |        ^^^^^^
+[warn]     |        unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala/scalus/prelude/StdlibTestKit.scala:282:8 
+[warn] 282 |        config: PropertyCheckConfiguration,
+[warn]     |        ^^^^^^
+[warn]     |        unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala/scalus/prelude/StdlibTestKit.scala:331:8 
+[warn] 331 |        config: PropertyCheckConfiguration,
+[warn]     |        ^^^^^^
+[warn]     |        unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-testkit/core-shared/scala/scalus/prelude/StdlibTestKit.scala:403:8 
+[warn] 403 |        config: PropertyCheckConfiguration,
+[warn]     |        ^^^^^^
+[warn]     |        unused implicit parameter
+[warn] 6 warnings found
+[info] done compiling
+[info] compiling 20 Scala sources and 1 Java source to /Users/rssh/packages/nau/scalus/scalus-examples/jvm/target/scala-3.3.7/classes ...
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/Betting.scala:233:30 
+[warn] 233 |    inline def compiled(using scalus.Compiler.Options) = compile(Betting.validate)
+[warn]     |                              ^
+[warn]     |                              unused implicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PaymentSplitter.scala:8:53 
+[warn] 8 |import scalus.ledger.api.v1.{Credential, PubKeyHash, Value}
+[warn]   |                                                     ^^^^^
+[warn]   |                                                     unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:13:18 
+[warn] 13 |    def validator(datum: Unit, redeemer: Unit, ctx: Data) = {
+[warn]    |                  ^^^^^
+[warn]    |                  unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:13:31 
+[warn] 13 |    def validator(datum: Unit, redeemer: Unit, ctx: Data) = {
+[warn]    |                               ^^^^^^^^
+[warn]    |                               unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:17:32 
+[warn] 17 |        def findSignatureOrFail(sigs: builtin.BuiltinList[Data]): Unit =
+[warn]    |                                ^^^^
+[warn]    |                                unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:26:54 
+[warn] 26 |    inline def validatorV2(inline pubKey: ByteString)(datum: Unit, redeemer: Unit, ctx: Data) = {
+[warn]    |                                                      ^^^^^
+[warn]    |                                               unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:26:67 
+[warn] 26 |    inline def validatorV2(inline pubKey: ByteString)(datum: Unit, redeemer: Unit, ctx: Data) = {
+[warn]    |                                                                   ^^^^^^^^
+[warn]    |                                               unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:31:32 
+[warn] 31 |        def findSignatureOrFail(sigs: builtin.BuiltinList[Data]): Unit =
+[warn]    |                                ^^^^
+[warn]    |                                unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/PubKeyValidator.scala:46:32 
+[warn] 46 |        def findSignatureOrFail(sigs: builtin.BuiltinList[Data]): Unit =
+[warn]    |                                ^^^^
+[warn]    |                                unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/SendTx.scala:10:42 
+[warn] 10 |import com.bloxbean.cardano.client.common.CardanoConstants
+[warn]    |                                          ^^^^^^^^^^^^^^^^
+[warn]    |                                          unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/SendTx.scala:22:51 
+[warn] 22 |import scalus.builtin.{platform, ByteString, Data, PlatformSpecific, given}
+[warn]    |                                                   ^^^^^^^^^^^^^^^^
+[warn]    |                                                   unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/main/scala/scalus/examples/vault/Vault.scala:11:30 
+[warn] 11 |import scalus.ledger.api.{v1, v2}
+[warn]    |                              ^^
+[warn]    |                              unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/shared/src/main/scala/scalus/examples/MintingPolicy.scala:88:9 
+[warn] 88 |    ) = (redeemer: Unit, ctxData: Data) => {
+[warn]    |         ^^^^^^^^
+[warn]    |         unused explicit parameter
+[info] skipping empty Scalus module Betting$ in 32ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.Betting$
+[info] skipping empty Scalus module HelloCardano$ in 8ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.HelloCardano$
+[info] skipping empty Scalus module PaymentSplitter$ in 8ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.PaymentSplitter$
+[info] skipping empty Scalus module PreimageValidatorV3$ in 7ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.PreimageValidatorV3$
+[info] skipping empty Scalus module SimpleTransfer$ in 18ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.SimpleTransfer$
+[info] skipping empty Scalus module InputCountValidator$ in 7ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.InputCountValidator$
+[info] skipping empty Scalus module Vesting$ in 7ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.examples.Vesting$
+[info] skipping empty Scalus module Status in 0ms
+[warn] 13 warnings found
+[info] done compiling
+[info] compiling 21 Scala sources to /Users/rssh/packages/nau/scalus/scalus-examples/jvm/target/scala-3.3.7/test-classes ...
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/test/scala/scalus/examples/TestUtil.scala:10:14 
+[warn] 10 |import scalus.plutusV3
+[warn]    |              ^^^^^^^^
+[warn]    |              unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/test/scala/scalus/examples/TestUtil.scala:22:19 
+[warn] 22 |      evaluator = (tx: Transaction, utxos: Map[TransactionInput, TransactionOutput]) => Seq.empty,
+[warn]    |                   ^^
+[warn]    |                   unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/test/scala/scalus/examples/TestUtil.scala:22:36 
+[warn] 22 |      evaluator = (tx: Transaction, utxos: Map[TransactionInput, TransactionOutput]) => Seq.empty,
+[warn]    |                                    ^^^^^
+[warn]    |                                    unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/test/scala/scalus/examples/TestUtil.scala:118:8 
+[warn] 118 |        wallet: WalletTrait,
+[warn]     |        ^^^^^^
+[warn]     |        unused explicit parameter
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/test/scala/scalus/examples/VaultTest.scala:7:59 
+[warn] 7 |import scalus.examples.vault.{State, Status, Transactions, VaultContract}
+[warn]   |                                                           ^^^^^^^^^^^^^
+[warn]   |                                                           unused import
+[warn] -- [E029] Pattern Match Exhaustivity Warning: /Users/rssh/packages/nau/scalus/scalus-examples/jvm/src/test/scala/scalus/examples/FibonacciTest.scala:125:11 
+[warn] 125 |        fib(n - 1) match
+[warn]     |        ^^^^^^^^^^
+[warn]     |  match may not be exhaustive.
+[warn]     |
+[warn]     |  It would fail on pattern case: Nil, scalus.prelude.List.Cons(_, Nil)
+[warn]     |---------------------------------------------------------------------------
+[warn]     | Explanation (enabled by `-explain`)
+[warn]     |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[warn]     | There are several ways to make the match exhaustive:
+[warn]     |  - Add missing cases as shown in the warning
+[warn]     |  - If an extractor always return Some(...), write Some[X] for its return type
+[warn]     |  - Add a case _ => ... at the end to match all remaining cases
+[warn]      ---------------------------------------------------------------------------
+[warn] 6 warnings found
+[info] done compiling
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rssh/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.3.7/scala3-library_3-3.3.7.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[info] MintingPolicyExampleTest:
+[info] - Minting Policy Validator
+[info] - Minting Policy Validator V2 *** FAILED ***
+[info]   1642 did not equal 2161 (MintingPolicyExampleTest.scala:200)
+[info] - Minting Policy Validator Optimized *** FAILED ***
+[info]   847 did not equal 857 (MintingPolicyExampleTest.scala:227)
+[info] Run completed in 2 seconds, 43 milliseconds.
+[info] Total number of tests run: 3
+[info] Suites: completed 1, aborted 0
+[info] Tests: succeeded 1, failed 2, canceled 0, ignored 0, pending 0
+[info] *** 2 TESTS FAILED ***
+[error] Failed tests:
+[error] 	scalus.examples.MintingPolicyExampleTest
+[error] (scalusExamplesJVM / Test / testOnly) sbt.TestsFailedException: Tests unsuccessful
+[error] Total time: 114 s (0:01:54.0), completed 22 Oct 2025, 16:01:40

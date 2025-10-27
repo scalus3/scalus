@@ -174,9 +174,7 @@ private[eval] class EvalContext(
                     val frame = frameStack.pop()
                     
                     // Debug logging
-                    if logger != NoLogger then {
-                        logger.log(s"RETURN: popped frame type=${frame.frameType}, acc=${acc.getClass.getSimpleName}")
-                    }
+                    logger.log(s"RETURN: popped frame type=${frame.frameType}, acc=${acc.getClass.getSimpleName}")
 
                     (frame.frameType: @switch) match {
                         case FRAME_APPLY_ARG =>
@@ -184,6 +182,9 @@ private[eval] class EvalContext(
                             // Push new frame to apply after arg evaluation
                             val funcValue = acc
                             val argInstrIdx = frame.data.asInstanceOf[Int]
+                            
+                            logger.log(s"FRAME_APPLY_ARG: funcValue=${funcValue.getClass.getSimpleName}, argIdx=$argInstrIdx, returnAddr=${frame.returnAddr}")
+                            
                             frameStack.push(FRAME_APPLY_EXEC, funcValue, frame.returnAddr)
                             ip = argInstrIdx
 
@@ -191,6 +192,8 @@ private[eval] class EvalContext(
                             // We have both function and argument, execute application
                             val funcValue = frame.data
                             val argValue = acc
+                            
+                            logger.log(s"FRAME_APPLY_EXEC: funcValue=${funcValue.getClass.getSimpleName}, argValue=$argValue, returnAddr=${frame.returnAddr}")
 
                             // Execute function application
                             funcValue match {
@@ -205,9 +208,7 @@ private[eval] class EvalContext(
 
                                 case f: Function1[?, ?] =>
                                     acc = f.asInstanceOf[Any => Any](argValue)
-                                    if logger != NoLogger then {
-                                        logger.log(s"Applied Function1 to $argValue, result=${acc.getClass.getSimpleName}")
-                                    }
+                                    logger.log(s"Applied Function1 to $argValue, result=${acc.getClass.getSimpleName}")
                                     ip = frame.returnAddr // Return to caller
 
                                 case snippet: Snippet =>
@@ -273,6 +274,8 @@ private[eval] class EvalContext(
                     // Push frame to evaluate argument after function
                     val funcInstrIdx = instr.data.asInstanceOf[(Int, Int)]._1
                     val argInstrIdx = instr.data.asInstanceOf[(Int, Int)]._2
+                    
+                    logger.log(s"OP_APPLY: ip=$ip, funIdx=$funcInstrIdx, argIdx=$argInstrIdx, frameStack.size=${frameStack.size}")
 
                     frameStack.push(FRAME_APPLY_ARG, argInstrIdx, ip + 1)
 

@@ -1,0 +1,819 @@
+[info] welcome to sbt 1.11.2 (Azul Systems, Inc. Java 21.0.4)
+[info] loading global plugins from /Users/rssh/.sbt/1.0/plugins
+[info] loading settings for project scalus-build from plugins.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project
+[info] loading settings for project root from build.sbt...
+[info] resolving key references (17732 settings) ...
+[info] 
+[info]   ███████╗ ██████╗ █████╗ ██╗     ██╗   ██╗███████╗
+[info]   ██╔════╝██╔════╝██╔══██╗██║     ██║   ██║██╔════╝
+[info]   ███████╗██║     ███████║██║     ██║   ██║███████╗
+[info]   ╚════██║██║     ██╔══██║██║     ██║   ██║╚════██║
+[info]   ███████║╚██████╗██║  ██║███████╗╚██████╔╝███████║
+[info]   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝
+[info] 
+[info]   Version: 0.11.0+56-55f90f8e+20250808-1547-SNAPSHOT Scala 3.3.6
+[info] 
+[info] Useful sbt tasks:
+[info] a. ~compile - Compile with file-watch enabled
+[info] b. quick - Format all, compile and quick test everything on JVM
+[info] c. precommit - Format all, clean compile and test everything
+[info] d. ci - Clean compile, check formatting and test everything
+[info] e. mima - Check binary compatibility with the previous version using MiMa
+[info] f. docs/docusaurusCreateSite - Generate Scalus documentation website
+[info] Copied shared files to target /Users/rssh/packages/nau/scalus/scalus-plugin/src/main/shared/scala
+[info] compiling 165 Scala sources to /Users/rssh/packages/nau/scalus/scalus-core/jvm/target/scala-3.3.6/classes ...
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LocalScope.scala:3:18 
+[warn] 3 |import scalus.sir.SIRPosition
+[warn]   |                  ^^^^^^^^^^^
+[warn]   |                  unused import
+[info] skipping empty Scalus module FromDataInstances$ in 0ms
+[info] skipping empty Scalus module ToDataInstances$ in 0ms
+[warn] -- [E029] Pattern Match Exhaustivity Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/typegens/TypeVarSirTypeGenerator.scala:117:28 
+[warn] 117 |                            prodRepr match {
+[warn]     |                            ^^^^^^^^
+[warn]     | match may not be exhaustive.
+[warn]     |
+[warn]     | It would fail on pattern case: ElelementOfListPairListPairAsUnaryList
+[warn]     |---------------------------------------------------------------------------
+[warn]     | Explanation (enabled by `-explain`)
+[warn]     |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+[warn]     | There are several ways to make the match exhaustive:
+[warn]     |  - Add missing cases as shown in the warning
+[warn]     |  - If an extractor always return Some(...), write Some[X] for its return type
+[warn]     |  - Add a case _ => ... at the end to match all remaining cases
+[warn]      ---------------------------------------------------------------------------
+[warn] two warnings found
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/prelude/Prelude.scala:7:17 
+[warn] 7 |import Ord.{<=>, by, Order}
+[warn]   |                 ^^
+[warn]   |                 unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/SIR.scala:3:28 
+[warn] 3 |import scalus.uplc.Constant.Integer
+[warn]   |                            ^^^^^^^
+[warn]   |                            unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/SIR.scala:4:42 
+[warn] 4 |import scalus.uplc.{Constant, DefaultFun, DefaultUni}
+[warn]   |                                          ^^^^^^^^^^
+[warn]   |                                          unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:7:26 
+[warn] 7 |import scalus.sir.SIRType.isSum
+[warn]   |                          ^^^^^
+[warn]   |                          unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:9:36 
+[warn] 9 |import scalus.sir.lowering.typegens.SirTypeUplcGenerator
+[warn]   |                                    ^^^^^^^^^^^^^^^^^^^^
+[warn]   |                                    unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/sir/lowering/LoweredValue.scala:13:26 
+[warn] 13 |import scala.util.control.NonFatal
+[warn]    |                          ^^^^^^^^
+[warn]    |                          unused import
+[warn] -- Deprecation Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/ledger/api/v3/Contexts.scala:466:17 
+[warn] 466 |    given ToData[SpendingScriptInfo] = ToData.derived
+[warn]     |                 ^^^^^^^^^^^^^^^^^^
+[warn]     |class SpendingScriptInfo in package scalus.ledger.api.v3 is deprecated: Use ScriptInfo instead
+[warn] -- Deprecation Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/ledger/api/v3/Contexts.scala:466:46 
+[warn] 466 |    given ToData[SpendingScriptInfo] = ToData.derived
+[warn]     |                                       ^^^^^^^^^^^^^^
+[warn]     |class SpendingScriptInfo in package scalus.ledger.api.v3 is deprecated: Use ScriptInfo instead
+[info] skipping empty Scalus module FromDataInstances$ in 0ms
+[info] skipping empty Scalus module ToDataInstances$ in 0ms
+[warn] /Users/rssh/packages/nau/scalus/scalus-core/shared/src/main/scala/scalus/builtin/ToDataMacros.scala:9:16: class SpendingScriptInfo in package scalus.ledger.api.v3 is deprecated: Use ScriptInfo instead
+[warn]         '{ (a: A) =>
+[warn]                ^
+[warn] 11 warnings found
+[info] done compiling
+[info] compiling 96 Scala sources to /Users/rssh/packages/nau/scalus/scalus-core/jvm/target/scala-3.3.6/test-classes ...
+[warn] -- Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/bugtracking/hydrozoa20250804/DisputeResolutionValidator.scala:1:27 
+[warn] 1 |package scalus.bugtracking.hydrozoa20250804
+[warn]   |^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[warn]   |No class, trait or object is defined in the compilation unit.
+[warn]   |The incremental compiler cannot record the dependency information in such case.
+[warn]   |Some errors like unused import referring to a non-existent class might not be reported.
+[warn] -- Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/bugtracking/hydrozoa20250804/SameCborTest.scala:1:27 
+[warn] 1 |package scalus.bugtracking.hydrozoa20250804
+[warn]   |^
+[warn]   |No class, trait or object is defined in the compilation unit.
+[warn]   |The incremental compiler cannot record the dependency information in such case.
+[warn]   |Some errors like unused import referring to a non-existent class might not be reported.
+[warn] 2 |import scalus.*
+[warn] 3 |import scalus.Compiler.compile
+[warn] 4 |import org.scalatest.funsuite.AnyFunSuite
+[warn] 5 |import java.util.concurrent.atomic.AtomicReference
+[warn] -- Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/bugtracking/hydrozoa20250804/TreasuryValidator.scala:1:27 
+[warn] 1 |package scalus.bugtracking.hydrozoa20250804
+[warn]   |^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[warn]   |No class, trait or object is defined in the compilation unit.
+[warn]   |The incremental compiler cannot record the dependency information in such case.
+[warn]   |Some errors like unused import referring to a non-existent class might not be reported.
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/bugtracking/hydrozoa20250804/ValueExtensions.scala:7:38 
+[warn] 7 |import scalus.prelude.{fail, require, AssocMap, List, given}
+[warn]   |                                      ^^^^^^^^
+[warn]   |                                      unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/prelude/ShowTest.scala:5:45 
+[warn] 5 |import scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering
+[warn]   |                                             ^^^^^^^^^^^^^^^^^^^^
+[warn]   |                                             unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/prelude/ShowTest.scala:7:27 
+[warn] 7 |import scalus.builtin.Data.toData
+[warn]   |                           ^^^^^^
+[warn]   |                           unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/jvm/src/test/scala/scalus/sir/S3LoweringDataAccessTest.scala:11:27 
+[warn] 11 |import scalus.builtin.Data.toData
+[warn]    |                           ^^^^^^
+[warn]    |                           unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:3:30 
+[warn] 3 |import scalus.cardano.onchain.RequirementError
+[warn]   |                              ^^^^^^^^^^^^^^^^
+[warn]   |                              unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:4:23 
+[warn] 4 |import scalus.prelude.{List, Option, SortedMap}
+[warn]   |                       ^^^^
+[warn]   |                       unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:4:29 
+[warn] 4 |import scalus.prelude.{List, Option, SortedMap}
+[warn]   |                             ^^^^^^
+[warn]   |                             unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:4:37 
+[warn] 4 |import scalus.prelude.{List, Option, SortedMap}
+[warn]   |                                     ^^^^^^^^^
+[warn]   |                                     unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:5:22 
+[warn] 5 |import scalus.builtin.ByteString
+[warn]   |                      ^^^^^^^^^^
+[warn]   |                      unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v1/ValueTest.scala:6:22 
+[warn] 6 |import scalus.prelude.given
+[warn]   |                      ^^^^^
+[warn]   |                      unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:4:23 
+[warn] 4 |import scalus.prelude.{AssocMap, List, Option, given}
+[warn]   |                       ^^^^^^^^
+[warn]   |                       unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:4:47 
+[warn] 4 |import scalus.prelude.{AssocMap, List, Option, given}
+[warn]   |                                               ^^^^^
+[warn]   |                                               unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/ledger/api/v3/TxInfoTest.scala:6:28 
+[warn] 6 |import scalus.ledger.api.v2.OutputDatum
+[warn]   |                            ^^^^^^^^^^^
+[warn]   |                            unused import
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/prelude/ListTest.scala:3:28 
+[warn] 3 |import scalus.prelude.List.{single, Cons, Nil}
+[warn]   |                            ^^^^^^
+[warn]   |                            unused import
+[info] skipping empty Scalus module ByteStringExtensions$ in 3ms
+[warn] 17 warnings found
+[info] done compiling
+[info] ValueTest:
+sir=data scalus.prelude.Option Nothing = scalus.prelude.Option$.Some(value: A#82211)
+                                   | scalus.prelude.Option$.None
+data scala.Tuple2 ByteString,List = scala.Tuple2(_1: T1#22314, _2: T2#22315)
+let scalus.builtin.internal.UniversalDataConversion$.fromData: (λ.A#65546 =>> (Data -> Nothing)) =
+  ∀A.
+  {λ data ->
+    ERROR 'impossible to call this method at runtime, it is used only in the compiler plugin'
+  }
+in
+let scalus.prelude.List$.headOption: (λ.A#96559 =>> (scalus.prelude.List[A#96559] -> scalus.prelude.Option[A#96559])) =
+  ∀A.
+  {λ self ->
+    match self with
+      case scalus.prelude.List$.Nil -> scalus.prelude.Option$.None()
+      case scalus.prelude.List$.Cons[A#96559](value, $bind7) ->
+        let retval: scalus.prelude.Option[A#96559] =
+          cast  (scalus.prelude.Option$.Some(value)): scalus.prelude.Option[A#96559]
+        in
+        retval
+  }
+in
+{λ d ->
+  let list: scalus.prelude.List[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]] =
+    scalus.builtin.internal.UniversalDataConversion$.fromData(d)
+  in
+  match scalus.prelude.List$.headOption(list) with
+    case scalus.prelude.Option$.Some[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]](
+      v
+    ) ->
+      let __ValueTest_line_145: Unit = trace("negora assign", ()) in
+      let $1$: scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]] =
+        match v with
+          case scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]](
+            cs,
+            tnList
+          ) ->
+            scala.Tuple2(cs, tnList)
+      in
+      let cs: ByteString = $1$._1 in
+      let tnList: scalus.prelude.List[scala.Tuple2[ByteString, Int]] = $1$._2 in
+      trace("after assign", ())
+    case scalus.prelude.Option$.None -> ERROR 'List is empty, cannot extract head'
+}
+lwe=let scalus.prelude.List$.headOption21=(lam self16:scalus.prelude.List[A#96559] -> scalus.prelude.Option[A#96559][(SumDataList -> DataConstr)].
+    ListMatch{listInput17(= var(self16:scalus.prelude.List[A#96559][SumDataList]) ) match
+                                                                                         Cons(consHead18(=
+                                                                                           HeadList(
+                                                                                             listInput17
+                                                                                           )
+                                                                                         ),consTail19(=
+                                                                                           TailList(
+                                                                                             listInput17
+                                                                                           )
+                                                                                         )) =>let retval20=cast.repr.proxy(
+                                                                                               cast.repr.proxy(
+                                                                                                 ConstrData((con integer 0)
+                                                                                                 Constr(scalus.prelude.Option$.Some[A#96559],
+                                                                                                   MkCons(cast.repr.proxy(
+                                                                                                     consHead18
+                                                                                                   :A#96559[TypeVar])
+                                                                                                   [
+                                                                                                     (builtin mkNilData)
+                                                                                                     (con unit ())
+                                                                                                   ])
+                                                                                                 ))
+                                                                                               :scalus.prelude.Option[*][DataConstr])
+                                                                                             :scalus.prelude.Option[A#96559][DataConstr])in
+                                                                                           
+                                                                                             retval20
+                                                                                           
+                                                                                         Nil =>cast.repr.proxy(
+                                                                                             ConstrData((con integer 1)
+                                                                                             Constr(scalus.prelude.Option$.None,
+                                                                                               [
+                                                                                                 (builtin mkNilData)
+                                                                                                 (con unit ())
+                                                                                               ]
+                                                                                             ))
+                                                                                           :scalus.prelude.Option[*][DataConstr])}:scalus.prelude.Option[A#96559]
+  )in 
+  (lam d22:Data -> Unit[(Constant -> Constant)].
+    let list23=FromData( d22 )in 
+      if EqualsInteger(_match_constr_idx28(=
+          FstPair(
+            _match_scrutinee27(=
+              UnConstrData(
+                App(scalus.prelude.List$.headOption21 listr26(=
+                    depvar(listr24r25:scalus.prelude.List[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]][SumDataList])=App($TuplesListToDataList6(=
+                                                                                                                                                          (letrec fun_$TuplesListToDataList1=(lam list2:scalus.prelude.List[scala.Tuple2[A#2084379728, B#2084379728]] -> scalus.prelude.List[scala.Tuple2[A#2084379728, B#2084379728]][(SumDataPairList -> SumDataList)].
+                                                                                                                                                              force(
+                                                                                                                                                                App(App(ChooseList(
+                                                                                                                                                                      list2
+                                                                                                                                                                    )
+                                                                                                                                                                  delay(
+                                                                                                                                                                      [
+                                                                                                                                                                        (builtin mkNilData)
+                                                                                                                                                                        (con unit ())
+                                                                                                                                                                      ]
+                                                                                                                                                                    ))
+                                                                                                                                                                delay(
+                                                                                                                                                                    MkCons(ConstrData((con integer 0)
+                                                                                                                                                                    MkCons(FstPair(
+                                                                                                                                                                      headVal3(=
+                                                                                                                                                                        HeadList(
+                                                                                                                                                                          list2
+                                                                                                                                                                        )
+                                                                                                                                                                      )
+                                                                                                                                                                    )
+                                                                                                                                                                    MkCons(SndPair(
+                                                                                                                                                                      headVal3
+                                                                                                                                                                    )
+                                                                                                                                                                    [
+                                                                                                                                                                      (builtin mkNilData)
+                                                                                                                                                                      (con unit ())
+                                                                                                                                                                    ])))
+                                                                                                                                                                    App(fun_$TuplesListToDataList1
+                                                                                                                                                                    tailVal4(=
+                                                                                                                                                                        TailList(
+                                                                                                                                                                          list2
+                                                                                                                                                                        )
+                                                                                                                                                                      )))
+                                                                                                                                                                  ))
+                                                                                                                                                              )
+                                                                                                                                                            ) in
+                                                                                                                                                            fun_$TuplesListToDataList1
+                                                                                                                                                          )
+                                                                                                                                                        )
+                                                                                                                                                      listr24(=
+                                                                                                                                                        UnMapData(
+                                                                                                                                                          list23
+                                                                                                                                                        )
+                                                                                                                                                      ))
+                                                                                                                                                      :scalus.prelude.List[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]][SumDataList]
+                                                                                                                                                      
+                  ))
+              )
+            )
+          )
+        ) (con integer 0))
+      then let __ValueTest_line_14532=App(App((force (builtin trace)) (con string "negora assign"))
+          (con unit ()))in 
+          let $1$36=Constr(scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]],
+              MkCons(cast.repr.proxy(
+                cs34(=
+                  HeadList(
+                    _match_data_list33(=
+                      SndPair(
+                        UnConstrData(
+                          cast.repr.proxy(
+                            v30(= HeadList( _match_datalist29(= SndPair( _match_scrutinee27 ) ) ) )
+                          :scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]][ProdDataConstr])
+                        )
+                      )
+                    )
+                  )
+                )
+              :ByteString[PackedData]) MkCons(MapData(
+                App($dataListToTuplesList14(=
+                    (letrec fun_$dataListToTuplesList8=(lam list9:scalus.prelude.List[scala.Tuple2[A#1228757168, B#1228757168]] -> scalus.prelude.List[scala.Tuple2[A#1228757168, B#1228757168]][(SumDataList -> SumDataPairList)].
+                        force(
+                          App(App(ChooseList( list9 ) delay(
+                                [(builtin mkNilPairData) (con unit ())]
+                              )) delay(
+                              MkCons(MkPairData(HeadList(
+                                prodList12(=
+                                  SndPair( UnConstrData( headVal10(= HeadList( list9 ) ) ) )
+                                )
+                              ) HeadList( TailList( prodList12 ) )) App(fun_$dataListToTuplesList8
+                              tailVal11(= TailList( list9 ) )))
+                            ))
+                        )
+                      ) in fun_$dataListToTuplesList8 )
+                  ) cast.repr.proxy(
+                    tnList35(= HeadList( _match_data_list33_t(= TailList( _match_data_list33 ) ) ) )
+                  :scalus.prelude.List[scala.Tuple2[ByteString, Int]][SumDataList]))
+              ) [(builtin mkNilData) (con unit ())]))
+            )in 
+            let cs37=HeadList( $1$36 )in 
+              let tnList38=HeadList( $1$36_tail_1(= TailList( $1$36 ) ) )in 
+                App(App((force (builtin trace)) (con string "after assign")) (con unit ()))
+              
+            
+          
+        
+      else if EqualsInteger(_match_constr_idx28 (con integer 1))
+           then (force [
+               (force (builtin trace)) (con string "List is empty, cannot extract head")
+               (delay (error))
+             ])
+           else (force [
+               (force (builtin trace))
+               (con string "Incorrect constructor index for type scalus.prelude.Option[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]]")
+               (delay (error))
+             ])
+    
+  )
+
+uplc=[
+  (lam __z_combinator__
+    [
+      (lam scalus.prelude.List$.headOption21
+        (lam d22
+          [
+            (lam list23
+              [
+                (lam _match_scrutinee27
+                  [
+                    (lam $TuplesListToDataList6
+                      (force [
+                        (force (builtin ifThenElse)) [
+                          (builtin equalsInteger) [
+                            (force (force (builtin fstPair))) _match_scrutinee27
+                          ] (con integer 0)
+                        ] (delay [
+                          (lam __ValueTest_line_14532
+                            [
+                              (lam $1$36
+                                [
+                                  (lam cs37
+                                    [
+                                      (lam tnList38
+                                        [
+                                          (force (builtin trace)) (con string "after assign")
+                                          (con unit ())
+                                        ]) [
+                                        (force (builtin headList)) [
+                                          (force (builtin tailList)) $1$36
+                                        ]
+                                      ]
+                                    ]) [(force (builtin headList)) $1$36]
+                                ]) [
+                                (lam _match_data_list33
+                                  [
+                                    (lam _match_datalist29
+                                      [
+                                        (force (builtin mkCons)) [
+                                          (force (builtin headList)) _match_data_list33
+                                        ] [
+                                          (force (builtin mkCons)) [
+                                            (builtin mapData) [
+                                              (lam fun_$dataListToTuplesList8
+                                                fun_$dataListToTuplesList8) [
+                                                __z_combinator__ (lam fun_$dataListToTuplesList8
+                                                  (lam list9
+                                                    (force [
+                                                      (force (force (builtin chooseList))) list9
+                                                      (delay [
+                                                        (builtin mkNilPairData) (con unit ())
+                                                      ]) (delay [
+                                                        (force (builtin mkCons)) [
+                                                          (builtin mkPairData) [
+                                                            (force (builtin headList)) [
+                                                              (force (force (builtin sndPair))) [
+                                                                (builtin unConstrData) [
+                                                                  (force (builtin headList)) list9
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ] [
+                                                            (force (builtin headList)) [
+                                                              (force (builtin tailList)) [
+                                                                (force (force (builtin sndPair))) [
+                                                                  (builtin unConstrData) [
+                                                                    (force (builtin headList)) list9
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ] [
+                                                          fun_$dataListToTuplesList8 [
+                                                            (force (builtin tailList)) list9
+                                                          ]
+                                                        ]
+                                                      ])
+                                                    ])))
+                                              ] [
+                                                (force (builtin headList)) [
+                                                  (force (builtin tailList)) _match_data_list33
+                                                ]
+                                              ]
+                                            ]
+                                          ] [(builtin mkNilData) (con unit ())]
+                                        ]
+                                      ]) [(force (force (builtin sndPair))) _match_scrutinee27]
+                                  ]) [
+                                  (force (force (builtin sndPair))) [
+                                    (builtin unConstrData) [
+                                      (force (builtin headList)) [
+                                        (force (force (builtin sndPair))) _match_scrutinee27
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]) [(force (builtin trace)) (con string "negora assign") (con unit ())]
+                        ]) (delay (force [
+                          (force (builtin ifThenElse)) [
+                            (builtin equalsInteger) [
+                              (force (force (builtin fstPair))) _match_scrutinee27
+                            ] (con integer 1)
+                          ] (delay (force [
+                            (force (builtin trace))
+                            (con string "List is empty, cannot extract head") (delay (error))
+                          ])) (delay (force [
+                            (force (builtin trace))
+                            (con string "Incorrect constructor index for type scalus.prelude.Option[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]]")
+                            (delay (error))
+                          ]))
+                        ]))
+                      ])) [
+                      (lam fun_$TuplesListToDataList1
+                        fun_$TuplesListToDataList1) [
+                        __z_combinator__ (lam fun_$TuplesListToDataList1
+                          (lam list2
+                            (force [
+                              (force (force (builtin chooseList))) list2 (delay [
+                                (builtin mkNilData) (con unit ())
+                              ]) (delay [
+                                (force (builtin mkCons)) [
+                                  (builtin constrData) (con integer 0) [
+                                    (force (builtin mkCons)) [
+                                      (force (force (builtin fstPair))) [
+                                        (force (builtin headList)) list2
+                                      ]
+                                    ] [
+                                      (force (builtin mkCons)) [
+                                        (force (force (builtin sndPair))) [
+                                          (force (builtin headList)) list2
+                                        ]
+                                      ] [(builtin mkNilData) (con unit ())]
+                                    ]
+                                  ]
+                                ] [fun_$TuplesListToDataList1 [(force (builtin tailList)) list2]]
+                              ])
+                            ])))
+                      ]
+                    ]
+                  ]) [
+                  (builtin unConstrData) [
+                    scalus.prelude.List$.headOption21 [
+                      (lam fun_$TuplesListToDataList1
+                        fun_$TuplesListToDataList1) [
+                        __z_combinator__ (lam fun_$TuplesListToDataList1
+                          (lam list2
+                            (force [
+                              (force (force (builtin chooseList))) list2 (delay [
+                                (builtin mkNilData) (con unit ())
+                              ]) (delay [
+                                (force (builtin mkCons)) [
+                                  (builtin constrData) (con integer 0) [
+                                    (force (builtin mkCons)) [
+                                      (force (force (builtin fstPair))) [
+                                        (force (builtin headList)) list2
+                                      ]
+                                    ] [
+                                      (force (builtin mkCons)) [
+                                        (force (force (builtin sndPair))) [
+                                          (force (builtin headList)) list2
+                                        ]
+                                      ] [(builtin mkNilData) (con unit ())]
+                                    ]
+                                  ]
+                                ] [fun_$TuplesListToDataList1 [(force (builtin tailList)) list2]]
+                              ])
+                            ])))
+                      ] [(builtin unMapData) list23]
+                    ]
+                  ]
+                ]
+              ]) d22
+          ])) (lam self16
+        [
+          (lam listInput17
+            (force [
+              (force (force (builtin chooseList))) listInput17 (delay [
+                (builtin constrData) (con integer 1) [(builtin mkNilData) (con unit ())]
+              ]) (delay [
+                (lam retval20
+                  retval20) [
+                  (builtin constrData) (con integer 0) [
+                    (force (builtin mkCons)) [(force (builtin headList)) listInput17] [
+                      (builtin mkNilData) (con unit ())
+                    ]
+                  ]
+                ]
+              ])
+            ])) self16
+        ])
+    ]) (lam ff
+    [(lam xx   [ff (lam vv   [xx xx vv])]) (lam xx   [ff (lam vv   [xx xx vv])])])
+]
+arg0Data={"666337663166376631333830643937616666346566663230376661626463666662653766383066343031323330306563383037613766626639373031303137666666623433343766376663343031": {"303030653031363238303031": 104929086447450, "666266663766303131623533303130306666386130316133": -173061477122556}}
+uplcWithArg= [
+  (lam __z_combinator__
+    [
+      (lam scalus.prelude.List$.headOption21
+        (lam d22
+          [
+            (lam list23
+              [
+                (lam _match_scrutinee27
+                  [
+                    (lam $TuplesListToDataList6
+                      (force [
+                        (force (builtin ifThenElse)) [
+                          (builtin equalsInteger) [
+                            (force (force (builtin fstPair))) _match_scrutinee27
+                          ] (con integer 0)
+                        ] (delay [
+                          (lam __ValueTest_line_14532
+                            [
+                              (lam $1$36
+                                [
+                                  (lam cs37
+                                    [
+                                      (lam tnList38
+                                        [
+                                          (force (builtin trace)) (con string "after assign")
+                                          (con unit ())
+                                        ]) [
+                                        (force (builtin headList)) [
+                                          (force (builtin tailList)) $1$36
+                                        ]
+                                      ]
+                                    ]) [(force (builtin headList)) $1$36]
+                                ]) [
+                                (lam _match_data_list33
+                                  [
+                                    (lam _match_datalist29
+                                      [
+                                        (force (builtin mkCons)) [
+                                          (force (builtin headList)) _match_data_list33
+                                        ] [
+                                          (force (builtin mkCons)) [
+                                            (builtin mapData) [
+                                              (lam fun_$dataListToTuplesList8
+                                                fun_$dataListToTuplesList8) [
+                                                __z_combinator__ (lam fun_$dataListToTuplesList8
+                                                  (lam list9
+                                                    (force [
+                                                      (force (force (builtin chooseList))) list9
+                                                      (delay [
+                                                        (builtin mkNilPairData) (con unit ())
+                                                      ]) (delay [
+                                                        (force (builtin mkCons)) [
+                                                          (builtin mkPairData) [
+                                                            (force (builtin headList)) [
+                                                              (force (force (builtin sndPair))) [
+                                                                (builtin unConstrData) [
+                                                                  (force (builtin headList)) list9
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ] [
+                                                            (force (builtin headList)) [
+                                                              (force (builtin tailList)) [
+                                                                (force (force (builtin sndPair))) [
+                                                                  (builtin unConstrData) [
+                                                                    (force (builtin headList)) list9
+                                                                  ]
+                                                                ]
+                                                              ]
+                                                            ]
+                                                          ]
+                                                        ] [
+                                                          fun_$dataListToTuplesList8 [
+                                                            (force (builtin tailList)) list9
+                                                          ]
+                                                        ]
+                                                      ])
+                                                    ])))
+                                              ] [
+                                                (force (builtin headList)) [
+                                                  (force (builtin tailList)) _match_data_list33
+                                                ]
+                                              ]
+                                            ]
+                                          ] [(builtin mkNilData) (con unit ())]
+                                        ]
+                                      ]) [(force (force (builtin sndPair))) _match_scrutinee27]
+                                  ]) [
+                                  (force (force (builtin sndPair))) [
+                                    (builtin unConstrData) [
+                                      (force (builtin headList)) [
+                                        (force (force (builtin sndPair))) _match_scrutinee27
+                                      ]
+                                    ]
+                                  ]
+                                ]
+                              ]
+                            ]) [(force (builtin trace)) (con string "negora assign") (con unit ())]
+                        ]) (delay (force [
+                          (force (builtin ifThenElse)) [
+                            (builtin equalsInteger) [
+                              (force (force (builtin fstPair))) _match_scrutinee27
+                            ] (con integer 1)
+                          ] (delay (force [
+                            (force (builtin trace))
+                            (con string "List is empty, cannot extract head") (delay (error))
+                          ])) (delay (force [
+                            (force (builtin trace))
+                            (con string "Incorrect constructor index for type scalus.prelude.Option[scala.Tuple2[ByteString, scalus.prelude.List[scala.Tuple2[ByteString, Int]]]]")
+                            (delay (error))
+                          ]))
+                        ]))
+                      ])) [
+                      (lam fun_$TuplesListToDataList1
+                        fun_$TuplesListToDataList1) [
+                        __z_combinator__ (lam fun_$TuplesListToDataList1
+                          (lam list2
+                            (force [
+                              (force (force (builtin chooseList))) list2 (delay [
+                                (builtin mkNilData) (con unit ())
+                              ]) (delay [
+                                (force (builtin mkCons)) [
+                                  (builtin constrData) (con integer 0) [
+                                    (force (builtin mkCons)) [
+                                      (force (force (builtin fstPair))) [
+                                        (force (builtin headList)) list2
+                                      ]
+                                    ] [
+                                      (force (builtin mkCons)) [
+                                        (force (force (builtin sndPair))) [
+                                          (force (builtin headList)) list2
+                                        ]
+                                      ] [(builtin mkNilData) (con unit ())]
+                                    ]
+                                  ]
+                                ] [fun_$TuplesListToDataList1 [(force (builtin tailList)) list2]]
+                              ])
+                            ])))
+                      ]
+                    ]
+                  ]) [
+                  (builtin unConstrData) [
+                    scalus.prelude.List$.headOption21 [
+                      (lam fun_$TuplesListToDataList1
+                        fun_$TuplesListToDataList1) [
+                        __z_combinator__ (lam fun_$TuplesListToDataList1
+                          (lam list2
+                            (force [
+                              (force (force (builtin chooseList))) list2 (delay [
+                                (builtin mkNilData) (con unit ())
+                              ]) (delay [
+                                (force (builtin mkCons)) [
+                                  (builtin constrData) (con integer 0) [
+                                    (force (builtin mkCons)) [
+                                      (force (force (builtin fstPair))) [
+                                        (force (builtin headList)) list2
+                                      ]
+                                    ] [
+                                      (force (builtin mkCons)) [
+                                        (force (force (builtin sndPair))) [
+                                          (force (builtin headList)) list2
+                                        ]
+                                      ] [(builtin mkNilData) (con unit ())]
+                                    ]
+                                  ]
+                                ] [fun_$TuplesListToDataList1 [(force (builtin tailList)) list2]]
+                              ])
+                            ])))
+                      ] [(builtin unMapData) list23]
+                    ]
+                  ]
+                ]
+              ]) d22
+          ])) (lam self16
+        [
+          (lam listInput17
+            (force [
+              (force (force (builtin chooseList))) listInput17 (delay [
+                (builtin constrData) (con integer 1) [(builtin mkNilData) (con unit ())]
+              ]) (delay [
+                (lam retval20
+                  retval20) [
+                  (builtin constrData) (con integer 0) [
+                    (force (builtin mkCons)) [(force (builtin headList)) listInput17] [
+                      (builtin mkNilData) (con unit ())
+                    ]
+                  ]
+                ]
+              ])
+            ])) self16
+        ])
+    ]) (lam ff
+    [(lam xx   [ff (lam vv   [xx xx vv])]) (lam xx   [ff (lam vv   [xx xx vv])])])
+  (con data (Map [(B #666337663166376631333830643937616666346566663230376661626463666662653766383066343031323330306563383037613766626639373031303137666666623433343766376663343031, Map [(B #303030653031363238303031, I 104929086447450), (B #666266663766303131623533303130306666386130316133, I -173061477122556)])]))
+]
+UPLC evaluation failed (2): scalus.uplc.eval.BuiltinError: Builtin error: ChooseList Apply(Apply(Apply(Force(Force(Builtin(ChooseList))), Const(Data({"303030653031363238303031": 104929086447450, "666266663766303131623533303130306666386130316133": -173061477122556}))), Delay(Apply(Builtin(MkNilPairData), Const(Unit)))), Delay(Apply(Apply(Force(Builtin(MkCons)), Apply(Apply(Builtin(MkPairData), Apply(Force(Builtin(HeadList)), Apply(Force(Force(Builtin(SndPair))), Apply(Builtin(UnConstrData), Apply(Force(Builtin(HeadList)), Const(Data({"303030653031363238303031": 104929086447450, "666266663766303131623533303130306666386130316133": -173061477122556}))))))), Apply(Force(Builtin(HeadList)), Apply(Force(Builtin(TailList)), Apply(Force(Force(Builtin(SndPair))), Apply(Builtin(UnConstrData), Apply(Force(Builtin(HeadList)), Const(Data({"303030653031363238303031": 104929086447450, "666266663766303131623533303130306666386130316133": -173061477122556}))))))))), Apply(LamAbs("vv", Apply(Apply(LamAbs("xx", Apply(LamAbs("fun_$dataListToTuplesList8", LamAbs("list9", Force(Apply(Apply(Apply(Force(Force(Builtin(ChooseList))), Var(NamedDeBruijn("list9"))), Delay(Apply(Builtin(MkNilPairData), Const(Unit)))), Delay(Apply(Apply(Force(Builtin(MkCons)), Apply(Apply(Builtin(MkPairData), Apply(Force(Builtin(HeadList)), Apply(Force(Force(Builtin(SndPair))), Apply(Builtin(UnConstrData), Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("list9"))))))), Apply(Force(Builtin(HeadList)), Apply(Force(Builtin(TailList)), Apply(Force(Force(Builtin(SndPair))), Apply(Builtin(UnConstrData), Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("list9"))))))))), Apply(Var(NamedDeBruijn("fun_$dataListToTuplesList8")), Apply(Force(Builtin(TailList)), Var(NamedDeBruijn("list9")))))))))), LamAbs("vv", Apply(Apply(Var(NamedDeBruijn("xx")), Var(NamedDeBruijn("xx"))), Var(NamedDeBruijn("vv")))))), LamAbs("xx", Apply(LamAbs("fun_$dataListToTuplesList8", LamAbs("list9", Force(Apply(Apply(Apply(Force(Force(Builtin(ChooseList))), Var(NamedDeBruijn("list9"))), Delay(Apply(Builtin(MkNilPairData), Const(Unit)))), Delay(Apply(Apply(Force(Builtin(MkCons)), Apply(Apply(Builtin(MkPairData), Apply(Force(Builtin(HeadList)), Apply(Force(Force(Builtin(SndPair))), Apply(Builtin(UnConstrData), Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("list9"))))))), Apply(Force(Builtin(HeadList)), Apply(Force(Builtin(TailList)), Apply(Force(Force(Builtin(SndPair))), Apply(Builtin(UnConstrData), Apply(Force(Builtin(HeadList)), Var(NamedDeBruijn("list9"))))))))), Apply(Var(NamedDeBruijn("fun_$dataListToTuplesList8")), Apply(Force(Builtin(TailList)), Var(NamedDeBruijn("list9")))))))))), LamAbs("vv", Apply(Apply(Var(NamedDeBruijn("xx")), Var(NamedDeBruijn("xx"))), Var(NamedDeBruijn("vv"))))))), Var(NamedDeBruijn("vv")))), Apply(Force(Builtin(TailList)), Const(Data({"303030653031363238303031": 104929086447450, "666266663766303131623533303130306666386130316133": -173061477122556}))))))), caused by scalus.uplc.eval.KnownTypeUnliftingError: Expected type ProtoList, got VCon(Data({"303030653031363238303031": 104929086447450, "666266663766303131623533303130306666386130316133": -173061477122556}))
+logs: List(negora assign: { mem: 0.018706, cpu: 4.612547 })
+[info] - unsafeFromList *** FAILED ***
+[info]   UPLC evaluation failed (ValueTest.scala:222)
+[info]   org.scalatest.exceptions.TestFailedException:
+[info]   at org.scalatest.Assertions.newAssertionFailedException(Assertions.scala:476)
+[info]   at org.scalatest.Assertions.newAssertionFailedException$(Assertions.scala:421)
+[info]   at org.scalatest.Assertions$.newAssertionFailedException(Assertions.scala:1385)
+[info]   at org.scalatest.Assertions$AssertionsHelper.macroAssert(Assertions.scala:1460)
+[info]   at scalus.ledger.api.v1.ValueTest.testFun$proxy1$1(ValueTest.scala:222)
+[info]   at scalus.ledger.api.v1.ValueTest.$init$$$anonfun$1(ValueTest.scala:115)
+[info]   at org.scalatest.Transformer.apply$$anonfun$1(Transformer.scala:22)
+[info]   at org.scalatest.OutcomeOf.outcomeOf(OutcomeOf.scala:85)
+[info]   at org.scalatest.OutcomeOf.outcomeOf$(OutcomeOf.scala:31)
+[info]   at org.scalatest.OutcomeOf$.outcomeOf(OutcomeOf.scala:104)
+[info]   at org.scalatest.Transformer.apply(Transformer.scala:22)
+[info]   at org.scalatest.Transformer.apply(Transformer.scala:21)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike$$anon$1.apply(AnyFunSuiteLike.scala:206)
+[info]   at org.scalatest.TestSuite.withFixture(TestSuite.scala:196)
+[info]   at org.scalatest.TestSuite.withFixture$(TestSuite.scala:138)
+[info]   at org.scalatest.funsuite.AnyFunSuite.withFixture(AnyFunSuite.scala:1563)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.invokeWithFixture$1(AnyFunSuiteLike.scala:212)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.runTest$$anonfun$1(AnyFunSuiteLike.scala:216)
+[info]   at org.scalatest.SuperEngine.runTestImpl(Engine.scala:306)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.runTest(AnyFunSuiteLike.scala:216)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.runTest$(AnyFunSuiteLike.scala:47)
+[info]   at org.scalatest.funsuite.AnyFunSuite.runTest(AnyFunSuite.scala:1563)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.runTests$$anonfun$1(AnyFunSuiteLike.scala:249)
+[info]   at org.scalatest.SuperEngine.traverseSubNodes$1$$anonfun$1(Engine.scala:413)
+[info]   at scala.runtime.function.JProcedure1.apply(JProcedure1.java:15)
+[info]   at scala.runtime.function.JProcedure1.apply(JProcedure1.java:10)
+[info]   at scala.collection.immutable.List.foreach(List.scala:334)
+[info]   at org.scalatest.SuperEngine.traverseSubNodes$1(Engine.scala:429)
+[info]   at org.scalatest.SuperEngine.runTestsInBranch(Engine.scala:396)
+[info]   at org.scalatest.SuperEngine.runTestsImpl(Engine.scala:475)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.runTests(AnyFunSuiteLike.scala:249)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.runTests$(AnyFunSuiteLike.scala:47)
+[info]   at org.scalatest.funsuite.AnyFunSuite.runTests(AnyFunSuite.scala:1563)
+[info]   at org.scalatest.Suite.run(Suite.scala:1114)
+[info]   at org.scalatest.Suite.run$(Suite.scala:564)
+[info]   at org.scalatest.funsuite.AnyFunSuite.org$scalatest$funsuite$AnyFunSuiteLike$$super$run(AnyFunSuite.scala:1563)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.run$$anonfun$1(AnyFunSuiteLike.scala:253)
+[info]   at org.scalatest.SuperEngine.runImpl(Engine.scala:535)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.run(AnyFunSuiteLike.scala:253)
+[info]   at org.scalatest.funsuite.AnyFunSuiteLike.run$(AnyFunSuiteLike.scala:47)
+[info]   at org.scalatest.funsuite.AnyFunSuite.run(AnyFunSuite.scala:1563)
+[info]   at org.scalatest.tools.Framework.org$scalatest$tools$Framework$$runSuite(Framework.scala:321)
+[info]   at org.scalatest.tools.Framework$ScalaTestTask.execute(Framework.scala:517)
+[info]   at sbt.ForkMain$Run.lambda$runTest$1(ForkMain.java:414)
+[info]   at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+[info]   at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+[info]   at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+[info]   at java.base/java.lang.Thread.run(Thread.java:1583)
+[info] Run completed in 2 seconds, 17 milliseconds.
+[info] Total number of tests run: 1
+[info] Suites: completed 1, aborted 0
+[info] Tests: succeeded 0, failed 1, canceled 0, ignored 0, pending 0
+[info] *** 1 TEST FAILED ***
+[error] Failed tests:
+[error] 	scalus.ledger.api.v1.ValueTest
+[error] (scalusJVM / Test / testOnly) sbt.TestsFailedException: Tests unsuccessful
+[error] Total time: 147 s (0:02:27.0), completed 8 Aug 2025, 15:50:20

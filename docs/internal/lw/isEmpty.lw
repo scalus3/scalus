@@ -1,0 +1,11 @@
+let scalus.prelude.List$.isEmpty22=(lam self18:scalus.prelude.List[A#94477] -> Boolean[(SumDataList -> Constant)].
+      ListMatch{listInput19(=
+        var(self18:scalus.prelude.List[A#94477][SumDataList])
+      ) match
+         Cons(consHead20(= HeadList( listInput19 ) ),consTail21(=
+               TailList( listInput19 )
+             )) =>(con bool False)
+         Nil =>(con bool True)}:Boolean
+) in ...
+
+chooseList(true, false)

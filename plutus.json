@@ -1,0 +1,102 @@
+{
+  "preamble": {
+    "title": "cardano-foundation/cardano-blueprint-and-ecosystem-monitoring",
+    "description": "Aiken contracts for project 'cardano-foundation/cardano-blueprint-and-ecosystem-monitoring/payment-splitter'",
+    "version": "0.2.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.16+23061c0"
+    }
+  },
+  "validators": [
+    {
+      "title": "payment_splitter.split_payment.spend",
+      "datum": {
+        "title": "_datum",
+        "schema": {
+          "$ref": "#/definitions/payment_splitter~1Datum"
+        }
+      },
+      "redeemer": {
+        "title": "_redeemer",
+        "schema": {
+          "$ref": "#/definitions/payment_splitter~1Redeemer"
+        }
+      },
+      "parameters": [
+        {
+          "title": "script_hashes",
+          "schema": {
+            "$ref": "#/definitions/List$aiken~1crypto~1VerificationKeyHash"
+          }
+        }
+      ],
+      "compiledCode": "588a010100229800aba2aba1aab9faab9eaab9dab9a9bac002488888896600264653001300800198041804800cc0200092225980099b8748008c020dd500144c8cc896600266e1d2000300b375400d132325980098088014528c5900f1bae300f001300c375400d16402860180026018601a00260126ea800a2c8038601000260086ea802229344d95900201",
+      "hash": "33de0bed2e1a9fea07c0a4aa8bf9ae16cce0bd73a4245edcaef46025"
+    },
+    {
+      "title": "payment_splitter.split_payment.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "parameters": [
+        {
+          "title": "script_hashes",
+          "schema": {
+            "$ref": "#/definitions/List$aiken~1crypto~1VerificationKeyHash"
+          }
+        }
+      ],
+      "compiledCode": "588a010100229800aba2aba1aab9faab9eaab9dab9a9bac002488888896600264653001300800198041804800cc0200092225980099b8748008c020dd500144c8cc896600266e1d2000300b375400d132325980098088014528c5900f1bae300f001300c375400d16402860180026018601a00260126ea800a2c8038601000260086ea802229344d95900201",
+      "hash": "33de0bed2e1a9fea07c0a4aa8bf9ae16cce0bd73a4245edcaef46025"
+    }
+  ],
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "List$aiken/crypto/VerificationKeyHash": {
+      "dataType": "list",
+      "items": {
+        "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+      }
+    },
+    "aiken/crypto/VerificationKeyHash": {
+      "title": "VerificationKeyHash",
+      "dataType": "bytes"
+    },
+    "payment_splitter/Datum": {
+      "title": "Datum",
+      "anyOf": [
+        {
+          "title": "Datum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "owner",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            }
+          ]
+        }
+      ]
+    },
+    "payment_splitter/Redeemer": {
+      "title": "Redeemer",
+      "anyOf": [
+        {
+          "title": "Redeemer",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "message",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

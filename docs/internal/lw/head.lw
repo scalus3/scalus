@@ -1,0 +1,40 @@
+let scalus.prelude.List$.headOption31=(lam self27:scalus.prelude.List[A#96626] -> scalus.prelude.Option[A#96626][(SumDataList -> DataConstr)].
+            ListMatch{listInput28(=
+              var(self27:scalus.prelude.List[A#96626][SumDataList])
+            ) match
+                   Cons(consHead29(= HeadList( listInput28 ) ),consTail30(=TailList( listInput28 ))) =>
+                     cast.repr.proxy(
+                       cast.repr.proxy(
+                         ConstrData((con integer 0) Constr(scalus.prelude.Option$.Some[A#96626],
+                           MkCons(cast.repr.proxy( consHead29 :A#96626[TypeVar]) [
+                             (builtin mkNilData) (con unit ())
+                           ])
+                         ))
+                       :scalus.prelude.Option[*][DataConstr])
+                     :scalus.prelude.Option[A#96626][DataConstr])
+                   Nil =>cast.repr.proxy(
+                       ConstrData((con integer 1) Constr(scalus.prelude.Option$.None,
+                         [(builtin mkNilData) (con unit ())]
+                       ))
+                     :scalus.prelude.Option[*][DataConstr])}:scalus.prelude.Option[A#96626]
+          )in 
+          let scalus.prelude.List$.head38=(lam self32:scalus.prelude.List[A#96624] -> Nothing[(SumDataList -> TypeVar)].
+              let self$proxy1133=App(scalus.prelude.List$.headOption31 self32)in 
+                if EqualsInteger(_match_constr_idx35(=
+                    FstPair( _match_scrutinee34(= UnConstrData( self$proxy1133 ) ) )
+                  ) (con integer 0))
+                then cast.repr.proxy(
+                    value37(= HeadList( _match_datalist36(= SndPair( _match_scrutinee34 ) ) ) )
+                  :A#96624[TypeVar])
+                else if EqualsInteger(_match_constr_idx35 (con integer 1))
+                     then (force [
+                         (force (builtin trace)) (con string "head of empty list") (delay (error))
+                       ])
+                     else (force [
+                         (force (builtin trace))
+                             (con string "Incorrect constructor index for type scalus.prelude.Option[A#96624]")
+                         (delay (error))
+                       ])
+              
+            )in  .....
+          

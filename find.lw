@@ -1,0 +1,41 @@
+(letrec scalus.prelude.List$.find246=(lam self247:scalus.prelude.List[A#82094] -> (A#82094 -> Boolean) -> scalus.prelude.Option[A#82094][(SumDataList -> ((TypeVar -> Constant) -> DataConstr))].
+                                                        (lam predicate248:(A#82094 -> Boolean) -> scalus.prelude.Option[A#82094][((TypeVar -> Constant) -> DataConstr)].
+                                                          ListMatch{listInput249(=
+                                                            var(self247:scalus.prelude.List[A#82094][SumDataList])
+                                                          ) matchCons(consHead250(=
+                                                                   HeadList( listInput249 )
+                                                                 ),consTail251(=
+                                                                   TailList( listInput249 )
+                                                                 )) =>if App(predicate248
+                                                                        cast.repr.proxy(
+                                                                            cast.repr.proxy(
+                                                                              consHead250
+                                                                            :A#82094[TypeVar])
+                                                                          :A#82094[TypeVar]))
+                                                                      then cast.repr.proxy(
+                                                                          cast.repr.proxy(
+                                                                            ConstrData((con integer 0)
+                                                                            Constr(scalus.prelude.Option$.Some[A#82094],
+                                                                              MkCons(cast.repr.proxy(
+                                                                                consHead250
+                                                                              :A#82094[TypeVar]) [
+                                                                                (builtin mkNilData)
+                                                                                (con unit ())
+                                                                              ])
+                                                                            ))
+                                                                          :scalus.prelude.Option[*][DataConstr])
+                                                                        :scalus.prelude.Option[A#82094][DataConstr])
+                                                                      else
+                                                                        App(App(scalus.prelude.List$.find246
+                                                                          consTail251)
+                                                                        predicate248)Nil =>cast.repr.proxy(
+                                                                     ConstrData((con integer 1)
+                                                                     Constr(scalus.prelude.Option$.None,
+                                                                       [
+                                                                         (builtin mkNilData)
+                                                                         (con unit ())
+                                                                       ]
+                                                                     ))
+                                                                   :scalus.prelude.Option[*][DataConstr])}:scalus.prelude.Option[A#82094]
+                                                        )
+                                                      )

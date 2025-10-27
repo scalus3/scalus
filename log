@@ -1,0 +1,630 @@
+OpenJDK 64-Bit Server VM warning: Option UseCompressedClassPointers was deprecated in version 25.0 and will likely be removed in a future release.
+OpenJDK 64-Bit Server VM warning: Option UseCompressedClassPointers was deprecated in version 25.0 and will likely be removed in a future release.
+[info] welcome to sbt 1.11.6 (Homebrew Java 25)
+[info] loading global plugins from /Users/rssh/.sbt/1.0/plugins
+[info] loading settings for project scalus-build-build-build from metals.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project/project/project
+[info] loading settings for project scalus-build-build from metals.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project/project
+[success] Generated .bloop/scalus-build-build.json
+[success] Total time: 2 s, completed 20 Oct 2025, 21:10:38
+[info] loading settings for project scalus-build from metals.sbt, plugins.sbt...
+[info] loading project definition from /Users/rssh/packages/nau/scalus/project
+[success] Generated .bloop/scalus-build.json
+[success] Total time: 1 s, completed 20 Oct 2025, 21:10:40
+[info] loading settings for project root from build.sbt...
+[info] resolving key references (22093 settings) ...
+[info] 
+[info]   ███████╗ ██████╗ █████╗ ██╗     ██╗   ██╗███████╗
+[info]   ██╔════╝██╔════╝██╔══██╗██║     ██║   ██║██╔════╝
+[info]   ███████╗██║     ███████║██║     ██║   ██║███████╗
+[info]   ╚════██║██║     ██╔══██║██║     ██║   ██║╚════██║
+[info]   ███████║╚██████╗██║  ██║███████╗╚██████╔╝███████║
+[info]   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝ ╚══════╝
+[info] 
+[info]   Version: 0.12.1+187-f9768f93+20251020-2110-SNAPSHOT Scala 3.3.6
+[info] 
+[info] Useful sbt tasks:
+[info] a. ~compile - Compile with file-watch enabled
+[info] b. quick - Format all, compile and quick test everything on JVM
+[info] c. precommit - Format all, clean compile and test everything on JVM
+[info] d. ci - Clean compile, check formatting and test everything, build docs, run MiMa
+[info] e. benchmark - Run benchmarks
+[info] f. mima - Check binary compatibility with the previous version using MiMa
+[info] g. docs/docusaurusCreateSite - Generate Scalus documentation website
+[info] Copied shared files to target /Users/rssh/packages/nau/scalus/scalus-plugin/src/main/shared/scala
+[info] compiling 180 Scala sources to /Users/rssh/packages/nau/scalus/scalus-core/jvm/target/scala-3.3.6/classes ...
+[info] skipping empty Scalus module ParameterizedValidator in 27ms
+[info] skipping empty Scalus module DataParameterizedValidator in 24ms
+[info] skipping empty Scalus module Validator in 28ms
+[info] done compiling
+[info] compiling 118 Scala sources to /Users/rssh/packages/nau/scalus/scalus-core/jvm/target/scala-3.3.6/test-classes ...
+[warn] -- [E198] Unused Symbol Warning: /Users/rssh/packages/nau/scalus/scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64FlatTest.scala:7:62 
+[warn] 7 |import scalus.serialization.flat.{DecoderState, EncoderState, Flat}
+[warn]   |                                                              ^^^^
+[warn]   |                                                             unused import
+[info] skipping empty Scalus module ByteStringExtensions$ in 0ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.regression.hydrozoa20250804.ByteStringExtensions$
+[info] skipping empty Scalus module EmptyValidator$ in 9ms
+ScalusPhase: SIRBodyAnnotation not found for scalus.cardano.blueprint.EmptyValidator$
+[warn] one warning found
+[info] done compiling
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rssh/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.3.6/scala3-library_3-3.3.6.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+[info] ListTest:
+[info] - empty
+[info] - single
+[info] - apply
+[info] - apply list of pairs
+[info] - from IterableOnce
+[info] - from java.lang.Iterable
+[info] - range
+[info] - rangeUntil
+[info] - fill
+[info] - map2
+[info] - ToData <-> FromData
+[info] - Eq
+[info] - Ord
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+[info] - quicksort
+[info] - flatten
+[info] - isEmpty
+[info] - nonEmpty
+[info] - isDefinedAt
+[info] - get
+[info] - at
+[info] - !!
+[info] - contains
+
+>>> Creating Lambda with parameter: id=head95, name=head
+    enclosingLambdaParams: mapper85(name='mapper'), self84(name='self')
+    Adding dependency: head95.directDependFrom += mapper85
+
+>>> Creating Lambda with parameter: id=tail96, name=tail
+    enclosingLambdaParams: head95(name='head'), mapper85(name='mapper'), self84(name='self')
+    Adding dependency: tail96.directDependFrom += head95
+
+>>> Creating Lambda with parameter: id=head95, name=head
+    enclosingLambdaParams: mapper85(name='mapper'), self84(name='self')
+    Adding dependency: head95.directDependFrom += mapper85
+
+>>> Creating Lambda with parameter: id=tail96, name=tail
+    enclosingLambdaParams: head95(name='head'), mapper85(name='mapper'), self84(name='self')
+    Adding dependency: tail96.directDependFrom += head95
+
+>>> Creating Lambda with parameter: id=head95, name=head
+    enclosingLambdaParams: mapper85(name='mapper'), self84(name='self')
+    Adding dependency: head95.directDependFrom += mapper85
+
+>>> Creating Lambda with parameter: id=tail96, name=tail
+    enclosingLambdaParams: head95(name='head'), mapper85(name='mapper'), self84(name='self')
+    Adding dependency: tail96.directDependFrom += head95
+[info] - groupBy
+
+>>> Creating Lambda with parameter: id=head95, name=head
+    enclosingLambdaParams: mapper85(name='mapper'), self84(name='self')
+    Adding dependency: head95.directDependFrom += mapper85
+
+>>> Creating Lambda with parameter: id=tail96, name=tail
+    enclosingLambdaParams: head95(name='head'), mapper85(name='mapper'), self84(name='self')
+    Adding dependency: tail96.directDependFrom += head95
+
+>>> Creating Lambda with parameter: id=head95, name=head
+    enclosingLambdaParams: mapper85(name='mapper'), self84(name='self')
+    Adding dependency: head95.directDependFrom += mapper85
+
+>>> Creating Lambda with parameter: id=tail96, name=tail
+    enclosingLambdaParams: head95(name='head'), mapper85(name='mapper'), self84(name='self')
+    Adding dependency: tail96.directDependFrom += head95
+
+>>> Creating Lambda with parameter: id=head95, name=head
+    enclosingLambdaParams: mapper85(name='mapper'), self84(name='self')
+    Adding dependency: head95.directDependFrom += mapper85
+
+>>> Creating Lambda with parameter: id=tail96, name=tail
+    enclosingLambdaParams: head95(name='head'), mapper85(name='mapper'), self84(name='self')
+    Adding dependency: tail96.directDependFrom += head95
+[info] - groupMap
+[info] - groupMapReduce
+[info] - zip
+[info] - prepended
+[info] - +:
+[info] - prependedAll
+[info] - ++:
+[info] - appended
+[info] - :+
+[info] - appendedAll
+[info] - :++
+[info] - concat
+[info] - ++
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: mapper36(name='mapper'), self35(name='self')
+    Adding dependency: head46.directDependFrom += mapper36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), mapper36(name='mapper'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: mapper36(name='mapper'), self35(name='self')
+    Adding dependency: head46.directDependFrom += mapper36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), mapper36(name='mapper'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: mapper36(name='mapper'), self35(name='self')
+    Adding dependency: head46.directDependFrom += mapper36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), mapper36(name='mapper'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+[info] - map
+
+>>> Creating Lambda with parameter: id=head59, name=head
+    enclosingLambdaParams: mapper49(name='mapper'), self48(name='self')
+    Adding dependency: head59.directDependFrom += mapper49
+
+>>> Creating Lambda with parameter: id=tail60, name=tail
+    enclosingLambdaParams: head59(name='head'), mapper49(name='mapper'), self48(name='self')
+    Adding dependency: tail60.directDependFrom += head59
+
+>>> Creating Lambda with parameter: id=head59, name=head
+    enclosingLambdaParams: mapper49(name='mapper'), self48(name='self')
+    Adding dependency: head59.directDependFrom += mapper49
+
+>>> Creating Lambda with parameter: id=tail60, name=tail
+    enclosingLambdaParams: head59(name='head'), mapper49(name='mapper'), self48(name='self')
+    Adding dependency: tail60.directDependFrom += head59
+
+>>> Creating Lambda with parameter: id=head59, name=head
+    enclosingLambdaParams: mapper49(name='mapper'), self48(name='self')
+    Adding dependency: head59.directDependFrom += mapper49
+
+>>> Creating Lambda with parameter: id=tail60, name=tail
+    enclosingLambdaParams: head59(name='head'), mapper49(name='mapper'), self48(name='self')
+    Adding dependency: tail60.directDependFrom += head59
+
+>>> Creating Lambda with parameter: id=head59, name=head
+    enclosingLambdaParams: mapper49(name='mapper'), self48(name='self')
+    Adding dependency: head59.directDependFrom += mapper49
+
+>>> Creating Lambda with parameter: id=tail60, name=tail
+    enclosingLambdaParams: head59(name='head'), mapper49(name='mapper'), self48(name='self')
+    Adding dependency: tail60.directDependFrom += head59
+
+>>> Creating Lambda with parameter: id=head59, name=head
+    enclosingLambdaParams: mapper49(name='mapper'), self48(name='self')
+    Adding dependency: head59.directDependFrom += mapper49
+
+>>> Creating Lambda with parameter: id=tail60, name=tail
+    enclosingLambdaParams: head59(name='head'), mapper49(name='mapper'), self48(name='self')
+    Adding dependency: tail60.directDependFrom += head59
+[info] - flatMap
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+[info] - filter
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+[info] - filterNot
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+SIR=data scalus.prelude.List Nothing = scalus.prelude.List$.Nil
+                                 | scalus.prelude.List$.Cons(
+                                     head: A#83974,
+                                     tail: scalus.prelude.List[A#83974]
+                                   )
+data scalus.prelude.Option A = scalus.prelude.Option$.Some(value: A#33738)
+                             | scalus.prelude.Option$.None
+fun scalus.prelude.List$.foldRight(self, init, combiner): (λ.A#92834 =>> (scalus.prelude.List[A#92834] -> (λ.B#92836 =>> (B#92836 -> ((A#92834 -> (B#92836 -> B#92836)) -> B#92836))))) =
+    match self with
+      case scalus.prelude.List$.Nil -> init
+      case scalus.prelude.List$.Cons[A#92834](
+        _List.scala_883_match_head_1,
+        _List.scala_883_match_tail_2
+      ) ->
+        combiner(
+          _List.scala_883_match_head_1,
+          scalus.prelude.List$.foldRight(_List.scala_883_match_tail_2, init, combiner)
+        )
+in let scalus.prelude.List$.filterMap: (λ.A#83889 =>> (scalus.prelude.List[A#83889] -> (λ.B#83891 =>> ((A#83889 -> scalus.prelude.Option[B#83891]) -> scalus.prelude.List[B#83891])))) =
+  ∀A.
+  {λ self predicate ->
+    scalus.prelude.List$.foldRight(
+      self,
+      cast  (scalus.prelude.List$.Nil()): scalus.prelude.List[B#83891],
+      {λ head tail ->
+        let _List.scala_788_match_scrutinee_1: scalus.prelude.Option[B#83891] =[lazy]
+          predicate(head)
+        in
+        match _List.scala_788_match_scrutinee_1 with
+          case scalus.prelude.Option$.None -> tail
+          case scalus.prelude.Option$.Some[B#83891](_List.scala_788_match_value_2) ->
+            cast  (scalus.prelude.List$.Cons(
+                  _List.scala_788_match_value_2,
+                  tail
+                )): scalus.prelude.List[B#83891]
+      }
+    )
+  }
+in
+let scalus.prelude.List$.single: (λ.A#92608 =>> (A#92608 -> scalus.prelude.List[A#92608])) =
+  ∀A.
+  {λ a ->
+    cast  (scalus.prelude.List$.Cons(a, scalus.prelude.List$.Nil())): scalus.prelude.List[A#92608]
+  }
+in
+{λ _ ->
+  scalus.prelude.List$.filterMap(
+    scalus.prelude.List$.single(1),
+    {λ x ->
+      if lessThanInteger(1, x)
+      then
+          cast  (scalus.prelude.Option$.Some(addInteger(x, 1))): scalus.prelude.Option[Int]
+      else
+          scalus.prelude.Option$.None()
+    }
+  )
+}
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+Lowered=(letrec scalus.prelude.List$.foldRight16=repr.proxy(
+    (lam self17:scalus.prelude.List[A#92834] -> B#92836 -> (A#92834 -> B#92836 -> B#92836) -> B#92836[(SumDataList -> (TypeVar -> ((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar)))].
+      (lam init18:B#92836 -> (A#92834 -> B#92836 -> B#92836) -> B#92836[(TypeVar -> ((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar))].
+        (lam combiner19:(A#92834 -> B#92836 -> B#92836) -> B#92836[((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar)].
+          ListMatch{listInput20(= var(self17:scalus.prelude.List[A#92834][SumDataList]) ) match
+                                                                                               Cons(consHead21(=
+                                                                                                 HeadList(
+                                                                                                   listInput20
+                                                                                                 )
+                                                                                               ),consTail22(=
+                                                                                                 TailList(
+                                                                                                   listInput20
+                                                                                                 )
+                                                                                               )) =>App(App(combiner19
+                                                                                                   cast.repr.proxy(
+                                                                                                       cast.repr.proxy(
+                                                                                                         consHead21
+                                                                                                       :A#92834[TypeVar])
+                                                                                                     :A#92834[TypeVar]))
+                                                                                                 cast.repr.proxy(
+                                                                                                     App((lam xIn29:(A#92837 -> B#92838 -> B#92836) -> B#92836[((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar)].
+                                                                                                         App(App((lam xIn24:B#92838 -> (A#92837 -> B#92838 -> B#92838) -> B#92838[(TypeVar -> ((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar))].
+                                                                                                               (lam xIn25:(A#92837 -> B#92838 -> B#92838) -> B#92838[((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar)].
+                                                                                                                 App(App(App(scalus.prelude.List$.foldRight16
+                                                                                                                     consTail22)
+                                                                                                                   xIn24)
+                                                                                                                 xIn25r28(=
+                                                                                                                     repr.proxy(
+                                                                                                                       xIn25
+                                                                                                                     [(TypeVar -> (TypeVar -> TypeVar))])
+                                                                                                                   ))
+                                                                                                               )
+                                                                                                             )
+                                                                                                           cast.repr.proxy(
+                                                                                                               cast.repr.proxy(
+                                                                                                                 init18
+                                                                                                               :B#92836[TypeVar])
+                                                                                                             :B#92838[TypeVar]))
+                                                                                                         xIn29r32(=
+                                                                                                             repr.proxy(
+                                                                                                               xIn29
+                                                                                                             [(TypeVar -> (TypeVar -> TypeVar))])
+                                                                                                           ))
+                                                                                                       )
+                                                                                                     combiner19)
+                                                                                                   :B#92836[TypeVar]))
+                                                                                               Nil =>cast.repr.proxy(
+                                                                                                   init18
+                                                                                                 :B#92836[TypeVar])}:B#92836
+        )
+      )
+    )
+  [(SumDataList -> (TypeVar -> ((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar)))]) in
+  let scalus.prelude.List$.filterMap56=(lam self35:scalus.prelude.List[A#83889] -> (A#83889 -> scalus.prelude.Option[B#83891]) -> scalus.prelude.List[B#83891][(SumDataList -> ((TypeVar -> DataConstr) -> SumDataList))].
+      (lam predicate36:(A#83889 -> scalus.prelude.Option[B#83891]) -> scalus.prelude.List[B#83891][((TypeVar -> DataConstr) -> SumDataList)].
+        App((lam xIn42:(A#92837 -> scalus.prelude.List[B#83891] -> scalus.prelude.List[B#83891]) -> scalus.prelude.List[B#83891][((TypeVar -> (SumDataList -> SumDataList)) -> SumDataList)].
+            UnListData(
+              repr.proxy(
+                App(App((lam xIn37:B#92838 -> (A#92837 -> B#92838 -> B#92838) -> B#92838[(TypeVar -> ((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar))].
+                      (lam xIn38:(A#92837 -> B#92838 -> B#92838) -> B#92838[((TypeVar -> (TypeVar -> TypeVar)) -> TypeVar)].
+                        App(App(App(scalus.prelude.List$.foldRight16 self35) xIn37) xIn38r41(=
+                            repr.proxy( xIn38 [(TypeVar -> (TypeVar -> TypeVar))])
+                          ))
+                      )
+                    ) repr.proxy(
+                      ListData(
+                        cast.repr.proxy(
+                          cast.repr.proxy(
+                            [(builtin mkNilData) (con unit ())]
+                          :scalus.prelude.List[*][SumDataList])
+                        :scalus.prelude.List[B#83891][SumDataList])
+                      )
+                    [TypeVar])) repr.proxy(
+                    (lam xIn43:A#92837 -> scalus.prelude.List[B#83891] -> scalus.prelude.List[B#83891][(TypeVar -> (TypeVar -> TypeVar))].
+                      (lam xIn44:scalus.prelude.List[B#83891] -> scalus.prelude.List[B#83891][(TypeVar -> TypeVar)].
+                        repr.proxy(
+                          ListData(
+                            App(App(xIn42 xIn43) xIn44r45(=
+                                UnListData( repr.proxy( xIn44 [PackedSumDataList]) )
+                              ))
+                          )
+                        [TypeVar])
+                      )
+                    )
+                  [(TypeVar -> (TypeVar -> TypeVar))]))
+              [PackedSumDataList])
+            )
+          )
+        (lam head46:A#83889 -> scalus.prelude.List[B#83891] -> scalus.prelude.List[B#83891][(TypeVar -> (SumDataList -> SumDataList))].
+            (lam tail47:scalus.prelude.List[B#83891] -> scalus.prelude.List[B#83891][(SumDataList -> SumDataList)].
+              scope{
+                scope{
+                  if EqualsInteger(_match_constr_idx51(=
+                      FstPair(
+                        _match_scrutinee49(=
+                          depvar(_List.scala_788_match_scrutinee_1r50:scalus.prelude.Option[B#83891][PairIntDataList])=UnConstrData(
+                            _List.scala_788_match_scrutinee_148(=
+                              App(predicate36 cast.repr.proxy(
+                                cast.repr.proxy( head46 :A#83889[TypeVar])
+                              :A#83889[TypeVar])) :scalus.prelude.Option[B#83891][DataConstr] 
+                            )
+                          )
+                        )
+                      )
+                    ) (con integer 0))
+                  then scope{
+                      cast.repr.proxy(
+                        cast.repr.proxy(
+                          MkCons(cast.repr.proxy(
+                            _List.scala_788_match_value_253(=
+                              HeadList( _match_datalist52(= SndPair( _match_scrutinee49 ) ) )
+                            )
+                          :B#83891[TypeVar]) tail47)
+                        :scalus.prelude.List[*][SumDataList])
+                      :scalus.prelude.List[B#83891][SumDataList])
+                    }
+                  else if EqualsInteger(_match_constr_idx51 (con integer 1)) then scope{ tail47 }
+                       else force(
+                           Trace((con string "Incorrect constructor index for type scalus.prelude.Option[B#83891]")
+                           (delay (error)))
+                         )
+                }
+              }
+            )
+          ))
+      )
+    )in 
+    let scalus.prelude.List$.single58=(lam a57:A#92608 -> scalus.prelude.List[A#92608][(TypeVar -> SumDataList)].
+        cast.repr.proxy(
+          cast.repr.proxy(
+            MkCons(cast.repr.proxy( a57 :A#92608[TypeVar]) [(builtin mkNilData) (con unit ())])
+          :scalus.prelude.List[*][SumDataList])
+        :scalus.prelude.List[A#92608][SumDataList])
+      )in 
+      (lam _59:Unit -> scalus.prelude.List[Int][(Constant -> SumDataList)].
+        App((lam xIn60:(Int -> scalus.prelude.Option[B#83893]) -> scalus.prelude.List[B#83893][((Constant -> DataConstr) -> SumDataList)].
+            App(App(scalus.prelude.List$.filterMap56 App(scalus.prelude.List$.single58 IData(
+                    (con integer 1)
+                  ))) repr.proxy(
+                (lam xIn61:Int -> scalus.prelude.Option[B#83893][(TypeVar -> DataConstr)].
+                  App(xIn60 xIn61r62(= UnIData( xIn61 ) ))
+                )
+              [(TypeVar -> DataConstr)]))
+          ) (lam x63:Int -> scalus.prelude.Option[Int][(Constant -> DataConstr)].
+            if App(App((builtin lessThanInteger) (con integer 1)) x63)
+            then cast.repr.proxy(
+                cast.repr.proxy(
+                  ConstrData((con integer 0) Constr(scalus.prelude.Option$.Some[Int],
+                    MkCons(IData( App(App((builtin addInteger) x63) (con integer 1)) ) [
+                      (builtin mkNilData) (con unit ())
+                    ])
+                  ))
+                :scalus.prelude.Option[*][DataConstr])
+              :scalus.prelude.Option[Int][DataConstr])
+            else cast.repr.proxy(
+                ConstrData((con integer 1) Constr(scalus.prelude.Option$.None,
+                  [(builtin mkNilData) (con unit ())]
+                ))
+              :scalus.prelude.Option[*][DataConstr])
+          ))
+      )
+    
+  
+)
+befire eval:----------
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+
+>>> Creating Lambda with parameter: id=head46, name=head
+    enclosingLambdaParams: predicate36(name='predicate'), self35(name='self')
+    Adding dependency: head46.directDependFrom += predicate36
+
+>>> Creating Lambda with parameter: id=tail47, name=tail
+    enclosingLambdaParams: head46(name='head'), predicate36(name='predicate'), self35(name='self')
+    Adding dependency: tail47.directDependFrom += head46
+[info] - filterMap
+[info] - find
+[info] - findMap
+[info] - foldLeft
+[info] - foldRight
+[info] - exists
+[info] - forall
+[info] - count
+[info] - indexOfOption
+[info] - indexOf
+[info] - lastOption
+[info] - last
+[info] - headOption
+[info] - head
+[info] - length
+[info] - size
+[info] - tail
+[info] - drop
+
+>>> Creating Lambda with parameter: id=head50, name=head
+    enclosingLambdaParams: skip36(name='skip'), self35(name='self')
+    Adding dependency: head50.directDependFrom += skip36
+
+>>> Creating Lambda with parameter: id=head50, name=head
+    enclosingLambdaParams: skip36(name='skip'), self35(name='self')
+    Adding dependency: head50.directDependFrom += skip36
+
+>>> Creating Lambda with parameter: id=head50, name=head
+    enclosingLambdaParams: skip36(name='skip'), self35(name='self')
+    Adding dependency: head50.directDependFrom += skip36
+
+>>> Creating Lambda with parameter: id=head50, name=head
+    enclosingLambdaParams: skip36(name='skip'), self35(name='self')
+    Adding dependency: head50.directDependFrom += skip36
+
+>>> Creating Lambda with parameter: id=head50, name=head
+    enclosingLambdaParams: skip36(name='skip'), self35(name='self')
+    Adding dependency: head50.directDependFrom += skip36
+
+>>> Creating Lambda with parameter: id=head50, name=head
+    enclosingLambdaParams: skip36(name='skip'), self35(name='self')
+    Adding dependency: head50.directDependFrom += skip36
+[info] - dropRight
+[info] - dropWhile
+[info] - deleteFirst
+[info] - take
+
+>>> Creating Lambda with parameter: id=head49, name=head
+    enclosingLambdaParams: count36(name='count'), self35(name='self')
+    Adding dependency: head49.directDependFrom += count36
+
+>>> Creating Lambda with parameter: id=head49, name=head
+    enclosingLambdaParams: count36(name='count'), self35(name='self')
+    Adding dependency: head49.directDependFrom += count36
+
+>>> Creating Lambda with parameter: id=head49, name=head
+    enclosingLambdaParams: count36(name='count'), self35(name='self')
+    Adding dependency: head49.directDependFrom += count36
+
+>>> Creating Lambda with parameter: id=head49, name=head
+    enclosingLambdaParams: count36(name='count'), self35(name='self')
+    Adding dependency: head49.directDependFrom += count36
+
+>>> Creating Lambda with parameter: id=head49, name=head
+    enclosingLambdaParams: count36(name='count'), self35(name='self')
+    Adding dependency: head49.directDependFrom += count36
+
+>>> Creating Lambda with parameter: id=head49, name=head
+    enclosingLambdaParams: count36(name='count'), self35(name='self')
+    Adding dependency: head49.directDependFrom += count36
+[info] - takeRight
+[info] - takeWhile
+[info] - distinct
+[info] - diff
+
+>>> Creating Lambda with parameter: id=head55, name=head
+    enclosingLambdaParams: skip41(name='skip'), self40(name='self')
+    Adding dependency: head55.directDependFrom += skip41
+
+>>> Creating Lambda with parameter: id=head57, name=head
+    enclosingLambdaParams: skip43(name='skip'), self42(name='self')
+    Adding dependency: head57.directDependFrom += skip43
+
+>>> Creating Lambda with parameter: id=head55, name=head
+    enclosingLambdaParams: skip41(name='skip'), self40(name='self')
+    Adding dependency: head55.directDependFrom += skip41
+[info] - init
+[info] - reverse
+[info] - foreach
+[info] - asScala/asScalus
+[info] Run completed in 3 seconds, 855 milliseconds.
+[info] Total number of tests run: 70
+[info] Suites: completed 1, aborted 0
+[info] Tests: succeeded 70, failed 0, canceled 0, ignored 0, pending 0
+[info] All tests passed.
+[success] Total time: 133 s (0:02:13.0), completed 20 Oct 2025, 21:12:57

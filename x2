@@ -1,0 +1,63 @@
+  [
+      (lam i1= Data(serviceContext)
+        (case (constr 0 
+               (force (builtin tailList)) = i2
+               (force (builtin headList)) = i3
+               (force (force (builtin chooseList))) = i4
+               (force (force (builtin sndPair))) = i5
+               (force (force (builtin fstPair))) = i6
+               (force (builtin ifThenElse)) = i7
+               {params.unListData} = i8)
+          (lam i2
+            (lam i3
+              (lam i4
+                (lam i5
+                  (lam i6
+                    (lam i7
+                      (lam i8
+                        (force (case (constr 0 [
+                          (lam i9 
+                            [
+                              (lam i10
+                                (case (constr 0 [i3 i10] [i3 [i2 i10]] [i3 i9])
+                                  (lam i11
+                                    (lam i12
+                                      (lam i13
+                                        (force (case (constr 0 [
+                                          (builtin equalsInteger) (con integer 1) [
+                                            i6 [(builtin unConstrData) i12]
+                                          ]
+                                        ] (delay [
+                                          (lam i14
+                                            [
+                                              (lam i15
+                                                (lam i16
+                                                  (force (case (constr 0 [
+                                                    (builtin equalsInteger) (con integer 0) [
+                                                      i6 [(builtin unConstrData) i11]
+                                                    ]
+                                                  ] (delay [
+                                                    (lam i17
+                                                      [
+                                                        (lam i18
+                                                          (force (case (constr 0 [i2 i17]
+                                                          (delay (con bool True)) (delay (error)))
+                                                            i4))) [(builtin unBData) [i3 i17]]
+                                                      ]) [i5 [(builtin unConstrData) i11]]
+                                                  ]) (delay (error)))
+                                                    i7)))) [i3 i14] [i3 [i2 i14]]
+                                            ]) [i5 [(builtin unConstrData) i12]]
+                                        ]) (delay (error)))
+                                          i7))))))) [i2 i9]
+                            ]) scriptContext.unConstrData.sndPair
+                        ] (delay (con unit ())) (delay [(error) (force (error))]))
+                          i7))))))))))))
+   (con data {scriptContext})
+ ]
+)
+
+-----------------------------------
+    (con data (List [List [B #3c00805d80211e017f7f7f00ff24a59fe851eed17f00dc01507f5130, B #a1237f007f800101011501c2d4ffd43e000101d78081018002f9ff16]]))
+    (con data (Constr 0 [Constr 0 [List [Constr 0 [Constr 0 [B #d5ff2201568246ec807ff2007f647f01117f01b6ff80e47f490027b28f009001, I 0], Constr 0 [Constr 0 [Constr 1 [B #5301836daccee6661b47ee7d0c67773ff4153ec671c8eb55fc6085f6], Constr 1 []], Map [(B #, Map [(B #, I 100)])], Constr 0 [], Constr 1 []]], Constr 0 [Constr 0 [B #0000c5b600ff8000cab1ddc9c0a8053b00ff06017f140100e876867fb27fe9d6, I 0], Constr 0 [Constr 0 [Constr 0 [B #3c00805d80211e017f7f7f00ff24a59fe851eed17f00dc01507f5130], Constr 1 []], Map [(B #, Map [(B #, I 100)])], Constr 0 [], Constr 1 []]]], List [], List [Constr 0 [Constr 0 [Constr 0 [B #3c00805d80211e017f7f7f00ff24a59fe851eed17f00dc01507f5130], Constr 1 []], Map [(B #, Map [(B #, I 140)])], Constr 0 [], Constr 1 []], Constr 0 [Constr 0 [Constr 0 [B #a1237f007f800101011501c2d4ffd43e000101d78081018002f9ff16], Constr 1 []], Map [(B #, Map [(B #, I 50)])], Constr 0 [], Constr 1 []]], I 10, Map [], List [Constr 0 [Constr 0 [B #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa], Constr 1 []]], Map [], Constr 0 [Constr 0 [Constr 0 [], Constr 1 []], Constr 0 [Constr 2 [], Constr 1 []]], List [B #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa], Map [(Constr 1 [Constr 0 [B #d5ff2201568246ec807ff2007f647f01117f01b6ff80e47f490027b28f009001, I 0]], Constr 0 [])], Map [], B #1d01ac8000ce218cff018078019f01f80146007f7a017e006880fb0101da39df, Map [], List [], Constr 1 [], Constr 1 []], Constr 0 [], Constr 1 [Constr 0 [B #d5ff2201568246ec807ff2007f647f01117f01b6ff80e47f490027b28f009001, I 0], Constr 1 []]]))
+  ]
+)
