@@ -233,53 +233,37 @@ object JITCompiler {
                 )
 
             case Term.Constr(tag, args) =>
-                // Constructor: Create snippet
+                // Compile each argument
                 val argIdxs = args.map(a => compileTerm(a, env))
-                val snippet = staging.run { (quotes: Quotes) ?=>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                // TODO: Evaluate args and create tuple
-                                throw new UnsupportedOperationException(
-                                  "Constr not yet implemented"
-                                )
-                            }
-                        }
-                    }
-                }
-                summon[CompileContext].emit(
-                  Instruction(opcode = JIT.OP_EXEC_SNIPPET, snippet = snippet)
+                
+                // Emit OP_CONSTR instruction with tag and arg indices
+                val constrIdx = summon[CompileContext].emit(
+                  Instruction(
+                    opcode = JIT.OP_CONSTR,
+                    data = (tag.value, argIdxs.toArray)
+                  )
                 )
+                
+                // Emit RETURN after constr so control returns to caller
+                summon[CompileContext].emit(Instruction(opcode = JIT.OP_RETURN))
+                constrIdx
 
             case Term.Case(arg, cases) =>
-                // Case: Create snippet
+                // Compile scrutinee and all case branches
                 val argIdx = compileTerm(arg, env)
                 val caseIdxs = cases.map(c => compileTerm(c, env))
-                val snippet = staging.run { (quotes: Quotes) ?=>
-                    '{
-                        new Snippet {
-                            def execute(
-                                acc: Any,
-                                dataStack: DataStack,
-                                budget: BudgetSpender,
-                                logger: Logger,
-                                params: MachineParams
-                            ): Any = {
-                                // TODO: Evaluate scrutinee and select case
-                                throw new UnsupportedOperationException("Case not yet implemented")
-                            }
-                        }
-                    }
-                }
-                summon[CompileContext].emit(
-                  Instruction(opcode = JIT.OP_EXEC_SNIPPET, snippet = snippet)
+                
+                // Emit OP_CASE instruction
+                val caseIdx = summon[CompileContext].emit(
+                  Instruction(
+                    opcode = JIT.OP_CASE,
+                    data = (argIdx, caseIdxs.toArray)
+                  )
                 )
+                
+                // Note: OP_CASE handles its own control flow, returning when done
+                // No explicit RETURN needed here as the case branches handle returns
+                caseIdx
         }
     }
 

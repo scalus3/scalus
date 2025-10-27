@@ -49,8 +49,8 @@ private object Test {
     def getJitted(): (Logger, BudgetSpender, MachineParams) => Any = {
         println(s"Starting JIT compilation at ${System.currentTimeMillis()}")
         val start = System.currentTimeMillis()
-        println("Calling JIT.jitUplc...")
-        val r = JIT.jitUplc(program.term)
+        println("Calling mincont.JIT.jitUplc...")
+        val r = mincont.JIT.jitUplc(program.term)
         val end = System.currentTimeMillis()
         println(s"JIT completed in ${end - start} ms")
         r

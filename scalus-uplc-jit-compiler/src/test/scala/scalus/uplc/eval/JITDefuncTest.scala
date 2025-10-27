@@ -2,7 +2,8 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.uplc.{Constant, DefaultFun, Term}
+import scalus.cardano.ledger.Word64
+import scalus.uplc.{Constant, DefaultFun, NamedDeBruijn, Term}
 import scala.util.Try
 
 class JITDefuncTest extends AnyFunSuite {
@@ -356,6 +357,211 @@ class JITDefuncTest extends AnyFunSuite {
       )
 
       assert(result == BigInt(2))
+    }
+
+    runTest("Constr: empty constructor Constr(0, [])") {
+      // Test: Constr(0, [])
+      val term = Term.Constr(Word64(0), List.empty)
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == (0L, List.empty))
+    }
+
+    runTest("Constr: constructor with args Constr(1, [42, 99])") {
+      // Test: Constr(1, [42, 99])
+      val term = Term.Constr(
+        Word64(1),
+        List(
+          Term.Const(Constant.Integer(42)),
+          Term.Const(Constant.Integer(99))
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == (1L, List(BigInt(42), BigInt(99))))
+    }
+
+    runTest("Constr: nested constructor Constr(0, [Constr(1, [5])])") {
+      // Test: Constr(0, [Constr(1, [5])])
+      val term = Term.Constr(
+        Word64(0),
+        List(
+          Term.Constr(
+            Word64(1),
+            List(Term.Const(Constant.Integer(5)))
+          )
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == (0L, List((1L, List(BigInt(5))))))
+    }
+
+    runTest("Case: simple case with no args") {
+      // Test: case Constr(0, []) of { 0 -> 100; 1 -> 200 }
+      val term = Term.Case(
+        Term.Constr(Word64(0), List.empty),
+        List(
+          Term.Const(Constant.Integer(100)), // case 0
+          Term.Const(Constant.Integer(200))  // case 1
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == BigInt(100))
+    }
+
+    runTest("Case: select second branch") {
+      // Test: case Constr(1, []) of { 0 -> 100; 1 -> 200 }
+      val term = Term.Case(
+        Term.Constr(Word64(1), List.empty),
+        List(
+          Term.Const(Constant.Integer(100)), // case 0
+          Term.Const(Constant.Integer(200))  // case 1
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == BigInt(200))
+    }
+
+    runTest("Case: with single argument - identity function") {
+      // Test: case Constr(0, [42]) of { 0 -> \x -> x; 1 -> \x -> 0 }
+      val term = Term.Case(
+        Term.Constr(Word64(0), List(Term.Const(Constant.Integer(42)))),
+        List(
+          Term.LamAbs("x", Term.Var(NamedDeBruijn("x", 0))), // case 0: identity
+          Term.LamAbs("x", Term.Const(Constant.Integer(0)))  // case 1: const 0
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == BigInt(42))
+    }
+
+    runTest("Case: with multiple arguments") {
+      // Test: case Constr(0, [5, 10]) of { 0 -> \x y -> x + y; 1 -> \x y -> x * y }
+      val term = Term.Case(
+        Term.Constr(
+          Word64(0),
+          List(
+            Term.Const(Constant.Integer(5)),
+            Term.Const(Constant.Integer(10))
+          )
+        ),
+        List(
+          // case 0: \x y -> x + y
+          Term.LamAbs(
+            "x",
+            Term.LamAbs(
+              "y",
+              Term.Apply(
+                Term.Apply(
+                  Term.Builtin(DefaultFun.AddInteger),
+                  Term.Var(NamedDeBruijn("x", 1))
+                ),
+                Term.Var(NamedDeBruijn("y", 0))
+              )
+            )
+          ),
+          // case 1: \x y -> x * y
+          Term.LamAbs(
+            "x",
+            Term.LamAbs(
+              "y",
+              Term.Apply(
+                Term.Apply(
+                  Term.Builtin(DefaultFun.MultiplyInteger),
+                  Term.Var(NamedDeBruijn("x", 1))
+                ),
+                Term.Var(NamedDeBruijn("y", 0))
+              )
+            )
+          )
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == BigInt(15)) // 5 + 10
+    }
+
+    runTest("Case: nested case") {
+      // Test: case (case Constr(0, [1]) of { 0 -> \x -> Constr(1, [x]); 1 -> \x -> Constr(0, [x]) })
+      //       of { 0 -> 100; 1 -> 200 }
+      val innerCase = Term.Case(
+        Term.Constr(Word64(0), List(Term.Const(Constant.Integer(1)))),
+        List(
+          // case 0: \x -> Constr(1, [x])
+          Term.LamAbs(
+            "x",
+            Term.Constr(Word64(1), List(Term.Var(NamedDeBruijn("x", 0))))
+          ),
+          // case 1: \x -> Constr(0, [x])
+          Term.LamAbs(
+            "x",
+            Term.Constr(Word64(0), List(Term.Var(NamedDeBruijn("x", 0))))
+          )
+        )
+      )
+
+      val term = Term.Case(
+        innerCase,
+        List(
+          Term.Const(Constant.Integer(100)), // case 0
+          Term.Const(Constant.Integer(200))  // case 1
+        )
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV3Params
+      )
+
+      assert(result == BigInt(200)) // Inner case produces Constr(1, [1]), outer case selects branch 1
     }
   }
 }
