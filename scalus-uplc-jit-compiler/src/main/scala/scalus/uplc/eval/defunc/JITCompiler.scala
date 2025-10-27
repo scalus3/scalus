@@ -409,10 +409,15 @@ object JITCompiler {
       */
     private def compileBuiltin(bi: DefaultFun): Snippet = {
         bi match {
-            case DefaultFun.AddInteger      => BuiltinSnippets.addInteger
-            case DefaultFun.SubtractInteger => BuiltinSnippets.subtractInteger
-            case DefaultFun.MultiplyInteger => BuiltinSnippets.multiplyInteger
-            case DefaultFun.EqualsData      => BuiltinSnippets.equalsData
+            case DefaultFun.AddInteger            => BuiltinSnippets.addInteger
+            case DefaultFun.SubtractInteger       => BuiltinSnippets.subtractInteger
+            case DefaultFun.MultiplyInteger       => BuiltinSnippets.multiplyInteger
+            case DefaultFun.DivideInteger         => BuiltinSnippets.divideInteger
+            case DefaultFun.EqualsInteger         => BuiltinSnippets.equalsInteger
+            case DefaultFun.LessThanInteger       => BuiltinSnippets.lessThanInteger
+            case DefaultFun.LessThanEqualsInteger => BuiltinSnippets.lessThanEqualsInteger
+            case DefaultFun.IfThenElse            => BuiltinSnippets.ifThenElse
+            case DefaultFun.EqualsData            => BuiltinSnippets.equalsData
             case _ =>
                 throw new UnsupportedOperationException(
                   s"Builtin not yet implemented: ${bi.toString}"

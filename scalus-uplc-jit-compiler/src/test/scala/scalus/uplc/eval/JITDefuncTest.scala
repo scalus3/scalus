@@ -211,5 +211,151 @@ class JITDefuncTest extends AnyFunSuite {
 
       assert(result == ())
     }
+    
+    runTest("DivideInteger: 15 / 3 = 5") {
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Builtin(DefaultFun.DivideInteger),
+          Term.Const(Constant.Integer(15))
+        ),
+        Term.Const(Constant.Integer(3))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == BigInt(5))
+    }
+    
+    runTest("EqualsInteger: 5 == 5 = true") {
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Builtin(DefaultFun.EqualsInteger),
+          Term.Const(Constant.Integer(5))
+        ),
+        Term.Const(Constant.Integer(5))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == true)
+    }
+    
+    runTest("EqualsInteger: 5 == 3 = false") {
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Builtin(DefaultFun.EqualsInteger),
+          Term.Const(Constant.Integer(5))
+        ),
+        Term.Const(Constant.Integer(3))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == false)
+    }
+    
+    runTest("LessThanInteger: 3 < 5 = true") {
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Builtin(DefaultFun.LessThanInteger),
+          Term.Const(Constant.Integer(3))
+        ),
+        Term.Const(Constant.Integer(5))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == true)
+    }
+    
+    runTest("LessThanInteger: 5 < 3 = false") {
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Builtin(DefaultFun.LessThanInteger),
+          Term.Const(Constant.Integer(5))
+        ),
+        Term.Const(Constant.Integer(3))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == false)
+    }
+    
+    runTest("IfThenElse: if true then 1 else 2 = 1") {
+      // IfThenElse takes a unit argument first for polymorphism
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Apply(
+            Term.Apply(
+              Term.Builtin(DefaultFun.IfThenElse),
+              Term.Const(Constant.Unit)
+            ),
+            Term.Const(Constant.Bool(true))
+          ),
+          Term.Const(Constant.Integer(1))
+        ),
+        Term.Const(Constant.Integer(2))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == BigInt(1))
+    }
+    
+    runTest("IfThenElse: if false then 1 else 2 = 2") {
+      val term = Term.Apply(
+        Term.Apply(
+          Term.Apply(
+            Term.Apply(
+              Term.Builtin(DefaultFun.IfThenElse),
+              Term.Const(Constant.Unit)
+            ),
+            Term.Const(Constant.Bool(false))
+          ),
+          Term.Const(Constant.Integer(1))
+        ),
+        Term.Const(Constant.Integer(2))
+      )
+
+      val result = jit.eval(
+        term,
+        NoLogger,
+        NoBudgetSpender,
+        MachineParams.defaultPlutusV2PostConwayParams
+      )
+
+      assert(result == BigInt(2))
+    }
   }
 }
