@@ -16,6 +16,15 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
 
+/** Benchmark for CekMachine running on JVM.
+  *
+  * This follows the structure of Plutus `validation` benchmarks. Those can be found at:
+  * https://github.com/input-output-hk/plutus/blob/086d16a771a894a10e5a99e17d4082ea32af8a89/plutus-benchmark/validation/bench/BenchCek.hs
+  *
+  * The idea is to benchmark the evaluation of some UPLC programs (smart contracts) using the
+  * CekMachine implementation on the JVM. Don't account for deserialization time, only evaluation
+  * time.
+  */
 @State(Scope.Benchmark)
 class CekJVMBenchmark:
     @Param(
@@ -28,18 +37,19 @@ class CekJVMBenchmark:
     )
     private var file: String = ""
     private var path: Path = null
-    private val vm = PlutusVM.makePlutusV2VM()
+    private var program: DeBruijnedProgram = null
+    private val vm = PlutusVM.makePlutusV1VM()
 
     @Setup
     def readProgram() = {
         path = Paths.get(s"src/main/resources/data/$file")
+        val bytes = Files.readAllBytes(path)
+        program = DeBruijnedProgram.fromFlatEncoded(bytes)
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     def bench() = {
-        val bytes = Files.readAllBytes(path)
-        val program = DeBruijnedProgram.fromFlatEncoded(bytes)
         vm.evaluateScript(program, RestrictingBudgetSpender(ExBudget.enormous), NoLogger)
     }

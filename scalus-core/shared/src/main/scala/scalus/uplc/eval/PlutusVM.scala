@@ -4,6 +4,8 @@ import scalus.builtin.{platform, PlatformSpecific, given}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.uplc.*
 
+import scala.collection.mutable
+
 /** Plutus VM facade.
   *
   *   - Term is a representation of a UPLC term.
@@ -28,12 +30,14 @@ class PlutusVM(
     val semanticVariant: BuiltinSemanticsVariant,
     platformSpecific: PlatformSpecific
 ) {
-    private lazy val builtins =
-        new CardanoBuiltins(
+    private val builtins = {
+        val builtins = new CardanoBuiltins(
           machineParams.builtinCostModel,
           platformSpecific,
           semanticVariant
         )
+        builtins.BuiltinMeanings.to(mutable.HashMap)
+    }
 
     /** Evaluates a Plutus script according to the Plutus specification.
       *
@@ -106,7 +110,12 @@ class PlutusVM(
         budgetSpender: BudgetSpender = NoBudgetSpender,
         logger: Logger = NoLogger
     ): Term = {
-        val cek = new CekMachine(machineParams, budgetSpender, logger, builtins.BuiltinMeanings)
+        val cek = new CekMachine(
+          machineParams,
+          budgetSpender,
+          logger,
+          builtins
+        )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
     }
 

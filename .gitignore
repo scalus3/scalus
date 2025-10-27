@@ -27,3 +27,4 @@ package-lock.json
 website/static/api
 node_modules
 .scala-build
+.envrc.local

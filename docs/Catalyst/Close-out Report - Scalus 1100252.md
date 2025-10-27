@@ -45,7 +45,7 @@ C/C++/Rust, etc.) via LLVM backend.
 | **Cross‑Platform Reach**<br>Make tooling available beyond Haskell ecosystem | One codebase ships as JVM JAR, JavaScript ESM/NPM package, and Native C‑ABI library (Key Achievements #2)                                    |
 | **Script Budget Accuracy**                                                  | Verified against 100k mainnet scripts with exact budget match                                                                                |
 | **Packaging & Documentation**                                               | 12+ tagged releases to Maven Central & NPM, Scalus Starter Project, full API docs, site with documentation and tutorials                     |
-| **Community Uptake**                                                        | 100 ★ on GitHub, 170 Discord members, 30 external contributors; integrations with leading JS SDKs (Key Achievements #4 & #5)                 |
+| **Community Uptake**                                                        | 100 ★ on GitHub, >50 Discord members, 18 contributors; integrations with leading JS SDKs (Key Achievements #4 & #5)                          |
 | **Ecosystem Collaboration**<br>Demonstrate real‑world adoption              | Library already powers **Binocular** oracle & **Hydrozoa** mini‑Hydra; Lucid Evolution & Mesh.JS integrations underway (Key Achievements #4) |
 
 ---
@@ -117,5 +117,4 @@ de‑facto full‑stack platform for Cardano DApps.
 
 ## Close‑out Video
 
-[Public demo of multiplatform evaluation &
-budgeting]()
+[Public demo of multiplatform evaluation & budgeting](https://www.youtube.com/watch?v=AlzYO5OLwBU)

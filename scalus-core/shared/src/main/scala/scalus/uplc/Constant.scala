@@ -26,7 +26,10 @@ object Constant:
     }
     given seqLiftValue[A: LiftValue: DefaultUni.Lift]: LiftValue[Seq[A]] with {
         def lift(a: Seq[A]): Constant =
-            List(summon[DefaultUni.Lift[A]].defaultUni, a.map(summon[LiftValue[A]].lift).toList)
+            List(
+              summon[DefaultUni.Lift[A]].defaultUni,
+              a.view.map(summon[LiftValue[A]].lift).toList
+            )
     }
 
     given tupleLiftValue[A: LiftValue: DefaultUni.Lift, B: LiftValue: DefaultUni.Lift]
@@ -79,7 +82,7 @@ object Constant:
         case DefaultUni.Data =>
             Data(a.asInstanceOf[scalus.builtin.Data])
         case DefaultUni.Apply(DefaultUni.ProtoList, elemType) =>
-            List(elemType, a.asInstanceOf[Seq[Any]].toList.map(fromValue(elemType, _)))
+            List(elemType, a.asInstanceOf[Seq[Any]].view.map(fromValue(elemType, _)).toList)
         case DefaultUni.Apply(DefaultUni.Apply(DefaultUni.ProtoPair, aType), bType) =>
             Pair(
               fromValue(aType, a.asInstanceOf[(Any, Any)]._1),

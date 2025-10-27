@@ -11,7 +11,7 @@ import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, S
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
-import scalus.cardano.txbuilder.TransactionBuilder.setMinAda
+import scalus.cardano.txbuilder.TransactionBuilder.ensureMinAda
 import scalus.cardano.txbuilder.TestPeer.Alice
 import scalus.ledger.api.v1.ArbitraryInstances.genByteStringOfN
 import scalus.prelude.Option as SOption
@@ -82,7 +82,7 @@ def genAdaOnlyPubKeyUtxo(
         value <- genAdaOnlyValue
     } yield (
       txId,
-      setMinAda(
+      ensureMinAda(
         Babbage(
           address = peer.address,
           value = Value(Coin(0L)),
@@ -96,7 +96,7 @@ def genAdaOnlyPubKeyUtxo(
 // Get the minAda for an Ada only pubkey utxo
 def minPubkeyAda(params: ProtocolParams = blockfrost544Params) = {
     val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get.focus(_._2.value.coin.value).replace(0L)
-    setMinAda(utxo._2, blockfrost544Params).value.coin
+    ensureMinAda(utxo._2, blockfrost544Params).value.coin
 }
 
 def sumUtxoValues(utxos: Seq[(TransactionInput, TransactionOutput)]): Value =

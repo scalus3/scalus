@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import scalus.cardano.address.Address
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
+import monocle.Lens
 
 /** Represents a transaction output in Cardano. Both Shelley-era and Babbage-era output formats are
   * supported.
@@ -12,6 +13,19 @@ sealed trait TransactionOutput:
     def scriptRef: Option[ScriptRef]
 
 object TransactionOutput:
+    // Note: I think this will erase the distinction between Shelley and Babbage on using `Set`.
+    // I don't think the compiler knows that this takes Shelley -> Shelley and Babbage -> Babbage.
+    // Is there a better way?
+    val valueLens: Lens[TransactionOutput, Value] = {
+        val get: TransactionOutput => Value = _.value
+        val set: Value => TransactionOutput => TransactionOutput =
+            v => {
+                case s: Shelley => s.copy(value = v)
+                case b: Babbage => b.copy(value = v)
+            }
+        Lens(get)(set)
+    }
+
     /** Shelley-era transaction output format */
     final case class Shelley(
         override val address: Address,

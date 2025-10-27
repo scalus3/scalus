@@ -11,6 +11,7 @@ import scalus.ledger.api.v3.{TxInfo, TxOutRef}
 import scalus.prelude.List.*
 import scalus.prelude.Option.*
 import scalus.prelude.*
+import scalus.prelude.AssocMap
 
 /** Split payouts equally among a list of specified payees
   *
@@ -65,7 +66,7 @@ object PaymentSplitter extends DataParameterizedValidator {
 
         val (sumOutput, sumsPerPayee) =
             tx.outputs.foldLeft(
-              (BigInt(0), SortedMap.empty[Credential.PubKeyCredential, BigInt])
+              (BigInt(0), AssocMap.empty[Credential.PubKeyCredential, BigInt])
             ) { case (state, output) =>
                 val (sum, sumsPerPayee) = state
                 val value = output.value.getLovelace

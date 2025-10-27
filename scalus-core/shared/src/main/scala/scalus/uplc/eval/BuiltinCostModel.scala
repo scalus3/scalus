@@ -22,8 +22,8 @@ case class BuiltinCostModel(
     appendByteString: DefaultCostingFun[TwoArguments],
     consByteString: DefaultCostingFun[TwoArguments],
     sliceByteString: DefaultCostingFun[ThreeArguments],
-    lengthOfByteString: DefaultCostingFun[OneArgument],
-    indexByteString: DefaultCostingFun[TwoArguments],
+    lengthOfByteString: ConstCostingFun,
+    indexByteString: ConstCostingFun,
     equalsByteString: DefaultCostingFun[TwoArguments],
     lessThanByteString: DefaultCostingFun[TwoArguments],
     lessThanEqualsByteString: DefaultCostingFun[TwoArguments],
@@ -32,7 +32,7 @@ case class BuiltinCostModel(
     sha3_256: DefaultCostingFun[OneArgument],
     blake2b_256: DefaultCostingFun[OneArgument],
     verifyEd25519Signature: DefaultCostingFun[ThreeArguments],
-    verifyEcdsaSecp256k1Signature: DefaultCostingFun[ThreeArguments],
+    verifyEcdsaSecp256k1Signature: ConstCostingFun,
     verifySchnorrSecp256k1Signature: DefaultCostingFun[ThreeArguments],
     // Strings
     appendString: DefaultCostingFun[TwoArguments],
@@ -40,65 +40,66 @@ case class BuiltinCostModel(
     encodeUtf8: DefaultCostingFun[OneArgument],
     decodeUtf8: DefaultCostingFun[OneArgument],
     // Bool
-    ifThenElse: DefaultCostingFun[ThreeArguments],
+    // ifThenElse: DefaultCostingFun[ThreeArguments],
+    ifThenElse: ConstCostingFun,
     // Unit
-    chooseUnit: DefaultCostingFun[TwoArguments],
+    chooseUnit: ConstCostingFun,
     // Tracing
-    trace: DefaultCostingFun[TwoArguments],
+    trace: ConstCostingFun,
     // Pairs
-    fstPair: DefaultCostingFun[OneArgument],
-    sndPair: DefaultCostingFun[OneArgument],
+    fstPair: ConstCostingFun,
+    sndPair: ConstCostingFun,
     // Lists
-    chooseList: DefaultCostingFun[ThreeArguments],
-    mkCons: DefaultCostingFun[TwoArguments],
-    headList: DefaultCostingFun[OneArgument],
-    tailList: DefaultCostingFun[OneArgument],
-    nullList: DefaultCostingFun[OneArgument],
+    chooseList: ConstCostingFun,
+    mkCons: ConstCostingFun,
+    headList: ConstCostingFun,
+    tailList: ConstCostingFun,
+    nullList: ConstCostingFun,
     // Data
-    chooseData: DefaultCostingFun[SixArguments],
-    constrData: DefaultCostingFun[TwoArguments],
-    mapData: DefaultCostingFun[OneArgument],
-    listData: DefaultCostingFun[OneArgument],
-    iData: DefaultCostingFun[OneArgument],
-    bData: DefaultCostingFun[OneArgument],
-    unConstrData: DefaultCostingFun[OneArgument],
-    unMapData: DefaultCostingFun[OneArgument],
-    unListData: DefaultCostingFun[OneArgument],
-    unIData: DefaultCostingFun[OneArgument],
-    unBData: DefaultCostingFun[OneArgument],
+    chooseData: ConstCostingFun,
+    constrData: ConstCostingFun,
+    mapData: ConstCostingFun,
+    listData: ConstCostingFun,
+    iData: ConstCostingFun,
+    bData: ConstCostingFun,
+    unConstrData: ConstCostingFun,
+    unMapData: ConstCostingFun,
+    unListData: ConstCostingFun,
+    unIData: ConstCostingFun,
+    unBData: ConstCostingFun,
     equalsData: DefaultCostingFun[TwoArguments],
     // Misc constructors
-    mkPairData: DefaultCostingFun[TwoArguments],
-    mkNilData: DefaultCostingFun[OneArgument],
-    mkNilPairData: DefaultCostingFun[OneArgument],
+    mkPairData: ConstCostingFun,
+    mkNilData: ConstCostingFun,
+    mkNilPairData: ConstCostingFun,
     serialiseData: DefaultCostingFun[OneArgument],
     blake2b_224: DefaultCostingFun[OneArgument],
     keccak_256: DefaultCostingFun[OneArgument],
     // BLS
-    bls12_381_G1_add: DefaultCostingFun[TwoArguments],
-    bls12_381_G1_neg: DefaultCostingFun[OneArgument],
+    bls12_381_G1_add: ConstCostingFun,
+    bls12_381_G1_neg: ConstCostingFun,
     bls12_381_G1_scalarMul: DefaultCostingFun[TwoArguments],
-    bls12_381_G1_equal: DefaultCostingFun[TwoArguments],
-    bls12_381_G1_compress: DefaultCostingFun[OneArgument],
-    bls12_381_G1_uncompress: DefaultCostingFun[OneArgument],
+    bls12_381_G1_equal: ConstCostingFun,
+    bls12_381_G1_compress: ConstCostingFun,
+    bls12_381_G1_uncompress: ConstCostingFun,
     bls12_381_G1_hashToGroup: DefaultCostingFun[TwoArguments],
-    bls12_381_G2_add: DefaultCostingFun[TwoArguments],
-    bls12_381_G2_neg: DefaultCostingFun[OneArgument],
+    bls12_381_G2_add: ConstCostingFun,
+    bls12_381_G2_neg: ConstCostingFun,
     bls12_381_G2_scalarMul: DefaultCostingFun[TwoArguments],
-    bls12_381_G2_equal: DefaultCostingFun[TwoArguments],
-    bls12_381_G2_compress: DefaultCostingFun[OneArgument],
-    bls12_381_G2_uncompress: DefaultCostingFun[OneArgument],
+    bls12_381_G2_equal: ConstCostingFun,
+    bls12_381_G2_compress: ConstCostingFun,
+    bls12_381_G2_uncompress: ConstCostingFun,
     bls12_381_G2_hashToGroup: DefaultCostingFun[TwoArguments],
-    bls12_381_millerLoop: DefaultCostingFun[TwoArguments],
-    bls12_381_mulMlResult: DefaultCostingFun[TwoArguments],
-    bls12_381_finalVerify: DefaultCostingFun[TwoArguments],
+    bls12_381_millerLoop: ConstCostingFun,
+    bls12_381_mulMlResult: ConstCostingFun,
+    bls12_381_finalVerify: ConstCostingFun,
     integerToByteString: IntegerToByteStringCostingFun,
     byteStringToInteger: DefaultCostingFun[TwoArguments],
     andByteString: DefaultCostingFun[ThreeArguments],
     orByteString: DefaultCostingFun[ThreeArguments],
     xorByteString: DefaultCostingFun[ThreeArguments],
     complementByteString: DefaultCostingFun[OneArgument],
-    readBit: DefaultCostingFun[TwoArguments],
+    readBit: ConstCostingFun,
     writeBits: WriteBitsCostingFun,
     replicateByte: ReplicateByteCostingFun,
     shiftByteString: ShiftOrRotateByteStringCostingFun,
@@ -182,8 +183,8 @@ object BuiltinCostModel {
             "appendByteString" -> writeJs(model.appendByteString),
             "consByteString" -> writeJs(model.consByteString),
             "sliceByteString" -> writeJs(model.sliceByteString),
-            "lengthOfByteString" -> writeJs(model.lengthOfByteString),
-            "indexByteString" -> writeJs(model.indexByteString),
+            "lengthOfByteString" -> writeJs(model.lengthOfByteString.toDefaultFun[OneArgument]),
+            "indexByteString" -> writeJs(model.indexByteString.toDefaultFun[TwoArguments]),
             "equalsByteString" -> writeJs(model.equalsByteString),
             "lessThanByteString" -> writeJs(model.lessThanByteString),
             "lessThanEqualsByteString" -> writeJs(model.lessThanEqualsByteString),
@@ -191,64 +192,80 @@ object BuiltinCostModel {
             "sha3_256" -> writeJs(model.sha3_256),
             "blake2b_256" -> writeJs(model.blake2b_256),
             "verifyEd25519Signature" -> writeJs(model.verifyEd25519Signature),
-            "verifyEcdsaSecp256k1Signature" -> writeJs(model.verifyEcdsaSecp256k1Signature),
+            "verifyEcdsaSecp256k1Signature" -> writeJs(
+              model.verifyEcdsaSecp256k1Signature.toDefaultFun[ThreeArguments]
+            ),
             "verifySchnorrSecp256k1Signature" -> writeJs(model.verifySchnorrSecp256k1Signature),
             "appendString" -> writeJs(model.appendString),
             "equalsString" -> writeJs(model.equalsString),
             "encodeUtf8" -> writeJs(model.encodeUtf8),
             "decodeUtf8" -> writeJs(model.decodeUtf8),
-            "ifThenElse" -> writeJs(model.ifThenElse),
-            "chooseUnit" -> writeJs(model.chooseUnit),
-            "trace" -> writeJs(model.trace),
-            "fstPair" -> writeJs(model.fstPair),
-            "sndPair" -> writeJs(model.sndPair),
-            "chooseList" -> writeJs(model.chooseList),
-            "mkCons" -> writeJs(model.mkCons),
-            "headList" -> writeJs(model.headList),
-            "tailList" -> writeJs(model.tailList),
-            "nullList" -> writeJs(model.nullList),
-            "chooseData" -> writeJs(model.chooseData),
-            "constrData" -> writeJs(model.constrData),
-            "mapData" -> writeJs(model.mapData),
-            "listData" -> writeJs(model.listData),
-            "iData" -> writeJs(model.iData),
-            "bData" -> writeJs(model.bData),
-            "unConstrData" -> writeJs(model.unConstrData),
-            "unMapData" -> writeJs(model.unMapData),
-            "unListData" -> writeJs(model.unListData),
-            "unIData" -> writeJs(model.unIData),
-            "unBData" -> writeJs(model.unBData),
+            "ifThenElse" -> writeJs(model.ifThenElse.toDefaultFun[ThreeArguments]),
+            "chooseUnit" -> writeJs(model.chooseUnit.toDefaultFun[TwoArguments]),
+            "trace" -> writeJs(model.trace.toDefaultFun[TwoArguments]),
+            "fstPair" -> writeJs(model.fstPair.toDefaultFun[OneArgument]),
+            "sndPair" -> writeJs(model.sndPair.toDefaultFun[OneArgument]),
+            "chooseList" -> writeJs(model.chooseList.toDefaultFun[ThreeArguments]),
+            "mkCons" -> writeJs(model.mkCons.toDefaultFun[TwoArguments]),
+            "headList" -> writeJs(model.headList.toDefaultFun[OneArgument]),
+            "tailList" -> writeJs(model.tailList.toDefaultFun[OneArgument]),
+            "nullList" -> writeJs(model.nullList.toDefaultFun[OneArgument]),
+            "chooseData" -> writeJs(model.chooseData.toDefaultFun[SixArguments]),
+            "constrData" -> writeJs(model.constrData.toDefaultFun[TwoArguments]),
+            "mapData" -> writeJs(model.mapData.toDefaultFun[OneArgument]),
+            "listData" -> writeJs(model.listData.toDefaultFun[OneArgument]),
+            "iData" -> writeJs(model.iData.toDefaultFun[OneArgument]),
+            "bData" -> writeJs(model.bData.toDefaultFun[OneArgument]),
+            "unConstrData" -> writeJs(model.unConstrData.toDefaultFun[OneArgument]),
+            "unMapData" -> writeJs(model.unMapData.toDefaultFun[OneArgument]),
+            "unListData" -> writeJs(model.unListData.toDefaultFun[OneArgument]),
+            "unIData" -> writeJs(model.unIData.toDefaultFun[OneArgument]),
+            "unBData" -> writeJs(model.unBData.toDefaultFun[OneArgument]),
             "equalsData" -> writeJs(model.equalsData),
-            "mkPairData" -> writeJs(model.mkPairData),
-            "mkNilData" -> writeJs(model.mkNilData),
-            "mkNilPairData" -> writeJs(model.mkNilPairData),
+            "mkPairData" -> writeJs(model.mkPairData.toDefaultFun[TwoArguments]),
+            "mkNilData" -> writeJs(model.mkNilData.toDefaultFun[OneArgument]),
+            "mkNilPairData" -> writeJs(model.mkNilPairData.toDefaultFun[OneArgument]),
             "serialiseData" -> writeJs(model.serialiseData),
             "blake2b_224" -> writeJs(model.blake2b_224),
             "keccak_256" -> writeJs(model.keccak_256),
-            "bls12_381_G1_add" -> writeJs(model.bls12_381_G1_add),
-            "bls12_381_G1_neg" -> writeJs(model.bls12_381_G1_neg),
+            "bls12_381_G1_add" -> writeJs(model.bls12_381_G1_add.toDefaultFun[TwoArguments]),
+            "bls12_381_G1_neg" -> writeJs(model.bls12_381_G1_neg.toDefaultFun[OneArgument]),
             "bls12_381_G1_scalarMul" -> writeJs(model.bls12_381_G1_scalarMul),
-            "bls12_381_G1_equal" -> writeJs(model.bls12_381_G1_equal),
-            "bls12_381_G1_compress" -> writeJs(model.bls12_381_G1_compress),
-            "bls12_381_G1_uncompress" -> writeJs(model.bls12_381_G1_uncompress),
+            "bls12_381_G1_equal" -> writeJs(model.bls12_381_G1_equal.toDefaultFun[TwoArguments]),
+            "bls12_381_G1_compress" -> writeJs(
+              model.bls12_381_G1_compress.toDefaultFun[OneArgument]
+            ),
+            "bls12_381_G1_uncompress" -> writeJs(
+              model.bls12_381_G1_uncompress.toDefaultFun[OneArgument]
+            ),
             "bls12_381_G1_hashToGroup" -> writeJs(model.bls12_381_G1_hashToGroup),
-            "bls12_381_G2_add" -> writeJs(model.bls12_381_G2_add),
-            "bls12_381_G2_neg" -> writeJs(model.bls12_381_G2_neg),
+            "bls12_381_G2_add" -> writeJs(model.bls12_381_G2_add.toDefaultFun[TwoArguments]),
+            "bls12_381_G2_neg" -> writeJs(model.bls12_381_G2_neg.toDefaultFun[OneArgument]),
             "bls12_381_G2_scalarMul" -> writeJs(model.bls12_381_G2_scalarMul),
-            "bls12_381_G2_equal" -> writeJs(model.bls12_381_G2_equal),
-            "bls12_381_G2_compress" -> writeJs(model.bls12_381_G2_compress),
-            "bls12_381_G2_uncompress" -> writeJs(model.bls12_381_G2_uncompress),
+            "bls12_381_G2_equal" -> writeJs(model.bls12_381_G2_equal.toDefaultFun[TwoArguments]),
+            "bls12_381_G2_compress" -> writeJs(
+              model.bls12_381_G2_compress.toDefaultFun[OneArgument]
+            ),
+            "bls12_381_G2_uncompress" -> writeJs(
+              model.bls12_381_G2_uncompress.toDefaultFun[OneArgument]
+            ),
             "bls12_381_G2_hashToGroup" -> writeJs(model.bls12_381_G2_hashToGroup),
-            "bls12_381_millerLoop" -> writeJs(model.bls12_381_millerLoop),
-            "bls12_381_mulMlResult" -> writeJs(model.bls12_381_mulMlResult),
-            "bls12_381_finalVerify" -> writeJs(model.bls12_381_finalVerify),
+            "bls12_381_millerLoop" -> writeJs(
+              model.bls12_381_millerLoop.toDefaultFun[TwoArguments]
+            ),
+            "bls12_381_mulMlResult" -> writeJs(
+              model.bls12_381_mulMlResult.toDefaultFun[TwoArguments]
+            ),
+            "bls12_381_finalVerify" -> writeJs(
+              model.bls12_381_finalVerify.toDefaultFun[TwoArguments]
+            ),
             "integerToByteString" -> writeJs(model.integerToByteString),
             "byteStringToInteger" -> writeJs(model.byteStringToInteger),
             "andByteString" -> writeJs(model.andByteString),
             "orByteString" -> writeJs(model.orByteString),
             "xorByteString" -> writeJs(model.xorByteString),
             "complementByteString" -> writeJs(model.complementByteString),
-            "readBit" -> writeJs(model.readBit),
+            "readBit" -> writeJs(model.readBit.toDefaultFun[TwoArguments]),
             "writeBits" -> writeJs(model.writeBits),
             "replicateByte" -> writeJs(model.replicateByte),
             "shiftByteString" -> writeJs(model.shiftByteString),
@@ -273,8 +290,10 @@ object BuiltinCostModel {
             appendByteString = read[DefaultCostingFun[TwoArguments]](json("appendByteString")),
             consByteString = read[DefaultCostingFun[TwoArguments]](json("consByteString")),
             sliceByteString = read[DefaultCostingFun[ThreeArguments]](json("sliceByteString")),
-            lengthOfByteString = read[DefaultCostingFun[OneArgument]](json("lengthOfByteString")),
-            indexByteString = read[DefaultCostingFun[TwoArguments]](json("indexByteString")),
+            lengthOfByteString = ConstCostingFun
+                .readDefaultFun[OneArgument]("lengthOfByteString", json("lengthOfByteString")),
+            indexByteString = ConstCostingFun
+                .readDefaultFun[TwoArguments]("indexByteString", json("indexByteString")),
             equalsByteString = read[DefaultCostingFun[TwoArguments]](json("equalsByteString")),
             lessThanByteString = read[DefaultCostingFun[TwoArguments]](json("lessThanByteString")),
             lessThanEqualsByteString =
@@ -284,70 +303,106 @@ object BuiltinCostModel {
             blake2b_256 = read[DefaultCostingFun[OneArgument]](json("blake2b_256")),
             verifyEd25519Signature =
                 read[DefaultCostingFun[ThreeArguments]](json("verifyEd25519Signature")),
-            verifyEcdsaSecp256k1Signature =
-                read[DefaultCostingFun[ThreeArguments]](json("verifyEcdsaSecp256k1Signature")),
+            verifyEcdsaSecp256k1Signature = ConstCostingFun.readDefaultFun[ThreeArguments](
+              "verifyEcdsaSecp256k1Signature",
+              json("verifyEcdsaSecp256k1Signature")
+            ),
             verifySchnorrSecp256k1Signature =
                 read[DefaultCostingFun[ThreeArguments]](json("verifySchnorrSecp256k1Signature")),
             appendString = read[DefaultCostingFun[TwoArguments]](json("appendString")),
             equalsString = read[DefaultCostingFun[TwoArguments]](json("equalsString")),
             encodeUtf8 = read[DefaultCostingFun[OneArgument]](json("encodeUtf8")),
             decodeUtf8 = read[DefaultCostingFun[OneArgument]](json("decodeUtf8")),
-            ifThenElse = read[DefaultCostingFun[ThreeArguments]](json("ifThenElse")),
-            chooseUnit = read[DefaultCostingFun[TwoArguments]](json("chooseUnit")),
-            trace = read[DefaultCostingFun[TwoArguments]](json("trace")),
-            fstPair = read[DefaultCostingFun[OneArgument]](json("fstPair")),
-            sndPair = read[DefaultCostingFun[OneArgument]](json("sndPair")),
-            chooseList = read[DefaultCostingFun[ThreeArguments]](json("chooseList")),
-            mkCons = read[DefaultCostingFun[TwoArguments]](json("mkCons")),
-            headList = read[DefaultCostingFun[OneArgument]](json("headList")),
-            tailList = read[DefaultCostingFun[OneArgument]](json("tailList")),
-            nullList = read[DefaultCostingFun[OneArgument]](json("nullList")),
-            chooseData = read[DefaultCostingFun[SixArguments]](json("chooseData")),
-            constrData = read[DefaultCostingFun[TwoArguments]](json("constrData")),
-            mapData = read[DefaultCostingFun[OneArgument]](json("mapData")),
-            listData = read[DefaultCostingFun[OneArgument]](json("listData")),
-            iData = read[DefaultCostingFun[OneArgument]](json("iData")),
-            bData = read[DefaultCostingFun[OneArgument]](json("bData")),
-            unConstrData = read[DefaultCostingFun[OneArgument]](json("unConstrData")),
-            unMapData = read[DefaultCostingFun[OneArgument]](json("unMapData")),
-            unListData = read[DefaultCostingFun[OneArgument]](json("unListData")),
-            unIData = read[DefaultCostingFun[OneArgument]](json("unIData")),
-            unBData = read[DefaultCostingFun[OneArgument]](json("unBData")),
+            ifThenElse = ConstCostingFun
+                .fromDefaultFun(
+                  read[DefaultCostingFun[TwoArguments]](json("ifThenElse"))
+                )
+                .getOrElse {
+                    throw new IllegalArgumentException(
+                      "ifThenElse must be a constant costing function"
+                    )
+                },
+            chooseUnit =
+                ConstCostingFun.readDefaultFun[TwoArguments]("chooseUnit", json("chooseUnit")),
+            trace = ConstCostingFun.readDefaultFun[TwoArguments]("trace", json("trace")),
+            fstPair = ConstCostingFun.readDefaultFun[OneArgument]("fstPair", json("fstPair")),
+            sndPair = ConstCostingFun.readDefaultFun[OneArgument]("sndPair", json("sndPair")),
+            chooseList =
+                ConstCostingFun.readDefaultFun[ThreeArguments]("chooseList", json("chooseList")),
+            mkCons = ConstCostingFun.readDefaultFun[TwoArguments]("mkCons", json("mkCons")),
+            headList = ConstCostingFun.readDefaultFun[OneArgument]("headList", json("headList")),
+            tailList = ConstCostingFun.readDefaultFun[OneArgument]("tailList", json("tailList")),
+            nullList = ConstCostingFun.readDefaultFun[OneArgument]("nullList", json("nullList")),
+            chooseData =
+                ConstCostingFun.readDefaultFun[SixArguments]("chooseData", json("chooseData")),
+            constrData =
+                ConstCostingFun.readDefaultFun[TwoArguments]("constrData", json("constrData")),
+            mapData = ConstCostingFun.readDefaultFun[OneArgument]("mapData", json("mapData")),
+            listData = ConstCostingFun.readDefaultFun[OneArgument]("listData", json("listData")),
+            iData = ConstCostingFun.readDefaultFun[OneArgument]("iData", json("iData")),
+            bData = ConstCostingFun.readDefaultFun[OneArgument]("bData", json("bData")),
+            unConstrData =
+                ConstCostingFun.readDefaultFun[OneArgument]("unConstrData", json("unConstrData")),
+            unMapData = ConstCostingFun.readDefaultFun[OneArgument]("unMapData", json("unMapData")),
+            unListData =
+                ConstCostingFun.readDefaultFun[OneArgument]("unListData", json("unListData")),
+            unIData = ConstCostingFun.readDefaultFun[OneArgument]("unIData", json("unIData")),
+            unBData = ConstCostingFun.readDefaultFun[OneArgument]("unBData", json("unBData")),
             equalsData = read[DefaultCostingFun[TwoArguments]](json("equalsData")),
-            mkPairData = read[DefaultCostingFun[TwoArguments]](json("mkPairData")),
-            mkNilData = read[DefaultCostingFun[OneArgument]](json("mkNilData")),
-            mkNilPairData = read[DefaultCostingFun[OneArgument]](json("mkNilPairData")),
+            mkPairData =
+                ConstCostingFun.readDefaultFun[TwoArguments]("mkPairData", json("mkPairData")),
+            mkNilData = ConstCostingFun.readDefaultFun[OneArgument]("mkNilData", json("mkNilData")),
+            mkNilPairData =
+                ConstCostingFun.readDefaultFun[OneArgument]("mkNilPairData", json("mkNilPairData")),
             serialiseData = read[DefaultCostingFun[OneArgument]](json("serialiseData")),
             blake2b_224 = read[DefaultCostingFun[OneArgument]](json("blake2b_224")),
             keccak_256 = read[DefaultCostingFun[OneArgument]](json("keccak_256")),
-            bls12_381_G1_add = read[DefaultCostingFun[TwoArguments]](json("bls12_381_G1_add")),
-            bls12_381_G1_neg = read[DefaultCostingFun[OneArgument]](json("bls12_381_G1_neg")),
+            bls12_381_G1_add = ConstCostingFun
+                .readDefaultFun[TwoArguments]("bls12_381_G1_add", json("bls12_381_G1_add")),
+            bls12_381_G1_neg = ConstCostingFun
+                .readDefaultFun[OneArgument]("bls12_381_G1_neg", json("bls12_381_G1_neg")),
             bls12_381_G1_scalarMul =
                 read[DefaultCostingFun[TwoArguments]](json("bls12_381_G1_scalarMul")),
-            bls12_381_G1_equal = read[DefaultCostingFun[TwoArguments]](json("bls12_381_G1_equal")),
-            bls12_381_G1_compress =
-                read[DefaultCostingFun[OneArgument]](json("bls12_381_G1_compress")),
-            bls12_381_G1_uncompress =
-                read[DefaultCostingFun[OneArgument]](json("bls12_381_G1_uncompress")),
+            bls12_381_G1_equal = ConstCostingFun
+                .readDefaultFun[TwoArguments]("bls12_381_G1_equal", json("bls12_381_G1_equal")),
+            bls12_381_G1_compress = ConstCostingFun.readDefaultFun[OneArgument](
+              "bls12_381_G1_compress",
+              json("bls12_381_G1_compress")
+            ),
+            bls12_381_G1_uncompress = ConstCostingFun.readDefaultFun[OneArgument](
+              "bls12_381_G1_uncompress",
+              json("bls12_381_G1_uncompress")
+            ),
             bls12_381_G1_hashToGroup =
                 read[DefaultCostingFun[TwoArguments]](json("bls12_381_G1_hashToGroup")),
-            bls12_381_G2_add = read[DefaultCostingFun[TwoArguments]](json("bls12_381_G2_add")),
-            bls12_381_G2_neg = read[DefaultCostingFun[OneArgument]](json("bls12_381_G2_neg")),
+            bls12_381_G2_add = ConstCostingFun
+                .readDefaultFun[TwoArguments]("bls12_381_G2_add", json("bls12_381_G2_add")),
+            bls12_381_G2_neg = ConstCostingFun
+                .readDefaultFun[OneArgument]("bls12_381_G2_neg", json("bls12_381_G2_neg")),
             bls12_381_G2_scalarMul =
                 read[DefaultCostingFun[TwoArguments]](json("bls12_381_G2_scalarMul")),
-            bls12_381_G2_equal = read[DefaultCostingFun[TwoArguments]](json("bls12_381_G2_equal")),
-            bls12_381_G2_compress =
-                read[DefaultCostingFun[OneArgument]](json("bls12_381_G2_compress")),
-            bls12_381_G2_uncompress =
-                read[DefaultCostingFun[OneArgument]](json("bls12_381_G2_uncompress")),
+            bls12_381_G2_equal = ConstCostingFun
+                .readDefaultFun[TwoArguments]("bls12_381_G2_equal", json("bls12_381_G2_equal")),
+            bls12_381_G2_compress = ConstCostingFun.readDefaultFun[OneArgument](
+              "bls12_381_G2_compress",
+              json("bls12_381_G2_compress")
+            ),
+            bls12_381_G2_uncompress = ConstCostingFun.readDefaultFun[OneArgument](
+              "bls12_381_G2_uncompress",
+              json("bls12_381_G2_uncompress")
+            ),
             bls12_381_G2_hashToGroup =
                 read[DefaultCostingFun[TwoArguments]](json("bls12_381_G2_hashToGroup")),
-            bls12_381_millerLoop =
-                read[DefaultCostingFun[TwoArguments]](json("bls12_381_millerLoop")),
-            bls12_381_mulMlResult =
-                read[DefaultCostingFun[TwoArguments]](json("bls12_381_mulMlResult")),
-            bls12_381_finalVerify =
-                read[DefaultCostingFun[TwoArguments]](json("bls12_381_finalVerify")),
+            bls12_381_millerLoop = ConstCostingFun
+                .readDefaultFun[TwoArguments]("bls12_381_millerLoop", json("bls12_381_millerLoop")),
+            bls12_381_mulMlResult = ConstCostingFun.readDefaultFun[TwoArguments](
+              "bls12_381_mulMlResult",
+              json("bls12_381_mulMlResult")
+            ),
+            bls12_381_finalVerify = ConstCostingFun.readDefaultFun[TwoArguments](
+              "bls12_381_finalVerify",
+              json("bls12_381_finalVerify")
+            ),
             integerToByteString = read[IntegerToByteStringCostingFun](json("integerToByteString")),
             byteStringToInteger =
                 read[DefaultCostingFun[TwoArguments]](json("byteStringToInteger")),
@@ -369,7 +424,7 @@ object BuiltinCostModel {
                 else null,
             readBit =
                 if json.obj.keySet.contains("readBit") then
-                    read[DefaultCostingFun[TwoArguments]](json("readBit"))
+                    ConstCostingFun.readDefaultFun[TwoArguments]("readBit", json("readBit"))
                 else null,
             writeBits =
                 if json.obj.keySet.contains("writeBits") then
@@ -750,13 +805,13 @@ object BuiltinCostModel {
               )
             )
           ),
-          lengthOfByteString = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(cost = params.`lengthOfByteString-cpu-arguments`),
-            memory = OneArgument.ConstantCost(cost = params.`lengthOfByteString-memory-arguments`)
+          lengthOfByteString = ConstCostingFun(
+            cpu = params.`lengthOfByteString-cpu-arguments`,
+            memory = params.`lengthOfByteString-memory-arguments`
           ),
-          indexByteString = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(cost = params.`indexByteString-cpu-arguments`),
-            memory = TwoArguments.ConstantCost(cost = params.`indexByteString-memory-arguments`)
+          indexByteString = ConstCostingFun(
+            cpu = params.`indexByteString-cpu-arguments`,
+            memory = params.`indexByteString-memory-arguments`
           ),
           equalsByteString = DefaultCostingFun(
             cpu = TwoArguments.LinearOnDiagonal(
@@ -828,13 +883,9 @@ object BuiltinCostModel {
               cost = params.`verifyEd25519Signature-memory-arguments`
             )
           ),
-          verifyEcdsaSecp256k1Signature = DefaultCostingFun(
-            cpu = ThreeArguments.ConstantCost(
-              cost = params.`verifyEcdsaSecp256k1Signature-cpu-arguments`
-            ),
-            memory = ThreeArguments.ConstantCost(
-              cost = params.`verifyEcdsaSecp256k1Signature-memory-arguments`
-            )
+          verifyEcdsaSecp256k1Signature = ConstCostingFun(
+            cpu = params.`verifyEcdsaSecp256k1Signature-cpu-arguments`,
+            memory = params.`verifyEcdsaSecp256k1Signature-memory-arguments`
           ),
           verifySchnorrSecp256k1Signature = DefaultCostingFun(
             cpu = ThreeArguments.LinearInY(
@@ -901,173 +952,89 @@ object BuiltinCostModel {
               )
             )
           ),
-          ifThenElse = DefaultCostingFun(
-            cpu = ThreeArguments.ConstantCost(
-              cost = params.`ifThenElse-cpu-arguments`
-            ),
-            memory = ThreeArguments.ConstantCost(
-              cost = params.`ifThenElse-memory-arguments`
-            )
+          ifThenElse = ConstCostingFun(
+            cpu = params.`ifThenElse-cpu-arguments`,
+            memory = params.`ifThenElse-memory-arguments`
           ),
-          chooseUnit = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`chooseUnit-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`chooseUnit-memory-arguments`
-            )
+          chooseUnit = ConstCostingFun(
+            cpu = params.`chooseUnit-cpu-arguments`,
+            memory = params.`chooseUnit-memory-arguments`
           ),
-          trace = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`trace-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`trace-memory-arguments`
-            )
+          trace = ConstCostingFun(
+            cpu = params.`trace-cpu-arguments`,
+            memory = params.`trace-memory-arguments`
           ),
-          fstPair = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`fstPair-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`fstPair-memory-arguments`
-            )
+          fstPair = ConstCostingFun(
+            cpu = params.`fstPair-cpu-arguments`,
+            memory = params.`fstPair-memory-arguments`
           ),
-          sndPair = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`sndPair-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`sndPair-memory-arguments`
-            )
+          sndPair = ConstCostingFun(
+            cpu = params.`sndPair-cpu-arguments`,
+            memory = params.`sndPair-memory-arguments`
           ),
-          chooseList = DefaultCostingFun(
-            cpu = ThreeArguments.ConstantCost(
-              cost = params.`chooseList-cpu-arguments`
-            ),
-            memory = ThreeArguments.ConstantCost(
-              cost = params.`chooseList-memory-arguments`
-            )
+          chooseList = ConstCostingFun(
+            cpu = params.`chooseList-cpu-arguments`,
+            memory = params.`chooseList-memory-arguments`
           ),
-          mkCons = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`mkCons-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`mkCons-memory-arguments`
-            )
+          mkCons = ConstCostingFun(
+            cpu = params.`mkCons-cpu-arguments`,
+            memory = params.`mkCons-memory-arguments`
           ),
-          headList = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`headList-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`headList-memory-arguments`
-            )
+          headList = ConstCostingFun(
+            cpu = params.`headList-cpu-arguments`,
+            memory = params.`headList-memory-arguments`
           ),
-          tailList = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`tailList-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`tailList-memory-arguments`
-            )
+          tailList = ConstCostingFun(
+            cpu = params.`tailList-cpu-arguments`,
+            memory = params.`tailList-memory-arguments`
           ),
-          nullList = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`nullList-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`nullList-memory-arguments`
-            )
+          nullList = ConstCostingFun(
+            cpu = params.`nullList-cpu-arguments`,
+            memory = params.`nullList-memory-arguments`
           ),
-          chooseData = DefaultCostingFun(
-            cpu = SixArguments.ConstantCost(
-              cost = params.`chooseData-cpu-arguments`
-            ),
-            memory = SixArguments.ConstantCost(
-              cost = params.`chooseData-memory-arguments`
-            )
+          chooseData = ConstCostingFun(
+            cpu = params.`chooseData-cpu-arguments`,
+            memory = params.`chooseData-memory-arguments`
           ),
-          constrData = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`constrData-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`constrData-memory-arguments`
-            )
+          constrData = ConstCostingFun(
+            cpu = params.`constrData-cpu-arguments`,
+            memory = params.`constrData-memory-arguments`
           ),
-          mapData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`mapData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`mapData-memory-arguments`
-            )
+          mapData = ConstCostingFun(
+            cpu = params.`mapData-cpu-arguments`,
+            memory = params.`mapData-memory-arguments`
           ),
-          listData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`listData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`listData-memory-arguments`
-            )
+          listData = ConstCostingFun(
+            cpu = params.`listData-cpu-arguments`,
+            memory = params.`listData-memory-arguments`
           ),
-          iData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`iData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`iData-memory-arguments`
-            )
+          iData = ConstCostingFun(
+            cpu = params.`iData-cpu-arguments`,
+            memory = params.`iData-memory-arguments`
           ),
-          bData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bData-memory-arguments`
-            )
+          bData = ConstCostingFun(
+            cpu = params.`bData-cpu-arguments`,
+            memory = params.`bData-memory-arguments`
           ),
-          unConstrData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`unConstrData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`unConstrData-memory-arguments`
-            )
+          unConstrData = ConstCostingFun(
+            cpu = params.`unConstrData-cpu-arguments`,
+            memory = params.`unConstrData-memory-arguments`
           ),
-          unMapData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`unMapData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`unMapData-memory-arguments`
-            )
+          unMapData = ConstCostingFun(
+            cpu = params.`unMapData-cpu-arguments`,
+            memory = params.`unMapData-memory-arguments`
           ),
-          unListData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`unListData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`unListData-memory-arguments`
-            )
+          unListData = ConstCostingFun(
+            cpu = params.`unListData-cpu-arguments`,
+            memory = params.`unListData-memory-arguments`
           ),
-          unIData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`unIData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`unIData-memory-arguments`
-            )
+          unIData = ConstCostingFun(
+            cpu = params.`unIData-cpu-arguments`,
+            memory = params.`unIData-memory-arguments`
           ),
-          unBData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`unBData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`unBData-memory-arguments`
-            )
+          unBData = ConstCostingFun(
+            cpu = params.`unBData-cpu-arguments`,
+            memory = params.`unBData-memory-arguments`
           ),
           equalsData = DefaultCostingFun(
             cpu = TwoArguments.MinSize(
@@ -1080,29 +1047,17 @@ object BuiltinCostModel {
               cost = params.`equalsData-memory-arguments`
             )
           ),
-          mkPairData = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`mkPairData-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`mkPairData-memory-arguments`
-            )
+          mkPairData = ConstCostingFun(
+            cpu = params.`mkPairData-cpu-arguments`,
+            memory = params.`mkPairData-memory-arguments`
           ),
-          mkNilData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`mkNilData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`mkNilData-memory-arguments`
-            )
+          mkNilData = ConstCostingFun(
+            cpu = params.`mkNilData-cpu-arguments`,
+            memory = params.`mkNilData-memory-arguments`
           ),
-          mkNilPairData = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`mkNilPairData-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`mkNilPairData-memory-arguments`
-            )
+          mkNilPairData = ConstCostingFun(
+            cpu = params.`mkNilPairData-cpu-arguments`,
+            memory = params.`mkNilPairData-memory-arguments`
           ),
           serialiseData = DefaultCostingFun(
             cpu = OneArgument.LinearInX(
@@ -1140,21 +1095,13 @@ object BuiltinCostModel {
               cost = params.`keccak_256-memory-arguments`
             )
           ),
-          bls12_381_G1_add = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G1_add-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G1_add-memory-arguments`
-            )
+          bls12_381_G1_add = ConstCostingFun(
+            cpu = params.`bls12_381_G1_add-cpu-arguments`,
+            memory = params.`bls12_381_G1_add-memory-arguments`
           ),
-          bls12_381_G1_neg = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G1_neg-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G1_neg-memory-arguments`
-            )
+          bls12_381_G1_neg = ConstCostingFun(
+            cpu = params.`bls12_381_G1_neg-cpu-arguments`,
+            memory = params.`bls12_381_G1_neg-memory-arguments`
           ),
           bls12_381_G1_scalarMul = DefaultCostingFun(
             cpu = TwoArguments.LinearInX(
@@ -1167,29 +1114,17 @@ object BuiltinCostModel {
               cost = params.`bls12_381_G1_scalarMul-memory-arguments`
             )
           ),
-          bls12_381_G1_equal = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G1_equal-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G1_equal-memory-arguments`
-            )
+          bls12_381_G1_equal = ConstCostingFun(
+            cpu = params.`bls12_381_G1_equal-cpu-arguments`,
+            memory = params.`bls12_381_G1_equal-memory-arguments`
           ),
-          bls12_381_G1_compress = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G1_compress-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G1_compress-memory-arguments`
-            )
+          bls12_381_G1_compress = ConstCostingFun(
+            cpu = params.`bls12_381_G1_compress-cpu-arguments`,
+            memory = params.`bls12_381_G1_compress-memory-arguments`
           ),
-          bls12_381_G1_uncompress = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G1_uncompress-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G1_uncompress-memory-arguments`
-            )
+          bls12_381_G1_uncompress = ConstCostingFun(
+            cpu = params.`bls12_381_G1_uncompress-cpu-arguments`,
+            memory = params.`bls12_381_G1_uncompress-memory-arguments`
           ),
           bls12_381_G1_hashToGroup = DefaultCostingFun(
             cpu = TwoArguments.LinearInX(
@@ -1202,21 +1137,13 @@ object BuiltinCostModel {
               cost = params.`bls12_381_G1_hashToGroup-memory-arguments`
             )
           ),
-          bls12_381_G2_add = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G2_add-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G2_add-memory-arguments`
-            )
+          bls12_381_G2_add = ConstCostingFun(
+            cpu = params.`bls12_381_G2_add-cpu-arguments`,
+            memory = params.`bls12_381_G2_add-memory-arguments`
           ),
-          bls12_381_G2_neg = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G2_neg-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G2_neg-memory-arguments`
-            )
+          bls12_381_G2_neg = ConstCostingFun(
+            cpu = params.`bls12_381_G2_neg-cpu-arguments`,
+            memory = params.`bls12_381_G2_neg-memory-arguments`
           ),
           bls12_381_G2_scalarMul = DefaultCostingFun(
             cpu = TwoArguments.LinearInX(
@@ -1229,29 +1156,17 @@ object BuiltinCostModel {
               cost = params.`bls12_381_G2_scalarMul-memory-arguments`
             )
           ),
-          bls12_381_G2_equal = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G2_equal-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_G2_equal-memory-arguments`
-            )
+          bls12_381_G2_equal = ConstCostingFun(
+            cpu = params.`bls12_381_G2_equal-cpu-arguments`,
+            memory = params.`bls12_381_G2_equal-memory-arguments`
           ),
-          bls12_381_G2_compress = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G2_compress-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G2_compress-memory-arguments`
-            )
+          bls12_381_G2_compress = ConstCostingFun(
+            cpu = params.`bls12_381_G2_compress-cpu-arguments`,
+            memory = params.`bls12_381_G2_compress-memory-arguments`
           ),
-          bls12_381_G2_uncompress = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G2_uncompress-cpu-arguments`
-            ),
-            memory = OneArgument.ConstantCost(
-              cost = params.`bls12_381_G2_uncompress-memory-arguments`
-            )
+          bls12_381_G2_uncompress = ConstCostingFun(
+            cpu = params.`bls12_381_G2_uncompress-cpu-arguments`,
+            memory = params.`bls12_381_G2_uncompress-memory-arguments`
           ),
           bls12_381_G2_hashToGroup = DefaultCostingFun(
             cpu = TwoArguments.LinearInX(
@@ -1264,29 +1179,17 @@ object BuiltinCostModel {
               cost = params.`bls12_381_G2_hashToGroup-memory-arguments`
             )
           ),
-          bls12_381_millerLoop = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_millerLoop-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_millerLoop-memory-arguments`
-            )
+          bls12_381_millerLoop = ConstCostingFun(
+            cpu = params.`bls12_381_millerLoop-cpu-arguments`,
+            memory = params.`bls12_381_millerLoop-memory-arguments`
           ),
-          bls12_381_mulMlResult = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_mulMlResult-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_mulMlResult-memory-arguments`
-            )
+          bls12_381_mulMlResult = ConstCostingFun(
+            cpu = params.`bls12_381_mulMlResult-cpu-arguments`,
+            memory = params.`bls12_381_mulMlResult-memory-arguments`
           ),
-          bls12_381_finalVerify = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_finalVerify-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`bls12_381_finalVerify-memory-arguments`
-            )
+          bls12_381_finalVerify = ConstCostingFun(
+            cpu = params.`bls12_381_finalVerify-cpu-arguments`,
+            memory = params.`bls12_381_finalVerify-memory-arguments`
           ),
           integerToByteString = IntegerToByteStringCostingFun(
             cpu = ThreeArguments.QuadraticInZ(
@@ -1377,13 +1280,9 @@ object BuiltinCostModel {
               )
             )
           ),
-          readBit = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(
-              cost = params.`readBit-cpu-arguments`
-            ),
-            memory = TwoArguments.ConstantCost(
-              cost = params.`readBit-memory-arguments`
-            )
+          readBit = ConstCostingFun(
+            cpu = params.`readBit-cpu-arguments`,
+            memory = params.`readBit-memory-arguments`
           ),
           writeBits = WriteBitsCostingFun(
             cpu = ThreeArguments.LinearInY(

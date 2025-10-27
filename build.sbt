@@ -12,7 +12,7 @@ import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleMet
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.12.0"
+val scalusStableVersion = "0.13.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
@@ -310,6 +310,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
+      libraryDependencies ++= Seq(
+        "dev.optics" %%% "monocle-core" % "3.3.0",
+        "dev.optics" %%% "monocle-macro" % "3.3.0",
+      ),
       buildInfoKeys ++= Seq[BuildInfoKey](
         "scalusVersion" -> scalusStableVersion
       ),
@@ -480,47 +484,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.Interop.getScriptInfoFromScriptRef"
-        ),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptInfo"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptInfo$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV1"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV1$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV2"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV2$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV3"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV3$"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.bloxbean.TxEvaluator$RestrictingBudgetSpenderWithScripDump"
-        ),
-        // SlotConfig moved from scalus.bloxbean to scalus.cardano.ledger
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.SlotConfig"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.SlotConfig$"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getInterval"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getScriptContextV2"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getScriptContextV3"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV1"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV2"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV3"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.getSlotConfig"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.slotConfig"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.TxEvaluator.this"),
-        ProblemFilters
-            .exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.TxEvaluator.slotConfig")
-      ),
+      mimaBinaryIssueFilters ++= Seq(),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
@@ -572,14 +536,15 @@ lazy val bench = project
       name := "scalus-bench",
       PluginDependency,
       publish / skip := true,
+      packageBin / skip := true,
       // Increase stack size for JIT compilation and deeply nested UPLC terms
       Jmh / javaOptions ++= Seq(
         "-Xss64m", // Increase stack size to 64MB (default is usually 1MB)
         "-Xmx4g" // Increase heap to 4GB for large compilations
       ),
-      // Fix JMH compilation issues
-      Compile / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
-      Jmh / classLoaderLayeringStrategy := ClassLoaderLayeringStrategy.Flat,
+      // Fix JMH compilation issues - disable incremental compilation
+      Jmh / incOptions := (Jmh / incOptions).value.withEnabled(false),
+      run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
       libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.0",
@@ -727,6 +692,7 @@ addCommandAlias(
   "clean;native/Test/compile;native/test"
 )
 addCommandAlias("benchmark", "bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*")
+addCommandAlias("benchmark-jit", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*(JIT|Cek).*")
 addCommandAlias(
   "it",
   "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test"

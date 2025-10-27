@@ -1,6 +1,9 @@
-package scalus.uplc
-package eval
+package scalus.uplc.eval
+
+import scalus.uplc.*
 import upickle.default.*
+
+import scala.compiletime.erasedValue
 
 type CostingInteger = Long
 type Intercept = CostingInteger
@@ -86,13 +89,17 @@ sealed trait CostModel {
     def calculateCost(args: Seq[CostingInteger]): CostingInteger
 }
 
+sealed trait BaseConstantCostModel extends CostModel {
+    def cost: CostingInteger
+}
+
 trait OneArgument extends CostModel {
     def apply(arg: CostingInteger): CostingInteger
     def calculateCost(args: Seq[CostingInteger]) = apply(args.head)
 }
 
 object OneArgument:
-    case class ConstantCost(cost: CostingInteger) extends OneArgument {
+    case class ConstantCost(cost: CostingInteger) extends OneArgument with BaseConstantCostModel {
         def apply(arg: CostingInteger): CostingInteger = cost
     }
 
@@ -124,7 +131,7 @@ trait TwoArguments extends CostModel {
 }
 
 object TwoArguments {
-    case class ConstantCost(cost: CostingInteger) extends TwoArguments {
+    case class ConstantCost(cost: CostingInteger) extends TwoArguments with BaseConstantCostModel {
         def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger = cost
     }
 
@@ -271,7 +278,9 @@ trait ThreeArguments extends CostModel {
 }
 
 object ThreeArguments {
-    case class ConstantCost(cost: CostingInteger) extends ThreeArguments {
+    case class ConstantCost(cost: CostingInteger)
+        extends ThreeArguments
+        with BaseConstantCostModel {
         def apply(
             arg1: CostingInteger,
             arg2: CostingInteger,
@@ -395,7 +404,7 @@ trait FourArguments extends CostModel {
 }
 
 object FourArguments {
-    case class ConstantCost(cost: CostingInteger) extends FourArguments {
+    case class ConstantCost(cost: CostingInteger) extends FourArguments with BaseConstantCostModel {
         def apply(
             arg1: CostingInteger,
             arg2: CostingInteger,
@@ -429,7 +438,7 @@ trait FiveArguments extends CostModel {
 }
 
 object FiveArguments {
-    case class ConstantCost(cost: CostingInteger) extends FiveArguments {
+    case class ConstantCost(cost: CostingInteger) extends FiveArguments with BaseConstantCostModel {
         def apply(
             arg1: CostingInteger,
             arg2: CostingInteger,
@@ -465,7 +474,7 @@ trait SixArguments extends CostModel {
 }
 
 object SixArguments {
-    case class ConstantCost(cost: CostingInteger) extends SixArguments {
+    case class ConstantCost(cost: CostingInteger) extends SixArguments with BaseConstantCostModel {
         def apply(
             arg1: CostingInteger,
             arg2: CostingInteger,
@@ -500,6 +509,76 @@ case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends Costing
         val mem = ExMemory(this.memory.calculateCost(argsMem))
         ExBudget(cpu, mem)
     }
+}
+
+case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends CostingFun {
+
+    def calculateCost(args: CekValue*): ExBudget = {
+        constantCost
+    }
+
+    val constantCost: ExBudget = ExBudget(ExCPU(cpu), ExMemory(memory))
+
+    inline def toDefaultFun[M <: CostModel]: DefaultCostingFun[M] = {
+        inline erasedValue[M] match {
+            case _: OneArgument =>
+                DefaultCostingFun[OneArgument](
+                  cpu = OneArgument.ConstantCost(cpu),
+                  memory = OneArgument.ConstantCost(memory)
+                ).asInstanceOf[DefaultCostingFun[M]]
+            case _: TwoArguments =>
+                DefaultCostingFun[TwoArguments](
+                  cpu = TwoArguments.ConstantCost(cpu),
+                  memory = TwoArguments.ConstantCost(memory)
+                ).asInstanceOf[DefaultCostingFun[M]]
+            case _: ThreeArguments =>
+                DefaultCostingFun[ThreeArguments](
+                  cpu = ThreeArguments.ConstantCost(cpu),
+                  memory = ThreeArguments.ConstantCost(memory)
+                ).asInstanceOf[DefaultCostingFun[M]]
+            case _: FourArguments =>
+                DefaultCostingFun[FourArguments](
+                  cpu = FourArguments.ConstantCost(cpu),
+                  memory = FourArguments.ConstantCost(memory)
+                ).asInstanceOf[DefaultCostingFun[M]]
+            case _: FiveArguments =>
+                DefaultCostingFun[FiveArguments](
+                  cpu = FiveArguments.ConstantCost(cpu),
+                  memory = FiveArguments.ConstantCost(memory)
+                ).asInstanceOf[DefaultCostingFun[M]]
+            case _: SixArguments =>
+                DefaultCostingFun[SixArguments](
+                  cpu = SixArguments.ConstantCost(cpu),
+                  memory = SixArguments.ConstantCost(memory)
+                ).asInstanceOf[DefaultCostingFun[M]]
+        }
+    }
+
+}
+
+object ConstCostingFun {
+
+    def fromDefaultFun[M <: CostModel](df: DefaultCostingFun[M]): Option[ConstCostingFun] = {
+        (df.cpu, df.memory) match {
+            case (constCpu: BaseConstantCostModel, constMem: BaseConstantCostModel) =>
+                Some(ConstCostingFun(constCpu.cost, constMem.cost))
+            case _ => None
+        }
+    }
+
+    def readDefaultFun[M <: CostModel](
+        name: String,
+        s: ujson.Readable,
+        trace: Boolean = false
+    )(using Reader[DefaultCostingFun[M]]): ConstCostingFun = {
+        val df = read[DefaultCostingFun[M]](s, trace)
+        fromDefaultFun[M](df) match {
+            case Some(cf) => cf
+            case None =>
+                throw new IllegalStateException(s"Costing function $name is not constant")
+        }
+    }
+
 }
 
 /** When invoking `integerToByteString` built-in function, its second argument is a built-in Integer

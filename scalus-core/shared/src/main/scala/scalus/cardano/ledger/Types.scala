@@ -9,6 +9,7 @@ import scalus.serialization.cbor.Cbor
 import scalus.utils.Hex.toHex
 import upickle.default.ReadWriter as UpickleReadWriter
 import cats.kernel.CommutativeGroup
+import monocle.*
 
 import java.util
 import scala.annotation.{targetName, threadUnsafe}
@@ -529,6 +530,11 @@ case class KeepRaw[A] private (val value: A, rawBytes: () => Array[Byte]) {
 }
 
 object KeepRaw {
+    def lens[A: Encoder](): Lens[KeepRaw[A], A] = {
+        val get: KeepRaw[A] => A = kr => kr.value
+        val replace: A => KeepRaw[A] => KeepRaw[A] = a => kr => KeepRaw(a)
+        Lens[KeepRaw[A], A](get)(replace)
+    }
 
     /** Create a KeepRaw instance from a value and its raw CBOR bytes
       *
@@ -571,11 +577,17 @@ extension (self: KeepRaw[Data]) {
     }
 }
 
-case class Sized[A](value: A, size: Int) {
+case class Sized[A] private (value: A, size: Int) {
     override def toString: String = s"Sized(value=$value, size=$size)"
 }
 
 object Sized {
+    def lens[A: Encoder](): Lens[Sized[A], A] = {
+        val get: Sized[A] => A = kr => kr.value
+        val replace: A => Sized[A] => Sized[A] = a => sz => Sized(a)
+        Lens[Sized[A], A](get)(replace)
+    }
+
     def apply[A: Encoder](value: A): Sized[A] =
         new Sized(value, Cbor.encode(value).length)
 

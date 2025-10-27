@@ -9,6 +9,7 @@ import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.testkit.ScalusTest
 import scalus.uplc.eval.*
+import scalus.builtin.Builtins
 
 import scala.util.Try
 
@@ -102,7 +103,7 @@ class HtlcValidatorTest extends AnyFunSuite with ScalusTest {
           fee = 50,
           timeout = 500,
           validFrom = 1000,
-          signatories = List.empty,
+          signatories = List(WrongCommitter),
           action = Action.Timeout,
           preimage = generatePreimage(),
           expected = failure(UnsignedCommitterTransaction)
@@ -118,7 +119,7 @@ class HtlcValidatorTest extends AnyFunSuite with ScalusTest {
           fee = 50,
           timeout = 1000,
           validFrom = 500,
-          signatories = List.empty,
+          signatories = List(WrongReceiver),
           action = Action.Reveal(preimage),
           preimage = preimage,
           expected = failure(UnsignedReceiverTransaction)
@@ -133,6 +134,12 @@ object HtlcValidatorTest extends ScalusTest {
     enum Person(val pkh: Hash):
         case Committer extends Person(genByteStringOfN(28).sample.get)
         case Receiver extends Person(genByteStringOfN(28).sample.get)
+        case WrongCommitter
+            extends Person(
+              Builtins.xorByteString(false, Person.Committer.pkh, Person.Committer.pkh)
+            )
+        case WrongReceiver
+            extends Person(Builtins.xorByteString(false, Person.Receiver.pkh, Person.Receiver.pkh))
 
         infix def gives(value: BigInt): Input = Input(this, value)
         infix def gets(value: BigInt): Output = Output(this, value)
@@ -169,8 +176,8 @@ object HtlcValidatorTest extends ScalusTest {
               fee = fee,
               validRange = Interval.after(validFrom),
               signatories = signatories.map(_.pkh),
-              action = Option.Some(action),
-              contractDatum = Option.Some(contractDatum)
+              action = action,
+              contractDatum = contractDatum
             )
 
             val actual = Try(HtlcValidator.validate(context.toData))
@@ -186,14 +193,13 @@ object HtlcValidatorTest extends ScalusTest {
     private def generateInvalidPreimage(): Preimage = genByteStringOfN(12).sample.get
 
     private def makeSpendingScriptContext(
-        inputs: List[TxInInfo] = List.empty,
-        outputs: List[TxOut] = List.empty,
-        fee: BigInt = 0,
-        validRange: Interval = Interval.always,
-        signatories: List[ByteString] = List.empty,
-        action: Option[Action] = Option.empty,
-        contractDatum: Option[ContractDatum] = Option.empty,
-        indexOfInputWithHtlcScript: BigInt = 0
+        inputs: List[TxInInfo],
+        outputs: List[TxOut],
+        fee: BigInt,
+        validRange: Interval,
+        signatories: List[ByteString],
+        action: Action,
+        contractDatum: ContractDatum
     ): ScriptContext = {
         ScriptContext(
           txInfo = TxInfo(
@@ -204,10 +210,10 @@ object HtlcValidatorTest extends ScalusTest {
             signatories = signatories.map(PubKeyHash(_)),
             id = random[TxId]
           ),
-          redeemer = action.map(_.toData).getOrElse(Data.unit),
+          redeemer = action.toData,
           scriptInfo = ScriptInfo.SpendingScript(
-            txOutRef = inputs.at(indexOfInputWithHtlcScript).outRef,
-            datum = contractDatum.map(_.toData)
+            txOutRef = inputs.at(0).outRef,
+            datum = Option.Some(contractDatum.toData)
           )
         )
     }

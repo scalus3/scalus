@@ -4,6 +4,7 @@ import monocle.Focus.focus
 import monocle.Lens
 import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee, TxBalance}
 import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.TxBalancingError.Failed
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -28,10 +29,12 @@ object LowLevelTxBuilder {
             val newChangeOut = Sized(changeOut.value.withValue(newValue))
             val minAda = MinCoinSizedTransactionOutput(newChangeOut, protocolParams)
 
-            if updatedLovelaceChange < minAda.value then
+            if updatedLovelaceChange < minAda.value then {
+
                 return Left(
                   TxBalancingError.InsufficientFunds(diff, minAda.value - updatedLovelaceChange)
                 )
+            }
 
             val tb = tx.body.value
                 .focus(_.outputs.index(changeOutputIdx))
@@ -83,43 +86,24 @@ object LowLevelTxBuilder {
             if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
             val providedTxFee = tx.body.value.fee
 
-            computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx) match
-                case Left(error) => Left(error)
-                case Right(txWithExUnits) =>
-                    MinTransactionFee(txWithExUnits, resolvedUtxo, protocolParams) match
-                        case Right(minFee) =>
-                            // don't go below initial fee
-                            val fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
-                            val txWithFees = setFee(fee)(txWithExUnits)
-
-                            // if modifying the fee changed the transaction size - re-loop
-                            if providedTxFee != fee then
-                                MinTransactionFee(txWithFees, resolvedUtxo, protocolParams) match
-                                    case Right(newMinFee) if newMinFee != minFee =>
-                                        return loop(txWithFees)
-                                    case Right(_) =>
-                                    // Fee is still correct, continue
-                                    case Left(error) => return Left(TxBalancingError.Failed(error))
-
-                            // find the diff
-                            val diff =
-                                calculateChangeLovelace(txWithFees, resolvedUtxo, protocolParams)
-                            // try to balance it
-                            diffHandler(diff, txWithFees) match
-                                case Right(balanced) =>
-                                    val balancedDiff =
-                                        calculateChangeLovelace(
-                                          balanced,
-                                          resolvedUtxo,
-                                          protocolParams
-                                        )
-                                    // if diff is zero, we are done
-                                    if balancedDiff == 0 then Right(balanced)
-                                    else loop(balanced) // try again with the balanced tx
-                                case Left(error) => Left(error)
-                        case Left(error) => Left(TxBalancingError.Failed(error))
+            val eTrialTx = for {
+                txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
+                minFee <- MinTransactionFee(txWithExUnits, resolvedUtxo, protocolParams).left.map(
+                  TxBalancingError.Failed(_)
+                )
+                // Don't go below initial fee
+                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
+                txWithFees = setFee(fee)(txWithExUnits)
+                diff = calculateChangeLovelace(txWithFees, resolvedUtxo, protocolParams)
+                // try to balance it
+                balanced <- diffHandler(diff, txWithFees)
+            } yield balanced
+            eTrialTx match {
+                case Left(e)                         => Left(e)
+                case Right(trialTx) if tx == trialTx => Right(tx)
+                case Right(trialTx)                  => loop(trialTx)
+            }
         }
-
         loop(initial)
     }
 
@@ -163,7 +147,6 @@ object LowLevelTxBuilder {
             )
         }
     }
-
 }
 
 // Transaction balancing error types

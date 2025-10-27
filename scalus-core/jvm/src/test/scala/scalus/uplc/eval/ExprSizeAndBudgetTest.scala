@@ -5,12 +5,14 @@ import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data
+import scalus.cardano.ledger.CardanoInfo
 import scalus.serialization.flat.Flat
 import scalus.uplc.FlatInstantces.given
 import scalus.uplc.NamedDeBruijn
 import scalus.uplc.Term
 import scalus.uplc.Term.*
-import scalus.uplc.eval.ExBudget.given
+import scalus.uplc.eval.ExBudget.{enormous, given}
+
 import scala.math.Ordering.Implicits.*
 
 class ExprSizeAndBudgetTest extends AnyFunSuite {
@@ -19,6 +21,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     private val unitSize = encoder.bitSize(compile(()).toUplc())
     private val fun1Uplc = compile((b: Boolean) => b).toUplc()
     private val fun1Size = encoder.bitSize(fun1Uplc)
+    private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     // SimpleSirToUplcLowering is used to have stable sizes in terms, not in data representation.
     given scalus.Compiler.Options = scalus.Compiler.Options(
@@ -63,6 +66,31 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     test("prelude.List.single(true) size is 123") {
         val uplc = compile(prelude.List.single(true)).toUplcOptimized()
         assert(encoder.bitSize(uplc) == 123)
+    }
+
+    test("Recursion cost") {
+        val ifUplc =
+            compile((n: BigInt) => if n == BigInt(0) then BigInt(0) else n - 1).toUplc()
+        val ifBudget0 = (ifUplc $ 0.asTerm).evaluateDebug.budget
+        val ifBudget1 = (ifUplc $ 1.asTerm).evaluateDebug.budget
+        val sir = compile:
+            def rec(n: BigInt): BigInt =
+                if n == BigInt(0) then BigInt(0)
+                else rec(n - 1)
+            rec(1000)
+        val uplc = sir.toUplc()
+        val budget = uplc.evaluateDebug.budget
+        val cpu = (budget.cpu - 1000 * ifBudget1.cpu) / 1000
+        val mem = (budget.memory - 1000 * ifBudget1.memory) / 1000
+        val params = CardanoInfo.mainnet.protocolParams
+        val lovelacePerRecursion = params.executionUnitPrices.priceSteps * cpu +
+            params.executionUnitPrices.priceMemory * mem
+        // convert to USD assuming 1 ADA = 0.66 USD
+        val pricePerRecursionInUSDMilliCents = lovelacePerRecursion.toDouble / 1000000 * 66_000
+        assert(cpu == 128540)
+        assert(mem == 703)
+        assert(lovelacePerRecursion.ceil == 50)
+        assert(pricePerRecursionInUSDMilliCents == 3.28798668)
     }
 
     test("equalsInteger(unIData) < equalsData(iData)") {

@@ -1,10 +1,15 @@
 package scalus.cardano.ledger
 package utils
 
+import monocle.Focus
+import monocle.Focus.refocus
 import scalus.serialization.cbor.Cbor
+import scalus.|>
+
 import scala.annotation.tailrec
 
 object MinTransactionFee {
+    @tailrec
     def apply(
         transaction: Transaction,
         utxo: Utxos,
@@ -14,13 +19,25 @@ object MinTransactionFee {
           TransactionException.BadReferenceInputsUTxOException,
       Coin
     ] = {
-        for scripts <- AllResolvedScripts.allProvidedReferenceScripts(transaction, utxo)
-        yield
-            val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
-            val transactionSizeFee = calculateTransactionSizeFee(transaction, protocolParams)
-            val exUnitsFee = calculateExUnitsFee(transaction, protocolParams)
+        AllResolvedScripts.allProvidedReferenceScripts(transaction, utxo) match {
+            case Left(e) => Left(e)
+            case Right(scripts) =>
+                val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
+                val transactionSizeFee = calculateTransactionSizeFee(transaction, protocolParams)
+                val exUnitsFee = calculateExUnitsFee(transaction, protocolParams)
 
-            refScriptsFee + transactionSizeFee + exUnitsFee
+                val minFee = refScriptsFee + transactionSizeFee + exUnitsFee
+                if minFee <= transaction.body.value.fee
+                then Right(minFee)
+                else {
+                    val nextCandidateTransaction = transaction |>
+                        Focus[Transaction](_.body)
+                            .andThen(KeepRaw.lens[TransactionBody]())
+                            .refocus(_.fee)
+                            .replace(minFee)
+                    MinTransactionFee(nextCandidateTransaction, utxo, protocolParams)
+                }
+        }
     }
 
     private object RefScriptsFeeCalculator {
