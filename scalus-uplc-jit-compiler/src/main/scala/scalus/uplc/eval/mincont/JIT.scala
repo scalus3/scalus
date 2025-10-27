@@ -247,6 +247,27 @@ object JIT {
                             }
                         )
                     }
+                case Term.Builtin(DefaultFun.DivideInteger) =>
+                    '{
+                        Return((x: Any) =>
+                            (y: Any) => {
+                                val xv = x.asInstanceOf[BigInt]
+                                val yv = y.asInstanceOf[BigInt]
+                                $budget.spendBudget(
+                                  Step(StepKind.Builtin),
+                                  $params.builtinCostModel.divideInteger
+                                      .calculateCostFromMemory(
+                                        Seq(
+                                          MemoryUsageJit.memoryUsage(xv),
+                                          MemoryUsageJit.memoryUsage(yv)
+                                        )
+                                      ),
+                                  Nil
+                                )
+                                xv / yv
+                            }
+                        )
+                    }
                 case Term.Builtin(DefaultFun.EqualsData) =>
                     '{
                         Return((x: Any) =>
@@ -354,7 +375,7 @@ object JIT {
                     }
                 case Term.Builtin(DefaultFun.IfThenElse) =>
                     '{
-                        Return(() =>
+                        Return((unitArg: Any) =>
                             (c: Any) =>
                                 (t: Any) =>
                                     (f: Any) => {
