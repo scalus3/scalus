@@ -34,18 +34,18 @@ object Coin {
 
         def signum: Int = if self > 0 then 1 else 0
 
-        @targetName("addCoin")
+        @targetName("add")
         infix def +(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
 
-        @targetName("subtractCoin")
+        @targetName("subtract")
         infix def -(other: Coin): Unbounded = Unbounded(self) - Unbounded(other)
 
-        @targetName("addUnbounded")
+        @targetName("add")
         infix def +(unbounded: Unbounded): Either[Coin.ArithmeticError, Coin] = Coin(
           Unbounded(self) + unbounded
         )
 
-        @targetName("subtractUnbounded")
+        @targetName("subtract")
         infix def -(unbounded: Unbounded): Either[Coin.ArithmeticError, Coin] = Coin(
           Unbounded(self) - unbounded
         )
@@ -53,11 +53,9 @@ object Coin {
         @targetName("negate")
         def unary_- : Unbounded = -Unbounded(self)
 
-        @targetName("scalarMultiplyIntegral")
-        infix def scale(c: SafeLong): Unbounded = Unbounded(c * self)
+        def scale(c: SafeLong): Unbounded = Unbounded(c * self)
 
-        @targetName("scalarMultiplyNumeric")
-        infix def scale(c: BigDecimal): Fractional = Fractional(c * self)
+        def scale(c: BigDecimal): Fractional = Fractional(c * self)
 
     given Conversion[Coin, Long] = identity
 
@@ -131,6 +129,10 @@ object Coin {
             override def timesl(s: SafeLong, self: Unbounded): Unbounded = s * self
         }
     }
+
+    // ===================================
+    // Coin.Fractional
+    // ===================================
 
     type Fractional = Fractional.Fractional
 
