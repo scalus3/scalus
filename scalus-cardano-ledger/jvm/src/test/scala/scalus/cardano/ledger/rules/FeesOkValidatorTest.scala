@@ -22,7 +22,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -127,7 +127,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -227,7 +227,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -320,7 +320,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -428,7 +428,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -528,7 +528,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -622,7 +622,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

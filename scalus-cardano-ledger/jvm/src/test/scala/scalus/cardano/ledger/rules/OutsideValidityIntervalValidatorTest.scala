@@ -13,7 +13,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -41,7 +41,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -69,7 +69,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -97,7 +97,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -125,7 +125,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -153,7 +153,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -181,7 +181,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -209,7 +209,7 @@ class OutsideValidityIntervalValidatorTest extends AnyFunSuite, ValidatorRulesTe
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

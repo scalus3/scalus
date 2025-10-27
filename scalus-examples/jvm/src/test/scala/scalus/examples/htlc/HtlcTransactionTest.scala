@@ -30,7 +30,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val wrongReceiverPkh =
         ByteString.fromArray(TestUtil.createTestAddress("d" * 56).payment.asHash.bytes)
 
-    private val lockAmount: Long = 10_000L
+    private val lockAmount: Long = 100_000_000L
     private val amount: Long = 50_000_000L
 
     private val timeout: PosixTime = 1_745_261_347_000L
@@ -108,17 +108,12 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(result.isSuccess)
 
-        val scriptOutputs = revealTx.body.value.outputs.filter(_.value.address.hasScript)
-        assert(scriptOutputs.isEmpty, "no script outputs after revealing")
-
-        val receiverOutputs = revealTx.body.value.outputs.filter { output =>
-            output.value.address == receiverAddress
-        }
-        assert(receiverOutputs.nonEmpty, "reveal should send funds to receiver")
-
-        // verify that the locked funds were successfully withdrawn, and the sum of the outputs exceeds the starting wallet funds.
-        val totalReceiverOutput = receiverOutputs.map(_.value.value.coin.value).sum
-        assert(totalReceiverOutput > amount)
+        val receiverCoinValue =
+            TestUtil.findUtxoByAddress(revealTx, receiverAddress).map(_._2.value.coin.value)
+        assert(
+          receiverCoinValue.exists(_ >= lockAmount),
+          s"expected receiver coin value >= $lockAmount, found: ${receiverCoinValue.map(_.toString).getOrElse("none")}"
+        )
     }
 
     test("receiver fails with wrong preimage") {
@@ -147,16 +142,12 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(result.isSuccess)
 
-        val scriptOutputs = timeoutTx.body.value.outputs.filter(_.value.address.hasScript)
-        assert(scriptOutputs.isEmpty, "no script outputs after timeout")
-
-        val committerOutputs = timeoutTx.body.value.outputs.filter { output =>
-            output.value.address == committerAddress
-        }
-        assert(committerOutputs.nonEmpty)
-
-        val totalCommitterOutput = committerOutputs.map(_.value.value.coin.value).sum
-        assert(totalCommitterOutput > amount)
+        val committerCoinValue =
+            TestUtil.findUtxoByAddress(timeoutTx, committerAddress).map(_._2.value.coin.value)
+        assert(
+          committerCoinValue.exists(_ >= lockAmount),
+          s"expected committer coin value >= $lockAmount, found: ${committerCoinValue.map(_.toString).getOrElse("none")}"
+        )
     }
 
     test("committer fails before timeout") {

@@ -39,7 +39,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val referenceInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -176,7 +176,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val input2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

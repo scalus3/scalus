@@ -8,7 +8,7 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
         val context = Context()
         val state = State()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -33,7 +33,7 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
         val state = State()
         val transaction = {
             val inputs = genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

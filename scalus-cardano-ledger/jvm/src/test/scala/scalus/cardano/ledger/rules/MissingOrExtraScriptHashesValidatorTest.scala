@@ -28,7 +28,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

@@ -18,7 +18,6 @@ import scalus.cardano.address
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.GovAction.*
-import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.rules.{Context as SContext, STS, State as SState, UtxoEnv}
 import scalus.cardano.ledger.utils.{AllResolvedScripts, MinCoinSizedTransactionOutput}
@@ -2009,24 +2008,6 @@ enum SomeBuildError:
         case ValidationError(e) =>
             s"Transaction validation failed: ${e.getClass.getSimpleName} - ${e.getMessage}"
     }
-
-// -------------------------------------------------------------------------
-// Extra stuff to keep here
-// -------------------------------------------------------------------------
-
-extension (self: TransactionOutput)
-    def datumOption: Option[DatumOption] =
-        self match {
-            case TransactionOutput.Shelley(_, _, datumHash) =>
-                datumHash.map(DatumOption.Hash(_))
-            case Babbage(_, _, datumOption, _) =>
-                datumOption match {
-                    case Some(value) => Some(value)
-                    case None        => None
-                }
-        }
-
-// ----
 
 def keepRawL[A: Encoder](): Lens[KeepRaw[A], A] = {
     val get: KeepRaw[A] => A = kr => kr.value

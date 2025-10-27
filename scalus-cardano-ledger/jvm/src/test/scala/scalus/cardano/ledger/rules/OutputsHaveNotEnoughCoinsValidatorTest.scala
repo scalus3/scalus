@@ -23,7 +23,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -57,7 +57,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -91,7 +91,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -125,7 +125,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

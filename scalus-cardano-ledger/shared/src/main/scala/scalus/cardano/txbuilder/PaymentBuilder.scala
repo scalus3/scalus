@@ -76,9 +76,19 @@ case class PaymentBuilder(
     def build(): Either[String, Transaction] = {
         val totalRequired = payments.foldLeft(Value.zero)((acc, p) => acc + p._2)
 
+        val totalSpend = additionalSteps
+            .flatMap {
+                case TransactionBuilderStep.Spend(utxo, _) => Some(utxo.output.value)
+                case _                                     => None
+            }
+            .foldLeft(Value.zero) { _ + _ }
+
         for {
             walletInputsWithWitnesses <- context.wallet
-                .selectInputs(totalRequired)
+                .selectInputs(
+                  if totalSpend.coin >= totalRequired.coin then Value.zero
+                  else totalRequired - totalSpend
+                )
                 .toRight("Insufficient funds in wallet")
 
             inputSteps = (scriptInputs ++ walletInputsWithWitnesses).map { case (utxo, witness) =>

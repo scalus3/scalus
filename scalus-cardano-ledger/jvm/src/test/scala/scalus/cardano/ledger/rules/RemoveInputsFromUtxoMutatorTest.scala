@@ -10,7 +10,7 @@ class RemoveInputsFromUtxoMutatorTest extends AnyFunSuite, ValidatorRulesTestKit
           utxo = genMapOfSizeFromArbitrary[TransactionInput, TransactionOutput](1, 4).sample.get
         )
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

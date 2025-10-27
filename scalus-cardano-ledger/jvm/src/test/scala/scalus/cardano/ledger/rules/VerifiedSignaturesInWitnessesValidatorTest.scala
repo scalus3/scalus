@@ -11,7 +11,7 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet(
@@ -35,7 +35,7 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet(
@@ -66,7 +66,7 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
@@ -105,7 +105,7 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
