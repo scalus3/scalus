@@ -11,7 +11,9 @@ case class Value private (lovelace: Coin, assets: MultiAsset = MultiAsset.zero)
 object Value {
     def zero: Value = Value(Coin.zero)
 
-    given partialOrder: PartialOrder[Value] with {
+    given algebra: Algebra.type = Algebra
+
+    object Algebra extends PartialOrder[Value] {
         override def partialCompare(self: Value, other: Value): Double =
             partialCompareImpl(self.lovelace, self.assets, other.lovelace, other.assets)
     }
@@ -48,7 +50,7 @@ object Value {
             Value(lovelace, assets)
         }
 
-        def scale(s: SafeLong): Unbounded = Unbounded.ops.timesl(s, this)
+        def scale(s: SafeLong): Unbounded = Unbounded.algebra.timesl(s, this)
 
         def scale(s: BigDecimal): Fractional =
             Fractional(this.lovelace.scale(s), this.assets.scale(s))
@@ -57,12 +59,12 @@ object Value {
     object Unbounded {
         def zero: Unbounded = Unbounded(Coin.Unbounded.zero)
 
-        given partialOrder: PartialOrder[Value.Unbounded] with {
+        given algebra: Algebra.type = Algebra
+
+        object Algebra extends PartialOrder[Value.Unbounded], CModule[Unbounded, SafeLong] {
             override def partialCompare(self: Unbounded, other: Unbounded): Double =
                 partialCompareImpl(self.lovelace, self.assets, other.lovelace, other.assets)
-        }
 
-        given ops: CModule[Unbounded, SafeLong] with {
             override def scalar: CRing[SafeLong] = CRing[SafeLong]
 
             override def zero: Unbounded = Unbounded.zero
@@ -112,18 +114,18 @@ object Value {
             Value(lovelace, assets)
         }
 
-        def scale(s: BigDecimal): Fractional = Fractional.ops.timesl(s, this)
+        def scale(s: BigDecimal): Fractional = Fractional.algebra.timesl(s, this)
     }
 
     object Fractional {
         def zero: Fractional = Fractional(Coin.Fractional.zero)
 
-        given partialOrder: PartialOrder[Value.Fractional] with {
+        given algebra: Algebra.type = Algebra
+
+        object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, BigDecimal] {
             override def partialCompare(self: Fractional, other: Fractional): Double =
                 partialCompareImpl(self.lovelace, self.assets, other.lovelace, other.assets)
-        }
 
-        given ops: VectorSpace[Fractional, BigDecimal] with {
             override def scalar: Field[BigDecimal] = Field[BigDecimal]
 
             override def zero: Fractional = Fractional.zero

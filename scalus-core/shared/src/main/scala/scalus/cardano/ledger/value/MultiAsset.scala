@@ -19,15 +19,20 @@ object MultiAsset {
 
     def zero: MultiAsset = SortedMap.empty
 
-    given partialOrder: PartialOrder[MultiAsset] = {
-        // If both keys exist, compare the values.
-        // If only the left key exists, compare the left value against zero.
-        // If only the right key exists, compare the right value against zero.
-        SortedMapPartialOrder[TokenName, Inner, Double](
-          compareBoth = MultiAsset.Inner.partialOrder.partialCompare,
-          compareLeft = MultiAsset.Inner.partialOrder.partialCompare(_, Inner.zero),
-          compareRight = MultiAsset.Inner.partialOrder.partialCompare(Inner.zero, _)
+    given algebra: Algebra.type = Algebra
+
+    object Algebra extends PartialOrder[MultiAsset] {
+        private val mapPartialOrder = SortedMapPartialOrder[TokenName, Inner, Double](
+          // If both keys exist, compare the values.
+          // If only the left key exists, compare the left value against zero.
+          // If only the right key exists, compare the right value against zero.
+          compareBoth = MultiAsset.Inner.algebra.partialCompare,
+          compareLeft = MultiAsset.Inner.algebra.partialCompare(_, Inner.zero),
+          compareRight = MultiAsset.Inner.algebra.partialCompare(Inner.zero, _)
         )
+
+        override def partialCompare(self: MultiAsset, other: MultiAsset): Double =
+            mapPartialOrder.partialCompare(self, other)
     }
 
     type Unbounded = Unbounded.Unbounded
@@ -57,38 +62,40 @@ object MultiAsset {
                 )
                 .to(SortedMap)
 
-            def scale(s: SafeLong): Unbounded = ops.timesl(s, self)
+            def scale(s: SafeLong): Unbounded = algebra.timesl(s, self)
 
             def scale(s: BigDecimal): Fractional =
                 Fractional(self.view.mapValues(_.scale(s)).to(SortedMap))
 
-        import Inner.Unbounded.ops as innerOps
-        import Inner.Unbounded.partialOrder as innerPartialOrder
+        import Inner.Unbounded.algebra as innerAlgebra
 
-        given partialOrder: PartialOrder[Unbounded] = {
-            // If both keys exist, compare the values.
-            // If only the left key exists, compare the left value against zero.
-            // If only the right key exists, compare the right value against zero.
-            SortedMapPartialOrder[TokenName, Inner.Unbounded, Double](
-              compareBoth = innerPartialOrder.partialCompare,
-              compareLeft = innerPartialOrder.partialCompare(_, Inner.Unbounded.zero),
-              compareRight = innerPartialOrder.partialCompare(Inner.Unbounded.zero, _)
+        given algebra: Algebra.type = Algebra
+
+        object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
+            private val mapPartialOrder = SortedMapPartialOrder[TokenName, Inner.Unbounded, Double](
+              // If both keys exist, compare the values.
+              // If only the left key exists, compare the left value against zero.
+              // If only the right key exists, compare the right value against zero.
+              compareBoth = innerAlgebra.partialCompare,
+              compareLeft = innerAlgebra.partialCompare(_, Inner.Unbounded.zero),
+              compareRight = innerAlgebra.partialCompare(Inner.Unbounded.zero, _)
             )
-        }
 
-        given ops: CModule[Unbounded, SafeLong] with {
+            override def partialCompare(self: Unbounded, other: Unbounded): Double =
+                mapPartialOrder.partialCompare(self, other)
+
             override def scalar: CRing[SafeLong] = CRing[SafeLong]
 
             override def zero: Unbounded = Unbounded.zero
 
             override def negate(self: Unbounded): Unbounded =
-                self.view.mapValues(innerOps.negate).to(SortedMap)
+                self.view.mapValues(innerAlgebra.negate).to(SortedMap)
 
             override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerOps.plus)(self, other)
+                combineWith(innerAlgebra.plus)(self, other)
 
             override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerOps.plus, identity, innerOps.negate)(self, other)
+                combineWith(innerAlgebra.plus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 self.view.mapValues(_.scale(s)).to(SortedMap)
@@ -102,7 +109,7 @@ object MultiAsset {
 
         def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = x
 
-        def zero: Fractional = ops.zero
+        def zero: Fractional = algebra.zero
 
         extension (self: Fractional)
             def round(mode: RoundingMode): Unbounded =
@@ -126,38 +133,42 @@ object MultiAsset {
                 )
                 .to(SortedMap)
 
-            def scale(s: BigDecimal): Fractional = ops.timesl(s, self)
+            def scale(s: BigDecimal): Fractional = algebra.timesl(s, self)
 
-        import Inner.Fractional.ops as innerOps
-        import Inner.Fractional.partialOrder as innerPartialOrder
+        import Inner.Fractional.algebra as innerAlgebra
 
-        given partialOrder: PartialOrder[Fractional] = {
-            // If both keys exist, compare the values.
-            // If only the left key exists, compare the left value against zero.
-            // If only the right key exists, compare the right value against zero.
-            SortedMapPartialOrder[TokenName, Inner.Fractional, Double](
-              compareBoth = innerPartialOrder.partialCompare,
-              compareLeft = innerPartialOrder.partialCompare(_, Inner.Fractional.zero),
-              compareRight = innerPartialOrder.partialCompare(Inner.Fractional.zero, _)
-            )
-        }
+        given algebra: Algebra.type = Algebra
 
-        given ops: VectorSpace[Fractional, BigDecimal] with
+        object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, BigDecimal] {
+            private val mapPartialOrder =
+                SortedMapPartialOrder[TokenName, Inner.Fractional, Double](
+                  // If both keys exist, compare the values.
+                  // If only the left key exists, compare the left value against zero.
+                  // If only the right key exists, compare the right value against zero.
+                  compareBoth = innerAlgebra.partialCompare,
+                  compareLeft = innerAlgebra.partialCompare(_, Inner.Fractional.zero),
+                  compareRight = innerAlgebra.partialCompare(Inner.Fractional.zero, _)
+                )
+
+            override def partialCompare(self: Fractional, other: Fractional): Double =
+                mapPartialOrder.partialCompare(self, other)
+
             override def scalar: Field[BigDecimal] = Field[BigDecimal]
 
             override def zero: Fractional = Fractional.zero
 
             override def negate(self: Fractional): Fractional =
-                self.view.mapValues(innerOps.negate).to(SortedMap)
+                self.view.mapValues(innerAlgebra.negate).to(SortedMap)
 
             override def plus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerOps.plus)(self, other)
+                combineWith(innerAlgebra.plus)(self, other)
 
             override def minus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerOps.minus, identity, innerOps.negate)(self, other)
+                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: BigDecimal, self: Fractional): Fractional =
                 self.view.mapValues(_.scale(s)).to(SortedMap)
+        }
     }
 
     sealed trait ArithmeticError extends Throwable:
@@ -188,15 +199,20 @@ object MultiAsset {
 
         type Unbounded = Unbounded.Unbounded
 
-        given partialOrder: PartialOrder[Inner] = {
-            // If both keys exist, compare the values.
-            // If only the left key exists, compare the left value against zero.
-            // If only the right key exists, compare the right value against zero.
-            SortedMapPartialOrder[TokenName, Coin, Int](
-              compareBoth = Coin.order.compare,
+        given algebra: Algebra.type = Algebra
+
+        object Algebra extends PartialOrder[Inner] {
+            private val mapPartialOrder = SortedMapPartialOrder[TokenName, Coin, Int](
+              // If both keys exist, compare the values.
+              // If only the left key exists, compare the left value against zero.
+              // If only the right key exists, compare the right value against zero.
+              compareBoth = Coin.algebra.compare,
               compareLeft = _.signum,
               compareRight = -_.signum
             )
+
+            override def partialCompare(self: Inner, other: Inner): Double =
+                mapPartialOrder.partialCompare(self, other)
         }
 
         object Unbounded {
@@ -227,37 +243,41 @@ object MultiAsset {
                 def toFractional: Fractional =
                     Fractional(self.view.mapValues(_.toCoinFractional).to(SortedMap))
 
-                def scale(s: SafeLong): Unbounded = ops.timesl(s, self)
+                def scale(s: SafeLong): Unbounded = algebra.timesl(s, self)
 
                 def scale(s: BigDecimal): Fractional =
                     Fractional(self.view.mapValues(_.scale(s)).to(SortedMap))
 
-            import Coin.Unbounded.ops as coinOps
-            import Coin.Unbounded.order as coinOrder
+            import Coin.Unbounded.algebra as coinAlgebra
 
-            given partialOrder: PartialOrder[Unbounded] =
-                // If both keys exist, compare the values.
-                // If only the left key exists, compare the left value against zero.
-                // If only the right key exists, compare the right value against zero.
-                SortedMapPartialOrder[TokenName, Coin.Unbounded, Int](
-                  compareBoth = coinOrder.compare,
-                  compareLeft = _.convert.signum,
-                  compareRight = -_.convert.signum
-                )
+            given algebra: Algebra.type = Algebra
 
-            given ops: CModule[Unbounded, SafeLong] with {
+            object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
+                private val mapPartialOrder =
+                    MultiAsset.SortedMapPartialOrder[TokenName, Coin.Unbounded, Int](
+                      // If both keys exist, compare the values.
+                      // If only the left key exists, compare the left value against zero.
+                      // If only the right key exists, compare the right value against zero.
+                      compareBoth = coinAlgebra.compare,
+                      compareLeft = _.signum,
+                      compareRight = -_.signum
+                    )
+
+                override def partialCompare(self: Unbounded, other: Unbounded): Double =
+                    mapPartialOrder.partialCompare(self, other)
+
                 override def scalar: CRing[SafeLong] = CRing[SafeLong]
 
                 override def zero: Unbounded = Unbounded.zero
 
                 override def negate(self: Unbounded): Unbounded =
-                    self.view.mapValues(coinOps.negate).to(SortedMap)
+                    self.view.mapValues(coinAlgebra.negate).to(SortedMap)
 
                 override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                    combineWith(coinOps.plus)(self, other)
+                    combineWith(coinAlgebra.plus)(self, other)
 
                 override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                    combineWith(coinOps.plus, identity, coinOps.negate)(self, other)
+                    combineWith(coinAlgebra.plus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                     self.view.mapValues(_.scale(s)).to(SortedMap)
@@ -294,37 +314,39 @@ object MultiAsset {
                     )
                     .to(SortedMap)
 
-                def scale(s: BigDecimal): Fractional = ops.timesl(s, self)
+                def scale(s: BigDecimal): Fractional = algebra.timesl(s, self)
 
-            import Coin.Fractional.ops as coinOps
-            import Coin.Fractional.order as coinOrder
+            import Coin.Fractional.algebra as coinAlgebra
 
-            given partialOrder: PartialOrder[Fractional] =
-                // If both keys exist, compare the values.
-                // If only the left key exists, compare it against zero.
-                // If only the right key exists, compare it against zero.
-                SortedMapPartialOrder[TokenName, Coin.Fractional, Int](
-                  compareBoth = coinOrder.compare,
-                  compareLeft = _.convert.signum,
-                  compareRight = -_.convert.signum
-                )
+            given algebra: Algebra.type = Algebra
 
-            given ops: VectorSpace[Fractional, BigDecimal] with
+            object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, BigDecimal] {
+                private val mapPartialOrder =
+                    SortedMapPartialOrder[TokenName, Coin.Fractional, Int](
+                      compareBoth = coinAlgebra.compare,
+                      compareLeft = _.signum,
+                      compareRight = -_.signum
+                    )
+
+                override def partialCompare(self: Fractional, other: Fractional): Double =
+                    mapPartialOrder.partialCompare(self, other)
+
                 override def scalar: Field[BigDecimal] = Field[BigDecimal]
 
                 override def zero: Fractional = Fractional.zero
 
                 override def negate(self: Fractional): Fractional =
-                    self.view.mapValues(coinOps.negate).to(SortedMap)
+                    self.view.mapValues(coinAlgebra.negate).to(SortedMap)
 
                 override def plus(self: Fractional, other: Fractional): Fractional =
-                    combineWith(coinOps.plus)(self, other)
+                    combineWith(coinAlgebra.plus)(self, other)
 
                 override def minus(self: Fractional, other: Fractional): Fractional =
-                    combineWith(coinOps.minus, identity, coinOps.negate)(self, other)
+                    combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: BigDecimal, self: Fractional): Fractional =
                     self.view.mapValues(_.scale(s)).to(SortedMap)
+            }
         }
 
         sealed trait ArithmeticError extends Throwable:
@@ -465,7 +487,7 @@ object MultiAsset {
         }
     }
 
-    private trait ToDouble[I]:
+    private sealed trait ToDouble[I]:
         def toDouble: I => Double
 
     private given ToDouble[Double] with
