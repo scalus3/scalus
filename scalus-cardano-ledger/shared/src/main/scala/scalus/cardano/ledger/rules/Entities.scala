@@ -46,6 +46,12 @@ sealed trait STS {
     type Error <: TransactionException
     final type Result = Either[Error, Value]
 
+    lazy val name: String = {
+        val simpleName = this.getClass.getSimpleName
+        if simpleName.endsWith("$") then simpleName.substring(0, simpleName.length - 1)
+        else simpleName
+    }
+
     def apply(context: Context, state: State, event: Event): Result
 
     protected final def failure(error: Error): Result = Left(error)

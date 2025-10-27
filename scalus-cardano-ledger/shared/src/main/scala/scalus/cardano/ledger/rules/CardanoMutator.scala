@@ -17,8 +17,7 @@ object CardanoMutator extends STS.Mutator {
         TraitObjectScanner.findImplementors[STS.Validator](packageName)
 
     val allMutators: Map[String, STS.Mutator] =
-        TraitObjectScanner.findImplementors[STS.Mutator](packageName) - getClass.getSimpleName
-            .dropRight(1)
+        TraitObjectScanner.findImplementors[STS.Mutator](packageName) - this.name
 
     val allSTSs: Map[String, STS] = allValidators ++ allMutators
 }

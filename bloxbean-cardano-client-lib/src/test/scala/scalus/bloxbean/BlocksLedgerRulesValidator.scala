@@ -8,11 +8,13 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.bloxbean.Interop.??
 
 class BlocksLedgerRulesValidator(
-    val sts: STS,
+    val rules: Map[String, STS],
     val context: Context = Context(),
     val state: State = State()
 ) extends AnyFunSuite {
     import BlocksLedgerRulesValidator.utxoResolver
+
+    def this(rule: STS) = this(Map(rule.name -> rule))
 
     private lazy val apiKey = System.getenv("BLOCKFROST_API_KEY") ?? sys.error(
       "BLOCKFROST_API_KEY is not set, please set it before running the test"
@@ -23,7 +25,9 @@ class BlocksLedgerRulesValidator(
         val dirPath = Paths.get(url.toURI)
 
         val files = Files.list(dirPath).iterator().asScala.toList
-        for file <- files
+        for
+            (ruleName, rule) <- rules
+            file <- files
         do
             val bytes = Files.readAllBytes(file)
             given OriginalCborByteArray = OriginalCborByteArray(bytes)
@@ -34,7 +38,10 @@ class BlocksLedgerRulesValidator(
                     val utxo = utxoResolver.resolveUtxos(transaction)
 //                    val utxo = bloxbeanResolveUtxo(transaction)
 
-                    assert(sts(context, state.copy(utxo = state.utxo ++ utxo), transaction).isRight)
+                    assert(
+                      rule(context, state.copy(utxo = state.utxo ++ utxo), transaction).isRight,
+                      s"Transaction ${transaction.id} in block ${block.header.blockNumber} failed $ruleName"
+                    )
 
 //                    println(
 //                      s"Transaction ${transaction.id} in block ${block.header.blockNumber} passed ${sts.getClass.getSimpleName}"
