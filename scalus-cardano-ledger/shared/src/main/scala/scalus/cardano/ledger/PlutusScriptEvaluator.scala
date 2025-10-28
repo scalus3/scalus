@@ -59,7 +59,7 @@ trait PlutusScriptEvaluator {
     def evalPlutusScriptsWithContexts(
         tx: Transaction,
         utxos: Map[TransactionInput, TransactionOutput],
-    ): Seq[(Redeemer, ScriptContext)]
+    ): Seq[(Redeemer, ScriptContext, ScriptHash)]
 }
 
 object PlutusScriptEvaluator {
@@ -134,7 +134,7 @@ object PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
             utxos: Map[TransactionInput, TransactionOutput],
-        ): Seq[(Redeemer, ScriptContext)] = {
+        ): Seq[(Redeemer, ScriptContext, ScriptHash)] = {
             log.debug(s"Starting Phase 2 evaluation for transaction: ${tx.id}")
 
             val redeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
@@ -254,7 +254,7 @@ object PlutusScriptEvaluator {
                       remainingBudget.memory - evaluatedRedeemer.exUnits.memory
                     )
 
-                    (evaluatedRedeemer, sc)
+                    (evaluatedRedeemer, sc, scriptHash)
                 }).toSeq
 
             log.debug(s"Phase 2 evaluation completed. Remaining budget: $remainingBudget")
