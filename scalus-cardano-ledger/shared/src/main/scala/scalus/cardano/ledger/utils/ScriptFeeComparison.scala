@@ -4,15 +4,43 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
+import scalus.cardano.txbuilder.Datum.DatumInlined
+import scalus.sir.TargetLoweringBackend.{SimpleSirToUplcLowering, SirToUplc110Lowering, SirToUplcV3Lowering}
+import scalus.{plutusV3, toUplc, Compiler}
+import scalus.uplc.Program
 
 object ScriptFeeComparison {
 
-    case class FeeComparison(directFee: Coin, referenceFee: Coin)
+    case class FeeComparison(
+        directFee: Coin,
+        referenceFee: Coin,
+        directExUnits: ExUnits,
+        referenceExUnits: ExUnits
+    )
+
+    object FeeComparison {
+        def apply(directTx: Transaction, refTx: Transaction): FeeComparison = FeeComparison(
+          directTx.body.value.fee,
+          refTx.body.value.fee,
+          directTx.witnessSet.redeemers.get.value.toSeq.head.exUnits,
+          refTx.witnessSet.redeemers.get.value.toSeq.head.exUnits
+        )
+    }
+
+    enum ComparisonResult {
+        case Ok(
+            comparison: FeeComparison,
+            options: Compiler.Options,
+        )
+        case Fail(message: String, options: Compiler.Options)
+    }
+
+    case class ComparisonMatrix(results: Map[Compiler.Options, ComparisonResult])
 
     def compareFees(
         script: PlutusScript,
         redeemer: Data,
-        datum: Datum,
+        datum: Option[DatumOption],
         context: BuilderContext,
         additionalSigners: Set[ExpectedSigner] = Set.empty,
         scriptValue: Value = Value.lovelace(10_000_000)
@@ -28,13 +56,11 @@ object ScriptFeeComparison {
           TransactionHash.fromByteString(ByteString.fromHex("aa" * 32)),
           0
         )
-        val scriptUtxoDatum = datum match
-            case Datum.DatumInlined     => DatumOption.Inline(Data.I(0))
-            case Datum.DatumValue(data) => DatumOption.Inline(data)
+
         val scriptUtxoOutput = TransactionOutput.Babbage(
           address = scriptAddress,
           value = scriptValue,
-          datumOption = Some(scriptUtxoDatum),
+          datumOption = datum,
           scriptRef = None
         )
         val scriptUtxo = TransactionUnspentOutput(scriptUtxoInput, scriptUtxoOutput)
@@ -43,7 +69,7 @@ object ScriptFeeComparison {
             val directWitness = ThreeArgumentPlutusScriptWitness(
               scriptSource = ScriptSource.PlutusScriptValue(script),
               redeemer = redeemer,
-              datum = datum,
+              datum = DatumInlined,
               additionalSigners = additionalSigners
             )
 
@@ -69,7 +95,7 @@ object ScriptFeeComparison {
             val refWitness = ThreeArgumentPlutusScriptWitness(
               scriptSource = ScriptSource.PlutusScriptAttached,
               redeemer = redeemer,
-              datum = datum,
+              datum = DatumInlined,
               additionalSigners = additionalSigners
             )
 
@@ -83,6 +109,37 @@ object ScriptFeeComparison {
         for
             direct <- createDirect
             reference <- createRef
-        yield FeeComparison(direct.body.value.fee, reference.body.value.fee)
+        yield FeeComparison(direct, reference)
     }
+
+    inline def compareAll(
+        inline code: Any,
+        redeemer: Data,
+        datum: Option[DatumOption],
+        context: BuilderContext,
+        additionalSigners: Set[ExpectedSigner] = Set.empty,
+        scriptValue: Value = Value.lovelace(10_000_000)
+    ): Map[Compiler.Options, ComparisonResult] = enumerateOptions
+        .groupMap(identity) { options =>
+            val plutusV3 = makePlutusV3(options, code)
+            compareFees(plutusV3, redeemer, datum, context, additionalSigners, scriptValue) match {
+                case Right(comparison)  => ComparisonResult.Ok(comparison, options)
+                case Left(errorMessage) => ComparisonResult.Fail(errorMessage, options)
+            }
+        }
+        .view
+        .mapValues(_.head)
+        .toMap
+
+    private inline def makePlutusV3(options: Compiler.Options, inline code: Any) = {
+        val p: Program = Compiler.compileInlineWithOptions(options, code).toUplc().plutusV3
+        Script.PlutusV3(p.cborByteString)
+    }
+
+    private def enumerateOptions: Seq[Compiler.Options] = for {
+        backend <- Seq(SimpleSirToUplcLowering, SirToUplc110Lowering, SirToUplcV3Lowering)
+        traces <- Seq(true, false)
+        optimize <- Seq(true, false)
+        debug <- Seq(true, false)
+    } yield Compiler.Options(backend, traces, optimize, debug = debug)
 }

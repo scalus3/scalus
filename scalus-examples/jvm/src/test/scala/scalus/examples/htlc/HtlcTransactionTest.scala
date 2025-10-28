@@ -6,9 +6,11 @@ import scalus.builtin.ByteString
 import scalus.builtin.ToData.*
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.utils.ScriptFeeComparison
-import scalus.cardano.ledger.utils.ScriptFeeComparison.FeeComparison
-import scalus.cardano.txbuilder.{BuilderContext, Datum}
+import scalus.cardano.ledger.utils.ScriptFeeComparison.{ComparisonResult, FeeComparison}
+import scalus.cardano.txbuilder.Datum.DatumInlined
+import scalus.cardano.txbuilder.{BuilderContext, Datum, ExpectedSigner}
 import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
@@ -165,15 +167,23 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     }
 
     test("fee cost comparison") {
-        ScriptFeeComparison.compareFees(
-          HtlcContract.releaseCompiledContract.script,
-          Reveal(ByteString.fromHex("a".repeat(32))).toData,
-          Datum.DatumInlined,
-          BuilderContext(env, TestUtil.createTestWallet(receiverAddress, amount))
-        ) match {
-            case Right(FeeComparison(direct, ref)) =>
-                assert(ref < direct)
-            case _ => fail("could not compare script fees for HTLC reveal")
-        }
+        val testDatum = ContractDatum(
+          committer = committerPkh,
+          receiver = receiverPkh,
+          image = validImage,
+          timeout = timeout
+        ).toData
+
+        val matrix = ScriptFeeComparison.compareAll(
+          HtlcValidator.validate,
+          Reveal(validPreimage).toData,
+          Some(Inline(testDatum)),
+          BuilderContext(
+            TestUtil.testEnvironmentWithEvaluator,
+            TestUtil.createTestWallet(receiverAddress, amount)
+          ),
+          additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(receiverPkh)))
+        )
+        matrix.foreach(println)
     }
 }

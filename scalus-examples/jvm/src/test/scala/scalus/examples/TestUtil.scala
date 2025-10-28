@@ -6,6 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{Environment, PubKeyWitness, TransactionUnspentOutput, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v3
 import scalus.uplc.Program
+import scalus.uplc.eval.ExBudget
 import scalus.testkit.ScalusTest
 
 object TestUtil extends ScalusTest {
@@ -16,6 +17,18 @@ object TestUtil extends ScalusTest {
       protocolParams = testProtocolParams,
       slotConfig = CardanoInfo.mainnet.slotConfig,
       evaluator = (_: Transaction, _: Map[TransactionInput, TransactionOutput]) => Seq.empty,
+      network = CardanoInfo.mainnet.network
+    )
+
+    val testEnvironmentWithEvaluator: Environment = Environment(
+      protocolParams = testProtocolParams,
+      slotConfig = CardanoInfo.mainnet.slotConfig,
+      evaluator = PlutusScriptEvaluator(
+        slotConfig = CardanoInfo.mainnet.slotConfig,
+        initialBudget = ExBudget.enormous,
+        protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
+        costModels = testProtocolParams.costModels
+      ),
       network = CardanoInfo.mainnet.network
     )
 
