@@ -26,9 +26,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
     import Cons.{cons, head}
     import scalus.uplc.eval.ExBudget
 
+    extension (self: TxOut) def token: Value = self.value.withoutLovelace
+
     val policyId = Mock.mockScriptHash(1)
-    val txRef = Mock.mockTxOutRef(2, 1)
     val initRef = Mock.mockTxOutRef(1, 1)
+    val removeRef = Mock.mockTxOutRef(3, 2)
     val parentRef = Mock.mockTxOutRef(3, 1)
     val royalty = Mock.mockScriptHash(2)
     val scriptAddress = Address.fromScriptHash(policyId)
@@ -39,129 +41,87 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
     )
     val user1 = Mock.mockPubKeyHash(1).hash
     val user2 = Mock.mockPubKeyHash(2).hash
+    val user3 = Mock.mockPubKeyHash(3).hash
     val emptyKey = hex""
 
     def key(token: TokenName = hex""): TokenName = LinkedList.nodeToken() ++ token
 
-    case class TestCase(
-        exBudget: ExBudget
-    ):
+    def node(
+        cell: Cons,
+        key: TokenName = key(),
+        burn: Boolean = false,
+        lovelace: BigInt = 0
+    ): TxOut = TxOut(
+      address = scriptAddress,
+      value = Value.lovelace(lovelace) + Value(cs = policyId, tn = key, v = if burn then -1 else 1),
+      datum = OutputDatum.OutputDatum(cell.toData)
+    )
 
+    case class TestCase(
+        budget: ExBudget,
+        inputs: List[TxInInfo],
+        outputs: List[TxOut] = List.Nil,
+        mint: Value,
+        action: NodeAction,
+        validRange: Interval = Interval.always,
+        signedBy: Option[PubKeyHash] = None,
+        shouldFail: Boolean = false
+    ):
         def check: Unit =
-            val mintedValue = Value(cs = policyId, tn = key(), v = 1)
-            val cell: Cons = head()
-            val headOutput = TxOut(
-              address = scriptAddress,
-              value = Value.lovelace(4_000_000) + mintedValue,
-              datum = OutputDatum.OutputDatum(cell.toData)
-            )
             val tx = TxInfo.placeholder.copy(
-              inputs = List(
-                TxInInfo(
-                  outRef = initRef,
-                  resolved = TxOut(
-                    address = scriptAddress,
-                    value = Value.lovelace(4_000_000),
-                    datum = OutputDatum.NoOutputDatum
-                  )
-                )
-              ),
-              outputs = List.single(headOutput),
-              mint = mintedValue,
-              id = txRef.id
+              inputs,
+              outputs = outputs,
+              mint = mint,
+              validRange = validRange,
+              signatories = signedBy.map(List.single).getOrElse(List.Nil),
+              id = Mock.mockTxOutRef(2, 1).id
             )
-            LinkedListContract
+            val result = LinkedListContract
                 .make(config)
                 .runWithDebug(
                   scriptContext = ScriptContext(
                     txInfo = tx,
-                    redeemer = NodeAction.Init.toData,
+                    redeemer = action.toData,
                     scriptInfo = ScriptInfo.MintingScript(policyId)
                   )
-                ) match
-                case Result.Success(term, budget, costs, logs) =>
-                    if budget.cpu <= exBudget.cpu && budget.memory <= exBudget.memory then
-                        println(budget)
-                        fail("Performance regression")
-                case Result.Failure(exception, budget, costs, logs) =>
-                    logs.foreach(println)
-                    fail(s"Script failed with exception: ${exception.getMessage}")
+                )
+            if shouldFail != result.isSuccess then
+                if result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory then
+                    println(result.budget)
+                    println(result.costs)
+                    fail("Performance regression")
+            else
+                result.logs.foreach(println)
+                val reason = result match
+                    case Result.Failure(exception, _, _, _) =>
+                        s"Script failed with exception: ${exception.getMessage}"
+                    case _ => "Script should fail, but didn't"
+                fail(reason)
 
     test("Verify that a linked list can be properly initialized"):
-        val mintedValue = Value(cs = policyId, tn = key(), v = 1)
-        val cell: Cons = head()
-        val headOutput = TxOut(
-          address = scriptAddress,
-          value = Value.lovelace(4_000_000) + mintedValue,
-          datum = OutputDatum.OutputDatum(cell.toData)
-        )
-        val tx = TxInfo.placeholder.copy(
+        val headOutput = node(head(), lovelace = 4_000_000)
+        val headInput = headOutput.copy(datum = OutputDatum.NoOutputDatum)
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(143129594, 515159),
           inputs = List(
             TxInInfo(
               outRef = initRef,
-              resolved = TxOut(
-                address = scriptAddress,
-                value = Value.lovelace(4_000_000),
-                datum = OutputDatum.NoOutputDatum
-              )
+              resolved = headInput
             )
           ),
           outputs = List.single(headOutput),
-          mint = mintedValue,
-          id = txRef.id
+          mint = headOutput.token,
+          action = NodeAction.Init
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Init.toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isFailure then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(143129594, 515159)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isSuccess, "Linked list initialization should succeed")
 
     test("Verify that a linked list can be properly de-initialized (burn)"):
-        val burnValue = Value(cs = policyId, tn = key(), v = -1)
-        val cell: Cons = head()
-        val nodeOut = TxOut(
-          address = scriptAddress,
-          value = Value.lovelace(4_000_000) + burnValue,
-          datum = OutputDatum.OutputDatum(cell.toData)
-        )
-        val tx = TxInfo.placeholder.copy(
+        val nodeOut = node(head(), burn = true, lovelace = 4_000_000)
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(85976699, 303776),
           inputs = List(TxInInfo(initRef, nodeOut)),
-          mint = burnValue,
-          id = txRef.id
+          mint = nodeOut.token,
+          action = NodeAction.Deinit
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Deinit.toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isFailure then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(85976699, 303776)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isSuccess, "Linked list de-initialization should succeed")
 
     test("Verify that de-initialization fails if the list is not empty"):
         val nonEmptyCell = cons(
@@ -175,30 +135,13 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           datum = OutputDatum.OutputDatum(nonEmptyCell.toData)
         )
         val burnValue = Value(cs = policyId, tn = key(), v = -1)
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(63261784, 222384),
           inputs = List(TxInInfo(initRef, nodeOut)),
           mint = burnValue,
-          id = txRef.id
+          action = NodeAction.Deinit,
+          shouldFail = true,
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Deinit.toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(63261784, 222384)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isFailure, "De-initialization should fail if the list is not empty")
 
     test("Verify that the first node can be inserted into the linked list"):
         val parentCell: Cons = head()
@@ -216,36 +159,18 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           insertValue,
           OutputDatum.OutputDatum(newCell.toData)
         )
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(303439106, 1054709),
           inputs = List.single(TxInInfo(parentRef, parentOutput)),
           outputs = List(
             parentOutput.copy(datum = OutputDatum.OutputDatum(head(newCell.key).toData)),
             newOutput
           ),
           mint = Value(cs = policyId, tn = key(user1), v = 1),
+          action = NodeAction.Insert(PubKeyHash(user1), parentCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user1)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user1))
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Insert(PubKeyHash(user1), parentCell).toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isFailure then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(303439106, 1054709)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isSuccess, "Linked list insertion should succeed")
 
     test("Verify that a new node can be inserted into the linked list"):
         val parentCell = cons(user1)
@@ -262,7 +187,8 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           insertValue,
           OutputDatum.OutputDatum(newCell.toData)
         )
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
           inputs = List.single(TxInInfo(parentRef, parentOutput)),
           outputs = List(
             parentOutput.copy(datum =
@@ -270,30 +196,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
             ),
             newOutput
           ),
-          mint = Value(cs = policyId, tn = key(user2), v = 1),
+          mint = Value(cs = policyId, tn = key(user1), v = 1),
+          action = NodeAction.Insert(PubKeyHash(user2), parentCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user2)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user2))
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Insert(PubKeyHash(user2), parentCell).toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isFailure then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(305468667, 1062506)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isSuccess, "Linked list insertion should succeed")
 
     test("Verify that a new node can be inserted into the linked list for a non-empty covering"):
         val parentCell = cons(user1)
@@ -310,7 +217,8 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           insertValue,
           OutputDatum.OutputDatum(newCell.toData)
         )
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
           inputs = List.single(TxInInfo(parentRef, parentOutput)),
           outputs = List(
             parentOutput.copy(datum =
@@ -319,31 +227,10 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
             newOutput
           ),
           mint = Value(cs = policyId, tn = key(user2), v = 1),
+          action = NodeAction.Insert(PubKeyHash(user2), parentCell.copy()),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user2)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user2))
         )
-        val user3 = Mock.mockPubKeyHash(3).hash
-        val updatedCell = cons(user2, Some(user3))
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Insert(PubKeyHash(user2), parentCell.copy()).toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isFailure then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(305468667, 1062506)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isSuccess, "Linked list insertion should succeed if covering isn't empty")
 
     test("Verify that a new node insertion fails for a duplicate key"):
         // TODO: test in ledger with keys not at inputs
@@ -361,7 +248,8 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           insertValue,
           OutputDatum.OutputDatum(newCell.toData)
         )
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
           inputs = List.single(TxInInfo(parentRef, parentOutput)),
           outputs = List(
             parentOutput.copy(datum =
@@ -370,29 +258,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
             newOutput
           ),
           mint = Value(cs = policyId, tn = key(user2), v = 1),
+          action = NodeAction.Insert(PubKeyHash(user2), parentCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user2)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user2)),
+          shouldFail = true
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Insert(PubKeyHash(user2), parentCell).toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(305468667, 1062506)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isFailure, "Linked list insertion should fail for a duplicate key")
 
     test("Verify that a new node insertion fails for an unordered key"):
         val parentCell = cons(user2)
@@ -409,7 +279,8 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           insertValue,
           OutputDatum.OutputDatum(newCell.toData)
         )
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
           inputs = List.single(TxInInfo(parentRef, parentOutput)),
           outputs = List(
             parentOutput.copy(datum =
@@ -418,29 +289,11 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
             newOutput
           ),
           mint = Value(cs = policyId, tn = key(user1), v = 1),
+          action = NodeAction.Insert(PubKeyHash(user1), parentCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user1)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user1)),
+          shouldFail = true
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Insert(PubKeyHash(user1), parentCell).toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(305468667, 1062506)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isFailure, "Linked list insertion should fail for an unordered key")
 
     test("Verify that a new node insertion fails for an empty key"):
         val parentCell: Cons = head()
@@ -459,36 +312,19 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           insertValue,
           OutputDatum.OutputDatum(newCell.toData)
         )
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(146423245, 522047),
           inputs = List.single(TxInInfo(parentRef, parentOutput)),
           outputs = List(
             parentOutput.copy(datum = OutputDatum.OutputDatum(head(newCell.key).toData)),
             newOutput
           ),
           mint = Value(cs = policyId, tn = key(emptyKey), v = 1),
+          action = NodeAction.Insert(PubKeyHash(emptyKey), parentCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(emptyKey)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(emptyKey)),
+          shouldFail = true
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction.Insert(PubKeyHash(emptyKey), parentCell).toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(146423245, 522047)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isFailure, "Linked list insertion should fail if key is empty")
 
     test("Verify that a node can be removed from the linked list"):
         val parentCell = cons(key = user1, ref = Some(user2))
@@ -513,38 +349,18 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           OutputDatum.OutputDatum(updatedCell.toData)
         )
         val burnValue = Value(cs = policyId, tn = key(user2), v = -1)
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
           inputs = List(
             TxInInfo(removeRef, removeOutput),
             TxInInfo(parentRef, parentOutput)
           ),
           outputs = List.single(updatedOutput),
           mint = burnValue,
+          action = NodeAction.Remove(PubKeyHash(user2), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user2)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user2))
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction
-                    .Remove(PubKeyHash(user2), updatedCell)
-                    .toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isFailure then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(338398996, 1165209)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isSuccess, "Linked list removal should succeed")
 
     test("Verify that a node removing fails for an empty key"):
         val parentCell = cons(key = user1, ref = Some(emptyKey))
@@ -570,38 +386,18 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           OutputDatum.OutputDatum(updatedCell.toData)
         )
         val burnValue = Value(cs = policyId, tn = key(emptyKey), v = -1)
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
           inputs = List(
             TxInInfo(removeRef, removeOutput),
             TxInInfo(parentRef, parentOutput)
           ),
           outputs = List.single(updatedOutput),
           mint = burnValue,
+          action = NodeAction.Remove(PubKeyHash(emptyKey), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(emptyKey)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(emptyKey))
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction
-                    .Remove(PubKeyHash(emptyKey), updatedCell)
-                    .toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(338398996, 1165209)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(result.isFailure, "Linked list removal should fail if key is empty")
 
     test("Verify that the first node removing fails for a non-empty covering"):
         val parentCell = head(Some(user1))
@@ -618,7 +414,6 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           removeValue,
           OutputDatum.OutputDatum(removeCell.toData)
         )
-        val removeRef = Mock.mockTxOutRef(3, 2)
         val updatedCell = head(Some(user2))
         val updatedOutput = TxOut(
           scriptAddress,
@@ -626,40 +421,17 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           OutputDatum.OutputDatum(updatedCell.toData)
         )
         val burnValue = Value(cs = policyId, tn = key(user1), v = -1)
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
           inputs = List(
             TxInInfo(removeRef, removeOutput),
             TxInInfo(parentRef, parentOutput)
           ),
           outputs = List.single(updatedOutput),
           mint = burnValue,
+          action = NodeAction.Remove(PubKeyHash(user1), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user1)),
-          id = txRef.id
-        )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction
-                    .Remove(PubKeyHash(user1), updatedCell)
-                    .toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(338398996, 1165209)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
-        )
-        assert(
-          result.isFailure,
-          "Linked list removal should fail if covering reference isn't empty for the first node"
+          signedBy = Some(PubKeyHash(user1))
         )
 
     test("Verify that a non-first node removing fails for an empty covering"):
@@ -685,38 +457,121 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           OutputDatum.OutputDatum(updatedCell.toData)
         )
         val burnValue = Value(cs = policyId, tn = key(user2), v = -1)
-        val tx = TxInfo.placeholder.copy(
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
           inputs = List(
             TxInInfo(removeRef, removeOutput),
             TxInInfo(parentRef, parentOutput)
           ),
           outputs = List.single(updatedOutput),
           mint = burnValue,
+          action = NodeAction.Remove(PubKeyHash(user2), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signatories = List.single(PubKeyHash(user2)),
-          id = txRef.id
+          signedBy = Some(PubKeyHash(user2))
         )
-        val result = LinkedListContract
-            .make(config)
-            .runWithDebug(
-              scriptContext = ScriptContext(
-                txInfo = tx,
-                redeemer = NodeAction
-                    .Remove(PubKeyHash(user2), updatedCell)
-                    .toData,
-                scriptInfo = ScriptInfo.MintingScript(policyId)
-              )
-            )
-        if result.isSuccess then
-            result.logs.foreach(println)
-            println(result)
-        else println(result.budget)
-        val budget = ExBudget.fromCpuAndMemory(338398996, 1165209)
-        assert(
-          result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory,
-          "Performance regression"
+
+    test("Verify that a node can be prepended to the head of the linked list"):
+        val headCell = head(Some(user1))
+        val headValue =
+            Value.lovelace(4_000_000) + Value(cs = policyId, tn = key(), v = 1)
+        val headOutput = TxOut(
+          scriptAddress,
+          headValue,
+          OutputDatum.OutputDatum(headCell.toData)
         )
-        assert(
-          result.isFailure,
-          "Linked list removal should fail if covering reference is empty for a non-first node"
+        val newCell = cons(user2, ref = Some(user1))
+        val newValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
+        val newOutput = TxOut(
+          scriptAddress,
+          newValue,
+          OutputDatum.OutputDatum(newCell.toData)
+        )
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
+          inputs = List.single(TxInInfo(parentRef, headOutput)),
+          outputs = List(
+            // Updated head now points to user2
+            headOutput.copy(
+              datum = OutputDatum.OutputDatum(cons(key = emptyKey, ref = Some(user2)).toData)
+            ),
+            newOutput
+          ),
+          mint = Value(cs = policyId, tn = key(user2), v = 1),
+          action = NodeAction.Prepend(PubKeyHash(user2), headCell),
+          validRange = Interval.entirelyBetween(1000L, 2000L),
+          signedBy = Some(PubKeyHash(user2))
+        )
+
+    test("Verify that prepend fails when the anchor is not the head node"):
+        val midCell = cons(key = user1, ref = Some(user2))
+        val midValue =
+            Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
+        val midOutput = TxOut(
+          scriptAddress,
+          midValue,
+          OutputDatum.OutputDatum(midCell.toData)
+        )
+        val newCell = cons(user3, ref = Some(user1))
+        val newValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user3), v = 1)
+        val newOutput = TxOut(
+          scriptAddress,
+          newValue,
+          OutputDatum.OutputDatum(newCell.toData)
+        )
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
+          inputs = List.single(TxInInfo(parentRef, midOutput)),
+          outputs = List(midOutput, newOutput),
+          mint = Value(cs = policyId, tn = key(user3), v = 1),
+          action = NodeAction.Prepend(PubKeyHash(user3), midCell),
+          validRange = Interval.entirelyBetween(1000L, 2000L),
+          signedBy = Some(PubKeyHash(user3)),
+          shouldFail = true
+        )
+
+    test("Verify that a node can be appended to the tail of the linked list"):
+        val parentCell = cons(user1)
+        val parentOutput = node(parentCell, user1, lovelace = 9_000_000)
+        val newCell = cons(user2)
+        val newOutput = node(newCell, user2, lovelace = parentOutput.value.getLovelace)
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
+          inputs = List.single(TxInInfo(parentRef, parentOutput)),
+          outputs = List(
+            parentOutput.copy(
+              datum = OutputDatum.OutputDatum(parentCell.copy(ref = Some(user2)).toData)
+            ),
+            newOutput
+          ),
+          mint = newOutput.token,
+          action = NodeAction.Append(PubKeyHash(user2), parentCell),
+          validRange = Interval.entirelyBetween(1000L, 2000L),
+          signedBy = Some(PubKeyHash(user2))
+        )
+
+    test("Verify that append fails when the anchor is not the tail node"):
+        val midCell = cons(user1, ref = Some(user2))
+        val midValue =
+            Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
+        val midOutput = TxOut(
+          scriptAddress,
+          midValue,
+          OutputDatum.OutputDatum(midCell.toData)
+        )
+        val newCell = cons(user3)
+        val newValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user3), v = 1)
+        val newOutput = TxOut(
+          scriptAddress,
+          newValue,
+          OutputDatum.OutputDatum(newCell.toData)
+        )
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
+          inputs = List.single(TxInInfo(parentRef, midOutput)),
+          outputs = List(midOutput, newOutput),
+          mint = Value(cs = policyId, tn = key(user3), v = 1),
+          action = NodeAction.Append(PubKeyHash(user3), midCell),
+          validRange = Interval.entirelyBetween(1000L, 2000L),
+          signedBy = Some(PubKeyHash(user3)),
+          shouldFail = true
         )

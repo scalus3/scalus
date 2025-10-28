@@ -4,8 +4,8 @@ import scalus.Compiler.compile
 import scalus.Compiler.compileWithOptions
 import scalus.builtin.Builtins
 import scalus.builtin.ByteString
-import scalus.builtin.ByteString.hex
 import scalus.builtin.ByteString.fromString
+import scalus.builtin.ByteString.hex
 import scalus.builtin.Data
 import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
@@ -37,6 +37,8 @@ case class Config(
 
 @Compile
 object Config
+
+// assumptions: keys must be unique
 
 type NodeKey = Option[TokenName]
 
@@ -179,6 +181,8 @@ enum NodeAction derives FromData, ToData:
       *   A pair of `key`'s original parent key, that expected to be at linked list, and a reference
       *   to the original tail, that remains unchanged.
       */
+    case Prepend(key: PubKeyHash, covering: Cons)
+    case Append(key: PubKeyHash, covering: Cons)
     case Remove(key: PubKeyHash, covering: Cons)
 
 @Compile
@@ -403,6 +407,26 @@ object LinkedList extends DataParameterizedValidator:
                   "Must be signed by a node key"
                 )
                 insert(common, key, covering)
+            case NodeAction.Prepend(key, covering) =>
+                require(
+                  range.isEntirelyBefore(cfg.deadline),
+                  "Must be before the deadline"
+                )
+                require(
+                  signatories.contains(key),
+                  "Must be signed by a node key"
+                )
+                prepend(common, key, covering)
+            case NodeAction.Append(key, covering) =>
+                require(
+                  range.isEntirelyBefore(cfg.deadline),
+                  "Must be before the deadline"
+                )
+                require(
+                  signatories.contains(key),
+                  "Must be signed by a node key"
+                )
+                append(common, key, covering)
             case NodeAction.Remove(key, covering) =>
                 require(
                   signatories.contains(key),
@@ -548,6 +572,121 @@ object LinkedList extends DataParameterizedValidator:
               "There must be stay node input\n" +
                   "There must be a remove node input\n" +
                   "Must spend parent and removed nodes only"
+            )
+
+    /** Prepend a new node to the beginning of the list.
+      *
+      * Covering cell is expected to be the head (root) node's cell.
+      *
+      * @param prependKey
+      *   A key the new cell be added at.
+      * @param cell
+      *   A pair of key's parent key, that expected to be at linked list, and a reference to the new
+      *   tail.
+      */
+    def prepend(common: Common, prependKey: PubKeyHash, cell: Cons): Unit = common.inputs match
+        case List.Cons(anchorIn, List.Nil) =>
+            common.outputs match
+                case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
+                    val (prepOut, anchorOut) = fstOut.sort(sndOut)
+                    val PubKeyHash(key) = prependKey
+
+                    // The anchor input must be the head (root): its key must be None
+                    require(
+                      anchorIn.cell.key.isEmpty,
+                      "Anchor node input must be the head (root)"
+                    )
+
+                    // The newly prepended node must hold the minted token
+                    require(
+                      common.mint.flatten === List.single(
+                        (common.policy, nodeToken(key), BigInt(1))
+                      ),
+                      "Must mint an NFT value for the prepended key for this linked list"
+                    )
+
+                    // The prepended node must reference the old anchor's ref (preserve link)
+                    require(
+                      prepOut.cell.ref === anchorIn.cell.ref,
+                      "Prepended node must point to the same next node as the anchor input"
+                    )
+
+                    // Anchor output must now point to the prepended key
+                    require(
+                      anchorOut.cell === Node(anchorIn.value, anchorIn.cell.succ(key)).cell,
+                      "Anchor node output must link to the prepended key"
+                    )
+
+                    // Ensure parent's value unchanged except for the link update
+                    require(
+                      anchorOut.value === anchorIn.value,
+                      "Anchor node output must keep same value as anchor input"
+                    )
+
+                case _ =>
+                    fail(
+                      "There must be exactly two node outputs: prepended node and anchor node output"
+                    )
+        case _ =>
+            fail(
+              "There must be a single anchor node input"
+            )
+
+    /** Append a new node to the end of the list.
+      *
+      * Covering cell is expected to be the last node's cell.
+      *
+      * @param appendKey
+      *   A key the new cell be added at.
+      * @param cell
+      *   A pair of key's parent key, that expected to be at linked list, and a reference to the new
+      *   tail.
+      */
+    def append(common: Common, appendKey: PubKeyHash, cell: Cons): Unit = common.inputs match
+        case List.Cons(anchorIn, List.Nil) =>
+            common.outputs match
+                case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
+                    val (appendOut, anchorOut) = fstOut.sort(sndOut)
+                    val PubKeyHash(key) = appendKey
+
+                    // Anchor input must be the last node before transaction: its ref must be None
+                    require(
+                      anchorIn.cell.ref.isEmpty,
+                      "Anchor node input must be the last node (tail)"
+                    )
+
+                    // The newly appended node must hold the minted token and be the new last node
+                    require(
+                      appendOut.cell.ref.isEmpty,
+                      "Appended node must be the last node (its ref must be empty)"
+                    )
+
+                    require(
+                      common.mint.flatten === List.single(
+                        (common.policy, nodeToken(key), BigInt(1))
+                      ),
+                      "Must mint an NFT value for the appended key for this linked list"
+                    )
+
+                    // Anchor output must link to the appended key
+                    require(
+                      anchorOut.cell === Node(anchorIn.value, anchorIn.cell.succ(key)).cell,
+                      "Anchor node output must link to the appended key"
+                    )
+
+                    // Ensure parent's value unchanged except for the link update
+                    require(
+                      anchorOut.value === anchorIn.value,
+                      "Anchor node output must keep same value as anchor input"
+                    )
+
+                case _ =>
+                    fail(
+                      "There must be exactly two node outputs: appended node and anchor node output"
+                    )
+        case _ =>
+            fail(
+              "There must be a single anchor node input"
             )
 
 object LinkedListContract:
