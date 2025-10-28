@@ -71,11 +71,23 @@ object Coin {
             case _ => -1
         }
 
-        @targetName("addCoerceCoins")
-        infix def +(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
+        @targetName("addCoerce")
+        infix def +~(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
 
-        @targetName("subtractCoerceCoins")
-        infix def -(other: Coin): Unbounded = Unbounded(self) - Unbounded(other)
+        @targetName("addCoerce")
+        infix def +~(other: Unbounded): Unbounded = Unbounded(self) + other
+
+        @targetName("addCoerce")
+        infix def +~(other: Fractional): Fractional = Fractional(self) + other
+
+        @targetName("subtractCoerce")
+        infix def -~(other: Coin): Unbounded = Unbounded(self) - Unbounded(other)
+
+        @targetName("subtractCoerce")
+        infix def -~(other: Unbounded): Unbounded = Unbounded(self) - other
+
+        @targetName("subtractCoerce")
+        infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
         @targetName("negate")
         infix def unary_- : Unbounded = -Unbounded(self)
@@ -137,6 +149,24 @@ object Coin {
                 else throw Coin.ArithmeticError.Overflow
 
             def toCoinFractional: Fractional = Fractional(self.toRational)
+
+            @targetName("addCoerce")
+            infix def +~(other: Coin): Unbounded = self + other.toCoinUnbounded
+
+            @targetName("addCoerce")
+            infix def +~(other: Unbounded): Unbounded = self + other
+
+            @targetName("addCoerce")
+            infix def +~(other: Fractional): Fractional = Fractional(self) + other
+
+            @targetName("subtractCoerce")
+            infix def -~(other: Coin): Unbounded = self - other.toCoinUnbounded
+
+            @targetName("subtractCoerce")
+            infix def -~(other: Unbounded): Unbounded = self - other
+
+            @targetName("subtractCoerce")
+            infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 self :* c.toSafeLong
@@ -216,6 +246,24 @@ object Coin {
                     case e: Coin.ArithmeticError => throw e
                 }
             }
+
+            @targetName("addCoerce")
+            infix def +~(other: Coin): Fractional = self + other.toCoinFractional
+
+            @targetName("addCoerce")
+            infix def +~(other: Unbounded): Fractional = self + other.toCoinFractional
+
+            @targetName("addCoerce")
+            infix def +~(other: Fractional): Fractional = self + other
+
+            @targetName("subtractCoerce")
+            infix def -~(other: Coin): Fractional = self - other.toCoinFractional
+
+            @targetName("subtractCoerce")
+            infix def -~(other: Unbounded): Fractional = self - other.toCoinFractional
+
+            @targetName("subtractCoerce")
+            infix def -~(other: Fractional): Fractional = self - other
 
             def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
                 self :* c.toRational
