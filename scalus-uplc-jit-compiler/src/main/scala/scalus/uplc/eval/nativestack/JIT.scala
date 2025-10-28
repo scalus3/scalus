@@ -6,6 +6,7 @@ import scalus.uplc.DefaultUni.asConstant
 import scalus.*
 import scalus.uplc.eval.{BudgetSpender, CekValue, ExBudgetCategory, Logger, MachineParams, StepKind}
 import scalus.uplc.eval.ExBudgetCategory.{Startup, Step}
+import scalus.uplc.eval.jitcommon.*
 
 import scala.quoted.*
 
@@ -22,7 +23,7 @@ import scala.quoted.*
   * @note
   *   This is an experimental feature that requires scala3-staging and scala3-compiler dependencies.
   */
-object JIT {
+object JIT extends JitRunner {
     private given staging.Compiler = staging.Compiler.make(getClass.getClassLoader)
 
     private given ByteStringToExpr: ToExpr[ByteString] with {
@@ -51,12 +52,12 @@ object JIT {
 
     private def constantToExpr(const: Constant)(using Quotes): Expr[Any] = {
         const match
-            case Constant.Integer(value)    => Expr(value)
-            case Constant.ByteString(value) => Expr(value)
-            case Constant.String(value)     => Expr(value)
-            case Constant.Unit              => '{ () }
-            case Constant.Bool(value)       => Expr(value)
-            case Constant.Data(value)       => Expr(value)
+            case Constant.Integer(value)        => Expr(value)
+            case Constant.ByteString(value)     => Expr(value)
+            case Constant.String(value)         => Expr(value)
+            case Constant.Unit                  => '{ () }
+            case Constant.Bool(value)           => Expr(value)
+            case Constant.Data(value)           => Expr(value)
             case Constant.List(elemType, value) =>
                 // Lists are represented as plain Scala List[Any] at runtime
                 // No need to track element type - list operations have constant cost functions
@@ -81,12 +82,15 @@ object JIT {
     )(using Quotes): Expr[(Logger, BudgetSpender, MachineParams) => Any] = {
         import quotes.reflect.{Lambda, MethodType, Symbol, TypeRepr, asTerm}
 
+        val nativeStackContext = '{ new NativeStackContext() }
+
         def genCode(
             term: Term,
             env: List[(String, quotes.reflect.Term)],
             logger: Expr[Logger],
             budget: Expr[BudgetSpender],
-            params: Expr[MachineParams]
+            params: Expr[MachineParams],
+            nativeStackContext: Expr[NativeStackContext]
         ): Expr[Any] = {
             term match
                 case Term.Var(name) =>
@@ -108,6 +112,7 @@ object JIT {
                             logger,
                             budget,
                             params,
+                            nativeStackContext
                           ).asTerm
                               .changeOwner(methSym)
                       }
@@ -121,18 +126,21 @@ object JIT {
                         $lambda
                     }
                 case Term.Apply(f, arg) =>
-                    val func = genCode(f, env, logger, budget, params)
-                    val a = genCode(arg, env, logger, budget, params)
+                    val func = genCode(f, env, logger, budget, params, nativeStackContext)
+                    val a = genCode(arg, env, logger, budget, params, nativeStackContext)
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Apply),
                           $params.machineCosts.applyCost,
                           Nil
                         )
-                        ${ func }.asInstanceOf[Any => Any].apply($a)
+                        ${ nativeStackContext }.incr()
+                        val r = ${ func }.asInstanceOf[Any => Any].apply($a)
+                        ${ nativeStackContext }.decr()
+                        r
                     }
                 case Term.Force(term) =>
-                    val expr = genCode(term, env, logger, budget, params)
+                    val expr = genCode(term, env, logger, budget, params, nativeStackContext)
                     '{
                         val forceTerm = ${ expr }.asInstanceOf[() => Any]
                         $budget.spendBudget(
@@ -149,7 +157,7 @@ object JIT {
                           $params.machineCosts.delayCost,
                           Nil
                         )
-                        () => ${ genCode(term, env, logger, budget, params) }
+                        () => ${ genCode(term, env, logger, budget, params, nativeStackContext) }
                     }
                 case Term.Const(const) =>
                     val expr = constantToExpr(const)
@@ -209,7 +217,7 @@ object JIT {
                 case Term.Constr(tag, args) =>
                     val expr = Expr.ofTuple(
                       Expr(tag.value) -> Expr.ofList(
-                        args.map(a => genCode(a, env, logger, budget, params))
+                        args.map(a => genCode(a, env, logger, budget, params, nativeStackContext))
                       )
                     )
                     '{
@@ -222,12 +230,12 @@ object JIT {
                     }
                 case Term.Case(arg, cases) =>
                     val constr =
-                        genCode(arg, env, logger, budget, params)
+                        genCode(arg, env, logger, budget, params, nativeStackContext)
                             .asExprOf[(Long, List[Any])]
                     val caseFuncs =
                         Expr.ofList(
                           cases.map(c =>
-                              genCode(c, env, logger, budget, params)
+                              genCode(c, env, logger, budget, params, nativeStackContext)
                                   .asExprOf[Any => Any]
                           )
                         )
@@ -241,8 +249,9 @@ object JIT {
         }
 
         val retval = '{ (logger: Logger, budget: BudgetSpender, params: MachineParams) =>
+            val nativeStackContext = new NativeStackContext()
             budget.spendBudget(Startup, params.machineCosts.startupCost, Nil)
-            ${ genCode(term, Nil, 'logger, 'budget, 'params) }
+            ${ genCode(term, Nil, 'logger, 'budget, 'params, 'nativeStackContext) }
         }
 
         // println(retval.show)
@@ -251,37 +260,13 @@ object JIT {
     }
 
     /** Compiles a UPLC term into an optimized JVM function using JIT compilation.
-      *
-      * This method takes a UPLC term and generates optimized JVM bytecode that can be executed
-      * directly without interpretation overhead. The resulting function maintains full
-      * compatibility with Plutus VM semantics including proper budget tracking, logging, and error
-      * handling.
-      *
-      * @param term
-      *   The UPLC term to compile
-      * @return
-      *   A function that takes a Logger, BudgetSpender, and MachineParams and returns the
-      *   evaluation result. The function signature is:
-      *   `(Logger, BudgetSpender, MachineParams) => Any`
-      *
-      * @example
-      *   {{{
-      * val term: Term = ... // some UPLC term
-      * val jittedFunction = JIT.jitUplc(term)
-      * val result = jittedFunction(logger, budgetSpender, machineParams)
-      *   }}}
-      *
-      * @note
-      *   The compilation happens at runtime and may take some time for complex terms. The compiled
-      *   function can then be cached and reused for better performance when evaluating the same
-      *   term multiple times.
-      *
-      * @throws RuntimeException
-      *   if the term contains unsupported constructs or if compilation fails
       */
-    def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any =
+    override def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any =
         staging.run { (quotes: Quotes) ?=>
             val expr = genCodeFromTerm(term)
             expr
         }
+
+    override def isStackSafe: Boolean = false
+
 }

@@ -18,7 +18,7 @@ object TestJITCompilationHang {
 
         val start = System.currentTimeMillis()
         println("Calling JIT.jitUplc...")
-        val jitted = JIT.jitUplc(program.term)
+        val jitted = mincont.JIT.jitUplc(program.term)
         val end = System.currentTimeMillis()
 
         println(s"JIT compilation completed in ${end - start} ms")

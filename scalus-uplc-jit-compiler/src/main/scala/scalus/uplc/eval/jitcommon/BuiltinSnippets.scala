@@ -1,8 +1,9 @@
-package scalus.uplc.eval.nativestack
+package scalus.uplc.eval.jitcommon
 
 import scalus.builtin.{Builtins, ByteString, Data}
 import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams, StepKind}
 import scalus.uplc.eval.ExBudgetCategory.Step
+import scalus.uplc.eval.jitcommon.*
 
 /** Pre-compiled builtin function implementations for NativeStack JIT.
   *
@@ -23,137 +24,144 @@ object BuiltinSnippets {
     @inline def addInteger(
         budget: BudgetSpender,
         params: MachineParams
-    ): (BigInt, BigInt) => BigInt =
-        (x: BigInt, y: BigInt) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.addInteger.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.addInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x + y
-        }
+                x + y
+            }
 
     @inline def subtractInteger(
         budget: BudgetSpender,
         params: MachineParams
-    ): (BigInt, BigInt) => BigInt =
-        (x: BigInt, y: BigInt) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.subtractInteger.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.subtractInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x - y
-        }
+                x - y
+            }
 
     @inline def multiplyInteger(
         budget: BudgetSpender,
         params: MachineParams
-    ): (BigInt, BigInt) => BigInt =
-        (x: BigInt, y: BigInt) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.multiplyInteger.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.multiplyInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x * y
-        }
+                x * y
+            }
 
     @inline def lessThanInteger(
         budget: BudgetSpender,
         params: MachineParams
-    ): (BigInt, BigInt) => Boolean =
-        (x: BigInt, y: BigInt) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.lessThanInteger.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    ): BigInt => BigInt => Boolean =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.lessThanInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x < y
-        }
+                x < y
+            }
 
     @inline def lessThanEqualsInteger(
         budget: BudgetSpender,
         params: MachineParams
-    ): (BigInt, BigInt) => Boolean =
-        (x: BigInt, y: BigInt) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.lessThanEqualsInteger.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    ): BigInt => BigInt => Boolean =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.lessThanEqualsInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x <= y
-        }
+                x <= y
+            }
 
     @inline def equalsInteger(
         budget: BudgetSpender,
         params: MachineParams
-    ): (BigInt, BigInt) => Boolean =
-        (x: BigInt, y: BigInt) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.equalsInteger.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    ): BigInt => BigInt => Boolean =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.equalsInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x == y
-        }
+                x == y
+            }
 
     // ByteString operations
 
     @inline def equalsByteString(
         budget: BudgetSpender,
         params: MachineParams
-    ): (ByteString, ByteString) => Boolean =
-        (x: ByteString, y: ByteString) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.equalsByteString.calculateCostFromMemory(
-                Seq(
-                  MemoryUsageJit.memoryUsage(x),
-                  MemoryUsageJit.memoryUsage(y)
+    ): ByteString => ByteString => Boolean =
+        (x: ByteString) =>
+            (y: ByteString) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.equalsByteString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            x == y
-        }
+                x == y
+            }
 
     @inline def sha2_256(budget: BudgetSpender, params: MachineParams): ByteString => ByteString =
         (bs: ByteString) => {
             budget.spendBudget(
               Step(StepKind.Builtin),
               params.builtinCostModel.sha2_256.calculateCostFromMemory(
-                Seq(MemoryUsage.memoryUsage(bs))
+                Seq(MemoryUsageJit.memoryUsage(bs))
               ),
               Nil
             )
@@ -162,20 +170,21 @@ object BuiltinSnippets {
 
     // Data operations
 
-    @inline def equalsData(budget: BudgetSpender, params: MachineParams): (Data, Data) => Boolean =
-        (x: Data, y: Data) => {
-            budget.spendBudget(
-              Step(StepKind.Builtin),
-              params.builtinCostModel.equalsData.calculateCostFromMemory(
-                Seq(
-                  MemoryUsage.memoryUsage(x),
-                  MemoryUsage.memoryUsage(y)
+    @inline def equalsData(budget: BudgetSpender, params: MachineParams): Data => Data => Boolean =
+        (x: Data) =>
+            (y: Data) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.equalsData.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
                 )
-              ),
-              Nil
-            )
-            Builtins.equalsData(x, y)
-        }
+                Builtins.equalsData(x, y)
+            }
 
     @inline def unConstrData(budget: BudgetSpender, params: MachineParams): Data => Any =
         (x: Data) => {
@@ -247,7 +256,7 @@ object BuiltinSnippets {
 
     // Pair operations
 
-    @inline def fstPair(budget: BudgetSpender, params: MachineParams): () => Any =
+    @inline def fstPair(budget: BudgetSpender, params: MachineParams): () => () => Any =
         () =>
             () =>
                 (x: Any) => {
@@ -260,7 +269,7 @@ object BuiltinSnippets {
                     Builtins.fstPair(x.asInstanceOf[BuiltinPair[?, ?]])
                 }
 
-    @inline def sndPair(budget: BudgetSpender, params: MachineParams): () => Any =
+    @inline def sndPair(budget: BudgetSpender, params: MachineParams): () => () => Any =
         () =>
             () =>
                 (x: Any) => {

@@ -1,14 +1,7 @@
 package scalus.uplc.eval.jitcommon
-
 import scalus.builtin.*
-import scalus.uplc.eval
+import scalus.uplc.eval.*
 
-/** Memory usage calculation for JIT values without CekValue wrapper allocation.
-  *
-  * JIT represents values as native Scala types (BigInt, String, ByteString, Data, etc.) instead of
-  * wrapped CekValue. This object provides memory usage calculation directly on these native types,
-  * avoiding the overhead of creating VCon wrappers.
-  */
 object MemoryUsageJit {
 
     /** Calculate memory usage for JIT values directly without CekValue wrapper.
@@ -19,10 +12,10 @@ object MemoryUsageJit {
       *   Memory usage in CostingInteger units
       */
     def memoryUsage(a: Any): CostingInteger = a match
-        case i: BigInt      => CoreMemoryUsage.memoryUsageInteger(i)
-        case bs: ByteString => CoreMemoryUsage.memoryUsageByteString(bs)
-        case s: String      => CoreMemoryUsage.memoryUsageString(s)
-        case d: Data        => CoreMemoryUsage.memoryUsageData(d)
+        case i: BigInt      => MemoryUsage.memoryUsageInteger(i)
+        case bs: ByteString => MemoryUsage.memoryUsageByteString(bs)
+        case s: String      => MemoryUsage.memoryUsageString(s)
+        case d: Data        => MemoryUsage.memoryUsageData(d)
         case _: Boolean     => 1
         case ()             => 1
         case l: List[?] =>
@@ -39,4 +32,5 @@ object MemoryUsageJit {
         case _: BLS12_381_G2_Element => 36
         case _: BLS12_381_MlResult   => 72
         case _                       => 1 // Functions, builtins, etc.
+
 }

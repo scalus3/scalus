@@ -1,4 +1,4 @@
-package scalus.uplc.eval.nativestack
+package scalus.uplc.eval.jitcommon
 
 import scalus.uplc.*
 import scalus.builtin.*
@@ -15,7 +15,7 @@ object RuntimeHelper {
             case p: BuiltinPair[?, ?] =>
                 Constant.Pair(anyUplcConstant(p.fst), anyUplcConstant(p.snd))
             case p: Tuple2[?, ?] => Constant.Pair(anyUplcConstant(p._1), anyUplcConstant(p._2))
-            case l: List[?]     =>
+            case l: List[?]      =>
                 // Lists in JIT are plain List[Any] - element type is lost at runtime
                 // For serialization, we assume Data type (most common case)
                 Constant.List(DefaultUni.Data, l.map(anyUplcConstant))
@@ -42,7 +42,7 @@ object RuntimeHelper {
             case Data.Constr(index, fields) =>
                 BuiltinPair(
                   BigInt(index),
-                  fields  // Plain List[Data]
+                  fields // Plain List[Data]
                 )
             case _ =>
                 throw new IllegalArgumentException("Data is not a Constr")
@@ -50,7 +50,7 @@ object RuntimeHelper {
     }
 
     final def unListData(d: Data): List[Data] = d match
-        case Data.List(values) => values  // Plain List[Data]
+        case Data.List(values) => values // Plain List[Data]
         case _                 => throw new Exception(s"not a list but $d")
 
 }
