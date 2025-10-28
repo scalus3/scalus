@@ -7,7 +7,13 @@ import spire.math.{Rational, SafeLong}
 import java.math.MathContext
 import scala.math.BigDecimal.defaultMathContext
 
-case class Value private (lovelace: Coin, assets: MultiAsset = MultiAsset.zero)
+case class Value private (lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
+    def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Value.Unbounded =
+        Value.Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
+
+    def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Value.Fractional =
+        Value.Fractional(lovelace.scaleFractional(c), assets.scaleFractional(c))
+}
 
 object Value {
     def zero: Value = Value(Coin.zero)
@@ -51,10 +57,11 @@ object Value {
             Value(lovelace, assets)
         }
 
-        def scale(s: SafeLong): Unbounded = Unbounded.algebra.timesl(s, this)
+        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+            this :* c.toSafeLong
 
-        def scale(s: Rational): Fractional =
-            Fractional(this.lovelace.scale(s), this.assets.scale(s))
+        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+            Fractional(this.lovelace.scaleFractional(c), this.assets.scaleFractional(c))
     }
 
     object Unbounded {
@@ -80,7 +87,7 @@ object Value {
                 Unbounded(self.lovelace - other.lovelace, self.assets - other.assets)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                Unbounded(self.lovelace.scale(s), self.assets.scale(s))
+                Unbounded(self.lovelace :* s, self.assets :* s)
         }
     }
 
@@ -115,7 +122,8 @@ object Value {
             Value(lovelace, assets)
         }
 
-        def scale(s: Rational): Fractional = Fractional.algebra.timesl(s, this)
+        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+            this :* c.toRational
     }
 
     object Fractional {
@@ -141,7 +149,7 @@ object Value {
                 Fractional(self.lovelace - other.lovelace, self.assets - other.assets)
 
             override def timesl(s: Rational, self: Fractional): Fractional =
-                Fractional(self.lovelace.scale(s), self.assets.scale(s))
+                Fractional(self.lovelace :* s, self.assets :* s)
         }
     }
 

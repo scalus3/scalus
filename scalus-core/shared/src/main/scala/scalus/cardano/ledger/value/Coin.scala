@@ -1,6 +1,5 @@
 package scalus.cardano.ledger.value
 
-import spire.compat.integral
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
@@ -37,7 +36,7 @@ object Coin {
     // Defining similar coercive operators for `Coin.Unbounded` and `Coin.Fractional`
     // would cause clashes with the spire implicit operators.
     extension (self: Coin)
-        def toLong: Long = self
+        def underlying: Long = self
 
         def toCoinUnbounded: Unbounded = Unbounded(self)
         def toCoinFractional: Fractional = Fractional(self)
@@ -53,9 +52,11 @@ object Coin {
         @targetName("negate")
         infix def unary_- : Unbounded = -Unbounded(self)
 
-        def scale(c: SafeLong): Unbounded = Unbounded(c * self)
+        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+            Unbounded(self) :* c.toSafeLong
 
-        def scale(c: Rational): Fractional = Fractional(c * self)
+        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+            Fractional(self) :* c.toRational
 
     given algebra: Algebra.type = Algebra
 
@@ -82,6 +83,8 @@ object Coin {
     type Unbounded = Unbounded.Unbounded
 
     object Unbounded {
+        import spire.compat.integral
+
         opaque type Unbounded = SafeLong
 
         def apply(x: SafeLong): Unbounded = x
@@ -91,7 +94,7 @@ object Coin {
         given Conversion[Unbounded, Fractional] = Fractional.apply
 
         extension (self: Unbounded)
-            def toSafeLong: SafeLong = self
+            def underlying: SafeLong = self
 
             def toCoin: Either[ArithmeticError, Coin] =
                 if self.isValidLong
@@ -107,10 +110,11 @@ object Coin {
 
             def toCoinFractional: Fractional = Fractional(self.toRational)
 
-            def scale(c: SafeLong): Unbounded = algebra.timesl(c, self)
+            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+                self :* c.toSafeLong
 
-            def scale(c: Rational): Fractional =
-                Fractional.algebra.timesl(c, self.toCoinFractional)
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+                self.toCoinFractional :* c.toRational
 
             def signum: Int = self.signum
 
@@ -157,7 +161,7 @@ object Coin {
         def zero: Fractional = 0
 
         extension (self: Fractional)
-            def toRational: Rational = self
+            def underlying: Rational = self
 
             def toUnbounded(mc: MathContext = defaultMathContext): Unbounded = {
                 Unbounded(SafeLong(asIntegralBigDecimal(mc).bigDecimal.toBigIntegerExact))
@@ -185,7 +189,8 @@ object Coin {
                 }
             }
 
-            def scale(c: Rational): Fractional = algebra.timesl(c, self)
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+                self :* c.toRational
 
             def signum: Int = self.signum
 

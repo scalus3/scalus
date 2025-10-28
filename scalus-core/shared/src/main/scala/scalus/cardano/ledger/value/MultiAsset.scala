@@ -20,6 +20,16 @@ object MultiAsset {
 
     def zero: MultiAsset = SortedMap.empty
 
+    extension (self: MultiAsset)
+        def underlying: SortedMap[PolicyId, Inner] = self
+
+        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+            Unbounded(self.view.mapValues(_.scaleIntegral(c)).to(SortedMap))
+
+        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
+            Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+        }
+
     given algebra: Algebra.type = Algebra
 
     object Algebra extends PartialOrder[MultiAsset] {
@@ -45,7 +55,11 @@ object MultiAsset {
 
         def zero: Unbounded = SortedMap.empty
 
+        import Inner.Unbounded.algebra as innerAlgebra
+
         extension (self: Unbounded)
+            def underlying: SortedMap[PolicyId, Inner.Unbounded] = self
+
             def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] = try {
                 Right(self.unsafeToMultiAsset)
             } catch {
@@ -63,12 +77,12 @@ object MultiAsset {
                 )
                 .to(SortedMap)
 
-            def scale(s: SafeLong): Unbounded = algebra.timesl(s, self)
+            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+                self :* c.toSafeLong
 
-            def scale(s: Rational): Fractional =
-                Fractional(self.view.mapValues(_.scale(s)).to(SortedMap))
-
-        import Inner.Unbounded.algebra as innerAlgebra
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
+                Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+            }
 
         given algebra: Algebra.type = Algebra
 
@@ -99,7 +113,7 @@ object MultiAsset {
                 combineWith(innerAlgebra.plus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                self.view.mapValues(_.scale(s)).to(SortedMap)
+                self.view.mapValues(_ :* s).to(SortedMap)
         }
     }
 
@@ -113,6 +127,8 @@ object MultiAsset {
         def zero: Fractional = algebra.zero
 
         extension (self: Fractional)
+            def underlying: SortedMap[PolicyId, Inner.Fractional] = self
+
             def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
                 Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
 
@@ -136,7 +152,8 @@ object MultiAsset {
                 )
                 .to(SortedMap)
 
-            def scale(s: Rational): Fractional = algebra.timesl(s, self)
+            def scaleFractional[F](c: F)(using spire.math.Fractional[F]): Fractional =
+                self :* c.toRational
 
         import Inner.Fractional.algebra as innerAlgebra
 
@@ -170,7 +187,7 @@ object MultiAsset {
                 combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: Rational, self: Fractional): Fractional =
-                self.view.mapValues(_.scale(s)).to(SortedMap)
+                self.view.mapValues(_ :* s).to(SortedMap)
         }
     }
 
@@ -200,7 +217,15 @@ object MultiAsset {
 
         def zero: Inner = SortedMap.empty
 
-        type Unbounded = Unbounded.Unbounded
+        extension (self: Inner)
+            def underlying: SortedMap[TokenName, Coin] = self
+
+            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+                Unbounded(self.view.mapValues(_.scaleIntegral(c)).to(SortedMap))
+
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
+                Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+            }
 
         given algebra: Algebra.type = Algebra
 
@@ -218,6 +243,8 @@ object MultiAsset {
                 mapPartialOrder.partialCompare(self, other)
         }
 
+        type Unbounded = Unbounded.Unbounded
+
         object Unbounded {
             opaque type Unbounded = SortedMap[TokenName, Coin.Unbounded]
 
@@ -225,7 +252,11 @@ object MultiAsset {
 
             def zero: Unbounded = SortedMap.empty
 
+            import Coin.Unbounded.algebra as coinAlgebra
+
             extension (self: Unbounded)
+                def underlying: SortedMap[TokenName, Coin.Unbounded] = self
+
                 def toInner: Either[Inner.ArithmeticError, Inner] = try {
                     Right(self.unsafeToInner)
                 } catch {
@@ -246,12 +277,12 @@ object MultiAsset {
                 def toFractional: Fractional =
                     Fractional(self.view.mapValues(_.toCoinFractional).to(SortedMap))
 
-                def scale(s: SafeLong): Unbounded = algebra.timesl(s, self)
+                def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+                    self :* c.toSafeLong
 
-                def scale(s: Rational): Fractional =
-                    Fractional(self.view.mapValues(_.scale(s)).to(SortedMap))
-
-            import Coin.Unbounded.algebra as coinAlgebra
+                def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
+                    Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+                }
 
             given algebra: Algebra.type = Algebra
 
@@ -283,7 +314,7 @@ object MultiAsset {
                     combineWith(coinAlgebra.plus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                    self.view.mapValues(_.scale(s)).to(SortedMap)
+                    self.view.mapValues(_ :* s).to(SortedMap)
             }
         }
 
@@ -297,6 +328,8 @@ object MultiAsset {
             def zero: Fractional = SortedMap.empty
 
             extension (self: Fractional)
+                def underlying: SortedMap[TokenName, Coin.Fractional] = self
+
                 def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
                     Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
 
@@ -319,7 +352,8 @@ object MultiAsset {
                     )
                     .to(SortedMap)
 
-                def scale(s: Rational): Fractional = algebra.timesl(s, self)
+                def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+                    self :* c.toRational
 
             import Coin.Fractional.algebra as coinAlgebra
 
@@ -350,7 +384,7 @@ object MultiAsset {
                     combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: Rational, self: Fractional): Fractional =
-                    self.view.mapValues(_.scale(s)).to(SortedMap)
+                    self.view.mapValues(_ :* s).to(SortedMap)
             }
         }
 
