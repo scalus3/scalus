@@ -369,51 +369,56 @@ object MultiAsset {
     }
 
     private object CombineWith {
-        def combineWith[K, V](opBoth: (V, V) => V)(
-            self: SortedMap[K, V],
-            other: SortedMap[K, V]
-        )(using Ordering[K]): SortedMap[K, V] = {
-            combineWith(opBoth, identity, identity)(self, other)
-        }
-
-        def combineWith[K, V, V2](opBoth: (V, V) => V2, opSelf: V => V2, opOther: V => V2)(
-            self: SortedMap[K, V],
-            other: SortedMap[K, V]
-        )(using Ordering[K]): SortedMap[K, V2] = {
+        def combineWith[K, VCommon, VResult, VSelf, VOther](
+            opBoth: (VCommon, VCommon) => VResult,
+            opSelf: VCommon => VResult = identity[VResult],
+            opOther: VCommon => VResult = identity[VResult],
+            preMapSelf: VSelf => VCommon = identity[VCommon],
+            preMapOther: VOther => VCommon = identity[VCommon]
+        )(
+            self: SortedMap[K, VSelf],
+            other: SortedMap[K, VOther]
+        )(using Ordering[K]): SortedMap[K, VResult] = {
             import scala.annotation.tailrec
             import scala.collection.mutable
             import scala.math.Ordered.orderingToOrdered
 
-            val selfIterator: Iterator[(K, V)] = self.iterator
-            val otherIterator: Iterator[(K, V)] = other.iterator
-            val resultBuilder: mutable.Builder[(K, V2), SortedMap[K, V2]] = SortedMap.newBuilder
+            val selfIterator: Iterator[(K, VSelf)] = self.iterator
+            val otherIterator: Iterator[(K, VOther)] = other.iterator
+            val resultBuilder: mutable.Builder[(K, VResult), SortedMap[K, VResult]] =
+                SortedMap.newBuilder
 
-            inline def mapVal(f: V => V2)(z: (K, V)): (K, V2) = (z._1, f(z._2))
+            inline def processBoth(x: (K, VSelf), y: (K, VOther)): (K, VResult) =
+                (x._1, opBoth(preMapSelf(x._2), preMapOther(y._2)))
+            inline def processSelf(x: (K, VSelf)): (K, VResult) =
+                (x._1, opSelf(preMapSelf(x._2)))
+            inline def processOther(y: (K, VOther)): (K, VResult) =
+                (y._1, opOther(preMapOther(y._2)))
 
             // Warning: this function mutates its arguments!
             @tailrec
             def loop(
-                x: (K, V),
-                xs: Iterator[(K, V)],
-                y: (K, V),
-                ys: Iterator[(K, V)],
-                builder: mutable.Builder[(K, V2), SortedMap[K, V2]]
-            ): SortedMap[K, V2] = {
+                x: (K, VSelf),
+                xs: Iterator[(K, VSelf)],
+                y: (K, VOther),
+                ys: Iterator[(K, VOther)],
+                builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]]
+            ): SortedMap[K, VResult] = {
                 if x._1 < y._1 then {
                     // Process `x` now and `y` later
-                    builder += mapVal(opSelf)(x)
+                    builder += processSelf(x)
                     if xs.hasNext then {
                         // Continue looping with the next `x` and same `y`
                         val xNext = xs.next()
                         loop(xNext, xs, y, ys, builder)
                     } else {
                         // Process the remaining `ys` and return
-                        builder ++= ys.map(mapVal(opOther))
+                        builder ++= ys.map(processOther)
                         builder.result()
                     }
                 } else if x._1 == y._1 then {
                     // Process both `x` and `y` now
-                    builder += mapVal(opBoth(x._2, _))(y)
+                    builder += processBoth(x, y)
                     if xs.hasNext then
                         if ys.hasNext then {
                             // Continue looping with the next `x` and next `y`
@@ -422,17 +427,17 @@ object MultiAsset {
                             loop(xNext, xs, yNext, ys, builder)
                         } else {
                             // Process the remaining `xs` and return
-                            builder ++= xs.map(mapVal(opSelf))
+                            builder ++= xs.map(processSelf)
                             builder.result()
                         }
                     else {
                         // Process the remaining `ys` and return
-                        builder ++= ys.map(mapVal(opOther))
+                        builder ++= ys.map(processOther)
                         builder.result()
                     }
                 } else {
                     // Process `y` now and `x` later
-                    val yMapped = mapVal(opOther)(y)
+                    val yMapped = processOther(y)
                     builder += yMapped
                     if ys.hasNext then {
                         // Continue looping with the same `x` and next `y`
@@ -440,7 +445,7 @@ object MultiAsset {
                         loop(x, xs, yNext, ys, builder)
                     } else {
                         // Process the remaining `xs` and return
-                        builder ++= xs.map(mapVal(opSelf))
+                        builder ++= xs.map(processSelf)
                         builder.result()
                     }
                 }
@@ -454,12 +459,12 @@ object MultiAsset {
                     loop(selfFirst, selfIterator, otherFirst, otherIterator, resultBuilder)
                 } else {
                     // Process the remaining entries in `self` and return
-                    resultBuilder ++= selfIterator.map(mapVal(opSelf))
+                    resultBuilder ++= selfIterator.map(processSelf)
                     resultBuilder.result()
                 }
             } else {
                 // Process the remaining entries in `other` and return
-                resultBuilder ++= otherIterator.map(mapVal(opOther))
+                resultBuilder ++= otherIterator.map(processOther)
                 resultBuilder.result()
             }
         }
