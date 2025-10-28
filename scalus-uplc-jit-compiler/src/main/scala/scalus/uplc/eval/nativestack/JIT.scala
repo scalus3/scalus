@@ -128,17 +128,29 @@ object JIT extends JitRunner {
                 case Term.Apply(f, arg) =>
                     val func = genCode(f, env, logger, budget, params, nativeStackContext)
                     val a = genCode(arg, env, logger, budget, params, nativeStackContext)
-                    '{
-                        $budget.spendBudget(
-                          Step(StepKind.Apply),
-                          $params.machineCosts.applyCost,
-                          Nil
-                        )
-                        ${ nativeStackContext }.incr()
-                        val r = ${ func }.asInstanceOf[Any => Any].apply($a)
-                        ${ nativeStackContext }.decr()
-                        r
-                    }
+                    if UplcTermHelper.isSimpleTerm(f) && UplcTermHelper.isSimpleTerm(arg) then {
+                        // can not check stack-overflow
+                        '{
+                            $budget.spendBudget(
+                              Step(StepKind.Apply),
+                              $params.machineCosts.applyCost,
+                              Nil
+                            )
+                            ${ func }.asInstanceOf[Any => Any].apply($a)
+                        }
+                    } else
+                        '{
+                            $budget.spendBudget(
+                              Step(StepKind.Apply),
+                              $params.machineCosts.applyCost,
+                              Nil
+                            )
+                            ${ nativeStackContext }.incr()
+                            val r = ${ func }.asInstanceOf[Any => Any].apply($a)
+                            ${ nativeStackContext }.decr()
+                            r
+                        }
+
                 case Term.Force(term) =>
                     val expr = genCode(term, env, logger, budget, params, nativeStackContext)
                     '{

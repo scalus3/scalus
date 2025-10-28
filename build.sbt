@@ -373,6 +373,7 @@ lazy val scalusUplcJitCompiler = project
       // Skip scalus.jvm compilation when -DskipScalusRecompile=true
       scalus.jvm / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
       scalus.jvm / Test / skip := sys.props.get("skipScalusRecompile").contains("true"),
+      scalusPlugin / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test",

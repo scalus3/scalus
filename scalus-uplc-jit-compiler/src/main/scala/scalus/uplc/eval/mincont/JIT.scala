@@ -5,6 +5,7 @@ import scalus.uplc.eval.*
 import scalus.uplc.{Constant, DefaultFun, Term}
 import scalus.uplc.DefaultUni.asConstant
 import scalus.*
+import scalus.uplc.DefaultFun.AddInteger
 import scalus.uplc.eval.ExBudgetCategory.{Startup, Step}
 import scalus.uplc.eval.jitcommon.*
 
@@ -122,6 +123,15 @@ object JIT extends JitRunner {
             case _                 => false
         }
 
+        def isApplyBuiltin2WithSimpleArgs(term: Term): Boolean = {
+            term match
+                case Term.Apply(Term.Apply(Term.Builtin(bn), arg1), arg2) =>
+                    isSimpleTerm(arg1) && isSimpleTerm(arg2) && BuiltinAppliedGenerator.isSupported(
+                      bn
+                    )
+                case _ => false
+        }
+
         def genCode(
             term: Term,
             env: List[(String, quotes.reflect.Term)],
@@ -143,8 +153,6 @@ object JIT extends JitRunner {
                     }
 
                 case Term.LamAbs(name, term) =>
-                    // Lambda returns a function wrapped in Return
-                    // No stack overflow check needed - continuations are on the heap!
                     '{
                         Return((arg: Any) =>
                             ${ genCode(term, (name -> 'arg.asTerm) :: env, logger, budget, params) }
@@ -173,6 +181,43 @@ object JIT extends JitRunner {
                                 case v                         => Return(v)
                             }
                         }
+                    } else if isApplyBuiltin2WithSimpleArgs(term) then {
+                        val argCode = genCode(arg, env, logger, budget, params)
+                        fun match
+                            case Term.Apply(Term.Builtin(bn), arg1)
+                                if BuiltinAppliedGenerator.isSupported(bn) =>
+                                val arg1Code = genCode(arg1, env, logger, budget, params)
+                                bn match
+                                    case DefaultFun.AddInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.addInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.SubtractInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.subtractInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case _ => // impossible
+                                        throw IllegalStateException(
+                                          s"Short part optimization fo builtin $bn not implemented"
+                                        )
+                            case _ => // imoissibke, we have check
+                                throw IllegalStateException(
+                                  s"isApplyBuiltin2 for ${term} returns true but term is wrong shape"
+                                )
                     } else {
                         // Create Apply continuation - flattened to the top-level loop
                         '{
