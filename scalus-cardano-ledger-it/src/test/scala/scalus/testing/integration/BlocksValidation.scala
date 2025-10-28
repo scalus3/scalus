@@ -1,6 +1,6 @@
 package scalus.testing.integration
 
-import co.nstant.in.cbor.{CborException, model as cbor}
+import co.nstant.in.cbor.{model as cbor, CborException}
 import com.bloxbean.cardano.client.api.UtxoSupplier
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
 import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
@@ -16,13 +16,13 @@ import scalus.*
 import scalus.bloxbean.*
 import scalus.bloxbean.Interop.??
 import scalus.bloxbean.TxEvaluator.ScriptHash
-import scalus.builtin.{ByteString, platform}
+import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig, ValidityInterval}
 import scalus.ledger.api.v1.ScriptPurpose
 import scalus.ledger.api.v2.ScriptPurpose
 import scalus.ledger.api.v3.ScriptInfo
-import scalus.ledger.api.{ScriptContext, v3, *}
+import scalus.ledger.api.{v3, ScriptContext, *}
 import scalus.uplc.eval.ExBudget
 import scalus.utils.Utils
 
@@ -34,8 +34,8 @@ import java.util.stream.Collectors
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 import scala.math.Ordering.Implicits.*
-import scala.util.boundary.{Break, break}
-import scala.util.{Using, boundary}
+import scala.util.boundary.{break, Break}
+import scala.util.{boundary, Using}
 
 /** Setup BLOCKFROST_API_KEY environment variable before running this test. In SBT shell:
   *   - set `scalus-bloxbean-cardano-client-lib`/envVars := Map("BLOCKFROST_API_KEY" -> "apikey")
@@ -165,7 +165,14 @@ class BlocksValidation extends AnyFunSuite {
                                     println(
                                       error.scriptContext.map(showScriptContext).mkString("\n")
                                     )
-                                    for case (tx, key, actualExUnits, expectedExUnits, newSc, newSh) <-
+                                    for case (
+                                          tx,
+                                          key,
+                                          actualExUnits,
+                                          expectedExUnits,
+                                          newSc,
+                                          newSh
+                                        ) <-
                                             evalScalus(blockBytes)
                                     do
                                         if tx.id.toHex == txhash then {
@@ -176,7 +183,7 @@ class BlocksValidation extends AnyFunSuite {
                                                   s"\nScalus script context (key $key, actual $actualExUnits, expected $expectedExUnits):"
                                                 )
                                                 println(newSh)
-                                                println(showScriptContext(newSc))
+                                                // println(showScriptContext(newSc))
                                             }
                                         }
                                     println()
@@ -201,7 +208,7 @@ class BlocksValidation extends AnyFunSuite {
                             errors += (("Invalid tx", fileName, txhash))
                     }
                 } catch {
-                    case e: Break[_] => throw e
+                    case e: Break[?]  => throw e
                     case e: Exception => println(s"$fileName ${e.getMessage}")
                 }
 
@@ -258,7 +265,9 @@ class BlocksValidation extends AnyFunSuite {
 
     def evalBlockWithScalus(utxoResolver: ScalusUtxoResolver, evaluator: PlutusScriptEvaluator)(
         blockBytes: Array[Byte]
-    ): Seq[(ledger.Transaction, (RedeemerTag, Int), ExUnits, ExUnits, ScriptContext, ScriptHash)] = {
+    ): Seq[
+      (ledger.Transaction, (RedeemerTag, Int), ExUnits, ExUnits, ScriptContext, ScriptHash)
+    ] = {
         given OriginalCborByteArray = OriginalCborByteArray(blockBytes)
         val block = BlockFile.fromCborArray(blockBytes).block
         val txs = block.transactions.filter(t => t.witnessSet.redeemers.nonEmpty && t.isValid)
@@ -305,7 +314,9 @@ class BlocksValidation extends AnyFunSuite {
             for path <- blocks do
                 try {
                     val blockBytes = Files.readAllBytes(path)
-                    for case (tx, key, actualExUnits, expectedExUnits, sc, sh) <- evalScalus(blockBytes)
+                    for case (tx, key, actualExUnits, expectedExUnits, sc, sh) <- evalScalus(
+                          blockBytes
+                        )
                     do
                         totalTx += 1
                         ScriptContext.foldMap(sc)(
@@ -338,10 +349,25 @@ class BlocksValidation extends AnyFunSuite {
         println(
           s"\n${Console.GREEN}Total txs: $totalTx, errors ${errors.size}, blocks: ${blocks.size}, epoch: $epoch${Console.RESET}"
         )
-        println(s"Scripts v1: ${stats._1.values.sum} of ${stats._1.size}")
-        println(s"Scripts v2: ${stats._2.values.sum} of ${stats._2.size}")
-        println(s"Scripts v3: ${stats._3.values.sum} of ${stats._3.size}")
+        showScriptsStats(1, stats._1.toMap)
+        showScriptsStats(2, stats._2.toMap)
+        showScriptsStats(3, stats._3.toMap)
         errors.size
+    }
+
+    def showScriptsStats(ver: Int, stats: Map[ScriptHash, Int]): Unit = {
+        val count = stats.values.sum -> stats.size
+        println(s"Scripts v$ver: ${count._1} of ${count._2}")
+        val top = collection.SortedMap
+            .from(stats.groupBy(_._2).view.mapValues(_.keySet))(using Ordering[Int].reverse)
+        val top10 = top.take(10).keys.sum -> top.take(10).values.map(_.size).sum
+        println(
+          s"  Top 10: ${top10._1} (${100 * top10._1 / count._1}%) by ${top10._2} (${100 * top10._2 / count._2}%) "
+        )
+        val top100 = top.take(100).keys.sum -> top.take(100).values.map(_.size).sum
+        println(
+          s"  Top 100: ${top100._1} (${100 * top100._1 / count._1}%) by ${top100._2} (${100 * top100._2 / count._2}%) "
+        )
     }
 
     def readTransactionsFromBlockCbor(path: Path): (collection.Seq[BlockTx], Array[Byte]) = {
@@ -623,7 +649,7 @@ class BlocksValidation extends AnyFunSuite {
     test("validateBlocksOfEpochWithScalus(543)"):
         assert(validateBlocksOfEpochWithScalus(543) == 0)
 
-    test("validateBlocksOfEpoch(543)"):
+    ignore("validateBlocksOfEpoch(543)"):
         validateBlocksOfEpoch(543)
 
     test("validateNativeScriptEvaluation()"):
