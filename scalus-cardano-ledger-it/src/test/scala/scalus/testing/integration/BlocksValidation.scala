@@ -20,8 +20,9 @@ import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig, ValidityInterval}
 import scalus.ledger.api.v1.ScriptPurpose
+import scalus.ledger.api.v2.ScriptPurpose
 import scalus.ledger.api.v3.ScriptInfo
-import scalus.ledger.api.{v3, ScriptContext}
+import scalus.ledger.api.{v3, ScriptContext, *}
 import scalus.uplc.eval.ExBudget
 import scalus.utils.Utils
 
@@ -259,6 +260,11 @@ class BlocksValidation extends AnyFunSuite {
 
     private def validateBlocksOfEpochWithScalus(epoch: Int): Int = {
         val errors = mutable.ArrayBuffer[String]()
+        val stats = (
+          mutable.Set[v1.ScriptPurpose](),
+          mutable.Set[v2.ScriptPurpose](),
+          mutable.Set[v3.ScriptInfo]()
+        )
 
         val backendService = new BFBackendService(Constants.BLOCKFROST_MAINNET_URL, apiKey)
         val utxoSupplier = CachedUtxoSupplier(
@@ -286,6 +292,11 @@ class BlocksValidation extends AnyFunSuite {
                     for case (tx, key, actualExUnits, expectedExUnits, sc) <- evalScalus(blockBytes)
                     do
                         totalTx += 1
+                        ScriptContext.foldMap(sc)(
+                          s => stats._1.add(s.purpose),
+                          s => stats._2.add(s.purpose),
+                          s => stats._3.add(s.scriptInfo)
+                        )
                         if actualExUnits > expectedExUnits then {
                             val error =
                                 s"AAAA!!!! block $path, tx ${tx.id} ${key._1} budget: $actualExUnits > $expectedExUnits"
@@ -311,6 +322,9 @@ class BlocksValidation extends AnyFunSuite {
         println(
           s"\n${Console.GREEN}Total txs: $totalTx, errors ${errors.size}, blocks: ${blocks.size}, epoch: $epoch${Console.RESET}"
         )
+        println(s"Scripts v1: ${stats._1.size}")
+        println(s"Scripts v2: ${stats._2.size}")
+        println(s"Scripts v3: ${stats._3.size}")
         errors.size
     }
 
