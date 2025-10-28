@@ -7,8 +7,8 @@ import scalus.uplc.{DeBruijnedProgram, DefaultFun, Program, Term}
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
 
-@State(Scope.Benchmark)
-class JITBenchmark:
+@State(Scope.Thread)
+class JITMincontBenchmark:
     @Param(
       Array(
         "auction_1-1.flat",
@@ -18,45 +18,83 @@ class JITBenchmark:
       )
     )
     private var file: String = ""
-    private var path: Path = null
     private var program: DeBruijnedProgram | Null = null
-
-    // Compile with all JIT implementations
-    private var jittedMincont: (Logger, BudgetSpender, MachineParams) => Any | Null = null
-    private var jittedNativeStack: (Logger, BudgetSpender, MachineParams) => Any | Null = null
-    private var jittedHybrid: (Logger, BudgetSpender, MachineParams) => Any | Null = null
-
+    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
     private val params = MachineParams.defaultPlutusV2PostConwayParams
 
     @Setup
-    def readProgram(): Unit = {
-        path = Paths.get(s"src/main/resources/data/$file")
+    def setup(): Unit = {
+        val path = Paths.get(s"src/main/resources/data/$file")
         val bytes = Files.readAllBytes(path)
         program = DeBruijnedProgram.fromFlatEncoded(bytes)
-        jittedMincont = Test.getJitted(program.toProgram, JITImplementation.Mincont)
-        jittedNativeStack = Test.getJitted(program.toProgram, JITImplementation.NativeStack)
-        jittedHybrid = Test.getJitted(program.toProgram, JITImplementation.Hybrid())
+        jitted = Test.getJitted(program.toProgram, JITImplementation.Mincont)
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     def benchJIT_Mincont(): Unit = {
-        jittedMincont(NoLogger, NoBudgetSpender, params)
+        jitted(NoLogger, NoBudgetSpender, params)
+    }
+
+@State(Scope.Thread)
+class JITNativeStackBenchmark:
+    @Param(
+      Array(
+        "auction_1-1.flat",
+        "auction_1-2.flat",
+        "auction_1-3.flat",
+        "auction_1-4.flat"
+      )
+    )
+    private var file: String = ""
+    private var program: DeBruijnedProgram | Null = null
+    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
+    private val params = MachineParams.defaultPlutusV2PostConwayParams
+
+    @Setup
+    def setup(): Unit = {
+        val path = Paths.get(s"src/main/resources/data/$file")
+        val bytes = Files.readAllBytes(path)
+        program = DeBruijnedProgram.fromFlatEncoded(bytes)
+        jitted = Test.getJitted(program.toProgram, JITImplementation.NativeStack)
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     def benchJIT_NativeStack(): Unit = {
-        jittedNativeStack(NoLogger, NoBudgetSpender, params)
+        jitted(NoLogger, NoBudgetSpender, params)
+    }
+
+@State(Scope.Thread)
+class JITHybridBenchmark:
+    @Param(
+      Array(
+        "auction_1-1.flat",
+        "auction_1-2.flat",
+        "auction_1-3.flat",
+        "auction_1-4.flat"
+      )
+    )
+    private var file: String = ""
+    private var program: DeBruijnedProgram | Null = null
+    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
+    private val params = MachineParams.defaultPlutusV2PostConwayParams
+
+    @Setup
+    def setup(): Unit = {
+        val path = Paths.get(s"src/main/resources/data/$file")
+        val bytes = Files.readAllBytes(path)
+        program = DeBruijnedProgram.fromFlatEncoded(bytes)
+        jitted = Test.getJitted(program.toProgram, JITImplementation.Hybrid())
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     def benchJIT_Hybrid(): Unit = {
-        jittedHybrid(NoLogger, NoBudgetSpender, params)
+        jitted(NoLogger, NoBudgetSpender, params)
     }
 
 private object Test {
