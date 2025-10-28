@@ -116,7 +116,9 @@ object MultiAsset {
             def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
                 Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
 
-            def toMultiAsset(mc: MathContext = defaultMathContext): Either[MultiAsset.ArithmeticError, MultiAsset] =
+            def toMultiAsset(
+                mc: MathContext = defaultMathContext
+            ): Either[MultiAsset.ArithmeticError, MultiAsset] =
                 try {
                     Right(self.unsafeToMultiAsset(mc))
                 } catch {
@@ -298,7 +300,9 @@ object MultiAsset {
                 def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
                     Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
 
-                def toInner(mc: MathContext = defaultMathContext): Either[Inner.ArithmeticError, Inner] = try {
+                def toInner(
+                    mc: MathContext = defaultMathContext
+                ): Either[Inner.ArithmeticError, Inner] = try {
                     Right(self.unsafeToInner(mc))
                 } catch {
                     case e: Inner.ArithmeticError => Left(e)

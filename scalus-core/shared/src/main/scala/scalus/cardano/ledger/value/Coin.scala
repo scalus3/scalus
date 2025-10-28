@@ -12,22 +12,26 @@ import scala.annotation.targetName
 type Coin = Coin.Coin
 
 object Coin {
+    import ArithmeticError.*
 
     /** Non-negative and bounded amount of coins. Can be used in tx outputs without any additional
       * checks.
       */
     opaque type Coin = Long
 
-    def apply(self: Long): Either[Coin.ArithmeticError.Underflow.type, Coin] = {
-        if self.signum < 0 then Left(Coin.ArithmeticError.Underflow) else Right(self)
+    def apply(self: Long): Either[Underflow.type, Coin] = {
+        if self.signum < 0 then Left(Underflow) else Right(self)
     }
 
     def apply(unbounded: Unbounded): Either[Coin.ArithmeticError, Coin] = unbounded.toCoin
 
     def unsafeApply(self: Long): Coin =
-        if self.signum < 0 then throw Coin.ArithmeticError.Underflow else self
+        if self.signum < 0 then throw Underflow else self
 
     def zero: Coin = Coin.unsafeApply(0)
+
+    given Conversion[Coin, Unbounded] = Unbounded.apply
+    given Conversion[Coin, Fractional] = Fractional.apply
 
     // Only `Coin` should have coercive operators defined.
     // Defining similar coercive operators for `Coin.Unbounded` and `Coin.Fractional`
@@ -40,23 +44,11 @@ object Coin {
 
         def signum: Int = if self > 0 then 1 else 0
 
-        @targetName("add")
+        @targetName("addCoerceCoins")
         infix def +(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
 
-        @targetName("add")
-        infix def +(other: Unbounded): Unbounded = Unbounded(self) + other
-
-        @targetName("add")
-        infix def +(other: Fractional): Fractional = Fractional(self) + other
-
-        @targetName("subtract")
+        @targetName("subtractCoerceCoins")
         infix def -(other: Coin): Unbounded = Unbounded(self) - Unbounded(other)
-
-        @targetName("subtract")
-        infix def -(other: Unbounded): Unbounded = Unbounded(self) - other
-
-        @targetName("subtract")
-        infix def -(unbounded: Fractional): Fractional = Fractional(self) - unbounded
 
         @targetName("negate")
         infix def unary_- : Unbounded = -Unbounded(self)
@@ -96,7 +88,7 @@ object Coin {
 
         def zero: Unbounded = 0
 
-        import ArithmeticError.*
+        given Conversion[Unbounded, Fractional] = Fractional.apply
 
         extension (self: Unbounded)
             def toSafeLong: SafeLong = self
@@ -185,8 +177,9 @@ object Coin {
                 } catch {
                     // Thrown by `bigDecimal.toLongExact` if out of bounds
                     case _: java.lang.ArithmeticException =>
-                        // Backup approach: go through Unbounded
-                        Unbounded(SafeLong(rounded.bigDecimal.toBigIntegerExact)).unsafeToCoin
+                        // Figure out whether we have over or underflow
+                        val bigInteger = rounded.bigDecimal.toBigIntegerExact
+                        if bigInteger.signum < 0 then throw Underflow else throw Overflow
                     // Re-throw Coin.ArithmeticError from `Coin.unsafeApply` in the try block
                     case e: Coin.ArithmeticError => throw e
                 }
