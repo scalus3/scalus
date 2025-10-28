@@ -8,7 +8,7 @@ package scalus.cardano.ledger.value
  * The object exposes safe arithmetic operations on three underlying types:
  *
  * - A [[Coin.Coin]] type, which is an opaque newtype wrapper around a non-negative, bounded (64-bit) amount of
- *   coins suitable for use in a [[`TransactionBody`]]'s outputs` field.
+ *   coins suitable for use in a [[`TransactionBody`]]'s outputs field.
  * - An unbounded [[Coin.Unbounded]] type that can be used in intermediate calculations where the total amount may
  *   exceed the capacity of a `Word64`.
  * - An unbounded [[Coin.Fractional]] type that can be used, e.g., for exchange rates.
@@ -28,8 +28,6 @@ import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
 
-import java.math.MathContext
-import scala.math.BigDecimal.defaultMathContext
 import scala.annotation.targetName
 
 type Coin = Coin.Coin
@@ -42,14 +40,26 @@ object Coin {
       */
     opaque type Coin = Long
 
-    def apply(self: Long): Either[Underflow.type, Coin] = {
-        if self.signum < 0 then Left(Underflow) else Right(self)
-    }
+    enum ArithmeticError extends Throwable:
+        case Underflow
+        case Overflow
 
-    def apply(unbounded: Unbounded): Either[Coin.ArithmeticError, Coin] = unbounded.toCoin
+    def apply(self: Long): Either[Underflow.type, Coin] =
+        try { Right(unsafeApply(self)) }
+        catch { case e: Underflow.type => Left(e) }
+
+    def apply(self: SafeLong): Either[ArithmeticError, Coin] =
+        try { Right(unsafeApply(self)) }
+        catch { case e: ArithmeticError => Left(e) }
 
     def unsafeApply(self: Long): Coin =
         if self.signum < 0 then throw Underflow else self
+
+    def unsafeApply(self: SafeLong): Coin =
+        if self.isValidLong
+        then self.longValue
+        else if self.signum < 0 then throw Underflow
+        else throw Coin.ArithmeticError.Overflow
 
     def zero: Coin = Coin.unsafeApply(0)
 
@@ -65,11 +75,13 @@ object Coin {
         def toCoinUnbounded: Unbounded = Unbounded(self)
         def toCoinFractional: Fractional = Fractional(self)
 
-        def signum: Int = self match {
-            case _ if self > 0 => 1
-            case _ if self == 0 => 1
-            case _ => -1
-        }
+        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+            Unbounded(self) :* c.toSafeLong
+
+        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+            Fractional(self) :* c.toRational
+
+        def signum: Int = if self > 0 then 1 else 0
 
         @targetName("addCoerce")
         infix def +~(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
@@ -91,12 +103,6 @@ object Coin {
 
         @targetName("negate")
         infix def unary_- : Unbounded = -Unbounded(self)
-
-        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-            Unbounded(self) :* c.toSafeLong
-
-        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-            Fractional(self) :* c.toRational
 
     given algebra: Algebra.type = Algebra
 
@@ -137,18 +143,20 @@ object Coin {
             def underlying: SafeLong = self
 
             def toCoin: Either[ArithmeticError, Coin] =
-                if self.isValidLong
-                then Coin(self.longValue)
-                else if self.signum < 0 then Left(Underflow)
-                else Left(Coin.ArithmeticError.Overflow)
+                try { Right(Coin.unsafeApply(self)) }
+                catch { case e: ArithmeticError => Left(e) }
 
-            def unsafeToCoin: Coin =
-                if self.isValidLong
-                then Coin.unsafeApply(self.longValue)
-                else if self.signum < 0 then throw Underflow
-                else throw Coin.ArithmeticError.Overflow
+            def unsafeToCoin: Coin = Coin.unsafeApply(self)
 
             def toCoinFractional: Fractional = Fractional(self.toRational)
+
+            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
+                self :* c.toSafeLong
+
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+                self.toCoinFractional :* c.toRational
+
+            def signum: Int = self.signum
 
             @targetName("addCoerce")
             infix def +~(other: Coin): Unbounded = self + other.toCoinUnbounded
@@ -167,14 +175,6 @@ object Coin {
 
             @targetName("subtractCoerce")
             infix def -~(other: Fractional): Fractional = Fractional(self) - other
-
-            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-                self :* c.toSafeLong
-
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-                self.toCoinFractional :* c.toRational
-
-            def signum: Int = self.signum
 
         extension (self: IterableOnce[Unbounded]) {
             def averageCoin: Option[Fractional] = Aggregate.average(self, _.toCoinFractional)
@@ -212,6 +212,8 @@ object Coin {
     type Fractional = Fractional.Fractional
 
     object Fractional {
+        import RationalExtensions.*
+
         opaque type Fractional = Rational
 
         def apply(x: Rational): Fractional = x
@@ -221,31 +223,18 @@ object Coin {
         extension (self: Fractional)
             def underlying: Rational = self
 
-            def toUnbounded(mc: MathContext = defaultMathContext): Unbounded = {
-                Unbounded(SafeLong(asIntegralBigDecimal(mc).bigDecimal.toBigIntegerExact))
-            }
+            def toUnbounded: Unbounded = Unbounded(self.roundHalfEven)
 
-            def toCoin(mc: MathContext = defaultMathContext): Either[ArithmeticError, Coin] = try {
-                Right(self.unsafeToCoin(mc))
-            } catch {
-                case e: Coin.ArithmeticError => Left(e)
-            }
+            def toCoin: Either[ArithmeticError, Coin] =
+                try { Right(unsafeToCoin) }
+                catch { case e: Coin.ArithmeticError => Left(e) }
 
-            def unsafeToCoin(mc: MathContext = defaultMathContext): Coin = {
-                val rounded = asIntegralBigDecimal(mc)
-                try {
-                    // Succeeds if `rounded` is an exact and positive Long.
-                    Coin.unsafeApply(rounded.toLongExact)
-                } catch {
-                    // Thrown by `bigDecimal.toLongExact` if out of bounds
-                    case _: java.lang.ArithmeticException =>
-                        // Figure out whether we have over or underflow
-                        val bigInteger = rounded.bigDecimal.toBigIntegerExact
-                        if bigInteger.signum < 0 then throw Underflow else throw Overflow
-                    // Re-throw Coin.ArithmeticError from `Coin.unsafeApply` in the try block
-                    case e: Coin.ArithmeticError => throw e
-                }
-            }
+            def unsafeToCoin: Coin = Coin.unsafeApply(self.roundHalfEven)
+
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+                self :* c.toRational
+
+            def signum: Int = self.signum
 
             @targetName("addCoerce")
             infix def +~(other: Coin): Fractional = self + other.toCoinFractional
@@ -264,16 +253,6 @@ object Coin {
 
             @targetName("subtractCoerce")
             infix def -~(other: Fractional): Fractional = self - other
-
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-                self :* c.toRational
-
-            def signum: Int = self.signum
-
-            // Round the Rational via BigDecimal with the defaultMathContext
-            // `defaultMathContext` uses banker's rounding and 34 decimal digits of precision.
-            private def asIntegralBigDecimal(mc: MathContext = defaultMathContext): BigDecimal =
-                self.toBigDecimal(mc).setScale(0)
 
         extension (self: IterableOnce[Fractional])
             def min: Fractional = self.iterator.min
@@ -331,7 +310,41 @@ object Coin {
         }
     }
 
-    enum ArithmeticError extends Throwable:
-        case Underflow
-        case Overflow
+    private object RationalExtensions {
+        extension (self: Rational)
+            /** Half-even rounding (also called banker's rounding). Rounds the to the nearest
+              * integer; if equidistant between two integers, then rounds to the even integer.
+              *
+              * Implementation ported from Haskell's `GHC.Real.RealFrac.{properFraction, round}`:
+              *
+              * [[https://hackage.haskell.org/package/base-4.21.0.0/docs/GHC-Real.html#t:RealFrac]]
+              *
+              * @return
+              *   the rounded integer. Note that this is different from [[Rational.round]], which
+              *   returns a [[Rational]] with a denominator of one.
+              */
+            def roundHalfEven: SafeLong = {
+                // The whole part of the proper fraction.
+                // Divide the numerator by the denominator, truncating toward zero.
+                val whole = self.numerator / self.denominator
+
+                // The fractional part of the proper fraction.
+                val fraction = Rational(self.numerator % self.denominator, self.denominator)
+
+                // The whole part incremented away from zero.
+                val awayFromZero = if whole.signum < 0 then whole - 1 else whole + 1
+
+                // The distance between the absolute fractional part and one half.
+                val distanceToHalf = fraction.abs - Rational(1, 2)
+
+                distanceToHalf.signum match {
+                    // Round toward zero if absolute fractional part is less than half.
+                    case -1 => whole
+                    // Round away from zero if absolute fractional part is more than half.
+                    case 1 => awayFromZero
+                    // Break ties by rounding toward whichever nearest integer is even.
+                    case 0 => if whole.isEven then whole else awayFromZero
+                }
+            }
+    }
 }

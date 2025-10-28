@@ -5,9 +5,7 @@ import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
 
-import java.math.MathContext
 import scala.collection.immutable.SortedMap
-import scala.math.BigDecimal.defaultMathContext
 
 type MultiAsset = MultiAsset.MultiAsset
 
@@ -35,7 +33,7 @@ object MultiAsset {
     sealed trait ArithmeticError extends Throwable:
         def policyId: PolicyId
 
-        def tokenName: AssetName
+        def assetName: AssetName
 
     type Unbounded = Unbounded.Unbounded
 
@@ -67,17 +65,14 @@ object MultiAsset {
         extension (self: Unbounded)
             def underlying: SortedMap[PolicyId, Inner.Unbounded] = self
 
-            def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] = try {
-                Right(self.unsafeToMultiAsset)
-            } catch {
-                case e: MultiAsset.ArithmeticError => Left(e)
-            }
+            def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
+                try { Right(self.unsafeToMultiAsset) }
+                catch { case e: MultiAsset.ArithmeticError => Left(e) }
 
             def unsafeToMultiAsset: MultiAsset = self.view
                 .map((policyId: PolicyId, innerUnbounded: Inner.Unbounded) =>
-                    try {
-                        (policyId, innerUnbounded.unsafeToInner)
-                    } catch {
+                    try { (policyId, innerUnbounded.unsafeToInner) }
+                    catch {
                         case e: Inner.ArithmeticError =>
                             throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
                     }
@@ -134,23 +129,17 @@ object MultiAsset {
         extension (self: Fractional)
             def underlying: SortedMap[PolicyId, Inner.Fractional] = self
 
-            def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
-                Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
+            def toUnbounded: Unbounded =
+                Unbounded(self.view.mapValues(_.toUnbounded).to(SortedMap))
 
-            def toMultiAsset(
-                mc: MathContext = defaultMathContext
-            ): Either[MultiAsset.ArithmeticError, MultiAsset] =
-                try {
-                    Right(self.unsafeToMultiAsset(mc))
-                } catch {
-                    case e: MultiAsset.ArithmeticError => Left(e)
-                }
+            def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
+                try { Right(self.unsafeToMultiAsset) }
+                catch { case e: MultiAsset.ArithmeticError => Left(e) }
 
-            def unsafeToMultiAsset(mc: MathContext = defaultMathContext): MultiAsset = self.view
+            def unsafeToMultiAsset: MultiAsset = self.view
                 .map((policyId: PolicyId, innerFractional: Inner.Fractional) =>
-                    try {
-                        (policyId, innerFractional.unsafeToInner(mc))
-                    } catch {
+                    try { (policyId, innerFractional.unsafeToInner) }
+                    catch {
                         case e: Inner.ArithmeticError =>
                             throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
                     }
@@ -197,9 +186,9 @@ object MultiAsset {
     }
 
     object ArithmeticError {
-        final case class Underflow(policyId: PolicyId, tokenName: AssetName) extends ArithmeticError
+        final case class Underflow(policyId: PolicyId, assetName: AssetName) extends ArithmeticError
 
-        final case class Overflow(policyId: PolicyId, tokenName: AssetName) extends ArithmeticError
+        final case class Overflow(policyId: PolicyId, assetName: AssetName) extends ArithmeticError
 
         def withPolicyId(e: Inner.ArithmeticError, policyId: PolicyId): MultiAsset.ArithmeticError =
             e match {
@@ -232,7 +221,7 @@ object MultiAsset {
         given algebra: Algebra.type = Algebra
 
         sealed trait ArithmeticError extends Throwable:
-            def tokenName: AssetName
+            def assetName: AssetName
 
         type Unbounded = Unbounded.Unbounded
 
@@ -264,19 +253,16 @@ object MultiAsset {
             extension (self: Unbounded)
                 def underlying: SortedMap[AssetName, Coin.Unbounded] = self
 
-                def toInner: Either[Inner.ArithmeticError, Inner] = try {
-                    Right(self.unsafeToInner)
-                } catch {
-                    case e: Inner.ArithmeticError => Left(e)
-                }
+                def toInner: Either[Inner.ArithmeticError, Inner] =
+                    try { Right(self.unsafeToInner) }
+                    catch { case e: Inner.ArithmeticError => Left(e) }
 
                 def unsafeToInner: Inner = self.view
-                    .map((tokenName: AssetName, coinUnbounded: Coin.Unbounded) =>
-                        try {
-                            (tokenName, coinUnbounded.unsafeToCoin)
-                        } catch {
+                    .map((assetName: AssetName, coinUnbounded: Coin.Unbounded) =>
+                        try { (assetName, coinUnbounded.unsafeToCoin) }
+                        catch {
                             case e: Coin.ArithmeticError =>
-                                throw Inner.ArithmeticError.withAssetName(e, tokenName)
+                                throw Inner.ArithmeticError.withAssetName(e, assetName)
                         }
                     )
                     .to(SortedMap)
@@ -335,24 +321,19 @@ object MultiAsset {
             extension (self: Fractional)
                 def underlying: SortedMap[AssetName, Coin.Fractional] = self
 
-                def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
-                    Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
+                def toUnbounded: Unbounded =
+                    Unbounded(self.view.mapValues(_.toUnbounded).to(SortedMap))
 
-                def toInner(
-                    mc: MathContext = defaultMathContext
-                ): Either[Inner.ArithmeticError, Inner] = try {
-                    Right(self.unsafeToInner(mc))
-                } catch {
-                    case e: Inner.ArithmeticError => Left(e)
-                }
+                def toInner: Either[Inner.ArithmeticError, Inner] =
+                    try { Right(self.unsafeToInner) }
+                    catch { case e: Inner.ArithmeticError => Left(e) }
 
-                def unsafeToInner(mc: MathContext = defaultMathContext): Inner = self.view
-                    .map((tokenName: AssetName, coinFractional: Coin.Fractional) =>
-                        try {
-                            (tokenName, coinFractional.unsafeToCoin(mc))
-                        } catch {
+                def unsafeToInner: Inner = self.view
+                    .map((assetName: AssetName, coinFractional: Coin.Fractional) =>
+                        try { (assetName, coinFractional.unsafeToCoin) }
+                        catch {
                             case e: Coin.ArithmeticError =>
-                                throw Inner.ArithmeticError.withAssetName(e, tokenName)
+                                throw Inner.ArithmeticError.withAssetName(e, assetName)
                         }
                     )
                     .to(SortedMap)
@@ -396,17 +377,17 @@ object MultiAsset {
         object ArithmeticError {
             def withAssetName(
                 e: Coin.ArithmeticError,
-                tokenName: AssetName
+                assetName: AssetName
             ): Inner.ArithmeticError =
                 e match {
                     case Coin.ArithmeticError.Underflow =>
-                        Inner.ArithmeticError.Underflow(tokenName)
-                    case Coin.ArithmeticError.Overflow => Inner.ArithmeticError.Overflow(tokenName)
+                        Inner.ArithmeticError.Underflow(assetName)
+                    case Coin.ArithmeticError.Overflow => Inner.ArithmeticError.Overflow(assetName)
                 }
 
-            final case class Underflow(tokenName: AssetName) extends ArithmeticError
+            final case class Underflow(assetName: AssetName) extends ArithmeticError
 
-            final case class Overflow(tokenName: AssetName) extends ArithmeticError
+            final case class Overflow(assetName: AssetName) extends ArithmeticError
         }
     }
 

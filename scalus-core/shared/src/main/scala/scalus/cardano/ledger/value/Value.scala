@@ -4,10 +4,7 @@ import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
 
-import java.math.MathContext
-import scala.math.BigDecimal.defaultMathContext
-
-case class Value (lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
+case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
     def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Value.Unbounded =
         Value.Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
 
@@ -41,18 +38,12 @@ object Value {
 
         def unsafeToValue: Value = {
             val lovelace =
-                try {
-                    this.lovelace.unsafeToCoin
-                } catch {
-                    case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
-                }
+                try { this.lovelace.unsafeToCoin }
+                catch { case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e) }
 
             val assets =
-                try {
-                    this.assets.unsafeToMultiAsset
-                } catch {
-                    case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
-                }
+                try { this.assets.unsafeToMultiAsset }
+                catch { case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e) }
 
             Value(lovelace, assets)
         }
@@ -95,29 +86,21 @@ object Value {
         lovelace: Coin.Fractional,
         assets: MultiAsset.Fractional = MultiAsset.Fractional.zero
     ) {
-        def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
-            Unbounded(this.lovelace.toUnbounded(mc), this.assets.toUnbounded(mc))
+        def toUnbounded: Unbounded =
+            Unbounded(this.lovelace.toUnbounded, this.assets.toUnbounded)
 
-        def toValue(mc: MathContext = defaultMathContext): Either[ArithmeticError, Value] = try {
-            Right(this.unsafeToValue(mc))
-        } catch {
-            case e: ArithmeticError => Left(e)
-        }
+        def toValue: Either[ArithmeticError, Value] =
+            try { Right(this.unsafeToValue) }
+            catch { case e: ArithmeticError => Left(e) }
 
-        def unsafeToValue(mc: MathContext = defaultMathContext): Value = {
+        def unsafeToValue: Value = {
             val lovelace =
-                try {
-                    this.lovelace.unsafeToCoin(mc)
-                } catch {
-                    case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
-                }
+                try { this.lovelace.unsafeToCoin }
+                catch { case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e) }
 
             val assets =
-                try {
-                    this.assets.unsafeToMultiAsset(mc)
-                } catch {
-                    case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
-                }
+                try { this.assets.unsafeToMultiAsset }
+                catch { case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e) }
 
             Value(lovelace, assets)
         }
