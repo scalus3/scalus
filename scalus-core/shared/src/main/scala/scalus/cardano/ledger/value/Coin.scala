@@ -1,28 +1,25 @@
 package scalus.cardano.ledger.value
 
-/**
- * The [[Coin]] object can be used to work with quantities of cardano assets, including lovelace (ada)
- * and native assets. With Cardano, quantities of assets have various restrictions in different contexts;
- * see the NOTES section below for a description.
- *
- * The object exposes safe arithmetic operations on three underlying types:
- *
- * - A [[Coin.Coin]] type, which is an opaque newtype wrapper around a non-negative, bounded (64-bit) amount of
- *   coins suitable for use in a [[`TransactionBody`]]'s outputs field.
- * - An unbounded [[Coin.Unbounded]] type that can be used in intermediate calculations where the total amount may
- *   exceed the capacity of a `Word64`.
- * - An unbounded [[Coin.Fractional]] type that can be used, e.g., for exchange rates.
- *
- * Functions to convert safely between these three types are provided. "Safety" in this case means:
- * - Detecting overflow/underflow when converting from bounded to unbounded types
- * - (TODO)
- *
- * NOTES:
- * In the haskell `cardano-ledger`, `Coin` is represented as an (unbounded) `Integer`, but the
- * CBOR serialization instances convert directly from a `Word64`. This is contrary to the
- * plutus-core spec, which defines an alternative CBOR encoding for integers larger than 64 bits.
- *
- */
+/** The [[Coin]] object can be used to work with quantities of cardano assets, including lovelace
+  * (ada) and native assets. With Cardano, quantities of assets have various restrictions in
+  * different contexts; see the NOTES section below for a description.
+  *
+  * The object exposes safe arithmetic operations on three underlying types:
+  *
+  *   - A [[Coin.Coin]] type, which is an opaque newtype wrapper around a non-negative, bounded
+  *     (64-bit) amount of coins suitable for use in a [[`TransactionBody`]]'s outputs field.
+  *   - An unbounded [[Coin.Unbounded]] type that can be used in intermediate calculations where the
+  *     total amount may exceed the capacity of a `Word64`.
+  *   - An unbounded [[Coin.Fractional]] type that can be used, e.g., for exchange rates.
+  *
+  * Functions to convert safely between these three types are provided. "Safety" in this case means:
+  *   - Detecting overflow/underflow when converting from bounded to unbounded types
+  *   - (TODO)
+  *
+  * NOTES: In the haskell `cardano-ledger`, `Coin` is represented as an (unbounded) `Integer`, but
+  * the CBOR serialization instances convert directly from a `Word64`. This is contrary to the
+  * plutus-core spec, which defines an alternative CBOR encoding for integers larger than 64 bits.
+  */
 
 import spire.algebra.*
 import spire.implicits.*
@@ -44,16 +41,15 @@ object Coin {
         case Underflow
         case Overflow
 
-    def apply(self: Long): Either[Underflow.type, Coin] =
-        try { Right(unsafeApply(self)) }
-        catch { case e: Underflow.type => Left(e) }
+    def apply(x: Long): Either[Underflow.type, Coin] =
+        if x.sign < 0 then Left(Underflow) else Right(x)
 
     def apply(self: SafeLong): Either[ArithmeticError, Coin] =
         try { Right(unsafeApply(self)) }
         catch { case e: ArithmeticError => Left(e) }
 
-    def unsafeApply(self: Long): Coin =
-        if self.signum < 0 then throw Underflow else self
+    def unsafeApply(x: Long): Coin =
+        if x.sign < 0 then throw Underflow else x
 
     def unsafeApply(self: SafeLong): Coin =
         if self.isValidLong
@@ -65,10 +61,7 @@ object Coin {
 
     given Conversion[Coin, Unbounded] = Unbounded.apply
     given Conversion[Coin, Fractional] = Fractional.apply
-
-    // Only `Coin` should have coercive operators defined.
-    // Defining similar coercive operators for `Coin.Unbounded` and `Coin.Fractional`
-    // would cause clashes with the spire implicit operators.
+    
     extension (self: Coin)
         def underlying: Long = self
 
@@ -81,7 +74,7 @@ object Coin {
         def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
             Fractional(self) :* c.toRational
 
-        def signum: Int = if self > 0 then 1 else 0
+        def signum: Int = LongAlgebra.signum(self)
 
         @targetName("addCoerce")
         infix def +~(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)

@@ -23,7 +23,7 @@ class CoinUnit extends AnyFunSuite {
     }
 
     test("Coin 1 + 2 == 3") {
-        assert(Coin.unsafeApply(1L) + Coin.unsafeApply(2L) == Coin.unsafeApply(3L))
+        assert(Coin.unsafeApply(1L) +~ Coin.unsafeApply(2L) == Coin.unsafeApply(3L))
     }
 
     // ===================================
@@ -35,7 +35,7 @@ class CoinUnit extends AnyFunSuite {
     // ===================================
 
     test("zero denominator fractional should fail")(
-      assert(Try(Coin.Fractional(Rational(1 , 0))).isFailure)
+      assert(Try(Coin.Fractional(Rational(1, 0))).isFailure)
     )
 
 }
@@ -94,7 +94,7 @@ class CoinUnit extends AnyFunSuite {
 
                 minBound - maxBound
 
-                maxBound - (- 1))
+                maxBound - (- 1)
 
     Summation
 

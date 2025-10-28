@@ -18,6 +18,9 @@ class ValueLaws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
 
     checkAll("Value Unbounded CModule", VectorSpaceLaws[Value.Unbounded, SafeLong].cModule)
 
-    checkAll("Value Fractional VectorSpace", VectorSpaceLaws[Value.Fractional, Rational].vectorSpace)
+    checkAll(
+      "Value Fractional VectorSpace",
+      VectorSpaceLaws[Value.Fractional, Rational].vectorSpace
+    )
 
 }
