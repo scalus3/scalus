@@ -1,6 +1,7 @@
-package scalus.uplc.eval
+package scalus.uplc.eval.jitcommon
 
-import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, BLS12_381_MlResult, BuiltinPair, ByteString, Data}
+import scalus.builtin.*
+import scalus.uplc.eval
 
 /** Memory usage calculation for JIT values without CekValue wrapper allocation.
   *
@@ -18,10 +19,10 @@ object MemoryUsageJit {
       *   Memory usage in CostingInteger units
       */
     def memoryUsage(a: Any): CostingInteger = a match
-        case i: BigInt      => MemoryUsage.memoryUsageInteger(i)
-        case bs: ByteString => MemoryUsage.memoryUsageByteString(bs)
-        case s: String      => MemoryUsage.memoryUsageString(s)
-        case d: Data        => MemoryUsage.memoryUsageData(d)
+        case i: BigInt      => CoreMemoryUsage.memoryUsageInteger(i)
+        case bs: ByteString => CoreMemoryUsage.memoryUsageByteString(bs)
+        case s: String      => CoreMemoryUsage.memoryUsageString(s)
+        case d: Data        => CoreMemoryUsage.memoryUsageData(d)
         case _: Boolean     => 1
         case ()             => 1
         case l: List[?] =>

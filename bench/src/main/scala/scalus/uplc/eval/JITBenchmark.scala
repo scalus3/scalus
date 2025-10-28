@@ -20,7 +20,12 @@ class JITBenchmark:
     private var file: String = ""
     private var path: Path = null
     private var program: DeBruijnedProgram | Null = null
-    private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
+
+    // Compile with all JIT implementations
+    private var jittedMincont: (Logger, BudgetSpender, MachineParams) => Any | Null = null
+    private var jittedNativeStack: (Logger, BudgetSpender, MachineParams) => Any | Null = null
+    private var jittedHybrid: (Logger, BudgetSpender, MachineParams) => Any | Null = null
+
     private val params = MachineParams.defaultPlutusV2PostConwayParams
 
     @Setup
@@ -28,14 +33,30 @@ class JITBenchmark:
         path = Paths.get(s"src/main/resources/data/$file")
         val bytes = Files.readAllBytes(path)
         program = DeBruijnedProgram.fromFlatEncoded(bytes)
-        jitted = Test.getJitted()
+        jittedMincont = Test.getJitted(program.toProgram, JITImplementation.Mincont)
+        jittedNativeStack = Test.getJitted(program.toProgram, JITImplementation.NativeStack)
+        jittedHybrid = Test.getJitted(program.toProgram, JITImplementation.Hybrid())
     }
 
     @Benchmark
     @BenchmarkMode(Array(Mode.AverageTime))
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
-    def benchJIT(): Unit = {
-        jitted(NoLogger, NoBudgetSpender, params)
+    def benchJIT_Mincont(): Unit = {
+        jittedMincont(NoLogger, NoBudgetSpender, params)
+    }
+
+    @Benchmark
+    @BenchmarkMode(Array(Mode.AverageTime))
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    def benchJIT_NativeStack(): Unit = {
+        jittedNativeStack(NoLogger, NoBudgetSpender, params)
+    }
+
+    @Benchmark
+    @BenchmarkMode(Array(Mode.AverageTime))
+    @OutputTimeUnit(TimeUnit.MICROSECONDS)
+    def benchJIT_Hybrid(): Unit = {
+        jittedHybrid(NoLogger, NoBudgetSpender, params)
     }
 
 private object Test {
@@ -57,24 +78,31 @@ private object Test {
 
     private val builtins = collect(program.term).toSeq.sorted
 
-    def getJitted(): (Logger, BudgetSpender, MachineParams) => Any = {
-        println(s"Starting JIT compilation at ${System.currentTimeMillis()}")
+    def getJitted(prog: Program, impl: JITImplementation): (Logger, BudgetSpender, MachineParams) => Any = {
+        println(s"Starting JIT compilation (${impl.name}) at ${System.currentTimeMillis()}")
         val start = System.currentTimeMillis()
-        println("Calling JIT.jitUplc...")
-        val r = JIT.jitUplc(program.term)
+        println(s"Calling ${impl.name}.compile...")
+        val r = impl.compile(prog.term)
         val end = System.currentTimeMillis()
-        println(s"JIT completed in ${end - start} ms")
+        println(s"JIT compilation (${impl.name}) completed in ${end - start} ms")
         r
     }
 
     @main def run() = {
         given PlutusVM = PlutusVM.makePlutusV2VM()
+        println("Builtins used:")
         println(builtins)
+        println("\nProgram evaluation (CeK):")
         println(program.evaluateDebug)
-        //        println(program.showHighlighted)
-        //        println(JIT.jitUplc(program.term)())
-        val spender = CountingBudgetSpender()
-        getJitted()(NoLogger, spender, MachineParams.defaultPlutusV2PostConwayParams)
-        println(spender.getSpentBudget.showJson)
+
+        // Test all JIT implementations
+        for impl <- JITImplementation.standaloneImplementations do
+            println(s"\n=== Testing ${impl.name} JIT ===")
+            println(s"Stack-safe: ${impl.isStackSafe}")
+            val spender = CountingBudgetSpender()
+            val jitted = getJitted(program, impl)
+            val result = jitted(NoLogger, spender, MachineParams.defaultPlutusV2PostConwayParams)
+            println(s"Result: $result")
+            println(s"Budget: ${spender.getSpentBudget.showJson}")
     }
 }
