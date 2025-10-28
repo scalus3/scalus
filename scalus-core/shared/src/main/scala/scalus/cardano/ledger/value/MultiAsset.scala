@@ -1,10 +1,11 @@
 package scalus.cardano.ledger.value
 
-import scala.math.BigDecimal.RoundingMode.RoundingMode
 import spire.algebra.*
 import spire.implicits.*
-import spire.math.SafeLong
+import spire.math.{Rational, SafeLong}
 
+import java.math.MathContext
+import scala.math.BigDecimal.defaultMathContext
 import scala.collection.immutable.SortedMap
 import scalus.ledger.api.v3.{PolicyId, TokenName}
 
@@ -64,7 +65,7 @@ object MultiAsset {
 
             def scale(s: SafeLong): Unbounded = algebra.timesl(s, self)
 
-            def scale(s: BigDecimal): Fractional =
+            def scale(s: Rational): Fractional =
                 Fractional(self.view.mapValues(_.scale(s)).to(SortedMap))
 
         import Inner.Unbounded.algebra as innerAlgebra
@@ -112,20 +113,20 @@ object MultiAsset {
         def zero: Fractional = algebra.zero
 
         extension (self: Fractional)
-            def round(mode: RoundingMode): Unbounded =
-                Unbounded(self.view.mapValues(_.round(mode)).to(SortedMap))
+            def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
+                Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
 
-            def toMultiAsset(mode: RoundingMode): Either[MultiAsset.ArithmeticError, MultiAsset] =
+            def toMultiAsset(mc: MathContext = defaultMathContext): Either[MultiAsset.ArithmeticError, MultiAsset] =
                 try {
-                    Right(self.unsafeToMultiAsset(mode))
+                    Right(self.unsafeToMultiAsset(mc))
                 } catch {
                     case e: MultiAsset.ArithmeticError => Left(e)
                 }
 
-            def unsafeToMultiAsset(mode: RoundingMode): MultiAsset = self.view
+            def unsafeToMultiAsset(mc: MathContext = defaultMathContext): MultiAsset = self.view
                 .map((policyId: PolicyId, innerFractional: Inner.Fractional) =>
                     try {
-                        (policyId, innerFractional.unsafeToInner(mode))
+                        (policyId, innerFractional.unsafeToInner(mc))
                     } catch {
                         case e: Inner.ArithmeticError =>
                             throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
@@ -133,13 +134,13 @@ object MultiAsset {
                 )
                 .to(SortedMap)
 
-            def scale(s: BigDecimal): Fractional = algebra.timesl(s, self)
+            def scale(s: Rational): Fractional = algebra.timesl(s, self)
 
         import Inner.Fractional.algebra as innerAlgebra
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, BigDecimal] {
+        object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
             private val mapPartialOrder =
                 SortedMapPartialOrder[TokenName, Inner.Fractional, Double](
                   // If both keys exist, compare the values.
@@ -153,7 +154,7 @@ object MultiAsset {
             override def partialCompare(self: Fractional, other: Fractional): Double =
                 mapPartialOrder.partialCompare(self, other)
 
-            override def scalar: Field[BigDecimal] = Field[BigDecimal]
+            override def scalar: Field[Rational] = Field[Rational]
 
             override def zero: Fractional = Fractional.zero
 
@@ -166,7 +167,7 @@ object MultiAsset {
             override def minus(self: Fractional, other: Fractional): Fractional =
                 combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
-            override def timesl(s: BigDecimal, self: Fractional): Fractional =
+            override def timesl(s: Rational, self: Fractional): Fractional =
                 self.view.mapValues(_.scale(s)).to(SortedMap)
         }
     }
@@ -245,7 +246,7 @@ object MultiAsset {
 
                 def scale(s: SafeLong): Unbounded = algebra.timesl(s, self)
 
-                def scale(s: BigDecimal): Fractional =
+                def scale(s: Rational): Fractional =
                     Fractional(self.view.mapValues(_.scale(s)).to(SortedMap))
 
             import Coin.Unbounded.algebra as coinAlgebra
@@ -294,19 +295,19 @@ object MultiAsset {
             def zero: Fractional = SortedMap.empty
 
             extension (self: Fractional)
-                def round(mode: RoundingMode): Unbounded =
-                    Unbounded(self.view.mapValues(_.round(mode)).to(SortedMap))
+                def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
+                    Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
 
-                def toInner(mode: RoundingMode): Either[Inner.ArithmeticError, Inner] = try {
-                    Right(self.unsafeToInner(mode))
+                def toInner(mc: MathContext = defaultMathContext): Either[Inner.ArithmeticError, Inner] = try {
+                    Right(self.unsafeToInner(mc))
                 } catch {
                     case e: Inner.ArithmeticError => Left(e)
                 }
 
-                def unsafeToInner(mode: RoundingMode): Inner = self.view
+                def unsafeToInner(mc: MathContext = defaultMathContext): Inner = self.view
                     .map((tokenName: TokenName, coinFractional: Coin.Fractional) =>
                         try {
-                            (tokenName, coinFractional.unsafeToCoin(mode))
+                            (tokenName, coinFractional.unsafeToCoin(mc))
                         } catch {
                             case e: Coin.ArithmeticError =>
                                 throw Inner.ArithmeticError.withTokenName(e, tokenName)
@@ -314,13 +315,13 @@ object MultiAsset {
                     )
                     .to(SortedMap)
 
-                def scale(s: BigDecimal): Fractional = algebra.timesl(s, self)
+                def scale(s: Rational): Fractional = algebra.timesl(s, self)
 
             import Coin.Fractional.algebra as coinAlgebra
 
             given algebra: Algebra.type = Algebra
 
-            object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, BigDecimal] {
+            object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
                 private val mapPartialOrder =
                     SortedMapPartialOrder[TokenName, Coin.Fractional, Int](
                       compareBoth = coinAlgebra.compare,
@@ -331,7 +332,7 @@ object MultiAsset {
                 override def partialCompare(self: Fractional, other: Fractional): Double =
                     mapPartialOrder.partialCompare(self, other)
 
-                override def scalar: Field[BigDecimal] = Field[BigDecimal]
+                override def scalar: Field[Rational] = Field[Rational]
 
                 override def zero: Fractional = Fractional.zero
 
@@ -344,7 +345,7 @@ object MultiAsset {
                 override def minus(self: Fractional, other: Fractional): Fractional =
                     combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
 
-                override def timesl(s: BigDecimal, self: Fractional): Fractional =
+                override def timesl(s: Rational, self: Fractional): Fractional =
                     self.view.mapValues(_.scale(s)).to(SortedMap)
             }
         }

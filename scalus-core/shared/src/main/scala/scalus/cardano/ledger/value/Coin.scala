@@ -3,10 +3,11 @@ package scalus.cardano.ledger.value
 import spire.compat.integral
 import spire.algebra.*
 import spire.implicits.*
-import spire.math.SafeLong
+import spire.math.{Rational, SafeLong}
 
+import java.math.MathContext
+import scala.math.BigDecimal.defaultMathContext
 import scala.annotation.targetName
-import scala.math.BigDecimal.RoundingMode.RoundingMode
 
 type Coin = Coin.Coin
 
@@ -62,7 +63,7 @@ object Coin {
 
         def scale(c: SafeLong): Unbounded = Unbounded(c * self)
 
-        def scale(c: BigDecimal): Fractional = Fractional(c * self)
+        def scale(c: Rational): Fractional = Fractional(c * self)
 
     given algebra: Algebra.type = Algebra
 
@@ -112,11 +113,11 @@ object Coin {
                 else if self.signum < 0 then throw Underflow
                 else throw Coin.ArithmeticError.Overflow
 
-            def toCoinFractional: Fractional = Fractional(self.toBigDecimal)
+            def toCoinFractional: Fractional = Fractional(self.toRational)
 
             def scale(c: SafeLong): Unbounded = algebra.timesl(c, self)
 
-            def scale(c: BigDecimal): Fractional =
+            def scale(c: Rational): Fractional =
                 Fractional.algebra.timesl(c, self.toCoinFractional)
 
             def signum: Int = self.signum
@@ -157,24 +158,48 @@ object Coin {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        opaque type Fractional = BigDecimal
+        opaque type Fractional = Rational
 
-        def apply(x: BigDecimal): Fractional = x
+        def apply(x: Rational): Fractional = x
 
         def zero: Fractional = 0
 
         extension (self: Fractional)
-            def toBigDecimal: BigDecimal = self
+            def toRational: Rational = self
 
-            def round(mode: RoundingMode): Unbounded = Unbounded(self.setScale(0, mode).toBigInt)
+            def toUnbounded(mc: MathContext = defaultMathContext): Unbounded = {
+                Unbounded(SafeLong(asIntegralBigDecimal(mc).bigDecimal.toBigIntegerExact))
+            }
 
-            def toCoin(mode: RoundingMode): Either[ArithmeticError, Coin] = round(mode).toCoin
+            def toCoin(mc: MathContext = defaultMathContext): Either[ArithmeticError, Coin] = try {
+                Right(self.unsafeToCoin(mc))
+            } catch {
+                case e: Coin.ArithmeticError => Left(e)
+            }
 
-            def unsafeToCoin(mode: RoundingMode): Coin = round(mode).unsafeToCoin
+            def unsafeToCoin(mc: MathContext = defaultMathContext): Coin = {
+                val rounded = asIntegralBigDecimal(mc)
+                try {
+                    // Succeeds if `rounded` is an exact and positive Long.
+                    Coin.unsafeApply(rounded.toLongExact)
+                } catch {
+                    // Thrown by `bigDecimal.toLongExact` if out of bounds
+                    case _: java.lang.ArithmeticException =>
+                        // Backup approach: go through Unbounded
+                        Unbounded(SafeLong(rounded.bigDecimal.toBigIntegerExact)).unsafeToCoin
+                    // Re-throw Coin.ArithmeticError from `Coin.unsafeApply` in the try block
+                    case e: Coin.ArithmeticError => throw e
+                }
+            }
 
-            def scale(c: BigDecimal): Fractional = algebra.timesl(c, self)
+            def scale(c: Rational): Fractional = algebra.timesl(c, self)
 
             def signum: Int = self.signum
+
+            // Round the Rational via BigDecimal with the defaultMathContext
+            // `defaultMathContext` uses banker's rounding and 34 decimal digits of precision.
+            private def asIntegralBigDecimal(mc: MathContext = defaultMathContext): BigDecimal =
+                self.toBigDecimal(mc).setScale(0)
 
         extension (self: IterableOnce[Fractional])
             def min: Fractional = self.iterator.min
@@ -187,10 +212,10 @@ object Coin {
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends Order[Fractional], VectorSpace[Fractional, BigDecimal] {
+        object Algebra extends Order[Fractional], VectorSpace[Fractional, Rational] {
             override def compare(self: Fractional, other: Fractional): Int = self.compare(other)
 
-            override def scalar: Field[BigDecimal] = Field[BigDecimal]
+            override def scalar: Field[Rational] = Field[Rational]
 
             override def zero: Fractional = Fractional.zero
 
@@ -200,15 +225,15 @@ object Coin {
 
             override def minus(x: Fractional, y: Fractional): Fractional = x - y
 
-            override def timesl(s: BigDecimal, v: Fractional): Fractional = Fractional(s * v)
+            override def timesl(s: Rational, v: Fractional): Fractional = Fractional(s * v)
         }
     }
 
     private object Aggregate {
-        def average[T <: SafeLong | BigDecimal, R](
+        def average[T <: SafeLong | Rational, R](
             self: IterableOnce[T],
             convert: T => R = identity[R]
-        )(using evT: AdditiveMonoid[T], evR: VectorSpace[R, BigDecimal]): Option[R] = {
+        )(using evT: AdditiveMonoid[T], evR: VectorSpace[R, Rational]): Option[R] = {
             val (sum, length) = Aggregate.sumLength(self)
 
             Option.when(length > 0)(convert(sum) :/ length)
@@ -218,10 +243,10 @@ object Coin {
 
         def min[T](self: IterableOnce[T])(using ev: Ordering[T]): T = self.iterator.min
 
-        def sum[T <: SafeLong | BigDecimal](self: IterableOnce[T])(using ev: AdditiveMonoid[T]): T =
+        def sum[T <: SafeLong | Rational](self: IterableOnce[T])(using ev: AdditiveMonoid[T]): T =
             self.iterator.foldRight(ev.zero)(ev.plus)
 
-        private def sumLength[T <: SafeLong | BigDecimal](
+        private def sumLength[T <: SafeLong | Rational](
             self: IterableOnce[T]
         )(using ev: AdditiveMonoid[T]): (T, Int) = {
             type Acc = (T, Int)

@@ -2,9 +2,10 @@ package scalus.cardano.ledger.value
 
 import spire.algebra.*
 import spire.implicits.*
-import spire.math.SafeLong
+import spire.math.{Rational, SafeLong}
 
-import scala.math.BigDecimal.RoundingMode.RoundingMode
+import java.math.MathContext
+import scala.math.BigDecimal.defaultMathContext
 
 case class Value private (lovelace: Coin, assets: MultiAsset = MultiAsset.zero)
 
@@ -52,7 +53,7 @@ object Value {
 
         def scale(s: SafeLong): Unbounded = Unbounded.algebra.timesl(s, this)
 
-        def scale(s: BigDecimal): Fractional =
+        def scale(s: Rational): Fractional =
             Fractional(this.lovelace.scale(s), this.assets.scale(s))
     }
 
@@ -87,26 +88,26 @@ object Value {
         lovelace: Coin.Fractional,
         assets: MultiAsset.Fractional = MultiAsset.Fractional.zero
     ) {
-        def round(mode: RoundingMode): Unbounded =
-            Unbounded(this.lovelace.round(mode), this.assets.round(mode))
+        def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
+            Unbounded(this.lovelace.toUnbounded(mc), this.assets.toUnbounded(mc))
 
-        def toValue(mode: RoundingMode): Either[ArithmeticError, Value] = try {
-            Right(this.unsafeToValue(mode))
+        def toValue(mc: MathContext = defaultMathContext): Either[ArithmeticError, Value] = try {
+            Right(this.unsafeToValue(mc))
         } catch {
             case e: ArithmeticError => Left(e)
         }
 
-        def unsafeToValue(mode: RoundingMode): Value = {
+        def unsafeToValue(mc: MathContext = defaultMathContext): Value = {
             val lovelace =
                 try {
-                    this.lovelace.unsafeToCoin(mode)
+                    this.lovelace.unsafeToCoin(mc)
                 } catch {
                     case e: Coin.ArithmeticError => throw ArithmeticError.Lovelace(e)
                 }
 
             val assets =
                 try {
-                    this.assets.unsafeToMultiAsset(mode)
+                    this.assets.unsafeToMultiAsset(mc)
                 } catch {
                     case e: MultiAsset.ArithmeticError => throw ArithmeticError.Assets(e)
                 }
@@ -114,7 +115,7 @@ object Value {
             Value(lovelace, assets)
         }
 
-        def scale(s: BigDecimal): Fractional = Fractional.algebra.timesl(s, this)
+        def scale(s: Rational): Fractional = Fractional.algebra.timesl(s, this)
     }
 
     object Fractional {
@@ -122,11 +123,11 @@ object Value {
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, BigDecimal] {
+        object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
             override def partialCompare(self: Fractional, other: Fractional): Double =
                 partialCompareImpl(self.lovelace, self.assets, other.lovelace, other.assets)
 
-            override def scalar: Field[BigDecimal] = Field[BigDecimal]
+            override def scalar: Field[Rational] = Field[Rational]
 
             override def zero: Fractional = Fractional.zero
 
@@ -139,7 +140,7 @@ object Value {
             override def minus(self: Fractional, other: Fractional): Fractional =
                 Fractional(self.lovelace - other.lovelace, self.assets - other.assets)
 
-            override def timesl(s: BigDecimal, self: Fractional): Fractional =
+            override def timesl(s: Rational, self: Fractional): Fractional =
                 Fractional(self.lovelace.scale(s), self.assets.scale(s))
         }
     }
