@@ -1,6 +1,6 @@
 package scalus.uplc.eval.jitcommon
 
-import scalus.builtin.{Builtins, ByteString, Data}
+import scalus.builtin.{BuiltinPair, Builtins, ByteString, Data}
 import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams, StepKind}
 import scalus.uplc.eval.ExBudgetCategory.Step
 import scalus.uplc.eval.jitcommon.*
@@ -256,10 +256,13 @@ object BuiltinSnippets {
 
     // Pair operations
 
-    @inline def fstPair(budget: BudgetSpender, params: MachineParams): () => () => Any =
+    @inline def fstPair(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): () => () => BuiltinPair[?, ?] => Any =
         () =>
             () =>
-                (x: Any) => {
+                (x: BuiltinPair[?, ?]) => {
                     import scalus.builtin.BuiltinPair
                     budget.spendBudget(
                       Step(StepKind.Builtin),
@@ -269,10 +272,13 @@ object BuiltinSnippets {
                     Builtins.fstPair(x.asInstanceOf[BuiltinPair[?, ?]])
                 }
 
-    @inline def sndPair(budget: BudgetSpender, params: MachineParams): () => () => Any =
+    @inline def sndPair(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): () => () => BuiltinPair[?, ?] => Any =
         () =>
             () =>
-                (x: Any) => {
+                (x: BuiltinPair[?, ?]) => {
                     import scalus.builtin.BuiltinPair
                     budget.spendBudget(
                       Step(StepKind.Builtin),
