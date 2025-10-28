@@ -113,25 +113,6 @@ object JIT extends JitRunner {
             else code
         }
 
-        // Helper to check if a term always produces Return (no Apply/Force)
-        def isSimpleTerm(term: Term): Boolean = term match {
-            case Term.Var(_)       => true
-            case Term.Const(_)     => true
-            case Term.Builtin(_)   => true
-            case Term.LamAbs(_, _) => true
-            case Term.Delay(_)     => true // Delay wraps in Return
-            case _                 => false
-        }
-
-        def isApplyBuiltin2WithSimpleArgs(term: Term): Boolean = {
-            term match
-                case Term.Apply(Term.Apply(Term.Builtin(bn), arg1), arg2) =>
-                    isSimpleTerm(arg1) && isSimpleTerm(arg2) && BuiltinAppliedGenerator.isSupported(
-                      bn
-                    )
-                case _ => false
-        }
-
         def genCode(
             term: Term,
             env: List[(String, quotes.reflect.Term)],
@@ -160,9 +141,99 @@ object JIT extends JitRunner {
                     }
 
                 case Term.Apply(fun, arg) =>
+                    // Optimize: detect fully-applied 1-argument builtins with simple arg
+                    if UplcTermHelper.isApplyBuiltin1WithSimpleArg(term) then {
+                        fun match
+                            case Term.Builtin(bn) if BuiltinAppliedGenerator.isSupported1(bn) =>
+                                val argCode = genCode(arg, env, logger, budget, params)
+                                // Generate inline code for one-argument builtins
+                                val result = bn match
+                                    case DefaultFun.Sha2_256 =>
+                                        BuiltinAppliedGenerator.sha2_256(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.Sha3_256 =>
+                                        BuiltinAppliedGenerator.sha3_256(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.Blake2b_256 =>
+                                        BuiltinAppliedGenerator.blake2b_256(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnConstrData =>
+                                        BuiltinAppliedGenerator.unConstrData(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnListData =>
+                                        BuiltinAppliedGenerator.unListData(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnIData =>
+                                        BuiltinAppliedGenerator.unIData(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnBData =>
+                                        BuiltinAppliedGenerator.unBData(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.LengthOfByteString =>
+                                        BuiltinAppliedGenerator.lengthOfByteString(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.EncodeUtf8 =>
+                                        BuiltinAppliedGenerator.encodeUtf8(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.DecodeUtf8 =>
+                                        BuiltinAppliedGenerator.decodeUtf8(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.HeadList =>
+                                        BuiltinAppliedGenerator.headList(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.TailList =>
+                                        BuiltinAppliedGenerator.tailList(
+                                          '{ ${ argCode }.asInstanceOf[Return].value },
+                                          budget,
+                                          params
+                                        )
+                                    case _ =>
+                                        throw IllegalStateException(
+                                          s"Short circuit optimization for 1-arg builtin $bn not implemented"
+                                        )
+                                '{ Return($result) }
+                            case _ =>
+                                throw IllegalStateException(
+                                  s"isApplyBuiltin1WithSimpleArg returned true but term has wrong shape"
+                                )
+                    }
                     // Optimize: if both fun and arg are simple (Return-producing),
                     // generate direct application instead of Apply continuation
-                    if isSimpleTerm(fun) && isSimpleTerm(arg) then {
+                    else if UplcTermHelper.isSimpleTerm(fun) && UplcTermHelper.isSimpleTerm(arg)
+                    then {
                         val funCode = genCode(fun, env, logger, budget, params)
                         val argCode = genCode(arg, env, logger, budget, params)
                         '{
@@ -181,7 +252,7 @@ object JIT extends JitRunner {
                                 case v                         => Return(v)
                             }
                         }
-                    } else if isApplyBuiltin2WithSimpleArgs(term) then {
+                    } else if UplcTermHelper.isApplyBuiltin2WithSimpleArgs(term) then {
                         val argCode = genCode(arg, env, logger, budget, params)
                         fun match
                             case Term.Apply(Term.Builtin(bn), arg1)
@@ -210,9 +281,177 @@ object JIT extends JitRunner {
                                                 )
                                             })
                                         }
+                                    case DefaultFun.MultiplyInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.multiplyInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.EqualsInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.equalsInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.LessThanInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.lessThanInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.LessThanEqualsInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.lessThanEqualsInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.EqualsByteString =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.equalsByteString(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.EqualsData =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.equalsData(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    // Additional integer operations
+                                    case DefaultFun.DivideInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.divideInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.QuotientInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.quotientInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.RemainderInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.remainderInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.ModInteger =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.modInteger(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    // ByteString operations
+                                    case DefaultFun.AppendByteString =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.appendByteString(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.LessThanByteString =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.lessThanByteString(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.LessThanEqualsByteString =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.lessThanEqualsByteString(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    // String operations
+                                    case DefaultFun.AppendString =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.appendString(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
+                                    case DefaultFun.EqualsString =>
+                                        '{
+                                            Return(${
+                                                BuiltinAppliedGenerator.equalsString(
+                                                  '{ ${ arg1Code }.asInstanceOf[Return].value },
+                                                  '{ ${ argCode }.asInstanceOf[Return].value },
+                                                  budget,
+                                                  params
+                                                )
+                                            })
+                                        }
                                     case _ => // impossible
                                         throw IllegalStateException(
-                                          s"Short part optimization fo builtin $bn not implemented"
+                                          s"Short circuit optimization for builtin $bn not implemented"
                                         )
                             case _ => // imoissibke, we have check
                                 throw IllegalStateException(

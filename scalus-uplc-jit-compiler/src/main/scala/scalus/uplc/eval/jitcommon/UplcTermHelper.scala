@@ -14,4 +14,20 @@ object UplcTermHelper {
         case _                 => false
     }
 
+    // Helper to check if a term is a fully-applied 2-argument builtin with simple arguments
+    def isApplyBuiltin2WithSimpleArgs(term: Term): Boolean = {
+        term match
+            case Term.Apply(Term.Apply(Term.Builtin(bn), arg1), arg2) =>
+                isSimpleTerm(arg1) && isSimpleTerm(arg2) && BuiltinAppliedGenerator.isSupported2(bn)
+            case _ => false
+    }
+
+    // Helper to check if a term is a fully-applied 1-argument builtin with simple argument
+    def isApplyBuiltin1WithSimpleArg(term: Term): Boolean = {
+        term match
+            case Term.Apply(Term.Builtin(bn), arg) =>
+                isSimpleTerm(arg) && BuiltinAppliedGenerator.isSupported1(bn)
+            case _ => false
+    }
+
 }

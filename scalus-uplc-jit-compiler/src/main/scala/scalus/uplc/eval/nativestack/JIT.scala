@@ -126,30 +126,261 @@ object JIT extends JitRunner {
                         $lambda
                     }
                 case Term.Apply(f, arg) =>
-                    val func = genCode(f, env, logger, budget, params, nativeStackContext)
-                    val a = genCode(arg, env, logger, budget, params, nativeStackContext)
-                    if UplcTermHelper.isSimpleTerm(f) && UplcTermHelper.isSimpleTerm(arg) then {
-                        // can not check stack-overflow
-                        '{
-                            $budget.spendBudget(
-                              Step(StepKind.Apply),
-                              $params.machineCosts.applyCost,
-                              Nil
-                            )
-                            ${ func }.asInstanceOf[Any => Any].apply($a)
-                        }
-                    } else
-                        '{
-                            $budget.spendBudget(
-                              Step(StepKind.Apply),
-                              $params.machineCosts.applyCost,
-                              Nil
-                            )
-                            ${ nativeStackContext }.incr()
-                            val r = ${ func }.asInstanceOf[Any => Any].apply($a)
-                            ${ nativeStackContext }.decr()
-                            r
-                        }
+                    // Optimize: detect fully-applied 1-argument builtins with simple arg
+                    if UplcTermHelper.isApplyBuiltin1WithSimpleArg(term) then {
+                        f match
+                            case Term.Builtin(bn) if BuiltinAppliedGenerator.isSupported1(bn) =>
+                                val argCode =
+                                    genCode(arg, env, logger, budget, params, nativeStackContext)
+                                // Generate inline code for one-argument builtins
+                                bn match
+                                    case DefaultFun.Sha2_256 =>
+                                        BuiltinAppliedGenerator.sha2_256(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.Sha3_256 =>
+                                        BuiltinAppliedGenerator.sha3_256(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.Blake2b_256 =>
+                                        BuiltinAppliedGenerator.blake2b_256(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnConstrData =>
+                                        BuiltinAppliedGenerator.unConstrData(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnListData =>
+                                        BuiltinAppliedGenerator.unListData(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnIData =>
+                                        BuiltinAppliedGenerator.unIData(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.UnBData =>
+                                        BuiltinAppliedGenerator.unBData(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.LengthOfByteString =>
+                                        BuiltinAppliedGenerator.lengthOfByteString(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.EncodeUtf8 =>
+                                        BuiltinAppliedGenerator.encodeUtf8(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.DecodeUtf8 =>
+                                        BuiltinAppliedGenerator.decodeUtf8(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.HeadList =>
+                                        BuiltinAppliedGenerator.headList(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.TailList =>
+                                        BuiltinAppliedGenerator.tailList(
+                                          '{ $argCode },
+                                          budget,
+                                          params
+                                        )
+                                    case _ =>
+                                        throw IllegalStateException(
+                                          s"Short circuit optimization for 1-arg builtin $bn not implemented"
+                                        )
+                            case _ =>
+                                throw IllegalStateException(
+                                  s"isApplyBuiltin1WithSimpleArg returned true but term has wrong shape"
+                                )
+                    }
+                    // Optimize: detect fully-applied 2-argument builtins with simple args
+                    else if UplcTermHelper.isApplyBuiltin2WithSimpleArgs(term) then {
+                        f match
+                            case Term.Apply(Term.Builtin(bn), arg1) =>
+                                val arg1Code =
+                                    genCode(arg1, env, logger, budget, params, nativeStackContext)
+                                val arg2Code =
+                                    genCode(arg, env, logger, budget, params, nativeStackContext)
+                                bn match
+                                    // Integer operations
+                                    case DefaultFun.AddInteger =>
+                                        BuiltinAppliedGenerator.addInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.SubtractInteger =>
+                                        BuiltinAppliedGenerator.subtractInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.MultiplyInteger =>
+                                        BuiltinAppliedGenerator.multiplyInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.DivideInteger =>
+                                        BuiltinAppliedGenerator.divideInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.QuotientInteger =>
+                                        BuiltinAppliedGenerator.quotientInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.RemainderInteger =>
+                                        BuiltinAppliedGenerator.remainderInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.ModInteger =>
+                                        BuiltinAppliedGenerator.modInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.EqualsInteger =>
+                                        BuiltinAppliedGenerator.equalsInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.LessThanInteger =>
+                                        BuiltinAppliedGenerator.lessThanInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.LessThanEqualsInteger =>
+                                        BuiltinAppliedGenerator.lessThanEqualsInteger(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    // ByteString operations
+                                    case DefaultFun.AppendByteString =>
+                                        BuiltinAppliedGenerator.appendByteString(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.EqualsByteString =>
+                                        BuiltinAppliedGenerator.equalsByteString(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.LessThanByteString =>
+                                        BuiltinAppliedGenerator.lessThanByteString(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.LessThanEqualsByteString =>
+                                        BuiltinAppliedGenerator.lessThanEqualsByteString(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    // String operations
+                                    case DefaultFun.AppendString =>
+                                        BuiltinAppliedGenerator.appendString(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case DefaultFun.EqualsString =>
+                                        BuiltinAppliedGenerator.equalsString(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    // Data operations
+                                    case DefaultFun.EqualsData =>
+                                        BuiltinAppliedGenerator.equalsData(
+                                          '{ $arg1Code },
+                                          '{ $arg2Code },
+                                          budget,
+                                          params
+                                        )
+                                    case _ =>
+                                        throw IllegalStateException(
+                                          s"Short circuit optimization for builtin $bn not implemented"
+                                        )
+                            case _ =>
+                                throw IllegalStateException(
+                                  s"isApplyBuiltin2WithSimpleArgs returned true but term has wrong shape"
+                                )
+                    } else {
+                        val func = genCode(f, env, logger, budget, params, nativeStackContext)
+                        val a = genCode(arg, env, logger, budget, params, nativeStackContext)
+                        if UplcTermHelper.isSimpleTerm(f) && UplcTermHelper.isSimpleTerm(arg) then {
+                            // can not check stack-overflow
+                            '{
+                                $budget.spendBudget(
+                                  Step(StepKind.Apply),
+                                  $params.machineCosts.applyCost,
+                                  Nil
+                                )
+                                ${ func }.asInstanceOf[Any => Any].apply($a)
+                            }
+                        } else
+                            '{
+                                $budget.spendBudget(
+                                  Step(StepKind.Apply),
+                                  $params.machineCosts.applyCost,
+                                  Nil
+                                )
+                                ${ nativeStackContext }.incr()
+                                val r = ${ func }.asInstanceOf[Any => Any].apply($a)
+                                ${ nativeStackContext }.decr()
+                                r
+                            }
+                    }
 
                 case Term.Force(term) =>
                     val expr = genCode(term, env, logger, budget, params, nativeStackContext)
