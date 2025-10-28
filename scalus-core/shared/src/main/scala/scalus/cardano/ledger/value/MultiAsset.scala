@@ -1,13 +1,13 @@
 package scalus.cardano.ledger.value
 
+import scalus.cardano.ledger.{AssetName, PolicyId}
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
 
 import java.math.MathContext
-import scala.math.BigDecimal.defaultMathContext
 import scala.collection.immutable.SortedMap
-import scalus.ledger.api.v3.{PolicyId, TokenName}
+import scala.math.BigDecimal.defaultMathContext
 
 type MultiAsset = MultiAsset.MultiAsset
 
@@ -32,8 +32,15 @@ object MultiAsset {
 
     given algebra: Algebra.type = Algebra
 
+    sealed trait ArithmeticError extends Throwable:
+        def policyId: PolicyId
+
+        def tokenName: AssetName
+
+    type Unbounded = Unbounded.Unbounded
+
     object Algebra extends PartialOrder[MultiAsset] {
-        private val mapPartialOrder = SortedMapPartialOrder[TokenName, Inner, Double](
+        private val mapPartialOrder = SortedMapPartialOrder[PolicyId, Inner, Double](
           // If both keys exist, compare the values.
           // If only the left key exists, compare the left value against zero.
           // If only the right key exists, compare the right value against zero.
@@ -46,7 +53,7 @@ object MultiAsset {
             mapPartialOrder.partialCompare(self, other)
     }
 
-    type Unbounded = Unbounded.Unbounded
+    type Fractional = Fractional.Fractional
 
     object Unbounded {
         opaque type Unbounded = SortedMap[PolicyId, Inner.Unbounded]
@@ -87,7 +94,7 @@ object MultiAsset {
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
-            private val mapPartialOrder = SortedMapPartialOrder[TokenName, Inner.Unbounded, Double](
+            private val mapPartialOrder = SortedMapPartialOrder[PolicyId, Inner.Unbounded, Double](
               // If both keys exist, compare the values.
               // If only the left key exists, compare the left value against zero.
               // If only the right key exists, compare the right value against zero.
@@ -116,8 +123,6 @@ object MultiAsset {
                 self.view.mapValues(_ :* s).to(SortedMap)
         }
     }
-
-    type Fractional = Fractional.Fractional
 
     object Fractional {
         opaque type Fractional = SortedMap[PolicyId, Inner.Fractional]
@@ -161,7 +166,7 @@ object MultiAsset {
 
         object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
             private val mapPartialOrder =
-                SortedMapPartialOrder[TokenName, Inner.Fractional, Double](
+                SortedMapPartialOrder[PolicyId, Inner.Fractional, Double](
                   // If both keys exist, compare the values.
                   // If only the left key exists, compare the left value against zero.
                   // If only the right key exists, compare the right value against zero.
@@ -191,13 +196,10 @@ object MultiAsset {
         }
     }
 
-    sealed trait ArithmeticError extends Throwable:
-        def policyId: PolicyId
-        def tokenName: TokenName
-
     object ArithmeticError {
-        final case class Underflow(policyId: PolicyId, tokenName: TokenName) extends ArithmeticError
-        final case class Overflow(policyId: PolicyId, tokenName: TokenName) extends ArithmeticError
+        final case class Underflow(policyId: PolicyId, tokenName: AssetName) extends ArithmeticError
+
+        final case class Overflow(policyId: PolicyId, tokenName: AssetName) extends ArithmeticError
 
         def withPolicyId(e: Inner.ArithmeticError, policyId: PolicyId): MultiAsset.ArithmeticError =
             e match {
@@ -211,14 +213,14 @@ object MultiAsset {
     type Inner = Inner.Inner
 
     object Inner {
-        opaque type Inner = SortedMap[TokenName, Coin]
+        opaque type Inner = SortedMap[AssetName, Coin]
 
-        def apply(x: SortedMap[TokenName, Coin]): Inner = x
+        def apply(x: SortedMap[AssetName, Coin]): Inner = x
 
         def zero: Inner = SortedMap.empty
 
         extension (self: Inner)
-            def underlying: SortedMap[TokenName, Coin] = self
+            def underlying: SortedMap[AssetName, Coin] = self
 
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 Unbounded(self.view.mapValues(_.scaleIntegral(c)).to(SortedMap))
@@ -229,8 +231,13 @@ object MultiAsset {
 
         given algebra: Algebra.type = Algebra
 
+        sealed trait ArithmeticError extends Throwable:
+            def tokenName: AssetName
+
+        type Unbounded = Unbounded.Unbounded
+
         object Algebra extends PartialOrder[Inner] {
-            private val mapPartialOrder = SortedMapPartialOrder[TokenName, Coin, Int](
+            private val mapPartialOrder = SortedMapPartialOrder[AssetName, Coin, Int](
               // If both keys exist, compare the values.
               // If only the left key exists, compare the left value against zero.
               // If only the right key exists, compare the right value against zero.
@@ -243,19 +250,19 @@ object MultiAsset {
                 mapPartialOrder.partialCompare(self, other)
         }
 
-        type Unbounded = Unbounded.Unbounded
+        type Fractional = Fractional.Fractional
 
         object Unbounded {
-            opaque type Unbounded = SortedMap[TokenName, Coin.Unbounded]
+            opaque type Unbounded = SortedMap[AssetName, Coin.Unbounded]
 
-            def apply(x: SortedMap[TokenName, Coin.Unbounded]): Unbounded = x
+            def apply(x: SortedMap[AssetName, Coin.Unbounded]): Unbounded = x
 
             def zero: Unbounded = SortedMap.empty
 
             import Coin.Unbounded.algebra as coinAlgebra
 
             extension (self: Unbounded)
-                def underlying: SortedMap[TokenName, Coin.Unbounded] = self
+                def underlying: SortedMap[AssetName, Coin.Unbounded] = self
 
                 def toInner: Either[Inner.ArithmeticError, Inner] = try {
                     Right(self.unsafeToInner)
@@ -264,12 +271,12 @@ object MultiAsset {
                 }
 
                 def unsafeToInner: Inner = self.view
-                    .map((tokenName: TokenName, coinUnbounded: Coin.Unbounded) =>
+                    .map((tokenName: AssetName, coinUnbounded: Coin.Unbounded) =>
                         try {
                             (tokenName, coinUnbounded.unsafeToCoin)
                         } catch {
                             case e: Coin.ArithmeticError =>
-                                throw Inner.ArithmeticError.withTokenName(e, tokenName)
+                                throw Inner.ArithmeticError.withAssetName(e, tokenName)
                         }
                     )
                     .to(SortedMap)
@@ -288,7 +295,7 @@ object MultiAsset {
 
             object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
                 private val mapPartialOrder =
-                    MultiAsset.SortedMapPartialOrder[TokenName, Coin.Unbounded, Int](
+                    MultiAsset.SortedMapPartialOrder[AssetName, Coin.Unbounded, Int](
                       // If both keys exist, compare the values.
                       // If only the left key exists, compare the left value against zero.
                       // If only the right key exists, compare the right value against zero.
@@ -318,17 +325,15 @@ object MultiAsset {
             }
         }
 
-        type Fractional = Fractional.Fractional
-
         object Fractional {
-            opaque type Fractional = SortedMap[TokenName, Coin.Fractional]
+            opaque type Fractional = SortedMap[AssetName, Coin.Fractional]
 
-            def apply(x: SortedMap[TokenName, Coin.Fractional]): Fractional = x
+            def apply(x: SortedMap[AssetName, Coin.Fractional]): Fractional = x
 
             def zero: Fractional = SortedMap.empty
 
             extension (self: Fractional)
-                def underlying: SortedMap[TokenName, Coin.Fractional] = self
+                def underlying: SortedMap[AssetName, Coin.Fractional] = self
 
                 def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
                     Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
@@ -342,12 +347,12 @@ object MultiAsset {
                 }
 
                 def unsafeToInner(mc: MathContext = defaultMathContext): Inner = self.view
-                    .map((tokenName: TokenName, coinFractional: Coin.Fractional) =>
+                    .map((tokenName: AssetName, coinFractional: Coin.Fractional) =>
                         try {
                             (tokenName, coinFractional.unsafeToCoin(mc))
                         } catch {
                             case e: Coin.ArithmeticError =>
-                                throw Inner.ArithmeticError.withTokenName(e, tokenName)
+                                throw Inner.ArithmeticError.withAssetName(e, tokenName)
                         }
                     )
                     .to(SortedMap)
@@ -361,7 +366,7 @@ object MultiAsset {
 
             object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
                 private val mapPartialOrder =
-                    SortedMapPartialOrder[TokenName, Coin.Fractional, Int](
+                    SortedMapPartialOrder[AssetName, Coin.Fractional, Int](
                       compareBoth = coinAlgebra.compare,
                       compareLeft = _.signum,
                       compareRight = -_.signum
@@ -388,22 +393,20 @@ object MultiAsset {
             }
         }
 
-        sealed trait ArithmeticError extends Throwable:
-            def tokenName: TokenName
-
         object ArithmeticError {
-            final case class Underflow(tokenName: TokenName) extends ArithmeticError
-            final case class Overflow(tokenName: TokenName) extends ArithmeticError
-
-            def withTokenName(
+            def withAssetName(
                 e: Coin.ArithmeticError,
-                tokenName: TokenName
+                tokenName: AssetName
             ): Inner.ArithmeticError =
                 e match {
                     case Coin.ArithmeticError.Underflow =>
                         Inner.ArithmeticError.Underflow(tokenName)
                     case Coin.ArithmeticError.Overflow => Inner.ArithmeticError.Overflow(tokenName)
                 }
+
+            final case class Underflow(tokenName: AssetName) extends ArithmeticError
+
+            final case class Overflow(tokenName: AssetName) extends ArithmeticError
         }
     }
 

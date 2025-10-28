@@ -7,7 +7,7 @@ import spire.math.{Rational, SafeLong}
 import java.math.MathContext
 import scala.math.BigDecimal.defaultMathContext
 
-case class Value private (lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
+case class Value (lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
     def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Value.Unbounded =
         Value.Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
 

@@ -1,5 +1,29 @@
 package scalus.cardano.ledger.value
 
+/**
+ * The [[Coin]] object can be used to work with quantities of cardano assets, including lovelace (ada)
+ * and native assets. With Cardano, quantities of assets have various restrictions in different contexts;
+ * see the NOTES section below for a description.
+ *
+ * The object exposes safe arithmetic operations on three underlying types:
+ *
+ * - A [[Coin.Coin]] type, which is an opaque newtype wrapper around a non-negative, bounded (64-bit) amount of
+ *   coins suitable for use in a [[`TransactionBody`]]'s outputs` field.
+ * - An unbounded [[Coin.Unbounded]] type that can be used in intermediate calculations where the total amount may
+ *   exceed the capacity of a `Word64`.
+ * - An unbounded [[Coin.Fractional]] type that can be used, e.g., for exchange rates.
+ *
+ * Functions to convert safely between these three types are provided. "Safety" in this case means:
+ * - Detecting overflow/underflow when converting from bounded to unbounded types
+ * - (TODO)
+ *
+ * NOTES:
+ * In the haskell `cardano-ledger`, `Coin` is represented as an (unbounded) `Integer`, but the
+ * CBOR serialization instances convert directly from a `Word64`. This is contrary to the
+ * plutus-core spec, which defines an alternative CBOR encoding for integers larger than 64 bits.
+ *
+ */
+
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
@@ -41,7 +65,11 @@ object Coin {
         def toCoinUnbounded: Unbounded = Unbounded(self)
         def toCoinFractional: Fractional = Fractional(self)
 
-        def signum: Int = if self > 0 then 1 else 0
+        def signum: Int = self match {
+            case _ if self > 0 => 1
+            case _ if self == 0 => 1
+            case _ => -1
+        }
 
         @targetName("addCoerceCoins")
         infix def +(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
@@ -61,7 +89,7 @@ object Coin {
     given algebra: Algebra.type = Algebra
 
     object Algebra extends Order[Coin] {
-        override def compare(self: Coin, other: Coin): Int = self.compare(other)
+        override def compare(self: Coin, other: Coin): Int = LongAlgebra.compare(self, other)
     }
 
     extension (self: IterableOnce[Coin]) {
