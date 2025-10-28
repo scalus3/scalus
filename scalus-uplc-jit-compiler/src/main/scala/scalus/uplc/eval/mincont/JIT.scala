@@ -112,6 +112,16 @@ object JIT extends JitRunner {
             else code
         }
 
+        // Helper to check if a term always produces Return (no Apply/Force)
+        def isSimpleTerm(term: Term): Boolean = term match {
+            case Term.Var(_)      => true
+            case Term.Const(_)    => true
+            case Term.Builtin(_)  => true
+            case Term.LamAbs(_, _) => true
+            case Term.Delay(_)    => true // Delay wraps in Return
+            case _                => false
+        }
+
         def genCode(
             term: Term,
             env: List[(String, quotes.reflect.Term)],
@@ -142,17 +152,40 @@ object JIT extends JitRunner {
                     }
 
                 case Term.Apply(fun, arg) =>
-                    // Create Apply continuation - flattened to the top-level loop
-                    '{
-                        $budget.spendBudget(
-                          Step(StepKind.Apply),
-                          $params.machineCosts.applyCost,
-                          Nil
-                        )
-                        Apply(
-                          ${ genCode(fun, env, logger, budget, params) },
-                          ${ genCode(arg, env, logger, budget, params) }
-                        )
+                    // Optimize: if both fun and arg are simple (Return-producing),
+                    // generate direct application instead of Apply continuation
+                    if isSimpleTerm(fun) && isSimpleTerm(arg) then {
+                        val funCode = genCode(fun, env, logger, budget, params)
+                        val argCode = genCode(arg, env, logger, budget, params)
+                        '{
+                            $budget.spendBudget(
+                              Step(StepKind.Apply),
+                              $params.machineCosts.applyCost,
+                              Nil
+                            )
+                            // Both are Return values, apply directly
+                            val f = $funCode.asInstanceOf[Return].value.asInstanceOf[Any => Any]
+                            val a = $argCode.asInstanceOf[Return].value
+                            val result = f(a)
+                            // Result might be continuation or value
+                            result match {
+                                case cont: ContinuationJitRepr => cont
+                                case v                         => Return(v)
+                            }
+                        }
+                    } else {
+                        // Create Apply continuation - flattened to the top-level loop
+                        '{
+                            $budget.spendBudget(
+                              Step(StepKind.Apply),
+                              $params.machineCosts.applyCost,
+                              Nil
+                            )
+                            Apply(
+                              ${ genCode(fun, env, logger, budget, params) },
+                              ${ genCode(arg, env, logger, budget, params) }
+                            )
+                        }
                     }
 
                 case Term.Force(term) =>
