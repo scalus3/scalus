@@ -14,6 +14,8 @@ import scalus.testkit.Mock
 import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
 
+import scalus.examples.{NodeAction, OrderedLinkedList, OrderedLinkedListContract}
+
 import scala.language.implicitConversions
 
 class LinkedListTest extends AnyFunSuite, ScalusTest:
@@ -93,7 +95,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           signatories = signedBy.map(key => List.single(PubKeyHash(key))).getOrElse(List.Nil),
           id = Mock.mockTxOutRef(2, 1).id
         )
-        val result = LinkedListContract
+        val result = OrderedLinkedListContract
             .make(config)
             .runWithDebug(
               scriptContext = ScriptContext(
