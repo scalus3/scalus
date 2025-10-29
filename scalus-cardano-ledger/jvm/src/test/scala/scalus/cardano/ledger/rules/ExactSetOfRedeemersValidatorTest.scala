@@ -164,7 +164,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             ),
           ),
           TransactionWitnessSet(
-            plutusV2Scripts = TaggedSortedSet(plutusScript),
+            plutusV2Scripts = TaggedSortedMap(plutusScript),
             redeemers = None // no redeemer
           )
         )
@@ -202,7 +202,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             ),
           ),
           TransactionWitnessSet(
-            nativeScripts = TaggedSortedSet(Script.Native(nativeScript)),
+            nativeScripts = TaggedSortedMap(Script.Native(nativeScript)),
             redeemers = None
           ),
         )

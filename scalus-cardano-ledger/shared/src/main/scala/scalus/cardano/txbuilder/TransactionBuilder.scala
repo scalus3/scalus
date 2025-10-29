@@ -1643,7 +1643,7 @@ object TransactionBuilder:
                       // Add the native script to the witness set
                       unsafeCtxWitnessL
                           .refocus(_.nativeScripts)
-                          .modify(s => TaggedSortedSet.from(appendDistinct(ns, s.toSeq)))
+                          .modify(s => TaggedSortedMap.from(appendDistinct(ns, s.toSeq)))
                     )
                 // Script should already be attached, see [[assertAttachedScriptExists]]
                 case ScriptSource.NativeScriptAttached => pure0(())
@@ -1691,19 +1691,19 @@ object TransactionBuilder:
                             modify0(
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV1Scripts)
-                                  .modify(s => TaggedSortedSet.from(appendDistinct(v1, s.toSeq)))
+                                  .modify(s => TaggedSortedMap.from(appendDistinct(v1, s.toSeq)))
                             )
                         case v2: Script.PlutusV2 =>
                             modify0(
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV2Scripts)
-                                  .modify(s => TaggedSortedSet.from(appendDistinct(v2, s.toSeq)))
+                                  .modify(s => TaggedSortedMap.from(appendDistinct(v2, s.toSeq)))
                             )
                         case v3: Script.PlutusV3 =>
                             modify0(
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV3Scripts)
-                                  .modify(s => TaggedSortedSet.from(appendDistinct(v3, s.toSeq)))
+                                  .modify(s => TaggedSortedMap.from(appendDistinct(v3, s.toSeq)))
                             )
                     }
                 // Script should already be attached, see [[assertAttachedScriptExists]]

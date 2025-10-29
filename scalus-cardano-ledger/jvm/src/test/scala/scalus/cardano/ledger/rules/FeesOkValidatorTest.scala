@@ -52,10 +52,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -157,10 +157,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -250,10 +250,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -358,10 +358,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -458,10 +458,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -558,10 +558,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -645,10 +645,10 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet.empty,
-                plutusV2Scripts = TaggedSortedSet.empty,
-                plutusV3Scripts = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
                 plutusData = KeepRaw(TaggedSet.empty),
                 redeemers = Some(
                   KeepRaw(

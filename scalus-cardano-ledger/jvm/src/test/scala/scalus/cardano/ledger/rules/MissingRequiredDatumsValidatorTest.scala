@@ -56,7 +56,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = TaggedSortedSet(plutusScript),
+            plutusV1Scripts = TaggedSortedMap(plutusScript),
             plutusData = KeepRaw(
               TaggedSet.from(
                 Set(KeepRaw(datum))
@@ -93,7 +93,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV2Scripts = TaggedSortedSet(plutusScript),
+            plutusV2Scripts = TaggedSortedMap(plutusScript),
             plutusData = KeepRaw(
               TaggedSet.from(
                 Set(KeepRaw(datum))
@@ -129,7 +129,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = TaggedSortedSet(plutusScript)
+            plutusV1Scripts = TaggedSortedMap(plutusScript)
           )
         )
         val context = Context()
@@ -158,7 +158,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = TaggedSortedSet(plutusScript)
+            plutusV1Scripts = TaggedSortedMap(plutusScript)
           )
         )
         val context = Context()
@@ -263,7 +263,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            nativeScripts = TaggedSortedSet(Script.Native(nativeScript))
+            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
         val context = Context()

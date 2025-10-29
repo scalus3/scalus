@@ -43,7 +43,6 @@ private[scalus] class ResourcesUtxoResolver {
             )
         // Initialize UTXOs with provided input UTXOs
         val utxos = mutable.HashMap[TransactionInput, TransactionOutput]()
-        val scripts = mutable.HashMap[ScriptHash, Script]()
         val allInputs =
             transaction.body.value.inputs.toSortedSet.view ++ transaction.body.value.referenceInputs.toSortedSet.view
         for input <- allInputs do
@@ -81,17 +80,6 @@ private[scalus] class ResourcesUtxoResolver {
                 val out = getTransactionOutput(output, scriptRef)
                 utxos.put(input, out)
             }
-
-        // Collect witness scripts
-        val witnessSet = transaction.witnessSet
-        val witnessScripts = witnessSet.nativeScripts.toSortedSet ++
-            witnessSet.plutusV1Scripts.toSortedSet ++
-            witnessSet.plutusV2Scripts.toSortedSet ++
-            witnessSet.plutusV3Scripts.toSortedSet
-
-        witnessScripts.foreach { script =>
-            scripts.put(script.scriptHash, script)
-        }
 
         // Return resolved UTXOs for all inputs (regular and reference)
         allInputs.map { input =>

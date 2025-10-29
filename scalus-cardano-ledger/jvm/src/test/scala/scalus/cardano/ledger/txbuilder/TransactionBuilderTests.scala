@@ -507,7 +507,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           // add script witness
           transactionL
               .refocus(_.witnessSet.plutusV1Scripts)
-              .replace(TaggedSortedSet(script1))
+              .replace(TaggedSortedMap(script1))
           |>
           // add redeemer
           transactionL
@@ -555,7 +555,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           Context.empty(Mainnet).toTuple
               |> transactionL
                   .refocus(_.witnessSet.plutusV1Scripts)
-                  .modify(s => TaggedSortedSet(s.toSortedSet + script1))
+                  .modify(s => TaggedSortedMap(s.toSet + script1))
               |> (transactionL >>> txBodyL
                   .refocus(_.requiredSigners))
                   .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
@@ -571,7 +571,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           Context.empty(Mainnet).toTuple
               |> transactionL
                   .refocus(_.witnessSet.plutusV1Scripts)
-                  .modify(s => TaggedSortedSet(s.toSortedSet + script1))
+                  .modify(s => TaggedSortedMap(s.toSet + script1))
               |> (transactionL >>> txBodyL
                   .refocus(_.requiredSigners))
                   .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
@@ -586,7 +586,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, 2L)))))
           |> transactionL
               .refocus(_.witnessSet.plutusV1Scripts)
-              .modify(s => TaggedSortedSet(s.toSortedSet + script1))
+              .modify(s => TaggedSortedMap(s.toSet + script1))
           |> (transactionL >>> txBodyL
               .refocus(_.requiredSigners))
               .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
@@ -625,7 +625,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, -3L)))))
           |> transactionL
               .refocus(_.witnessSet.plutusV1Scripts)
-              .modify(s => TaggedSortedSet(s.toSortedSet + script1))
+              .modify(s => TaggedSortedMap(s.toSet + script1))
           |> (transactionL >>> txBodyL
               .refocus(_.requiredSigners))
               .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
@@ -720,7 +720,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       expected = Context.empty(Mainnet).toTuple |>
           transactionL
               .refocus(_.witnessSet.plutusV1Scripts)
-              .replace(TaggedSortedSet(script1)) |>
+              .replace(TaggedSortedMap(script1)) |>
           transactionL
               .refocus(_.witnessSet.redeemers)
               .replace(redeemers(unitRedeemer(RedeemerTag.Cert, 0)))
