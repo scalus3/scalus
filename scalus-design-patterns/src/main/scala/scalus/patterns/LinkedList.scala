@@ -54,10 +54,15 @@ type NodeKey = Option[TokenName]
   *   Has a unique link to another node's key (unless it's the last node of the list)
   *   - [[scalus.prelude.Option.None]] means a end of the linked list (or empty head)
   *   - [[scalus.prelude.Option.Some]] contains a reference key to the next node.
+  *
+  * @note
+  *   Token present as a value asset name and as key at datum.
+  *
+  * @todo
+  *   `data: Data` field to store user data.
   */
 case class Cons(
-    key: NodeKey, // NOTE: storing key in datum is redundancy, available as a token at value already
-    // NEW: `data: Data`
+    key: NodeKey,
     ref: NodeKey = None
 ) derives FromData,
       ToData
@@ -80,19 +85,19 @@ object Cons:
 
     extension (self: Cons)
 
-        /** Create a parent node
+        /** Create a nested node
           *
           * @param at
           *   New node key, the head of linked list at current node.
           */
-        inline def succ(at: TokenName): Cons = cons(at, self.ref)
+        inline def chKey(at: TokenName): Cons = cons(at, self.ref)
 
-        /** Create a nested node
+        /** Create a parent node
           *
           * @param by
           *   New node key, the head of tail of linked list at current node.
           */
-        inline def pred(by: TokenName): Cons = Cons(self.key, Some(by)) // ???: rename to `tail`
+        inline def chRef(by: TokenName): Cons = Cons(self.key, Some(by))
 
 /** Every linked list node UTxO:
   *
@@ -171,6 +176,9 @@ enum NodeAction derives FromData, ToData:
       */
     case Insert(key: PubKeyHash, covering: Cons)
 
+    case Prepend(key: PubKeyHash, covering: Cons)
+    case Append(key: PubKeyHash, covering: Cons)
+
     /** Remove a linked list node by `key` at `covering` cell.
       *
       * Covering cell must be original parent's cell reference.
@@ -181,8 +189,6 @@ enum NodeAction derives FromData, ToData:
       *   A pair of `key`'s original parent key, that expected to be at linked list, and a reference
       *   to the original tail, that remains unchanged.
       */
-    case Prepend(key: PubKeyHash, covering: Cons)
-    case Append(key: PubKeyHash, covering: Cons)
     case Remove(key: PubKeyHash, covering: Cons)
 
 @Compile
@@ -406,7 +412,7 @@ object LinkedList extends DataParameterizedValidator:
                   signatories.contains(key),
                   "Must be signed by a node key"
                 )
-                insert(common, key, covering)
+                val _ = insert(common, key, covering)
             case NodeAction.Prepend(key, covering) =>
                 require(
                   range.isEntirelyBefore(cfg.deadline),
@@ -478,9 +484,8 @@ object LinkedList extends DataParameterizedValidator:
             )
         case _ =>
             fail(
-              "There must be a head node input\n" +
-                  "Head node input must be single\n" +
-                  "Linked list must be empty"
+              "There must be a single head node input,\n" +
+                  "the linked list must be empty"
             )
 
     /** Insert a node `insertKey` at covering `cell` at the linked list.
@@ -492,35 +497,34 @@ object LinkedList extends DataParameterizedValidator:
       * @param cell
       *   A pair of key's parent key, that expected to be at linked list, and a reference to the new
       *   tail.
+      * @return
+      *   Parent node.
       */
-    def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Unit = common.inputs match
-        case List.Cons(parent, List.Nil) =>
+    def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node = common.inputs match
+        case List.Cons(parentIn, List.Nil) =>
             common.outputs match
                 case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
-                    val (parentOut, insertNode) = fstOut.sort(sndOut)
                     val PubKeyHash(key) = insertKey
+                    val (parentOut, insertNode) = fstOut.sort(sndOut)
                     require(
-                      cell.succ(key) === insertNode.cell,
-                      "A covering cell must kept retained at inserted key at outputs,\n" +
-                          "inserted key present at the cell of inserted node"
+                      cell.chKey(key) === insertNode.cell,
+                      "The covering cell must be preserved by inserted key at outputs,\n" +
+                          "the inserted key must be present at the cell of inserted node"
                     )
                     require(
-                      parentOut === Node(parent.value, cell.pred(key)),
-                      "An inserted key must be referenced by the parent's key at outputs,\n" +
-                          "parent node's value kept unchanged"
-                    ) // NEW: cell.key === parent.cell.key
+                      parentOut === Node(parentIn.value, cell.chRef(key)),
+                      "The inserted key must be referenced by the parent's key at outputs,\n" +
+                          "the parent node's value must be preserved"
+                    ) // NEW: cell.key === parentIn.cell.key
                     require(
                       common.mint.flatten === List.single(
                         (common.policy, nodeToken(key), BigInt(1))
                       ),
                       "Must mint an NFT value for the inserted key for this linked list"
                     )
+                    parentIn
                 case _ => fail("There must be only a parent and an inserted node outputs")
-        case _ =>
-            fail(
-              "There must be a covering node input\n" +
-                  "Covering node input must be single"
-            )
+        case _ => fail("There must be a single covering node input")
 
     // FIXME: linking
     //
@@ -537,162 +541,86 @@ object LinkedList extends DataParameterizedValidator:
       * @param cell
       *   A pair of key's original parent key, that expected to be at linked list, and a reference
       *   to the original tail, that remains unchanged.
+      * @return
+      *   Removed node.
       */
     def remove(common: Common, removeKey: PubKeyHash, cell: Cons): Node = common.inputs match
         case List.Cons(fstIn, List.Cons(sndIn, List.Nil)) =>
             common.outputs match
                 case List.Cons(parentOut, List.Nil) =>
-                    val (parent, removeNode) = fstIn.sort(sndIn)
                     val PubKeyHash(key) = removeKey
+                    val (parentIn, removeNode) = fstIn.sort(sndIn)
+                    require(
+                      cell.chKey(key) === removeNode.cell,
+                      "The covering cell must be referenced by removed key at inputs,\n" +
+                          "the removed key must be present at the cell of removed node"
+                    )
+                    require(
+                      cell.chRef(key) === parentIn.cell,
+                      "The remove key must be referenced by parent's cell at inputs,\n" +
+                          "the parent key must be present at the covering cell"
+                    )
+                    require(
+                      parentOut === Node(parentIn.value, cell),
+                      "The covering cell must be referenced by the parent's key at outputs,\n" +
+                          "the parent node's value must be kept unchanged"
+                    )
                     require(
                       common.mint.flatten === List.single(
                         (common.policy, nodeToken(key), BigInt(-1))
                       ),
                       "Must burn an NFT value for the removed key for this linked list"
                     )
-                    require(
-                      cell.pred(key) === parent.cell,
-                      "A remove key must be referenced by parent's cell at inputs,\n" +
-                          "parent key present at the covering cell"
-                    )
-                    require(
-                      parentOut === Node(parent.value, cell),
-                      "A covering cell must be referenced by the parent's key at outputs,\n" +
-                          "parent node's value kept unchanged"
-                    )
-                    require(
-                      cell.succ(key) === removeNode.cell,
-                      "A covering cell must be referenced by removed key at inputs,\n" +
-                          "removed key present at the cell of removed node"
-                    )
                     removeNode
                 case _ => fail("There must be a single parent output")
-        case _ =>
-            fail(
-              "There must be stay node input\n" +
-                  "There must be a remove node input\n" +
-                  "Must spend parent and removed nodes only"
-            )
+        case _ => fail("There must be parent and remove node inputs only")
 
     /** Prepend a new node to the beginning of the list.
       *
-      * Covering cell is expected to be the head (root) node's cell.
+      * Covering cell is expected to be the head of the linked list.
       *
       * @param prependKey
       *   A key the new cell be added at.
       * @param cell
-      *   A pair of key's parent key, that expected to be at linked list, and a reference to the new
-      *   tail.
+      *   A pair of key's parent key, that expected to empty as a marker of a head of the linked
+      *   list, and a reference to the new tail.
+      * @note
+      *   Same as [[scalus.patterns.LinkedList.insert]] with a boundary extra check.
       */
-    def prepend(common: Common, prependKey: PubKeyHash, cell: Cons): Unit = common.inputs match
-        case List.Cons(anchorIn, List.Nil) =>
-            common.outputs match
-                case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
-                    val (prepOut, anchorOut) = fstOut.sort(sndOut)
-                    val PubKeyHash(key) = prependKey
-
-                    // The anchor input must be the head (root): its key must be None
-                    require(
-                      anchorIn.cell.key.isEmpty,
-                      "Anchor node input must be the head (root)"
-                    )
-
-                    // The newly prepended node must hold the minted token
-                    require(
-                      common.mint.flatten === List.single(
-                        (common.policy, nodeToken(key), BigInt(1))
-                      ),
-                      "Must mint an NFT value for the prepended key for this linked list"
-                    )
-
-                    // The prepended node must reference the old anchor's ref (preserve link)
-                    require(
-                      prepOut.cell.ref === anchorIn.cell.ref,
-                      "Prepended node must point to the same next node as the anchor input"
-                    )
-
-                    // Anchor output must now point to the prepended key
-                    require(
-                      anchorOut.cell === Node(anchorIn.value, anchorIn.cell.succ(key)).cell,
-                      "Anchor node output must link to the prepended key"
-                    )
-
-                    // Ensure parent's value unchanged except for the link update
-                    require(
-                      anchorOut.value === anchorIn.value,
-                      "Anchor node output must keep same value as anchor input"
-                    )
-
-                case _ =>
-                    fail(
-                      "There must be exactly two node outputs: prepended node and anchor node output"
-                    )
-        case _ =>
-            fail(
-              "There must be a single anchor node input"
-            )
+    def prepend(common: Common, prependKey: PubKeyHash, cell: Cons): Unit =
+        require(
+          cell.key.isEmpty,
+          "A covering cell must be the head of the linked list"
+        )
+        val _ = insert(common, prependKey, cell)
 
     /** Append a new node to the end of the list.
       *
-      * Covering cell is expected to be the last node's cell.
+      * Covering cell is expected to be the latest at the tail of the linked list.
       *
       * @param appendKey
       *   A key the new cell be added at.
       * @param cell
       *   A pair of key's parent key, that expected to be at linked list, and a reference to the new
-      *   tail.
+      *   tail, that expected to be empty as a marker of the end of the linked list.
+      * @note
+      *   Same as [[scalus.patterns.LinkedList.insert]] with a boundary extra check.
       */
-    def append(common: Common, appendKey: PubKeyHash, cell: Cons): Unit = common.inputs match
-        case List.Cons(anchorIn, List.Nil) =>
-            common.outputs match
-                case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
-                    val (appendOut, anchorOut) = fstOut.sort(sndOut)
-                    val PubKeyHash(key) = appendKey
-
-                    // Anchor input must be the last node before transaction: its ref must be None
-                    require(
-                      anchorIn.cell.ref.isEmpty,
-                      "Anchor node input must be the last node (tail)"
-                    )
-
-                    // The newly appended node must hold the minted token and be the new last node
-                    require(
-                      appendOut.cell.ref.isEmpty,
-                      "Appended node must be the last node (its ref must be empty)"
-                    )
-
-                    require(
-                      common.mint.flatten === List.single(
-                        (common.policy, nodeToken(key), BigInt(1))
-                      ),
-                      "Must mint an NFT value for the appended key for this linked list"
-                    )
-
-                    // Anchor output must link to the appended key
-                    require(
-                      anchorOut.cell === Node(anchorIn.value, anchorIn.cell.succ(key)).cell,
-                      "Anchor node output must link to the appended key"
-                    )
-
-                    // Ensure parent's value unchanged except for the link update
-                    require(
-                      anchorOut.value === anchorIn.value,
-                      "Anchor node output must keep same value as anchor input"
-                    )
-
-                case _ =>
-                    fail(
-                      "There must be exactly two node outputs: appended node and anchor node output"
-                    )
-        case _ =>
-            fail(
-              "There must be a single anchor node input"
-            )
+    def append(common: Common, appendKey: PubKeyHash, cell: Cons): Unit =
+        require(
+          cell.ref.isEmpty,
+          "A covering cell must be a latest at the tail of the linked list"
+        )
+        val parentIn = insert(common, appendKey, cell)
+        require(
+          parentIn.cell.ref.isEmpty,
+          "A parent cell cell must be a latest at the tail of the linked list"
+        )
 
 object LinkedListContract:
 
     given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
