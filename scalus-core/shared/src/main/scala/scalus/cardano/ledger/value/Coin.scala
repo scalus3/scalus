@@ -59,9 +59,9 @@ object Coin {
 
     def zero: Coin = Coin.unsafeApply(0)
 
-    given Conversion[Coin, Unbounded] = Unbounded.apply
-    given Conversion[Coin, Fractional] = Fractional.apply
-    
+//    given Conversion[Coin, Unbounded] = Unbounded.apply
+//    given Conversion[Coin, Fractional] = Fractional.apply
+
     extension (self: Coin)
         def underlying: Long = self
 

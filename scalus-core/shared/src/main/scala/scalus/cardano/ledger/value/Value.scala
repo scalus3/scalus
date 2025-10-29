@@ -4,7 +4,7 @@ import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
 
-case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
+case class Value (lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
     def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Value.Unbounded =
         Value.Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
 

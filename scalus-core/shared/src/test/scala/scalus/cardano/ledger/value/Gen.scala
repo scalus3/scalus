@@ -68,25 +68,25 @@ object Gen {
     }
 
     def genConfigurableInnerFractional(
-        minAssets: Int = 1,
-        maxAssets: Int = 8
-    ): Gen0[MultiAsset.Inner.Fractional] =
+                                          minAssets: Int = 1,
+                                          maxAssets: Int = 8
+                                      ): Gen0[MultiAsset.Inner.Fractional] =
         for {
             poly <- genInnerPolymorphic[Coin.Fractional](minAssets, maxAssets)
         } yield MultiAsset.Inner.Fractional(poly)
 
     def genConfigurableInnerUnbounded(
-        minAssets: Int = 1,
-        maxAssets: Int = 8
-    ): Gen0[MultiAsset.Inner.Unbounded] =
+                                         minAssets: Int = 1,
+                                         maxAssets: Int = 8
+                                     ): Gen0[MultiAsset.Inner.Unbounded] =
         for {
             poly <- genInnerPolymorphic[Coin.Unbounded](minAssets, maxAssets)
         } yield MultiAsset.Inner.Unbounded(poly)
 
     def genConfigurableInner(
-        minAssets: Int = 1,
-        maxAssets: Int = 8
-    ): Gen0[MultiAsset.Inner] =
+                                minAssets: Int = 1,
+                                maxAssets: Int = 8
+                            ): Gen0[MultiAsset.Inner] =
         for {
             poly <- genInnerPolymorphic[Coin](minAssets, maxAssets)
         } yield MultiAsset.Inner(poly)
