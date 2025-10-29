@@ -7,9 +7,8 @@ import scala.quoted.*
 
 /** Emits code for UPLC builtin functions across all JIT compiler variants.
   *
-  * This object provides a unified interface for generating code for builtin functions,
-  * supporting both direct code generation (nativestack) and continuation-based code
-  * generation (mincont).
+  * This object provides a unified interface for generating code for builtin functions, supporting
+  * both direct code generation (nativestack) and continuation-based code generation (mincont).
   */
 object BuiltinEmitter {
 

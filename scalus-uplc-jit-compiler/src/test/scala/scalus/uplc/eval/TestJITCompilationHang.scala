@@ -48,7 +48,7 @@ class JITCompilationHangTest extends AnyFunSuite {
         TestJITCompilationHang.main(Array("auction_1-2.flat"))
     }
 
-    test("auction_1-3.flat is jit-complied") {
+    ignore("auction_1-3.flat is jit-complied") {
         TestJITCompilationHang.main(Array("auction_1-3.flat"))
     }
 

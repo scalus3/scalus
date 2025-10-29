@@ -1,8 +1,8 @@
 package scalus.uplc.eval.hybrid
 
 import scalus.uplc.{DeBruijn, Term}
-import scalus.uplc.eval.{BudgetSpender, CekMachine, EvaluationFailure, Logger, MachineParams, PlutusVM}
-import scalus.uplc.eval.jitcommon.JitRunner
+import scalus.uplc.eval.{BudgetSpender, CekMachine, EvaluationFailure, Logger, MachineError, MachineParams, PlutusVM}
+import scalus.uplc.eval.jitcommon.{JitRunner, RuntimeHelper}
 import scalus.uplc.eval.nativestack.StackTresholdException
 
 object HybridJIT extends JitRunner {
@@ -21,7 +21,14 @@ object HybridJIT extends JitRunner {
                 val vm = PlutusVM.makePlutusV3VM()
                 val djTerm = DeBruijn.deBruijnTerm(term, true)
                 (logger: Logger, budgetSpender: BudgetSpender, machineParams: MachineParams) =>
-                    vm.evaluateDeBruijnedTerm(djTerm, budgetSpender, logger)
+                    val term = vm.evaluateDeBruijnedTerm(djTerm, budgetSpender, logger)
+                    term match
+                        case Term.Const(v) => RuntimeHelper.uplcToJitAny(v)
+                        case _ =>
+                            throw MachineError(
+                              "HybridJIT: Expected constant result from Cek fallback",
+                            )
+
             case FailBackStrategy.Mincont =>
                 val mincontFun = scalus.uplc.eval.mincont.JIT.jitUplc(term)
                 (logger: Logger, budgetSpender: BudgetSpender, machineParams: MachineParams) =>
