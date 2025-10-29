@@ -700,7 +700,10 @@ addCommandAlias(
   "clean;native/Test/compile;native/test"
 )
 addCommandAlias("benchmark", "bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*")
-addCommandAlias("benchmark-jit", "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 .*(JIT|Cek).*")
+addCommandAlias(
+  "benchmark-jit",
+  "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff bench/target/benchmark-jit.txt .*(JIT|Cek).*"
+)
 addCommandAlias(
   "it",
   "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test"
