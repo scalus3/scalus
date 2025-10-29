@@ -109,10 +109,12 @@ object MultiAsset {
                 self.view.mapValues(innerAlgebra.negate).to(SortedMap)
 
             override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.plus)(self, other)
+                combineSimple(innerAlgebra.plus)(self,other)
+//                combineWith(innerAlgebra.plus)(self, other)
 
             override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
+                combineSimple(innerAlgebra.minus)(self,other)
+//                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 self.view.mapValues(_ :* s).to(SortedMap)
@@ -175,10 +177,12 @@ object MultiAsset {
                 self.view.mapValues(innerAlgebra.negate).to(SortedMap)
 
             override def plus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerAlgebra.plus)(self, other)
+                combineSimple(innerAlgebra.plus)(self,other)
+//                combineWith(innerAlgebra.plus)(self, other)
 
             override def minus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
+                combineSimple(innerAlgebra.minus)(self,other)
+//                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: Rational, self: Fractional): Fractional =
                 self.view.mapValues(_ :* s).to(SortedMap)
@@ -301,10 +305,12 @@ object MultiAsset {
                     self.view.mapValues(coinAlgebra.negate).to(SortedMap)
 
                 override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                    combineWith(coinAlgebra.plus)(self, other)
+                    combineSimple(coinAlgebra.plus)(self,other)
+//                    combineWith(coinAlgebra.plus)(self, other)
 
                 override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                    combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
+                    combineSimple(coinAlgebra.minus)(self,other)
+//                    combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                     self.view.mapValues(_ :* s).to(SortedMap)
@@ -364,10 +370,12 @@ object MultiAsset {
                     self.view.mapValues(coinAlgebra.negate).to(SortedMap)
 
                 override def plus(self: Fractional, other: Fractional): Fractional =
-                    combineWith(coinAlgebra.plus)(self, other)
+                    combineSimple(coinAlgebra.plus)(self,other)
+//                    combineWith(coinAlgebra.plus)(self, other)
 
                 override def minus(self: Fractional, other: Fractional): Fractional =
-                    combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
+                    combineSimple(coinAlgebra.minus)(self,other)
+//                    combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: Rational, self: Fractional): Fractional =
                     self.view.mapValues(_ :* s).to(SortedMap)
@@ -392,6 +400,21 @@ object MultiAsset {
     }
 
     private object CombineWith {
+        def combineSimple[K, V](
+            opBoth: (V, V) => V
+        )(self: SortedMap[K, V], other: SortedMap[K, V])(using
+            ev: AdditiveMonoid[V],
+            ord: Ordering[K]
+        ): SortedMap[K, V] = {
+            (self.keySet ++ other.keySet).view
+                .map { key =>
+                    val combinedValue =
+                        opBoth(self.getOrElse(key, ev.zero), other.getOrElse(key, ev.zero))
+                    key -> combinedValue
+                }
+                .to(SortedMap)
+        }
+
         def combineWith[K, VCommon, VResult, VSelf, VOther](
             opBoth: (VCommon, VCommon) => VResult,
             opSelf: VCommon => VResult = identity[VResult],

@@ -4,21 +4,30 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{AssetName, ScriptHash}
 import spire.math.SafeLong
 
+import spire.algebra.*
+import spire.implicits.*
+
 import scala.collection.immutable.TreeMap
 
 class MultiAssetUnit extends AnyFunSuite {
-    test("Multiasset: additive semigroup associativity") {
-        val combine = MultiAsset.Unbounded.algebra.additive.combine
-        val x = combine(combine(Sample1.arg0, Sample1.arg1), Sample1.arg2)
-        val y = combine(Sample1.arg0, combine(Sample1.arg1, Sample1.arg2))
-
-        assert(x === y)
+    test("Multiasset inner: sumN(a,1) === a") {
+        val additive = MultiAsset.Inner.Unbounded.algebra.additive
+        val x = Sample2.arg0
+        val xx = additive.combine(x, x)
     }
 
     test("Multiasset inner: additive semigroup associativity") {
         val combine = MultiAsset.Inner.Unbounded.algebra.additive.combine
         val x = combine(combine(Sample2.arg0, Sample2.arg1), Sample2.arg2)
         val y = combine(Sample2.arg0, combine(Sample2.arg1, Sample2.arg2))
+
+        assert(x === y)
+    }
+
+    test("Multiasset: additive semigroup associativity") {
+        val combine = MultiAsset.Unbounded.algebra.additive.combine
+        val x = combine(combine(Sample1.arg0, Sample1.arg1), Sample1.arg2)
+        val y = combine(Sample1.arg0, combine(Sample1.arg1, Sample1.arg2))
 
         assert(x === y)
     }
