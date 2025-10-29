@@ -356,17 +356,20 @@ class BlocksValidation extends AnyFunSuite {
     }
 
     def showScriptsStats(ver: Int, stats: Map[ScriptHash, Int]): Unit = {
-        val count = stats.values.sum -> stats.size
-        println(s"Scripts v$ver: ${count._1} of ${count._2}")
-        val top = collection.SortedMap
-            .from(stats.groupBy(_._2).view.mapValues(_.keySet))(using Ordering[Int].reverse)
-        val top10 = top.take(10).keys.sum -> top.take(10).values.map(_.size).sum
+        val scripts = stats.size
+        val runs = stats.values.sum
+        println(s"Scripts v$ver: $runs runs of $scripts scripts")
+        val top = stats.toSeq.sortBy(_._2)(using Ordering[Int].reverse)
         println(
-          s"  Top 10: ${top10._1} (${100 * top10._1 / count._1}%) by ${top10._2} (${100 * top10._2 / count._2}%) "
+            s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
         )
-        val top100 = top.take(100).keys.sum -> top.take(100).values.map(_.size).sum
+        val top10 = top.take(10).map(_._2).sum
         println(
-          s"  Top 100: ${top100._1} (${100 * top100._1 / count._1}%) by ${top100._2} (${100 * top100._2 / count._2}%) "
+          s"  Top 10: ${top10} (${100 * top10 / runs}%) runs by 10 (${100 * 10 / scripts}%) scripts "
+        )
+        val top100 = top.take(100).map(_._2).sum
+        println(
+            s"  Top 100: ${top100} (${100 * top100 / runs}%) runs by 100 (${100 * 100 / scripts}%) scripts "
         )
     }
 
