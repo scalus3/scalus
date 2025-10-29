@@ -81,6 +81,7 @@ object Gen {
     ): Gen0[MultiAsset.Inner.Unbounded] =
         for {
             poly <- genInnerPolymorphic[Coin.Unbounded](minAssets, maxAssets)
+            _ <- Gen0.const(println(poly))
         } yield MultiAsset.Inner.Unbounded(poly)
 
     def genConfigurableInner(

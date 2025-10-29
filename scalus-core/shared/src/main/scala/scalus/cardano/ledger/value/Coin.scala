@@ -14,11 +14,24 @@ package scalus.cardano.ledger.value
   *
   * Functions to convert safely between these three types are provided. "Safety" in this case means:
   *   - Detecting overflow/underflow when converting from bounded to unbounded types
-  *   - (TODO)
+  *   - Tested laws-compliance for most algebraic operations (ordering, vector space, cmodule)
+ *    - Safe projection/injection and other type-changing round-trips where applicable. For example,
+ *      if we have
+ *          - c : Coin.Coin
+ *          - i = SafeLong
+ *      then `(c.scaleIntegral(i).scaleFractional(Rational(1, i))) == Right(c)`.
   *
+ *
+ *
   * NOTES: In the haskell `cardano-ledger`, `Coin` is represented as an (unbounded) `Integer`, but
-  * the CBOR serialization instances convert directly from a `Word64`. This is contrary to the
-  * plutus-core spec, which defines an alternative CBOR encoding for integers larger than 64 bits.
+  * the CBOR serialization instances convert directly from a (signed) `Long`.
+  * This is contrary to the plutus-core spec, which defines an alternative CBOR encoding for
+  * integers larger than 64 bits.
+  * It is also contrary to the conway CDDL spec, which defines the coin in a transaction output
+  * as a Word64 (i.e., an _unsigned_ Long).
+  *
+  * We do our best here to support the lowest common denominator, which is just using `Long` for
+  * the bounded representation.
   */
 
 import spire.algebra.*
@@ -52,15 +65,12 @@ object Coin {
         if x.sign < 0 then throw Underflow else x
 
     def unsafeApply(self: SafeLong): Coin =
-        if self.isValidLong
+        if self.isValidLong && self >= 0
         then self.longValue
         else if self.signum < 0 then throw Underflow
         else throw Coin.ArithmeticError.Overflow
 
     def zero: Coin = Coin.unsafeApply(0)
-
-//    given Conversion[Coin, Unbounded] = Unbounded.apply
-//    given Conversion[Coin, Fractional] = Fractional.apply
 
     extension (self: Coin)
         def underlying: Long = self
