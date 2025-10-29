@@ -67,6 +67,30 @@ object Gen {
         } yield MultiAsset(innerDone)
     }
 
+    def genConfigurableInnerFractional(
+        minAssets: Int = 1,
+        maxAssets: Int = 8
+    ): Gen0[MultiAsset.Inner.Fractional] =
+        for {
+            poly <- genInnerPolymorphic[Coin.Fractional](minAssets, maxAssets)
+        } yield MultiAsset.Inner.Fractional(poly)
+
+    def genConfigurableInnerUnbounded(
+        minAssets: Int = 1,
+        maxAssets: Int = 8
+    ): Gen0[MultiAsset.Inner.Unbounded] =
+        for {
+            poly <- genInnerPolymorphic[Coin.Unbounded](minAssets, maxAssets)
+        } yield MultiAsset.Inner.Unbounded(poly)
+
+    def genConfigurableInner(
+        minAssets: Int = 1,
+        maxAssets: Int = 8
+    ): Gen0[MultiAsset.Inner] =
+        for {
+            poly <- genInnerPolymorphic[Coin](minAssets, maxAssets)
+        } yield MultiAsset.Inner(poly)
+
     private def genConfigurableMultiAssetPolymorphic[A](
         minPolicies: Int = 1,
         maxPolicies: Int = 8,
@@ -115,6 +139,15 @@ object Gen {
 
         implicit val multiAssetFractionalArb: Arbitrary[MultiAsset.Fractional] =
             Arbitrary(genConfigurableMultiAssetFractional())
+
+        implicit val multiAssetInnerArb: Arbitrary[MultiAsset.Inner] =
+            Arbitrary(genConfigurableInner())
+
+        implicit val multiAssetInnerUnboundedArb: Arbitrary[MultiAsset.Inner.Unbounded] =
+            Arbitrary(genConfigurableInnerUnbounded())
+
+        implicit val multiAssetInnerFractionalArb: Arbitrary[MultiAsset.Inner.Fractional] =
+            Arbitrary(genConfigurableInnerFractional())
 
         implicit val valueArb: Arbitrary[Value] = Arbitrary(
           for {

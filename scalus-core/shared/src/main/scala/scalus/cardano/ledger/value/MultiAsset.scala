@@ -435,7 +435,8 @@ object MultiAsset {
                         val xNext = xs.next()
                         loop(xNext, xs, y, ys, builder)
                     } else {
-                        // Process the remaining `ys` and return
+                        // Process `y` and the remaining `ys` and return
+                        builder += processOther(y)
                         builder ++= ys.map(processOther)
                         builder.result()
                     }
@@ -449,25 +450,27 @@ object MultiAsset {
                             val yNext = ys.next()
                             loop(xNext, xs, yNext, ys, builder)
                         } else {
-                            // Process the remaining `xs` and return
+                            // Process `x` and the remaining `xs` and return
+                            builder += processSelf(x)
                             builder ++= xs.map(processSelf)
                             builder.result()
                         }
                     else {
-                        // Process the remaining `ys` and return
+                        // Process `y` and the remaining `ys` and return
+                        builder += processOther(y)
                         builder ++= ys.map(processOther)
                         builder.result()
                     }
                 } else {
                     // Process `y` now and `x` later
-                    val yMapped = processOther(y)
-                    builder += yMapped
+                    builder += processOther(y)
                     if ys.hasNext then {
                         // Continue looping with the same `x` and next `y`
                         val yNext = ys.next()
                         loop(x, xs, yNext, ys, builder)
                     } else {
-                        // Process the remaining `xs` and return
+                        // Process `x` and the remaining `xs` and return
+                        builder += processSelf(x)
                         builder ++= xs.map(processSelf)
                         builder.result()
                     }
@@ -481,12 +484,12 @@ object MultiAsset {
                     val otherFirst = otherIterator.next()
                     loop(selfFirst, selfIterator, otherFirst, otherIterator, resultBuilder)
                 } else {
-                    // Process the remaining entries in `self` and return
+                    // Process the entries in `self` and return
                     resultBuilder ++= selfIterator.map(processSelf)
                     resultBuilder.result()
                 }
             } else {
-                // Process the remaining entries in `other` and return
+                // Process the entries in `other` and return
                 resultBuilder ++= otherIterator.map(processOther)
                 resultBuilder.result()
             }
