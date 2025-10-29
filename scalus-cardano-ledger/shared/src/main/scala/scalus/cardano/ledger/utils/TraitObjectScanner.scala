@@ -33,13 +33,7 @@ object TraitObjectScanner:
                 case _      => Seq.empty
         }.toSet // Convert to Set for automatic deduplication
 
-        implementors.view.map { obj =>
-            val simpleName = obj.getClass.getSimpleName
-            val name =
-                if simpleName.endsWith("$") then simpleName.substring(0, simpleName.length - 1)
-                else simpleName
-            name -> obj
-        }.toMap
+        implementors.view.map { obj => obj.getClass.getSimpleName.stripSuffix("$") -> obj }.toMap
 
         implementors.view.map(obj => obj.getClass.getSimpleName.dropRight(1) -> obj).toMap
 

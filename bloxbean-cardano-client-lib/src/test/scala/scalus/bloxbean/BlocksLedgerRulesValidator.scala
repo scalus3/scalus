@@ -39,7 +39,7 @@ class BlocksLedgerRulesValidator(
 //                    val utxo = bloxbeanResolveUtxo(transaction)
 
                     assert(
-                      rule(context, state.copy(utxo = state.utxo ++ utxo), transaction).isRight,
+                      rule(context, state.copy(utxos = state.utxos ++ utxo), transaction).isRight,
                       s"Transaction ${transaction.id} in block ${block.header.blockNumber} failed $ruleName"
                     )
 

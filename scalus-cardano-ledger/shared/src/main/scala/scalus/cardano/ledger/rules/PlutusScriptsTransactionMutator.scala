@@ -19,7 +19,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
         val maxTxExecutionUnits = protocolParameters.maxTxExecutionUnits
         val protocolVersion = protocolParameters.protocolVersion
         val costModels = protocolParameters.costModels
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         try {
             PlutusScriptEvaluator(
@@ -41,7 +41,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                 // TODO full transition
                 success(
                   state.copy(
-                    utxo = state.utxo -- event.body.value.inputs.toSortedSet ++ addedUtxo,
+                    utxos = state.utxos -- event.body.value.inputs.toSortedSet ++ addedUtxo,
                     fees = state.fees + event.body.value.fee,
                     donation = state.donation + event.body.value.donation.getOrElse(Coin.zero)
                   )
@@ -92,8 +92,8 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                     // TODO full transition
                     success(
                       state.copy(
-                        utxo =
-                            state.utxo -- event.body.value.collateralInputs.toSortedSet ++ addedUtxo,
+                        utxos =
+                            state.utxos -- event.body.value.collateralInputs.toSortedSet ++ addedUtxo,
                         fees = state.fees + (collateralCoins - collateralReturnCoins)
                       )
                     )

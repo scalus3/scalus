@@ -12,6 +12,13 @@ enum DatumOption:
     /** Inline datum value */
     case Inline(data: Data)
 
+    /** Return true when the semantic content is the same (handles hash vs inline) */
+    def contentEquals(other: DatumOption): Boolean = (this, other) match
+        case (Hash(h1), Hash(h2))     => h1 == h2
+        case (Inline(d1), Inline(d2)) => d1 == d2
+        case (Hash(h), Inline(d))     => h == d.dataHash
+        case (Inline(d), Hash(h))     => d.dataHash == h
+
 object DatumOption:
     /** CBOR encoder for DatumOption */
     given Encoder[DatumOption] with

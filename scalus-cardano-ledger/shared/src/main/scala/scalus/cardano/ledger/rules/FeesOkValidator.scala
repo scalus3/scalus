@@ -30,7 +30,7 @@ object FeesOkValidator extends STS.Validator {
         val transactionId = event.id
         val collateralInputs = event.body.value.collateralInputs
         val collateralReturnOutput = event.body.value.collateralReturnOutput.map(_.value)
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         for
             _ <- feePaidIsGreeterOrEqualThanMinimumFee(context, state, event)
@@ -144,7 +144,7 @@ object FeesOkValidator extends STS.Validator {
     ): Result = {
         val transactionId = event.id
         val transactionFee = event.body.value.fee
-        val utxo = state.utxo
+        val utxo = state.utxos
         val protocolParams = context.env.params
 
         for

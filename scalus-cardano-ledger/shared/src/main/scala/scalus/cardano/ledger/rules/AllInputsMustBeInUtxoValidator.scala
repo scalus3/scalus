@@ -10,7 +10,7 @@ object AllInputsMustBeInUtxoValidator extends STS.Validator {
     override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
         val body = event.body.value
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         val missingInputs = body.inputs.toSortedSet.filterNot(utxo.contains)
         val missingCollateralInputs = body.collateralInputs.toSortedSet.filterNot(utxo.contains)

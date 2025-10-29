@@ -80,14 +80,22 @@ object TestUtil extends ScalusTest {
         (TransactionInput(tx.id, index), transactionOutput)
     }
 
-    def findUtxoByAddress(
+    def findUtxoByAddressAndDatum(
         tx: Transaction,
-        address: Address
+        address: Address,
+        datum: Option[DatumOption] = None
     ): Option[(TransactionInput, TransactionOutput)] = {
         tx.body.value.outputs.view
             .map(_.value)
             .zipWithIndex
-            .find { (transactionOutput, _) => transactionOutput.address == address }
+            .find { (transactionOutput, _) =>
+                address == transactionOutput.address && (
+                  (datum, transactionOutput.datumOption) match
+                      case (Some(d1), Some(d2)) => d1.contentEquals(d2)
+                      case (None, None)         => true
+                      case _                    => false
+                )
+            }
             .map { (transactionOutput, index) =>
                 (TransactionInput(tx.id, index), transactionOutput)
             }

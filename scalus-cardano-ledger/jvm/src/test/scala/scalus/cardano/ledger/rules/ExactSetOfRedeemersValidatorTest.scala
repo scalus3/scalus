@@ -27,7 +27,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           witnessSet = TransactionWitnessSet()
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
@@ -57,7 +57,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
@@ -96,7 +96,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
@@ -130,7 +130,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
 
@@ -169,7 +169,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
 
@@ -207,7 +207,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           ),
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
@@ -272,7 +272,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)

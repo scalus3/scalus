@@ -39,7 +39,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value.ada(1), // 1 ADA
         )
         val state = State(
-          utxo = Map(input -> resolvedOutput)
+          utxos = Map(input -> resolvedOutput)
         )
         val tx = randomValidTransaction.copy(
           body = KeepRaw(

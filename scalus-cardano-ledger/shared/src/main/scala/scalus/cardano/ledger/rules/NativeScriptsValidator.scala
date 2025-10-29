@@ -12,7 +12,7 @@ object NativeScriptsValidator extends STS.Validator {
     override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
         val validityInterval = event.validityInterval
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         for
             allNeededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(

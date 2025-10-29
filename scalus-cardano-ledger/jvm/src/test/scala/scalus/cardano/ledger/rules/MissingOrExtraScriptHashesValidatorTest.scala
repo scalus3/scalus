@@ -171,7 +171,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             input -> TransactionOutput(
               Arbitrary
                   .arbitrary[StakeAddress]

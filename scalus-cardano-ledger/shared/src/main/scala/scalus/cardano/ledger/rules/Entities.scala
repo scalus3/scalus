@@ -11,7 +11,7 @@ class Context(
 )
 
 case class State(
-    utxo: Utxos = Map.empty,
+    utxos: Utxos = Map.empty,
     certState: CertState = CertState.empty,
     deposited: Coin = Coin.zero, // Lazy field used only for assertions
     fees: Coin = Coin.zero, // Accumulated transaction fees
@@ -46,11 +46,7 @@ sealed trait STS {
     type Error <: TransactionException
     final type Result = Either[Error, Value]
 
-    lazy val name: String = {
-        val simpleName = this.getClass.getSimpleName
-        if simpleName.endsWith("$") then simpleName.substring(0, simpleName.length - 1)
-        else simpleName
-    }
+    def name: String = this.getClass.getSimpleName.stripSuffix("$")
 
     def apply(context: Context, state: State, event: Event): Result
 
@@ -73,22 +69,26 @@ object STS {
         def apply[ErrorT <: TransactionException](
             validator: (Validator#Context, Validator#State, Validator#Event) => (Validator {
                 type Error = ErrorT
-            })#Result
+            })#Result,
+            validatorName: String = Validator.defaultName
         ): Validator { type Error = ErrorT } = new Validator {
             override final type Error = ErrorT
+
+            override def name: String = validatorName
 
             override def validate(context: Context, state: State, event: Event): Result =
                 validator(context, state, event)
         }
 
         def apply[ErrorT <: TransactionException](
-            validators: Iterable[Validator { type Error <: ErrorT }]
-        ): Validator { type Error = ErrorT } = new Validator {
-            override final type Error = ErrorT
+            validators: Iterable[Validator { type Error <: ErrorT }],
+            validatorName: String
+        ): Validator { type Error = ErrorT } =
+            Validator[ErrorT](Validator.validate[ErrorT](validators, _, _, _), validatorName)
 
-            override def validate(context: Context, state: State, event: Event): Result =
-                Validator.validate[ErrorT](validators, context, state, event)
-        }
+        def apply[ErrorT <: TransactionException](
+            validators: Iterable[Validator { type Error <: ErrorT }]
+        ): Validator { type Error = ErrorT } = Validator[ErrorT](validators, Validator.defaultName)
 
         def validate[ErrorT <: TransactionException](
             validators: Iterable[Validator { type Error <: ErrorT }],
@@ -102,6 +102,8 @@ object STS {
         }
 
         val success: (Validator { type Error = Nothing })#Result = Right(())
+
+        private val defaultName: String = "AnonymousValidator"
     }
 
     trait Mutator extends STS {
@@ -119,32 +121,39 @@ object STS {
         def apply[ErrorT <: TransactionException](
             mutator: (Mutator#Context, Mutator#State, Mutator#Event) => (Mutator {
                 type Error = ErrorT
-            })#Result
+            })#Result,
+            mutatorName: String = Mutator.defaultName
         ): Mutator { type Error = ErrorT } = new Mutator {
             override final type Error = ErrorT
+
+            override def name: String = mutatorName
 
             override def transit(context: Context, state: State, event: Event): Result =
                 mutator(context, state, event)
         }
 
         def apply[ErrorT <: TransactionException](
-            mutators: Iterable[Mutator { type Error <: ErrorT }]
-        ): Mutator { type Error = ErrorT } = new Mutator {
-            override final type Error = ErrorT
+            mutators: Iterable[Mutator { type Error <: ErrorT }],
+            mutatorName: String
+        ): Mutator { type Error = ErrorT } =
+            Mutator[ErrorT](Mutator.transit[ErrorT](mutators, _, _, _), mutatorName)
 
-            override def transit(context: Context, state: State, event: Event): Result =
-                Mutator.transit[ErrorT](mutators, context, state, event)
-        }
+        def apply[ErrorT <: TransactionException](
+            mutators: Iterable[Mutator { type Error <: ErrorT }]
+        ): Mutator { type Error = ErrorT } = Mutator[ErrorT](mutators, Mutator.defaultName)
+
+        def apply[ErrorT <: TransactionException](
+            validators: Iterable[Validator { type Error <: ErrorT }],
+            mutators: Iterable[Mutator { type Error <: ErrorT }],
+            mutatorName: String
+        ): Mutator { type Error = ErrorT } =
+            Mutator[ErrorT](Mutator.transit[ErrorT](validators, mutators, _, _, _), mutatorName)
 
         def apply[ErrorT <: TransactionException](
             validators: Iterable[Validator { type Error <: ErrorT }],
             mutators: Iterable[Mutator { type Error <: ErrorT }]
-        ): Mutator { type Error = ErrorT } = new Mutator {
-            override final type Error = ErrorT
-
-            override def transit(context: Context, state: State, event: Event): Result =
-                Mutator.transit[ErrorT](validators, mutators, context, state, event)
-        }
+        ): Mutator { type Error = ErrorT } =
+            Mutator[ErrorT](validators, mutators, Mutator.defaultName)
 
         def transit[ErrorT <: TransactionException](
             mutators: Iterable[Mutator { type Error <: ErrorT }],
@@ -171,5 +180,7 @@ object STS {
         }
 
         def success(state: STS#State): (Mutator { type Error = Nothing })#Result = Right(state)
+
+        private val defaultName: String = "AnonymousMutator"
     }
 }
