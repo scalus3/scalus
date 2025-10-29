@@ -44,6 +44,12 @@ object BuiltinEmitter {
                 '{ BuiltinSnippets.lessThanEqualsInteger($budget, $params) }
             case DefaultFun.EqualsInteger =>
                 '{ BuiltinSnippets.equalsInteger($budget, $params) }
+            case DefaultFun.ConsByteString =>
+                '{ BuiltinSnippets.consByteString($budget, $params) }
+            case DefaultFun.SliceByteString =>
+                '{ BuiltinSnippets.sliceByteString($budget, $params) }
+            case DefaultFun.IndexByteString =>
+                '{ BuiltinSnippets.indexByteString($budget, $params) }
             case DefaultFun.EqualsByteString =>
                 '{ BuiltinSnippets.equalsByteString($budget, $params) }
             case DefaultFun.EqualsData =>
@@ -82,6 +88,14 @@ object BuiltinEmitter {
                 '{ BuiltinSnippets.listData($budget, $params) }
             case DefaultFun.MapData =>
                 '{ BuiltinSnippets.mapData($budget, $params) }
+            case DefaultFun.UnMapData =>
+                '{ BuiltinSnippets.unMapData($budget, $params) }
+            case DefaultFun.SerialiseData =>
+                '{ BuiltinSnippets.serialiseData($budget, $params) }
+            case DefaultFun.MkPairData =>
+                '{ BuiltinSnippets.mkPairData($budget, $params) }
+            case DefaultFun.ChooseData =>
+                '{ BuiltinSnippets.chooseData($budget, $params) }
             case DefaultFun.MkCons =>
                 '{ BuiltinSnippets.mkCons($budget, $params) }
             case DefaultFun.NullList =>
@@ -147,6 +161,10 @@ object BuiltinEmitter {
                 BuiltinAppliedGenerator.listData(argCode, budget, params)
             case DefaultFun.MapData =>
                 BuiltinAppliedGenerator.mapData(argCode, budget, params)
+            case DefaultFun.UnMapData =>
+                BuiltinAppliedGenerator.unMapData(argCode, budget, params)
+            case DefaultFun.SerialiseData =>
+                BuiltinAppliedGenerator.serialiseData(argCode, budget, params)
             case DefaultFun.NullList =>
                 BuiltinAppliedGenerator.nullList(argCode, budget, params)
             case DefaultFun.MkNilData =>
@@ -205,6 +223,10 @@ object BuiltinEmitter {
             // ByteString operations
             case DefaultFun.AppendByteString =>
                 BuiltinAppliedGenerator.appendByteString(arg1Code, arg2Code, budget, params)
+            case DefaultFun.ConsByteString =>
+                BuiltinAppliedGenerator.consByteString(arg1Code, arg2Code, budget, params)
+            case DefaultFun.IndexByteString =>
+                BuiltinAppliedGenerator.indexByteString(arg1Code, arg2Code, budget, params)
             case DefaultFun.EqualsByteString =>
                 BuiltinAppliedGenerator.equalsByteString(arg1Code, arg2Code, budget, params)
             case DefaultFun.LessThanByteString =>
@@ -226,6 +248,8 @@ object BuiltinEmitter {
                 BuiltinAppliedGenerator.equalsData(arg1Code, arg2Code, budget, params)
             case DefaultFun.ConstrData =>
                 BuiltinAppliedGenerator.constrData(arg1Code, arg2Code, budget, params)
+            case DefaultFun.MkPairData =>
+                BuiltinAppliedGenerator.mkPairData(arg1Code, arg2Code, budget, params)
             // List operations
             case DefaultFun.MkCons =>
                 BuiltinAppliedGenerator.mkCons(arg1Code, arg2Code, budget, params)

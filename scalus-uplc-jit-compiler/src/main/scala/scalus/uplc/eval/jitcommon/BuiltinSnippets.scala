@@ -156,6 +156,60 @@ object BuiltinSnippets {
                 x == y
             }
 
+    @inline def consByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => ByteString => ByteString =
+        (char: BigInt) =>
+            (bs: ByteString) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.consByteString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(char),
+                      MemoryUsageJit.memoryUsage(bs)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.consByteString(char, bs)
+            }
+
+    @inline def sliceByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => BigInt => ByteString => ByteString =
+        (start: BigInt) =>
+            (n: BigInt) =>
+                (bs: ByteString) => {
+                    budget.spendBudget(
+                      Step(StepKind.Builtin),
+                      params.builtinCostModel.sliceByteString.calculateCostFromMemory(
+                        Seq(
+                          MemoryUsageJit.memoryUsage(start),
+                          MemoryUsageJit.memoryUsage(n),
+                          MemoryUsageJit.memoryUsage(bs)
+                        )
+                      ),
+                      Nil
+                    )
+                    Builtins.sliceByteString(start, n, bs)
+                }
+
+    @inline def indexByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => BigInt => BigInt =
+        (bs: ByteString) =>
+            (i: BigInt) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.indexByteString.constantCost,
+                  Nil
+                )
+                Builtins.indexByteString(bs, i)
+            }
+
     @inline def sha2_256(budget: BudgetSpender, params: MachineParams): ByteString => ByteString =
         (bs: ByteString) => {
             budget.spendBudget(
@@ -284,6 +338,68 @@ object BuiltinSnippets {
             )
             Data.Map(x.map(p => (p.fst, p.snd)))
         }
+
+    @inline def unMapData(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): Data => List[BuiltinPair[Data, Data]] =
+        (x: Data) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.unMapData.constantCost,
+              Nil
+            )
+            RuntimeHelper.unMapData(x)
+        }
+
+    @inline def serialiseData(budget: BudgetSpender, params: MachineParams): Data => ByteString =
+        (x: Data) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.serialiseData.calculateCostFromMemory(
+                Seq(MemoryUsageJit.memoryUsage(x))
+              ),
+              Nil
+            )
+            Builtins.serialiseData(x)
+        }
+
+    @inline def mkPairData(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): Data => Data => BuiltinPair[Data, Data] =
+        (fst: Data) =>
+            (snd: Data) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.mkPairData.constantCost,
+                  Nil
+                )
+                BuiltinPair(fst, snd)
+            }
+
+    @inline def chooseData(budget: BudgetSpender, params: MachineParams): () => Any =
+        () =>
+            (d: Data) =>
+                (constrCase: Any) =>
+                    (mapCase: Any) =>
+                        (listCase: Any) =>
+                            (iCase: Any) =>
+                                (bCase: Any) => {
+                                    budget.spendBudget(
+                                      Step(StepKind.Builtin),
+                                      params.builtinCostModel.chooseData.constantCost,
+                                      Nil
+                                    )
+                                    Builtins.chooseData(
+                                      d,
+                                      constrCase,
+                                      mapCase,
+                                      listCase,
+                                      iCase,
+                                      bCase
+                                    )
+                                }
 
     // List operations
 

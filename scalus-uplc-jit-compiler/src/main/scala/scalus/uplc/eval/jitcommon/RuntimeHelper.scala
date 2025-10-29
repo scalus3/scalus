@@ -53,4 +53,9 @@ object RuntimeHelper {
         case Data.List(values) => values // Plain List[Data]
         case _                 => throw new Exception(s"not a list but $d")
 
+    final def unMapData(d: Data): List[BuiltinPair[Data, Data]] = d match
+        case Data.Map(values) =>
+            values.map(BuiltinPair.apply) // Plain List[BuiltinPair[Data, Data]]
+        case _ => throw new Exception(s"not a map but $d")
+
 }
