@@ -10,7 +10,7 @@ object ScriptsWellFormedValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
-        val utxo = state.utxo
+        val utxo = state.utxos
         val body = event.body.value
         val majorProtocolVersion = MajorProtocolVersion(context.env.params.protocolVersion.major)
 

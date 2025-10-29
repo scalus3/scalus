@@ -10,7 +10,7 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         val invalidVkeyWitnessesSet = invalidVkeyWitnesses(event)
         val invalidBootstrapWitnessesSet = invalidBootstrapWitnesses(event)

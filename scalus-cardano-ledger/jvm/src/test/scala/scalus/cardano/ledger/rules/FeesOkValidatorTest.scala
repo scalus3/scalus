@@ -76,7 +76,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -181,7 +181,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -274,7 +274,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -382,7 +382,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -482,7 +482,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -582,7 +582,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]

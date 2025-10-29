@@ -17,7 +17,7 @@ object ValueNotConservedUTxOValidator extends STS.Validator {
         val txBody = tx.body.value
         val mint = txBody.mint.getOrElse(MultiAsset.empty)
 
-        TxBalance.consumed(tx, state.certState, state.utxo, context.env.params).flatMap {
+        TxBalance.consumed(tx, state.certState, state.utxos, context.env.params).flatMap {
             consumed =>
                 val produced = TxBalance.produced(tx)
                 if consumed == produced then success

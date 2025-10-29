@@ -125,7 +125,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
 
             State(
-              utxo = Map(
+              utxos = Map(
                 input1 -> TransactionOutput(
                   signatureTimelock1Address,
                   Value(Coin(1000L)),
@@ -211,7 +211,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
 
             State(
-              utxo = Map(
+              utxos = Map(
                 input1 -> TransactionOutput(
                   timeStartTimelockAddress,
                   Value(Coin(1000L)),

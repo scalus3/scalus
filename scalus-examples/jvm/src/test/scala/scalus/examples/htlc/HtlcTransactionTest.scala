@@ -18,9 +18,10 @@ import scalus.ledger.api.v1.PosixTime
 import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
+import scalus.cardano.ledger.utils.AllResolvedScripts
+import scalus.uplc.Program
 
 class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
-
     private val env = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.debugCompiledContract
 
@@ -45,6 +46,15 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val wrongPreimage = genByteStringOfN(12).sample.get
     private val validImage: ByteString = sha3_256(validPreimage)
 
+    private val scriptAddress =
+        Address(env.network, Credential.ScriptHash(compiledContract.script.scriptHash))
+    private val datum = ContractDatum(
+      committerPkh,
+      receiverPkh,
+      validImage,
+      timeout
+    ).toData
+
     private val lockHtlc: Transaction = {
         val wallet = TestUtil.createTestWallet(committerAddress, lockAmount + amount)
         val context = BuilderContext(env, wallet)
@@ -56,10 +66,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     }
 
     private val htlcUtxo = TestUtil
-        .findUtxoByAddress(
-          lockHtlc,
-          Address(env.network, Credential.ScriptHash(compiledContract.script.scriptHash))
-        )
+        .findUtxoByAddressAndDatum(lockHtlc, scriptAddress, Some(DatumOption.Inline(datum)))
         .get
 
     private def revealHtlc(
@@ -104,7 +111,21 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private def runValidator(tx: Transaction, utxo: Utxos) = {
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxo, htlcUtxo._1, RedeemerTag.Spend, env)
-        compiledContract.program.runWithDebug(scriptContext)
+
+        val allScripts = AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxo).toOption.get
+        val script = scriptAddress.scriptHashOption.flatMap(allScripts.get).get
+        val program = Program.fromCbor(script.script.bytes)
+
+//        assert(program alphaEq compiledContract.program)
+        assert(
+          program.runWithDebug(scriptContext) alphaEq compiledContract.program.runWithDebug(
+            scriptContext
+          )
+        )
+        assert(script == compiledContract.script)
+        assert(program.cborByteString == compiledContract.script.script)
+
+        program.runWithDebug(scriptContext)
     }
 
     test("receiver reveals preimage before timeout") {
@@ -113,7 +134,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
         assert(result.isSuccess)
 
         val receiverCoinValue =
-            TestUtil.findUtxoByAddress(revealTx, receiverAddress).map(_._2.value.coin.value)
+            TestUtil.findUtxoByAddressAndDatum(revealTx, receiverAddress).map(_._2.value.coin.value)
         assert(
           receiverCoinValue.exists(_ >= lockAmount),
           s"expected receiver coin value >= $lockAmount, found: ${receiverCoinValue.map(_.toString).getOrElse("none")}"
@@ -147,7 +168,9 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
         assert(result.isSuccess)
 
         val committerCoinValue =
-            TestUtil.findUtxoByAddress(timeoutTx, committerAddress).map(_._2.value.coin.value)
+            TestUtil
+                .findUtxoByAddressAndDatum(timeoutTx, committerAddress)
+                .map(_._2.value.coin.value)
         assert(
           committerCoinValue.exists(_ >= lockAmount),
           s"expected committer coin value >= $lockAmount, found: ${committerCoinValue.map(_.toString).getOrElse("none")}"

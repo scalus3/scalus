@@ -11,7 +11,7 @@ object MissingKeyHashesValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         val allWitnessesKeyHashes = AllWitnessesKeyHashes.allWitnessesKeyHashes(event)
 

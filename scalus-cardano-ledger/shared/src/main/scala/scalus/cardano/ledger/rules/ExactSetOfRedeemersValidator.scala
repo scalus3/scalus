@@ -9,7 +9,7 @@ object ExactSetOfRedeemersValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transaction = event
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         val result = for {
             neededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(transaction, utxo)

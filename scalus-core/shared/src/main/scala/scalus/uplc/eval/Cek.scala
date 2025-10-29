@@ -410,6 +410,32 @@ enum Result:
         logs: Seq[String]
     )
 
+    /** Compare this `Result` with `that` for semantic equality.
+      *
+      * For `Success` results this uses `Term.alphaEq` to compare the produced terms (so
+      * alpha-equivalent terms are considered equal), and also requires budgets, costs and logs to
+      * be equal.
+      *
+      * For `Failure` results this compares the runtime exception classes and messages (stack traces
+      * are intentionally ignored), and also requires budgets, costs and logs to be equal.
+      *
+      * Returns `true` only when both sides are the same variant (`Success` or `Failure`) and all
+      * compared components match as described above.
+      *
+      * @param that
+      *   the other Result to compare against
+      * @return
+      *   true if results are semantically equal (alpha-equivalence for terms)
+      */
+    infix def alphaEq(that: Result): Boolean = (this, that) match
+        case (Success(term1, budget1, costs1, logs1), Success(term2, budget2, costs2, logs2)) =>
+            Term.alphaEq(term1, term2) && budget1 == budget2 && costs1 == costs2 && logs1 == logs2
+        case (Failure(ex1, budget1, costs1, logs1), Failure(ex2, budget2, costs2, logs2)) =>
+            ex1.getClass == ex2.getClass &&
+            Option(ex1.getMessage) == Option(ex2.getMessage) &&
+            budget1 == budget2 && costs1 == costs2 && logs1 == logs2
+        case _ => false
+
     def isSuccess: Boolean = this match
         case _: Success => true
         case _          => false

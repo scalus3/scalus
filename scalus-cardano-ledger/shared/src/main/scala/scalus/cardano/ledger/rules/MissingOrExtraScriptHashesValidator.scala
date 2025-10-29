@@ -11,7 +11,7 @@ object MissingOrExtraScriptHashesValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         for
-            scriptHashesValidator <- ScriptHashesValidator(event, state.utxo)
+            scriptHashesValidator <- ScriptHashesValidator(event, state.utxos)
             _ <- scriptHashesValidator.validate()
         yield ()
     }

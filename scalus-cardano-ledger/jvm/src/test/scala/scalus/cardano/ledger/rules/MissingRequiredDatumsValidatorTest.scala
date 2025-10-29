@@ -28,7 +28,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           witnessSet = TransactionWitnessSet()
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -65,7 +65,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -102,7 +102,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -133,7 +133,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -162,7 +162,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -204,7 +204,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -237,7 +237,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -267,7 +267,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
