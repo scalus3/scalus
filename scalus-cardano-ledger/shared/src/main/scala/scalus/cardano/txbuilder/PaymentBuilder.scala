@@ -73,6 +73,19 @@ case class PaymentBuilder(
     def withSteps(steps: Seq[TransactionBuilderStep]): PaymentBuilder =
         copy(additionalSteps = additionalSteps ++ steps)
 
+    private def deduplicateByInput(
+        steps: Seq[TransactionBuilderStep]
+    ): Seq[TransactionBuilderStep] = {
+        val seenInputs = scala.collection.mutable.Set.empty[TransactionInput]
+        steps.filter {
+            case TransactionBuilderStep.Spend(utxo, _) =>
+                !seenInputs.contains(utxo.input) && { seenInputs.add(utxo.input); true }
+            case TransactionBuilderStep.ReferenceOutput(utxo) =>
+                !seenInputs.contains(utxo.input) && { seenInputs.add(utxo.input); true }
+            case _ => true
+        }
+    }
+
     def build(): Either[String, Transaction] = {
         val totalRequired = payments.foldLeft(Value.zero)((acc, p) => acc + p._2)
 
@@ -91,18 +104,20 @@ case class PaymentBuilder(
                 )
                 .toRight("Insufficient funds in wallet")
 
-            inputSteps = (scriptInputs ++ walletInputsWithWitnesses).map { case (utxo, witness) =>
-                witness match {
-                    case w: PubKeyWitness.type =>
-                        TransactionBuilderStep.Spend(utxo, w)
-                    case w: NativeScriptWitness =>
-                        TransactionBuilderStep.Spend(utxo, w)
-                    case w: ThreeArgumentPlutusScriptWitness =>
-                        TransactionBuilderStep.Spend(utxo, w)
-                    case _: TwoArgumentPlutusScriptWitness =>
-                        ???
+            inputSteps = (scriptInputs.toSeq ++ walletInputsWithWitnesses)
+                .distinctBy { case (utxo, _) => utxo.input }
+                .map { case (utxo, witness) =>
+                    witness match {
+                        case w: PubKeyWitness.type =>
+                            TransactionBuilderStep.Spend(utxo, w)
+                        case w: NativeScriptWitness =>
+                            TransactionBuilderStep.Spend(utxo, w)
+                        case w: ThreeArgumentPlutusScriptWitness =>
+                            TransactionBuilderStep.Spend(utxo, w)
+                        case _: TwoArgumentPlutusScriptWitness =>
+                            ???
+                    }
                 }
-            }
 
             outputSteps = payments.map { case (addr, value, datum) =>
                 TransactionBuilderStep.Send(
@@ -120,11 +135,12 @@ case class PaymentBuilder(
                 .getOrElse(context.wallet.collateralInputs)
                 .map(x => TransactionBuilderStep.AddCollateral(x._1))
 
-            allSteps =
-                inputSteps ++ outputSteps ++ collateralSteps ++ additionalSteps
+            allSteps = deduplicateByInput(
+              inputSteps ++ outputSteps ++ collateralSteps ++ additionalSteps
+            )
 
             resolvedContext <- TransactionBuilder
-                .build(context.env.network, allSteps.toSeq)
+                .build(context.env.network, allSteps)
                 .left
                 .map(_.toString)
 

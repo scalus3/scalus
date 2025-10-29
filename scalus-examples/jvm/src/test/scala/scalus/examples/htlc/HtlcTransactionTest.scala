@@ -1,6 +1,7 @@
 package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.Compiler
 import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.ByteString
 import scalus.builtin.ToData.*
@@ -14,6 +15,7 @@ import scalus.cardano.txbuilder.{BuilderContext, Datum, ExpectedSigner}
 import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
+import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
 
@@ -166,7 +168,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
         assert(result.logs.last.contains(HtlcValidator.UnsignedCommitterTransaction))
     }
 
-    test("fee cost comparison") {
+    test("has smaller fees on v3 backend") {
         val testDatum = ContractDatum(
           committer = committerPkh,
           receiver = receiverPkh,
@@ -184,6 +186,20 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
           ),
           additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(receiverPkh)))
         )
-        matrix.foreach(println)
+        val releaseV3 = matrix.collectFirst {
+            case (
+                  Compiler.Options(SirToUplcV3Lowering, _, true, _, _),
+                  ComparisonResult.Ok(result, _)
+                ) =>
+                result
+        }.get
+
+        val otherBackends = matrix.collect {
+            case (options, ComparisonResult.Ok(comparisonResult, _))
+                if options.targetLoweringBackend != SirToUplcV3Lowering =>
+                comparisonResult
+        }
+        assert(otherBackends.nonEmpty)
+        assert(otherBackends.forall(_.directFee > releaseV3.directFee))
     }
 }
