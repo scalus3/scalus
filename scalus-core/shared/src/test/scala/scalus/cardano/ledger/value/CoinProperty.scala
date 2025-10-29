@@ -27,7 +27,7 @@ object CoinProperty extends Properties("Coin") {
 
 
     property("coinA + coinB == coinB + coinA") =
-        forAll(arbitrary[Coin], arbitrary[Coin]){ (a, b) => a + b == b + a}
+        forAll(arbitrary[Coin], arbitrary[Coin]){ (a, b) => a +~ b == b +~ a}
 
     property("∀ (sl : SafeLong , c: Coin) => c.scaleIntegral(sl) == c.scaleFractional(u.toRational).toUnbounded") =
        forAll(Arbitrary.arbitrary[SafeLong], arbitrary[Coin]){
