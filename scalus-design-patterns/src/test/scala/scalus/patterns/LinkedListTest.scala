@@ -39,23 +39,41 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
       deadline = 86_400_000L,
       penalty = Address.fromScriptHash(royalty)
     )
-    val user1 = Mock.mockPubKeyHash(1).hash
-    val user2 = Mock.mockPubKeyHash(2).hash
-    val user3 = Mock.mockPubKeyHash(3).hash
+    // hashes must be ordered
+    val user1 = Mock.mockPubKeyHash(8).hash
+    val user2 = Mock.mockPubKeyHash(16).hash
+    val user3 = Mock.mockPubKeyHash(32).hash
     val emptyKey = hex""
 
-    def key(token: TokenName = hex""): TokenName = LinkedList.nodeToken() ++ token
+    def nodeToken(key: TokenName = hex""): TokenName = LinkedList.nodeToken() ++ key
+
+    def txOut(
+        node: Option[(TokenName, Cons)],
+        burn: Boolean,
+        lovelace: BigInt
+    ): TxOut =
+        val (token, datum) = node match
+            case Some(token -> datum) =>
+                Value(cs = policyId, tn = token, v = if burn then -1 else 1) ->
+                    OutputDatum.OutputDatum(datum.toData)
+            case _ => Value.zero -> OutputDatum.NoOutputDatum
+        TxOut(
+          address = scriptAddress,
+          value = Value.lovelace(lovelace) + token,
+          datum = datum
+        )
 
     def node(
         cell: Cons,
-        key: TokenName = key(),
+        key: TokenName = hex"",
         burn: Boolean = false,
         lovelace: BigInt = 0
-    ): TxOut = TxOut(
-      address = scriptAddress,
-      value = Value.lovelace(lovelace) + Value(cs = policyId, tn = key, v = if burn then -1 else 1),
-      datum = OutputDatum.OutputDatum(cell.toData)
-    )
+    ): TxOut = txOut(Some(nodeToken(key) -> cell), burn, lovelace)
+
+    def empty(
+        burn: Boolean = false,
+        lovelace: BigInt = 0
+    ): TxOut = txOut(None, burn, lovelace)
 
     case class TestCase(
         budget: ExBudget,
@@ -64,514 +82,361 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
         mint: Value,
         action: NodeAction,
         validRange: Interval = Interval.always,
-        signedBy: Option[PubKeyHash] = None,
-        shouldFail: Boolean = false
+        signedBy: Option[TokenName] = None,
+        fails: Boolean = false
     ):
-        def check: Unit =
-            val tx = TxInfo.placeholder.copy(
-              inputs,
-              outputs = outputs,
-              mint = mint,
-              validRange = validRange,
-              signatories = signedBy.map(List.single).getOrElse(List.Nil),
-              id = Mock.mockTxOutRef(2, 1).id
+        val tx = TxInfo.placeholder.copy(
+          inputs,
+          outputs = outputs,
+          mint = mint,
+          validRange = validRange,
+          signatories = signedBy.map(key => List.single(PubKeyHash(key))).getOrElse(List.Nil),
+          id = Mock.mockTxOutRef(2, 1).id
+        )
+        val result = LinkedListContract
+            .make(config)
+            .runWithDebug(
+              scriptContext = ScriptContext(
+                txInfo = tx,
+                redeemer = action.toData,
+                scriptInfo = ScriptInfo.MintingScript(policyId)
+              )
             )
-            val result = LinkedListContract
-                .make(config)
-                .runWithDebug(
-                  scriptContext = ScriptContext(
-                    txInfo = tx,
-                    redeemer = action.toData,
-                    scriptInfo = ScriptInfo.MintingScript(policyId)
-                  )
-                )
-            if shouldFail != result.isSuccess then
-                if result.budget.cpu <= budget.cpu && result.budget.memory <= budget.memory then
-                    println(result.budget)
-                    println(result.costs)
-                    fail("Performance regression")
-            else
-                result.logs.foreach(println)
-                val reason = result match
-                    case Result.Failure(exception, _, _, _) =>
-                        s"Script failed with exception: ${exception.getMessage}"
-                    case _ => "Script should fail, but didn't"
-                fail(reason)
+        if fails != result.isSuccess then
+            if result.budget.cpu > budget.cpu || result.budget.memory > budget.memory then
+                println(result.budget)
+                println("Costs: " + result.costs)
+                fail("Performance regression")
+        else
+            result.logs.foreach(println)
+            val reason = result match
+                case Result.Failure(exception, _, _, _) =>
+                    s"Script failed with exception: ${exception.getMessage}"
+                case _ => "Script should fail, but didn't"
+            fail(reason)
 
     test("Verify that a linked list can be properly initialized"):
-        val headOutput = node(head(), lovelace = 4_000_000)
-        val headInput = headOutput.copy(datum = OutputDatum.NoOutputDatum)
+        val nodeIn = empty(lovelace = 4_000_000)
+        val nodeOut = node(head(), lovelace = nodeIn.value.getLovelace)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(143129594, 515159),
-          inputs = List(
-            TxInInfo(
-              outRef = initRef,
-              resolved = headInput
-            )
-          ),
-          outputs = List.single(headOutput),
-          mint = headOutput.token,
+          budget = ExBudget.fromCpuAndMemory(315866792, 1089434),
+          inputs = List.single(TxInInfo(initRef, nodeIn)),
+          outputs = List.single(nodeOut),
+          mint = nodeOut.token,
           action = NodeAction.Init
         )
 
     test("Verify that a linked list can be properly de-initialized (burn)"):
-        val nodeOut = node(head(), burn = true, lovelace = 4_000_000)
+        val nodeIn = node(head(), burn = true, lovelace = 4_000_000)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(85976699, 303776),
-          inputs = List(TxInInfo(initRef, nodeOut)),
-          mint = nodeOut.token,
+          budget = ExBudget.fromCpuAndMemory(228692388, 777264),
+          inputs = List.single(TxInInfo(initRef, nodeIn)),
+          mint = nodeIn.token,
           action = NodeAction.Deinit
         )
 
     test("Verify that de-initialization fails if the list is not empty"):
-        val nonEmptyCell = cons(
-          key = user1,
-          ref = Some(user2)
-        )
-        val nodeValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = -1)
-        val nodeOut = TxOut(
-          address = scriptAddress,
-          value = nodeValue,
-          datum = OutputDatum.OutputDatum(nonEmptyCell.toData)
-        )
-        val burnValue = Value(cs = policyId, tn = key(), v = -1)
+        val nonEmptyCell = cons(user1, Some(user2))
+        val nodeIn = node(nonEmptyCell, user2, burn = true, lovelace = 9_000_000)
+        val nodeOut = empty(burn = true)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(63261784, 222384),
-          inputs = List(TxInInfo(initRef, nodeOut)),
-          mint = burnValue,
+          budget = ExBudget.fromCpuAndMemory(495962460, 1683061),
+          inputs = List.single(TxInInfo(initRef, nodeIn)),
+          mint = nodeOut.token,
           action = NodeAction.Deinit,
-          shouldFail = true,
+          fails = true,
         )
 
     test("Verify that the first node can be inserted into the linked list"):
         val parentCell: Cons = head()
-        val parentValue =
-            Value.lovelace(4_000_000) + Value(cs = policyId, tn = key(), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
+        val parentIn = node(parentCell, lovelace = 4_000_000)
         val newCell = cons(user1)
-        val insertValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          insertValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val newOutput = node(newCell, user1, lovelace = 9_000_000)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(303439106, 1054709),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(datum = OutputDatum.OutputDatum(head(newCell.key).toData)),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(user1), v = 1),
-          action = NodeAction.Insert(PubKeyHash(user1), parentCell),
+          budget = ExBudget.fromCpuAndMemory(501785103, 1703570),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(user1), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user1))
+          signedBy = newCell.key
         )
 
     test("Verify that a new node can be inserted into the linked list"):
         val parentCell = cons(user1)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
         val newCell = cons(user2)
-        val insertValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          insertValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(datum =
-                OutputDatum.OutputDatum(cons(key = user1, ref = Some(user2)).toData)
-            ),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(user1), v = 1),
-          action = NodeAction.Insert(PubKeyHash(user2), parentCell),
+          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2))
+          signedBy = newCell.key
+        )
+
+    test("Verify that a new node insertion fails with an irrelevant covering key"):
+        val parentCell = cons(user1)
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val newCell = cons(user3)
+        val newOutput = node(newCell, user3, lovelace = parentIn.value.getLovelace)
+        val newParent = cons(user2)
+        val updatedCell = newParent.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = newParent.copy(ref = newCell.ref)
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(501785103, 1703570),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(user3), covering),
+          validRange = Interval.entirelyBetween(1000L, 2000L),
+          signedBy = newCell.key,
+          fails = true
         )
 
     test("Verify that a new node can be inserted into the linked list for a non-empty covering"):
         val parentCell = cons(user1)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
-        val newCell = cons(user2)
-        val insertValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          insertValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val newCell = cons(user2, Some(user3))
+        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(datum =
-                OutputDatum.OutputDatum(cons(key = user1, ref = Some(user2)).toData)
-            ),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(user2), v = 1),
-          action = NodeAction.Insert(PubKeyHash(user2), parentCell.copy()),
+          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2))
+          signedBy = newCell.key
         )
 
     test("Verify that a new node insertion fails for a duplicate key"):
-        // TODO: test in ledger with keys not at inputs
+        // TODO: test in ledger with keys not utxo but not at tx inputs
         val parentCell = cons(user2)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
+        val parentIn = node(parentCell, user2, lovelace = 9_000_000)
         val newCell = cons(user2)
-        val insertValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          insertValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(datum =
-                OutputDatum.OutputDatum(cons(key = user2, ref = Some(user2)).toData)
-            ),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(user2), v = 1),
-          action = NodeAction.Insert(PubKeyHash(user2), parentCell),
+          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2)),
-          shouldFail = true
+          signedBy = newCell.key,
+          fails = true
         )
 
-    test("Verify that a new node insertion fails for an unordered key"):
+    test("Verify that a new node insertion fails with unordered keys"):
         val parentCell = cons(user2)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
+        val parentIn = node(parentCell, user2, lovelace = 9_000_000)
         val newCell = cons(user1)
-        val insertValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          insertValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val newOutput = node(newCell, user1, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305468667, 1062506),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(datum =
-                OutputDatum.OutputDatum(cons(key = user2, ref = Some(user1)).toData)
-            ),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(user1), v = 1),
-          action = NodeAction.Insert(PubKeyHash(user1), parentCell),
+          budget = ExBudget.fromCpuAndMemory(429416754, 1458044),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(user1), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user1)),
-          shouldFail = true
+          signedBy = newCell.key,
+          fails = true
         )
 
     test("Verify that a new node insertion fails for an empty key"):
-        val parentCell: Cons = head()
-        val parentValue =
-            Value.lovelace(4_000_000) + Value(cs = policyId, tn = key(), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
+        val parentCell = head()
+        val parentIn = node(parentCell, lovelace = 4_000_000)
         val newCell = cons(emptyKey)
-        val insertValue =
-            Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(emptyKey), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          insertValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val newOutput = node(newCell, lovelace = 9_000_000)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(146423245, 522047),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(datum = OutputDatum.OutputDatum(head(newCell.key).toData)),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(emptyKey), v = 1),
-          action = NodeAction.Insert(PubKeyHash(emptyKey), parentCell),
+          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Insert(PubKeyHash(emptyKey), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(emptyKey)),
-          shouldFail = true
+          signedBy = newCell.key,
+          fails = true
         )
 
     test("Verify that a node can be removed from the linked list"):
-        val parentCell = cons(key = user1, ref = Some(user2))
-        val removeCell = cons(key = user2)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val removeValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
-        val removeOutput = TxOut(
-          scriptAddress,
-          removeValue,
-          OutputDatum.OutputDatum(removeCell.toData)
-        )
-        val removeRef = Mock.mockTxOutRef(3, 2)
-        val updatedCell = cons(user1)
-        val updatedOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(updatedCell.toData)
-        )
-        val burnValue = Value(cs = policyId, tn = key(user2), v = -1)
+        val parentCell = cons(user1, Some(user2))
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val remCell = cons(user2)
+        val removeIn = node(remCell, user2, burn = true, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = remCell.ref)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
-          inputs = List(
-            TxInInfo(removeRef, removeOutput),
-            TxInInfo(parentRef, parentOutput)
-          ),
-          outputs = List.single(updatedOutput),
-          mint = burnValue,
+          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
+          outputs = List.single(parentOut),
+          mint = removeIn.token,
           action = NodeAction.Remove(PubKeyHash(user2), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2))
+          signedBy = remCell.key
         )
 
     test("Verify that a node removing fails for an empty key"):
-        val parentCell = cons(key = user1, ref = Some(emptyKey))
-        val removeCell = cons(key = emptyKey)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val removeValue =
-            Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(emptyKey), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
-        val removeOutput = TxOut(
-          scriptAddress,
-          removeValue,
-          OutputDatum.OutputDatum(removeCell.toData)
-        )
-        val removeRef = Mock.mockTxOutRef(3, 2)
-        val updatedCell = cons(user1)
-        val updatedOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(updatedCell.toData)
-        )
-        val burnValue = Value(cs = policyId, tn = key(emptyKey), v = -1)
+        val parentCell = cons(user1, Some(emptyKey))
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val remCell = cons(emptyKey)
+        val removeIn = node(remCell, emptyKey, burn = true, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = remCell.ref)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
-          inputs = List(
-            TxInInfo(removeRef, removeOutput),
-            TxInInfo(parentRef, parentOutput)
-          ),
-          outputs = List.single(updatedOutput),
-          mint = burnValue,
+          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
+          outputs = List.single(parentOut),
+          mint = removeIn.token,
           action = NodeAction.Remove(PubKeyHash(emptyKey), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(emptyKey))
+          signedBy = remCell.key,
+          fails = true
         )
 
-    test("Verify that the first node removing fails for a non-empty covering"):
+    test("Verify that the first node can be removed with a non-empty covering"):
         val parentCell = head(Some(user1))
-        val removeCell = cons(user1)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(), v = 1)
-        val removeValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
-        val removeOutput = TxOut(
-          scriptAddress,
-          removeValue,
-          OutputDatum.OutputDatum(removeCell.toData)
-        )
-        val updatedCell = head(Some(user2))
-        val updatedOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(updatedCell.toData)
-        )
-        val burnValue = Value(cs = policyId, tn = key(user1), v = -1)
+        val parentIn = node(parentCell, lovelace = 9_000_000)
+        val remCell = cons(user1, Some(user2))
+        val removeIn = node(remCell, user1, burn = true, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = remCell.ref)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
-          inputs = List(
-            TxInInfo(removeRef, removeOutput),
-            TxInInfo(parentRef, parentOutput)
-          ),
-          outputs = List.single(updatedOutput),
-          mint = burnValue,
+          budget = ExBudget.fromCpuAndMemory(590553133, 1996487),
+          inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
+          outputs = List.single(parentOut),
+          mint = removeIn.token,
           action = NodeAction.Remove(PubKeyHash(user1), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user1))
+          signedBy = remCell.key
         )
 
-    test("Verify that a non-first node removing fails for an empty covering"):
-        val parentCell = cons(key = user1, ref = Some(user2))
-        val removeCell = cons(key = user2)
-        val parentValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val removeValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val parentOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(parentCell.toData)
-        )
-        val removeOutput = TxOut(
-          scriptAddress,
-          removeValue,
-          OutputDatum.OutputDatum(removeCell.toData)
-        )
+    test("Verify that a non-first node can be removed with an empty covering"):
+        val parentCell = cons(user1, Some(user2))
+        val remCell = cons(user2)
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val removeIn = node(remCell, user2, burn = true, lovelace = parentIn.value.getLovelace)
         val removeRef = Mock.mockTxOutRef(3, 2)
-        val updatedCell = head()
-        val updatedOutput = TxOut(
-          scriptAddress,
-          parentValue,
-          OutputDatum.OutputDatum(updatedCell.toData)
-        )
-        val burnValue = Value(cs = policyId, tn = key(user2), v = -1)
+        val updatedCell = parentCell.copy(ref = remCell.ref)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(338398996, 1165209),
-          inputs = List(
-            TxInInfo(removeRef, removeOutput),
-            TxInInfo(parentRef, parentOutput)
-          ),
-          outputs = List.single(updatedOutput),
-          mint = burnValue,
+          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
+          outputs = List.single(parentOut),
+          mint = removeIn.token,
           action = NodeAction.Remove(PubKeyHash(user2), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2))
+          signedBy = remCell.key
+        )
+
+    test("Verify that a node removing fails for a non-relevant covering"):
+        val parentCell = head(Some(user1))
+        val parentIn = node(parentCell, lovelace = 9_000_000)
+        val remCell = cons(user1)
+        val removeIn = node(remCell, user1, burn = true, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = Some(user2))
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        TestCase(
+          budget = ExBudget.fromCpuAndMemory(509647608, 1730487),
+          inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
+          outputs = List.single(parentOut),
+          mint = removeIn.token,
+          action = NodeAction.Remove(PubKeyHash(user1), updatedCell),
+          validRange = Interval.entirelyBetween(1000L, 2000L),
+          signedBy = remCell.key,
+          fails = true
         )
 
     test("Verify that a node can be prepended to the head of the linked list"):
-        val headCell = head(Some(user1))
-        val headValue =
-            Value.lovelace(4_000_000) + Value(cs = policyId, tn = key(), v = 1)
-        val headOutput = TxOut(
-          scriptAddress,
-          headValue,
-          OutputDatum.OutputDatum(headCell.toData)
-        )
-        val newCell = cons(user2, ref = Some(user1))
-        val newValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user2), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          newValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+        val parentCell = head(Some(user2))
+        val parentIn = node(parentCell, lovelace = 4_000_000)
+        val newCell = cons(user1, Some(user2))
+        val newOutput = node(newCell, user1, lovelace = 9_000_000)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
-          inputs = List.single(TxInInfo(parentRef, headOutput)),
-          outputs = List(
-            // Updated head now points to user2
-            headOutput.copy(
-              datum = OutputDatum.OutputDatum(cons(key = emptyKey, ref = Some(user2)).toData)
-            ),
-            newOutput
-          ),
-          mint = Value(cs = policyId, tn = key(user2), v = 1),
-          action = NodeAction.Prepend(PubKeyHash(user2), headCell),
+          budget = ExBudget.fromCpuAndMemory(593743028, 2016535),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Prepend(PubKeyHash(user1), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2))
+          signedBy = newCell.key
         )
 
-    test("Verify that prepend fails when the anchor is not the head node"):
-        val midCell = cons(key = user1, ref = Some(user2))
-        val midValue =
-            Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val midOutput = TxOut(
-          scriptAddress,
-          midValue,
-          OutputDatum.OutputDatum(midCell.toData)
-        )
-        val newCell = cons(user3, ref = Some(user1))
-        val newValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user3), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          newValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+    test("Verify that prepend fails when the covering is not the head node"):
+        val parentCell = cons(key = user1, ref = Some(user3))
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val newCell = cons(user2, Some(user3))
+        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
-          inputs = List.single(TxInInfo(parentRef, midOutput)),
-          outputs = List(midOutput, newOutput),
-          mint = Value(cs = policyId, tn = key(user3), v = 1),
-          action = NodeAction.Prepend(PubKeyHash(user3), midCell),
+          budget = ExBudget.fromCpuAndMemory(593973078, 2017393),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Prepend(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user3)),
-          shouldFail = true
+          signedBy = newCell.key,
+          fails = true
         )
 
     test("Verify that a node can be appended to the tail of the linked list"):
         val parentCell = cons(user1)
-        val parentOutput = node(parentCell, user1, lovelace = 9_000_000)
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
         val newCell = cons(user2)
-        val newOutput = node(newCell, user2, lovelace = parentOutput.value.getLovelace)
+        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
-          inputs = List.single(TxInInfo(parentRef, parentOutput)),
-          outputs = List(
-            parentOutput.copy(
-              datum = OutputDatum.OutputDatum(parentCell.copy(ref = Some(user2)).toData)
-            ),
-            newOutput
-          ),
+          budget = ExBudget.fromCpuAndMemory(593743028, 2016535),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
           mint = newOutput.token,
-          action = NodeAction.Append(PubKeyHash(user2), parentCell),
+          action = NodeAction.Append(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user2))
+          signedBy = newCell.key
         )
 
-    test("Verify that append fails when the anchor is not the tail node"):
-        val midCell = cons(user1, ref = Some(user2))
-        val midValue =
-            Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user1), v = 1)
-        val midOutput = TxOut(
-          scriptAddress,
-          midValue,
-          OutputDatum.OutputDatum(midCell.toData)
-        )
-        val newCell = cons(user3)
-        val newValue = Value.lovelace(9_000_000) + Value(cs = policyId, tn = key(user3), v = 1)
-        val newOutput = TxOut(
-          scriptAddress,
-          newValue,
-          OutputDatum.OutputDatum(newCell.toData)
-        )
+    test("Verify that append fails when the covering is not the tail node"):
+        val parentCell = cons(user1, ref = Some(user3))
+        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
+        val newCell = cons(user2)
+        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
+        val updatedCell = parentCell.copy(ref = newCell.key)
+        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
+        val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(305000000, 1060000),
-          inputs = List.single(TxInInfo(parentRef, midOutput)),
-          outputs = List(midOutput, newOutput),
-          mint = Value(cs = policyId, tn = key(user3), v = 1),
-          action = NodeAction.Append(PubKeyHash(user3), midCell),
+          budget = ExBudget.fromCpuAndMemory(593973078, 2017393),
+          inputs = List.single(TxInInfo(parentRef, parentIn)),
+          outputs = List(parentOut, newOutput),
+          mint = newOutput.token,
+          action = NodeAction.Append(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = Some(PubKeyHash(user3)),
-          shouldFail = true
+          signedBy = newCell.key,
+          fails = true
         )
