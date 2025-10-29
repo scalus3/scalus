@@ -112,7 +112,7 @@ object MultiAsset {
                 combineWith(innerAlgebra.plus)(self, other)
 
             override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.plus, identity, innerAlgebra.negate)(self, other)
+                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 self.view.mapValues(_ :* s).to(SortedMap)
@@ -304,7 +304,7 @@ object MultiAsset {
                     combineWith(coinAlgebra.plus)(self, other)
 
                 override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                    combineWith(coinAlgebra.plus, identity, coinAlgebra.negate)(self, other)
+                    combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
 
                 override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                     self.view.mapValues(_ :* s).to(SortedMap)
