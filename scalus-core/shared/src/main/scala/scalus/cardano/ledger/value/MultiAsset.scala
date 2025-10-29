@@ -5,9 +5,7 @@ import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
 
-import java.math.MathContext
 import scala.collection.immutable.SortedMap
-import scala.math.BigDecimal.defaultMathContext
 
 type MultiAsset = MultiAsset.MultiAsset
 
@@ -67,17 +65,14 @@ object MultiAsset {
         extension (self: Unbounded)
             def underlying: SortedMap[PolicyId, Inner.Unbounded] = self
 
-            def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] = try {
-                Right(self.unsafeToMultiAsset)
-            } catch {
-                case e: MultiAsset.ArithmeticError => Left(e)
-            }
+            def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
+                try { Right(self.unsafeToMultiAsset) }
+                catch { case e: MultiAsset.ArithmeticError => Left(e) }
 
             def unsafeToMultiAsset: MultiAsset = self.view
                 .map((policyId: PolicyId, innerUnbounded: Inner.Unbounded) =>
-                    try {
-                        (policyId, innerUnbounded.unsafeToInner)
-                    } catch {
+                    try { (policyId, innerUnbounded.unsafeToInner) }
+                    catch {
                         case e: Inner.ArithmeticError =>
                             throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
                     }
@@ -129,28 +124,22 @@ object MultiAsset {
 
         def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = x
 
-        def zero: Fractional = algebra.zero
+        def zero: Fractional = SortedMap.empty
 
         extension (self: Fractional)
             def underlying: SortedMap[PolicyId, Inner.Fractional] = self
 
-            def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
-                Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
+            def toUnbounded: Unbounded =
+                Unbounded(self.view.mapValues(_.toUnbounded).to(SortedMap))
 
-            def toMultiAsset(
-                mc: MathContext = defaultMathContext
-            ): Either[MultiAsset.ArithmeticError, MultiAsset] =
-                try {
-                    Right(self.unsafeToMultiAsset(mc))
-                } catch {
-                    case e: MultiAsset.ArithmeticError => Left(e)
-                }
+            def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
+                try { Right(self.unsafeToMultiAsset) }
+                catch { case e: MultiAsset.ArithmeticError => Left(e) }
 
-            def unsafeToMultiAsset(mc: MathContext = defaultMathContext): MultiAsset = self.view
+            def unsafeToMultiAsset: MultiAsset = self.view
                 .map((policyId: PolicyId, innerFractional: Inner.Fractional) =>
-                    try {
-                        (policyId, innerFractional.unsafeToInner(mc))
-                    } catch {
+                    try { (policyId, innerFractional.unsafeToInner) }
+                    catch {
                         case e: Inner.ArithmeticError =>
                             throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
                     }
@@ -264,17 +253,14 @@ object MultiAsset {
             extension (self: Unbounded)
                 def underlying: SortedMap[AssetName, Coin.Unbounded] = self
 
-                def toInner: Either[Inner.ArithmeticError, Inner] = try {
-                    Right(self.unsafeToInner)
-                } catch {
-                    case e: Inner.ArithmeticError => Left(e)
-                }
+                def toInner: Either[Inner.ArithmeticError, Inner] =
+                    try { Right(self.unsafeToInner) }
+                    catch { case e: Inner.ArithmeticError => Left(e) }
 
                 def unsafeToInner: Inner = self.view
                     .map((tokenName: AssetName, coinUnbounded: Coin.Unbounded) =>
-                        try {
-                            (tokenName, coinUnbounded.unsafeToCoin)
-                        } catch {
+                        try { (tokenName, coinUnbounded.unsafeToCoin) }
+                        catch {
                             case e: Coin.ArithmeticError =>
                                 throw Inner.ArithmeticError.withAssetName(e, tokenName)
                         }
@@ -335,22 +321,17 @@ object MultiAsset {
             extension (self: Fractional)
                 def underlying: SortedMap[AssetName, Coin.Fractional] = self
 
-                def toUnbounded(mc: MathContext = defaultMathContext): Unbounded =
-                    Unbounded(self.view.mapValues(_.toUnbounded(mc)).to(SortedMap))
+                def toUnbounded: Unbounded =
+                    Unbounded(self.view.mapValues(_.toUnbounded).to(SortedMap))
 
-                def toInner(
-                    mc: MathContext = defaultMathContext
-                ): Either[Inner.ArithmeticError, Inner] = try {
-                    Right(self.unsafeToInner(mc))
-                } catch {
-                    case e: Inner.ArithmeticError => Left(e)
-                }
+                def toInner: Either[Inner.ArithmeticError, Inner] =
+                    try { Right(self.unsafeToInner) }
+                    catch { case e: Inner.ArithmeticError => Left(e) }
 
-                def unsafeToInner(mc: MathContext = defaultMathContext): Inner = self.view
+                def unsafeToInner: Inner = self.view
                     .map((tokenName: AssetName, coinFractional: Coin.Fractional) =>
-                        try {
-                            (tokenName, coinFractional.unsafeToCoin(mc))
-                        } catch {
+                        try { (tokenName, coinFractional.unsafeToCoin) }
+                        catch {
                             case e: Coin.ArithmeticError =>
                                 throw Inner.ArithmeticError.withAssetName(e, tokenName)
                         }
@@ -411,6 +392,21 @@ object MultiAsset {
     }
 
     private object CombineWith {
+//        def combineWithSimple[K, V](
+//            opBoth: (V, V) => V
+//        )(self: SortedMap[K, V], other: SortedMap[K, V])(using
+//            ev: AdditiveMonoid[V],
+//            ord: Ordering[K]
+//        ): SortedMap[K, V] = {
+//            (self.keySet ++ other.keySet).view
+//                .map { key =>
+//                    val combinedValue =
+//                        opBoth(self.getOrElse(key, ev.zero), other.getOrElse(key, ev.zero))
+//                    key -> combinedValue
+//                }
+//                .to(SortedMap)
+//        }
+
         def combineWith[K, VCommon, VResult, VSelf, VOther](
             opBoth: (VCommon, VCommon) => VResult,
             opSelf: VCommon => VResult = identity[VResult],
@@ -455,6 +451,7 @@ object MultiAsset {
                         loop(xNext, xs, y, ys, builder)
                     } else {
                         // Process the remaining `ys` and return
+                        builder += processOther(y)
                         builder ++= ys.map(processOther)
                         builder.result()
                     }
@@ -479,14 +476,14 @@ object MultiAsset {
                     }
                 } else {
                     // Process `y` now and `x` later
-                    val yMapped = processOther(y)
-                    builder += yMapped
+                    builder += processOther(y)
                     if ys.hasNext then {
                         // Continue looping with the same `x` and next `y`
                         val yNext = ys.next()
                         loop(x, xs, yNext, ys, builder)
                     } else {
                         // Process the remaining `xs` and return
+                        builder += processSelf(x)
                         builder ++= xs.map(processSelf)
                         builder.result()
                     }

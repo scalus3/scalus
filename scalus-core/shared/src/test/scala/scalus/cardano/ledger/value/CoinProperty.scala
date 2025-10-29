@@ -33,18 +33,14 @@ object CoinProperty extends Properties("Coin"){
        forAll(Arbitrary.arbitrary[SafeLong], arbitrary[Coin]){
 
          (sl, c) => {
-           println(s"c.scaleFractional(sl.toRational) == ${c.scaleFractional(sl.toRational)}")
-           println(s"c.scaleFractional(sl.toRational).toUnbounded() == ${c.scaleFractional(sl.toRational).toUnbounded()}")
-           c.scaleIntegral(sl) == c.scaleFractional(sl.toRational).toUnbounded()
+           c.scaleIntegral(sl) == c.scaleFractional(sl.toRational).toUnbounded
          }
        }
 
     property("∀ (u : Unbounded) => u.toFractional.toUnbounded == u)") =
         forAll(Arbitrary.arbitrary[Coin.Unbounded]){
             u => {
-              println(s"round tripped ${u.toCoinFractional.toUnbounded()}")
-              println(s"not round tripped ${u}")
-              u.toCoinFractional.toUnbounded() === u
+              u.toCoinFractional.toUnbounded === u
             }
         }
 }

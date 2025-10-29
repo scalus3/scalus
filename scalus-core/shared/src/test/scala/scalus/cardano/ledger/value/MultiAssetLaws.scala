@@ -16,7 +16,11 @@ class MultiAssetLaws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
     
     checkAll("MultiAsset Fractional Partial Order", OrderLaws[MultiAsset.Fractional].partialOrder)
     
-    checkAll("MultiAsset Unbounded CModule", VectorSpaceLaws[MultiAsset.Unbounded, SafeLong].cModule)
+    checkAll("MultiAsset Unbounded Inner CModule", VectorSpaceLaws[MultiAsset.Inner.Unbounded, SafeLong].cModule)
+
+    checkAll("MultiAsset Fractional Inner VectorSpace", VectorSpaceLaws[MultiAsset.Inner.Fractional, Rational].vectorSpace)
     
+    checkAll("MultiAsset Unbounded CModule", VectorSpaceLaws[MultiAsset.Unbounded, SafeLong].cModule)
+
     checkAll("MultiAsset Fractional VectorSpace", VectorSpaceLaws[MultiAsset.Fractional, Rational].vectorSpace)
 }
