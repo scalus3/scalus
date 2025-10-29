@@ -1,6 +1,7 @@
 package scalus.uplc.eval.jitcommon
 
 import scalus.uplc.DefaultFun
+import scalus.uplc.DefaultFun.{SubtractInteger, VerifyEd25519Signature}
 import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
 
 import scala.quoted.*
@@ -104,6 +105,14 @@ object BuiltinEmitter {
                 '{ BuiltinSnippets.mkNilData($budget, $params) }
             case DefaultFun.MkNilPairData =>
                 '{ BuiltinSnippets.mkNilPairData($budget, $params) }
+            case DefaultFun.VerifyEd25519Signature =>
+                '{ BuiltinSnippets.verifyEd25519Signature($budget, $params) }
+            case DefaultFun.VerifyEcdsaSecp256k1Signature =>
+                '{ BuiltinSnippets.verifyEcdsaSecp256k1Signature($budget, $params) }
+            case DefaultFun.VerifySchnorrSecp256k1Signature =>
+                '{ BuiltinSnippets.verifySchnorrSecp256k1Signature($budget, $params) }
+            case DefaultFun.ChooseUnit =>
+                '{ BuiltinSnippets.chooseUnit($budget, $params) }
             case _ =>
                 sys.error(
                   s"Builtin $bn is not yet supported by the JIT compiler. Please add implementation in the Builtin pattern matching section."
@@ -257,4 +266,5 @@ object BuiltinEmitter {
                 throw IllegalStateException(
                   s"Short circuit optimization for builtin $bn not implemented"
                 )
+
 }

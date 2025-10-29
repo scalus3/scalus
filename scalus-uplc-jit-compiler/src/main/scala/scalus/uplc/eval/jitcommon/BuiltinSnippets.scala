@@ -551,4 +551,75 @@ object BuiltinSnippets {
                 )
                 xv.tail
             }
+
+    def verifyEd25519Signature(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString => ByteString => Boolean =
+        (pk: ByteString) =>
+            (msg: ByteString) =>
+                (sig: ByteString) => {
+                    budget.spendBudget(
+                      Step(StepKind.Builtin),
+                      params.builtinCostModel.verifyEd25519Signature.calculateCostFromMemory(
+                        Seq(
+                          MemoryUsageJit.memoryUsage(pk),
+                          MemoryUsageJit.memoryUsage(msg),
+                          MemoryUsageJit.memoryUsage(sig)
+                        )
+                      ),
+                      Nil
+                    )
+                    Builtins.verifyEd25519Signature(pk, msg, sig)
+                }
+
+    def verifyEcdsaSecp256k1Signature(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString => ByteString => Boolean =
+        (pk: ByteString) =>
+            (msg: ByteString) =>
+                (sig: ByteString) => {
+                    budget.spendBudget(
+                      Step(StepKind.Builtin),
+                      params.builtinCostModel.verifyEcdsaSecp256k1Signature.constantCost,
+                      Nil
+                    )
+                    Builtins.verifyEcdsaSecp256k1Signature(pk, msg, sig)
+                }
+
+    def verifySchnorrSecp256k1Signature(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString => ByteString => Boolean =
+        (pk: ByteString) =>
+            (msg: ByteString) =>
+                (sig: ByteString) => {
+                    budget.spendBudget(
+                      Step(StepKind.Builtin),
+                      params.builtinCostModel.verifySchnorrSecp256k1Signature
+                          .calculateCostFromMemory(
+                            Seq(
+                              MemoryUsageJit.memoryUsage(pk),
+                              MemoryUsageJit.memoryUsage(msg),
+                              MemoryUsageJit.memoryUsage(sig)
+                            )
+                          ),
+                      Nil
+                    )
+                    Builtins.verifySchnorrSecp256k1Signature(pk, msg, sig)
+                }
+
+    def chooseUnit(budget: BudgetSpender, params: MachineParams): () => Unit => Any =
+        () =>
+            (u: Unit) =>
+                (caseUnit: Any) => {
+                    budget.spendBudget(
+                      Step(StepKind.Builtin),
+                      params.builtinCostModel.chooseUnit.constantCost,
+                      Nil
+                    )
+                    caseUnit
+                }
+
 }
