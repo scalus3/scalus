@@ -1,7 +1,7 @@
 package scalus.uplc.eval.hybrid
 
 import scalus.uplc.{DeBruijn, Term}
-import scalus.uplc.eval.{BudgetSpender, CekMachine, Logger, MachineParams, PlutusVM}
+import scalus.uplc.eval.{BudgetSpender, CekMachine, EvaluationFailure, Logger, MachineParams, PlutusVM}
 import scalus.uplc.eval.jitcommon.JitRunner
 import scalus.uplc.eval.nativestack.StackTresholdException
 
@@ -9,7 +9,24 @@ object HybridJIT extends JitRunner {
 
     override def isStackSafe: Boolean = true
 
+    enum FailBackStrategy {
+        case Cek, Mincont
+    }
+
+    val config = FailBackStrategy.Cek
+
     override def jitUplc(term: Term): (Logger, BudgetSpender, MachineParams) => Any = {
+        val backupEvaluator: (Logger, BudgetSpender, MachineParams) => Any = config match {
+            case FailBackStrategy.Cek =>
+                val vm = PlutusVM.makePlutusV3VM()
+                val djTerm = DeBruijn.deBruijnTerm(term, true)
+                (logger: Logger, budgetSpender: BudgetSpender, machineParams: MachineParams) =>
+                    vm.evaluateDeBruijnedTerm(djTerm, budgetSpender, logger)
+            case FailBackStrategy.Mincont =>
+                val mincontFun = scalus.uplc.eval.mincont.JIT.jitUplc(term)
+                (logger: Logger, budgetSpender: BudgetSpender, machineParams: MachineParams) =>
+                    mincontFun(logger, budgetSpender, machineParams)
+        }
         val deBruijnedTerm = DeBruijn.deBruijnTerm(term, true)
         val nativeStackFun = scalus.uplc.eval.nativestack.JIT.jitUplc(term)
 
@@ -18,9 +35,8 @@ object HybridJIT extends JitRunner {
                 nativeStackFun(logger, budgetSpender, machineParams)
             } catch {
                 case ex: StackTresholdException =>
-                    // Fallback to stack-safe mincont JIT
-                    val mincontFun = scalus.uplc.eval.mincont.JIT.jitUplc(term)
-                    mincontFun(logger, budgetSpender, machineParams)
+                    // Fallback to stack-safe Evaluator (Cek or minicont JIT)
+                    backupEvaluator(logger, budgetSpender, machineParams)
             }
     }
 

@@ -116,7 +116,10 @@ private object Test {
 
     private val builtins = collect(program.term).toSeq.sorted
 
-    def getJitted(prog: Program, impl: JITImplementation): (Logger, BudgetSpender, MachineParams) => Any = {
+    def getJitted(
+        prog: Program,
+        impl: JITImplementation
+    ): (Logger, BudgetSpender, MachineParams) => Any = {
         println(s"Starting JIT compilation (${impl.name}) at ${System.currentTimeMillis()}")
         val start = System.currentTimeMillis()
         println(s"Calling ${impl.name}.compile...")

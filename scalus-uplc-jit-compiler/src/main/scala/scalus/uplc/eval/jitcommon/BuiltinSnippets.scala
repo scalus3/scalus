@@ -226,6 +226,113 @@ object BuiltinSnippets {
             Builtins.unBData(x)
         }
 
+    // Data constructors
+
+    @inline def constrData(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => List[Data] => Data =
+        (tag: BigInt) =>
+            (fields: List[Data]) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.constrData.constantCost,
+                  Nil
+                )
+                Data.Constr(tag.longValue, fields)
+            }
+
+    @inline def iData(budget: BudgetSpender, params: MachineParams): BigInt => Data =
+        (x: BigInt) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.iData.constantCost,
+              Nil
+            )
+            Data.I(x)
+        }
+
+    @inline def bData(budget: BudgetSpender, params: MachineParams): ByteString => Data =
+        (x: ByteString) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.bData.constantCost,
+              Nil
+            )
+            Data.B(x)
+        }
+
+    @inline def listData(budget: BudgetSpender, params: MachineParams): List[Data] => Data =
+        (x: List[Data]) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.listData.constantCost,
+              Nil
+            )
+            Data.List(x)
+        }
+
+    @inline def mapData(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): List[BuiltinPair[Data, Data]] => Data =
+        (x: List[BuiltinPair[Data, Data]]) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.mapData.constantCost,
+              Nil
+            )
+            Data.Map(x.map(p => (p.fst, p.snd)))
+        }
+
+    // List operations
+
+    @inline def mkCons(budget: BudgetSpender, params: MachineParams): () => Any =
+        () =>
+            (head: Any) =>
+                (tail: List[Any]) => {
+                    budget.spendBudget(
+                      Step(StepKind.Builtin),
+                      params.builtinCostModel.mkCons.constantCost,
+                      Nil
+                    )
+                    head :: tail
+                }
+
+    @inline def nullList(budget: BudgetSpender, params: MachineParams): () => Any =
+        () =>
+            (list: List[Any]) => {
+                budget.spendBudget(
+                  Step(StepKind.Builtin),
+                  params.builtinCostModel.nullList.constantCost,
+                  Nil
+                )
+                list.isEmpty
+            }
+
+    @inline def mkNilData(budget: BudgetSpender, params: MachineParams): Unit => List[Data] =
+        (_: Unit) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.mkNilData.constantCost,
+              Nil
+            )
+            Nil
+        }
+
+    @inline def mkNilPairData(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): Unit => List[BuiltinPair[Data, Data]] =
+        (_: Unit) => {
+            budget.spendBudget(
+              Step(StepKind.Builtin),
+              params.builtinCostModel.mkNilPairData.constantCost,
+              Nil
+            )
+            Nil
+        }
+
     // Control flow
 
     @inline def ifThenElse(budget: BudgetSpender, params: MachineParams): () => Any =

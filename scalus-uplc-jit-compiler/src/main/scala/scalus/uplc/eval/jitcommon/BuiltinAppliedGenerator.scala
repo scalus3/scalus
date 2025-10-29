@@ -34,7 +34,10 @@ object BuiltinAppliedGenerator {
             case EqualsString => true
             // Data operations
             case EqualsData => true
-            case _          => false
+            case ConstrData => true
+            // List operations
+            case MkCons => true
+            case _      => false
 
     // One-argument builtins that can be optimized
     def isSupported1(bn: DefaultFun): Boolean =
@@ -48,15 +51,23 @@ object BuiltinAppliedGenerator {
             case UnListData   => true
             case UnIData      => true
             case UnBData      => true
+            // Data constructors
+            case IData    => true
+            case BData    => true
+            case ListData => true
+            case MapData  => true
             // ByteString operations
             case LengthOfByteString => true
             // String operations
             case EncodeUtf8 => true
             case DecodeUtf8 => true
             // List operations
-            case HeadList => true
-            case TailList => true
-            case _        => false
+            case HeadList      => true
+            case TailList      => true
+            case NullList      => true
+            case MkNilData     => true
+            case MkNilPairData => true
+            case _             => false
 
     // For backward compatibility
     def isSupported(bn: DefaultFun): Boolean = isSupported2(bn)
@@ -521,6 +532,53 @@ object BuiltinAppliedGenerator {
         }
     }
 
+    // Data constructors
+
+    def constrData(
+        x: Expr[Any],
+        y: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Data] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Apply),
+              $params.machineCosts.applyCost,
+              Nil
+            )
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.constrData.constantCost,
+              Nil
+            )
+            Data.Constr(
+              ${ x }.asInstanceOf[BigInt].longValue,
+              ${ y }.asInstanceOf[List[Data]]
+            )
+        }
+    }
+
+    def mkCons(
+        x: Expr[Any],
+        y: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[List[Any]] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Apply),
+              $params.machineCosts.applyCost,
+              Nil
+            )
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.mkCons.constantCost,
+              Nil
+            )
+            ${ x } :: ${ y }.asInstanceOf[List[Any]]
+        }
+    }
+
     // One-argument builtin generators
 
     def sha2_256(
@@ -631,6 +689,115 @@ object BuiltinAppliedGenerator {
               Nil
             )
             Builtins.unBData(${ x }.asInstanceOf[Data])
+        }
+    }
+
+    def iData(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Data] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.iData.constantCost,
+              Nil
+            )
+            Data.I(${ x }.asInstanceOf[BigInt])
+        }
+    }
+
+    def bData(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Data] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.bData.constantCost,
+              Nil
+            )
+            Data.B(${ x }.asInstanceOf[ByteString])
+        }
+    }
+
+    def listData(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Data] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.listData.constantCost,
+              Nil
+            )
+            Data.List(${ x }.asInstanceOf[List[Data]])
+        }
+    }
+
+    def mapData(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Data] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.mapData.constantCost,
+              Nil
+            )
+            Data.Map(
+              ${ x }
+                  .asInstanceOf[List[scalus.builtin.BuiltinPair[Data, Data]]]
+                  .map(p => (p.fst, p.snd))
+            )
+        }
+    }
+
+    def nullList(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[Boolean] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.nullList.constantCost,
+              Nil
+            )
+            ${ x }.asInstanceOf[List[Any]].isEmpty
+        }
+    }
+
+    def mkNilData(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[List[Data]] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.mkNilData.constantCost,
+              Nil
+            )
+            Nil
+        }
+    }
+
+    def mkNilPairData(
+        x: Expr[Any],
+        budget: Expr[BudgetSpender],
+        params: Expr[MachineParams]
+    )(using Quotes): Expr[List[scalus.builtin.BuiltinPair[Data, Data]]] = {
+        '{
+            ${ budget }.spendBudget(
+              Step(StepKind.Builtin),
+              ${ params }.builtinCostModel.mkNilPairData.constantCost,
+              Nil
+            )
+            Nil
         }
     }
 

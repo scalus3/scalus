@@ -7,14 +7,18 @@ import java.nio.file.{Files, Paths}
 
 object TestJITCompilationHang {
     def main(args: Array[String]): Unit = {
-        val stream = getClass.getClassLoader.getResourceAsStream("auction_1-1.flat")
-        if stream == null then throw new RuntimeException("auction_1-1.flat not found in resources")
+        if args.length == 0 then
+            throw new RuntimeException("Please run with the location of flat file as argument")
+
+        val fname = args(0)
+        val stream = getClass.getClassLoader.getResourceAsStream(fname)
+        if stream == null then throw new RuntimeException(s"${fname} not found in resources")
         val bytes = stream.readAllBytes()
         stream.close()
         val program = DeBruijnedProgram.fromFlatEncoded(bytes).toProgram
 
         println("Program loaded successfully")
-        println(s"Starting JIT compilation at ${System.currentTimeMillis()}")
+        println(s"Starting JIT compilation for ${fname} at ${System.currentTimeMillis()}")
 
         val start = System.currentTimeMillis()
         println("Calling JIT.jitUplc...")
@@ -34,10 +38,18 @@ object TestJITCompilationHang {
 
 class JITCompilationHangTest extends AnyFunSuite {
 
-    ignore("acution_1.flat is jit-complied") {
+    ignore("acution_1-1.flat is jit-complied") {
         // Ignored: This test may timeout in CI due to long compilation time (~20-30s)
         // The test passes locally but may exceed CI timeout limits
-        TestJITCompilationHang.main(Array.empty[String])
+        TestJITCompilationHang.main(Array("auction_1-1.flat"))
+    }
+
+    ignore("auction_1-2.flat is jit-complied") {
+        TestJITCompilationHang.main(Array("auction_1-2.flat"))
+    }
+
+    test("auction_1-3.flat is jit-complied") {
+        TestJITCompilationHang.main(Array("auction_1-3.flat"))
     }
 
 }
