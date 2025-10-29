@@ -593,9 +593,9 @@ class BlocksValidation extends AnyFunSuite {
                                     .get
 
                             val desc =
-                                (if w.plutusV1Scripts.nonEmpty then "v1" else "")
-                                    ++ (if w.plutusV2Scripts.nonEmpty then "v2" else "")
-                                    ++ (if w.plutusV3Scripts.nonEmpty then "v3" else "")
+                                (if w.plutusV1Scripts.toMap.nonEmpty then "v1" else "")
+                                    ++ (if w.plutusV2Scripts.toMap.nonEmpty then "v2" else "")
+                                    ++ (if w.plutusV3Scripts.toMap.nonEmpty then "v3" else "")
                                     ++ (if w.plutusData.value.toIndexedSeq.nonEmpty then "D"
                                         else "")
                                     ++ (if w.redeemers.nonEmpty then "R" else "")
@@ -630,10 +630,10 @@ class BlocksValidation extends AnyFunSuite {
         val interestingBlocks = blocks.filter { path =>
             val blockBytes = Files.readAllBytes(path)
             val block = BlockFile.fromCborArray(blockBytes).block
-            block.transactionWitnessSets.exists { _.plutusV1Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV2Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV3Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.nativeScripts.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV1Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV2Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV3Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.nativeScripts.toMap.nonEmpty } &&
             block.transactionWitnessSets.exists { _.vkeyWitnesses.toSortedSet.nonEmpty } &&
             block.transactionWitnessSets.exists { _.plutusData.value.toIndexedSeq.nonEmpty }
         }

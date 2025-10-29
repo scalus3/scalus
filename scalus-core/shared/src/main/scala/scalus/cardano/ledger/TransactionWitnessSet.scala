@@ -39,13 +39,13 @@ case class TransactionWitnessSet(
     /** Check if the witness set is empty */
     def isEmpty: Boolean =
         vkeyWitnesses.toSortedSet.isEmpty &&
-            nativeScripts.isEmpty &&
+            nativeScripts.toMap.isEmpty &&
             bootstrapWitnesses.toSortedSet.isEmpty &&
-            plutusV1Scripts.isEmpty &&
+            plutusV1Scripts.toMap.isEmpty &&
             plutusData.value.toIndexedSeq.isEmpty &&
             redeemers.isEmpty &&
-            plutusV2Scripts.isEmpty &&
-            plutusV3Scripts.isEmpty
+            plutusV2Scripts.toMap.isEmpty &&
+            plutusV3Scripts.toMap.isEmpty
 
 object TransactionWitnessSet:
     /** Empty witness set */
@@ -89,13 +89,13 @@ object TransactionWitnessSet:
             var mapSize = 0
 
             if value.vkeyWitnesses.toSortedSet.nonEmpty then mapSize += 1
-            if value.nativeScripts.nonEmpty then mapSize += 1
+            if value.nativeScripts.toMap.nonEmpty then mapSize += 1
             if value.bootstrapWitnesses.toSortedSet.nonEmpty then mapSize += 1
-            if value.plutusV1Scripts.nonEmpty then mapSize += 1
+            if value.plutusV1Scripts.toMap.nonEmpty then mapSize += 1
             if value.plutusData.value.toIndexedSeq.nonEmpty then mapSize += 1
             if value.redeemers.isDefined then mapSize += 1
-            if value.plutusV2Scripts.nonEmpty then mapSize += 1
-            if value.plutusV3Scripts.nonEmpty then mapSize += 1
+            if value.plutusV2Scripts.toMap.nonEmpty then mapSize += 1
+            if value.plutusV3Scripts.toMap.nonEmpty then mapSize += 1
 
             w.writeMapHeader(mapSize)
 
@@ -105,7 +105,7 @@ object TransactionWitnessSet:
                 w.write(value.vkeyWitnesses)
 
             // Native scripts (key 1)
-            if value.nativeScripts.nonEmpty then
+            if value.nativeScripts.toMap.nonEmpty then
                 w.writeInt(1)
                 w.write(value.nativeScripts)
 
@@ -115,7 +115,7 @@ object TransactionWitnessSet:
                 w.write(value.bootstrapWitnesses)
 
             // Plutus V1 scripts (key 3)
-            if value.plutusV1Scripts.nonEmpty then
+            if value.plutusV1Scripts.toMap.nonEmpty then
                 w.writeInt(3)
                 w.write(value.plutusV1Scripts)
 
@@ -132,12 +132,12 @@ object TransactionWitnessSet:
             }
 
             // Plutus V2 scripts (key 6)
-            if value.plutusV2Scripts.nonEmpty then
+            if value.plutusV2Scripts.toMap.nonEmpty then
                 w.writeInt(6)
                 w.write(value.plutusV2Scripts)
 
             // Plutus V3 scripts (key 7)
-            if value.plutusV3Scripts.nonEmpty then
+            if value.plutusV3Scripts.toMap.nonEmpty then
                 w.writeInt(7)
                 w.write(value.plutusV3Scripts)
 

@@ -49,7 +49,7 @@ object AllWitnessesScripts {
         transaction.witnessSet.nativeScripts.toMap
 
     def allWitnessesNativeScripts(transaction: Transaction): Set[Script.Native] =
-        transaction.witnessSet.nativeScripts.toSet
+        transaction.witnessSet.nativeScripts.toMap.values.toSet
 
     def allWitnessesNativeScriptHashes(transaction: Transaction): Set[ScriptHash] = {
         allWitnessesNativeScriptsMap(transaction).keySet

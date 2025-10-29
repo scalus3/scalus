@@ -16,11 +16,7 @@ object TaggedSortedMap {
     inline def empty[K: Ordering, A]: TaggedSortedMap[K, A] = SortedMap.empty[K, A]
 
     extension [K, A](s: TaggedSortedMap[K, A]) {
-        inline def isEmpty: Boolean = s.isEmpty
-        inline def nonEmpty: Boolean = s.nonEmpty
         inline def toMap: Map[K, A] = s
-        inline def toSeq: Seq[A] = s.values.toSeq
-        inline def toSet: Set[A] = s.values.toSet
     }
 
     inline def apply[K: Ordering, A](s: SortedMap[K, A]): TaggedSortedMap[K, A] = s
