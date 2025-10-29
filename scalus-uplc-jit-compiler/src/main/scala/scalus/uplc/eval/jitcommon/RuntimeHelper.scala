@@ -1,4 +1,5 @@
-package scalus.uplc.eval
+package scalus.uplc.eval.jitcommon
+
 import scalus.uplc.*
 import scalus.builtin.*
 
@@ -14,7 +15,10 @@ object RuntimeHelper {
             case p: BuiltinPair[?, ?] =>
                 Constant.Pair(anyUplcConstant(p.fst), anyUplcConstant(p.snd))
             case p: Tuple2[?, ?] => Constant.Pair(anyUplcConstant(p._1), anyUplcConstant(p._2))
-            case l: ListJitRepr  => l.toConstant
+            case l: List[?]      =>
+                // Lists in JIT are plain List[Any] - element type is lost at runtime
+                // For serialization, we assume Data type (most common case)
+                Constant.List(DefaultUni.Data, l.map(anyUplcConstant))
             case _ => throw new IllegalArgumentException(s"Unsupported type: ${in.getClass}")
     }
 
@@ -27,25 +31,31 @@ object RuntimeHelper {
             case Constant.Data(d)        => d
             case Constant.Pair(fst, snd) =>
                 BuiltinPair(uplcToJitAny(fst), uplcToJitAny(snd))
-            case l @ Constant.List(elemType, v) =>
-                ListJitRepr.fromConstantList(l)
+            case Constant.List(elemType, v) =>
+                // Return plain List[Any] - element type not needed at runtime
+                v.map(uplcToJitAny)
             case _ => throw new IllegalArgumentException(s"Unsupported Constant type: ${in.tpe}")
     }
 
-    final def unConstrData(d: Data): BuiltinPair[BigInt, ListJitRepr] = {
+    final def unConstrData(d: Data): BuiltinPair[BigInt, List[Data]] = {
         d match {
             case Data.Constr(index, fields) =>
                 BuiltinPair(
                   BigInt(index),
-                  ListJitRepr(DefaultUni.Data, fields)
+                  fields // Plain List[Data]
                 )
             case _ =>
                 throw new IllegalArgumentException("Data is not a Constr")
         }
     }
 
-    final def unListData(d: Data): ListJitRepr = d match
-        case Data.List(values) => ListJitRepr(DefaultUni.Data, values)
+    final def unListData(d: Data): List[Data] = d match
+        case Data.List(values) => values // Plain List[Data]
         case _                 => throw new Exception(s"not a list but $d")
+
+    final def unMapData(d: Data): List[BuiltinPair[Data, Data]] = d match
+        case Data.Map(values) =>
+            values.map(BuiltinPair.apply) // Plain List[BuiltinPair[Data, Data]]
+        case _ => throw new Exception(s"not a map but $d")
 
 }

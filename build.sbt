@@ -359,13 +359,21 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 // Scalus UPLC JIT Compiler - experimental JIT compiler for UPLC
 lazy val scalusUplcJitCompiler = project
     .in(file("scalus-uplc-jit-compiler"))
-    .dependsOn(scalus.jvm)
+    .dependsOn(scalus.jvm % "compile->compile")
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-uplc-jit-compiler",
       scalaVersion := scalaVersion.value,
       scalacOptions ++= commonScalacOptions,
       Test / fork := true,
+      Test / javaOptions ++= Seq(
+        "-Xss64m", // Increase stack size to 64MB for JIT compilation of deeply nested UPLC terms
+        "-Xmx4g" // Increase heap to 4GB for large compilations
+      ),
+      // Skip scalus.jvm compilation when -DskipScalusRecompile=true
+      scalus.jvm / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
+      scalus.jvm / Test / skip := sys.props.get("skipScalusRecompile").contains("true"),
+      scalusPlugin / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test",
@@ -692,7 +700,10 @@ addCommandAlias(
   "clean;native/Test/compile;native/test"
 )
 addCommandAlias("benchmark", "bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*")
-addCommandAlias("benchmark-jit", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*(JIT|Cek).*")
+addCommandAlias(
+  "benchmark-jit",
+  "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff bench/target/benchmark-jit.txt .*(JIT|Cek).*"
+)
 addCommandAlias(
   "it",
   "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test"
