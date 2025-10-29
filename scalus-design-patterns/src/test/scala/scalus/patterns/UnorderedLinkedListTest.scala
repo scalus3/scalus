@@ -14,11 +14,12 @@ import scalus.testkit.Mock
 import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
 
-import scalus.examples.{NodeAction, OrderedLinkedList, OrderedLinkedListContract}
+import scalus.examples.{UnorderedLinkedListContract, UnorderedNodeAction}
+import scalus.patterns.UnorderedLinkedList as LinkedList
 
 import scala.language.implicitConversions
 
-class LinkedListTest extends AnyFunSuite, ScalusTest:
+class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
     given scalus.Compiler.Options = scalus.Compiler.Options(
       targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
@@ -82,7 +83,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
         inputs: List[TxInInfo],
         outputs: List[TxOut] = List.Nil,
         mint: Value,
-        action: NodeAction,
+        action: UnorderedNodeAction,
         validRange: Interval = Interval.always,
         signedBy: Option[TokenName] = None,
         fails: Boolean = false
@@ -95,7 +96,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           signatories = signedBy.map(key => List.single(PubKeyHash(key))).getOrElse(List.Nil),
           id = Mock.mockTxOutRef(2, 1).id
         )
-        val result = OrderedLinkedListContract
+        val result = UnorderedLinkedListContract
             .make(config)
             .runWithDebug(
               scriptContext = ScriptContext(
@@ -125,7 +126,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List.single(TxInInfo(initRef, nodeIn)),
           outputs = List.single(nodeOut),
           mint = nodeOut.token,
-          action = NodeAction.Init
+          action = UnorderedNodeAction.Init
         )
 
     test("Verify that a linked list can be properly de-initialized (burn)"):
@@ -134,7 +135,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           budget = ExBudget.fromCpuAndMemory(228692388, 777264),
           inputs = List.single(TxInInfo(initRef, nodeIn)),
           mint = nodeIn.token,
-          action = NodeAction.Deinit
+          action = UnorderedNodeAction.Deinit
         )
 
     test("Verify that de-initialization fails if the list is not empty"):
@@ -145,140 +146,8 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           budget = ExBudget.fromCpuAndMemory(495962460, 1683061),
           inputs = List.single(TxInInfo(initRef, nodeIn)),
           mint = nodeOut.token,
-          action = NodeAction.Deinit,
+          action = UnorderedNodeAction.Deinit,
           fails = true,
-        )
-
-    test("Verify that the first node can be inserted into the linked list"):
-        val parentCell: Cons = head()
-        val parentIn = node(parentCell, lovelace = 4_000_000)
-        val newCell = cons(user1)
-        val newOutput = node(newCell, user1, lovelace = 9_000_000)
-        val updatedCell = parentCell.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = parentCell.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(501785103, 1703570),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(user1), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key
-        )
-
-    test("Verify that a new node can be inserted into the linked list"):
-        val parentCell = cons(user1)
-        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
-        val newCell = cons(user2)
-        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
-        val updatedCell = parentCell.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = parentCell.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(user2), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key
-        )
-
-    test("Verify that a new node insertion fails with an irrelevant covering key"):
-        val parentCell = cons(user1)
-        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
-        val newCell = cons(user3)
-        val newOutput = node(newCell, user3, lovelace = parentIn.value.getLovelace)
-        val newParent = cons(user2)
-        val updatedCell = newParent.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = newParent.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(501785103, 1703570),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(user3), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key,
-          fails = true
-        )
-
-    test("Verify that a new node can be inserted into the linked list for a non-empty covering"):
-        val parentCell = cons(user1)
-        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
-        val newCell = cons(user2, Some(user3))
-        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
-        val updatedCell = parentCell.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = parentCell.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(user2), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key
-        )
-
-    test("Verify that a new node insertion fails for a duplicate key"):
-        // TODO: test in ledger with keys not utxo but not at tx inputs
-        val parentCell = cons(user2)
-        val parentIn = node(parentCell, user2, lovelace = 9_000_000)
-        val newCell = cons(user2)
-        val newOutput = node(newCell, user2, lovelace = parentIn.value.getLovelace)
-        val updatedCell = parentCell.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = parentCell.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(user2), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key,
-          fails = true
-        )
-
-    test("Verify that a new node insertion fails with unordered keys"):
-        val parentCell = cons(user2)
-        val parentIn = node(parentCell, user2, lovelace = 9_000_000)
-        val newCell = cons(user1)
-        val newOutput = node(newCell, user1, lovelace = parentIn.value.getLovelace)
-        val updatedCell = parentCell.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = parentCell.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(429416754, 1458044),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(user1), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key,
-          fails = true
-        )
-
-    test("Verify that a new node insertion fails for an empty key"):
-        val parentCell = head()
-        val parentIn = node(parentCell, lovelace = 4_000_000)
-        val newCell = cons(emptyKey)
-        val newOutput = node(newCell, lovelace = 9_000_000)
-        val updatedCell = parentCell.copy(ref = newCell.key)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        val covering = parentCell.copy(ref = newCell.ref)
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
-          inputs = List.single(TxInInfo(parentRef, parentIn)),
-          outputs = List(parentOut, newOutput),
-          mint = newOutput.token,
-          action = NodeAction.Insert(PubKeyHash(emptyKey), covering),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = newCell.key,
-          fails = true
         )
 
     test("Verify that a node can be removed from the linked list"):
@@ -293,27 +162,9 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
-          action = NodeAction.Remove(PubKeyHash(user2), updatedCell),
+          action = UnorderedNodeAction.Remove(PubKeyHash(user2), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = remCell.key
-        )
-
-    test("Verify that a node removing fails for an empty key"):
-        val parentCell = cons(user1, Some(emptyKey))
-        val parentIn = node(parentCell, user1, lovelace = 9_000_000)
-        val remCell = cons(emptyKey)
-        val removeIn = node(remCell, emptyKey, burn = true, lovelace = parentIn.value.getLovelace)
-        val updatedCell = parentCell.copy(ref = remCell.ref)
-        val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
-        TestCase(
-          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
-          inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
-          outputs = List.single(parentOut),
-          mint = removeIn.token,
-          action = NodeAction.Remove(PubKeyHash(emptyKey), updatedCell),
-          validRange = Interval.entirelyBetween(1000L, 2000L),
-          signedBy = remCell.key,
-          fails = true
         )
 
     test("Verify that the first node can be removed with a non-empty covering"):
@@ -328,7 +179,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
-          action = NodeAction.Remove(PubKeyHash(user1), updatedCell),
+          action = UnorderedNodeAction.Remove(PubKeyHash(user1), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = remCell.key
         )
@@ -346,7 +197,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
-          action = NodeAction.Remove(PubKeyHash(user2), updatedCell),
+          action = UnorderedNodeAction.Remove(PubKeyHash(user2), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = remCell.key
         )
@@ -363,7 +214,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
-          action = NodeAction.Remove(PubKeyHash(user1), updatedCell),
+          action = UnorderedNodeAction.Remove(PubKeyHash(user1), updatedCell),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = remCell.key,
           fails = true
@@ -382,7 +233,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
-          action = NodeAction.Prepend(PubKeyHash(user1), covering),
+          action = UnorderedNodeAction.Prepend(PubKeyHash(user1), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = newCell.key
         )
@@ -400,7 +251,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
-          action = NodeAction.Prepend(PubKeyHash(user2), covering),
+          action = UnorderedNodeAction.Prepend(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = newCell.key,
           fails = true
@@ -419,7 +270,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
-          action = NodeAction.Append(PubKeyHash(user2), covering),
+          action = UnorderedNodeAction.Append(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = newCell.key
         )
@@ -437,7 +288,7 @@ class LinkedListTest extends AnyFunSuite, ScalusTest:
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
-          action = NodeAction.Append(PubKeyHash(user2), covering),
+          action = UnorderedNodeAction.Append(PubKeyHash(user2), covering),
           validRange = Interval.entirelyBetween(1000L, 2000L),
           signedBy = newCell.key,
           fails = true
