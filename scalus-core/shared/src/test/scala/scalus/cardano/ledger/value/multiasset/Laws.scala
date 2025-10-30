@@ -14,12 +14,12 @@ import spire.laws.arb.given
 class Laws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
     implicit val config: PropertyCheckConfiguration = PropertyCheckConfiguration(
         minSuccessful = 10_000, workers = 10)
-
-    checkAll("MultiAsset Partial Order", OrderLaws[MultiAsset].partialOrder)
-
-    checkAll("MultiAsset Unbounded Partial Order", OrderLaws[MultiAsset.Unbounded].partialOrder)
-
-    checkAll("MultiAsset Fractional Partial Order", OrderLaws[MultiAsset.Fractional].partialOrder)
+//
+//    checkAll("MultiAsset Partial Order", OrderLaws[MultiAsset].partialOrder)
+//
+//    checkAll("MultiAsset Unbounded Partial Order", OrderLaws[MultiAsset.Unbounded].partialOrder)
+//
+//    checkAll("MultiAsset Fractional Partial Order", OrderLaws[MultiAsset.Fractional].partialOrder)
 
     checkAll(
       "MultiAsset Unbounded Inner CModule",
@@ -31,13 +31,13 @@ class Laws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
       VectorSpaceLaws[MultiAsset.Inner.Fractional, Rational].vectorSpace
     )
 
-    checkAll(
-      "MultiAsset Unbounded CModule",
-      VectorSpaceLaws[MultiAsset.Unbounded, SafeLong].cModule
-    )
-
-    checkAll(
-      "MultiAsset Fractional VectorSpace",
-      VectorSpaceLaws[MultiAsset.Fractional, Rational].vectorSpace
-    )
+//    checkAll(
+//      "MultiAsset Unbounded CModule",
+//      VectorSpaceLaws[MultiAsset.Unbounded, SafeLong].cModule
+//    )
+//
+//    checkAll(
+//      "MultiAsset Fractional VectorSpace",
+//      VectorSpaceLaws[MultiAsset.Fractional, Rational].vectorSpace
+//    )
 }

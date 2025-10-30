@@ -2,9 +2,9 @@ package scalus.cardano.ledger.value.multiasset
 
 import algebra.CommutativeGroup
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.ledger.AssetName
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
-import scalus.cardano.ledger.AssetName
 import spire.laws.GroupLaws
 import spire.math.SafeLong
 import spire.syntax.all.*
@@ -12,12 +12,13 @@ import spire.syntax.all.*
 import scala.collection.immutable.TreeMap
 
 class Unit extends AnyFunSuite {
-    val mai: MultiAsset.Inner.Unbounded = MultiAsset.Inner.Unbounded(
-      TreeMap(
-        AssetName.fromHex("") -> Coin
-            .Unbounded(SafeLong(BigInt(1)))
+    val mai: MultiAsset.Inner.Unbounded = MultiAsset.Inner.Unbounded.Unbounded(
+        CanonicalSortedMap.fromSortedMap(TreeMap(
+            AssetName.fromHex("") -> Coin
+                .Unbounded(SafeLong(BigInt(1)))
+          )
+        )
       )
-    )
 
     test("MultiAssetInner Left Distributivity with 0"){
         assert(0 *: mai + 0 *: mai == 0 *: (mai + mai))

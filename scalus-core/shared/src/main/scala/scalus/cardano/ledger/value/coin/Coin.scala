@@ -76,8 +76,12 @@ object Coin {
 
     given algebra: Algebra.type = Algebra
 
-    object Algebra extends Order[Coin] {
+    object Algebra extends Order[Coin] with Monoid[Coin] {
         override def compare(self: Coin, other: Coin): Int = LongAlgebra.compare(self, other)
+
+        override def empty: Coin = zero
+
+        override def combine(x : Coin, y : Coin): Coin = x + y
     }
 
     extension (self: IterableOnce[Coin]) {
@@ -178,7 +182,7 @@ private object CoinSubtypes {
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends Order[Unbounded], CModule[Unbounded, SafeLong] {
+        object Algebra extends Order[Unbounded], CModule[Unbounded, SafeLong], Monoid[Unbounded] {
             override def compare(self: Unbounded, other: Unbounded): Int = self.compare(other)
 
             override def scalar: CRing[SafeLong] = CRing[SafeLong]
@@ -192,6 +196,10 @@ private object CoinSubtypes {
             override def minus(self: Unbounded, other: Unbounded): Unbounded = self - other
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded = s * self
+            
+            override def empty: Unbounded = zero
+
+            override def combine(x : Unbounded, y : Unbounded) : Unbounded = x + y
         }
     }
 
@@ -258,7 +266,7 @@ private object CoinSubtypes {
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends Order[Fractional], VectorSpace[Fractional, Rational] {
+        object Algebra extends Order[Fractional], VectorSpace[Fractional, Rational], Monoid[Fractional] {
             override def compare(self: Fractional, other: Fractional): Int = self.compare(other)
 
             override def scalar: Field[Rational] = Field[Rational]
@@ -272,6 +280,10 @@ private object CoinSubtypes {
             override def minus(x: Fractional, y: Fractional): Fractional = x - y
 
             override def timesl(s: Rational, v: Fractional): Fractional = Fractional(s * v)
+            
+            override def empty: Fractional = zero
+
+            override def combine (x : Fractional, y:Fractional) : Fractional = plus(x,y)
         }
     }
 }

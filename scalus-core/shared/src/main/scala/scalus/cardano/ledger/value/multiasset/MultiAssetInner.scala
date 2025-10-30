@@ -2,20 +2,15 @@ package scalus.cardano.ledger.value.multiasset
 
 import scalus.cardano.ledger.AssetName
 import scalus.cardano.ledger.value.coin.Coin
-import scalus.cardano.ledger.value.multiasset.SortedMapUtils.Canonical
-import scalus.cardano.ledger.value.multiasset.SortedMapUtils.CombineWith.*
-import scalus.cardano.ledger.value.multiasset.SortedMapUtils.SortedMapPartialOrder
+import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.{CanonicalSortedMapPartialOrder, *}
+import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.CombineWith.*
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
-import spire.implicits.MapEq as _
-import spire.implicits.{MapMonoid as _, MapCSemiring as _}
-import spire.implicits.{MapCRng as _, MapGroup as _}
-import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
-
-import scala.collection.immutable.SortedMap
 
 private object MultiAssetInner {
+
+    import AssetName.given
     // ===================================
     // MultiAsset.Inner
     // ===================================
@@ -23,26 +18,30 @@ private object MultiAssetInner {
     type Inner = Inner.Inner
 
     object Inner {
-        opaque type Inner = SortedMap[AssetName, Coin]
+        case class Inner(underlying:  CanonicalSortedMap[AssetName, Coin, Coin.Algebra.type ])
 
-        def apply(x: SortedMap[AssetName, Coin]): Inner = Canonical.sortedMap(x, Coin.zero)
-
-        def zero: Inner = SortedMap.empty
+        def zero: Inner = Inner(CanonicalSortedMap.empty(using Ordering[AssetName]))
 
         extension (self: Inner)
-            def underlying: SortedMap[AssetName, Coin] = self
+            def underlying: CanonicalSortedMap[AssetName, Coin, Coin.Algebra.type ] = self.underlying
 
-            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-                Unbounded(self.view.mapValues(_.scaleIntegral(c)).to(SortedMap))
+            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded.Unbounded = {
+              Unbounded.Unbounded(self.underlying.mapValues(_.scaleIntegral(c)))
+            }
 
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
-                Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional.Fractional = {
+                Fractional.Fractional(self.underlying.mapValues(_.scaleFractional(c)))
             }
 
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Inner] {
-            private val mapPartialOrder = SortedMapPartialOrder[AssetName, Coin, Int](
+            implicit val mi : Monoid[Int] = Monoid.instance(0, (_ + _))
+            private val mapPartialOrder = CanonicalSortedMapPartialOrder[AssetName,
+              Coin,
+              Int,
+              Coin.Algebra.type,
+              mi.type ](
               // If both keys exist, compare the values.
               // If only the left key exists, compare the left value against zero.
               // If only the right key exists, compare the right value against zero.
@@ -52,7 +51,7 @@ private object MultiAssetInner {
             )
 
             override def partialCompare(self: Inner, other: Inner): Double =
-                mapPartialOrder.partialCompare(self, other)
+                mapPartialOrder.partialCompare(self.underlying, other.underlying)
 
             override def eqv(x: Inner, y: Inner): Boolean = x == y
         }
@@ -66,11 +65,11 @@ private object MultiAssetInner {
             def withAssetName(
                 e: Coin.ArithmeticError,
                 assetName: AssetName
-            ): Inner.ArithmeticError =
+            ): ArithmeticError =
                 e match {
                     case Coin.ArithmeticError.Underflow =>
-                        Inner.ArithmeticError.Underflow(assetName)
-                    case Coin.ArithmeticError.Overflow => Inner.ArithmeticError.Overflow(assetName)
+                        ArithmeticError.Underflow(assetName)
+                    case Coin.ArithmeticError.Overflow => ArithmeticError.Overflow(assetName)
                 }
 
         }
@@ -83,16 +82,13 @@ private object MultiAssetInner {
     type Unbounded = Unbounded.Unbounded
 
     object Unbounded {
-        opaque type Unbounded = SortedMap[AssetName, Coin.Unbounded]
+        case class Unbounded(underlying :  CanonicalSortedMap[AssetName, Coin.Unbounded, Coin.Unbounded.Algebra.type])
 
-        def apply(x: SortedMap[AssetName, Coin.Unbounded]): Unbounded = Canonical.sortedMap(x)
-
-        def zero: Unbounded = SortedMap.empty
+        def zero: Unbounded = Unbounded(CanonicalSortedMap.empty)
 
         import Coin.Unbounded.algebra as coinAlgebra
 
         extension (self: Unbounded)
-            def underlying: SortedMap[AssetName, Coin.Unbounded] = self
 
             def toInner: Either[Inner.ArithmeticError, Inner] =
                 try {
@@ -101,9 +97,8 @@ private object MultiAssetInner {
                     case e: Inner.ArithmeticError => Left(e)
                 }
 
-            def unsafeToInner: Inner = Inner(
-              self.view
-                  .map((assetName: AssetName, coinUnbounded: Coin.Unbounded) =>
+            def unsafeToInner: Inner = Inner.Inner(
+              self.underlying.map((assetName: AssetName, coinUnbounded: Coin.Unbounded) =>
                       try {
                           (assetName, coinUnbounded.unsafeToCoin)
                       } catch {
@@ -111,24 +106,24 @@ private object MultiAssetInner {
                               throw Inner.ArithmeticError.withAssetName(e, assetName)
                       }
                   )
-                  .to(SortedMap)
             )
 
-            def toFractional: Fractional =
-                Fractional(self.view.mapValues(_.toCoinFractional).to(SortedMap))
+            def toFractional: Fractional.Fractional =
+                Fractional.Fractional(self.underlying.mapValues(_.toCoinFractional))
 
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 self :* c.toSafeLong
 
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
-                Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional.Fractional = {
+                Fractional.Fractional(self.underlying.mapValues(_.scaleFractional(c)))
             }
 
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
             private val mapPartialOrder =
-                SortedMapPartialOrder[AssetName, Coin.Unbounded, Int](
+                implicit val mi : Monoid[Int] = Monoid.instance(0, (_ + _))
+                CanonicalSortedMapPartialOrder[AssetName, Coin.Unbounded, Int, Coin.Unbounded.Algebra.type, mi.type ](
                   // If both keys exist, compare the values.
                   // If only the left key exists, compare the left value against zero.
                   // If only the right key exists, compare the right value against zero.
@@ -138,23 +133,25 @@ private object MultiAssetInner {
                 )
 
             override def partialCompare(self: Unbounded, other: Unbounded): Double =
-                mapPartialOrder.partialCompare(self, other)
+                mapPartialOrder.partialCompare(self.underlying, other.underlying)
 
             override def scalar: CRing[SafeLong] = CRing[SafeLong]
 
-            override def zero: Unbounded = Unbounded.zero
+            override def zero: Unbounded = Unbounded(CanonicalSortedMap.empty)
 
             override def negate(self: Unbounded): Unbounded =
-                self.view.mapValues(coinAlgebra.negate).to(SortedMap)
+                Unbounded(self.underlying.mapValues(coinAlgebra.negate))
 
-            override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(coinAlgebra.plus)(self, other)
+            override def plus(self: Unbounded, other: Unbounded): Unbounded = {
+              Unbounded(combineWith(coinAlgebra.plus)(self.underlying, other.underlying))
+            }
 
             override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
+                Unbounded(combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)
+                  (self.underlying, other.underlying))
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                self.view.mapValues(_ :* s).filterNot(_._2.isZero).to(SortedMap)
+                Unbounded(self.underlying.mapValues(_ :* s))
 
             override def eqv(x: Unbounded, y: Unbounded): Boolean = x == y
         }
@@ -167,17 +164,14 @@ private object MultiAssetInner {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        opaque type Fractional = SortedMap[AssetName, Coin.Fractional]
+        case class Fractional(underlying : CanonicalSortedMap[AssetName, Coin.Fractional, Coin.Fractional.Algebra.type ])
 
-        def apply(x: SortedMap[AssetName, Coin.Fractional]): Fractional = Canonical.sortedMap(x)
-
-        def zero: Fractional = SortedMap.empty
+        def zero: Fractional = Fractional(CanonicalSortedMap.empty)
 
         extension (self: Fractional)
-            def underlying: SortedMap[AssetName, Coin.Fractional] = self
 
             def toUnbounded: Unbounded =
-                Unbounded(self.view.mapValues(_.toUnbounded).to(SortedMap))
+                Unbounded.Unbounded(self.underlying.mapValues(_.toUnbounded))
 
             def toInner: Either[Inner.ArithmeticError, Inner] =
                 try {
@@ -186,8 +180,8 @@ private object MultiAssetInner {
                     case e: Inner.ArithmeticError => Left(e)
                 }
 
-            def unsafeToInner: Inner = Inner(
-              self.view
+            def unsafeToInner: Inner = Inner.Inner(
+              self.underlying
                   .map((assetName: AssetName, coinFractional: Coin.Fractional) =>
                       try {
                           (assetName, coinFractional.unsafeToCoin)
@@ -196,7 +190,6 @@ private object MultiAssetInner {
                               throw Inner.ArithmeticError.withAssetName(e, assetName)
                       }
                   )
-                  .to(SortedMap)
             )
 
             def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
@@ -207,31 +200,33 @@ private object MultiAssetInner {
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
+            implicit val mi: Monoid[Int] = Monoid.instance(0, (_ + _))
             private val mapPartialOrder =
-                SortedMapPartialOrder[AssetName, Coin.Fractional, Int](
+                CanonicalSortedMapPartialOrder[AssetName, Coin.Fractional, Int, Coin.Fractional.Algebra.type, mi.type](
                   compareBoth = coinAlgebra.compare,
                   compareLeft = _.signum,
                   compareRight = -_.signum
                 )
 
             override def partialCompare(self: Fractional, other: Fractional): Double =
-                mapPartialOrder.partialCompare(self, other)
+                mapPartialOrder.partialCompare(self.underlying, other.underlying)
 
             override def scalar: Field[Rational] = Field[Rational]
 
-            override def zero: Fractional = Fractional.zero
+            override def zero: Fractional = Fractional(CanonicalSortedMap.empty)
 
             override def negate(self: Fractional): Fractional =
-                self.view.mapValues(coinAlgebra.negate).to(SortedMap)
+                Fractional(self.underlying.mapValues(coinAlgebra.negate))
 
             override def plus(self: Fractional, other: Fractional): Fractional =
-                combineWith(coinAlgebra.plus)(self, other)
+                Fractional(combineWith(coinAlgebra.plus)(self.underlying, other.underlying))
 
             override def minus(self: Fractional, other: Fractional): Fractional =
-                combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)(self, other)
+                Fractional(combineWith(coinAlgebra.minus, identity, coinAlgebra.negate)
+                  (self.underlying, other.underlying))
 
             override def timesl(s: Rational, self: Fractional): Fractional =
-                self.view.mapValues(_ :* s).filterNot(_._2.isZero).to(SortedMap)
+                Fractional(self.underlying.mapValues(_ :* s))
 
             override def eqv(x: Fractional, y: Fractional): Boolean = x == y
         }

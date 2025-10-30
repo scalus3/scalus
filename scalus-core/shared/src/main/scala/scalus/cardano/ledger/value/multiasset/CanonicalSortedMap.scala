@@ -1,25 +1,69 @@
 package scalus.cardano.ledger.value.multiasset
 
+import org.scalatest.funsuite.AnyFunSuite
 import spire.algebra.*
-import spire.implicits.*
 
 import scala.collection.immutable.SortedMap
-import spire.implicits.MapEq as _
-import spire.implicits.{MapMonoid as _, MapCSemiring as _}
-import spire.implicits.{MapCRng as _, MapGroup as _}
-import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
+
+type CanonicalSortedMap[K,V, M <: Monoid[V] & Singleton] =
+    CanonicalSortedMap.CanonicalSortedMap[K,V, M]
+
+/**
+ * A canonical sorted map is:
+ * - a [[SortedMap]] with an associated "zero" element, provided by a [[Monoid]],
+ * - such that zero elements are removed from the map.
+ */
+object CanonicalSortedMap {
+
+    opaque type CanonicalSortedMap[K,V, M <: Monoid[V] & Singleton] = SortedMap[K,V]
+
+    /**
+     * Canonicalize a [[SortedMap]], using the underlying [[Monoid]] on [[V]] to determine the 0 element.
+     */
+    def fromSortedMap[K, V](
+        self: SortedMap[K, V]
+    )(using vMonoid: Monoid[V]): CanonicalSortedMap[K, V, vMonoid.type ] =
+        self.filterNot(_._2 == vMonoid.empty)
 
 
-private object SortedMapUtils {
-    object Canonical {
-        def sortedMap[K, V](
-            self: SortedMap[K, V]
-        )(using vMonoid: AdditiveMonoid[V]): SortedMap[K, V] =
-            Canonical.sortedMap(self, vMonoid.zero)
+    def empty[K,V, M <: Monoid[V] & Singleton](using Ordering[K]) : CanonicalSortedMap[K,V, M] = SortedMap.empty
 
-        def sortedMap[K, V](self: SortedMap[K, V], zero: V): SortedMap[K, V] =
-            self.filterNot(_._2 == zero)
-    }
+    extension [K,V, M <: Monoid[V] & Singleton](self : CanonicalSortedMap[K,V, M])
+        def toSortedMap: SortedMap[K,V] = identity(self)
+
+        def map[K1, V1](f : (K, V) => (K1, V1))
+                       (using ordering : Ordering[K1], monoid: Monoid[V1]):
+            CanonicalSortedMap[K1, V1, monoid.type ]
+            = fromSortedMap(self.map(kv => f(kv._1, kv._2)))
+
+        def mapValues[V1](f: V => V1)
+                       (using ordering: Ordering[K], monoid: Monoid[V1]): CanonicalSortedMap[K, V1,
+                monoid.type ] =
+            fromSortedMap(self.view.mapValues(f).to(SortedMap))
+
+    /**
+     * Extension methods from a non-canoncialized sorted map to a canonicalized one
+     */
+    extension [K, V](self: SortedMap[K, V])
+        /**
+         * Apply a mapping function (fmap) to a non-canoncial SortedMap and canonicalize the results, using
+         * the [[AdditiveMonoid]] from [[V1]] to determine the zero element
+         */
+        def mapCanonicalize[K1, V1](f: (K, V) => (K1, V1))
+                                   (using v1Monoid: Monoid[V1],
+                                    k1Ord: Ordering[K1]): CanonicalSortedMap[K1, V1, v1Monoid.type ] =
+            fromSortedMap(self.map(kv => f(kv._1, kv._2)))
+
+        /**
+         * Apply a mapping function (fmap) to a non-canonical SortedMap's values and canonicalize the results, using
+         * the [[AdditiveMonoid]] from [[V1]] to determine the zero element
+         */
+        def mapValuesCanonicalize[V1](f: V => V1)
+                                     (using v1Monoid: Monoid[V1],
+                                      ordering: Ordering[K]
+                                     ): CanonicalSortedMap[K, V1, v1Monoid.type ] =
+            fromSortedMap(self.view.mapValues(f).to(SortedMap))
+
 
     object CombineWith {
 //        def combineWithSimple[K, V](
@@ -43,14 +87,15 @@ private object SortedMapUtils {
             opOther: VCommon => VResult = identity[VResult],
             preMapSelf: VSelf => VCommon = identity[VCommon],
             preMapOther: VOther => VCommon = identity[VCommon]
-        )(
-            self: SortedMap[K, VSelf],
-            other: SortedMap[K, VOther]
         )(using
-            kOrdering: Ordering[K],
-            vResultMonoid: AdditiveMonoid[VResult],
-            vResultEq: Eq[VResult]
-        ): SortedMap[K, VResult] = {
+          kOrdering: Ordering[K],
+          vSelfMonoid : Monoid[VSelf],
+          vOtherMonoid: Monoid[VOther],
+          vResultMonoid: Monoid[VResult],
+                                                           )(
+            self: CanonicalSortedMap[K, VSelf, vSelfMonoid.type ],
+            other: CanonicalSortedMap[K, VOther, vOtherMonoid.type ]
+        ): CanonicalSortedMap[K, VResult, vResultMonoid.type ] = {
             import scala.annotation.tailrec
             import scala.collection.mutable
             import scala.math.Ordered.orderingToOrdered
@@ -72,12 +117,14 @@ private object SortedMapUtils {
             inline def appendNonZero(
                 builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]],
                 z: (K, VResult)
-            ): Unit = if z._2.isZero then () else builder += z
+            ): Unit = {
+                if z._2 == vResultMonoid.empty then () else builder += z
+            }
 
             inline def concatNonZero(
                 builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]],
                 m: IterableOnce[(K, VResult)]
-            ): Unit = builder ++= m.iterator.filterNot(_._2.isZero)
+            ): Unit = builder ++= m.iterator.filterNot(_._2 == vResultMonoid.empty)
 
             // Warning: this function mutates its arguments!
             @tailrec
@@ -155,24 +202,25 @@ private object SortedMapUtils {
         }
     }
 
-    final class SortedMapPartialOrder[K, V, @specialized(Int, Double) I](
+    final class CanonicalSortedMapPartialOrder[K, V, @specialized(Int, Double) I, M <: Monoid[V] & Singleton, IM <: Monoid[I] & Singleton](
         compareBoth: (V, V) => I,
         compareLeft: V => I,
         compareRight: V => I
     )(using
         iEq: Eq[I],
-        iMonoid: AdditiveMonoid[I],
         kOrdering: Ordering[K],
         toDouble: ToDouble[I],
-    ) extends PartialOrder[SortedMap[K, V]] {
-        override def partialCompare(self: SortedMap[K, V], other: SortedMap[K, V]): Double = {
+        iMonoid : IM,
+        vMonoid: M
+    ) extends PartialOrder[CanonicalSortedMap[K, V, M]] {
+        override def partialCompare(self: CanonicalSortedMap[K, V, M], other: CanonicalSortedMap[K, V, M]): Double = {
             val comparisons: Iterable[I] =
-                CombineWith.combineWith(compareBoth, compareLeft, compareRight)(self, other).values
+                CombineWith.combineWith[K, V, I, V, V](compareBoth, compareLeft, compareRight)(self, other).values
             // If both maps are empty, then they are equal.
             // If all element-wise comparisons are the same, then the maps are comparable.
             // Otherwise, the maps are incomparable.
             comparisons.headOption.fold(0d)(first =>
-                val monotonic = comparisons.forall(_ === first)
+                val monotonic = comparisons.forall(_ == first)
                 if monotonic then toDouble.toDouble(first) else Double.NaN
             )
         }
