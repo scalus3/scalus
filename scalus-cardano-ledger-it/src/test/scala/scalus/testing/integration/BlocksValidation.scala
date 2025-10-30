@@ -596,7 +596,7 @@ class BlocksValidation extends AnyFunSuite {
                                 (if w.plutusV1Scripts.toMap.nonEmpty then "v1" else "")
                                     ++ (if w.plutusV2Scripts.toMap.nonEmpty then "v2" else "")
                                     ++ (if w.plutusV3Scripts.toMap.nonEmpty then "v3" else "")
-                                    ++ (if w.plutusData.value.toIndexedSeq.nonEmpty then "D"
+                                    ++ (if w.plutusData.value.toMap.nonEmpty then "D"
                                         else "")
                                     ++ (if w.redeemers.nonEmpty then "R" else "")
 
@@ -635,7 +635,7 @@ class BlocksValidation extends AnyFunSuite {
             block.transactionWitnessSets.exists { _.plutusV3Scripts.toMap.nonEmpty } &&
             block.transactionWitnessSets.exists { _.nativeScripts.toMap.nonEmpty } &&
             block.transactionWitnessSets.exists { _.vkeyWitnesses.toSortedSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusData.value.toIndexedSeq.nonEmpty }
+            block.transactionWitnessSets.exists { _.plutusData.value.toMap.nonEmpty }
         }
         println(s"Interesting blocks ${interestingBlocks.size} of ${blocks.size}")
         interestingBlocks.foreach { p =>

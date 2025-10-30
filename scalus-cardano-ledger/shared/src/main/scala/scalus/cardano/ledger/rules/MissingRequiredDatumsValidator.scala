@@ -23,9 +23,7 @@ object MissingRequiredDatumsValidator extends STS.Validator {
               transaction,
               scriptsProvided
             )
-            txHashes = transaction.witnessSet.plutusData.value.toIndexedSeq
-                .map(datum => datum.value.dataHash)
-                .toSet
+            txHashes = transaction.witnessSet.plutusData.value.toMap.keys.toSet[ByteString]
 
             unmatchedDatumHashes = inputHashes -- txHashes
             allowedSupplementalDataHashes = getSupplementalDataHashes(utxo, transaction)

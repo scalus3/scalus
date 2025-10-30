@@ -58,7 +58,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           witnessSet = TransactionWitnessSet(
             plutusV1Scripts = TaggedSortedMap(plutusScript),
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
@@ -95,7 +95,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           witnessSet = TransactionWitnessSet(
             plutusV2Scripts = TaggedSortedMap(plutusScript),
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
@@ -197,7 +197,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           ),
           witnessSet = TransactionWitnessSet(
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
@@ -230,7 +230,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           ),
           witnessSet = TransactionWitnessSet(
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )

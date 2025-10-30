@@ -21,7 +21,7 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = None
               ),
               auxiliaryData = None,

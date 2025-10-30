@@ -970,8 +970,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v2.ScriptContext = {
         val purpose = getScriptPurposeV2(tx, redeemer)
-        val datums = tx.witnessSet.plutusData.value.toIndexedSeq
-            .map(r => r.dataHash -> r.value)
+        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
         val txInfo = getTxInfoV2(tx, datums, utxos, slotConfig, protocolVersion)
         v2.ScriptContext(txInfo, purpose)
     }
@@ -987,8 +986,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v3.ScriptContext = {
         val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
-        val datums = tx.witnessSet.plutusData.value.toIndexedSeq
-            .map(r => r.dataHash -> r.value)
+        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
         val txInfo = getTxInfoV3(tx, datums, utxos, slotConfig, protocolVersion)
         v3.ScriptContext(txInfo, redeemer.data, scriptInfo)
     }

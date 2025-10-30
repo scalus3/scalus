@@ -105,11 +105,10 @@ object TestUtil extends ScalusTest {
         tx: Transaction,
         output: TransactionOutput
     ): Option[Data] = {
-        def getDatum(dataHash: DataHash) = tx.witnessSet.plutusData.value.toIndexedSeq
-            .find { datum =>
-                datum.dataHash == dataHash
-            }
-            .map(_.value)
+        def getDatum(dataHash: DataHash) =
+            tx.witnessSet.plutusData.value.toMap
+                .get(dataHash)
+                .map(_.value)
 
         output match
             case TransactionOutput.Shelley(_, _, Some(datumHash)) =>

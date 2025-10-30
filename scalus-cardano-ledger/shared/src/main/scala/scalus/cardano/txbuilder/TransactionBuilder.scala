@@ -810,10 +810,10 @@ object TransactionBuilder:
                                       .refocus(_.plutusData)
                                       .modify(plutusData =>
                                           KeepRaw.apply(
-                                            TaggedSet.from(
+                                            TaggedSortedMap.from(
                                               appendDistinct(
                                                 KeepRaw.apply(providedDatum),
-                                                plutusData.value.toIndexedSeq
+                                                plutusData.value.toMap.values.toSeq
                                               )
                                             )
                                           )

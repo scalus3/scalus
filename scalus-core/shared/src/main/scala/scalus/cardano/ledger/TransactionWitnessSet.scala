@@ -23,8 +23,7 @@ case class TransactionWitnessSet(
       *   We need raw CBOR bytes of all `plutusData` for [[ScriptDataHash]] calculation. Also, we
       *   need raw bytes for each datum for [[DataHash]] calculation.
       */
-    // TODO KeepRaw[Map[DataHash, KeepRaw[Data]]]
-    plutusData: KeepRaw[TaggedSet[KeepRaw[Data]]] = KeepRaw(TaggedSet.empty),
+    plutusData: KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]] = KeepRaw(TaggedSortedMap.empty),
 
     /** Redeemers */
     // TODO Map ...
@@ -42,7 +41,7 @@ case class TransactionWitnessSet(
             nativeScripts.toMap.isEmpty &&
             bootstrapWitnesses.toSortedSet.isEmpty &&
             plutusV1Scripts.toMap.isEmpty &&
-            plutusData.value.toIndexedSeq.isEmpty &&
+            plutusData.value.toMap.isEmpty &&
             redeemers.isEmpty &&
             plutusV2Scripts.toMap.isEmpty &&
             plutusV3Scripts.toMap.isEmpty
@@ -77,7 +76,7 @@ object TransactionWitnessSet:
           plutusV1Scripts = plutusV1Scripts,
           plutusV2Scripts = plutusV2Scripts,
           plutusV3Scripts = plutusV3Scripts,
-          plutusData = KeepRaw(TaggedSet(plutusData.map(KeepRaw(_))*)),
+          plutusData = KeepRaw(TaggedSortedMap(plutusData.map(KeepRaw(_))*)),
           redeemers = Some(KeepRaw(redeemers))
         )
     }
@@ -92,7 +91,7 @@ object TransactionWitnessSet:
             if value.nativeScripts.toMap.nonEmpty then mapSize += 1
             if value.bootstrapWitnesses.toSortedSet.nonEmpty then mapSize += 1
             if value.plutusV1Scripts.toMap.nonEmpty then mapSize += 1
-            if value.plutusData.value.toIndexedSeq.nonEmpty then mapSize += 1
+            if value.plutusData.value.toMap.nonEmpty then mapSize += 1
             if value.redeemers.isDefined then mapSize += 1
             if value.plutusV2Scripts.toMap.nonEmpty then mapSize += 1
             if value.plutusV3Scripts.toMap.nonEmpty then mapSize += 1
@@ -120,7 +119,7 @@ object TransactionWitnessSet:
                 w.write(value.plutusV1Scripts)
 
             // Plutus data (key 4)
-            if value.plutusData.value.toIndexedSeq.nonEmpty then
+            if value.plutusData.value.toMap.nonEmpty then
                 w.writeInt(4)
                 // TODO: handle KeepRaw properly when this is implemented: https://github.com/sirthias/borer/issues/764
                 w.write(value.plutusData)
@@ -153,7 +152,7 @@ object TransactionWitnessSet:
             var nativeScripts = TaggedSortedMap.empty[ScriptHash, Script.Native]
             var bootstrapWitnesses = TaggedSortedSet.empty[BootstrapWitness]
             var plutusV1Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV1]
-            var plutusData = KeepRaw(TaggedSet.empty[KeepRaw[Data]])
+            var plutusData = KeepRaw(TaggedSortedMap.empty[DataHash, KeepRaw[Data]])
             var redeemers: Option[KeepRaw[Redeemers]] = None
             var plutusV2Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV2]
             var plutusV3Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV3]
@@ -175,7 +174,7 @@ object TransactionWitnessSet:
                         plutusV1Scripts = r.read()
 
                     case 4 => // Plutus data
-                        plutusData = r.read[KeepRaw[TaggedSet[KeepRaw[Data]]]]()
+                        plutusData = r.read[KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]]]()
 
                     case 5 => // Redeemers
                         redeemers = Some(r.read[KeepRaw[Redeemers]]())
@@ -204,3 +203,4 @@ object TransactionWitnessSet:
     given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV1] = _.scriptHash
     given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV2] = _.scriptHash
     given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV3] = _.scriptHash
+    given TaggedSortedMap.KeyOf[DataHash, KeepRaw[Data]] = _.dataHash

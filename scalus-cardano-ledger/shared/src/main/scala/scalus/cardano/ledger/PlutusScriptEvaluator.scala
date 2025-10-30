@@ -143,9 +143,7 @@ object PlutusScriptEvaluator {
             // According to Babbage spec, we lookup datums only in witness set
             // and do not consider reference input inline datums
             // (getDatum, Figure 3: Functions related to scripts)
-            val datumsMapping = tx.witnessSet.plutusData.value.toIndexedSeq.view.map { datum =>
-                datum.dataHash -> datum.value
-            }.toSeq
+            val datumsMapping = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
 
             val lookupTable = LookupTable(allResolvedScripts(tx, utxos), datumsMapping.toMap)
 

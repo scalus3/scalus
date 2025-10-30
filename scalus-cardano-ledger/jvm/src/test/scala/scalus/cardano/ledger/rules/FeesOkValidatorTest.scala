@@ -56,7 +56,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -161,7 +161,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -254,7 +254,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -362,7 +362,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -462,7 +462,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -562,7 +562,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -649,7 +649,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV1Scripts = TaggedSortedMap.empty,
                 plutusV2Scripts = TaggedSortedMap.empty,
                 plutusV3Scripts = TaggedSortedMap.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
