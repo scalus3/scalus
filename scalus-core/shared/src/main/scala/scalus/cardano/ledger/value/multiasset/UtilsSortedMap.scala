@@ -6,6 +6,16 @@ import spire.implicits.*
 import scala.collection.immutable.SortedMap
 
 private object UtilsSortedMap {
+    object Canonical {
+        def sortedMap[K, V](
+            self: SortedMap[K, V]
+        )(using vMonoid: AdditiveMonoid[V], vEq: Eq[V]): SortedMap[K, V] =
+            Canonical.sortedMap(self, vMonoid.zero)
+
+        def sortedMap[K, V](self: SortedMap[K, V], zero: V)(using vEq: Eq[V]): SortedMap[K, V] =
+            self.filterNot(_._2 === zero)
+    }
+
     object CombineWith {
 //        def combineWithSimple[K, V](
 //            opBoth: (V, V) => V
@@ -31,7 +41,11 @@ private object UtilsSortedMap {
         )(
             self: SortedMap[K, VSelf],
             other: SortedMap[K, VOther]
-        )(using Ordering[K]): SortedMap[K, VResult] = {
+        )(using
+            kOrdering: Ordering[K],
+            vResultMonoid: AdditiveMonoid[VResult],
+            vResultEq: Eq[VResult]
+        ): SortedMap[K, VResult] = {
             import scala.annotation.tailrec
             import scala.collection.mutable
             import scala.math.Ordered.orderingToOrdered
@@ -50,6 +64,16 @@ private object UtilsSortedMap {
             inline def processOther(y: (K, VOther)): (K, VResult) =
                 (y._1, opOther(preMapOther(y._2)))
 
+            inline def appendNonZero(
+                builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]],
+                z: (K, VResult)
+            ): Unit = if z._2.isZero then () else builder += z
+
+            inline def concatNonZero(
+                builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]],
+                m: IterableOnce[(K, VResult)]
+            ): Unit = builder ++= m.iterator.filterNot(_._2.isZero)
+
             // Warning: this function mutates its arguments!
             @tailrec
             def loop(
@@ -61,20 +85,20 @@ private object UtilsSortedMap {
             ): SortedMap[K, VResult] = {
                 if x._1 < y._1 then {
                     // Process `x` now and `y` later
-                    builder += processSelf(x)
+                    appendNonZero(builder, processSelf(x))
                     if xs.hasNext then {
                         // Continue looping with the next `x` and same `y`
                         val xNext = xs.next()
                         loop(xNext, xs, y, ys, builder)
                     } else {
                         // Process `y` and the remaining `ys` and return
-                        builder += processOther(y)
-                        builder ++= ys.map(processOther)
+                        appendNonZero(builder, processOther(y))
+                        concatNonZero(builder, ys.map(processOther))
                         builder.result()
                     }
                 } else if x._1 == y._1 then {
                     // Process both `x` and `y` now
-                    builder += processBoth(x, y)
+                    appendNonZero(builder, processBoth(x, y))
                     if xs.hasNext then
                         if ys.hasNext then {
                             // Continue looping with the next `x` and next `y`
@@ -83,25 +107,25 @@ private object UtilsSortedMap {
                             loop(xNext, xs, yNext, ys, builder)
                         } else {
                             // Process the remaining `xs` and return
-                            builder ++= xs.map(processSelf)
+                            concatNonZero(builder, xs.map(processSelf))
                             builder.result()
                         }
                     else {
                         // Process the remaining `ys` and return
-                        builder ++= ys.map(processOther)
+                        concatNonZero(builder, ys.map(processOther))
                         builder.result()
                     }
                 } else {
                     // Process `y` now and `x` later
-                    builder += processOther(y)
+                    appendNonZero(builder, processOther(y))
                     if ys.hasNext then {
                         // Continue looping with the same `x` and next `y`
                         val yNext = ys.next()
                         loop(x, xs, yNext, ys, builder)
                     } else {
                         // Process `x` and the remaining `xs` and return
-                        builder += processSelf(x)
-                        builder ++= xs.map(processSelf)
+                        appendNonZero(builder, processSelf(x))
+                        concatNonZero(builder, xs.map(processSelf))
                         builder.result()
                     }
                 }
@@ -115,12 +139,12 @@ private object UtilsSortedMap {
                     loop(selfFirst, selfIterator, otherFirst, otherIterator, resultBuilder)
                 } else {
                     // Process the entries in `self` and return
-                    resultBuilder ++= selfIterator.map(processSelf)
+                    concatNonZero(resultBuilder, selfIterator.map(processSelf))
                     resultBuilder.result()
                 }
             } else {
                 // Process the entries in `other` and return
-                resultBuilder ++= otherIterator.map(processOther)
+                concatNonZero(resultBuilder, otherIterator.map(processOther))
                 resultBuilder.result()
             }
         }
@@ -131,9 +155,10 @@ private object UtilsSortedMap {
         compareLeft: V => I,
         compareRight: V => I
     )(using
-        eqI: Eq[I],
-        keyOrdering: Ordering[K],
-        toDouble: ToDouble[I]
+        iEq: Eq[I],
+        iMonoid: AdditiveMonoid[I],
+        kOrdering: Ordering[K],
+        toDouble: ToDouble[I],
     ) extends PartialOrder[SortedMap[K, V]] {
         override def partialCompare(self: SortedMap[K, V], other: SortedMap[K, V]): Double = {
             val comparisons: Iterable[I] =

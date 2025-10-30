@@ -2,6 +2,7 @@ package scalus.cardano.ledger.value.multiasset
 
 import scalus.cardano.ledger.AssetName
 import scalus.cardano.ledger.value.coin.Coin
+import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.Canonical
 import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.CombineWith.*
 import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.SortedMapPartialOrder
 import spire.algebra.*
@@ -20,7 +21,7 @@ private object MultiAssetInner {
     object Inner {
         opaque type Inner = SortedMap[AssetName, Coin]
 
-        def apply(x: SortedMap[AssetName, Coin]): Inner = x
+        def apply(x: SortedMap[AssetName, Coin]): Inner = Canonical.sortedMap(x, Coin.zero)
 
         def zero: Inner = SortedMap.empty
 
@@ -78,7 +79,7 @@ private object MultiAssetInner {
     object Unbounded {
         opaque type Unbounded = SortedMap[AssetName, Coin.Unbounded]
 
-        def apply(x: SortedMap[AssetName, Coin.Unbounded]): Unbounded = x
+        def apply(x: SortedMap[AssetName, Coin.Unbounded]): Unbounded = Canonical.sortedMap(x)
 
         def zero: Unbounded = SortedMap.empty
 
@@ -160,7 +161,7 @@ private object MultiAssetInner {
     object Fractional {
         opaque type Fractional = SortedMap[AssetName, Coin.Fractional]
 
-        def apply(x: SortedMap[AssetName, Coin.Fractional]): Fractional = x
+        def apply(x: SortedMap[AssetName, Coin.Fractional]): Fractional = Canonical.sortedMap(x)
 
         def zero: Fractional = SortedMap.empty
 

@@ -1,6 +1,6 @@
 package scalus.cardano.ledger.value.multiasset
 
-//import algebra.CommutativeGroup
+import algebra.CommutativeGroup
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
@@ -19,16 +19,17 @@ class Unit extends AnyFunSuite {
       )
     )
 
-//    test("MultiAsset.Unbounded subtracted from itself equals zero") {
-//        implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] =
-//            MultiAsset.Inner.Unbounded.algebra.additive
-//        assert(alg.empty === (alg.inverse(mai) |+| mai))
-//    }
-//
-//    test("MultiAsset.Unbounded subtracted from itself equals zero, 2") {
-//        implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] = MultiAsset.Inner.Unbounded.algebra.additive
-//        assert(alg.empty === mai - mai)
-//    }
+    test("MultiAsset.Unbounded subtracted from itself equals zero") {
+        implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] =
+            MultiAsset.Inner.Unbounded.algebra.additive
+        assert(alg.empty === (alg.inverse(mai) |+| mai))
+    }
+
+    test("MultiAsset.Unbounded subtracted from itself equals zero, 2") {
+        implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] =
+            MultiAsset.Inner.Unbounded.algebra.additive
+        assert(alg.empty === mai - mai)
+    }
 
     test("MultiAsset.Unbounded.Inner added to zero is identity") {
         assert(mai + MultiAsset.Inner.Unbounded.zero === mai)

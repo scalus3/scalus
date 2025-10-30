@@ -1,5 +1,6 @@
 package scalus.cardano.ledger.value.multiasset
 
+import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.Canonical
 import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.CombineWith.*
 import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.SortedMapPartialOrder
 import scalus.cardano.ledger.{AssetName, PolicyId}
@@ -14,7 +15,7 @@ type MultiAsset = MultiAsset.MultiAsset
 object MultiAsset {
     opaque type MultiAsset = SortedMap[PolicyId, Inner]
 
-    def apply(x: SortedMap[PolicyId, Inner]): MultiAsset = x
+    def apply(x: SortedMap[PolicyId, Inner]): MultiAsset = Canonical.sortedMap(x, Inner.zero)
 
     def zero: MultiAsset = SortedMap.empty
 
@@ -101,7 +102,7 @@ private object MultiAssetVariant {
     object Unbounded {
         opaque type Unbounded = SortedMap[PolicyId, Inner.Unbounded]
 
-        def apply(x: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = x
+        def apply(x: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = Canonical.sortedMap(x)
 
         def zero: Unbounded = SortedMap.empty
 
@@ -179,7 +180,7 @@ private object MultiAssetVariant {
     object Fractional {
         opaque type Fractional = SortedMap[PolicyId, Inner.Fractional]
 
-        def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = x
+        def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = Canonical.sortedMap(x)
 
         def zero: Fractional = SortedMap.empty
 
