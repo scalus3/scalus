@@ -1,7 +1,6 @@
 package scalus.cardano.ledger.value.multiasset
 
 import spire.algebra.*
-import spire.implicits.*
 
 import scala.collection.immutable.SortedMap
 
@@ -9,8 +8,8 @@ private object SortedMapUtils {
     object Canonical {
         def sortedMap[K, V](
             self: SortedMap[K, V]
-        )(using vMonoid: AdditiveMonoid[V], vEq: Eq[V]): SortedMap[K, V] =
-            self.filterNot(_._2 === vMonoid.zero)
+        )(using vMonoid: AdditiveMonoid[V]): SortedMap[K, V] =
+            self.filterNot(_._2 == vMonoid.zero)
     }
 
     object CombineWith {
@@ -40,8 +39,7 @@ private object SortedMapUtils {
             other: SortedMap[K, VOther]
         )(using
             kOrdering: Ordering[K],
-            vResultMonoid: AdditiveMonoid[VResult],
-            vResultEq: Eq[VResult]
+            vResultMonoid: AdditiveMonoid[VResult]
         ): SortedMap[K, VResult] = {
             import scala.annotation.tailrec
             import scala.collection.mutable
@@ -64,12 +62,12 @@ private object SortedMapUtils {
             inline def appendNonZero(
                 builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]],
                 z: (K, VResult)
-            ): Unit = if z._2.isZero then () else builder += z
+            ): Unit = if z._2 == vResultMonoid.zero then () else builder += z
 
             inline def concatNonZero(
                 builder: mutable.Builder[(K, VResult), SortedMap[K, VResult]],
                 m: IterableOnce[(K, VResult)]
-            ): Unit = builder ++= m.iterator.filterNot(_._2.isZero)
+            ): Unit = builder ++= m.iterator.filterNot(_._2 == vResultMonoid.zero)
 
             // Warning: this function mutates its arguments!
             @tailrec
@@ -152,7 +150,6 @@ private object SortedMapUtils {
         compareLeft: V => I,
         compareRight: V => I
     )(using
-        iEq: Eq[I],
         iMonoid: AdditiveMonoid[I],
         kOrdering: Ordering[K],
         toDouble: ToDouble[I],
@@ -164,7 +161,7 @@ private object SortedMapUtils {
             // If all element-wise comparisons are the same, then the maps are comparable.
             // Otherwise, the maps are incomparable.
             comparisons.headOption.fold(0d)(first =>
-                val monotonic = comparisons.forall(_ === first)
+                val monotonic = comparisons.forall(_ == first)
                 if monotonic then toDouble.toDouble(first) else Double.NaN
             )
         }

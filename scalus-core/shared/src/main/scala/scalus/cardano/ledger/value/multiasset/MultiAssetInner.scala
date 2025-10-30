@@ -6,8 +6,13 @@ import scalus.cardano.ledger.value.multiasset.SortedMapUtils.Canonical
 import scalus.cardano.ledger.value.multiasset.SortedMapUtils.CombineWith.*
 import scalus.cardano.ledger.value.multiasset.SortedMapUtils.SortedMapPartialOrder
 import spire.algebra.*
-import spire.implicits.*
 import spire.math.{Rational, SafeLong}
+
+import spire.implicits.*
+import spire.implicits.MapEq as _
+import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCRng as _, MapGroup as _}
+import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
 
 import scala.collection.immutable.SortedMap
 
@@ -39,17 +44,19 @@ private object MultiAssetInner {
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Inner] {
-            private val mapPartialOrder = SortedMapPartialOrder[AssetName, Coin, Int](
-              // If both keys exist, compare the values.
-              // If only the left key exists, compare the left value against zero.
-              // If only the right key exists, compare the right value against zero.
-              compareBoth = Coin.algebra.compare,
-              compareLeft = _.signum,
-              compareRight = -_.signum
-            )
+            override def eqv(self: Inner, other: Inner): Boolean = self == other
 
             override def partialCompare(self: Inner, other: Inner): Double =
                 mapPartialOrder.partialCompare(self, other)
+
+            private val mapPartialOrder = SortedMapPartialOrder[AssetName, Coin, Int](
+                // If both keys exist, compare the values.
+                // If only the left key exists, compare the left value against zero.
+                // If only the right key exists, compare the right value against zero.
+                compareBoth = Coin.algebra.compare,
+                compareLeft = _.signum,
+                compareRight = -_.signum
+            )
         }
 
         // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
@@ -132,15 +139,7 @@ private object MultiAssetInner {
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
-            private val mapPartialOrder =
-                SortedMapPartialOrder[AssetName, Coin.Unbounded, Int](
-                  // If both keys exist, compare the values.
-                  // If only the left key exists, compare the left value against zero.
-                  // If only the right key exists, compare the right value against zero.
-                  compareBoth = coinAlgebra.compare,
-                  compareLeft = _.signum,
-                  compareRight = -_.signum
-                )
+            override def eqv(self: Unbounded, other: Unbounded): Boolean = self == other
 
             override def partialCompare(self: Unbounded, other: Unbounded): Double =
                 mapPartialOrder.partialCompare(self, other)
@@ -160,6 +159,16 @@ private object MultiAssetInner {
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 self.view.mapValues(_ :* s).to(SortedMap)
+
+            private val mapPartialOrder =
+                SortedMapPartialOrder[AssetName, Coin.Unbounded, Int](
+                    // If both keys exist, compare the values.
+                    // If only the left key exists, compare the left value against zero.
+                    // If only the right key exists, compare the right value against zero.
+                    compareBoth = coinAlgebra.compare,
+                    compareLeft = _.signum,
+                    compareRight = -_.signum
+                )
         }
     }
 
@@ -210,12 +219,7 @@ private object MultiAssetInner {
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
-            private val mapPartialOrder =
-                SortedMapPartialOrder[AssetName, Coin.Fractional, Int](
-                  compareBoth = coinAlgebra.compare,
-                  compareLeft = _.signum,
-                  compareRight = -_.signum
-                )
+            override def eqv(self: Fractional, other: Fractional): Boolean = self == other
 
             override def partialCompare(self: Fractional, other: Fractional): Double =
                 mapPartialOrder.partialCompare(self, other)
@@ -235,6 +239,13 @@ private object MultiAssetInner {
 
             override def timesl(s: Rational, self: Fractional): Fractional =
                 self.view.mapValues(_ :* s).to(SortedMap)
+
+            private val mapPartialOrder =
+                SortedMapPartialOrder[AssetName, Coin.Fractional, Int](
+                    compareBoth = coinAlgebra.compare,
+                    compareLeft = _.signum,
+                    compareRight = -_.signum
+                )
         }
     }
 }

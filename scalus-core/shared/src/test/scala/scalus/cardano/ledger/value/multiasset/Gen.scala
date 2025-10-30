@@ -13,6 +13,11 @@ import scalus.cardano.ledger.value.coin.Gen.Arb.given
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 
+import spire.implicits.MapEq as _
+import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCRng as _, MapGroup as _}
+import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
+
 object Gen {
     def genConfigurableMultiAssetFractional(
         minPolicies: Int = 1,
@@ -107,7 +112,7 @@ object Gen {
                   for
                       policyId <- arbitrary[PolicyId]
                       assets <- arbitrary[immutable.Map[AssetName, A]]
-                  yield (policyId, assets.to(immutable.TreeMap))
+                  yield (policyId, assets.to(SortedMap))
                 )
         yield SortedMap.from(result)
     }

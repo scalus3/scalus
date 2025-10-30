@@ -9,11 +9,11 @@ import spire.laws.GroupLaws
 import spire.math.SafeLong
 import spire.syntax.all.*
 
-import scala.collection.immutable.TreeMap
+import scala.collection.immutable.SortedMap
 
 class Unit extends AnyFunSuite {
     val mai: MultiAsset.Inner.Unbounded = MultiAsset.Inner.Unbounded(
-      TreeMap(
+      SortedMap(
         AssetName.fromHex("") -> Coin
             .Unbounded(SafeLong(BigInt(1)))
       )

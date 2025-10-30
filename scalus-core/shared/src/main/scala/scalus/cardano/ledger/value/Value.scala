@@ -166,6 +166,6 @@ private object ValueVariants {
     ): Double = {
         val coinComparison: Double = selfLovelace.compare(otherLovelace).toDouble
         val assetsComparison: Double = selfAssets.partialCompare(otherAssets)
-        if coinComparison === assetsComparison then coinComparison else Double.NaN
+        if coinComparison == assetsComparison then coinComparison else Double.NaN
     }
 }
