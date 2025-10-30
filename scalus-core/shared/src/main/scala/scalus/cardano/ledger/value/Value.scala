@@ -1,5 +1,7 @@
 package scalus.cardano.ledger.value
 
+import scalus.cardano.ledger.value.coin.Coin
+import scalus.cardano.ledger.value.multiasset.MultiAsset
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
@@ -13,6 +15,8 @@ case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
 }
 
 object Value {
+    import ValueVariants.partialCompareImpl
+
     def zero: Value = Value(Coin.zero)
 
     given algebra: Algebra.type = Algebra
@@ -25,6 +29,17 @@ object Value {
     enum ArithmeticError extends Throwable:
         case Lovelace(e: Coin.ArithmeticError)
         case Assets(e: MultiAsset.ArithmeticError)
+
+    export ValueVariants.Unbounded
+    export ValueVariants.Fractional
+}
+
+private object ValueVariants {
+    import Value.ArithmeticError
+
+    // ===================================
+    // Value.Unbounded
+    // ===================================
 
     case class Unbounded(
         lovelace: Coin.Unbounded,
@@ -60,7 +75,7 @@ object Value {
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends PartialOrder[Value.Unbounded], CModule[Unbounded, SafeLong] {
+        object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
             override def partialCompare(self: Unbounded, other: Unbounded): Double =
                 partialCompareImpl(self.lovelace, self.assets, other.lovelace, other.assets)
 
@@ -81,6 +96,10 @@ object Value {
                 Unbounded(self.lovelace :* s, self.assets :* s)
         }
     }
+
+    // ===================================
+    // Value.Fractional
+    // ===================================
 
     case class Fractional(
         lovelace: Coin.Fractional,
@@ -136,7 +155,7 @@ object Value {
         }
     }
 
-    private def partialCompareImpl[C, MA](
+    def partialCompareImpl[C, MA](
         selfLovelace: C,
         selfAssets: MA,
         otherLovelace: C,

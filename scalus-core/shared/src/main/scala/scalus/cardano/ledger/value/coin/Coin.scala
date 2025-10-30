@@ -1,38 +1,4 @@
-package scalus.cardano.ledger.value
-
-/** The [[Coin]] object can be used to work with quantities of cardano assets, including lovelace
-  * (ada) and native assets. With Cardano, quantities of assets have various restrictions in
-  * different contexts; see the NOTES section below for a description.
-  *
-  * The object exposes safe arithmetic operations on three underlying types:
-  *
-  *   - A [[Coin.Coin]] type, which is an opaque newtype wrapper around a non-negative, bounded
-  *     (64-bit) amount of coins suitable for use in a [[`TransactionBody`]]'s outputs field.
-  *   - An unbounded [[Coin.Unbounded]] type that can be used in intermediate calculations where the
-  *     total amount may exceed the capacity of a `Word64`.
-  *   - An unbounded [[Coin.Fractional]] type that can be used, e.g., for exchange rates.
-  *
-  * Functions to convert safely between these three types are provided. "Safety" in this case means:
-  *   - Detecting overflow/underflow when converting from bounded to unbounded types
-  *   - Tested laws-compliance for most algebraic operations (ordering, vector space, cmodule)
- *    - Safe projection/injection and other type-changing round-trips where applicable. For example,
- *      if we have
- *          - c : Coin.Coin
- *          - i = SafeLong
- *      then `(c.scaleIntegral(i).scaleFractional(Rational(1, i))) == Right(c)`.
-  *
- *
- *
-  * NOTES: In the haskell `cardano-ledger`, `Coin` is represented as an (unbounded) `Integer`, but
-  * the CBOR serialization instances convert directly from a (signed) `Long`.
-  * This is contrary to the plutus-core spec, which defines an alternative CBOR encoding for
-  * integers larger than 64 bits.
-  * It is also contrary to the conway CDDL spec, which defines the coin in a transaction output
-  * as a Word64 (i.e., an _unsigned_ Long).
-  *
-  * We do our best here to support the lowest common denominator, which is just using `Long` for
-  * the bounded representation.
-  */
+package scalus.cardano.ledger.value.coin
 
 import spire.algebra.*
 import spire.implicits.*
@@ -44,6 +10,8 @@ type Coin = Coin.Coin
 
 object Coin {
     import ArithmeticError.*
+    import CoinSubtypes.*
+    import UtilsCoin.Aggregate
 
     /** Non-negative and bounded amount of coins. Can be used in tx outputs without any additional
       * checks.
@@ -126,12 +94,32 @@ object Coin {
     }
 
     // ===================================
+    // Re-exported nested objects and types
+    // ===================================
+    // We re-export these to avoid having them be directly defined in the root object,
+    // so that the root's opaque type stays opaque to the nested objects.
+
+    type Unbounded = CoinSubtypes.Unbounded
+
+    object Unbounded { export CoinSubtypes.Unbounded.{*, given} }
+
+    type Fractional = CoinSubtypes.Fractional
+
+    object Fractional { export CoinSubtypes.Fractional.{*, given} }
+}
+
+private object CoinSubtypes {
+    import Coin.ArithmeticError
+    import UtilsCoin.Aggregate
+
+    // ===================================
     // Coin.Unbounded
     // ===================================
 
     type Unbounded = Unbounded.Unbounded
 
     object Unbounded {
+
         import spire.compat.integral
 
         opaque type Unbounded = SafeLong
@@ -140,14 +128,15 @@ object Coin {
 
         def zero: Unbounded = 0
 
-        given Conversion[Unbounded, Fractional] = Fractional.apply
-
         extension (self: Unbounded)
             def underlying: SafeLong = self
 
             def toCoin: Either[ArithmeticError, Coin] =
-                try { Right(Coin.unsafeApply(self)) }
-                catch { case e: ArithmeticError => Left(e) }
+                try {
+                    Right(Coin.unsafeApply(self))
+                } catch {
+                    case e: ArithmeticError => Left(e)
+                }
 
             def unsafeToCoin: Coin = Coin.unsafeApply(self)
 
@@ -215,7 +204,7 @@ object Coin {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        import RationalExtensions.*
+        import UtilsCoin.RationalExtensions.*
 
         opaque type Fractional = Rational
 
@@ -229,8 +218,11 @@ object Coin {
             def toUnbounded: Unbounded = Unbounded(self.roundHalfEven)
 
             def toCoin: Either[ArithmeticError, Coin] =
-                try { Right(unsafeToCoin) }
-                catch { case e: Coin.ArithmeticError => Left(e) }
+                try {
+                    Right(unsafeToCoin)
+                } catch {
+                    case e: Coin.ArithmeticError => Left(e)
+                }
 
             def unsafeToCoin: Coin = Coin.unsafeApply(self.roundHalfEven)
 
@@ -283,71 +275,5 @@ object Coin {
 
             override def timesl(s: Rational, v: Fractional): Fractional = Fractional(s * v)
         }
-    }
-
-    private object Aggregate {
-        def average[T <: SafeLong | Rational, R](
-            self: IterableOnce[T],
-            convert: T => R = identity[R]
-        )(using evT: AdditiveMonoid[T], evR: VectorSpace[R, Rational]): Option[R] = {
-            val (sum, length) = Aggregate.sumLength(self)
-
-            Option.when(length > 0)(convert(sum) :/ length)
-        }
-
-        def max[T](self: IterableOnce[T])(using ev: Ordering[T]): T = self.iterator.max
-
-        def min[T](self: IterableOnce[T])(using ev: Ordering[T]): T = self.iterator.min
-
-        def sum[T <: SafeLong | Rational](self: IterableOnce[T])(using ev: AdditiveMonoid[T]): T =
-            self.iterator.foldRight(ev.zero)(ev.plus)
-
-        private def sumLength[T <: SafeLong | Rational](
-            self: IterableOnce[T]
-        )(using ev: AdditiveMonoid[T]): (T, Int) = {
-            type Acc = (T, Int)
-
-            def f(x: T, acc: Acc): Acc = (acc._1 + x, acc._2 + 1)
-
-            self.iterator.foldRight((ev.zero, 0))(f)
-        }
-    }
-
-    private object RationalExtensions {
-        extension (self: Rational)
-            /** Half-even rounding (also called banker's rounding). Rounds the to the nearest
-              * integer; if equidistant between two integers, then rounds to the even integer.
-              *
-              * Implementation ported from Haskell's `GHC.Real.RealFrac.{properFraction, round}`:
-              *
-              * [[https://hackage.haskell.org/package/base-4.21.0.0/docs/GHC-Real.html#t:RealFrac]]
-              *
-              * @return
-              *   the rounded integer. Note that this is different from [[Rational.round]], which
-              *   returns a [[Rational]] with a denominator of one.
-              */
-            def roundHalfEven: SafeLong = {
-                // The whole part of the proper fraction.
-                // Divide the numerator by the denominator, truncating toward zero.
-                val whole = self.numerator / self.denominator
-
-                // The fractional part of the proper fraction.
-                val fraction = Rational(self.numerator % self.denominator, self.denominator)
-
-                // The whole part incremented away from zero.
-                val awayFromZero = if whole.signum < 0 then whole - 1 else whole + 1
-
-                // The distance between the absolute fractional part and one half.
-                val distanceToHalf = fraction.abs - Rational(1, 2)
-
-                distanceToHalf.signum match {
-                    // Round toward zero if absolute fractional part is less than half.
-                    case -1 => whole
-                    // Round away from zero if absolute fractional part is more than half.
-                    case 1 => awayFromZero
-                    // Break ties by rounding toward whichever nearest integer is even.
-                    case 0 => if whole.isEven then whole else awayFromZero
-                }
-            }
     }
 }
