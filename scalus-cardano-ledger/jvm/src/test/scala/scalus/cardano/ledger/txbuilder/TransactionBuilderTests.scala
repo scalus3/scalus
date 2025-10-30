@@ -47,7 +47,13 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     ): Unit =
         test(label) {
             val res = TransactionBuilder.build(Mainnet, steps)
-            assert(res == Left(SomeStepError(error)))
+            res match {
+                case Left(SomeBuildError.SomeStepError(e, context)) => assert(e == error)
+                case other =>
+                    fail(
+                      s"Expected the transaction building to fail with $error, got $other instead"
+                    )
+            }
         }
 
     def testBuilderSteps(
@@ -179,31 +185,35 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderStepsFail(
       label = "PKH output x2",
       steps = List(Spend(pkhUtxo, PubKeyWitness), Spend(pkhUtxo, PubKeyWitness)),
-      error = InputAlreadyExists(pkhUtxo.input)
+      error = InputAlreadyExists(pkhUtxo.input, Spend(pkhUtxo, PubKeyWitness))
     )
 
     testBuilderStepsFail(
       label = "PKH output with wrong witness #1",
       steps = List(Spend(pkhUtxo, nsWitness)),
-      error = WrongOutputType(WitnessKind.ScriptBased, pkhUtxo)
+      error = WrongOutputType(WitnessKind.ScriptBased, pkhUtxo, Spend(pkhUtxo, nsWitness))
     )
 
     testBuilderStepsFail(
       label = "PKH output with wrong witness #2",
       steps = List(Spend(pkhUtxo, plutusScript1RefSpentWitness)),
-      error = WrongOutputType(WitnessKind.ScriptBased, pkhUtxo)
+      error = WrongOutputType(
+        WitnessKind.ScriptBased,
+        pkhUtxo,
+        Spend(pkhUtxo, plutusScript1RefSpentWitness)
+      )
     )
 
     testBuilderStepsFail(
       label = "SKH output with wrong witness #1",
       steps = List(Spend(skhUtxo, nsWitness)),
-      error = IncorrectScriptHash(ns, scriptHash1)
+      error = IncorrectScriptHash(ns, scriptHash1, Spend(skhUtxo, nsWitness))
     )
 
     testBuilderStepsFail(
       label = "SKH output with wrong witness #2",
       steps = List(Spend(skhUtxo, plutusScript2Witness)),
-      error = IncorrectScriptHash(script2, scriptHash1)
+      error = IncorrectScriptHash(script2, scriptHash1, Spend(skhUtxo, plutusScript2Witness))
     )
 
     // ============================================================================
@@ -228,7 +238,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderStepsFail(
       label = "Try to spend output with wrong network in address",
       steps = List(Spend(pkhUtxo, PubKeyWitness), Spend(pkhUtxoTestNet, PubKeyWitness)),
-      error = WrongNetworkId(pkhUtxoTestNet.output.address)
+      error = WrongNetworkId(pkhUtxoTestNet.output.address, Spend(pkhUtxoTestNet, PubKeyWitness))
     )
 
     test("SpendWithDelayedRedeemer sees transaction inputs") {
@@ -362,7 +372,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderStepsFail(
       label = "Script Output with mismatched script ref in spent utxo",
       steps = List(Spend(utxo = script1Utxo, witness = plutusScript2RefWitness)),
-      error = AttachedScriptNotFound(script1.scriptHash)
+      error =
+          AttachedScriptNotFound(script1.scriptHash, Spend(script1Utxo, plutusScript2RefWitness))
     )
 
     // ================================================================
@@ -543,7 +554,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderStepsFail(
       label = "Mint 0 directly",
       steps = List(mintScript1(0)),
-      error = CannotMintZero(scriptHash1, AssetName.empty)
+      error = CannotMintZero(scriptHash1, AssetName.empty, mintScript1(0))
     )
 
     testBuilderSteps(
@@ -698,7 +709,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderStepsFail(
       label = "A script based utxo can't be used as a collateral",
       steps = List(AddCollateral(utxo = script1Utxo)),
-      error = CollateralNotPubKey(script1Utxo)
+      error = CollateralNotPubKey(script1Utxo, AddCollateral(script1Utxo))
     )
 
     // =======================================================================
@@ -756,7 +767,11 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderStepsFail(
       label = "Deregistering stake credential with unneeded witness fails",
       steps = List(IssueCertificate(UnregCert(pubKeyHashCredential1, coin = None), witness)),
-      error = UnneededDeregisterWitness(StakeCredential(pubKeyHashCredential1), witness)
+      error = UnneededDeregisterWitness(
+        StakeCredential(pubKeyHashCredential1),
+        witness,
+        IssueCertificate(UnregCert(pubKeyHashCredential1, coin = None), witness)
+      )
     )
 
     testBuilderStepsFail(
@@ -771,7 +786,18 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
         )
       ),
-      error = IncorrectScriptHash(script1, script2.scriptHash)
+      error = IncorrectScriptHash(
+        script1,
+        script2.scriptHash,
+        IssueCertificate(
+          cert = UnregCert(Credential.ScriptHash(script2.scriptHash), coin = None),
+          witness = TwoArgumentPlutusScriptWitness(
+            PlutusScriptValue(script1),
+            Data.List(List.empty),
+            Set.empty
+          )
+        )
+      )
     )
 
     // =======================================================================

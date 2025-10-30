@@ -238,16 +238,17 @@ object TransactionConversion {
         } yield EditableTransaction(updatedTx, redeemers.toVector)
     }
 
-    /** Re-attach transaction redeemers. Fails if there are detached redeemers that are not valid
-      * (do not point to anything in the transaction).
+    /** Re-attach transaction redeemers. Returns Left with the problematic redeemer if a detached
+      * redeemer does not point to anything in the transaction (e.g., a redeemer for spending an
+      * input that doesn't exist, or minting with a policy that isn't in the mint field).
       */
     def fromEditableTransactionSafe(
         editable: EditableTransaction
-    ): Option[Transaction] = {
+    ): Either[DetachedRedeemer, Transaction] = {
         val ctx = RedeemersContext.fromTransaction(editable.transaction)
 
         RedeemerManagement.attachRedeemers(ctx, editable.redeemers) match {
-            case Left(_) => None
+            case Left(problematicRedeemer) => Left(problematicRedeemer)
             case Right(attachedRedeemers) =>
                 val currentWitnessSet = editable.transaction.witnessSet
                 val invalidRedeemers =
@@ -261,7 +262,7 @@ object TransactionConversion {
                 val updatedTx = editable.transaction
                     .focus(_.witnessSet)
                     .replace(updatedWitnessSet)
-                Some(updatedTx)
+                Right(updatedTx)
         }
     }
 
