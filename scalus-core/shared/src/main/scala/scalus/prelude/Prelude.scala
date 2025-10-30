@@ -33,6 +33,8 @@ extension (self: BigInt)
     def to(other: BigInt): List[BigInt] = List.range(self, other)
     def until(other: BigInt): List[BigInt] = List.rangeUntil(self, other)
 
+extension (self: BigInt.type) def unapply(value: BigInt): scala.Option[BigInt] = scala.Some(value)
+
 inline def log(inline msg: String): Unit = trace(msg)(())
 inline def identity[A](inline value: A): A = value
 

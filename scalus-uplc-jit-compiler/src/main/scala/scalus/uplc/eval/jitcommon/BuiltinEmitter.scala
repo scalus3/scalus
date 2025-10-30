@@ -2,7 +2,7 @@ package scalus.uplc.eval.jitcommon
 
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultFun.{SubtractInteger, VerifyEd25519Signature}
-import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
+import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams, StepKind}
 
 import scala.quoted.*
 
@@ -31,8 +31,8 @@ object BuiltinEmitter {
         logger: Expr[Logger],
         budget: Expr[BudgetSpender],
         params: Expr[MachineParams]
-    )(using Quotes): Expr[Any] =
-        bn match
+    )(using Quotes): Expr[Any] = {
+        val evalSnipped = bn match
             case DefaultFun.AddInteger =>
                 '{ BuiltinSnippets.addInteger($budget, $params) }
             case DefaultFun.SubtractInteger =>
@@ -117,6 +117,15 @@ object BuiltinEmitter {
                 sys.error(
                   s"Builtin $bn is not yet supported by the JIT compiler. Please add implementation in the Builtin pattern matching section."
                 )
+        '{
+            ${ budget }.spendBudget(
+              ExBudgetCategory.Step(StepKind.Builtin),
+              $params.machineCosts.builtinCost,
+              Nil
+            )
+            ${ evalSnipped }
+        }
+    }
 
     /** Generates optimized code for a fully-applied 1-argument builtin with a simple argument.
       *

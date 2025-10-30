@@ -165,6 +165,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
     // TODO: Add special handling for BigInt() constructor in PatternMatchingCompiler
     /*
     test("pattern matching on integer constants") {
+        import scalus.prelude.unapply
         val compiled = compile { (x: BigInt) =>
             x match
                 case BigInt(0) => "zero"
@@ -187,6 +188,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg3 = compile { BigInt(42) }.toUplc()
         assert((uplc $ arg3).evaluate == Term.Const(Constant.String("other")))
     }
+    
      */
 
     // Test constant patterns with booleans

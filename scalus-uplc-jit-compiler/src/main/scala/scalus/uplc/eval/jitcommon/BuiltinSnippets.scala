@@ -1,9 +1,9 @@
 package scalus.uplc.eval.jitcommon
 
 import scalus.builtin.{BuiltinPair, Builtins, ByteString, Data}
-import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams, StepKind}
-import scalus.uplc.eval.ExBudgetCategory.Step
-import scalus.uplc.eval.jitcommon.*
+import scalus.uplc.DefaultFun.*
+import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams}
+import scalus.uplc.eval.ExBudgetCategory.BuiltinApp
 
 /** Pre-compiled builtin function implementations for NativeStack JIT.
   *
@@ -28,7 +28,7 @@ object BuiltinSnippets {
         (x: BigInt) =>
             (y: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(AddInteger),
                   params.builtinCostModel.addInteger.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -47,7 +47,7 @@ object BuiltinSnippets {
         (x: BigInt) =>
             (y: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(SubtractInteger),
                   params.builtinCostModel.subtractInteger.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -66,7 +66,7 @@ object BuiltinSnippets {
         (x: BigInt) =>
             (y: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(MultiplyInteger),
                   params.builtinCostModel.multiplyInteger.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -85,7 +85,7 @@ object BuiltinSnippets {
         (x: BigInt) =>
             (y: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(LessThanInteger),
                   params.builtinCostModel.lessThanInteger.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -104,7 +104,7 @@ object BuiltinSnippets {
         (x: BigInt) =>
             (y: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(LessThanEqualsInteger),
                   params.builtinCostModel.lessThanEqualsInteger.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -123,7 +123,7 @@ object BuiltinSnippets {
         (x: BigInt) =>
             (y: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(EqualsInteger),
                   params.builtinCostModel.equalsInteger.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -144,7 +144,7 @@ object BuiltinSnippets {
         (x: ByteString) =>
             (y: ByteString) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(EqualsByteString),
                   params.builtinCostModel.equalsByteString.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -163,7 +163,7 @@ object BuiltinSnippets {
         (char: BigInt) =>
             (bs: ByteString) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(ConsByteString),
                   params.builtinCostModel.consByteString.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(char),
@@ -183,7 +183,7 @@ object BuiltinSnippets {
             (n: BigInt) =>
                 (bs: ByteString) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(SliceByteString),
                       params.builtinCostModel.sliceByteString.calculateCostFromMemory(
                         Seq(
                           MemoryUsageJit.memoryUsage(start),
@@ -203,7 +203,7 @@ object BuiltinSnippets {
         (bs: ByteString) =>
             (i: BigInt) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(IndexByteString),
                   params.builtinCostModel.indexByteString.constantCost,
                   Nil
                 )
@@ -213,7 +213,7 @@ object BuiltinSnippets {
     @inline def sha2_256(budget: BudgetSpender, params: MachineParams): ByteString => ByteString =
         (bs: ByteString) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(Sha2_256),
               params.builtinCostModel.sha2_256.calculateCostFromMemory(
                 Seq(MemoryUsageJit.memoryUsage(bs))
               ),
@@ -228,7 +228,7 @@ object BuiltinSnippets {
         (x: Data) =>
             (y: Data) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(EqualsData),
                   params.builtinCostModel.equalsData.calculateCostFromMemory(
                     Seq(
                       MemoryUsageJit.memoryUsage(x),
@@ -243,7 +243,7 @@ object BuiltinSnippets {
     @inline def unConstrData(budget: BudgetSpender, params: MachineParams): Data => Any =
         (x: Data) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(UnConstrData),
               params.builtinCostModel.unConstrData.constantCost,
               Nil
             )
@@ -253,17 +253,17 @@ object BuiltinSnippets {
     @inline def unListData(budget: BudgetSpender, params: MachineParams): Data => List[Data] =
         (x: Data) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(UnListData),
               params.builtinCostModel.unListData.constantCost,
               Nil
             )
-            RuntimeHelper.unListData(x)
+            scalus.uplc.eval.jitcommon.RuntimeHelper.unListData(x)
         }
 
     @inline def unIData(budget: BudgetSpender, params: MachineParams): Data => BigInt =
         (x: Data) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(UnIData),
               params.builtinCostModel.unIData.constantCost,
               Nil
             )
@@ -273,7 +273,7 @@ object BuiltinSnippets {
     @inline def unBData(budget: BudgetSpender, params: MachineParams): Data => ByteString =
         (x: Data) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(UnBData),
               params.builtinCostModel.unBData.constantCost,
               Nil
             )
@@ -289,7 +289,7 @@ object BuiltinSnippets {
         (tag: BigInt) =>
             (fields: List[Data]) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(ConstrData),
                   params.builtinCostModel.constrData.constantCost,
                   Nil
                 )
@@ -299,7 +299,7 @@ object BuiltinSnippets {
     @inline def iData(budget: BudgetSpender, params: MachineParams): BigInt => Data =
         (x: BigInt) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(IData),
               params.builtinCostModel.iData.constantCost,
               Nil
             )
@@ -309,7 +309,7 @@ object BuiltinSnippets {
     @inline def bData(budget: BudgetSpender, params: MachineParams): ByteString => Data =
         (x: ByteString) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(BData),
               params.builtinCostModel.bData.constantCost,
               Nil
             )
@@ -319,7 +319,7 @@ object BuiltinSnippets {
     @inline def listData(budget: BudgetSpender, params: MachineParams): List[Data] => Data =
         (x: List[Data]) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(ListData),
               params.builtinCostModel.listData.constantCost,
               Nil
             )
@@ -332,7 +332,7 @@ object BuiltinSnippets {
     ): List[BuiltinPair[Data, Data]] => Data =
         (x: List[BuiltinPair[Data, Data]]) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(MapData),
               params.builtinCostModel.mapData.constantCost,
               Nil
             )
@@ -345,17 +345,19 @@ object BuiltinSnippets {
     ): Data => List[BuiltinPair[Data, Data]] =
         (x: Data) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(UnMapData),
               params.builtinCostModel.unMapData.constantCost,
               Nil
             )
-            RuntimeHelper.unMapData(x)
+            x match
+                case Data.Map(values) => values.map(BuiltinPair.apply)
+                case _                => throw new Exception(s"not a map but $x")
         }
 
     @inline def serialiseData(budget: BudgetSpender, params: MachineParams): Data => ByteString =
         (x: Data) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(SerialiseData),
               params.builtinCostModel.serialiseData.calculateCostFromMemory(
                 Seq(MemoryUsageJit.memoryUsage(x))
               ),
@@ -371,7 +373,7 @@ object BuiltinSnippets {
         (fst: Data) =>
             (snd: Data) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(MkPairData),
                   params.builtinCostModel.mkPairData.constantCost,
                   Nil
                 )
@@ -387,7 +389,7 @@ object BuiltinSnippets {
                             (iCase: Any) =>
                                 (bCase: Any) => {
                                     budget.spendBudget(
-                                      Step(StepKind.Builtin),
+                                      BuiltinApp(ChooseData),
                                       params.builtinCostModel.chooseData.constantCost,
                                       Nil
                                     )
@@ -408,7 +410,7 @@ object BuiltinSnippets {
             (head: Any) =>
                 (tail: List[Any]) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(MkCons),
                       params.builtinCostModel.mkCons.constantCost,
                       Nil
                     )
@@ -419,7 +421,7 @@ object BuiltinSnippets {
         () =>
             (list: List[Any]) => {
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(NullList),
                   params.builtinCostModel.nullList.constantCost,
                   Nil
                 )
@@ -429,7 +431,7 @@ object BuiltinSnippets {
     @inline def mkNilData(budget: BudgetSpender, params: MachineParams): Unit => List[Data] =
         (_: Unit) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(MkNilData),
               params.builtinCostModel.mkNilData.constantCost,
               Nil
             )
@@ -442,7 +444,7 @@ object BuiltinSnippets {
     ): Unit => List[BuiltinPair[Data, Data]] =
         (_: Unit) => {
             budget.spendBudget(
-              Step(StepKind.Builtin),
+              BuiltinApp(MkNilPairData),
               params.builtinCostModel.mkNilPairData.constantCost,
               Nil
             )
@@ -457,7 +459,7 @@ object BuiltinSnippets {
                 (t: Any) =>
                     (f: Any) => {
                         budget.spendBudget(
-                          Step(StepKind.Builtin),
+                          BuiltinApp(IfThenElse),
                           params.builtinCostModel.ifThenElse.constantCost,
                           Nil
                         )
@@ -469,7 +471,7 @@ object BuiltinSnippets {
             (s: String) =>
                 (a: Any) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(Trace),
                       params.builtinCostModel.trace.constantCost,
                       Nil
                     )
@@ -486,13 +488,12 @@ object BuiltinSnippets {
         () =>
             () =>
                 (x: BuiltinPair[?, ?]) => {
-                    import scalus.builtin.BuiltinPair
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(FstPair),
                       params.builtinCostModel.fstPair.constantCost,
                       Nil
                     )
-                    Builtins.fstPair(x.asInstanceOf[BuiltinPair[?, ?]])
+                    Builtins.fstPair(x)
                 }
 
     @inline def sndPair(
@@ -502,13 +503,12 @@ object BuiltinSnippets {
         () =>
             () =>
                 (x: BuiltinPair[?, ?]) => {
-                    import scalus.builtin.BuiltinPair
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(SndPair),
                       params.builtinCostModel.sndPair.constantCost,
                       Nil
                     )
-                    Builtins.sndPair(x.asInstanceOf[BuiltinPair[?, ?]])
+                    Builtins.sndPair(x)
                 }
 
     // List operations
@@ -521,7 +521,7 @@ object BuiltinSnippets {
                         (ne: Any) => {
                             val lv = l.asInstanceOf[List[?]]
                             budget.spendBudget(
-                              Step(StepKind.Builtin),
+                              BuiltinApp(ChooseList),
                               params.builtinCostModel.chooseList.constantCost,
                               Nil
                             )
@@ -533,7 +533,7 @@ object BuiltinSnippets {
             (y: Any) => {
                 val yv = y.asInstanceOf[List[?]]
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(HeadList),
                   params.builtinCostModel.headList.constantCost,
                   Nil
                 )
@@ -545,7 +545,7 @@ object BuiltinSnippets {
             (x: Any) => {
                 val xv = x.asInstanceOf[List[?]]
                 budget.spendBudget(
-                  Step(StepKind.Builtin),
+                  BuiltinApp(TailList),
                   params.builtinCostModel.tailList.constantCost,
                   Nil
                 )
@@ -560,7 +560,7 @@ object BuiltinSnippets {
             (msg: ByteString) =>
                 (sig: ByteString) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(VerifyEd25519Signature),
                       params.builtinCostModel.verifyEd25519Signature.calculateCostFromMemory(
                         Seq(
                           MemoryUsageJit.memoryUsage(pk),
@@ -581,7 +581,7 @@ object BuiltinSnippets {
             (msg: ByteString) =>
                 (sig: ByteString) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(VerifyEcdsaSecp256k1Signature),
                       params.builtinCostModel.verifyEcdsaSecp256k1Signature.constantCost,
                       Nil
                     )
@@ -596,7 +596,7 @@ object BuiltinSnippets {
             (msg: ByteString) =>
                 (sig: ByteString) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(VerifySchnorrSecp256k1Signature),
                       params.builtinCostModel.verifySchnorrSecp256k1Signature
                           .calculateCostFromMemory(
                             Seq(
@@ -612,10 +612,10 @@ object BuiltinSnippets {
 
     def chooseUnit(budget: BudgetSpender, params: MachineParams): () => Unit => Any =
         () =>
-            (u: Unit) =>
+            (_: Unit) =>
                 (caseUnit: Any) => {
                     budget.spendBudget(
-                      Step(StepKind.Builtin),
+                      BuiltinApp(ChooseUnit),
                       params.builtinCostModel.chooseUnit.constantCost,
                       Nil
                     )
