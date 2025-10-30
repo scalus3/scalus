@@ -7,6 +7,10 @@ import scalus.cardano.ledger.{AssetName, PolicyId}
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
+import spire.implicits.MapEq as _
+import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCRng as _, MapGroup as _}
+import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
 
 import scala.collection.immutable.SortedMap
 
@@ -43,6 +47,8 @@ object MultiAsset {
 
         override def partialCompare(self: MultiAsset, other: MultiAsset): Double =
             mapPartialOrder.partialCompare(self, other)
+
+        override def eqv(x: MultiAsset, y: MultiAsset): Boolean = x == y
     }
 
     enum ArithmeticError extends Throwable:
@@ -167,7 +173,9 @@ private object MultiAssetVariant {
                 combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                self.view.mapValues(_ :* s).to(SortedMap)
+                self.view.mapValues(_ :* s).filterNot(_._2.isZero)to(SortedMap)
+
+            override def eqv(x: Unbounded, y: Unbounded): Boolean = x == y
         }
     }
 
@@ -245,7 +253,9 @@ private object MultiAssetVariant {
                 combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: Rational, self: Fractional): Fractional =
-                self.view.mapValues(_ :* s).to(SortedMap)
+                self.view.mapValues(_ :* s).filterNot(_._2.isZero).to(SortedMap)
+
+            override def eqv(x: Fractional, y: Fractional): Boolean = x == y
         }
     }
 }

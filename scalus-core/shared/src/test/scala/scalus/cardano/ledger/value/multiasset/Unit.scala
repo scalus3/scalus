@@ -19,6 +19,10 @@ class Unit extends AnyFunSuite {
       )
     )
 
+    test("MultiAssetInner Left Distributivity with 0"){
+        assert(0 *: mai + 0 *: mai == 0 *: (mai + mai))
+    }
+
     test("MultiAsset.Unbounded subtracted from itself equals zero") {
         implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] =
             MultiAsset.Inner.Unbounded.algebra.additive

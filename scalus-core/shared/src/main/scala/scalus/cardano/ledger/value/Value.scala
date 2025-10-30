@@ -5,6 +5,10 @@ import scalus.cardano.ledger.value.multiasset.MultiAsset
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
+import spire.implicits.MapEq as _
+import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCRng as _, MapGroup as _}
+import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
 
 case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
     def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Value.Unbounded =
@@ -24,6 +28,8 @@ object Value {
     object Algebra extends PartialOrder[Value] {
         override def partialCompare(self: Value, other: Value): Double =
             partialCompareImpl(self.lovelace, self.assets, other.lovelace, other.assets)
+
+        override def eqv(x: Value, y: Value): Boolean = x == y
     }
 
     enum ArithmeticError extends Throwable:
@@ -94,6 +100,8 @@ private object ValueVariants {
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 Unbounded(self.lovelace :* s, self.assets :* s)
+
+            override def eqv(x: Unbounded, y: Unbounded): Boolean = x == y
         }
     }
 
@@ -152,6 +160,8 @@ private object ValueVariants {
 
             override def timesl(s: Rational, self: Fractional): Fractional =
                 Fractional(self.lovelace :* s, self.assets :* s)
+
+            override def eqv(x: Fractional, y: Fractional): Boolean = x == y
         }
     }
 

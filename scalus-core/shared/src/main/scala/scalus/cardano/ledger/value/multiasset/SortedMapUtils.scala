@@ -4,16 +4,21 @@ import spire.algebra.*
 import spire.implicits.*
 
 import scala.collection.immutable.SortedMap
+import spire.implicits.MapEq as _
+import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCRng as _, MapGroup as _}
+import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
+
 
 private object SortedMapUtils {
     object Canonical {
         def sortedMap[K, V](
             self: SortedMap[K, V]
-        )(using vMonoid: AdditiveMonoid[V], vEq: Eq[V]): SortedMap[K, V] =
+        )(using vMonoid: AdditiveMonoid[V]): SortedMap[K, V] =
             Canonical.sortedMap(self, vMonoid.zero)
 
-        def sortedMap[K, V](self: SortedMap[K, V], zero: V)(using vEq: Eq[V]): SortedMap[K, V] =
-            self.filterNot(_._2 === zero)
+        def sortedMap[K, V](self: SortedMap[K, V], zero: V): SortedMap[K, V] =
+            self.filterNot(_._2 == zero)
     }
 
     object CombineWith {
