@@ -10,10 +10,7 @@ private object SortedMapUtils {
         def sortedMap[K, V](
             self: SortedMap[K, V]
         )(using vMonoid: AdditiveMonoid[V], vEq: Eq[V]): SortedMap[K, V] =
-            Canonical.sortedMap(self, vMonoid.zero)
-
-        def sortedMap[K, V](self: SortedMap[K, V], zero: V)(using vEq: Eq[V]): SortedMap[K, V] =
-            self.filterNot(_._2 === zero)
+            self.filterNot(_._2 === vMonoid.zero)
     }
 
     object CombineWith {

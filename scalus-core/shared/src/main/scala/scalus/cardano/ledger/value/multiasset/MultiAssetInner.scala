@@ -21,7 +21,8 @@ private object MultiAssetInner {
     object Inner {
         opaque type Inner = SortedMap[AssetName, Coin]
 
-        def apply(x: SortedMap[AssetName, Coin]): Inner = Canonical.sortedMap(x, Coin.zero)
+        def apply(x: SortedMap[AssetName, Coin]): Inner =
+            Canonical.sortedMap(x)(using vMonoid = Coin.AdditiveMonoid)
 
         def zero: Inner = SortedMap.empty
 
@@ -49,6 +50,16 @@ private object MultiAssetInner {
 
             override def partialCompare(self: Inner, other: Inner): Double =
                 mapPartialOrder.partialCompare(self, other)
+        }
+
+        // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
+        // because adding `Long` coins is unsafe (it can overflow/underflow without warning/error).
+        object AdditiveMonoid extends AdditiveMonoid[Inner] {
+            override def zero: Inner = Inner.zero
+            override def plus(self: Inner, other: Inner): Inner =
+                combineWith(Coin.AdditiveMonoid.plus)(self, other)(using
+                  vResultMonoid = Coin.AdditiveMonoid
+                )
         }
 
         enum ArithmeticError extends Throwable:

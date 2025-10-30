@@ -80,6 +80,13 @@ object Coin {
         override def compare(self: Coin, other: Coin): Int = LongAlgebra.compare(self, other)
     }
 
+    // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
+    // because adding `Long` coins is unsafe (it can overflow/underflow without warning/error).
+    object AdditiveMonoid extends AdditiveMonoid[Coin] {
+        override def zero: Coin = Coin.zero
+        override def plus(x: Coin, y: Coin): Coin = x + y
+    } 
+
     extension (self: IterableOnce[Coin]) {
         def averageCoin: Option[Fractional] = toUnbounded.averageCoin
 
