@@ -75,7 +75,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .get
 
         val utxos: Utxos = Map(htlcUtxo) ++ wallet.utxo
-        CardanoMutator.transit(Context(), State(utxos = utxos), tx).map(_ => ())
+        CardanoMutator.transit(Context.testMainnet(), State(utxos = utxos), tx).map(_ => ())
     }
 
     private def timeoutHtlc(
@@ -92,11 +92,12 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .get
 
         val utxos: Utxos = Map(htlcUtxo) ++ wallet.utxo
-        CardanoMutator.transit(Context(), State(utxos = utxos), tx).map(_ => ())
+        CardanoMutator.transit(Context.testMainnet(), State(utxos = utxos), tx).map(_ => ())
     }
 
     ignore("receiver reveals preimage before timeout") {
         val result = revealHtlc(validPreimage, receiverPkh, beforeTimeout)
+//        println(result)
         assert(result.isRight)
     }
 

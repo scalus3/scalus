@@ -10,6 +10,10 @@ class Context(
     val slotConfig: SlotConfig = SlotConfig.Mainnet
 )
 
+object Context {
+    def testMainnet(): Context = Context(env = UtxoEnv.testMainnet)
+}
+
 case class State(
     utxos: Utxos = Map.empty,
     certState: CertState = CertState.empty,
@@ -35,6 +39,21 @@ object UtxoEnv {
           params,
           CertState.empty,
           Network.Testnet
+        )
+
+    // TODO: remove
+    val testMainnet: UtxoEnv =
+
+        val params: ProtocolParams = ProtocolParams.fromBlockfrostJson(
+          this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
+        )
+
+        // Load protocol parameters from a JSON file
+        UtxoEnv(
+          0,
+          params,
+          CertState.empty,
+          Network.Mainnet
         )
 }
 

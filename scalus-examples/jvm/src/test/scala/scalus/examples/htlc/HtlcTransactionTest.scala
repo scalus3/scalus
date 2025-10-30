@@ -10,8 +10,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.utils.ScriptFeeComparison
 import scalus.cardano.ledger.utils.ScriptFeeComparison.{ComparisonResult, FeeComparison}
-import scalus.cardano.txbuilder.Datum.DatumInlined
-import scalus.cardano.txbuilder.{BuilderContext, Datum, ExpectedSigner}
+import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
 import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
@@ -116,16 +115,15 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
         val script = scriptAddress.scriptHashOption.flatMap(allScripts.get).get
         val program = Program.fromCbor(script.script.bytes)
 
+        val result = program.runWithDebug(scriptContext)
+
 //        assert(program alphaEq compiledContract.program)
-        assert(
-          program.runWithDebug(scriptContext) alphaEq compiledContract.program.runWithDebug(
-            scriptContext
-          )
-        )
+        assert(result alphaEq compiledContract.program.runWithDebug(scriptContext))
         assert(script == compiledContract.script)
+        assert(program.cborByteString == compiledContract.program.cborByteString)
         assert(program.cborByteString == compiledContract.script.script)
 
-        program.runWithDebug(scriptContext)
+        result
     }
 
     test("receiver reveals preimage before timeout") {

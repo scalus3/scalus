@@ -9,7 +9,7 @@ import scalus.bloxbean.Interop.??
 
 class BlocksLedgerRulesValidator(
     val rules: Map[String, STS],
-    val context: Context = Context(),
+    val context: Context = Context.testMainnet(),
     val state: State = State()
 ) extends AnyFunSuite {
     import BlocksLedgerRulesValidator.utxoResolver
@@ -38,9 +38,10 @@ class BlocksLedgerRulesValidator(
                     val utxo = utxoResolver.resolveUtxos(transaction)
 //                    val utxo = bloxbeanResolveUtxo(transaction)
 
+                    val result = rule(context, state.copy(utxos = state.utxos ++ utxo), transaction)
                     assert(
-                      rule(context, state.copy(utxos = state.utxos ++ utxo), transaction).isRight,
-                      s"Transaction ${transaction.id} in block ${block.header.blockNumber} failed $ruleName"
+                      result.isRight,
+                      s"Transaction ${transaction.id} in block ${block.header.blockNumber} failed $ruleName with error: ${result.swap.getOrElse("")}"
                     )
 
 //                    println(

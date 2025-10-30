@@ -408,7 +408,8 @@ case class ByronAddress(bytes: ByteString) extends Address {
     def hrp: Try[String] = Failure(
       new UnsupportedOperationException("Byron addresses don't use bech32")
     )
-    def network: Option[Network] = None // Byron addresses don't have explicit network
+    inline override def getNetwork: Option[Network] =
+        None // Byron addresses don't have explicit network
     def hasScript: Boolean = false // Byron addresses don't have scripts
     def isEnterprise: Boolean = false // Byron addresses are not enterprise addresses
     def encode: Try[String] = Failure(
