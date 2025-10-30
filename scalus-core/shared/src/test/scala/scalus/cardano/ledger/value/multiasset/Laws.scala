@@ -12,6 +12,9 @@ import Gen.Arb.given
 import spire.laws.arb.given
 
 class Laws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
+    implicit val config: PropertyCheckConfiguration = PropertyCheckConfiguration(
+        minSuccessful = 10_000, workers = 10)
+
     checkAll("MultiAsset Partial Order", OrderLaws[MultiAsset].partialOrder)
 
     checkAll("MultiAsset Unbounded Partial Order", OrderLaws[MultiAsset.Unbounded].partialOrder)
