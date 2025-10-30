@@ -11,6 +11,9 @@ import Gen.Arb.given
 import spire.laws.arb.given
 
 class Laws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
+    implicit val config: PropertyCheckConfiguration =
+        PropertyCheckConfiguration(minSuccessful = 100_000, workers = 10)
+
     checkAll("Coin.Coin ordered", OrderLaws[Coin.Coin].order)
 
     checkAll("Coin.Unbounded cModule", VectorSpaceLaws[Coin.Unbounded, SafeLong].cModule)
