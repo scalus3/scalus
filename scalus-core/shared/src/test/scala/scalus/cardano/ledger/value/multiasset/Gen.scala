@@ -14,9 +14,9 @@ import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 
 import spire.implicits.MapEq as _
-import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCSemiring as _, MapMonoid as _}
 import spire.implicits.{MapCRng as _, MapGroup as _}
-import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
+import spire.implicits.{MapInnerProductSpace as _, MapVectorSpace as _}
 
 object Gen {
     def genConfigurableMultiAssetFractional(

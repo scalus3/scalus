@@ -11,9 +11,6 @@ import Gen.Arb.given
 import spire.laws.arb.given
 
 class Laws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
-    // ===================================
-    // Value
-    // ===================================
     checkAll("Value Partial Order", OrderLaws[Value].partialOrder)
 
     checkAll("Value Unbounded Partial Order", OrderLaws[Value.Unbounded].partialOrder)

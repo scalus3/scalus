@@ -1,38 +1,41 @@
 package scalus.cardano.ledger.value.multiasset
 
-import scalus.cardano.ledger.value.multiasset.SortedMapUtils.Canonical
-import scalus.cardano.ledger.value.multiasset.SortedMapUtils.CombineWith.*
-import scalus.cardano.ledger.value.multiasset.SortedMapUtils.SortedMapPartialOrder
+import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap
+import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.*
 import scalus.cardano.ledger.{AssetName, PolicyId}
 import spire.algebra.*
 import spire.math.{Rational, SafeLong}
-
 import spire.implicits.*
 import spire.implicits.MapEq as _
-import spire.implicits.{MapMonoid as _, MapCSemiring as _}
+import spire.implicits.{MapCSemiring as _, MapMonoid as _}
 import spire.implicits.{MapCRng as _, MapGroup as _}
-import spire.implicits.{ MapVectorSpace as _, MapInnerProductSpace as _}
+import spire.implicits.{MapInnerProductSpace as _, MapVectorSpace as _}
 
+import scala.annotation.targetName
 import scala.collection.immutable.SortedMap
 
 type MultiAsset = MultiAsset.MultiAsset
 
 object MultiAsset {
-    opaque type MultiAsset = SortedMap[PolicyId, Inner]
+    opaque type MultiAsset = CanonicalSortedMap[PolicyId, Inner]
 
+    @targetName("applyWithCanonicalSortedMap")
+    def apply(x: CanonicalSortedMap[PolicyId, Inner]): MultiAsset = x
+
+    @targetName("applyWithSortedMap")
     def apply(x: SortedMap[PolicyId, Inner]): MultiAsset =
-        Canonical.sortedMap(x)(using vMonoid = Inner.AdditiveMonoid)
+        CanonicalSortedMap(x)(using vMonoid = Inner.AdditiveMonoid)
 
-    def zero: MultiAsset = SortedMap.empty
+    def zero: MultiAsset = CanonicalSortedMap.empty
 
     extension (self: MultiAsset)
-        def underlying: SortedMap[PolicyId, Inner] = self
+        def underlying: CanonicalSortedMap[PolicyId, Inner] = self
 
         def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-            Unbounded(self.view.mapValues(_.scaleIntegral(c)).to(SortedMap))
+            Unbounded(self.mapValues(_.scaleIntegral(c)))
 
         def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
-            Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+            Fractional(self.mapValues(_.scaleFractional(c)))
         }
 
     given algebra: Algebra.type = Algebra
@@ -43,14 +46,9 @@ object MultiAsset {
         override def partialCompare(self: MultiAsset, other: MultiAsset): Double =
             mapPartialOrder.partialCompare(self, other)
 
-        private val mapPartialOrder = SortedMapPartialOrder[PolicyId, Inner, Double](
-            // If both keys exist, compare the values.
-            // If only the left key exists, compare the left value against zero.
-            // If only the right key exists, compare the right value against zero.
-            compareBoth = MultiAsset.Inner.algebra.partialCompare,
-            compareLeft = MultiAsset.Inner.algebra.partialCompare(_, Inner.zero),
-            compareRight = MultiAsset.Inner.algebra.partialCompare(Inner.zero, _)
-        )
+        private val mapPartialOrder = CanonicalSortedMapPartialOrder[PolicyId, Inner](
+          MultiAsset.Inner.algebra.partialCompare
+        )(using vMonoid = Inner.AdditiveMonoid)
     }
 
     // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
@@ -60,7 +58,7 @@ object MultiAsset {
 
         override def plus(self: MultiAsset, other: MultiAsset): MultiAsset =
             combineWith(Inner.AdditiveMonoid.plus)(self, other)(using
-                vResultMonoid = Inner.AdditiveMonoid
+              vResultMonoid = Inner.AdditiveMonoid
             )
     }
 
@@ -119,42 +117,40 @@ private object MultiAssetVariant {
     type Unbounded = Unbounded.Unbounded
 
     object Unbounded {
-        opaque type Unbounded = SortedMap[PolicyId, Inner.Unbounded]
+        opaque type Unbounded = CanonicalSortedMap[PolicyId, Inner.Unbounded]
 
-        def apply(x: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = Canonical.sortedMap(x)
+        @targetName("applyWithCanonicalSortedMap")
+        def apply(x: CanonicalSortedMap[PolicyId, Inner.Unbounded]): Unbounded = x
 
-        def zero: Unbounded = SortedMap.empty
+        @targetName("applyWithSortedMap")
+        def apply(x: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = CanonicalSortedMap(x)
+
+        def zero: Unbounded = CanonicalSortedMap.empty
 
         import Inner.Unbounded.algebra as innerAlgebra
 
         extension (self: Unbounded)
-            def underlying: SortedMap[PolicyId, Inner.Unbounded] = self
+            def underlying: CanonicalSortedMap[PolicyId, Inner.Unbounded] = self
 
             def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
-                try {
-                    Right(self.unsafeToMultiAsset)
-                } catch {
-                    case e: MultiAsset.ArithmeticError => Left(e)
-                }
+                try { Right(self.unsafeToMultiAsset) }
+                catch { case e: MultiAsset.ArithmeticError => Left(e) }
 
             def unsafeToMultiAsset: MultiAsset = MultiAsset(
-              self.view
-                  .map((policyId: PolicyId, innerUnbounded: Inner.Unbounded) =>
-                      try {
-                          (policyId, innerUnbounded.unsafeToInner)
-                      } catch {
-                          case e: Inner.ArithmeticError =>
-                              throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
-                      }
-                  )
-                  .to(SortedMap)
+              self.mapValuesIndexed((policyId: PolicyId, innerUnbounded: Inner.Unbounded) =>
+                  try { innerUnbounded.unsafeToInner }
+                  catch {
+                      case e: Inner.ArithmeticError =>
+                          throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
+                  }
+              )(using vNewMonoid = Inner.AdditiveMonoid)
             )
 
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 self :* c.toSafeLong
 
             def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
-                Fractional(self.view.mapValues(_.scaleFractional(c)).to(SortedMap))
+                Fractional(self.mapValues(_.scaleFractional(c)))
             }
 
         given algebra: Algebra.type = Algebra
@@ -170,7 +166,7 @@ private object MultiAssetVariant {
             override def zero: Unbounded = Unbounded.zero
 
             override def negate(self: Unbounded): Unbounded =
-                self.view.mapValues(innerAlgebra.negate).to(SortedMap)
+                self.mapValues(innerAlgebra.negate)
 
             override def plus(self: Unbounded, other: Unbounded): Unbounded =
                 combineWith(innerAlgebra.plus)(self, other)
@@ -179,15 +175,10 @@ private object MultiAssetVariant {
                 combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                self.view.mapValues(_ :* s).to(SortedMap)
+                self.mapValues(_ :* s)
 
-            private val mapPartialOrder = SortedMapPartialOrder[PolicyId, Inner.Unbounded, Double](
-                // If both keys exist, compare the values.
-                // If only the left key exists, compare the left value against zero.
-                // If only the right key exists, compare the right value against zero.
-                compareBoth = innerAlgebra.partialCompare,
-                compareLeft = innerAlgebra.partialCompare(_, Inner.Unbounded.zero),
-                compareRight = innerAlgebra.partialCompare(Inner.Unbounded.zero, _)
+            private val mapPartialOrder = CanonicalSortedMapPartialOrder[PolicyId, Inner.Unbounded](
+              innerAlgebra.partialCompare
             )
         }
     }
@@ -199,36 +190,34 @@ private object MultiAssetVariant {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        opaque type Fractional = SortedMap[PolicyId, Inner.Fractional]
+        opaque type Fractional = CanonicalSortedMap[PolicyId, Inner.Fractional]
 
-        def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = Canonical.sortedMap(x)
+        @targetName("applyWithCanonicalSortedMap")
+        def apply(x: CanonicalSortedMap[PolicyId, Inner.Fractional]): Fractional = x
 
-        def zero: Fractional = SortedMap.empty
+        @targetName("applyWithSortedMap")
+        def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = CanonicalSortedMap(x)
+
+        def zero: Fractional = CanonicalSortedMap.empty
 
         extension (self: Fractional)
-            def underlying: SortedMap[PolicyId, Inner.Fractional] = self
+            def underlying: CanonicalSortedMap[PolicyId, Inner.Fractional] = self
 
             def toUnbounded: Unbounded =
-                Unbounded(self.view.mapValues(_.toUnbounded).to(SortedMap))
+                Unbounded(self.mapValues(_.toUnbounded))
 
             def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
-                try {
-                    Right(self.unsafeToMultiAsset)
-                } catch {
-                    case e: MultiAsset.ArithmeticError => Left(e)
-                }
+                try { Right(self.unsafeToMultiAsset) }
+                catch { case e: MultiAsset.ArithmeticError => Left(e) }
 
             def unsafeToMultiAsset: MultiAsset = MultiAsset(
-              self.view
-                  .map((policyId: PolicyId, innerFractional: Inner.Fractional) =>
-                      try {
-                          (policyId, innerFractional.unsafeToInner)
-                      } catch {
-                          case e: Inner.ArithmeticError =>
-                              throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
-                      }
-                  )
-                  .to(SortedMap)
+              self.mapValuesIndexed((policyId: PolicyId, innerFractional: Inner.Fractional) =>
+                  try { innerFractional.unsafeToInner }
+                  catch {
+                      case e: Inner.ArithmeticError =>
+                          throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
+                  }
+              )(using vNewMonoid = Inner.AdditiveMonoid)
             )
 
             def scaleFractional[F](c: F)(using spire.math.Fractional[F]): Fractional =
@@ -249,7 +238,7 @@ private object MultiAssetVariant {
             override def zero: Fractional = Fractional.zero
 
             override def negate(self: Fractional): Fractional =
-                self.view.mapValues(innerAlgebra.negate).to(SortedMap)
+                self.mapValues(innerAlgebra.negate)
 
             override def plus(self: Fractional, other: Fractional): Fractional =
                 combineWith(innerAlgebra.plus)(self, other)
@@ -258,16 +247,11 @@ private object MultiAssetVariant {
                 combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
 
             override def timesl(s: Rational, self: Fractional): Fractional =
-                self.view.mapValues(_ :* s).to(SortedMap)
+                self.mapValues(_ :* s)
 
             private val mapPartialOrder =
-                SortedMapPartialOrder[PolicyId, Inner.Fractional, Double](
-                    // If both keys exist, compare the values.
-                    // If only the left key exists, compare the left value against zero.
-                    // If only the right key exists, compare the right value against zero.
-                    compareBoth = innerAlgebra.partialCompare,
-                    compareLeft = innerAlgebra.partialCompare(_, Inner.Fractional.zero),
-                    compareRight = innerAlgebra.partialCompare(Inner.Fractional.zero, _)
+                CanonicalSortedMapPartialOrder[PolicyId, Inner.Fractional](
+                  innerAlgebra.partialCompare
                 )
         }
     }

@@ -85,7 +85,7 @@ object Coin {
     object AdditiveMonoid extends AdditiveMonoid[Coin] {
         override def zero: Coin = Coin.zero
         override def plus(x: Coin, y: Coin): Coin = x + y
-    } 
+    }
 
     extension (self: IterableOnce[Coin]) {
         def averageCoin: Option[Fractional] = toUnbounded.averageCoin
