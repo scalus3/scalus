@@ -5,7 +5,7 @@ import spire.implicits.*
 
 import scala.collection.immutable.SortedMap
 
-private object UtilsSortedMap {
+private object SortedMapUtils {
     object Canonical {
         def sortedMap[K, V](
             self: SortedMap[K, V]

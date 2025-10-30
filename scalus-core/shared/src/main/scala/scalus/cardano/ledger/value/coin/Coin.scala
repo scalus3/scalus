@@ -11,7 +11,6 @@ type Coin = Coin.Coin
 object Coin {
     import ArithmeticError.*
     import CoinSubtypes.*
-    import UtilsCoin.Aggregate
 
     /** Non-negative and bounded amount of coins. Can be used in tx outputs without any additional
       * checks.
@@ -110,7 +109,6 @@ object Coin {
 
 private object CoinSubtypes {
     import Coin.ArithmeticError
-    import UtilsCoin.Aggregate
 
     // ===================================
     // Coin.Unbounded
@@ -204,7 +202,7 @@ private object CoinSubtypes {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        import UtilsCoin.RationalExtensions.*
+        import RationalExtensions.*
 
         opaque type Fractional = Rational
 

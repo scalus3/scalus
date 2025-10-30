@@ -1,8 +1,8 @@
 package scalus.cardano.ledger.value.multiasset
 
-import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.Canonical
-import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.CombineWith.*
-import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.SortedMapPartialOrder
+import scalus.cardano.ledger.value.multiasset.SortedMapUtils.Canonical
+import scalus.cardano.ledger.value.multiasset.SortedMapUtils.CombineWith.*
+import scalus.cardano.ledger.value.multiasset.SortedMapUtils.SortedMapPartialOrder
 import scalus.cardano.ledger.{AssetName, PolicyId}
 import spire.algebra.*
 import spire.implicits.*

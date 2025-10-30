@@ -2,9 +2,9 @@ package scalus.cardano.ledger.value.multiasset
 
 import scalus.cardano.ledger.AssetName
 import scalus.cardano.ledger.value.coin.Coin
-import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.Canonical
-import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.CombineWith.*
-import scalus.cardano.ledger.value.multiasset.UtilsSortedMap.SortedMapPartialOrder
+import scalus.cardano.ledger.value.multiasset.SortedMapUtils.Canonical
+import scalus.cardano.ledger.value.multiasset.SortedMapUtils.CombineWith.*
+import scalus.cardano.ledger.value.multiasset.SortedMapUtils.SortedMapPartialOrder
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
