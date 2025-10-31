@@ -8,6 +8,17 @@ import scala.collection.immutable.SortedMap
   * keys corresponding to the monoid's additive identity are removed from the map. This ensures that
   * the map itself can be an additive monoid, because [[SortedMap.empty]] can be the unique additive
   * identity.
+ *
+ * KNOWN GOTCHAS:
+ *
+ * - The default map constructed with `SortedMap.from` is a `TreeMap`, which uses an implicit [[Ordering]] on the Keys.
+ *   This means that two `SortedMap[K,V]`s with the same set of keys are not guaranteed to be traversed in the same
+ *   order. As a user, this means that you should use a _consistent_ Ordering when constructing SortedMaps.
+ *     - See the ignored test "TreeMap ordering is not unique for a type" in `multiasset/Unit.scala`
+ * - This extends to CanonicalSortedMap as well. If you pass different `AdditiveMonoid`s during construction,
+ *   the canonical "zero" element that is supposed to be removed from the map can be interpreted differently,
+ *   and this may lead to unexpected behavior
+ *     - See the ignored test "canoncial sorted map should not allow different monoids" in `multiasset/Unit.scala`
   */
 type CanonicalSortedMap[K, V] = CanonicalSortedMap.CanonicalSortedMap[K, V]
 
@@ -174,6 +185,10 @@ private object CanonicalSortedMap {
         }
     }
 
+  /**
+   * A partial ordering on CanonicalSortedMap such that non-existant keys in one map are interpreted as zero,
+   * and two maps are only comparable if either both are empty or all comparisons are the same.
+   */
     trait CanonicalSortedMapPartialOrderAbstract[K, V, I](toDouble: I => Double)(using
         iMonoid: AdditiveMonoid[I],
         kOrdering: Ordering[K],

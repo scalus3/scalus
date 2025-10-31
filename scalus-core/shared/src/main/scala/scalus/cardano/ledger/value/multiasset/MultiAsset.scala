@@ -106,11 +106,14 @@ object MultiAsset {
         )(using vMonoid = Inner.AdditiveMonoid)
     }
 
-    // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
-    // because adding `Long` Inners is unsafe (it can overflow/underflow without warning/error).
+    /**
+     * This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
+    because adding `Long` Inners is unsafe (it can overflow/underflow without warning/error).
+    */
     object AdditiveMonoid extends AdditiveMonoid[MultiAsset] {
         override def zero: MultiAsset = MultiAsset.zero
 
+        /** Note: can silently overflow or underflow, breaking the invariants of the class */
         override def plus(self: MultiAsset, other: MultiAsset): MultiAsset =
             combineWith(Inner.AdditiveMonoid.plus, self, other)(using
               vSelfMonoid = Inner.AdditiveMonoid,
@@ -253,7 +256,7 @@ private object MultiAssetVariant {
                     other.underlying
                 )
             )
-        
+
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
