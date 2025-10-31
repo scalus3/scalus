@@ -106,10 +106,13 @@ class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
               )
             )
         if fails != result.isSuccess then
-            if result.budget.cpu > budget.cpu || result.budget.memory > budget.memory then
-                println(result.budget)
-                println("Costs: " + result.costs)
-                fail("Performance regression")
+            if result.budget.cpu > budget.cpu || result.budget.memory > budget.memory
+            then
+                fail:
+                    s"""Performance regression,
+                    |expected: $budget,
+                    |but got: ${result.budget};
+                    |costs: ${result.costs}""".stripMargin
         else
             result.logs.foreach(println)
             val reason = result match
