@@ -38,6 +38,61 @@ object MultiAsset {
             Fractional(self.mapValues(_.scaleFractional(c)))
         }
 
+        @targetName("addCoerce_Inner")
+        infix def +~(other: MultiAsset): Unbounded = Unbounded(
+            combineWith[PolicyId, Inner, Inner, Inner.Unbounded](_ +~ _, self, other)(using
+                vSelfMonoid = Inner.AdditiveMonoid,
+                vOtherMonoid = Inner.AdditiveMonoid
+            )
+        )
+
+        @targetName("addCoerce_Unbounded")
+        infix def +~(other: Unbounded): Unbounded = Unbounded(
+            combineWith[PolicyId, Inner, Inner.Unbounded, Inner.Unbounded](
+                _ +~ _,
+                self,
+                other.underlying
+            )(using vSelfMonoid = Inner.AdditiveMonoid)
+        )
+
+        @targetName("addCoerce_Fractional")
+        infix def +~(other: Fractional): Fractional = Fractional(
+            combineWith[PolicyId, Inner, Inner.Fractional, Inner.Fractional](
+                _ +~ _,
+                self,
+                other.underlying
+            )(using vSelfMonoid = Inner.AdditiveMonoid)
+        )
+
+        @targetName("subtractCoerce_Inner")
+        infix def -~(other: MultiAsset): Unbounded = Unbounded(
+            combineWith[PolicyId, Inner, Inner, Inner.Unbounded](_ -~ _, self, other)(using
+                vSelfMonoid = Inner.AdditiveMonoid,
+                vOtherMonoid = Inner.AdditiveMonoid
+            )
+        )
+
+        @targetName("subtractCoerce_Unbounded")
+        infix def -~(other: Unbounded): Unbounded = Unbounded(
+            combineWith[PolicyId, Inner, Inner.Unbounded, Inner.Unbounded](
+                _ -~ _,
+                self,
+                other.underlying
+            )(using vSelfMonoid = Inner.AdditiveMonoid)
+        )
+
+        @targetName("subtractCoerce_Fractional")
+        infix def -~(other: Fractional): Fractional = Fractional(
+            combineWith[PolicyId, Inner, Inner.Fractional, Inner.Fractional](
+                _ -~ _,
+                self,
+                other.underlying
+            )(using vSelfMonoid = Inner.AdditiveMonoid)
+        )
+
+        @targetName("negate")
+        infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
+
     given algebra: Algebra.type = Algebra
 
     object Algebra extends PartialOrder[MultiAsset] {
@@ -52,12 +107,14 @@ object MultiAsset {
     }
 
     // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
-    // because adding `Long` coins is unsafe (it can overflow/underflow without warning/error).
+    // because adding `Long` Inners is unsafe (it can overflow/underflow without warning/error).
     object AdditiveMonoid extends AdditiveMonoid[MultiAsset] {
         override def zero: MultiAsset = MultiAsset.zero
 
         override def plus(self: MultiAsset, other: MultiAsset): MultiAsset =
-            combineWith(Inner.AdditiveMonoid.plus)(self, other)(using
+            combineWith(Inner.AdditiveMonoid.plus, self, other)(using
+              vSelfMonoid = Inner.AdditiveMonoid,
+              vOtherMonoid = Inner.AdditiveMonoid,
               vResultMonoid = Inner.AdditiveMonoid
             )
     }
@@ -155,6 +212,48 @@ private object MultiAssetVariant {
                 Fractional(self.mapValues(_.scaleFractional(c)))
             }
 
+            @targetName("addCoerce_Inner")
+            infix def +~(other: MultiAsset): Unbounded = Unbounded(
+                combineWith[PolicyId, Inner.Unbounded, Inner, Inner.Unbounded](
+                    _ +~ _,
+                    self,
+                    other.underlying
+                )(using vOtherMonoid = Inner.AdditiveMonoid)
+            )
+
+            @targetName("addCoerce_Unbounded")
+            infix def +~(other: Unbounded): Unbounded = self + other
+
+            @targetName("addCoerce_Fractional")
+            infix def +~(other: Fractional): Fractional = Fractional(
+                combineWith[PolicyId, Inner.Unbounded, Inner.Fractional, Inner.Fractional](
+                    _ +~ _,
+                    self,
+                    other.underlying
+                )
+            )
+
+            @targetName("subtractCoerce_Inner")
+            infix def -~(other: MultiAsset): Unbounded = Unbounded(
+                combineWith[PolicyId, Inner.Unbounded, Inner, Inner.Unbounded](
+                    _ -~ _,
+                    self,
+                    other.underlying
+                )(using vOtherMonoid = Inner.AdditiveMonoid)
+            )
+
+            @targetName("subtractCoerce_Unbounded")
+            infix def -~(other: Unbounded): Unbounded = self - other
+
+            @targetName("subtractCoerce_Fractional")
+            infix def -~(other: Fractional): Fractional = Fractional(
+                combineWith[PolicyId, Inner.Unbounded, Inner.Fractional, Inner.Fractional](
+                    _ -~ _,
+                    self,
+                    other.underlying
+                )
+            )
+        
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
@@ -171,10 +270,10 @@ private object MultiAssetVariant {
                 self.mapValues(innerAlgebra.negate)
 
             override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.plus)(self, other)
+                combineWith(innerAlgebra.plus, self, other)
 
             override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
+                combineWith(innerAlgebra.minus, self, other)
 
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 self.mapValues(_ :* s)
@@ -226,6 +325,48 @@ private object MultiAssetVariant {
             def scaleFractional[F](c: F)(using spire.math.Fractional[F]): Fractional =
                 self :* c.toRational
 
+            @targetName("addCoerce_Inner")
+            infix def +~(other: MultiAsset): Fractional = Fractional(
+                combineWith[PolicyId, Inner.Fractional, Inner, Inner.Fractional](
+                    _ +~ _,
+                    self,
+                    other.underlying
+                )(using vOtherMonoid = Inner.AdditiveMonoid)
+            )
+
+            @targetName("addCoerce_Unbounded")
+            infix def +~(other: Unbounded): Fractional = Fractional(
+                combineWith[PolicyId, Inner.Fractional, Inner.Unbounded, Inner.Fractional](
+                    _ +~ _,
+                    self,
+                    other.underlying
+                )
+            )
+
+            @targetName("addCoerce_Fractional")
+            infix def +~(other: Fractional): Fractional = self + other
+
+            @targetName("subtractCoerce_Inner")
+            infix def -~(other: MultiAsset): Fractional = Fractional(
+                combineWith[PolicyId, Inner.Fractional, Inner, Inner.Fractional](
+                    _ -~ _,
+                    self,
+                    other.underlying
+                )(using vOtherMonoid = Inner.AdditiveMonoid)
+            )
+
+            @targetName("subtractCoerce_Unbounded")
+            infix def -~(other: Unbounded): Fractional = Fractional(
+                combineWith[PolicyId, Inner.Fractional, Inner.Unbounded, Inner.Fractional](
+                    _ -~ _,
+                    self,
+                    other.underlying
+                )
+            )
+
+            @targetName("subtractCoerce_Fractional")
+            infix def -~(other: Fractional): Fractional = self - other
+
         import Inner.Fractional.algebra as innerAlgebra
 
         given algebra: Algebra.type = Algebra
@@ -244,10 +385,10 @@ private object MultiAssetVariant {
                 self.mapValues(innerAlgebra.negate)
 
             override def plus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerAlgebra.plus)(self, other)
+                combineWith(innerAlgebra.plus, self, other)
 
             override def minus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerAlgebra.minus, identity, innerAlgebra.negate)(self, other)
+                combineWith(innerAlgebra.minus, self, other)
 
             override def timesl(s: Rational, self: Fractional): Fractional =
                 self.mapValues(_ :* s)

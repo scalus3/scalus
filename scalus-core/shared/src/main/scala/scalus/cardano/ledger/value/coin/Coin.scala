@@ -2,7 +2,7 @@ package scalus.cardano.ledger.value.coin
 
 import spire.algebra.*
 import spire.implicits.*
-import spire.math.{Rational, SafeLong}
+import spire.math.{ConvertableFrom, Rational, SafeLong}
 import RationalExtensions.*
 import cats.data.NonEmptyList
 
@@ -44,8 +44,8 @@ object Coin {
     extension (self: Coin)
         def underlying: Long = self
 
-        def toCoinUnbounded: Unbounded = Unbounded(self)
-        def toCoinFractional: Fractional = Fractional(self)
+        def toUnbounded: Unbounded = Unbounded(self)
+        def toFractional: Fractional = Fractional(self)
 
         def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
             Unbounded(self) :* c.toSafeLong
@@ -55,22 +55,22 @@ object Coin {
 
         def signum: Int = LongAlgebra.signum(self)
 
-        @targetName("addCoerce")
+        @targetName("addCoerce_Coin")
         infix def +~(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
 
-        @targetName("addCoerce")
+        @targetName("addCoerce_Unbounded")
         infix def +~(other: Unbounded): Unbounded = Unbounded(self) + other
 
-        @targetName("addCoerce")
+        @targetName("addCoerce_Unbounded")
         infix def +~(other: Fractional): Fractional = Fractional(self) + other
 
-        @targetName("subtractCoerce")
+        @targetName("subtractCoerce_Coin")
         infix def -~(other: Coin): Unbounded = Unbounded(self) - Unbounded(other)
 
-        @targetName("subtractCoerce")
+        @targetName("subtractCoerce_Unbounded")
         infix def -~(other: Unbounded): Unbounded = Unbounded(self) - other
 
-        @targetName("subtractCoerce")
+        @targetName("subtractCoerce_Fractional")
         infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
         @targetName("negate")
@@ -86,7 +86,7 @@ object Coin {
           */
         def distribute(weights: Distribution.NormalizedWeights): NonEmptyList[Coin] =
             // `unsafeToCoin` is safe here because the weights sum to one
-            toCoinUnbounded.distribute(weights).map(_.unsafeToCoin)
+            toUnbounded.distribute(weights).map(_.unsafeToCoin)
 
     // def scaleFloor
 
@@ -105,12 +105,12 @@ object Coin {
         override def plus(x: Coin, y: Coin): Coin = x + y
     }
 
-    extension (self: IterableOnce[Coin]) {
-        def averageCoin: Option[Fractional] = toUnbounded.averageCoin
+    extension (self: Seq[Coin]) {
+        def averageCoin: Option[Fractional] = unbounded.averageCoin
 
-        def sumCoins: Unbounded = toUnbounded.sumCoins
+        def sumCoins: Unbounded = unbounded.sumCoins
 
-        private def toUnbounded: IterableOnce[Unbounded] = self.iterator.map(_.toCoinUnbounded)
+        private def unbounded: Seq[Coin.Unbounded] = self.map(_.toUnbounded)
     }
 
     // ===================================
@@ -158,33 +158,33 @@ private object CoinSubtypes {
 
             def toFractional: Fractional = Fractional(self.toRational)
 
-            @targetName("scaleIntegral_CoinUnbounded")
+            @targetName("scaleIntegral_Unbounded")
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 self :* c.toSafeLong
 
-            @targetName("scaleFractional_CoinUnbounded")
+            @targetName("scaleFractional_Unbounded")
             def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
                 self.toFractional :* c.toRational
 
-            @targetName("signum_CoinUnbounded")
+            @targetName("signum_Unbounded")
             def signum: Int = self.signum
 
-            @targetName("addCoerce")
-            infix def +~(other: Coin): Unbounded = self + other.toCoinUnbounded
+            @targetName("addCoerce_Coin")
+            infix def +~(other: Coin): Unbounded = self + other.toUnbounded
 
-            @targetName("addCoerce")
+            @targetName("addCoerce_Unbounded")
             infix def +~(other: Unbounded): Unbounded = self + other
 
-            @targetName("addCoerce")
+            @targetName("addCoerce_Fractional")
             infix def +~(other: Fractional): Fractional = Fractional(self) + other
 
-            @targetName("subtractCoerce")
-            infix def -~(other: Coin): Unbounded = self - other.toCoinUnbounded
+            @targetName("subtractCoerce_Coin")
+            infix def -~(other: Coin): Unbounded = self - other.toUnbounded
 
-            @targetName("subtractCoerce")
+            @targetName("subtractCoerce_Unbounded")
             infix def -~(other: Unbounded): Unbounded = self - other
 
-            @targetName("subtractCoerce")
+            @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
             /** Distribute a [[Coin.Unbounded]] amount according to a list of normalized weights.
@@ -197,10 +197,13 @@ private object CoinSubtypes {
             def distribute(weights: Distribution.NormalizedWeights): NonEmptyList[Unbounded] =
                 weights.distribute(self)
 
-        extension (self: IterableOnce[Unbounded]) {
-            def averageCoin: Option[Fractional] = Aggregate.average(self, _.toFractional)
+        extension (self: Seq[Unbounded]) {
+            def averageCoin: Option[Fractional] = {
+                val l = self.length
+                Option.when(l > 0)(Fractional(Rational(self.qsum, l)))
+            }
 
-            def sumCoins: Unbounded = Aggregate.sum(self)
+            def sumCoins: Unbounded = self.qsum
         }
 
         given algebra: Algebra.type = Algebra
@@ -235,6 +238,8 @@ private object CoinSubtypes {
 
         def zero: Fractional = 0
 
+        def one: Fractional = 1
+
         extension (self: Fractional)
             def underlying: Rational = self
 
@@ -254,32 +259,35 @@ private object CoinSubtypes {
 
             def signum: Int = self.signum
 
-            @targetName("addCoerce")
-            infix def +~(other: Coin): Fractional = self + other.toCoinFractional
+            @targetName("addCoerce_Coin")
+            infix def +~(other: Coin): Fractional = self + other.toFractional
 
-            @targetName("addCoerce")
+            @targetName("addCoerce_Unbounded")
             infix def +~(other: Unbounded): Fractional = self + other.toFractional
 
-            @targetName("addCoerce")
+            @targetName("addCoerce_Fractional")
             infix def +~(other: Fractional): Fractional = self + other
 
-            @targetName("subtractCoerce")
-            infix def -~(other: Coin): Fractional = self - other.toCoinFractional
+            @targetName("subtractCoerce_Coin")
+            infix def -~(other: Coin): Fractional = self - other.toFractional
 
-            @targetName("subtractCoerce")
+            @targetName("subtractCoerce_Unbounded")
             infix def -~(other: Unbounded): Fractional = self - other.toFractional
 
-            @targetName("subtractCoerce")
+            @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = self - other
 
-        extension (self: IterableOnce[Fractional])
-            def sumCoins: Fractional = Aggregate.sum(self)
+        extension (self: Seq[Fractional])
+            def sumCoins: Fractional = self.qsum
 
-            def averageCoin: Option[Fractional] = Aggregate.average(self)
+            def averageCoin: Option[Fractional] = Option.when(self.nonEmpty)(self.qmean)
 
         given algebra: Algebra.type = Algebra
 
-        object Algebra extends Order[Fractional], VectorSpace[Fractional, Rational] {
+        object Algebra
+            extends Order[Fractional],
+              VectorSpace[Fractional, Rational],
+              Field[Fractional] {
             override def compare(self: Fractional, other: Fractional): Int = self.compare(other)
 
             override def scalar: Field[Rational] = Field[Rational]
@@ -293,6 +301,12 @@ private object CoinSubtypes {
             override def minus(x: Fractional, y: Fractional): Fractional = x - y
 
             override def timesl(s: Rational, v: Fractional): Fractional = Fractional(s * v)
+
+            override def one: Fractional = Fractional.one
+
+            override def times(x: Fractional, y: Fractional): Fractional = x * y
+
+            override def div(x: Fractional, y: Fractional): Fractional = x / y
         }
     }
 }

@@ -50,11 +50,11 @@ object Property extends Properties("Coin") {
     ///////////
     // For Coin
     property("Coin => Unbounded => Coin round trips") = forAll(arbitrary[Coin]) { c =>
-        c.toCoinUnbounded.toCoin == Right(c)
+        c.toUnbounded.toCoin == Right(c)
     }
 
     property("Coin => Fractional => Coin round trips") = forAll(arbitrary[Coin]) { c =>
-        c.toCoinFractional.toCoin == Right(c)
+        c.toFractional.toCoin == Right(c)
     }
 
     property("∀ (c : Coin) => Coin(c.underlying) == Right(c)") = forAll(arbitrary[Coin]) { c =>

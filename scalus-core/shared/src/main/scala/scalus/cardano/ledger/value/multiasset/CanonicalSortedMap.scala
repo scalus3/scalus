@@ -61,17 +61,14 @@ private object CanonicalSortedMap {
     //            .to(SortedMap)
     //    }
 
-    def combineWith[K, VCommon, VResult, VSelf, VOther](
-        opBoth: (VCommon, VCommon) => VResult,
-        opSelf: VCommon => VResult = identity[VResult],
-        opOther: VCommon => VResult = identity[VResult],
-        preMapSelf: VSelf => VCommon = identity[VCommon],
-        preMapOther: VOther => VCommon = identity[VCommon]
-    )(
+    def combineWith[K, VSelf, VOther, VResult](
+        combineElements: (VSelf, VOther) => VResult,
         self: CanonicalSortedMap[K, VSelf],
         other: CanonicalSortedMap[K, VOther]
     )(using
         kOrdering: Ordering[K],
+        vSelfMonoid: AdditiveMonoid[VSelf],
+        vOtherMonoid: AdditiveMonoid[VOther],
         vResultMonoid: AdditiveMonoid[VResult]
     ): CanonicalSortedMap[K, VResult] = {
         import scala.annotation.tailrec
@@ -84,13 +81,13 @@ private object CanonicalSortedMap {
             SortedMap.newBuilder
 
         inline def processBoth(x: (K, VSelf), y: (K, VOther)): (K, VResult) =
-            (x._1, opBoth(preMapSelf(x._2), preMapOther(y._2)))
+            (x._1, combineElements(x._2, y._2))
 
         inline def processSelf(x: (K, VSelf)): (K, VResult) =
-            (x._1, opSelf(preMapSelf(x._2)))
+            (x._1, combineElements(x._2, vOtherMonoid.zero))
 
         inline def processOther(y: (K, VOther)): (K, VResult) =
-            (y._1, opOther(preMapOther(y._2)))
+            (y._1, combineElements(vSelfMonoid.zero, y._2))
 
         inline def appendNonZero(
             builder: mutable.Builder[(K, VResult), CanonicalSortedMap[K, VResult]],
@@ -192,11 +189,7 @@ private object CanonicalSortedMap {
                 // If both keys exist, compare the values.
                 // If only the left key exists, compare the left value against zero.
                 // If only the right key exists, compare the right value against zero.
-                combineWith(
-                  compareElements,
-                  compareElements(_, vMonoid.zero),
-                  compareElements(vMonoid.zero, _)
-                )(self, other).values
+                combineWith(compareElements, self, other).values
             // If both maps are empty, then they are equal.
             // If all element-wise comparisons are the same, then the maps are comparable.
             // Otherwise, the maps are incomparable.
