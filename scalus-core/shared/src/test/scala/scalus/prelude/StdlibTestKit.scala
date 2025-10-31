@@ -1,21 +1,34 @@
 package scalus.prelude
 
-import scalus.*
-import scalus.uplc.{Constant, Term}
-import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.uplc.test.ArbitraryInstances
-import scalus.sir.SIR
-import scalus.builtin.Data
-import scalus.builtin.Data.{fromData, toData, FromData, ToData}
+import org.scalacheck.Arbitrary
+import org.scalacheck.Prop
+import org.scalacheck.util.Pretty
+import org.scalactic.Prettifier
+import org.scalactic.source
 import org.scalatest.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import org.scalacheck.{Arbitrary, Prop}
-import org.scalacheck.util.Pretty
-import org.scalactic.{source, Prettifier}
+import scalus.*
+import scalus.builtin.Data
+import scalus.builtin.Data.FromData
+import scalus.builtin.Data.ToData
+import scalus.builtin.Data.fromData
+import scalus.builtin.Data.toData
+import scalus.sir.SIR
+import scalus.uplc.Constant
+import scalus.uplc.DeBruijn
+import scalus.uplc.Term
+import scalus.uplc.eval.CountingBudgetSpender
+import scalus.uplc.eval.ExBudget
+import scalus.uplc.eval.NoBudgetSpender
+import scalus.uplc.eval.PlutusVM
+import scalus.uplc.eval.Result
+import scalus.uplc.eval.TallyingBudgetSpenderLogger
+import scalus.uplc.test.ArbitraryInstances
 
-import scala.util.control.NonFatal
+import scala.annotation.targetName
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
     export org.scalatestplus.scalacheck.Checkers.*
@@ -37,7 +50,14 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         catch case NonFatal(_) => Option.None
     }
 
-    protected final inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit = {
+    protected final inline def assertEvalFails[E <: Throwable: ClassTag](cpu: Long, memory: Long)(
+        inline code: Any
+    ): Unit = assertEvalBudgetFails(code, Some(ExBudget.fromCpuAndMemory(cpu, memory)))
+
+    protected final inline def assertEvalBudgetFails[E <: Throwable: ClassTag](
+        inline code: Any,
+        budget: scala.Option[ExBudget] = None
+    ): Unit = {
         var isExceptionThrown = false
 
         val _ =
@@ -63,6 +83,15 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                                         exception.getClass.getName
                                       )
                                     )
+                                    if budget.exists: budget =>
+                                            result.budget.cpu > budget.cpu ||
+                                                result.budget.memory > budget.memory
+                                    then
+                                        fail:
+                                            s"""Performance regression,
+                                            |expected: ${budget.get},
+                                            |but got: ${result.budget};
+                                            |costs: ${result.costs}""".stripMargin
                             }
                         case _ =>
                             fail(s"Expected failure, but got success: $result")
@@ -72,6 +101,9 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         if !isExceptionThrown then
             fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
     }
+
+    protected final inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit =
+        assertEvalBudgetFails(code)
 
     protected final inline def assertEvalFailsWithMessage[E <: Throwable: ClassTag](
         expectedMessage: String
@@ -130,16 +162,55 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
             case _ =>
     }
 
-    protected final inline def assertEvalEq[T: Eq](inline code: T, inline expected: T): Unit = {
+    extension [T: Eq](inline code: T)
+        @targetName("assertEvalEqBudgetTo")
+        protected final inline infix def evalEq(cpu: Long, memory: Long)(inline expected: T): Unit =
+            assertEvalEqBudget(code, expected, Some(ExBudget.fromCpuAndMemory(cpu, memory)))
+
+        @targetName("assertEvalEqTo")
+        protected final inline infix def evalEq(inline expected: T): Unit =
+            assertEvalEqBudget(code, expected)
+
+    protected final inline def assertEvalEqBudget[T: Eq](
+        inline code: T,
+        inline expected: T,
+        budget: scala.Option[ExBudget] = None
+    ): Unit = {
         assert(code === expected, s"Expected $expected, but got $code")
 
-        val codeTerm = Compiler.compileInline(code).toUplc(true).evaluate
+        val vm = summon[PlutusVM]
+        val spender =
+            if budget.nonEmpty
+            then TallyingBudgetSpenderLogger(CountingBudgetSpender())
+            else NoBudgetSpender
+
+        val codeTerm = vm.evaluateDeBruijnedTerm(
+          DeBruijn.deBruijnTerm(Compiler.compileInline(code).toUplc(true)),
+          budgetSpender = spender
+        )
+
+        if budget.exists: budget =>
+                spender.getSpentBudget.cpu > budget.cpu ||
+                    spender.getSpentBudget.memory > budget.memory
+        then
+            fail:
+                s"""Performance regression,
+                |expected: ${budget.get},
+                |but got: ${spender.getSpentBudget};
+                |costs: ${spender
+                      .asInstanceOf[TallyingBudgetSpenderLogger]
+                      .costs
+                      .toMap}""".stripMargin
+
         val expectedTerm = Compiler.compileInline(expected).toUplc(true).evaluate
         assert(
           Term.alphaEq(codeTerm, expectedTerm),
           s"Expected term $expectedTerm, but got $codeTerm"
         )
     }
+
+    protected final inline def assertEvalEq[T: Eq](inline code: T, inline expected: T): Unit =
+        assertEvalEqBudget(code, expected)
 
     protected final inline def assertEvalNotEq[T: Eq](inline code: T, inline expected: T): Unit = {
         assert(code !== expected, s"Expected not equal to $expected, but got $code")
