@@ -261,19 +261,28 @@ case class ExpectedSigner(hash: AddrKeyHash)
 
 object TransactionBuilder:
 
-    case class RedeemerIndexingErr(e: RedeemerIndexingInternalError, context: Context)
-
-    /** Builder is a state monad over Context. */
+    /** Transaction builder monad. Retains context at point of failure, if tehre's any.
+      */
     type BuilderM[A] =
-        StateT[[X] =>> Either[StepError | RedeemerIndexingErr, X], Context, A]
+        EitherT[[X] =>> State[Context, X], StepError | RedeemerIndexingInternalError, A]
 
     // Helpers to cut down on type signature noise
-    def pure0[A] =
-        StateT.pure[[X] =>> Either[StepError | RedeemerIndexingErr, X], Context, A]
-    def liftF0[A] =
-        StateT.liftF[[X] =>> Either[StepError | RedeemerIndexingErr, X], Context, A]
-    def modify0 = StateT.modify[[X] =>> Either[StepError | RedeemerIndexingErr, X], Context]
-    def get0 = StateT.get[[X] =>> Either[StepError | RedeemerIndexingErr, X], Context]
+    def pure0[A](value: A): BuilderM[A] =
+        EitherT.pure[[X] =>> State[Context, X], StepError | RedeemerIndexingInternalError](value)
+
+    def liftF0[A](either: Either[StepError | RedeemerIndexingInternalError, A]): BuilderM[A] =
+        EitherT.fromEither[[X] =>> State[Context, X]](either)
+
+    def modify0(f: Context => Context): BuilderM[Unit] =
+        EitherT.liftF[[X] =>> State[Context, X], StepError | RedeemerIndexingInternalError, Unit](
+          State.modify(f)
+        )
+
+    def get0: BuilderM[Context] =
+        EitherT
+            .liftF[[X] =>> State[Context, X], StepError | RedeemerIndexingInternalError, Context](
+              State.get
+            )
 
     /** Represents different types of authorized operations (except the spending, which goes
       * separately).
@@ -590,10 +599,7 @@ object TransactionBuilder:
                       )
                       .left
                       .map(detachedRedeemer =>
-                          RedeemerIndexingErr(
-                            RedeemerIndexingInternalError(detachedRedeemer, steps),
-                            ctx0
-                          )
+                          RedeemerIndexingInternalError(detachedRedeemer, steps)
                       )
                 )
                 // Replace the transaction in the context, keeping the rest
@@ -618,9 +624,18 @@ object TransactionBuilder:
                     }
             } yield ()
         }
-        modifyBuilderM.run(ctx).map(_._1).left.map {
-            case e: StepError                    => SomeStepError(e, ctx)
-            case RedeemerIndexingErr(e, context) => SomeRedeemerIndexingError(e, context)
+        // context at either the time of computation termination -- either success or first error
+        val (finalContext, result) = modifyBuilderM.value.run(ctx).value
+        result match {
+            case Left(error) =>
+                val buildError = error match {
+                    case e: StepError => SomeStepError(e, finalContext)
+                    case e: RedeemerIndexingInternalError =>
+                        SomeRedeemerIndexingError(e, finalContext)
+                }
+                Left(buildError)
+            case Right(_) =>
+                Right(finalContext)
         }
     }
 
