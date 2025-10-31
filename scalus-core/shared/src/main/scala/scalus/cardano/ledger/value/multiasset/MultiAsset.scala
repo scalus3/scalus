@@ -2,6 +2,7 @@ package scalus.cardano.ledger.value.multiasset
 
 import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap
 import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.*
+import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.CanonicalSortedMapPartialOrder.*
 import scalus.cardano.ledger.{AssetName, PolicyId}
 import spire.algebra.*
 import spire.math.{Rational, SafeLong}
@@ -101,7 +102,7 @@ object MultiAsset {
         override def partialCompare(self: MultiAsset, other: MultiAsset): Double =
             mapPartialOrder.partialCompare(self, other)
 
-        private val mapPartialOrder = CanonicalSortedMapPartialOrder[PolicyId, Inner](
+        private val mapPartialOrder = PartiallyOrderedElements[PolicyId, Inner](
           MultiAsset.Inner.algebra.partialCompare
         )(using vMonoid = Inner.AdditiveMonoid)
     }
@@ -281,7 +282,7 @@ private object MultiAssetVariant {
             override def timesl(s: SafeLong, self: Unbounded): Unbounded =
                 self.mapValues(_ :* s)
 
-            private val mapPartialOrder = CanonicalSortedMapPartialOrder[PolicyId, Inner.Unbounded](
+            private val mapPartialOrder = PartiallyOrderedElements[PolicyId, Inner.Unbounded](
               innerAlgebra.partialCompare
             )
         }
@@ -397,7 +398,7 @@ private object MultiAssetVariant {
                 self.mapValues(_ :* s)
 
             private val mapPartialOrder =
-                CanonicalSortedMapPartialOrder[PolicyId, Inner.Fractional](
+                PartiallyOrderedElements[PolicyId, Inner.Fractional](
                   innerAlgebra.partialCompare
                 )
         }

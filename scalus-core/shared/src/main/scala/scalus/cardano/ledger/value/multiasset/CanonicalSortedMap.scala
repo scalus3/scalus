@@ -189,7 +189,7 @@ private object CanonicalSortedMap {
    * A partial ordering on CanonicalSortedMap such that non-existant keys in one map are interpreted as zero,
    * and two maps are only comparable if either both are empty or all comparisons are the same.
    */
-    trait CanonicalSortedMapPartialOrderAbstract[K, V, I](toDouble: I => Double)(using
+    trait CanonicalSortedMapPartialOrder[K, V, I](toDouble: I => Double)(using
         iMonoid: AdditiveMonoid[I],
         kOrdering: Ordering[K],
         vMonoid: AdditiveMonoid[V]
@@ -215,21 +215,23 @@ private object CanonicalSortedMap {
         }
     }
 
-    final case class CanonicalSortedMapOrder[K, V](
-        override val compareElements: (V, V) => Int,
-    )(using kOrdering: Ordering[K], vMonoid: AdditiveMonoid[V])
-        extends PartialOrder[CanonicalSortedMap[K, V]],
-          CanonicalSortedMapPartialOrderAbstract[K, V, Int](intToDouble)(using
-            iMonoid = spire.implicits.IntAlgebra
-          )
+    object CanonicalSortedMapPartialOrder {
+        final case class TotallyOrderedElements[K, V](
+            override val compareElements: (V, V) => Int,
+        )(using kOrdering: Ordering[K], vMonoid: AdditiveMonoid[V])
+            extends PartialOrder[CanonicalSortedMap[K, V]],
+              CanonicalSortedMapPartialOrder[K, V, Int](intToDouble)(using
+                iMonoid = spire.implicits.IntAlgebra
+              )
 
-    final case class CanonicalSortedMapPartialOrder[K, V](
-        override val compareElements: (V, V) => Double,
-    )(using kOrdering: Ordering[K], vMonoid: AdditiveMonoid[V])
-        extends PartialOrder[CanonicalSortedMap[K, V]],
-          CanonicalSortedMapPartialOrderAbstract[K, V, Double](identity[Double])(using
-            iMonoid = spire.implicits.DoubleAlgebra
-          )
+        final case class PartiallyOrderedElements[K, V](
+            override val compareElements: (V, V) => Double,
+        )(using kOrdering: Ordering[K], vMonoid: AdditiveMonoid[V])
+            extends PartialOrder[CanonicalSortedMap[K, V]],
+              CanonicalSortedMapPartialOrder[K, V, Double](identity[Double])(using
+                iMonoid = spire.implicits.DoubleAlgebra
+              )
+    }
 
     private def intToDouble(x: Int): Double = x.toDouble
 

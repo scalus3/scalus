@@ -52,9 +52,6 @@ object Gen {
         implicit val coinFractionalArb: Arbitrary[Coin.Fractional] =
             Arbitrary(gen.rational.map(Coin.Fractional(_)))
 
-        implicit val rawWeights: Arbitrary[NonEmptyList[Rational]] =
-            Arbitrary(genRawWeights())
-
         implicit val normalizedWeights: Arbitrary[Distribution.NormalizedWeights] =
             Arbitrary(genNormalizedWeights())
     }

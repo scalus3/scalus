@@ -4,6 +4,7 @@ import scalus.cardano.ledger.AssetName
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap
 import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.*
+import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.CanonicalSortedMapPartialOrder.*
 import spire.algebra.*
 import spire.math.{Rational, SafeLong}
 import spire.implicits.*
@@ -108,7 +109,7 @@ private object MultiAssetInner {
                 mapPartialOrder.partialCompare(self, other)
 
             private val mapPartialOrder =
-                CanonicalSortedMapOrder[AssetName, Coin](Coin.algebra.compare)(using
+                TotallyOrderedElements[AssetName, Coin](Coin.algebra.compare)(using
                   vMonoid = Coin.AdditiveMonoid
                 )
         }
@@ -264,7 +265,7 @@ private object MultiAssetInner {
                 self.mapValues(_ :* s)
 
             private val mapPartialOrder =
-                CanonicalSortedMapOrder[AssetName, Coin.Unbounded](coinAlgebra.compare)
+                TotallyOrderedElements[AssetName, Coin.Unbounded](coinAlgebra.compare)
         }
     }
 
@@ -383,7 +384,7 @@ private object MultiAssetInner {
                 self.mapValues(_ :* s)
 
             private val mapPartialOrder =
-                CanonicalSortedMapOrder[AssetName, Coin.Fractional](coinAlgebra.compare)
+                TotallyOrderedElements[AssetName, Coin.Fractional](coinAlgebra.compare)
         }
     }
 }

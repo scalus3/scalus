@@ -102,12 +102,12 @@ object Property extends Properties("Coin") {
     }
 
     property("Coin.Unbounded distribution sums to amount distributed.") =
-        forAll(arbitrary[Coin.Unbounded], genNormalizedWeights()) { (coin, weights) =>
+        forAll(arbitrary[Coin.Unbounded], arbitrary[Distribution.NormalizedWeights]) { (coin, weights) =>
             coin.distribute(weights).toList.sumCoins == coin
         }
 
     property("Coin distribution sums to amount distributed.") =
-        forAll(arbitrary[Coin], genNormalizedWeights()) { (coin, weights) =>
+        forAll(arbitrary[Coin], arbitrary[Distribution.NormalizedWeights]) { (coin, weights) =>
             coin.distribute(weights).toList.sumCoins == coin
         }
 
