@@ -71,11 +71,11 @@ enum Certificate {
 
     def keyHashes: Set[AddrKeyHash | PoolKeyHash] = {
         this match
-            case cert: Certificate.StakeDelegation => cert.credential.keyHashOption.toSet
+            case cert: Certificate.StakeDelegation  => cert.credential.keyHashOption.toSet
             case cert: Certificate.PoolRegistration =>
                 cert.poolOwners.view.concat(Some(cert.operator)).toSet
             case cert: Certificate.PoolRetirement => Set(cert.poolKeyHash)
-            case cert: Certificate.RegCert =>
+            case cert: Certificate.RegCert        =>
                 if cert.coin.nonEmpty then cert.credential.keyHashOption.toSet else Set.empty
             case cert: Certificate.UnregCert             => cert.credential.keyHashOption.toSet
             case cert: Certificate.VoteDelegCert         => cert.credential.keyHashOption.toSet
@@ -83,7 +83,7 @@ enum Certificate {
             case cert: Certificate.StakeRegDelegCert     => cert.credential.keyHashOption.toSet
             case cert: Certificate.VoteRegDelegCert      => cert.credential.keyHashOption.toSet
             case cert: Certificate.StakeVoteRegDelegCert => cert.credential.keyHashOption.toSet
-            case cert: Certificate.AuthCommitteeHotCert =>
+            case cert: Certificate.AuthCommitteeHotCert  =>
                 cert.committeeColdCredential.keyHashOption.toSet
             case cert: Certificate.ResignCommitteeColdCert =>
                 cert.committeeColdCredential.keyHashOption.toSet
@@ -97,7 +97,7 @@ enum Certificate {
             case cert: Certificate.StakeDelegation => cert.credential.scriptHashOption
             case _: Certificate.PoolRegistration   => None
             case _: Certificate.PoolRetirement     => None
-            case cert: Certificate.RegCert =>
+            case cert: Certificate.RegCert         =>
                 if cert.coin.nonEmpty then cert.credential.scriptHashOption else None
             case cert: Certificate.UnregCert             => cert.credential.scriptHashOption
             case cert: Certificate.VoteDelegCert         => cert.credential.scriptHashOption
@@ -105,7 +105,7 @@ enum Certificate {
             case cert: Certificate.StakeRegDelegCert     => cert.credential.scriptHashOption
             case cert: Certificate.VoteRegDelegCert      => cert.credential.scriptHashOption
             case cert: Certificate.StakeVoteRegDelegCert => cert.credential.scriptHashOption
-            case cert: Certificate.AuthCommitteeHotCert =>
+            case cert: Certificate.AuthCommitteeHotCert  =>
                 cert.committeeColdCredential.scriptHashOption
             case cert: Certificate.ResignCommitteeColdCert =>
                 cert.committeeColdCredential.scriptHashOption

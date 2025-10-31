@@ -125,7 +125,7 @@ object LetFloating:
             for (varRef, count) <- varCounts if count >= 2 do
                 val info = trackedVars.getOrElseUpdate(varRef, TrackedVarInfo())
                 info.minMultipleChildrenNode match
-                    case None => info.minMultipleChildrenNode = Some(nodeIndex)
+                    case None          => info.minMultipleChildrenNode = Some(nodeIndex)
                     case Some(minNode) =>
                         info.minMultipleChildrenNode = Some(minNode.min(nodeIndex))
 
@@ -420,22 +420,22 @@ object LetFloating:
 
             // Recursively process children
             node match
-                case Decl.DeclInfo(_, term, _) => computeInitialTargets(term)
+                case Decl.DeclInfo(_, term, _)            => computeInitialTargets(term)
                 case Let.LetInfo(bindings, body, _, _, _) =>
                     bindings.foreach(b => computeInitialTargets(b.value))
                     computeInitialTargets(body)
                 case LamAbs.LamAbsInfo(_, term, _, _, _) => computeInitialTargets(term)
-                case Apply.ApplyInfo(f, arg, _, _, _) =>
+                case Apply.ApplyInfo(f, arg, _, _, _)    =>
                     computeInitialTargets(f)
                     computeInitialTargets(arg)
                 case Select.SelectInfo(scrutinee, _, _, _, _) => computeInitialTargets(scrutinee)
-                case And.AndInfo(a, b, _, _) =>
+                case And.AndInfo(a, b, _, _)                  =>
                     computeInitialTargets(a)
                     computeInitialTargets(b)
                 case Or.OrInfo(a, b, _, _) =>
                     computeInitialTargets(a)
                     computeInitialTargets(b)
-                case Not.NotInfo(a, _, _) => computeInitialTargets(a)
+                case Not.NotInfo(a, _, _)                           => computeInitialTargets(a)
                 case IfThenElse.IfThenElseInfo(cond, t, f, _, _, _) =>
                     computeInitialTargets(cond)
                     computeInitialTargets(t)
@@ -490,7 +490,7 @@ object LetFloating:
     /** Compute initial target based on direct usage only (no transitive dependencies) */
     private def computeInitialTarget(varRef: VarRef, ctx: Context): Int =
         ctx.trackedVars.get(varRef) match
-            case None => Int.MaxValue
+            case None       => Int.MaxValue
             case Some(info) =>
                 val constraints = mutable.ArrayBuffer.empty[Int]
                 info.minDirectUsageNode.foreach(constraints += _)

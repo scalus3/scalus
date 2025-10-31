@@ -270,7 +270,7 @@ case class ProductCaseOneElementSirTypeGenerator(
         import ProductCaseOneElementSirTypeGenerator.*
         input match {
             case WrappedArg(constr, arg) => arg
-            case other =>
+            case other                   =>
                 val argType = retrieveArgType(other.sirType, other.pos)
                 ArgProxyLoweredValue(
                   other,

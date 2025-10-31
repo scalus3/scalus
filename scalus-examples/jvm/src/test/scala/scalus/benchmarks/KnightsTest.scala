@@ -336,7 +336,7 @@ object KnightsTest:
             extension [A](self: List[A])
                 def secondLast: Option[A] =
                     self.reverse match
-                        case List.Nil => fail()
+                        case List.Nil           => fail()
                         case List.Cons(_, tail) =>
                             tail match
                                 case List.Nil            => Option.None

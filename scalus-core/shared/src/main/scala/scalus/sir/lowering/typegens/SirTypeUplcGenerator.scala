@@ -169,7 +169,7 @@ object SirTypeUplcGenerator {
         if !(trace.get(tp) eq null) then false
         else
             tp match
-                case SIRType.Fun(_, _) => true
+                case SIRType.Fun(_, _)           => true
                 case SIRType.TypeLambda(_, body) =>
                     trace.put(tp, tp)
                     containsFun(body, trace)

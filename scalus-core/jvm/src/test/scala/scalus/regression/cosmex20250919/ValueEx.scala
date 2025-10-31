@@ -17,7 +17,7 @@ object ValueEx {
         ] = SortedMap.union(l.toSortedMap, r.toSortedMap)
         combined.mapValues {
             case These.These(v1, v2) => SortedMap.union(v1, v2)
-            case These.This(v1) =>
+            case These.This(v1)      =>
                 v1.mapValues {
                     These.This(_)
                 }

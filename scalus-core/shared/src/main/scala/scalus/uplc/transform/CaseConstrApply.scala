@@ -39,10 +39,10 @@ object CaseConstrApply {
                         Case(Constr(Word64.Zero, args.map(go)), go(f) :: Nil)
                     case (f, args) =>
                         args.foldLeft(go(f)) { case (acc, arg) => Apply(acc, go(arg)) }
-            case LamAbs(name, body) => LamAbs(name, go(body))
-            case Force(t)           => Force(go(t))
-            case Delay(t)           => Delay(go(t))
-            case Constr(tag, args)  => Constr(tag, args.map(arg => go(arg)))
+            case LamAbs(name, body)     => LamAbs(name, go(body))
+            case Force(t)               => Force(go(t))
+            case Delay(t)               => Delay(go(t))
+            case Constr(tag, args)      => Constr(tag, args.map(arg => go(arg)))
             case Case(scrutinee, cases) =>
                 Case(
                   go(scrutinee),

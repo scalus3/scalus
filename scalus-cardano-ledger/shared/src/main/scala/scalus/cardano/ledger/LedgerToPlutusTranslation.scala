@@ -316,7 +316,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v1.Interval = {
         (validityStartSlot.getOrElse(0L), ttl.getOrElse(0L)) match
-            case (0, 0) => v1.Interval.always
+            case (0, 0)       => v1.Interval.always
             case (0, validTo) =>
                 val closure = if protocolVersion.version > 8 then false else true
                 val upper = v1.IntervalBound(
@@ -933,7 +933,7 @@ object LedgerToPlutusTranslation {
         votingProcs: Option[VotingProcedures]
     ): SortedMap[v3.Voter, SortedMap[GovernanceActionId, v3.Vote]] = {
         votingProcs match
-            case None => SortedMap.empty
+            case None     => SortedMap.empty
             case Some(vp) =>
                 SortedMap.unsafeFromList(
                   prelude.List.from(

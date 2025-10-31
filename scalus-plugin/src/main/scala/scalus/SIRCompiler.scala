@@ -247,7 +247,7 @@ final class SIRCompiler(
             tree match
                 case EmptyTree            => Nil
                 case PackageDef(_, stats) => stats.flatMap(collectTypeDefs)
-                case cd: TypeDef =>
+                case cd: TypeDef          =>
                     if cd.symbol.hasAnnotation(CompileAnnot)
                     then
                         val debugLevel = cd.symbol.getAnnotation(ScalusDebugAnnot) match
@@ -1368,7 +1368,7 @@ final class SIRCompiler(
         val exprEnv = stmts.foldLeft(env) {
             case (env, _: Import)  => env // ignore local imports
             case (env, _: TypeDef) => env // ignore local type definitions
-            case (env, stmt) =>
+            case (env, stmt)       =>
                 compileStmt(env, stmt) match
                     case CompileMemberDefResult.Compiled(bind) =>
                         exprs += bind
@@ -2523,7 +2523,7 @@ final class SIRCompiler(
                   Closure(_, Ident(nme.ANON_FUN), _)
                 ) =>
                 compileStmt(env, dd) match
-                    case CompileMemberDefResult.Compiled(b) => b.body
+                    case CompileMemberDefResult.Compiled(b)           => b.body
                     case ignored @ CompileMemberDefResult.Ignored(tp) =>
                         error(
                           GenericError(s"Ignoring closure, dd=${dd.show}", tree.srcPos),
@@ -3198,7 +3198,7 @@ final class SIRCompiler(
                 else
                     acc.get(moduleName) match
                         case Some(_) => acc
-                        case None =>
+                        case None    =>
                             acc.updated(moduleName, v)
             case SIR.Let(binding, body, _, _) =>
                 val acc1 =

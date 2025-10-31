@@ -352,7 +352,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
     def isNilType(tp: SIRType): Boolean = {
         SIRType.retrieveConstrDecl(tp) match {
-            case Left(r) => false
+            case Left(r)           => false
             case Right(constrDecl) =>
                 constrDecl.name == "scalus.prelude.List$.Nil"
         }
@@ -444,7 +444,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     def isBuiltinList(tp: SIRType): Boolean = {
         SIRType.retrieveDataDecl(tp) match {
             case Right(dataDecl) => dataDecl.name == SIRType.BuiltinList.name
-            case Left(_) =>
+            case Left(_)         =>
                 SIRType.retrieveConstrDecl(tp) match
                     case Right(constrDecl) =>
                         constrDecl.name == SIRType.BuiltinList.Cons.name ||

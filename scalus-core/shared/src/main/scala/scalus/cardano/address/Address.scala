@@ -544,7 +544,7 @@ object Address {
             case 0x08 => parseType8(header, payload)
             case 0x0e => parseType14(header, payload)
             case 0x0f => parseType15(header, payload)
-            case _ =>
+            case _    =>
                 throw new IllegalArgumentException(f"Unsupported address type: 0x$addressType%02x")
     }
 

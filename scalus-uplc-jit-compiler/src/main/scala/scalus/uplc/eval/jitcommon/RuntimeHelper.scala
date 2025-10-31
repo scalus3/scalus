@@ -7,11 +7,11 @@ object RuntimeHelper {
 
     def anyUplcConstant(in: Any): Constant = {
         in match
-            case i: Int         => Constant.Integer(i)
-            case s: String      => Constant.String(s)
-            case b: Boolean     => Constant.Bool(b)
-            case bs: ByteString => Constant.ByteString(bs)
-            case d: Data        => Constant.Data(d)
+            case i: Int               => Constant.Integer(i)
+            case s: String            => Constant.String(s)
+            case b: Boolean           => Constant.Bool(b)
+            case bs: ByteString       => Constant.ByteString(bs)
+            case d: Data              => Constant.Data(d)
             case p: BuiltinPair[?, ?] =>
                 Constant.Pair(anyUplcConstant(p.fst), anyUplcConstant(p.snd))
             case p: Tuple2[?, ?] => Constant.Pair(anyUplcConstant(p._1), anyUplcConstant(p._2))

@@ -156,7 +156,7 @@ trait ArbitraryInstances:
 
     def arbConstantByType(t: DefaultUni): Gen[Constant] =
         t match
-            case DefaultUni.Integer => Arbitrary.arbitrary[BigInt].map(Constant.Integer.apply)
+            case DefaultUni.Integer    => Arbitrary.arbitrary[BigInt].map(Constant.Integer.apply)
             case DefaultUni.ByteString =>
                 Arbitrary.arbitrary[builtin.ByteString].map(Constant.ByteString.apply)
             case DefaultUni.String => Arbitrary.arbitrary[String].map(Constant.String.apply)
@@ -203,13 +203,13 @@ trait ArbitraryInstances:
     )
 
     given Shrink[Constant] = Shrink {
-        case Constant.Integer(i) => Shrink.shrink(i).map(Constant.Integer.apply)
+        case Constant.Integer(i)    => Shrink.shrink(i).map(Constant.Integer.apply)
         case Constant.ByteString(b) =>
             Shrink.shrink(b).map(Constant.ByteString.apply)
-        case Constant.String(s) => Shrink.shrink(s).map(Constant.String.apply)
-        case Constant.Data(d)   => Shrink.shrink(d).map(Constant.Data.apply)
-        case Constant.Unit      => Stream.empty
-        case Constant.Bool(b)   => Stream.empty
+        case Constant.String(s)      => Shrink.shrink(s).map(Constant.String.apply)
+        case Constant.Data(d)        => Shrink.shrink(d).map(Constant.Data.apply)
+        case Constant.Unit           => Stream.empty
+        case Constant.Bool(b)        => Stream.empty
         case Constant.List(t, elems) =>
             val elemsShrunk = Shrink.shrink(elems).map(Constant.List(t, _))
             elemsShrunk

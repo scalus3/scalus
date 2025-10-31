@@ -154,13 +154,13 @@ case class DataDecl(
             _constrs = constructors
                 .map { c =>
                     val parent = typeParams match
-                        case Nil => tp
+                        case Nil        => tp
                         case typeParams =>
                             val tpEnv = typeParams.zip(c.parentTypeArgs).toMap
                             SIRType.substitute(tp, tpEnv, Map.empty)
                     val optParent = if nConstrs == 1 then None else Some(parent)
                     val sirType = c.typeParams match
-                        case Nil => SIRType.CaseClass(c, Nil, optParent)
+                        case Nil   => SIRType.CaseClass(c, Nil, optParent)
                         case targs =>
                             SIRType.TypeLambda(
                               c.typeParams,
@@ -488,7 +488,7 @@ object SIR:
                             case None          => sir
                         }
                 case ExternalVar(moduleName, name, tp, anns) => sir
-                case Let(bindings, body, flags, anns) =>
+                case Let(bindings, body, flags, anns)        =>
                     val initBindings: IndexedSeq[Binding] = IndexedSeq.empty
                     val (newBindings, newLocalNames) =
                         bindings.foldLeft((initBindings, localNames)) {
@@ -517,7 +517,7 @@ object SIR:
                 case Select(scrutinee, field, tp, anns) =>
                     val nScrutinee = processSir(scrutinee, localNames).asInstanceOf[AnnotatedSIR]
                     Select(nScrutinee, field, tp, anns)
-                case Const(_, _, _) => sir
+                case Const(_, _, _)  => sir
                 case And(a, b, anns) =>
                     val nA = processSir(a, localNames).asInstanceOf[AnnotatedSIR]
                     val nB = processSir(b, localNames).asInstanceOf[AnnotatedSIR]
@@ -534,7 +534,7 @@ object SIR:
                     val nT = processSir(t, localNames).asInstanceOf[AnnotatedSIR]
                     val nF = processSir(f, localNames).asInstanceOf[AnnotatedSIR]
                     IfThenElse(nCond, nT, nF, tp, anns)
-                case Builtin(_, _, _) => sir
+                case Builtin(_, _, _)        => sir
                 case Error(msg, anns, cause) =>
                     val nMsg = processSir(msg, localNames).asInstanceOf[AnnotatedSIR]
                     Error(nMsg, anns, cause)
@@ -571,8 +571,8 @@ object SIR:
     ): A = {
 
         sir match {
-            case Var(_, _, anns)            => f(sir, localNames, a0)
-            case ExternalVar(_, _, _, anns) => f(sir, localNames, a0)
+            case Var(_, _, anns)              => f(sir, localNames, a0)
+            case ExternalVar(_, _, _, anns)   => f(sir, localNames, a0)
             case Let(bindings, body, _, anns) =>
                 val (aN, lnN) = bindings.foldLeft((a0, localNames)) { case ((a, ln), b) =>
                     val a1 = accumulate(b.value, a, ln, f)
@@ -593,7 +593,7 @@ object SIR:
                 val a1 = accumulate(scrutinee, a0, localNames, f)
                 f(sir, localNames, a1)
             case Const(_, _, anns) => f(sir, localNames, a0)
-            case And(a, b, anns) =>
+            case And(a, b, anns)   =>
                 val a1 = accumulate(a, a0, localNames, f)
                 val a2 = accumulate(b, a1, localNames, f)
                 f(sir, localNames, a2)
@@ -717,11 +717,11 @@ object SIRChecker {
             case SIR.Select(scrutinee, _, _, anns) =>
                 checkSIR(scrutinee, throwOnFirst) ++ checkTp ++ checkAnnotations(anns, throwOnFirst)
             case SIR.Const(_, tp, anns) => checkTp ++ checkAnnotations(anns, throwOnFirst)
-            case SIR.And(a, b, anns) =>
+            case SIR.And(a, b, anns)    =>
                 checkSIR(a, throwOnFirst) ++ checkSIR(b, throwOnFirst) ++ checkTp
             case SIR.Or(a, b, anns) =>
                 checkSIR(a, throwOnFirst) ++ checkSIR(b, throwOnFirst) ++ checkTp
-            case SIR.Not(a, anns) => checkSIR(a, throwOnFirst) ++ checkTp
+            case SIR.Not(a, anns)                     => checkSIR(a, throwOnFirst) ++ checkTp
             case SIR.IfThenElse(cond, t, f, tp, anns) =>
                 checkSIR(cond, throwOnFirst) ++ checkSIR(t, throwOnFirst) ++ checkSIR(
                   f,

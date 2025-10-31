@@ -255,7 +255,7 @@ object RenamingTypeVars {
             case SIRType.FreeUnificator          => SIRType.FreeUnificator
             case SIRType.TypeNothing             => SIRType.TypeNothing
             case SIRType.TypeNonCaseModule(name) => SIRType.TypeNonCaseModule(name)
-            case tv: SIRType.TypeVar =>
+            case tv: SIRType.TypeVar             =>
                 if ctx.renames.contains(tv) then
                     ctx.changed = true
                     ctx.renames(tv)

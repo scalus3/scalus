@@ -271,7 +271,7 @@ object Interval:
             self.from <=> self.to match
                 case Order.Greater => true
                 case Order.Equal   => !(self.from.isInclusive && self.to.isInclusive)
-                case Order.Less =>
+                case Order.Less    =>
                     val isOpenInterval = !self.from.isInclusive && !self.to.isInclusive
                     if isOpenInterval then
                         self.from.boundType match
@@ -352,27 +352,27 @@ object DCert {
 
             case DCert.DelegDelegate(cred1, del1) =>
                 y match
-                    case DCert.DelegRegKey(_)   => Order.Greater
-                    case DCert.DelegDeRegKey(_) => Order.Greater
+                    case DCert.DelegRegKey(_)             => Order.Greater
+                    case DCert.DelegDeRegKey(_)           => Order.Greater
                     case DCert.DelegDelegate(cred2, del2) =>
                         (cred1 <=> cred2) ifEqualThen (del1 <=> del2)
                     case _ => Order.Less
 
             case DCert.PoolRegister(id1, vrf1) =>
                 y match
-                    case DCert.DelegRegKey(_)      => Order.Greater
-                    case DCert.DelegDeRegKey(_)    => Order.Greater
-                    case DCert.DelegDelegate(_, _) => Order.Greater
+                    case DCert.DelegRegKey(_)          => Order.Greater
+                    case DCert.DelegDeRegKey(_)        => Order.Greater
+                    case DCert.DelegDelegate(_, _)     => Order.Greater
                     case DCert.PoolRegister(id2, vrf2) =>
                         (id1 <=> id2) ifEqualThen (vrf1 <=> vrf2)
                     case _ => Order.Less
 
             case DCert.PoolRetire(id1, epoch1) =>
                 y match
-                    case DCert.DelegRegKey(_)      => Order.Greater
-                    case DCert.DelegDeRegKey(_)    => Order.Greater
-                    case DCert.DelegDelegate(_, _) => Order.Greater
-                    case DCert.PoolRegister(_, _)  => Order.Greater
+                    case DCert.DelegRegKey(_)          => Order.Greater
+                    case DCert.DelegDeRegKey(_)        => Order.Greater
+                    case DCert.DelegDelegate(_, _)     => Order.Greater
+                    case DCert.PoolRegister(_, _)      => Order.Greater
                     case DCert.PoolRetire(id2, epoch2) =>
                         (id1 <=> id2) ifEqualThen (epoch1 <=> epoch2)
                     case _ => Order.Less
@@ -500,7 +500,7 @@ object StakingCredential {
                     case StakingCredential.StakingPtr(a, b, c) => false
             case StakingCredential.StakingPtr(a, b, c) =>
                 rhs match
-                    case StakingCredential.StakingHash(cred2) => false
+                    case StakingCredential.StakingHash(cred2)     => false
                     case StakingCredential.StakingPtr(a2, b2, c2) =>
                         a === a2 && b === b2 && c === c2
 
@@ -512,7 +512,7 @@ object StakingCredential {
                     case StakingCredential.StakingPtr(_, _, _) => Order.Less
             case StakingCredential.StakingPtr(a, b, c) =>
                 rhs match
-                    case StakingCredential.StakingHash(_) => Order.Greater
+                    case StakingCredential.StakingHash(_)         => Order.Greater
                     case StakingCredential.StakingPtr(a2, b2, c2) =>
                         (a <=> a2) ifEqualThen (b <=> b2) ifEqualThen (c <=> c2)
 

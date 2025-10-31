@@ -189,7 +189,7 @@ class TxEvaluator(
                         case _ => throw new IllegalStateException(s"impossible: $input")
 
                     val datum: Option[Data] = txInInfo.resolved.datum match
-                        case OutputDatum.NoOutputDatum => None
+                        case OutputDatum.NoOutputDatum              => None
                         case OutputDatum.OutputDatumHash(datumHash) =>
                             lookupTable.datums.get(datumHash)
                         case OutputDatum.OutputDatum(datum) => Some(datum)
@@ -434,7 +434,7 @@ class TxEvaluator(
             )
         val spender = mode match
             case EvaluatorMode.EVALUATE_AND_COMPUTE_COST => CountingBudgetSpender()
-            case EvaluatorMode.VALIDATE =>
+            case EvaluatorMode.VALIDATE                  =>
                 eval.RestrictingBudgetSpenderWithScriptDump(
                   budget,
                   debugDumpFilesForTesting

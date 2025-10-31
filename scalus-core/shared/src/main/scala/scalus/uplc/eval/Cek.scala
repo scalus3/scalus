@@ -700,7 +700,7 @@ class CekMachine(
                     val meaning = getBuiltinRuntime(bn)
                     Return(ctx, env, VBuiltin(bn, () => term, meaning))
                 catch case _: Exception => throw new UnknownBuiltin(bn, env)
-            case Error => throw new EvaluationFailure(env)
+            case Error             => throw new EvaluationFailure(env)
             case Constr(tag, args) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Constr), costs.constrCost, env)
                 args match
@@ -757,7 +757,7 @@ class CekMachine(
         arg: CekValue
     ): CekState = {
         fun match
-            case VLamAbs(name, term, env) => Compute(ctx, env :+ (name, arg), term)
+            case VLamAbs(name, term, env)     => Compute(ctx, env :+ (name, arg), term)
             case VBuiltin(fun, term, runtime) =>
                 val term1 = () => Apply(term(), dischargeCekValue(arg))
                 runtime.typeScheme match
@@ -779,7 +779,7 @@ class CekMachine(
       */
     private def forceEvaluate(ctx: Context, env: CekValEnv, value: CekValue): CekState = {
         value match
-            case VDelay(term, env) => Compute(ctx, env, term)
+            case VDelay(term, env)      => Compute(ctx, env, term)
             case VBuiltin(bn, term, rt) =>
                 val term1 = () => Force(term())
                 rt.typeScheme match

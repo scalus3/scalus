@@ -59,7 +59,7 @@ object SumCaseClassRepresentation {
     case object SumDataList extends SumCaseClassRepresentation(false, true) {
         override def isCompatibleWithType(tp: SIRType): Boolean = {
             SIRType.retrieveDataDecl(tp) match
-                case Left(_) => false
+                case Left(_)     => false
                 case Right(decl) =>
                     decl.name == SIRType.List.dataDecl.name || decl.name == SIRType.BuiltinList.dataDecl.name
         }
@@ -71,7 +71,7 @@ object SumCaseClassRepresentation {
 
         override def isCompatibleWithType(tp: SIRType): Boolean = {
             SIRType.retrieveDataDecl(tp) match
-                case Left(_) => false
+                case Left(_)     => false
                 case Right(decl) =>
                     val isList =
                         decl.name == SIRType.List.dataDecl.name || decl.name == SIRType.BuiltinList.dataDecl.name
@@ -142,7 +142,7 @@ object ProductCaseClassRepresentation {
     case object PackedDataMap extends ProductCaseClassRepresentation(true, true) {
         override def isCompatibleWithType(tp: SIRType): Boolean = {
             SIRType.retrieveConstrDecl(tp) match
-                case Left(_) => false
+                case Left(_)           => false
                 case Right(constrDecl) =>
                     constrDecl.name == "scalus.prelude.AssocMap" || constrDecl.name == "scalus.prelude.SortedMap"
         }
@@ -226,7 +226,7 @@ object ProductCaseClassRepresentation {
                     tp match
                         case SIRType.TypeVar(name, optId, isBuiltin) => tp
                         case SIRType.FreeUnificator                  => tp
-                        case SIRType.TypeLambda(params, body) =>
+                        case SIRType.TypeLambda(params, body)        =>
                             retrieveArgType(body, pos)
                         case SIRType.TypeProxy(ref) =>
                             retrieveArgType(ref, pos)
@@ -368,7 +368,7 @@ case class LambdaRepresentation(
         pos: SIRPosition
     )(using LoweringContext): Boolean =
         repr match {
-            case TypeVarRepresentation(_) => true
+            case TypeVarRepresentation(_)                                              => true
             case othrLambdaRepr @ LambdaRepresentation(otherFunTp, otherCanonicalPair) =>
                 val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
                 val InOutRepresentationPair(inRepr, outRepr) =
@@ -398,7 +398,7 @@ case class LambdaRepresentation(
             case tv @ SIRType.TypeVar(_, _, isBuiltin) => (tv, tv)
             case SIRType.FreeUnificator => (SIRType.FreeUnificator, SIRType.FreeUnificator)
             case SIRType.TypeNothing    => (SIRType.TypeNothing, SIRType.TypeNothing)
-            case _ =>
+            case _                      =>
                 throw LoweringException(
                   s"Can't retrieve input type from ${tp.show}, which is not a function type",
                   pos
@@ -486,13 +486,13 @@ object LoweredValueRepresentation {
             case tv @ SIRType.TypeVar(_, _, isBuiltin) =>
                 lc.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(tp) => constRepresentation(tp)
-                    case None =>
+                    case None     =>
                         TypeVarRepresentation(isBuiltin)
             case SIRType.FreeUnificator =>
                 TypeVarRepresentation(isBuiltin = false)
             case proxy: SIRType.TypeProxy =>
                 constRepresentation(proxy.ref)
-            case SIRType.TypeNothing => ErrorRepresentation
+            case SIRType.TypeNothing    => ErrorRepresentation
             case SIRType.TypeProxy(ref) =>
                 constRepresentation(ref)
             case SIRType.TypeNonCaseModule(name) =>

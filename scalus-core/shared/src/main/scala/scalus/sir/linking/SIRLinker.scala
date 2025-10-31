@@ -80,7 +80,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                       List(Binding(b.name, b.body.tp, b.body)),
                       acc match {
                           case annssir: AnnotatedSIR => annssir
-                          case _ =>
+                          case _                     =>
                               val msg =
                                   s"Unexpected Decl. In binding ${b.name} in SIRLinker.link"
                               error(
@@ -169,7 +169,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
             val nLhs = traverseAndLinkExpr(lhs, pos)
             val nRhs = traverseAndLinkExpr(rhs, pos)
             SIR.Or(nLhs, nRhs, anns)
-        case SIR.Not(term, anns) => SIR.Not(traverseAndLinkExpr(term, pos), anns)
+        case SIR.Not(term, anns)                  => SIR.Not(traverseAndLinkExpr(term, pos), anns)
         case SIR.IfThenElse(cond, t, f, tp, anns) =>
             val nCond = traverseAndLinkExpr(cond, pos)
             val nT = traverseAndLinkExpr(t, pos)
@@ -240,7 +240,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
     ): Either[String, mutable.LinkedHashMap[String, SIR]] = {
         moduleDefsCache.get(moduleName) match
             case Some(defs) => Right(defs)
-            case None =>
+            case None       =>
                 moduleDefs.get(moduleName) match
                     case Some(module) =>
                         validateSIRVersion(module, moduleName, srcPos)
@@ -309,7 +309,7 @@ object SIRLinker {
             val dep = queue.dequeue()
             retval.get(dep.sirModule.name) match
                 case Some(_) => // already added
-                case None =>
+                case None    =>
                     retval += (dep.sirModule.name -> dep.sirModule)
                     queue.enqueueAll(dep.sirDeps)
         retval

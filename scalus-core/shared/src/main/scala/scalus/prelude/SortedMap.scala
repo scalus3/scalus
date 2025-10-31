@@ -80,7 +80,7 @@ object SortedMap {
       */
     def fromList[A: Ord, B](lst: List[(A, B)]): SortedMap[A, B] = {
         def insertIfDoesNotExist(lst: List[(A, B)], key: A, value: B): List[(A, B)] = lst match
-            case Nil => single(key, value)
+            case Nil              => single(key, value)
             case Cons(pair, tail) =>
                 pair match
                     case (k, v) =>
@@ -120,10 +120,10 @@ object SortedMap {
         def checkStrictlyAscendingOrder(
             lst: List[(A, B)]
         ): Boolean = lst match
-            case Nil => true
+            case Nil               => true
             case Cons(pair1, tail) =>
                 tail match
-                    case Nil => true
+                    case Nil            => true
                     case Cons(pair2, _) =>
                         pair1._1 <=> pair2._1 match
                             case Order.Less => checkStrictlyAscendingOrder(tail)
@@ -162,7 +162,7 @@ object SortedMap {
             lhs: List[(A, B)],
             rhs: List[(A, C)]
         ): List[(A, These[B, C])] = lhs match
-            case Nil => rhs.map { pair => (pair._1, These.That(pair._2)) }
+            case Nil                    => rhs.map { pair => (pair._1, These.That(pair._2)) }
             case Cons(lhsPair, lhsTail) =>
                 rhs match
                     case Nil => lhs.map { pair => (pair._1, These.This(pair._2)) }
@@ -228,7 +228,7 @@ object SortedMap {
             lhs: List[(A, B)],
             rhs: List[(A, C)]
         ): List[(A, D)] = lhs match
-            case Nil => rhs.map { pair => (pair._1, f(These.That(pair._2))) }
+            case Nil                    => rhs.map { pair => (pair._1, f(These.That(pair._2))) }
             case Cons(lhsPair, lhsTail) =>
                 rhs match
                     case Nil => lhs.map { pair => (pair._1, f(These.This(pair._2))) }
@@ -317,7 +317,7 @@ object SortedMap {
                 a: List[(A, B)]
             ): scalus.builtin.BuiltinList[scalus.builtin.BuiltinPair[Data, Data]] =
                 a match {
-                    case Nil => mkNilPairData()
+                    case Nil               => mkNilPairData()
                     case Cons(tuple, tail) =>
                         tuple match {
                             case (a, b) =>
@@ -557,7 +557,7 @@ object SortedMap {
           */
         def foldLeft[C](init: C)(combiner: (C, (A, B)) => C): C = {
             self.toList match
-                case Nil => init
+                case Nil              => init
                 case Cons(pair, tail) =>
                     SortedMap(tail).foldLeft(combiner(init, pair))(combiner)
         }
@@ -597,7 +597,7 @@ object SortedMap {
         def get(key: A): Option[B] = {
             @tailrec
             def go(lst: List[(A, B)]): Option[B] = lst match
-                case Nil => None
+                case Nil              => None
                 case Cons(pair, tail) =>
                     pair match
                         case (k, v) =>
@@ -682,7 +682,7 @@ object SortedMap {
           */
         def insert(key: A, value: B): SortedMap[A, B] = {
             def go(lst: List[(A, B)]): List[(A, B)] = lst match
-                case Nil => single(key, value)
+                case Nil              => single(key, value)
                 case Cons(pair, tail) =>
                     pair match
                         case (k, v) =>
@@ -709,7 +709,7 @@ object SortedMap {
           */
         def delete(key: A): SortedMap[A, B] = {
             def go(m: SortedMap[A, B]): SortedMap[A, B] = m.toList match
-                case Nil => m
+                case Nil              => m
                 case Cons(pair, tail) =>
                     pair match
                         case (k, v) =>

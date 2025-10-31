@@ -17,7 +17,7 @@ object Order:
         lhs match
             case Less    => if rhs.isLess then Equal else Less
             case Greater => if rhs.isGreater then Equal else Greater
-            case Equal =>
+            case Equal   =>
                 rhs match
                     case Less    => Greater
                     case Greater => Less

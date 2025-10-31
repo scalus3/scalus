@@ -35,7 +35,7 @@ object HashConsedRef {
         tag: HashConsed.Tag
     ): HashConsedRef[A] =
         state.lookup(ihc, tag) match
-            case None => HashConsed.ForwardRef.create(state, ihc, tag)
+            case None           => HashConsed.ForwardRef.create(state, ihc, tag)
             case Some(Left(fw)) =>
                 HashConsed.ForwardRef.create(state, ihc, tag)
             case Some(Right(a)) => a.asInstanceOf[HashConsedRef[A]]
@@ -54,7 +54,7 @@ object HashConsedRef {
             ): A =
                 finishedValue match
                     case Some(a) => a
-                    case None =>
+                    case None    =>
                         if parents.get(this) != null then
                             println("cyclic reference for ex, created at:")
                             createdAt.printStackTrace()
@@ -241,7 +241,7 @@ object HashConsed {
             case Some(ref) =>
                 throw IllegalStateException(s"Double setRef for $key")
         state.forwardRefAcceptors.get(key) match
-            case None =>
+            case None     =>
             case Some(fw) =>
                 fw.setRefActions.foreach(_(ra))
                 fw.setRefActions = Nil
@@ -253,7 +253,7 @@ object HashConsed {
         lookupValue(s, ihc, tag) match
             case None =>
                 s.forwardRefAcceptors.get((ihc, tag)) match
-                    case None => None
+                    case None     => None
                     case Some(fw) =>
                         Some(Left(fw))
             case Some(r) => Some(Right(r))

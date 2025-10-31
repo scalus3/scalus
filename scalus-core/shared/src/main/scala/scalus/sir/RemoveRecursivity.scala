@@ -37,9 +37,9 @@ object RemoveRecursivity:
                   anns
                 )
             case LamAbs(name, term, tps, anns) => LamAbs(name, removeRecursivity(term), tps, anns)
-            case Apply(f, arg, tp, anns) =>
+            case Apply(f, arg, tp, anns)       =>
                 Apply(removeRecursivityInExpr(f), removeRecursivityInExpr(arg), tp, anns)
-            case Select(s, field, tp, anns) => Select(removeRecursivity(s), field, tp, anns)
+            case Select(s, field, tp, anns)       => Select(removeRecursivity(s), field, tp, anns)
             case IfThenElse(cond, t, f, tp, anns) =>
                 IfThenElse(
                   removeRecursivityInExpr(cond),
@@ -52,7 +52,7 @@ object RemoveRecursivity:
                 And(removeRecursivityInExpr(lhs), removeRecursivityInExpr(rhs), anns)
             case Or(lhs, rhs, anns) =>
                 Or(removeRecursivityInExpr(lhs), removeRecursivityInExpr(rhs), anns)
-            case Not(term, anns) => Not(removeRecursivityInExpr(term), anns)
+            case Not(term, anns)                   => Not(removeRecursivityInExpr(term), anns)
             case Match(scrutinee, cases, tp, anns) =>
                 Match(
                   removeRecursivityInExpr(scrutinee),
@@ -79,8 +79,8 @@ object RemoveRecursivity:
 
     def isRecursive(name: String, term: SIR, env: List[String] = Nil): Boolean =
         term match
-            case Var(n, tp, _)            => n == name && !env.contains(n)
-            case ExternalVar(_, n, tp, _) => n == name && !env.contains(n)
+            case Var(n, tp, _)                 => n == name && !env.contains(n)
+            case ExternalVar(_, n, tp, _)      => n == name && !env.contains(n)
             case Let(bindings, body, flags, _) =>
                 val newEnv = bindings.map(_.name) ++ env
                 bindings.exists(b => isRecursive(name, b.value, newEnv))
@@ -93,7 +93,7 @@ object RemoveRecursivity:
             case Not(a, _)          => isRecursive(name, a, env)
             case IfThenElse(c, t, f, tp, _) =>
                 isRecursive(name, c, env) || isRecursive(name, t, env) || isRecursive(name, f, env)
-            case Decl(_, t) => isRecursive(name, t, env)
+            case Decl(_, t)                => isRecursive(name, t, env)
             case Constr(_, _, args, tp, _) =>
                 args.exists(a => isRecursive(name, a, env))
             case Match(scrutinee, cases, tp, _) =>

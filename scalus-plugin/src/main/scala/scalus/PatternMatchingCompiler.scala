@@ -122,7 +122,7 @@ class PatternMatchingContext(
         val binding = row.patterns.zip(columnBinding).foldLeft(Map.empty[String, String]) {
             case (m, (p, cb)) =>
                 p.optNameInfo match {
-                    case None => m
+                    case None           => m
                     case Some(nameInfo) =>
                         m + (nameInfo.name -> cb.name)
                 }
@@ -177,7 +177,7 @@ object SirParsedCase:
             optNameInfo match {
                 case Some(nameInfo) =>
                     SIRUnify.topLevelUnifyType(tp, nameInfo.tp, SIRUnify.Env.empty) match {
-                        case SIRUnify.UnificationSuccess(emv, u) =>
+                        case SIRUnify.UnificationSuccess(emv, u)     =>
                         case SIRUnify.UnificationFailure(path, l, r) =>
                             throw IllegalStateException(
                               s"TypeSelector: type selector type ${tp.show} is not compatible with binding type ${nameInfo.tp.show} at ${pos.sourcePos.show} in path ${path}"
@@ -216,7 +216,7 @@ object SirParsedCase:
 
             def withAlias(alias: BindingNameInfo): Pattern = {
                 optNameInfo match {
-                    case None => this.copy(optNameInfo = Some(alias))
+                    case None           => this.copy(optNameInfo = Some(alias))
                     case Some(nameInfo) =>
                         this.copy(optNameInfo = Some(nameInfo.withAlias(alias)))
                 }
@@ -1652,7 +1652,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         }.toMap
 
         optNextSubtree match {
-            case None =>
+            case None          =>
             case Some(refTree) =>
                 SIRType.collectSumCaseClass(scrutineeTp) match
                     case Some((typeParams, sumCaseClass)) =>
@@ -1708,7 +1708,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         val newRows = rows.map { r =>
             val constructorPattern = r.patterns(colIndex) match
                 case c: SirParsedCase.Pattern.Constructor => c
-                case w: SirParsedCase.Pattern.Wildcard =>
+                case w: SirParsedCase.Pattern.Wildcard    =>
                     createWildcardConstructorPattern(cc, ccFreeTypeParams, w.pos)
                 case _ =>
                     throw IllegalStateException(
@@ -2069,7 +2069,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         val guardsRecords = ctx.parsedGuards.zipWithIndex.map { (og, i) =>
             val count = ctx.guardsUsageCount.getOrElse(i, 0)
             val embedding = og match {
-                case None => SirCaseDecisionTree.EmbeddingType.Inline
+                case None    => SirCaseDecisionTree.EmbeddingType.Inline
                 case Some(g) =>
                     if count <= 1 then SirCaseDecisionTree.EmbeddingType.Inline
                     else
@@ -2341,7 +2341,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         val s0 = decisions
         val s1 = dcRefs.zipWithIndex.foldLeft(s0) { case (acc, ((sir, embedding, name), i)) =>
             embedding match {
-                case SirCaseDecisionTree.EmbeddingType.Inline => acc
+                case SirCaseDecisionTree.EmbeddingType.Inline      => acc
                 case SirCaseDecisionTree.EmbeddingType.ByReference =>
                     val tp = decisions.tp
                     val posAnns = AnnotationsDecl.apply(pos = sir.anns.pos)
@@ -2362,7 +2362,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         }
         val s2 = actions.zipWithIndex.foldRight(s1) { case (((sir, embedding, name), i), acc) =>
             embedding match {
-                case SirCaseDecisionTree.EmbeddingType.Inline => acc
+                case SirCaseDecisionTree.EmbeddingType.Inline      => acc
                 case SirCaseDecisionTree.EmbeddingType.ByReference =>
                     val action = ctx.parsedActions(i)
                     val tp = generateActionSirType(action)
@@ -2378,10 +2378,10 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         }
         val s3 = guards.foldRight(s2) { case (og, acc) =>
             og match
-                case None => acc
+                case None                           => acc
                 case Some((guard, embedding, name)) =>
                     embedding match {
-                        case SirCaseDecisionTree.EmbeddingType.Inline => acc
+                        case SirCaseDecisionTree.EmbeddingType.Inline      => acc
                         case SirCaseDecisionTree.EmbeddingType.ByReference =>
                             val tp = buildGuardType(guard.bindedVariables)
                             val posAnns = AnnotationsDecl.apply(pos = guard.sir.anns.pos)
@@ -2494,7 +2494,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
               arg,
               acc.tp match {
                   case SIRType.Fun(_, retTp) => retTp
-                  case _ =>
+                  case _                     =>
                       throw IllegalStateException(
                         s"Expected function type in application, but got ${acc.tp.show}"
                       )

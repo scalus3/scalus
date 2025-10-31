@@ -272,10 +272,10 @@ object Value {
             rhs: List[(TokenName, BigInt)]
         ): Boolean = {
             lhs match
-                case List.Nil => rhs.forall(_._2 === BigInt(0))
+                case List.Nil                    => rhs.forall(_._2 === BigInt(0))
                 case List.Cons(lhsHead, lhsTail) =>
                     rhs match
-                        case List.Nil => lhs.forall(_._2 === BigInt(0))
+                        case List.Nil                    => lhs.forall(_._2 === BigInt(0))
                         case List.Cons(rhsHead, rhsTail) =>
                             (lhsHead === rhsHead) && go(lhsTail, rhsTail)
         }
@@ -847,7 +847,7 @@ object Value {
             rhs: List[(TokenName, BigInt)]
         ): List[(TokenName, BigInt)] = {
             lhs match
-                case List.Nil => rhs.map { case (tn, v) => (tn, op(0, v)) }
+                case List.Nil                    => rhs.map { case (tn, v) => (tn, op(0, v)) }
                 case List.Cons(lhsPair, lhsTail) =>
                     rhs match
                         case List.Nil => lhs.map { case (tn, v) => (tn, op(v, 0)) }

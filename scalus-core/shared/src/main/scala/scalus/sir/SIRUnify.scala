@@ -777,8 +777,8 @@ object SIRUnify {
             case (p1: SIRType.Primitive, p2: SIRType.Primitive) =>
                 if p1 == p2 then List(p1)
                 else List.empty
-            case (p1: SIRType.Primitive, _) => List.empty
-            case (_, p2: SIRType.Primitive) => List.empty
+            case (p1: SIRType.Primitive, _)                       => List.empty
+            case (_, p2: SIRType.Primitive)                       => List.empty
             case (cc1: SIRType.CaseClass, cc2: SIRType.CaseClass) =>
                 unifyConstrDecl(cc1.constrDecl, cc2.constrDecl, env) match
                     case UnificationSuccess(env, cc) =>
@@ -924,7 +924,7 @@ object SIRUnify {
                         var r: List[DataDecl] = Nil
                         while r.nonEmpty && s.nonEmpty do {
                             SIRType.retrieveDataDecl(s.head.params.head.tp) match
-                                case Left(msg) =>
+                                case Left(msg)        =>
                                 case Right(cDataDecl) =>
                                     val c = findRevIn(cDataDecl, track)
                                     if c.nonEmpty then r = decl :: c

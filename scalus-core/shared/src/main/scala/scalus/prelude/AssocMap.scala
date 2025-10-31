@@ -44,7 +44,7 @@ object AssocMap {
                 a: List[(A, B)]
             ): scalus.builtin.BuiltinList[scalus.builtin.BuiltinPair[Data, Data]] =
                 a match {
-                    case Nil => mkNilPairData()
+                    case Nil               => mkNilPairData()
                     case Cons(tuple, tail) =>
                         tuple match {
                             case (a, b) =>
@@ -83,7 +83,7 @@ object AssocMap {
         def find(predicate: ((A, B)) => Boolean): Option[(A, B)] = {
             @tailrec
             def go(lst: List[(A, B)]): Option[(A, B)] = lst match
-                case Nil => None
+                case Nil              => None
                 case Cons(pair, tail) =>
                     if predicate(pair) then Some(pair) else go(tail)
 
@@ -108,7 +108,7 @@ object AssocMap {
         def get(key: A): Option[B] = {
             @tailrec
             def go(lst: List[(A, B)]): Option[B] = lst match
-                case Nil => None
+                case Nil              => None
                 case Cons(pair, tail) =>
                     pair match
                         case (k, v) => if k === key then Some(v) else go(tail)
@@ -133,7 +133,7 @@ object AssocMap {
 
         def delete(key: A): AssocMap[A, B] = {
             def go(lst: List[(A, B)]): List[(A, B)] = lst match
-                case Nil => Nil
+                case Nil              => Nil
                 case Cons(pair, tail) =>
                     pair match
                         case (k, v) =>
@@ -147,7 +147,7 @@ object AssocMap {
         rhs: AssocMap[A, C]
     ): AssocMap[A, These[B, C]] = {
         def go(lst: List[(A, B)]): List[(A, These[B, C])] = lst match
-            case Nil => Nil
+            case Nil              => Nil
             case Cons(pair, tail) =>
                 pair match
                     case (k, v) =>

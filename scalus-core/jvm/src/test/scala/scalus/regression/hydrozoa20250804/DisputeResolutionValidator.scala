@@ -186,7 +186,7 @@ object DisputeResolutionValidator extends Validator:
     def maxVote(a: VoteStatus, b: VoteStatus): VoteStatus =
         import VoteStatus.{NoVote, Vote}
         a match {
-            case NoVote => b
+            case NoVote   => b
             case Vote(ad) =>
                 b match {
                     case NoVote   => a

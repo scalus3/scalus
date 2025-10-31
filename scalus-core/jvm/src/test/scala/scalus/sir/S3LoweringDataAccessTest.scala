@@ -155,7 +155,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
         val r1 = term1.evaluateDebug
         r1 match
             case Result.Success(result, _, _, logs) =>
-            case Result.Failure(_, _, _, logs) =>
+            case Result.Failure(_, _, _, logs)      =>
                 println(s"result: $r1")
                 logs.foreach(println)
 

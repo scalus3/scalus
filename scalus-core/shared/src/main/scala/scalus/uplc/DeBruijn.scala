@@ -41,7 +41,7 @@ object DeBruijn:
                 case Force(term)        => Force(process(term, env))
                 case Delay(term)        => Delay(process(term, env))
                 case Constr(tag, args)  => Constr(tag, args.map(process(_, env)))
-                case Case(arg, cases) =>
+                case Case(arg, cases)   =>
                     Case(process(arg, env), cases.map(process(_, env)))
                 case Const(const) => term
                 case Builtin(bn)  => term
@@ -60,9 +60,9 @@ object DeBruijn:
                 val binderName = s"i$idx"
                 idx += 1
                 LamAbs(binderName, go(term, binderName :: env))
-            case Apply(f, arg) => Apply(go(f, env), go(arg, env))
-            case Force(term)   => Force(go(term, env))
-            case Delay(term)   => Delay(go(term, env))
+            case Apply(f, arg)     => Apply(go(f, env), go(arg, env))
+            case Force(term)       => Force(go(term, env))
+            case Delay(term)       => Delay(go(term, env))
             case Constr(tag, args) =>
                 Constr(tag, args.map(go(_, env)))
             case Case(arg, cases) =>

@@ -533,7 +533,7 @@ class BuiltinsMeaning(
               VCon(
                 Constant.Data(Data.Map(aa.map {
                     case Constant.Pair(Constant.Data(a), Constant.Data(b)) => (a, b)
-                    case _ =>
+                    case _                                                 =>
                         throw new KnownTypeUnliftingError(
                           DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data),
                           args(0)

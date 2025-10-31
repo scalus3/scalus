@@ -16,7 +16,7 @@ object MemoryUsage {
             val bytes = i.toByteArray
             if bytes.head == 0 then bytes.tail else bytes
         bytes.headOption match {
-            case None => throw new IllegalStateException("empty number?")
+            case None    => throw new IllegalStateException("empty number?")
             case Some(u) =>
                 val unsigned = java.lang.Byte.toUnsignedInt(u)
                 val log2 = 32 - 1 - java.lang.Integer.numberOfLeadingZeros(unsigned)
@@ -53,7 +53,7 @@ object MemoryUsage {
             case Data.I(i)         => memoryUsageInteger(i)
             case Data.B(bs)        => memoryUsageByteString(bs)
             case Data.Constr(_, l) => sumList(l)
-            case Data.Map(l) =>
+            case Data.Map(l)       =>
                 var acc = 0L
                 val it = l.iterator
                 while it.hasNext do
@@ -82,7 +82,7 @@ object MemoryUsage {
         case Constant.Unit           => 1
         case _: Constant.Bool        => 1
         case Constant.Data(d)        => memoryUsageData(d)
-        case Constant.List(tpe, l) =>
+        case Constant.List(tpe, l)   =>
             var acc = 0L
             for d <- l do acc += memoryUsage(d)
             acc

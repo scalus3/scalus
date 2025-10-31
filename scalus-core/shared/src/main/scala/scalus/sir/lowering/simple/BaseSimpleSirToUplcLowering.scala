@@ -50,7 +50,7 @@ abstract class BaseSimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolea
                 decl.constructors
             case SIRType.TypeLambda(_, t) => findConstructors(t)
             case SIRType.TypeProxy(ref)   => findConstructors(ref)
-            case _ =>
+            case _                        =>
                 throw new IllegalArgumentException(
                   s"Expected case class type, got ${sirType}"
                 )
@@ -62,7 +62,7 @@ abstract class BaseSimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolea
     protected final def findConstructorDecl(sirType: SIRType, anns: AnnotationsDecl): ConstrDecl =
         sirType match
             case SIRType.CaseClass(constrDecl, _, _) => constrDecl
-            case SIRType.SumCaseClass(decl, _) =>
+            case SIRType.SumCaseClass(decl, _)       =>
                 if decl.constructors.length == 1 then decl.constructors.head
                 else
                     val pos = anns.pos
@@ -70,7 +70,7 @@ abstract class BaseSimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolea
                       s"Expected case class type, got ${sirType} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
                     )
             case SIRType.TypeLambda(_, t) => findConstructorDecl(t, anns)
-            case _ =>
+            case _                        =>
                 val pos = anns.pos
                 throw new IllegalArgumentException(
                   s"Expected case class type, got ${sirType} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
@@ -439,7 +439,7 @@ abstract class BaseSimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolea
             case SIR.Apply(f, arg, _, _)        => Term.Apply(lowerInner(f), lowerInner(arg))
             case SIR.Select(scrutinee, field, tp, anns) =>
                 lowerSelect(scrutinee, field, tp, anns)
-            case SIR.Const(const, _, _) => Term.Const(const)
+            case SIR.Const(const, _, _)  => Term.Const(const)
             case SIR.And(lhs, rhs, anns) =>
                 lowerInner(
                   SIR.IfThenElse(
@@ -477,7 +477,7 @@ abstract class BaseSimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolea
             case SIR.Cast(term, tp, anns) =>
                 lowerInner(term)
             case SIR.Builtin(bn, _, _) => builtinTerms(bn)
-            case SIR.Error(msg, _, _) =>
+            case SIR.Error(msg, _, _)  =>
                 if generateErrorTraces
                 then !(builtinTerms(DefaultFun.Trace) $ lowerInner(msg) $ ~Term.Error)
                 else Term.Error

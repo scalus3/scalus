@@ -35,7 +35,7 @@ object ToDataAdt:
     given AdtToData: ToData[Adt] = (a: Adt) =>
         given ToData[Adt] = AdtToData
         a match
-            case Adt.A => constrData(0, mkNilData())
+            case Adt.A     => constrData(0, mkNilData())
             case Adt.B(bs) =>
                 constrData(1, mkCons(bs.toData, mkNilData()))
             case Adt.C(a, b) =>

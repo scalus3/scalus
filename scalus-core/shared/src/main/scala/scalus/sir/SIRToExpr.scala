@@ -124,7 +124,7 @@ object ToExprHSSIRFlat extends HashConsedFlat[SIR] {
             val sir1 = ref.finValue(decoderState.hashConsed, 0, new HSRIdentityHashMap)
             decoderState.runFinCallbacks()
             SIRUnify.unifySIR(a, sir1, SIRUnify.Env.empty) match {
-                case SIRUnify.UnificationSuccess(_, _) =>
+                case SIRUnify.UnificationSuccess(_, _)              =>
                 case SIRUnify.UnificationFailure(path, left, right) =>
                     throw new SelfCheckException(
                       "unification for encoding/decoding failed",

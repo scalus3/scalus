@@ -214,7 +214,7 @@ object FeesOkValidator extends STS.Validator {
         val totalCollateral = event.body.value.totalCollateral
 
         totalCollateral match
-            case None => success
+            case None             => success
             case Some(collateral) =>
                 if collateral != totalSumOfCollateralCoins then
                     failure(
