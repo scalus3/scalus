@@ -2,7 +2,7 @@ package scalus.prelude.crypto.bls12_381
 
 import scalus.Compile
 import scalus.builtin.Builtins.{byteStringToInteger, integerToByteString}
-import scalus.builtin.ByteString
+import scalus.builtin.{ByteString, PlatformSpecific}
 import scalus.prelude.Option.{None, Some}
 import scalus.prelude.{require, Option}
 
@@ -21,9 +21,7 @@ case class Scalar private[bls12_381] (private val unScalar: BigInt)
 @Compile
 object Scalar:
     /** The prime number defining the scalar field of the BLS12-381 curve. */
-    val fieldPrime: BigInt = BigInt(
-      "52435875175126190479447740508185965837690552500527637822603658699938581184513"
-    )
+    val fieldPrime: BigInt = PlatformSpecific.bls12_381_scalar_period
 
     /** Returns a Scalar instance representing zero in the field. */
     def zero: Scalar = new Scalar(0)

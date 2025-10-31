@@ -1,5 +1,7 @@
 package scalus.builtin
 
+import scalus.Compile
+
 /** Provides access to platform-specific built-in functions.
   *
   * This is used to access cryptographic primitives and other platform-specific functionality that
@@ -208,12 +210,15 @@ trait PlatformSpecific:
       */
     def appendFile(path: String, bytes: Array[Byte]): Unit
 
+@Compile
 object PlatformSpecific:
     val bls12_381_scalar_period: BigInt =
-        BigInt("73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001", 16)
+        BigInt("52435875175126190479447740508185965837690552500527637822603658699938581184513")
 
     val bls12_381_G1_compressed_zero: ByteString =
-        ByteString.unsafeFromArray(Array(0xc0.toByte) ++ Array.fill(47)(0.toByte))
+        ByteString.fromHex(
+          "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        )
 
     val bls12_381_G1_compressed_generator: ByteString =
         ByteString.fromHex(
@@ -221,7 +226,9 @@ object PlatformSpecific:
         )
 
     val bls12_381_G2_compressed_zero: ByteString =
-        ByteString.unsafeFromArray(Array(0xc0.toByte) ++ Array.fill(95)(0.toByte))
+        ByteString.fromHex(
+          "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        )
 
     val bls12_381_G2_compressed_generator: ByteString =
         ByteString.fromHex(
