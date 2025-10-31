@@ -14,10 +14,11 @@ import org.scalacheck.{Arbitrary, Prop}
 import org.scalacheck.util.Pretty
 import org.scalactic.{source, Prettifier}
 
+import scala.annotation.targetName
 import scala.util.control.NonFatal
 import scala.reflect.ClassTag
 
-class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
+class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances { self =>
     export org.scalatestplus.scalacheck.Checkers.*
     export org.scalacheck.{Arbitrary, Gen, Shrink}
     // export scalus.builtin.Data
@@ -129,6 +130,11 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                 fail(s"Expected success, but got failure: $failure")
             case _ =>
     }
+
+    extension [T: Eq](inline code: T)
+        @targetName("assertEvalEqTo")
+        protected final inline infix def assertEvalEq(inline expected: T): Unit =
+        self.assertEvalEq(code, expected)
 
     protected final inline def assertEvalEq[T: Eq](inline code: T, inline expected: T): Unit = {
         assert(code === expected, s"Expected $expected, but got $code")
