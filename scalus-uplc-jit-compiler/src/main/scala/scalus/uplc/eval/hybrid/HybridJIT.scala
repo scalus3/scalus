@@ -24,7 +24,7 @@ object HybridJIT extends JitRunner {
                     val term = vm.evaluateDeBruijnedTerm(djTerm, budgetSpender, logger)
                     term match
                         case Term.Const(v) => RuntimeHelper.uplcToJitAny(v)
-                        case _ =>
+                        case _             =>
                             throw MachineError(
                               "HybridJIT: Expected constant result from Cek fallback",
                             )

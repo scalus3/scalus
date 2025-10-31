@@ -103,7 +103,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
             val optDatum = Data.fromData[scalus.prelude.Option[Datum]](data)
             optDatum match {
                 case Option.Some(datum) =>
-                case _ =>
+                case _                  =>
                     scalus.prelude.fail("Expected non-empty PubKeyHash")
             }
         }

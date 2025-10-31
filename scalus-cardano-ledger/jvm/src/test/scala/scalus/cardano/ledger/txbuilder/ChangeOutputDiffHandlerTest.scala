@@ -105,7 +105,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         } yield (initialFee, newFee)
 
         res match {
-            case Left(e) => fail(s"fee calculation failed: ${e.toString}")
+            case Left(e)                   => fail(s"fee calculation failed: ${e.toString}")
             case Right(initialFee, newFee) =>
                 assert(
                   initialFee == newFee,

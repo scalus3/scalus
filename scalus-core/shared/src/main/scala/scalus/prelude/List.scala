@@ -202,7 +202,7 @@ object List {
         (a: scalus.prelude.List[A]) => {
             def loop(a: scalus.prelude.List[A]): scalus.builtin.BuiltinList[Data] =
                 a match
-                    case scalus.prelude.List.Nil => mkNilData()
+                    case scalus.prelude.List.Nil              => mkNilData()
                     case scalus.prelude.List.Cons(head, tail) =>
                         mkCons(summon[ToData[A]](head), loop(tail))
 
@@ -270,7 +270,7 @@ object List {
                     case Cons(_, _) => Order.Less
             case Cons(headLhs, tailLhs) =>
                 rhs match
-                    case Nil => Order.Greater
+                    case Nil                    => Order.Greater
                     case Cons(headRhs, tailRhs) =>
                         val order = headLhs <=> headRhs
                         if order.nonEqual then order else tailLhs <=> tailRhs
@@ -278,7 +278,7 @@ object List {
     given showList[T: Show]: Show[List[T]] = (xs: List[T]) => {
         @tailrec
         def go(start: String, rest: List[T]): String = rest match {
-            case List.Nil => start
+            case List.Nil              => start
             case List.Cons(head, tail) =>
                 go(appendString(appendString(start, head.show), ", "), tail)
         }
@@ -308,7 +308,7 @@ object List {
           */
         def quicksort: List[A] =
             self match
-                case List.Nil => List.Nil
+                case List.Nil              => List.Nil
                 case List.Cons(head, tail) =>
                     val before = tail.filter { elem => (elem <=> head).isLess }.quicksort
                     val after = tail.filter { elem => !(elem <=> head).isLess }.quicksort
@@ -426,7 +426,7 @@ object List {
             else
                 @tailrec
                 def go(lst: List[A], currentIndex: BigInt): Option[A] = lst match
-                    case Nil => None
+                    case Nil              => None
                     case Cons(head, tail) =>
                         if currentIndex == index then Some(head)
                         else go(tail, currentIndex + 1)
@@ -500,7 +500,7 @@ object List {
             @tailrec
             def go(list: List[A], acc: SortedMap[K, List[B]]): SortedMap[K, List[B]] =
                 list match
-                    case Nil => acc
+                    case Nil              => acc
                     case Cons(head, tail) =>
                         val key = keyExtractor(head)
                         val value = valueExtractor(head)
@@ -546,7 +546,7 @@ object List {
             @tailrec
             def go(list: List[A], acc: SortedMap[K, B]): SortedMap[K, B] =
                 list match
-                    case Nil => acc
+                    case Nil              => acc
                     case Cons(head, tail) =>
                         val key = keyExtractor(head)
                         val value = valueExtractor(head)
@@ -580,10 +580,10 @@ object List {
           *   }}}
           */
         def zip[B](other: List[B]): List[(A, B)] = self match
-            case Nil => Nil
+            case Nil                      => Nil
             case Cons(selfHead, selfTail) =>
                 other match
-                    case Nil => Nil
+                    case Nil                        => Nil
                     case Cons(otherHead, otherTail) =>
                         Cons((selfHead, otherHead), selfTail.zip(otherTail))
 
@@ -832,7 +832,7 @@ object List {
           */
         @tailrec
         def findMap[B](mapper: A => Option[B]): Option[B] = self match
-            case Nil => None
+            case Nil              => None
             case Cons(head, tail) =>
                 val result = mapper(head)
                 if result.isDefined then result else tail.findMap(mapper)
@@ -985,7 +985,7 @@ object List {
         def indexOfOption[B >: A](elem: B)(using eq: Eq[B]): Option[BigInt] = {
             @tailrec
             def go(lst: List[A], index: BigInt): Option[BigInt] = lst match
-                case Nil => None
+                case Nil              => None
                 case Cons(head, tail) =>
                     if head === elem then Some(index) else go(tail, index + 1)
 
@@ -1163,7 +1163,7 @@ object List {
           *   }}}
           */
         def dropWhile(predicate: A => Boolean): List[A] = self match
-            case Nil => Nil
+            case Nil              => Nil
             case Cons(head, tail) =>
                 if predicate(head) then tail.dropWhile(predicate)
                 else self
@@ -1190,7 +1190,7 @@ object List {
           */
         def deleteFirst[B >: A](elem: B)(using eq: Eq[B]): List[A] = {
             def go(lst: List[A]): List[A] = lst match
-                case Nil => Nil
+                case Nil              => Nil
                 case Cons(head, tail) =>
                     if head === elem then tail
                     else Cons(head, go(tail))
@@ -1266,7 +1266,7 @@ object List {
           *   }}}
           */
         def takeWhile(predicate: A => Boolean): List[A] = self match
-            case Nil => Nil
+            case Nil              => Nil
             case Cons(head, tail) =>
                 if predicate(head) then Cons(head, tail.takeWhile(predicate))
                 else Nil

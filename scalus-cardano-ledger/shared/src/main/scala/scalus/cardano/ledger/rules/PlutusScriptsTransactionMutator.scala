@@ -77,7 +77,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                         .map { input =>
                             utxo.get(input) match {
                                 case Some(output) => output.value.coin
-                                case None =>
+                                case None         =>
                                     break(
                                       Left(
                                         TransactionException.BadCollateralInputsUTxOException(

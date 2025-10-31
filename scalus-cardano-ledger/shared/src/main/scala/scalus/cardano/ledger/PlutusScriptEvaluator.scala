@@ -201,7 +201,7 @@ object PlutusScriptEvaluator {
                     plutusScript <- lookupTable.scripts.get(scriptHash) match {
                         case Some(plutusScript: PlutusScript) => Some(plutusScript)
                         case Some(other)                      => None
-                        case None =>
+                        case None                             =>
                             throw new IllegalStateException(s"Script not found: $scriptHash")
                     }
                 yield {

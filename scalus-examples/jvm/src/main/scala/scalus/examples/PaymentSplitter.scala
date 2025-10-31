@@ -74,7 +74,7 @@ object PaymentSplitter extends DataParameterizedValidator {
                     case Credential.PubKeyCredential(pkh) => Credential.PubKeyCredential(pkh)
                     case _                                => fail("Output to script is not allowed")
                 sumsPerPayee.get(payee) match
-                    case None => (sum + value, sumsPerPayee.insert(payee, value))
+                    case None          => (sum + value, sumsPerPayee.insert(payee, value))
                     case Some(prevSum) =>
                         (sum + value, sumsPerPayee.insert(payee, prevSum + value))
             }
@@ -88,7 +88,7 @@ object PaymentSplitter extends DataParameterizedValidator {
                 then (optSplit, Some(value), nPayed + 1)
                 else
                     optSplit match
-                        case None => (Some(value), optPayeeSumWithChange, nPayed + 1)
+                        case None        => (Some(value), optPayeeSumWithChange, nPayed + 1)
                         case Some(split) =>
                             require(split === value, "Split unequally")
                             (Some(split), optPayeeSumWithChange, nPayed + 1)
@@ -96,7 +96,7 @@ object PaymentSplitter extends DataParameterizedValidator {
 
         require(payees.length === nPayed, "Not all payees were paid")
         optSplit match
-            case None => // one payee, no split
+            case None        => // one payee, no split
             case Some(split) =>
                 val payeeSumWithChange = optPayeeSumWithChange.getOrFail("No change output")
                 val eqSumValue = sumOutput - payeeSumWithChange + split

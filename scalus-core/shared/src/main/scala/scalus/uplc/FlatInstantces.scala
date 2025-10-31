@@ -36,13 +36,13 @@ object FlatInstantces:
                           s"This usually means the variable is not properly bound in the scope."
                     )
                 termTagWidth + summon[Flat[Word64]].bitSize(Word64(name.index))
-            case Const(c)     => termTagWidth + flatConstant.bitSize(c)
-            case Apply(f, x)  => termTagWidth + bitSize(f) + bitSize(x)
-            case LamAbs(x, t) => termTagWidth + bitSize(t)
-            case Force(term)  => termTagWidth + bitSize(term)
-            case Delay(term)  => termTagWidth + bitSize(term)
-            case Builtin(bn)  => termTagWidth + summon[Flat[DefaultFun]].bitSize(bn)
-            case Error        => termTagWidth
+            case Const(c)          => termTagWidth + flatConstant.bitSize(c)
+            case Apply(f, x)       => termTagWidth + bitSize(f) + bitSize(x)
+            case LamAbs(x, t)      => termTagWidth + bitSize(t)
+            case Force(term)       => termTagWidth + bitSize(term)
+            case Delay(term)       => termTagWidth + bitSize(term)
+            case Builtin(bn)       => termTagWidth + summon[Flat[DefaultFun]].bitSize(bn)
+            case Error             => termTagWidth
             case Constr(tag, args) =>
                 termTagWidth + summon[Flat[Word64]].bitSize(tag) + summon[Flat[List[Term]]]
                     .bitSize(args)

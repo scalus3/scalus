@@ -91,7 +91,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
             case _ => fail(s"expected function type, we have ${sir.tp.show}")
         val constrDecl = txInfoSIRType match
             case SIRType.CaseClass(constrDecl, typeArgs, _) => constrDecl
-            case SIRType.SumCaseClass(dataDecl, typeArgs) =>
+            case SIRType.SumCaseClass(dataDecl, typeArgs)   =>
                 if dataDecl.constructors.length == 1 then
                     val constrDecl = dataDecl.constructors.head
                     constrDecl
@@ -122,7 +122,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
         val tp1 = encodeDecodeSIRType(txInfoSIRType)
         val constrDecl1 = tp1 match
             case SIRType.CaseClass(constrDecl, typeArgs, parentTypeArgs) => constrDecl
-            case SIRType.SumCaseClass(dataDecl, typeArgs) =>
+            case SIRType.SumCaseClass(dataDecl, typeArgs)                =>
                 if dataDecl.constructors.length == 1 then
                     val constrDecl = dataDecl.constructors.head
                     constrDecl
@@ -150,7 +150,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
         }
         val constrDecl2 = tp2 match
             case SIRType.CaseClass(constrDecl, typeArgs, _) => constrDecl
-            case SIRType.SumCaseClass(dataDecl, typeArgs) =>
+            case SIRType.SumCaseClass(dataDecl, typeArgs)   =>
                 if dataDecl.constructors.length == 1 then
                     val constrDecl = dataDecl.constructors.head
                     constrDecl

@@ -156,7 +156,7 @@ private trait DataApi {
             // read bytes (sized or indefinite) where chunks are bounded by 64 bytes
             def readBoundedBytes(): Array[Byte] =
                 r.dataItem() match
-                    case DI.Bytes => readBoundedSizedBytes()
+                    case DI.Bytes      => readBoundedSizedBytes()
                     case DI.BytesStart =>
                         r.readBytesStart()
                         readBoundedBytesIndef()
@@ -168,7 +168,7 @@ private trait DataApi {
                 case DI.ArrayStart | DI.ArrayHeader =>
                     Data.List(Decoder.forArray[Data].read(r).toList)
                 case DI.Bytes | DI.BytesStart => B(ByteString.unsafeFromArray(readBoundedBytes()))
-                case DI.Tag =>
+                case DI.Tag                   =>
                     r.readTag() match
                         case Other(102) =>
                             val _ = r.readArrayHeader()
@@ -181,7 +181,7 @@ private trait DataApi {
                             Constr(value - 1280 + 7, Decoder.forArray[Data].read(r).toList)
                         case PositiveBigNum => I(BigInteger(1, readBoundedBytes()))
                         case NegativeBigNum => I(BigInteger(1, readBoundedBytes()).not)
-                        case tag =>
+                        case tag            =>
                             r.unexpectedDataItem(
                               s"Allowed Data Constr Tag or CBOR BigNum Tag, got $tag"
                             )

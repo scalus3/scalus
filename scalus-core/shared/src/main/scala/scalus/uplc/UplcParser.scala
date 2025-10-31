@@ -232,7 +232,7 @@ object UplcParser:
     def constantOf(t: DefaultUni, expectDataParens: Boolean = false): P[Constant] = t match
         case DefaultUni.Integer => lexeme(integer).map(i => Constant.Integer(i))
         case DefaultUni.Unit    => symbol("()").map(_ => Constant.Unit)
-        case DefaultUni.Bool =>
+        case DefaultUni.Bool    =>
             lexeme(P.stringIn(Seq("True", "False"))).map {
                 case "True"  => Constant.Bool(true)
                 case "False" => Constant.Bool(false)
@@ -245,7 +245,7 @@ object UplcParser:
             (if expectDataParens then inParens(dataTerm) else dataTerm).map(asConstant)
         case DefaultUni.Apply(ProtoList, t)                      => conListOf(t)
         case DefaultUni.Apply(DefaultUni.Apply(ProtoPair, a), b) => conPairOf(a, b)
-        case DefaultUni.BLS12_381_G1_Element =>
+        case DefaultUni.BLS12_381_G1_Element                     =>
             lexeme(conBLS12_381_G1_Element.map(bs => Constant.BLS12_381_G1_Element(bs)))
         case DefaultUni.BLS12_381_G2_Element =>
             lexeme(conBLS12_381_G2_Element.map(bs => Constant.BLS12_381_G2_Element(bs)))

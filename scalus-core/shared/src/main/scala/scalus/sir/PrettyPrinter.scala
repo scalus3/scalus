@@ -39,11 +39,11 @@ object PrettyPrinter:
     def prettyValue(c: Constant, dataParens: Boolean = false): Doc =
         import Constant.*
         c match
-            case Integer(value)    => str(value)
-            case ByteString(value) => text("#" + value.toHex)
-            case String(value)     => text("\"" + value + "\"")
-            case Unit              => text("()")
-            case Bool(value)       => text(if value then "True" else "False")
+            case Integer(value)       => str(value)
+            case ByteString(value)    => text("#" + value.toHex)
+            case String(value)        => text("\"" + value + "\"")
+            case Unit                 => text("()")
+            case Bool(value)          => text(if value then "True" else "False")
             case Constant.Data(value) =>
                 if dataParens then inParens(pretty(value)) else pretty(value)
             case Pair(a, b) =>
@@ -55,13 +55,13 @@ object PrettyPrinter:
                 ) + text("]")
             case BLS12_381_G1_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_G2_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
-            case BLS12_381_MlResult(_) =>
+            case BLS12_381_MlResult(_)       =>
                 throw new IllegalArgumentException("Cannot print to BLS12_381_MlResult")
 
     def pretty(d: Data): Doc =
         d match
-            case Data.I(value) => text("I") & str(value)
-            case Data.B(value) => text("B") & text("#" + value.toHex)
+            case Data.I(value)          => text("I") & str(value)
+            case Data.B(value)          => text("B") & text("#" + value.toHex)
             case Data.Constr(tag, args) =>
                 text("Constr") & str(tag) &
                     text("[") + intercalate(
@@ -84,11 +84,11 @@ object PrettyPrinter:
     def pretty(c: Constant): Doc = pretty(c.tpe) & prettyValue(c, true)
 
     def pretty(du: DefaultUni): Doc = du match
-        case DefaultUni.Integer    => text("integer")
-        case DefaultUni.ByteString => text("bytestring")
-        case DefaultUni.String     => text("string")
-        case DefaultUni.Unit       => text("unit")
-        case DefaultUni.Bool       => text("bool")
+        case DefaultUni.Integer                          => text("integer")
+        case DefaultUni.ByteString                       => text("bytestring")
+        case DefaultUni.String                           => text("string")
+        case DefaultUni.Unit                             => text("unit")
+        case DefaultUni.Bool                             => text("bool")
         case DefaultUni.Apply(DefaultUni.ProtoList, arg) =>
             inParens(text("list") & pretty(arg))
         case DefaultUni.Apply(DefaultUni.Apply(DefaultUni.ProtoPair, a), b) =>
@@ -111,7 +111,7 @@ object PrettyPrinter:
                 val prettyConstrs = constructors.map { constr =>
                     val params = constr.params match
                         case Nil => empty
-                        case _ =>
+                        case _   =>
                             intercalate(
                               text(",") + line,
                               constr.params.map(tb => typedName(tb.name, tb.tp))
@@ -143,7 +143,7 @@ object PrettyPrinter:
                             )
                             val params = bindings match
                                 case Nil => empty
-                                case _ =>
+                                case _   =>
                                     intercalate(text(",") + line, bindings.map(text))
                                         .tightBracketBy(text("("), text(")"))
                             (kw("case") & ctr(constr.name) + typedConst + params & text(
@@ -206,7 +206,7 @@ object PrettyPrinter:
                 val (t, args) = SirDSL.applyToList(a)
                 val prettyArgs = args match
                     case List() => text("()")
-                    case _ =>
+                    case _      =>
                         intercalate(text(",") + line, args.map(pretty(_, style)))
                             .tightBracketBy(text("("), text(")"))
 
@@ -274,7 +274,7 @@ object PrettyPrinter:
                     " =>> "
                   ) + pretty(body)
                 )
-            case p: SIRType.Primitive => text(p.show)
+            case p: SIRType.Primitive                         => text(p.show)
             case SIRType.CaseClass(constrDecl, typeParams, _) =>
                 text(constrDecl.name) + inOptBrackets(
                   intercalate(text(",") + space, typeParams.map(pretty))
@@ -306,7 +306,7 @@ object PrettyPrinter:
             def styled(s: paiges.Style): Doc = if style == Style.XTerm then d.style(s) else d
         def kw(s: String): Doc = text(s).styled(Fg.colorCode(172))
         term match
-            case Var(name) => text(name.name)
+            case Var(name)          => text(name.name)
             case LamAbs(name, term) =>
                 val color = nextBracketColor()
                 char('(').styled(Fg.colorCode(color))
@@ -328,7 +328,7 @@ object PrettyPrinter:
                 inParens(kw("con") & const.pretty.styled(Fg.colorCode(64)))
             case Builtin(bn) =>
                 inParens(kw("builtin") & pretty(bn).styled(Fg.colorCode(176)))
-            case Error => kw("(error)")
+            case Error             => kw("(error)")
             case Constr(tag, args) =>
                 val prettyArgs = intercalate(
                   lineOrSpace,

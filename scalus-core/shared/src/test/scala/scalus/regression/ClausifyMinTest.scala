@@ -29,7 +29,7 @@ object Min202507172:
     extension [A: Ord](self: List[A])
         def insertUniqueOrdered(elem: A): List[A] =
             self match
-                case List.Nil => List.single(elem)
+                case List.Nil              => List.single(elem)
                 case List.Cons(head, tail) =>
                     elem <=> head match
                         case Order.Less    => self.prepended(elem)

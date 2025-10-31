@@ -147,7 +147,7 @@ object CosmexContract extends DataParameterizedValidator {
         spendingTxOutRef: TxOutRef
     ): (TxInInfo, BigInt) = {
         def go(i: BigInt, txIns: List[TxInInfo]): (TxInInfo, BigInt) = txIns match
-            case List.Nil => fail("Own input not found")
+            case List.Nil                  => fail("Own input not found")
             case List.Cons(txInInfo, tail) =>
                 if txInInfo.outRef === spendingTxOutRef then (txInInfo, i)
                 else go(i + 1, tail)
@@ -815,7 +815,7 @@ object CosmexContract extends DataParameterizedValidator {
         import OnChainChannelState.*
 
         def findOwnInputAndIndex(i: BigInt, txIns: List[TxInInfo]): (TxOut, BigInt) = txIns match
-            case List.Nil => fail("Own input not found")
+            case List.Nil                                      => fail("Own input not found")
             case List.Cons(TxInInfo(txOutRef, resolved), tail) =>
                 if txOutRef === spendingTxOutRef then (resolved, i)
                 else findOwnInputAndIndex(i + 1, tail)

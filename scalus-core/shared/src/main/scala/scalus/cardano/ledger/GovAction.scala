@@ -97,7 +97,7 @@ enum GovAction {
     case InfoAction
 
     def scriptHashOption: Option[ScriptHash] = this match
-        case parameterChange: GovAction.ParameterChange => parameterChange.policyHash
+        case parameterChange: GovAction.ParameterChange         => parameterChange.policyHash
         case treasuryWithdrawals: GovAction.TreasuryWithdrawals =>
             treasuryWithdrawals.policyHash
         case _ => None

@@ -7,7 +7,7 @@ object SirDSL:
 
     def extractAnnotated(sir: SIR): AnnotatedSIR =
         sir match
-            case ansir: AnnotatedSIR => ansir
+            case ansir: AnnotatedSIR  => ansir
             case SIR.Decl(data, term) =>
                 extractAnnotated(term)
 

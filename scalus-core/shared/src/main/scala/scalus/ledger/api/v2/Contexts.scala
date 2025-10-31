@@ -235,7 +235,7 @@ object Utils {
     ): Option[Datum] = {
         datum.get(datumHash) match
             case Option.Some(datum) => Option.Some(datum)
-            case Option.None =>
+            case Option.None        =>
                 outputs.findMap { output =>
                     output.datum match
                         case OutputDatum.OutputDatum(data) =>

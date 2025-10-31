@@ -55,7 +55,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
         (input.representation, representation) match {
-            case (ProdDataList, ProdDataList) => input
+            case (ProdDataList, ProdDataList)   => input
             case (ProdDataList, PackedDataList) =>
                 lvBuiltinApply(
                   SIRBuiltins.listData,
@@ -83,7 +83,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case (ProdDataList, PairData) =>
                 val (inputIdv, addToScoped) = input match
                     case idv: IdentifiableLoweredValue => (idv, false)
-                    case other =>
+                    case other                         =>
                         val id = lctx.uniqueVarName("dl_to_pair_input")
                         val v = lvNewLazyIdVar(
                           id,
@@ -189,7 +189,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(PairData, pos)
-            case (UplcConstr, ProdDataList) => ???
+            case (UplcConstr, ProdDataList)   => ???
             case (UplcConstr, PackedDataList) =>
                 input
                     .toRepresentation(ProdDataList, pos)
@@ -216,11 +216,11 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                       s"Can't use one-element=generator for type ${input.sirType.show}",
                       pos
                     )
-            case (PairData, PairData) => input
+            case (PairData, PairData)     => input
             case (PairData, ProdDataList) =>
                 val inputIdv = input match
                     case idv: IdentifiableLoweredValue => idv
-                    case other =>
+                    case other                         =>
                         lvNewLazyIdVar(
                           lctx.uniqueVarName("pair_to_dl_input"),
                           input.sirType,
@@ -409,7 +409,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val tailId = list0id + s"_tail_${idx + 1}"
                 val tailLazyVar = lctx.scope.getById(tailId) match
                     case Some(v) => v
-                    case None =>
+                    case None    =>
                         lvNewLazyIdVar(
                           tailId,
                           SIRType.List(SIRType.Data),
@@ -518,7 +518,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   loweredScrutinee.pos
                 ) match
                     case idv: IdentifiableLoweredValue => (idv, false)
-                    case other =>
+                    case other                         =>
                         val v = lvNewLazyIdVar(
                           lctx.uniqueVarName("_match_data_list"),
                           SIRType.List(SIRType.Data),
@@ -746,7 +746,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         tp match {
             case SIRType.CaseClass(constrDecl, targs, optParent) =>
                 optParent match
-                    case None => 0
+                    case None         => 0
                     case Some(parent) =>
                         val parentDecl = SIRType
                             .retrieveDataDecl(parent)
@@ -781,7 +781,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     def retrieveConstrDecl(tp: SIRType, pos: SIRPosition): ConstrDecl = {
         SIRType.retrieveConstrDecl(tp) match
             case Right(decl) => decl
-            case Left(msg) =>
+            case Left(msg)   =>
                 throw LoweringException(
                   s"Can't retrieve constr decl from ${tp.show}: $msg",
                   pos

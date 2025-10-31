@@ -20,7 +20,7 @@ object MinTransactionFee {
       Coin
     ] = {
         AllResolvedScripts.allProvidedReferenceScripts(transaction, utxo) match {
-            case Left(e) => Left(e)
+            case Left(e)        => Left(e)
             case Right(scripts) =>
                 val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
                 val transactionSizeFee = calculateTransactionSizeFee(transaction, protocolParams)

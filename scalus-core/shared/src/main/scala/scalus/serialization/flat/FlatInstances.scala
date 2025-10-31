@@ -84,7 +84,7 @@ object FlatInstances:
 
         def encode(a: Option[String], encode: EncoderState): Unit =
             a match
-                case None => encode.bits(1, 0)
+                case None      => encode.bits(1, 0)
                 case Some(str) =>
                     encode.bits(1, 1)
                     summon[Flat[String]].encode(str, encode)
@@ -568,7 +568,7 @@ object FlatInstances:
                 case `tagPrimitiveBoolean`    => SIRTypeHashConsedRef.fromData(SIRType.Boolean)
                 case `tagPrimitiveVoid`       => SIRTypeHashConsedRef.fromData(SIRType.Unit)
                 case `tagPrimitiveData`       => SIRTypeHashConsedRef.fromData(SIRType.Data)
-                case `tagCaseClass` =>
+                case `tagCaseClass`           =>
                     SIRTypeCaseClassFlat.decodeHC(decode)
                 case `tagSumCaseClass` =>
                     SIRTypeSumCaseClassFlat.decodeHC(decode)
@@ -595,7 +595,7 @@ object FlatInstances:
                     SIRTypeHashConsedRef.fromData(SIRType.FreeUnificator)
                 case `tagTypeProxy` =>
                     SIRTypeTypeProxyFlat.decodeHC(decode)
-                case `tagTypeNothing` => SIRTypeHashConsedRef.fromData(SIRType.TypeNothing)
+                case `tagTypeNothing`   => SIRTypeHashConsedRef.fromData(SIRType.TypeNothing)
                 case `tagNonCaseModule` =>
                     SIRTypeNonCaseModuleFlat.decodeHC(decode)
                 case `tagBls12_381_G1_Element` =>
@@ -726,7 +726,7 @@ object FlatInstances:
         override def bitSizeHCNew(inA: SIRType, state: HashConsed.State): Int =
             val a = inA match
                 case tncm: SIRType.TypeNonCaseModule => tncm
-                case _ =>
+                case _                               =>
                     throw IllegalStateException(s"Expected SIRType.TypeNonCaseModule, have ${inA}")
             summon[Flat[String]].bitSize(a.name)
 
@@ -736,7 +736,7 @@ object FlatInstances:
         ): Unit =
             val a = inA match
                 case tncm: SIRType.TypeNonCaseModule => tncm
-                case _ =>
+                case _                               =>
                     throw IllegalStateException(s"Expected SIRType.TypeNonCaseModule, have ${inA}")
             summon[Flat[String]].encode(a.name, encode.encode)
 
@@ -1231,12 +1231,12 @@ object FlatInstances:
                     HashConsedRef.deferred((hs, l, p) => {
                         val ff = f.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in Apply")
                         }
                         val fx = x.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in Apply")
                         }
                         Apply(
@@ -1270,17 +1270,17 @@ object FlatInstances:
                     HashConsedRef.deferred((hs, l, p) =>
                         val c1 = c.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in IfThenElse")
                         }
                         val t1 = t.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in IfThenElse")
                         }
                         val f1 = f.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in IfThenElse")
                         }
                         IfThenElse(
@@ -1330,7 +1330,7 @@ object FlatInstances:
                         Match(
                           scrutinee.finValue(hs, l, p) match {
                               case as: AnnotatedSIR => as
-                              case _ =>
+                              case _                =>
                                   throw new IllegalStateException("non-annotated SIR in Match")
                           },
                           cases.finValue(hs, l, p),
@@ -1353,12 +1353,12 @@ object FlatInstances:
                     HashConsedRef.deferred((hs, l, p) => {
                         val x1 = x.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in And")
                         }
                         val y1 = y.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in And")
                         }
                         And(x1, y1, anns.finValue(hs, l, p))
@@ -1370,12 +1370,12 @@ object FlatInstances:
                     HashConsedRef.deferred((hs, l, p) => {
                         val x1 = x.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in Or")
                         }
                         val y1 = y.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in Or")
                         }
                         Or(x1, y1, anns.finValue(hs, l, p))
@@ -1386,7 +1386,7 @@ object FlatInstances:
                     HashConsedRef.deferred((hs, l, p) => {
                         val x1 = x.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in Not")
                         }
                         Not(x1, anns.finValue(hs, l, p))
@@ -1404,7 +1404,7 @@ object FlatInstances:
                     HashConsedRef.deferred((hs, l, p) =>
                         val finExpr = expr.finValue(hs, l, p) match {
                             case as: AnnotatedSIR => as
-                            case _ =>
+                            case _                =>
                                 throw new IllegalStateException("non-annotated SIR in Cast")
                         }
                         Cast(

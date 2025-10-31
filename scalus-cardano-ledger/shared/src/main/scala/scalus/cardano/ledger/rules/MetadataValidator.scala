@@ -84,9 +84,9 @@ object MetadataValidator extends STS.Validator {
         metadatum match {
             case Metadatum.Int(_)       => true
             case Metadatum.Bytes(bytes) => bytes.length <= MaxSize
-            case Metadatum.Text(str) =>
+            case Metadatum.Text(str)    =>
                 str.getBytes(StandardCharsets.UTF_8).length <= MaxSize
-            case Metadatum.List(items) => items.forall(isValidMetadatum)
+            case Metadatum.List(items)  => items.forall(isValidMetadatum)
             case Metadatum.Map(entries) =>
                 entries.forall { (key, value) =>
                     isValidMetadatum(key) && isValidMetadatum(value)

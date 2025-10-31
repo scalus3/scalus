@@ -18,7 +18,7 @@ object MemoryUsageJit {
         case d: Data        => MemoryUsage.memoryUsageData(d)
         case _: Boolean     => 1
         case ()             => 1
-        case l: List[?] =>
+        case l: List[?]     =>
             var acc = 0L
             for elem <- l do acc += memoryUsage(elem)
             acc

@@ -358,7 +358,7 @@ object Interop {
     def getInterval(tx: Transaction, slotConfig: SlotConfig, protocolVersion: Int): v1.Interval = {
         val validFrom = tx.getBody.getValidityStartInterval
         (validFrom, tx.getBody.getTtl) match
-            case (0, 0) => v1.Interval.always
+            case (0, 0)       => v1.Interval.always
             case (0, validTo) =>
                 val closure =
                     if protocolVersion > 8 then false
@@ -867,7 +867,7 @@ object Interop {
                       else prelude.Option.Some(getGovActionId(a.getPrevGovActionId)),
                   protocolVersion = getProtocolVersion(a.getProtocolVersion)
                 )
-            case _: InfoAction => v3.GovernanceAction.InfoAction
+            case _: InfoAction      => v3.GovernanceAction.InfoAction
             case a: NewConstitution =>
                 v3.GovernanceAction.NewConstitution(
                   id =

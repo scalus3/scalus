@@ -113,7 +113,7 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
             val result = enc.result
             val dec = DecoderState(result)
             v.foreach(_ match {
-                case Val.Bit(b) => assert(summon[Flat[Boolean]].decode(dec) == b)
+                case Val.Bit(b)         => assert(summon[Flat[Boolean]].decode(dec) == b)
                 case Val.ByteArray(arr) =>
                     assert(summon[Flat[Array[Byte]]].decode(dec).sameElements(arr))
             })

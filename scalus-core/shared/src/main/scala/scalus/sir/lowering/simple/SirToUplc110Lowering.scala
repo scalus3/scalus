@@ -80,7 +80,7 @@ class SirToUplc110Lowering(sir: SIR, generateErrorTraces: Boolean = false)
                 case SIR.Case(Pattern.Constr(constr, bindings, _), body, anns) =>
                     constr.params match
                         case Nil => lowerInner(body)
-                        case _ =>
+                        case _   =>
                             bindings.foldRight(lowerInner(body)) { (binding, acc) =>
                                 Term.LamAbs(binding, acc)
                             }

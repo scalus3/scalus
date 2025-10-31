@@ -20,7 +20,7 @@ sealed trait SIRType {
     inline def =>>:(that: SIRType): SIRType.TypeLambda =
         this match
             case x: SIRType.TypeVar => SIRType.TypeLambda(scala.List(x), that)
-            case other =>
+            case other              =>
                 throw new IllegalArgumentException(
                   s"Expected type variable at the left of =>>:, got $other"
                 )
@@ -539,7 +539,7 @@ object SIRType {
             tp match {
                 case SIRType.Fun(_, _)           => true
                 case SIRType.TypeLambda(_, body) => isPolyFunOrFun(body, trace)
-                case SIRType.TypeProxy(ref) =>
+                case SIRType.TypeProxy(ref)      =>
                     if ref == null then false
                     else isPolyFunOrFun(ref, trace)
                 case _ => false
@@ -574,7 +574,7 @@ object SIRType {
         tp match {
             case SIRType.SumCaseClass(_, _)  => true
             case SIRType.TypeLambda(_, body) => isSum(body)
-            case SIRType.TypeProxy(ref) =>
+            case SIRType.TypeProxy(ref)      =>
                 if ref == null then false
                 else isSum(ref)
             case _ => false
@@ -591,7 +591,7 @@ object SIRType {
             tp match {
                 case cc: SumCaseClass                 => Some((acc, cc))
                 case SIRType.TypeLambda(params, body) => go(body, acc ++ params)
-                case SIRType.TypeProxy(ref) =>
+                case SIRType.TypeProxy(ref)           =>
                     if ref == null then None
                     else go(ref, acc)
                 case _ => None
@@ -607,7 +607,7 @@ object SIRType {
         tp match {
             case SIRType.CaseClass(_, _, _)  => true
             case SIRType.TypeLambda(_, body) => isProd(body)
-            case SIRType.TypeProxy(ref) =>
+            case SIRType.TypeProxy(ref)      =>
                 if ref == null then false
                 else isProd(ref)
             case _ => false
@@ -628,7 +628,7 @@ object SIRType {
             tp match {
                 case cc: CaseClass                    => Some((acc, cc))
                 case SIRType.TypeLambda(params, body) => go(body, acc ++ params)
-                case SIRType.TypeProxy(ref) =>
+                case SIRType.TypeProxy(ref)           =>
                     if ref == null then None
                     else go(ref, acc)
                 case _ => None
@@ -659,7 +659,7 @@ object SIRType {
             tp match
                 case SIRType.Fun(SIRType.Unit, _) => true
                 case SIRType.TypeLambda(_, body)  => isPolyFunOrFunUnit(body, trace)
-                case SIRType.TypeProxy(ref) =>
+                case SIRType.TypeProxy(ref)       =>
                     if ref == null then false
                     else isPolyFunOrFunUnit(ref, trace)
                 case _ => false
@@ -874,7 +874,7 @@ object SIRType {
             case tp: TypeProxy =>
                 proxyEnv.get(tp) match
                     case Some(t) => t
-                    case None =>
+                    case None    =>
                         val newProxy = new TypeProxy(null)
                         newProxy.ref = substitute(tp.ref, env, proxyEnv.updated(tp, newProxy))
                         newProxy
@@ -893,7 +893,7 @@ object SIRType {
             case DefaultUni.BLS12_381_G1_Element => BLS12_381_G1_Element
             case DefaultUni.BLS12_381_G2_Element => BLS12_381_G2_Element
             case DefaultUni.BLS12_381_MlResult   => BLS12_381_MlResult
-            case DefaultUni.ProtoList =>
+            case DefaultUni.ProtoList            =>
                 val a = TypeVar("A", Some(DefaultUni.ProtoList.hashCode()), true)
                 TypeLambda(scala.List(a), SumCaseClass(BuiltinList.dataDecl, scala.List(a)))
             case DefaultUni.ProtoPair =>
@@ -915,7 +915,7 @@ object SIRType {
 
     def fromUplcTypeScheme(uplcTypeSchema: UplcTypeScheme): SIRType = {
         uplcTypeSchema match
-            case UplcTypeScheme.Type(argType) => fromDefaultUni(argType)
+            case UplcTypeScheme.Type(argType)           => fromDefaultUni(argType)
             case UplcTypeScheme.Arrow(argType, resType) =>
                 Fun(fromUplcTypeScheme(argType), fromUplcTypeScheme(resType))
             case UplcTypeScheme.All(typeVar, body) =>
@@ -931,7 +931,7 @@ object SIRType {
 
     def parentsNoEqSeq(input: SIRType, parent: SIRType): List[SIRType] = {
         parentsEqSeq(input, parent) match
-            case Nil => Nil
+            case Nil     => Nil
             case x :: xs =>
                 if x ~=~ parent then xs
                 else x :: xs
@@ -940,14 +940,14 @@ object SIRType {
     def leastUpperBound(left: SIRType, right: SIRType): SIRType = {
         SIRUnify.topLevelUnifyType(left, right, SIRUnify.Env.empty.withUpcasting) match {
             case SIRUnify.UnificationSuccess(env, res) => res
-            case SIRUnify.UnificationFailure(_, _, _) =>
+            case SIRUnify.UnificationFailure(_, _, _)  =>
                 SIRType.FreeUnificator
         }
     }
 
     def leastUpperBoundSeq(types: scala.List[SIRType]): SIRType = {
         types match {
-            case Nil => SIRType.TypeNothing
+            case Nil     => SIRType.TypeNothing
             case x :: xs =>
                 xs.foldLeft(x) { (acc, tp) =>
                     leastUpperBound(acc, tp)
@@ -959,7 +959,7 @@ object SIRType {
     def retrieveDataDecl(tp: SIRType): Either[String, DataDecl] = {
         tp match {
             case tp: SumCaseClass => Right(tp.decl)
-            case TypeProxy(ref) =>
+            case TypeProxy(ref)   =>
                 if ref == null then Left("TypeProxy is not resolved")
                 else retrieveDataDecl(ref)
             case TypeLambda(_, body) => retrieveDataDecl(body)
@@ -970,7 +970,7 @@ object SIRType {
     @scala.annotation.tailrec
     def retrieveConstrDecl(tp: SIRType): Either[String, ConstrDecl] = {
         tp match {
-            case tp: CaseClass => Right(tp.constrDecl)
+            case tp: CaseClass  => Right(tp.constrDecl)
             case TypeProxy(ref) =>
                 if ref == null then Left("TypeProxy is not resolved")
                 else retrieveConstrDecl(ref)
@@ -1005,7 +1005,7 @@ object SIRType {
     def prodParent(tp: SIRType): Option[SIRType] = {
         tp match {
             case CaseClass(_, _, Some(parent)) => Some(parent)
-            case TypeProxy(ref) =>
+            case TypeProxy(ref)                =>
                 if ref == null then None
                 else prodParent(ref)
             case TypeLambda(_, body) => prodParent(body)
@@ -1267,7 +1267,7 @@ object SIRType {
                     case TypeProxy(ref) =>
                         Option(proxiedRefs.get(ref)) match
                             case Some(visited) => acc
-                            case None =>
+                            case None          =>
                                 proxiedRefs.put(ref, ref)
                                 advance(
                                   acc,

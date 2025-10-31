@@ -1186,7 +1186,7 @@ object ClausifyTest:
             extension [A: Ord](self: List[A])
                 def insertUniqueOrdered(elem: A): List[A] =
                     self match
-                        case List.Nil => List.single(elem)
+                        case List.Nil              => List.single(elem)
                         case List.Cons(head, tail) =>
                             elem <=> head match
                                 case Order.Less    => self.prepended(elem)
@@ -1201,7 +1201,7 @@ object ClausifyTest:
                         formula match
                             case Or(arg1, arg2) => doClause(arg1, doClause(arg2, vars))
                             case Sym(arg)       => (vars._1.insertUniqueOrdered(arg), vars._2)
-                            case Not(expr) =>
+                            case Not(expr)      =>
                                 expr match
                                     case Sym(arg) =>
                                         (vars._1, vars._2.insertUniqueOrdered(arg))

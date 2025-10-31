@@ -44,7 +44,7 @@ enum Timelock:
     lazy val show: String = this match
         case Timelock.TimeStart(i)  => s"(Start >= $i)"
         case Timelock.TimeExpire(i) => s"(Expire < $i)"
-        case Timelock.AllOf(xs) =>
+        case Timelock.AllOf(xs)     =>
             val inner = xs.map(_.show).mkString(" ")
             s"(AllOf $inner)"
         case Timelock.AnyOf(xs) =>
@@ -85,7 +85,7 @@ enum Timelock:
                     if n <= 0 then true
                     else
                         remaining match
-                            case Seq() => false
+                            case Seq()              => false
                             case Seq(script, tail*) =>
                                 if script.evaluate(validatorKeys, interval) then
                                     isValidMOf(n - 1, tail)

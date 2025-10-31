@@ -68,7 +68,7 @@ sealed trait Redeemers:
     /** Convert to list of Redeemer objects */
     def toIndexedSeq: IndexedSeq[Redeemer] = this match
         case Redeemers.Array(list) => list
-        case Redeemers.Map(map) =>
+        case Redeemers.Map(map)    =>
             map.view.map { case ((tag, index), (data, exUnits)) =>
                 Redeemer(tag, index, data, exUnits)
             }.toIndexedSeq

@@ -17,7 +17,7 @@ given ToExpr[DefaultUni] with {
         case DefaultUni.Data                 => '{ DefaultUni.Data }
         case DefaultUni.ProtoList            => '{ DefaultUni.ProtoList }
         case DefaultUni.ProtoPair            => '{ DefaultUni.ProtoPair }
-        case DefaultUni.Apply(f, arg) =>
+        case DefaultUni.Apply(f, arg)        =>
             val fExpr = apply(f)
             val argExpr = apply(arg)
             '{ DefaultUni.Apply($fExpr, $argExpr) }

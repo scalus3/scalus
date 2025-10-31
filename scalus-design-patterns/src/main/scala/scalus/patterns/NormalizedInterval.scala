@@ -182,7 +182,7 @@ object NormalizedInterval {
         interval.from.boundType match
             case IntervalBoundType.NegInf =>
                 interval.to.boundType match
-                    case IntervalBoundType.NegInf => Option.None
+                    case IntervalBoundType.NegInf            => Option.None
                     case IntervalBoundType.Finite(upperTime) =>
                         Option.Some(
                           FromNegInf(
@@ -193,7 +193,7 @@ object NormalizedInterval {
 
             case IntervalBoundType.Finite(lowerTime) =>
                 interval.to.boundType match
-                    case IntervalBoundType.NegInf => Option.None
+                    case IntervalBoundType.NegInf            => Option.None
                     case IntervalBoundType.Finite(upperTime) =>
                         val lower = resolveLower(lowerTime, interval.from.isInclusive)
                         val upper = resolveUpper(upperTime, interval.to.isInclusive)

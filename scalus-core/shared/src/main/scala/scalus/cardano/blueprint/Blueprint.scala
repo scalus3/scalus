@@ -110,7 +110,7 @@ object Preamble {
                 case "v1" => Language.PlutusV1
                 case "v2" => Language.PlutusV2
                 case "v3" => Language.PlutusV3
-                case x =>
+                case x    =>
                     throw new RuntimeException(
                       s"Error when reading blueprint plutus version. Expected one of [v1, v2, v3], got $x"
                     )

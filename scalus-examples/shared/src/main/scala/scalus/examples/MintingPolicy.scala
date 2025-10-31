@@ -48,8 +48,8 @@ object MintingPolicy {
         val minted = txInfo.mint
         val purpose = ctx.purpose
         val ownSymbol = purpose match
-            case Minting(curSymbol) => curSymbol
-            case Spending(txOutRef) => throw new RuntimeException("PS")
+            case Minting(curSymbol)     => curSymbol
+            case Spending(txOutRef)     => throw new RuntimeException("PS")
             case Rewarding(stakingCred) =>
                 throw new RuntimeException("PR")
             case Certifying(cert) => throw new RuntimeException("PC")
@@ -90,7 +90,7 @@ object MintingPolicy {
             case MintingContext(txOutRefs, minted, ownSymbol) =>
                 val mintedTokens = minted.toSortedMap.get(ownSymbol) match
                     case Some(mintedTokens) => mintedTokens
-                    case None =>
+                    case None               =>
                         throw new Exception("T")
 
                 val checkSpendsTxOut = txOutRefs.find { case TxOutRef(txOutRefTxId, txOutRefIdx) =>
@@ -144,8 +144,8 @@ object MintingPolicyV2 {
         val minted = txInfo.mint
         val purpose = ctx.purpose
         val ownSymbol = purpose match
-            case Minting(curSymbol) => curSymbol
-            case Spending(txOutRef) => throw new RuntimeException("PS")
+            case Minting(curSymbol)     => curSymbol
+            case Spending(txOutRef)     => throw new RuntimeException("PS")
             case Rewarding(stakingCred) =>
                 throw new RuntimeException("PR")
             case Certifying(cert) => throw new RuntimeException("PC")

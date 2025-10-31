@@ -406,7 +406,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
         val constrPattern = sirCase.pattern match
             case p: Pattern.Constr => p
-            case _ =>
+            case _                 =>
                 throw new LoweringException(
                   s"Expected constructor pattern, got ${sirCase.pattern}",
                   sirCase.anns.pos
@@ -452,7 +452,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val nextTailVar =
                         lctx.scope.get(nextTailId, SumCaseClassRepresentation.SumDataList) match
                             case Some(v) => v
-                            case None =>
+                            case None    =>
                                 lvNewLazyIdVar(
                                   nextTailId,
                                   listDataType,
@@ -494,7 +494,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case SIRType.SumCaseClass(decl, _) =>
                 decl.constructors
             case SIRType.TypeLambda(_, t) => findConstructors(t, pos)
-            case SIRType.TypeProxy(ref) =>
+            case SIRType.TypeProxy(ref)   =>
                 findConstructors(ref, pos)
             case _ =>
                 throw new IllegalArgumentException(
@@ -505,7 +505,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
     def retrieveDataDecl(tp: SIRType, pos: SIRPosition): DataDecl = {
         SIRType.retrieveDataDecl(tp) match
             case Right(decl) => decl
-            case Left(msg) =>
+            case Left(msg)   =>
                 throw LoweringException(
                   s"Can't retrieve data declaration from ${tp.show}: $msg",
                   pos

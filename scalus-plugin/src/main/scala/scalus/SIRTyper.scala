@@ -124,7 +124,7 @@ class SIRTyper(using Context) {
             case tp: AndType =>
                 findClassInAndType(tp) match
                     case Some(tpf) => makeSIRClassTypeNoTypeArgs(tpf, env)
-                    case None =>
+                    case None      =>
                         unsupportedType(tp, s"AndType", env)
             case orTp: OrType =>
                 sirTypeInEnvWithErr(orTp.join, env)
@@ -294,7 +294,7 @@ class SIRTyper(using Context) {
         else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinList") then
             tpArgs match
                 case List(elemType) => Some(SIRType.BuiltinList(elemType))
-                case _ =>
+                case _              =>
                     throw TypingException(
                       symbol.info,
                       env.pos,
@@ -303,7 +303,7 @@ class SIRTyper(using Context) {
         else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinPair") then
             tpArgs match
                 case List(a1, a2) => Some(SIRType.BuiltinPair(a1, a2))
-                case _ =>
+                case _            =>
                     throw TypingException(
                       symbol.info,
                       env.pos,
@@ -395,7 +395,7 @@ class SIRTyper(using Context) {
         env: SIRTypeEnv
     ): (List[Symbol], List[Symbol]) = {
         typeSymbol.primaryConstructor.paramSymss match
-            case Nil => (Nil, Nil)
+            case Nil        => (Nil, Nil)
             case List(args) =>
                 if args.isEmpty then (Nil, Nil)
                 else if args.exists(_.isTerm) then (Nil, args)
@@ -453,8 +453,8 @@ class SIRTyper(using Context) {
             && bcChildren.exists(_ == typeSymbol)
         }
         val optParent = parentSyms match
-            case Nil         => None
-            case head :: Nil => Some(head)
+            case Nil          => None
+            case head :: Nil  => Some(head)
             case head :: tail =>
                 val msg =
                     s"Class ${typeSymbol.showFullName} have two parents: ${head.showFullName} and ${tail.head.showFullName}"
@@ -506,7 +506,7 @@ class SIRTyper(using Context) {
                     thisProxy.ref = cladType
                     val tlNakedType = nakedType match
                         case tl: SIRType.TypeLambda => tl
-                        case _ =>
+                        case _                      =>
                             throw new IllegalStateException(
                               s"nakedType should be TypeLambda, found ${nakedType.show}"
                             )
@@ -666,7 +666,7 @@ class SIRTyper(using Context) {
     ): DataDecl = {
         cachedDataDecl.get(typeSymbol) match
             case Some(retval) => retval
-            case None =>
+            case None         =>
                 val retval = makeSumClassDataDeclNoCache(typeSymbol, env)
                 cachedDataDecl.update(typeSymbol, retval)
                 retval

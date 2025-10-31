@@ -45,7 +45,7 @@ enum Term:
             case Term.LamAbs(_, body)                     => body.collectBuiltins
             case Term.Force(body)                         => body.collectBuiltins
             case Term.Delay(body)                         => body.collectBuiltins
-            case Term.Apply(f, arg) => f.collectBuiltins ++ arg.collectBuiltins
+            case Term.Apply(f, arg)   => f.collectBuiltins ++ arg.collectBuiltins
             case Term.Constr(_, args) =>
                 args.foldLeft(Set.empty[DefaultFun])((acc, x) => acc ++ x.collectBuiltins)
             case Term.Case(arg, cases) =>
@@ -74,14 +74,14 @@ object Term:
             n1.index == n2.index
 
         def equals(self: Term, other: Term): Boolean = (self, other) match
-            case (Var(n1), Var(n2))               => eqName(n1, n2)
-            case (LamAbs(n1, t1), LamAbs(n2, t2)) => equals(t1, t2)
-            case (Apply(f1, a1), Apply(f2, a2))   => equals(f1, f2) && equals(a1, a2)
-            case (Force(t1), Force(t2))           => equals(t1, t2)
-            case (Delay(t1), Delay(t2))           => equals(t1, t2)
-            case (Const(c1), Const(c2))           => c1 == c2
-            case (Builtin(b1), Builtin(b2))       => b1 == b2
-            case (Error, Error)                   => true
+            case (Var(n1), Var(n2))                         => eqName(n1, n2)
+            case (LamAbs(n1, t1), LamAbs(n2, t2))           => equals(t1, t2)
+            case (Apply(f1, a1), Apply(f2, a2))             => equals(f1, f2) && equals(a1, a2)
+            case (Force(t1), Force(t2))                     => equals(t1, t2)
+            case (Delay(t1), Delay(t2))                     => equals(t1, t2)
+            case (Const(c1), Const(c2))                     => c1 == c2
+            case (Builtin(b1), Builtin(b2))                 => b1 == b2
+            case (Error, Error)                             => true
             case (Constr(tag1, args1), Constr(tag2, args2)) =>
                 tag1 == tag2 && args1.size == args2.size && args1
                     .zip(args2)

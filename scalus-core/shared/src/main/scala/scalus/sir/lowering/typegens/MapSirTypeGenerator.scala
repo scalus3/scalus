@@ -202,7 +202,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
                     case "scalus.prelude.AssocMap" =>
                         val (ta, tb) = typeArgs match
                             case List(ta, tb) => (ta, tb)
-                            case _ =>
+                            case _            =>
                                 throw LoweringException(
                                   s"Expected that AssocMap have two arguments, we have ${tp.show}",
                                   SIRPosition.empty

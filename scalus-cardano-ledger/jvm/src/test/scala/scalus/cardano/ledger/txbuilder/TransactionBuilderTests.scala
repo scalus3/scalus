@@ -49,7 +49,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             val res = TransactionBuilder.build(Mainnet, steps)
             res match {
                 case Left(SomeBuildError.SomeStepError(e, context)) => assert(e == error)
-                case other =>
+                case other                                          =>
                     fail(
                       s"Expected the transaction building to fail with $error, got $other instead"
                     )

@@ -43,7 +43,7 @@ object Groth16Minimal:
         public: List[BigInt],
         result: BLS12_381_G1_Element
     ): BLS12_381_G1_Element = vk_ic match
-        case List.Nil => result
+        case List.Nil           => result
         case List.Cons(i, rest) =>
             public match
                 case List.Cons(scalar, publicRest) =>

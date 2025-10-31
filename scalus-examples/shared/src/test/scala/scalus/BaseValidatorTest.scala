@@ -29,7 +29,7 @@ abstract class BaseValidatorTest
         val result = Try(program.deBruijnedProgram.evaluate)
         // println(s"$result1 == $result2")
         (expected, result) match
-            case (Expected.SuccessAny, Success(term)) =>
+            case (Expected.SuccessAny, Success(term))            =>
             case (Expected.Success(termExpected), Success(term)) =>
                 assert(termExpected == term)
             case (Expected.Failure(_), Failure(e2)) =>

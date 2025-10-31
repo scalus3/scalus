@@ -1,4 +1,4 @@
-import mill._, scalalib._
+import mill.*, scalalib.*
 
 object scalusPlugin extends RootModule with SbtModule {
     def scalaVersion = "3.3.3"

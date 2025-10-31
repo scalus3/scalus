@@ -138,7 +138,7 @@ class SortedMapTest extends StdlibTestKit {
                           case (Option.Some(lv), Option.Some(rv)) => These.These(lv, rv)
                           case (Option.Some(lv), Option.None)     => These.This(lv)
                           case (Option.None, Option.Some(rv))     => These.That(rv)
-                          case (Option.None, Option.None) =>
+                          case (Option.None, Option.None)         =>
                               fail("unreachable: Both values are None")
                     )
             }
@@ -263,7 +263,7 @@ class SortedMapTest extends StdlibTestKit {
                           case (Option.Some(lv), Option.Some(rv)) => These.These(lv, rv)
                           case (Option.Some(lv), Option.None)     => These.This(lv)
                           case (Option.None, Option.Some(rv))     => These.That(rv)
-                          case (Option.None, Option.None) =>
+                          case (Option.None, Option.None)         =>
                               fail("unreachable: Both values are None")
                     )
             }

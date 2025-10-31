@@ -14,13 +14,13 @@ object Inliner:
     /** Counts number of occurrences of a variable in a term */
     private def countOccurrences(term: Term, name: String): Int = term match
         case Var(NamedDeBruijn(n, _)) => if n == name then 1 else 0
-        case LamAbs(n, body) =>
+        case LamAbs(n, body)          =>
             if n == name then 0 // Stop counting if shadowed
             else countOccurrences(body, name)
-        case Apply(f, arg)   => countOccurrences(f, name) + countOccurrences(arg, name)
-        case Force(t)        => countOccurrences(t, name)
-        case Delay(t)        => countOccurrences(t, name)
-        case Constr(_, args) => args.map(countOccurrences(_, name)).sum
+        case Apply(f, arg)          => countOccurrences(f, name) + countOccurrences(arg, name)
+        case Force(t)               => countOccurrences(t, name)
+        case Delay(t)               => countOccurrences(t, name)
+        case Constr(_, args)        => args.map(countOccurrences(_, name)).sum
         case Case(scrutinee, cases) =>
             countOccurrences(scrutinee, name) + cases.map(countOccurrences(_, name)).sum
         case Const(_) | Builtin(_) | Error => 0
@@ -42,7 +42,7 @@ object Inliner:
             case Force(t)                 => freeVars(t)
             case Delay(t)                 => freeVars(t)
             case Constr(_, args)          => args.flatMap(freeVars).toSet
-            case Case(scrutinee, cases) =>
+            case Case(scrutinee, cases)   =>
                 freeVars(scrutinee) ++ cases.flatMap(freeVars)
             case Const(_) | Builtin(_) | Error => Set.empty
 
@@ -136,7 +136,7 @@ object Inliner:
                         Apply(inlinedF, inlinedArg)
 
             case LamAbs(name, body) => LamAbs(name, go(body, env - name))
-            case Force(Delay(t)) =>
+            case Force(Delay(t))    =>
                 logs += s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}"
                 go(t, env)
             case Force(t)          => Force(go(t, env))

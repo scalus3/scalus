@@ -49,9 +49,9 @@ object ForcedBuiltinsExtractor {
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
                 logs += s"Replacing Forced builtin with Var: $name"
                 Var(NamedDeBruijn(name))
-            case Force(t)          => Force(go(t, env))
-            case Delay(t)          => Delay(go(t, env))
-            case Constr(tag, args) => Constr(tag, args.map(arg => go(arg, env)))
+            case Force(t)               => Force(go(t, env))
+            case Delay(t)               => Delay(go(t, env))
+            case Constr(tag, args)      => Constr(tag, args.map(arg => go(arg, env)))
             case Case(scrutinee, cases) =>
                 Case(
                   go(scrutinee, env),
