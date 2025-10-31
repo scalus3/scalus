@@ -1,5 +1,6 @@
 package scalus.cardano.ledger.value.coin
 
+import cats.data.NonEmptyList
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.value.coin.Coin
 import spire.math.{Rational, SafeLong}
@@ -56,7 +57,7 @@ class Unit extends AnyFunSuite {
         assert(Coin(tooSmall) == Left(Coin.ArithmeticError.Underflow))
     }
 
-    ///////////
+    // =====================
 
     test("Genuinely massive coin construction fails for bounded coin") {
         assert(
@@ -83,8 +84,9 @@ class Unit extends AnyFunSuite {
         assert(Coin.unsafeApply(100).signum == 1)
     }
 
-    //////////////////////////
+    // =====================
     // Coin.Unbounded
+    // =====================
 
     test("Coin.Unbounded => Coin.Coin fails on big positive coin") {
         val bigCoin = Coin.Unbounded(SafeLong(Long.MaxValue) * 10)
@@ -98,8 +100,9 @@ class Unit extends AnyFunSuite {
         assert(Try(bigCoin.unsafeToCoin).isFailure)
     }
 
-    ////////////////////////
+    // =====================
     // Banker's rounding
+    // =====================
     test("Coin.Fractional(1/2) rounds to 0") {
         val oneHalf = Coin.Fractional(Rational(1, 2))
         assert(oneHalf.toCoin == Right(Coin.zero))
@@ -126,4 +129,34 @@ class Unit extends AnyFunSuite {
         assert(x.toCoin == Left(Coin.ArithmeticError.Underflow))
         assert(x.toUnbounded == Coin.Unbounded(-2))
     }
+
+    // =====================
+    // Coin distribution
+    // =====================
+    test("Weights normalization") {
+        val rawWeights = NonEmptyList(Rational(33), List(Rational(8812911823L), Rational(51)))
+        val md = Distribution.normalizeWeights(rawWeights)
+        md.fold(fail())(d =>
+            assert(d.numberOfWeights == 3)
+            assert(d.totalWeight == 1)
+        )
+    }
+
+    test("Coin distribution") {
+        val x = Coin.unsafeApply(873_012_309_810_298L)
+        val rawWeights = NonEmptyList(Rational(53, 81), List(Rational(37, 123), Rational(67, 3329)))
+        val md = Distribution.normalizeWeights(rawWeights)
+        md.fold(fail())(d => assert(x.distribute(d).toList.sumCoins == x))
+    }
+
+    test("Coin.Unbounded distribution") {
+        val x = Coin.Unbounded(SafeLong(BigInt("12301230981029831298019283")))
+        val rawWeights = NonEmptyList(
+          Rational(23, 77),
+          List(Rational(11, 23), Rational(17, 101), Rational(9788, 178877))
+        )
+        val md = Distribution.normalizeWeights(rawWeights)
+        md.fold(fail())(d => assert(x.distribute(d).toList.sumCoins == x))
+    }
+
 }

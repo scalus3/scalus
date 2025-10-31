@@ -15,6 +15,8 @@ import scala.util.Try
 import Arbitrary.arbitrary
 import Prop.forAll
 
+import Gen.*
+
 /** These tests primarily test functions that mix underlying representations. Functions that test
   * within a single representation are test withing in the Laws module.
   */
@@ -62,7 +64,7 @@ object Property extends Properties("Coin") {
     property("∀ (u : Unbounded) => u.toFractional.toUnbounded == u)") =
         forAll(Arbitrary.arbitrary[Coin.Unbounded]) { u =>
             {
-                u.toCoinFractional.toUnbounded === u
+                u.toFractional.toUnbounded === u
             }
         }
 
@@ -91,5 +93,22 @@ object Property extends Properties("Coin") {
             c.scaleIntegral(sl) == c.scaleFractional(Rational(sl, 1)).toUnbounded
         }
     }
+
+    // ===================================
+    // Coin distribution
+    // ===================================
+    property("Coin distribution weights are normalized.") = forAll(genRawWeights()) { rw =>
+        Distribution.normalizeWeights(rw).fold(false)(weights => weights.totalWeight == 1)
+    }
+
+    property("Coin.Unbounded distribution sums to amount distributed.") =
+        forAll(arbitrary[Coin.Unbounded], genNormalizedWeights()) { (coin, weights) =>
+            coin.distribute(weights).toList.sumCoins == coin
+        }
+
+    property("Coin distribution sums to amount distributed.") =
+        forAll(arbitrary[Coin], genNormalizedWeights()) { (coin, weights) =>
+            coin.distribute(weights).toList.sumCoins == coin
+        }
 
 }

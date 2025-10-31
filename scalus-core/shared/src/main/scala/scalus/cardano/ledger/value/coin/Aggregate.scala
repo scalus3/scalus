@@ -14,10 +14,6 @@ private object Aggregate {
         Option.when(length > 0)(convert(sum) :/ length)
     }
 
-    def max[T](self: IterableOnce[T])(using ev: Ordering[T]): T = self.iterator.max
-
-    def min[T](self: IterableOnce[T])(using ev: Ordering[T]): T = self.iterator.min
-
     def sum[T <: SafeLong | Rational](self: IterableOnce[T])(using ev: AdditiveMonoid[T]): T =
         self.iterator.foldRight(ev.zero)(ev.plus)
 

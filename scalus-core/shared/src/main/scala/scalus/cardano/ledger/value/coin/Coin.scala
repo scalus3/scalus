@@ -3,6 +3,8 @@ package scalus.cardano.ledger.value.coin
 import spire.algebra.*
 import spire.implicits.*
 import spire.math.{Rational, SafeLong}
+import RationalExtensions.*
+import cats.data.NonEmptyList
 
 import scala.annotation.targetName
 
@@ -21,20 +23,20 @@ object Coin {
         case Underflow
         case Overflow
 
-    def apply(x: Long): Either[Underflow.type, Coin] =
-        if x.sign < 0 then Left(Underflow) else Right(x)
+    def apply(long: Long): Either[Underflow.type, Coin] =
+        if long.sign < 0 then Left(Underflow) else Right(long)
 
-    def apply(self: SafeLong): Either[ArithmeticError, Coin] =
-        try { Right(unsafeApply(self)) }
+    def apply(safeLong: SafeLong): Either[ArithmeticError, Coin] =
+        try { Right(unsafeApply(safeLong)) }
         catch { case e: ArithmeticError => Left(e) }
 
-    def unsafeApply(x: Long): Coin =
-        if x.sign < 0 then throw Underflow else x
+    def unsafeApply(long: Long): Coin =
+        if long.sign < 0 then throw Underflow else long
 
-    def unsafeApply(self: SafeLong): Coin =
-        if self.isValidLong && self >= 0
-        then self.longValue
-        else if self.signum < 0 then throw Underflow
+    def unsafeApply(safeLong: SafeLong): Coin =
+        if safeLong.isValidLong && safeLong >= 0
+        then safeLong.longValue
+        else if safeLong.signum < 0 then throw Underflow
         else throw Coin.ArithmeticError.Overflow
 
     def zero: Coin = Coin.unsafeApply(0)
@@ -74,6 +76,22 @@ object Coin {
         @targetName("negate")
         infix def unary_- : Unbounded = -Unbounded(self)
 
+        /** Distribute a [[Coin]] amount according to a list of normalized weights.
+          *
+          * @param weights
+          *   the list of rational weights that always sums to one.
+          *
+          * @return
+          *   a list of shares that always sums to the amount that was distributed.
+          */
+        def distribute(weights: Distribution.NormalizedWeights): NonEmptyList[Coin] =
+            // `unsafeToCoin` is safe here because the weights sum to one
+            toCoinUnbounded.distribute(weights).map(_.unsafeToCoin)
+
+    // def scaleFloor
+
+    // def scaleRound
+
     given algebra: Algebra.type = Algebra
 
     object Algebra extends Order[Coin] {
@@ -89,10 +107,6 @@ object Coin {
 
     extension (self: IterableOnce[Coin]) {
         def averageCoin: Option[Fractional] = toUnbounded.averageCoin
-
-        def max: Coin = Aggregate.max(self)
-
-        def min: Coin = Aggregate.min(self)
 
         def sumCoins: Unbounded = toUnbounded.sumCoins
 
@@ -124,12 +138,9 @@ private object CoinSubtypes {
     type Unbounded = Unbounded.Unbounded
 
     object Unbounded {
-
-        import spire.compat.integral
-
         opaque type Unbounded = SafeLong
 
-        def apply(x: SafeLong): Unbounded = x
+        def apply(safeLong: SafeLong): Unbounded = safeLong
 
         def zero: Unbounded = 0
 
@@ -145,14 +156,17 @@ private object CoinSubtypes {
 
             def unsafeToCoin: Coin = Coin.unsafeApply(self)
 
-            def toCoinFractional: Fractional = Fractional(self.toRational)
+            def toFractional: Fractional = Fractional(self.toRational)
 
+            @targetName("scaleIntegral_CoinUnbounded")
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 self :* c.toSafeLong
 
+            @targetName("scaleFractional_CoinUnbounded")
             def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-                self.toCoinFractional :* c.toRational
+                self.toFractional :* c.toRational
 
+            @targetName("signum_CoinUnbounded")
             def signum: Int = self.signum
 
             @targetName("addCoerce")
@@ -173,12 +187,18 @@ private object CoinSubtypes {
             @targetName("subtractCoerce")
             infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
+            /** Distribute a [[Coin.Unbounded]] amount according to a list of normalized weights.
+              *
+              * @param weights
+              *   the list of rational weights that always sums to one.
+              * @return
+              *   a list of shares that always sums to the amount that was distributed.
+              */
+            def distribute(weights: Distribution.NormalizedWeights): NonEmptyList[Unbounded] =
+                weights.distribute(self)
+
         extension (self: IterableOnce[Unbounded]) {
-            def averageCoin: Option[Fractional] = Aggregate.average(self, _.toCoinFractional)
-
-            def max: Unbounded = Aggregate.max(self)
-
-            def min: Unbounded = Aggregate.min(self)
+            def averageCoin: Option[Fractional] = Aggregate.average(self, _.toFractional)
 
             def sumCoins: Unbounded = Aggregate.sum(self)
         }
@@ -209,11 +229,9 @@ private object CoinSubtypes {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        import RationalExtensions.*
-
         opaque type Fractional = Rational
 
-        def apply(x: Rational): Fractional = x
+        def apply(rational: Rational): Fractional = rational
 
         def zero: Fractional = 0
 
@@ -240,7 +258,7 @@ private object CoinSubtypes {
             infix def +~(other: Coin): Fractional = self + other.toCoinFractional
 
             @targetName("addCoerce")
-            infix def +~(other: Unbounded): Fractional = self + other.toCoinFractional
+            infix def +~(other: Unbounded): Fractional = self + other.toFractional
 
             @targetName("addCoerce")
             infix def +~(other: Fractional): Fractional = self + other
@@ -249,16 +267,12 @@ private object CoinSubtypes {
             infix def -~(other: Coin): Fractional = self - other.toCoinFractional
 
             @targetName("subtractCoerce")
-            infix def -~(other: Unbounded): Fractional = self - other.toCoinFractional
+            infix def -~(other: Unbounded): Fractional = self - other.toFractional
 
             @targetName("subtractCoerce")
             infix def -~(other: Fractional): Fractional = self - other
 
         extension (self: IterableOnce[Fractional])
-            def min: Fractional = self.iterator.min
-
-            def max: Fractional = self.iterator.max
-
             def sumCoins: Fractional = Aggregate.sum(self)
 
             def averageCoin: Option[Fractional] = Aggregate.average(self)

@@ -20,11 +20,11 @@ object MultiAsset {
     opaque type MultiAsset = CanonicalSortedMap[PolicyId, Inner]
 
     @targetName("applyWithCanonicalSortedMap")
-    def apply(x: CanonicalSortedMap[PolicyId, Inner]): MultiAsset = x
+    def apply(self: CanonicalSortedMap[PolicyId, Inner]): MultiAsset = self
 
     @targetName("applyWithSortedMap")
-    def apply(x: SortedMap[PolicyId, Inner]): MultiAsset =
-        CanonicalSortedMap(x)(using vMonoid = Inner.AdditiveMonoid)
+    def apply(sortedMap: SortedMap[PolicyId, Inner]): MultiAsset =
+        CanonicalSortedMap(sortedMap)(using vMonoid = Inner.AdditiveMonoid)
 
     def zero: MultiAsset = CanonicalSortedMap.empty
 
@@ -120,10 +120,12 @@ private object MultiAssetVariant {
         opaque type Unbounded = CanonicalSortedMap[PolicyId, Inner.Unbounded]
 
         @targetName("applyWithCanonicalSortedMap")
-        def apply(x: CanonicalSortedMap[PolicyId, Inner.Unbounded]): Unbounded = x
+        def apply(self: CanonicalSortedMap[PolicyId, Inner.Unbounded]): Unbounded = self
 
         @targetName("applyWithSortedMap")
-        def apply(x: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = CanonicalSortedMap(x)
+        def apply(sortedMap: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = CanonicalSortedMap(
+          sortedMap
+        )
 
         def zero: Unbounded = CanonicalSortedMap.empty
 
@@ -193,10 +195,11 @@ private object MultiAssetVariant {
         opaque type Fractional = CanonicalSortedMap[PolicyId, Inner.Fractional]
 
         @targetName("applyWithCanonicalSortedMap")
-        def apply(x: CanonicalSortedMap[PolicyId, Inner.Fractional]): Fractional = x
+        def apply(self: CanonicalSortedMap[PolicyId, Inner.Fractional]): Fractional = self
 
         @targetName("applyWithSortedMap")
-        def apply(x: SortedMap[PolicyId, Inner.Fractional]): Fractional = CanonicalSortedMap(x)
+        def apply(sortedMap: SortedMap[PolicyId, Inner.Fractional]): Fractional =
+            CanonicalSortedMap(sortedMap)
 
         def zero: Fractional = CanonicalSortedMap.empty
 

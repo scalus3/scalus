@@ -15,10 +15,10 @@ private object CanonicalSortedMap {
     opaque type CanonicalSortedMap[K, V] = SortedMap[K, V]
 
     /** Canonicalize a [[SortedMap]] by removing all keys corresponding to zero value. */
-    def apply[K, V](
-        self: SortedMap[K, V]
-    )(using vMonoid: AdditiveMonoid[V]): CanonicalSortedMap[K, V] =
-        self.filterNot(_._2 == vMonoid.zero)
+    def apply[K, V](sortedMap: SortedMap[K, V])(using
+        vMonoid: AdditiveMonoid[V]
+    ): CanonicalSortedMap[K, V] =
+        sortedMap.filterNot(_._2 == vMonoid.zero)
 
     def empty[K, V](using Ordering[K]): CanonicalSortedMap[K, V] = SortedMap.empty
 
@@ -99,7 +99,7 @@ private object CanonicalSortedMap {
 
         inline def concatNonZero(
             builder: mutable.Builder[(K, VResult), CanonicalSortedMap[K, VResult]],
-            m: IterableOnce[(K, VResult)]
+            m: Iterator[(K, VResult)]
         ): Unit = builder ++= m.iterator.filterNot(_._2 == vResultMonoid.zero)
 
         // Warning: this function mutates its arguments!

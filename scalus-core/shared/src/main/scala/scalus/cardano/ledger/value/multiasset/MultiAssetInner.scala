@@ -26,11 +26,11 @@ private object MultiAssetInner {
         opaque type Inner = CanonicalSortedMap[AssetName, Coin]
 
         @targetName("applyWithCanonicalSortedMap")
-        def apply(x: CanonicalSortedMap[AssetName, Coin]): Inner = x
+        def apply(self: CanonicalSortedMap[AssetName, Coin]): Inner = self
 
         @targetName("applyWithSortedMap")
-        def apply(x: SortedMap[AssetName, Coin]): Inner =
-            CanonicalSortedMap(x)(using vMonoid = Coin.AdditiveMonoid)
+        def apply(sortedMap: SortedMap[AssetName, Coin]): Inner =
+            CanonicalSortedMap(sortedMap)(using vMonoid = Coin.AdditiveMonoid)
 
         def zero: Inner = CanonicalSortedMap.empty
 
@@ -97,10 +97,12 @@ private object MultiAssetInner {
         opaque type Unbounded = CanonicalSortedMap[AssetName, Coin.Unbounded]
 
         @targetName("applyWithCanonicalSortedMap")
-        def apply(x: CanonicalSortedMap[AssetName, Coin.Unbounded]): Unbounded = x
+        def apply(self: CanonicalSortedMap[AssetName, Coin.Unbounded]): Unbounded = self
 
         @targetName("applyWithSortedMap")
-        def apply(x: SortedMap[AssetName, Coin.Unbounded]): Unbounded = CanonicalSortedMap(x)
+        def apply(sortedMap: SortedMap[AssetName, Coin.Unbounded]): Unbounded = CanonicalSortedMap(
+          sortedMap
+        )
 
         def zero: Unbounded = CanonicalSortedMap.empty
 
@@ -127,7 +129,7 @@ private object MultiAssetInner {
             )
 
             def toFractional: Fractional =
-                Fractional(self.mapValues(_.toCoinFractional))
+                Fractional(self.mapValues(_.toFractional))
 
             def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
                 self :* c.toSafeLong
@@ -175,10 +177,11 @@ private object MultiAssetInner {
         opaque type Fractional = CanonicalSortedMap[AssetName, Coin.Fractional]
 
         @targetName("applyWithCanonicalSortedMap")
-        def apply(x: CanonicalSortedMap[AssetName, Coin.Fractional]): Fractional = x
+        def apply(self: CanonicalSortedMap[AssetName, Coin.Fractional]): Fractional = self
 
         @targetName("applyWithSortedMap")
-        def apply(x: SortedMap[AssetName, Coin.Fractional]): Fractional = CanonicalSortedMap(x)
+        def apply(sortedMap: SortedMap[AssetName, Coin.Fractional]): Fractional =
+            CanonicalSortedMap(sortedMap)
 
         def zero: Fractional = CanonicalSortedMap.empty
 
