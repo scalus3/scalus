@@ -100,6 +100,10 @@ private object MultiAssetInner {
             @targetName("negate")
             infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
 
+        extension (self: Iterable[Inner])
+            def multiAssetSum: Unbounded =
+                self.foldRight(Unbounded.zero)((x,y) => x +~ y)
+
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Inner] {
@@ -238,7 +242,8 @@ private object MultiAssetInner {
               )
             )
 
-        extension (self: Seq[Unbounded]) def sumMultiAssets: Unbounded = self.qsum
+        extension (self: Iterable[Unbounded])
+            def multiAssetSum: Unbounded = self.qsum
 
         given algebra: Algebra.type = Algebra
 
@@ -355,7 +360,8 @@ private object MultiAssetInner {
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = self - other
 
-        extension (self: Seq[Fractional]) def sumMultiAssets: Fractional = self.qsum
+        extension (self: Iterable[Fractional])
+            def multiAssetSum: Fractional = self.qsum
 
         import Coin.Fractional.algebra as coinAlgebra
 

@@ -94,6 +94,10 @@ object MultiAsset {
         @targetName("negate")
         infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
 
+    extension (self: Iterable[MultiAsset])
+        def multiAssetSum: Unbounded =
+            self.foldRight(Unbounded.zero)((x, y) => x +~ y)
+
     given algebra: Algebra.type = Algebra
 
     object Algebra extends PartialOrder[MultiAsset] {
@@ -258,6 +262,9 @@ private object MultiAssetVariant {
                 )
             )
 
+        extension (self: Iterable[Unbounded])
+            def multiAssetSum: Unbounded = self.qsum
+
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
@@ -370,6 +377,9 @@ private object MultiAssetVariant {
 
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = self - other
+
+        extension (self: Iterable[Fractional])
+            def multiAssetSum: Fractional = self.qsum
 
         import Inner.Fractional.algebra as innerAlgebra
 

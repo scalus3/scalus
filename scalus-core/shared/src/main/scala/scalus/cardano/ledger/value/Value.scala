@@ -9,45 +9,51 @@ import spire.math.{Rational, SafeLong}
 import scala.annotation.targetName
 
 case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
-    def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Value.Unbounded =
-        Value.Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
+    import Value.{Unbounded, Fractional}
+    
+    def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Unbounded =
+        Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
 
-    def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Value.Fractional =
-        Value.Fractional(lovelace.scaleFractional(c), assets.scaleFractional(c))
+    def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
+        Fractional(lovelace.scaleFractional(c), assets.scaleFractional(c))
 
     @targetName("addCoerce_Value")
-    infix def +~(other: Value): Value.Unbounded =
-        Value.Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
+    infix def +~(other: Value): Unbounded =
+        Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
         
     @targetName("addCoerce_Unbounded")
-    infix def +~(other: Value.Unbounded): Value.Unbounded =
-        Value.Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
+    infix def +~(other: Unbounded): Unbounded =
+        Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
 
     @targetName("addCoerce_Fractional")
-    infix def +~(other: Value.Fractional): Value.Fractional =
-        Value.Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
+    infix def +~(other: Fractional): Fractional =
+        Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
 
     @targetName("subtractCoerce_Value")
-    infix def -~(other: Value): Value.Unbounded =
-        Value.Unbounded(lovelace -~ other.lovelace, assets -~ other.assets)
+    infix def -~(other: Value): Unbounded =
+        Unbounded(lovelace -~ other.lovelace, assets -~ other.assets)
 
     @targetName("subtractCoerce_Unbounded")
-    infix def -~(other: Value.Unbounded): Value.Unbounded =
-        Value.Unbounded(lovelace -~ other.lovelace, assets -~ other.assets)
+    infix def -~(other: Unbounded): Unbounded =
+        Unbounded(lovelace -~ other.lovelace, assets -~ other.assets)
 
     @targetName("subtractCoerce_Fractional")
-    infix def -~(other: Value.Fractional): Value.Fractional =
-        Value.Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
+    infix def -~(other: Fractional): Fractional =
+        Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
 
     @targetName("negate")
-    infix def unary_- : Value.Unbounded =
-        Value.Unbounded(-lovelace, -assets)
+    infix def unary_- : Unbounded =
+        Unbounded(-lovelace, -assets)
 }
 
 object Value {
     import ValueVariants.partialCompareImpl
 
     def zero: Value = Value(Coin.zero)
+
+    extension (self: Iterable[Value])
+        def valueSum: Unbounded =
+            self.foldRight(Unbounded.zero)((x, y) => x +~ y)
 
     given algebra: Algebra.type = Algebra
 
@@ -100,30 +106,33 @@ private object ValueVariants {
             Fractional(lovelace.scaleFractional(c), assets.scaleFractional(c))
 
         @targetName("addCoerce_Value")
-        infix def +~(other: Value): Value.Unbounded =
-            Value.Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
+        infix def +~(other: Value): Unbounded =
+            Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
 
         @targetName("addCoerce_Unbounded")
-        infix def +~(other: Value.Unbounded): Value.Unbounded = this + other
+        infix def +~(other: Unbounded): Unbounded = this + other
 
         @targetName("addCoerce_Fractional")
-        infix def +~(other: Value.Fractional): Value.Fractional =
-            Value.Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
+        infix def +~(other: Fractional): Fractional =
+            Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
 
         @targetName("subtractCoerce_Value")
-        infix def -~(other: Value): Value.Unbounded =
-            Value.Unbounded(lovelace -~ other.lovelace, assets -~ other.assets)
+        infix def -~(other: Value): Unbounded =
+            Unbounded(lovelace -~ other.lovelace, assets -~ other.assets)
 
         @targetName("subtractCoerce_Unbounded")
-        infix def -~(other: Value.Unbounded): Value.Unbounded = this - other
+        infix def -~(other: Unbounded): Unbounded = this - other
 
         @targetName("subtractCoerce_Fractional")
-        infix def -~(other: Value.Fractional): Value.Fractional =
-            Value.Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
+        infix def -~(other: Fractional): Fractional =
+            Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
     }
 
     object Unbounded {
         def zero: Unbounded = Unbounded(Coin.Unbounded.zero)
+
+        extension (self: Iterable[Unbounded])
+            def valueSum: Unbounded = self.qsum
 
         given algebra: Algebra.type = Algebra
 
@@ -180,30 +189,33 @@ private object ValueVariants {
             this :* c.toRational
 
         @targetName("addCoerce_Value")
-        infix def +~(other: Value): Value.Fractional =
-            Value.Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
+        infix def +~(other: Value): Fractional =
+            Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
 
         @targetName("addCoerce_Unbounded")
-        infix def +~(other: Value.Unbounded): Value.Fractional =
-            Value.Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
+        infix def +~(other: Unbounded): Fractional =
+            Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
 
         @targetName("addCoerce_Fractional")
-        infix def +~(other: Value.Fractional): Value.Fractional = this + other
+        infix def +~(other: Fractional): Fractional = this + other
 
         @targetName("subtractCoerce_Value")
-        infix def -~(other: Value): Value.Fractional =
-            Value.Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
+        infix def -~(other: Value): Fractional =
+            Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
 
         @targetName("subtractCoerce_Unbounded")
-        infix def -~(other: Value.Unbounded): Value.Fractional =
-            Value.Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
+        infix def -~(other: Unbounded): Fractional =
+            Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
 
         @targetName("subtractCoerce_Fractional")
-        infix def -~(other: Value.Fractional): Value.Fractional = this - other
+        infix def -~(other: Fractional): Fractional = this - other
     }
 
     object Fractional {
         def zero: Fractional = Fractional(Coin.Fractional.zero)
+
+        extension (self: Iterable[Fractional])
+            def valueSum: Fractional = self.qsum
 
         given algebra: Algebra.type = Algebra
 

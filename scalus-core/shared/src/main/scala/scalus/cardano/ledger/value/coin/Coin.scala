@@ -105,12 +105,16 @@ object Coin {
         override def plus(x: Coin, y: Coin): Coin = x + y
     }
 
-    extension (self: Seq[Coin]) {
-        def averageCoin: Option[Fractional] = unbounded.averageCoin
+    extension (self: Iterable[Coin]) {
+        def coinAverage: Option[Fractional] = unbounded.coinAverage
 
-        def sumCoins: Unbounded = unbounded.sumCoins
+        def coinSum: Unbounded = unbounded.coinSum
 
-        private def unbounded: Seq[Coin.Unbounded] = self.map(_.toUnbounded)
+        def coinMin: Coin = self.qmin
+
+        def coinMax: Coin = self.qmax
+
+        private def unbounded: Iterable[Coin.Unbounded] = self.view.map(_.toUnbounded)
     }
 
     // ===================================
@@ -197,13 +201,17 @@ private object CoinSubtypes {
             def distribute(weights: Distribution.NormalizedWeights): NonEmptyList[Unbounded] =
                 weights.distribute(self)
 
-        extension (self: Seq[Unbounded]) {
-            def averageCoin: Option[Fractional] = {
-                val l = self.length
+        extension (self: Iterable[Unbounded]) {
+            def coinAverage: Option[Fractional] = {
+                val l = self.iterator.length
                 Option.when(l > 0)(Fractional(Rational(self.qsum, l)))
             }
 
-            def sumCoins: Unbounded = self.qsum
+            def coinSum: Unbounded = self.qsum
+            
+            def coinMin: Unbounded = self.qmin
+            
+            def coinMax: Unbounded = self.qmax
         }
 
         given algebra: Algebra.type = Algebra
@@ -277,10 +285,10 @@ private object CoinSubtypes {
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = self - other
 
-        extension (self: Seq[Fractional])
-            def sumCoins: Fractional = self.qsum
+        extension (self: Iterable[Fractional])
+            def coinSum: Fractional = self.qsum
 
-            def averageCoin: Option[Fractional] = Option.when(self.nonEmpty)(self.qmean)
+            def coinAverage: Option[Fractional] = Option.when(self.nonEmpty)(self.qmean)
 
         given algebra: Algebra.type = Algebra
 
