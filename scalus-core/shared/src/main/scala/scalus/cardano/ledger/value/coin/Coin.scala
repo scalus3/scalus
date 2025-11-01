@@ -47,13 +47,10 @@ object Coin {
         def toUnbounded: Unbounded = Unbounded(self)
         def toFractional: Fractional = Fractional(self)
 
-        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-            Unbounded(self) :* c.toSafeLong
-
-        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-            Fractional(self) :* c.toRational
-
         def signum: Int = LongAlgebra.signum(self)
+
+        @targetName("negate")
+        infix def unary_- : Unbounded = -Unbounded(self)
 
         @targetName("addCoerce_Coin")
         infix def +~(other: Coin): Unbounded = Unbounded(self) + Unbounded(other)
@@ -73,8 +70,17 @@ object Coin {
         @targetName("subtractCoerce_Fractional")
         infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
-        @targetName("negate")
-        infix def unary_- : Unbounded = -Unbounded(self)
+        @targetName("scale")
+        infix def *~(c: SafeLong): Unbounded = Unbounded(self) :* c
+
+        @targetName("scale")
+        infix def *~(c: Rational): Fractional = Fractional(self) :* c
+
+        @targetName("div")
+        infix def /~(c: SafeLong): Fractional = Fractional(self) :/ c.toRational
+        
+        @targetName("div")
+        infix def /~(c: Rational): Fractional = Fractional(self) :/ c
 
         /** Distribute a [[Coin]] amount according to a list of normalized weights.
           *
@@ -87,10 +93,6 @@ object Coin {
         def distribute(weights: Distribution.NormalizedWeights): NonEmptyList[Coin] =
             // `unsafeToCoin` is safe here because the weights sum to one
             toUnbounded.distribute(weights).map(_.unsafeToCoin)
-
-    // def scaleFloor
-
-    // def scaleRound
 
     given algebra: Algebra.type = Algebra
 
@@ -162,14 +164,6 @@ private object CoinSubtypes {
 
             def toFractional: Fractional = Fractional(self.toRational)
 
-            @targetName("scaleIntegral_Unbounded")
-            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-                self :* c.toSafeLong
-
-            @targetName("scaleFractional_Unbounded")
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-                self.toFractional :* c.toRational
-
             @targetName("signum_Unbounded")
             def signum: Int = self.signum
 
@@ -191,6 +185,18 @@ private object CoinSubtypes {
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = Fractional(self) - other
 
+            @targetName("scale")
+            infix def *~(c: SafeLong): Unbounded = self :* c
+
+            @targetName("scale")
+            infix def *~(c: Rational): Fractional = Fractional(self) :* c
+
+            @targetName("div")
+            infix def /~(c: SafeLong): Fractional = Fractional(self) :/ c.toRational
+            
+            @targetName("div")
+            infix def /~(c: Rational): Fractional = Fractional(self) :/ c
+
             /** Distribute a [[Coin.Unbounded]] amount according to a list of normalized weights.
               *
               * @param weights
@@ -208,9 +214,9 @@ private object CoinSubtypes {
             }
 
             def coinSum: Unbounded = self.qsum
-            
+
             def coinMin: Unbounded = self.qmin
-            
+
             def coinMax: Unbounded = self.qmax
         }
 
@@ -262,9 +268,6 @@ private object CoinSubtypes {
 
             def unsafeToCoin: Coin = Coin.unsafeApply(self.roundHalfEven)
 
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-                self :* c.toRational
-
             def signum: Int = self.signum
 
             @targetName("addCoerce_Coin")
@@ -284,6 +287,18 @@ private object CoinSubtypes {
 
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = self - other
+
+            @targetName("scale")
+            infix def *~(c: SafeLong): Fractional = self :* c.toRational
+
+            @targetName("scale")
+            infix def *~(c: Rational): Fractional = self :* c
+
+            @targetName("div")
+            infix def /~(c: SafeLong): Fractional = self :/ c.toRational
+            
+            @targetName("div")
+            infix def /~(c: Rational): Fractional = self :/ c
 
         extension (self: Iterable[Fractional])
             def coinSum: Fractional = self.qsum

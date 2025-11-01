@@ -38,12 +38,8 @@ private object MultiAssetInner {
         extension (self: Inner)
             def underlying: CanonicalSortedMap[AssetName, Coin] = self
 
-            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-                Unbounded(self.mapValues(_.scaleIntegral(c)))
-
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
-                Fractional(self.mapValues(_.scaleFractional(c)))
-            }
+            @targetName("negate")
+            infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
 
             @targetName("addCoerce_Inner")
             infix def +~(other: Inner): Unbounded = Unbounded(
@@ -97,12 +93,21 @@ private object MultiAssetInner {
               )(using vSelfMonoid = Coin.AdditiveMonoid)
             )
 
-            @targetName("negate")
-            infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
+            @targetName("scale")
+            infix def *~(c: SafeLong): Unbounded = Unbounded(self.mapValues(_ *~ c))
+
+            @targetName("scale")
+            infix def *~(c: Rational): Fractional = Fractional(self.mapValues(_ *~ c))
+
+            @targetName("div")
+            infix def /~(c: SafeLong): Fractional = Fractional(self.mapValues(_ /~ c))
+            
+            @targetName("div")
+            infix def /~(c: Rational): Fractional = Fractional(self.mapValues(_ /~ c))
 
         extension (self: Iterable[Inner])
             def multiAssetSum: Unbounded =
-                self.foldRight(Unbounded.zero)((x,y) => x +~ y)
+                self.foldRight(Unbounded.zero)((x, y) => x +~ y)
 
         given algebra: Algebra.type = Algebra
 
@@ -193,13 +198,6 @@ private object MultiAssetInner {
             def toFractional: Fractional =
                 Fractional(self.mapValues(_.toFractional))
 
-            def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-                self :* c.toSafeLong
-
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional = {
-                Fractional(self.mapValues(_.scaleFractional(c)))
-            }
-
             @targetName("addCoerce_Inner")
             infix def +~(other: Inner): Unbounded = Unbounded(
               combineWith[AssetName, Coin.Unbounded, Coin, Coin.Unbounded](
@@ -241,6 +239,18 @@ private object MultiAssetInner {
                 other.underlying
               )
             )
+
+            @targetName("scale")
+            infix def *~(c: SafeLong): Unbounded = self :* c
+
+            @targetName("scale")
+            infix def *~(c: Rational): Fractional = Fractional(self.mapValues(_ *~ c))
+
+            @targetName("div")
+            infix def /~(c: SafeLong): Fractional = Fractional(self.mapValues(_ /~ c))
+            
+            @targetName("div")
+            infix def /~(c: Rational): Fractional = Fractional(self.mapValues(_ /~ c))
 
         extension (self: Iterable[Unbounded])
             def multiAssetSum: Unbounded = self.qsum
@@ -315,9 +325,6 @@ private object MultiAssetInner {
               )(using vNewMonoid = Coin.AdditiveMonoid)
             )
 
-            def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-                self :* c.toRational
-
             @targetName("addCoerce_Inner")
             infix def +~(other: Inner): Fractional = Fractional(
               combineWith[AssetName, Coin.Fractional, Coin, Coin.Fractional](
@@ -360,8 +367,19 @@ private object MultiAssetInner {
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = self - other
 
-        extension (self: Iterable[Fractional])
-            def multiAssetSum: Fractional = self.qsum
+            @targetName("scale")
+            infix def *~(c: SafeLong): Fractional = self :* c.toRational
+
+            @targetName("scale")
+            infix def *~(c: Rational): Fractional = self :* c
+
+            @targetName("div")
+            infix def /~(c: SafeLong): Fractional = self :/ c.toRational
+            
+            @targetName("div")
+            infix def /~(c: Rational): Fractional = self :/ c
+
+        extension (self: Iterable[Fractional]) def multiAssetSum: Fractional = self.qsum
 
         import Coin.Fractional.algebra as coinAlgebra
 

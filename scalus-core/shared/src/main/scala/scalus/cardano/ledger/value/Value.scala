@@ -9,18 +9,12 @@ import spire.math.{Rational, SafeLong}
 import scala.annotation.targetName
 
 case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
-    import Value.{Unbounded, Fractional}
-    
-    def scaleIntegral[I](c: I)(using frac: spire.math.Integral[I]): Unbounded =
-        Unbounded(lovelace.scaleIntegral(c), assets.scaleIntegral(c))
-
-    def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-        Fractional(lovelace.scaleFractional(c), assets.scaleFractional(c))
+    import Value.{Fractional, Unbounded}
 
     @targetName("addCoerce_Value")
     infix def +~(other: Value): Unbounded =
         Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
-        
+
     @targetName("addCoerce_Unbounded")
     infix def +~(other: Unbounded): Unbounded =
         Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
@@ -44,6 +38,18 @@ case class Value(lovelace: Coin, assets: MultiAsset = MultiAsset.zero) {
     @targetName("negate")
     infix def unary_- : Unbounded =
         Unbounded(-lovelace, -assets)
+
+    @targetName("scale")
+    infix def *~(c: SafeLong): Unbounded = Unbounded(lovelace *~ c, assets *~ c)
+
+    @targetName("scale")
+    infix def *~(c: Rational): Fractional = Fractional(lovelace *~ c, assets *~ c)
+
+    @targetName("div")
+    infix def /~(c: SafeLong): Fractional = Fractional(lovelace /~ c, assets /~ c)
+
+    @targetName("div")
+    infix def /~(c: Rational): Fractional = Fractional(lovelace /~ c, assets /~ c)
 }
 
 object Value {
@@ -99,12 +105,6 @@ private object ValueVariants {
             Value(newLovelace, newAssets)
         }
 
-        def scaleIntegral[I](c: I)(using int: spire.math.Integral[I]): Unbounded =
-            this :* c.toSafeLong
-
-        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-            Fractional(lovelace.scaleFractional(c), assets.scaleFractional(c))
-
         @targetName("addCoerce_Value")
         infix def +~(other: Value): Unbounded =
             Unbounded(lovelace +~ other.lovelace, assets +~ other.assets)
@@ -126,13 +126,24 @@ private object ValueVariants {
         @targetName("subtractCoerce_Fractional")
         infix def -~(other: Fractional): Fractional =
             Fractional(lovelace -~ other.lovelace, assets -~ other.assets)
+
+        @targetName("scale")
+        infix def *~(c: SafeLong): Unbounded = this :* c
+
+        @targetName("scale")
+        infix def *~(c: Rational): Fractional = Fractional(lovelace *~ c, assets *~ c)
+
+        @targetName("div")
+        infix def /~(c: SafeLong): Fractional = Fractional(lovelace /~ c, assets /~ c)
+
+        @targetName("div")
+        infix def /~(c: Rational): Fractional = Fractional(lovelace /~ c, assets /~ c)
     }
 
     object Unbounded {
         def zero: Unbounded = Unbounded(Coin.Unbounded.zero)
 
-        extension (self: Iterable[Unbounded])
-            def valueSum: Unbounded = self.qsum
+        extension (self: Iterable[Unbounded]) def valueSum: Unbounded = self.qsum
 
         given algebra: Algebra.type = Algebra
 
@@ -185,9 +196,6 @@ private object ValueVariants {
             Value(newLovelace, newAssets)
         }
 
-        def scaleFractional[F](c: F)(using frac: spire.math.Fractional[F]): Fractional =
-            this :* c.toRational
-
         @targetName("addCoerce_Value")
         infix def +~(other: Value): Fractional =
             Fractional(lovelace +~ other.lovelace, assets +~ other.assets)
@@ -209,13 +217,24 @@ private object ValueVariants {
 
         @targetName("subtractCoerce_Fractional")
         infix def -~(other: Fractional): Fractional = this - other
+
+        @targetName("scale")
+        infix def *~(c: SafeLong): Fractional = Fractional(lovelace *~ c, assets *~ c)
+
+        @targetName("scale")
+        infix def *~(c: Rational): Fractional = this :* c
+
+        @targetName("div")
+        infix def /~(c: SafeLong): Fractional = this :/ c.toRational
+
+        @targetName("div")
+        infix def /~(c: Rational): Fractional = this :/ c
     }
 
     object Fractional {
         def zero: Fractional = Fractional(Coin.Fractional.zero)
 
-        extension (self: Iterable[Fractional])
-            def valueSum: Fractional = self.qsum
+        extension (self: Iterable[Fractional]) def valueSum: Fractional = self.qsum
 
         given algebra: Algebra.type = Algebra
 
