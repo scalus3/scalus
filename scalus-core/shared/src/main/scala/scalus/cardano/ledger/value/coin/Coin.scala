@@ -1,12 +1,13 @@
 package scalus.cardano.ledger.value.coin
 
-import spire.algebra.*
-import spire.implicits.*
-import spire.math.{ConvertableFrom, Rational, SafeLong}
-import RationalExtensions.*
 import cats.data.NonEmptyList
+import spire.algebra.*
+import spire.math.{Rational, SafeLong}
+import spire.implicits.{additiveGroupOps, additiveSemigroupOps, rms, seqOps, toRational, vectorSpaceOps, LongAlgebra}
 
 import scala.annotation.targetName
+
+import RationalExtensions.*
 
 type Coin = Coin.Coin
 
@@ -22,6 +23,8 @@ object Coin {
     enum ArithmeticError extends Throwable:
         case Underflow
         case Overflow
+
+    given eqArithmeticError: Eq[ArithmeticError] = Eq.fromUniversalEquals
 
     def apply(long: Long): Either[Underflow.type, Coin] =
         if long.sign < 0 then Left(Underflow) else Right(long)
@@ -78,7 +81,7 @@ object Coin {
 
         @targetName("div")
         infix def /~(c: SafeLong): Fractional = Fractional(self) :/ c.toRational
-        
+
         @targetName("div")
         infix def /~(c: Rational): Fractional = Fractional(self) :/ c
 
@@ -96,13 +99,18 @@ object Coin {
 
     given algebra: Algebra.type = Algebra
 
-    object Algebra extends Order[Coin] {
+    object Algebra extends CoinOrder
+
+    object AlgebraFull extends CoinOrder, CoinAdditiveMonoid
+
+    trait CoinOrder extends Order[Coin] {
         override def compare(self: Coin, other: Coin): Int = LongAlgebra.compare(self, other)
     }
 
-    // This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
-    // because adding `Long` coins is unsafe (it can overflow/underflow without warning/error).
-    object AdditiveMonoid extends AdditiveMonoid[Coin] {
+    /** This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
+      * because adding `Long` Inners is unsafe (it can overflow/underflow without warning/error).
+      */
+    trait CoinAdditiveMonoid extends AdditiveMonoid[Coin] {
         override def zero: Coin = Coin.zero
         override def plus(x: Coin, y: Coin): Coin = x + y
     }
@@ -127,11 +135,11 @@ object Coin {
 
     type Unbounded = CoinSubtypes.Unbounded
 
-    object Unbounded { export CoinSubtypes.Unbounded.{*, given} }
+    object Unbounded { export CoinSubtypes.Unbounded.* }
 
     type Fractional = CoinSubtypes.Fractional
 
-    object Fractional { export CoinSubtypes.Fractional.{*, given} }
+    object Fractional { export CoinSubtypes.Fractional.* }
 }
 
 private object CoinSubtypes {
@@ -193,7 +201,7 @@ private object CoinSubtypes {
 
             @targetName("div")
             infix def /~(c: SafeLong): Fractional = Fractional(self) :/ c.toRational
-            
+
             @targetName("div")
             infix def /~(c: Rational): Fractional = Fractional(self) :/ c
 
@@ -296,7 +304,7 @@ private object CoinSubtypes {
 
             @targetName("div")
             infix def /~(c: SafeLong): Fractional = self :/ c.toRational
-            
+
             @targetName("div")
             infix def /~(c: Rational): Fractional = self :/ c
 

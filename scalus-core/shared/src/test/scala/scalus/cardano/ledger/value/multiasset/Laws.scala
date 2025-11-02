@@ -11,6 +11,7 @@ import spire.math.{Rational, SafeLong}
 import Gen.Arb.given
 import spire.laws.arb.given
 
+/** These tests use the spire/cats `Eq` instances when comparing things with `===`. */
 class Laws extends AnyFunSuite with FunSuiteDiscipline with Checkers {
     implicit val config: PropertyCheckConfiguration =
         PropertyCheckConfiguration(minSuccessful = 10_000, workers = 10)

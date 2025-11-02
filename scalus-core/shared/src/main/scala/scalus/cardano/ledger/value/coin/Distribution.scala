@@ -1,8 +1,8 @@
 package scalus.cardano.ledger.value.coin
 
 import cats.data.NonEmptyList
-import spire.implicits.*
 import spire.math.{Rational, SafeLong}
+import spire.implicits.toRational
 
 object Distribution {
 

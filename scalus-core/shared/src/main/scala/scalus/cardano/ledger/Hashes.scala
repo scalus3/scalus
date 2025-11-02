@@ -55,6 +55,12 @@ object Hash {
     given Ordering[HF, Purpose]: Ordering[Hash[HF, Purpose]] =
         (x: Hash[HF, Purpose], y: Hash[HF, Purpose]) =>
             ByteString.given_Ordering_ByteString.compare(x, y)
+
+    given Order[HF, Purpose]: spire.algebra.Order[Hash[HF, Purpose]] with {
+        def compare(x: Hash[HF, Purpose], y: Hash[HF, Purpose]): Int = {
+            Ordering[HF, Purpose].compare(x, y)
+        }
+    }
 }
 
 trait HashConstructors[HashType >: Hash[HashFunction, Purpose], HashFunction: HashSize, Purpose] {

@@ -1,90 +1,78 @@
 package scalus.cardano.ledger.value.multiasset
 
-import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap
-import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.*
-import scalus.cardano.ledger.value.multiasset.CanonicalSortedMap.CanonicalSortedMapPartialOrder.*
+import scalus.cardano.ledger.value.coin.Coin
+import scalus.cardano.ledger.value.multiasset.lib.Multiset
 import scalus.cardano.ledger.{AssetName, PolicyId}
+
 import spire.algebra.*
 import spire.math.{Rational, SafeLong}
-import spire.implicits.*
-import spire.implicits.MapEq as _
-import spire.implicits.{MapCSemiring as _, MapMonoid as _}
-import spire.implicits.{MapCRng as _, MapGroup as _}
-import spire.implicits.{MapInnerProductSpace as _, MapVectorSpace as _}
+import spire.implicits.{additiveGroupOps, additiveSemigroupOps, rms, seqOps, toRational, vectorSpaceOps, DoubleAlgebra}
 
 import scala.annotation.targetName
-import scala.collection.immutable.SortedMap
+
+// ===================================
+// MultiAsset
+// ===================================
 
 type MultiAsset = MultiAsset.MultiAsset
 
 object MultiAsset {
-    opaque type MultiAsset = CanonicalSortedMap[PolicyId, Inner]
+    import Inner.AlgebraFull as vAlgebra
 
-    @targetName("applyWithCanonicalSortedMap")
-    def apply(self: CanonicalSortedMap[PolicyId, Inner]): MultiAsset = self
+    type InnerType = Inner
 
-    @targetName("applyWithSortedMap")
-    def apply(sortedMap: SortedMap[PolicyId, Inner]): MultiAsset =
-        CanonicalSortedMap(sortedMap)(using vMonoid = Inner.AdditiveMonoid)
+    opaque type MultiAsset = Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
 
-    def zero: MultiAsset = CanonicalSortedMap.empty
+    def apply(m: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]): MultiAsset = m
+
+    def empty: MultiAsset = Multiset.empty(using vMonoid = vAlgebra)
+    def zero: MultiAsset = empty
 
     extension (self: MultiAsset)
-        def underlying: CanonicalSortedMap[PolicyId, Inner] = self
+        def underlying: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]] = self
+
+        def get(policyId: PolicyId): Inner = underlying.get(policyId)
+
+        def get(policyId: PolicyId, assetName: AssetName): Coin =
+            underlying.get(policyId).get(assetName)
 
         @targetName("negate")
         infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
 
         @targetName("addCoerce_Inner")
         infix def +~(other: MultiAsset): Unbounded = Unbounded(
-          combineWith[PolicyId, Inner, Inner, Inner.Unbounded](_ +~ _, self, other)(using
-            vSelfMonoid = Inner.AdditiveMonoid,
-            vOtherMonoid = Inner.AdditiveMonoid
+          Multiset.combineWith(self, other)(_ +~ _)(using
+            vSelfMonoid = vAlgebra,
+            vOtherMonoid = vAlgebra
           )
         )
 
         @targetName("addCoerce_Unbounded")
         infix def +~(other: Unbounded): Unbounded = Unbounded(
-          combineWith[PolicyId, Inner, Inner.Unbounded, Inner.Unbounded](
-            _ +~ _,
-            self,
-            other.underlying
-          )(using vSelfMonoid = Inner.AdditiveMonoid)
+          Multiset.combineWith(self, other.underlying)(_ +~ _)(using vSelfMonoid = vAlgebra)
         )
 
         @targetName("addCoerce_Fractional")
         infix def +~(other: Fractional): Fractional = Fractional(
-          combineWith[PolicyId, Inner, Inner.Fractional, Inner.Fractional](
-            _ +~ _,
-            self,
-            other.underlying
-          )(using vSelfMonoid = Inner.AdditiveMonoid)
+          Multiset.combineWith(self, other.underlying)(_ +~ _)(using vSelfMonoid = vAlgebra)
         )
 
         @targetName("subtractCoerce_Inner")
         infix def -~(other: MultiAsset): Unbounded = Unbounded(
-          combineWith[PolicyId, Inner, Inner, Inner.Unbounded](_ -~ _, self, other)(using
-            vSelfMonoid = Inner.AdditiveMonoid,
-            vOtherMonoid = Inner.AdditiveMonoid
+          Multiset.combineWith(self, other)(_ -~ _)(using
+            vSelfMonoid = vAlgebra,
+            vOtherMonoid = vAlgebra
           )
         )
 
         @targetName("subtractCoerce_Unbounded")
         infix def -~(other: Unbounded): Unbounded = Unbounded(
-          combineWith[PolicyId, Inner, Inner.Unbounded, Inner.Unbounded](
-            _ -~ _,
-            self,
-            other.underlying
-          )(using vSelfMonoid = Inner.AdditiveMonoid)
+          Multiset.combineWith(self, other.underlying)(_ -~ _)(using vSelfMonoid = vAlgebra)
         )
 
         @targetName("subtractCoerce_Fractional")
         infix def -~(other: Fractional): Fractional = Fractional(
-          combineWith[PolicyId, Inner, Inner.Fractional, Inner.Fractional](
-            _ -~ _,
-            self,
-            other.underlying
-          )(using vSelfMonoid = Inner.AdditiveMonoid)
+          Multiset.combineWith(self, other.underlying)(_ -~ _)(using vSelfMonoid = vAlgebra)
         )
 
         @targetName("scale")
@@ -100,35 +88,35 @@ object MultiAsset {
         infix def /~(c: Rational): Fractional = Fractional(self.mapValues(_ /~ c))
 
     extension (self: Iterable[MultiAsset])
-        def multiAssetSum: Unbounded =
-            self.foldRight(Unbounded.zero)((x, y) => x +~ y)
+        def multiAssetSum: Unbounded = self.foldRight(Unbounded.empty)(_ +~ _)
 
     given algebra: Algebra.type = Algebra
 
-    object Algebra extends PartialOrder[MultiAsset] {
-        override def eqv(self: MultiAsset, other: MultiAsset): Boolean = self == other
+    object Algebra extends InnerPartialOrder
 
-        override def partialCompare(self: MultiAsset, other: MultiAsset): Double =
-            mapPartialOrder.partialCompare(self, other)
+    /** This is available for manual import, but it isn't implicitly given to users because adding
+      * `Long` Inners is unsafe (it can overflow/underflow without warning/error).
+      */
+    object AlgebraFull extends InnerPartialOrder, InnerAdditiveMonoid
 
-        private val mapPartialOrder = PartiallyOrderedElements[PolicyId, Inner](
-          MultiAsset.Inner.algebra.partialCompare
-        )(using vMonoid = Inner.AdditiveMonoid)
+    private object M
+        extends Multiset.Algebra[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]](using
+          vMonoid = vAlgebra
+        )
+
+    trait InnerPartialOrder extends PartialOrder[MultiAsset] {
+        private object A extends M.PartialOrder.PartiallyOrderedElements(vAlgebra.partialCompare)
+
+        override def eqv(self: MultiAsset, other: MultiAsset): Boolean = A.eqv(self, other)
+        override def partialCompare(x: MultiAsset, y: MultiAsset): Double =
+            A.partialCompare(x, y)
     }
 
-    /** This AdditiveMonoid is available for manual import, but it isn't implicitly given to users
-      * because adding `Long` Inners is unsafe (it can overflow/underflow without warning/error).
-      */
-    object AdditiveMonoid extends AdditiveMonoid[MultiAsset] {
-        override def zero: MultiAsset = MultiAsset.zero
+    trait InnerAdditiveMonoid extends AdditiveMonoid[MultiAsset] {
+        private object A extends M.AdditiveMonoid
 
-        /** Note: can silently overflow or underflow, breaking the invariants of the class */
-        override def plus(self: MultiAsset, other: MultiAsset): MultiAsset =
-            combineWith(Inner.AdditiveMonoid.plus, self, other)(using
-              vSelfMonoid = Inner.AdditiveMonoid,
-              vOtherMonoid = Inner.AdditiveMonoid,
-              vResultMonoid = Inner.AdditiveMonoid
-            )
+        override def zero: MultiAsset = A.zero
+        override def plus(x: MultiAsset, y: MultiAsset): MultiAsset = A.plus(x, y)
     }
 
     enum ArithmeticError extends Throwable:
@@ -137,6 +125,8 @@ object MultiAsset {
 
         case Underflow(policyId: PolicyId, assetName: AssetName) extends ArithmeticError
         case Overflow(policyId: PolicyId, assetName: AssetName) extends ArithmeticError
+
+    given eqArithmeticError: Eq[ArithmeticError] = Eq.fromUniversalEquals
 
     object ArithmeticError {
         def withPolicyId(e: Inner.ArithmeticError, policyId: PolicyId): MultiAsset.ArithmeticError =
@@ -156,24 +146,24 @@ object MultiAsset {
 
     type Unbounded = MultiAssetVariant.Unbounded
 
-    object Unbounded { export MultiAssetVariant.Unbounded.{*, given} }
+    object Unbounded { export MultiAssetVariant.Unbounded.* }
 
     type Fractional = MultiAssetVariant.Fractional
 
-    object Fractional { export MultiAssetVariant.Fractional.{*, given} }
+    object Fractional { export MultiAssetVariant.Fractional.* }
 
     type Inner = MultiAssetInner.Inner
 
     object Inner {
-        export MultiAssetInner.Inner.{*, given}
+        export MultiAssetInner.Inner.*
 
         type Unbounded = MultiAssetInner.Unbounded
 
-        object Unbounded { export MultiAssetInner.Unbounded.{*, given} }
+        object Unbounded { export MultiAssetInner.Unbounded.* }
 
         type Fractional = MultiAssetInner.Fractional
 
-        object Fractional { export MultiAssetInner.Fractional.{*, given} }
+        object Fractional { export MultiAssetInner.Fractional.* }
     }
 }
 
@@ -183,47 +173,59 @@ private object MultiAssetVariant {
     // ===================================
     // MultiAsset.Unbounded
     // ===================================
+
     type Unbounded = Unbounded.Unbounded
 
     object Unbounded {
-        opaque type Unbounded = CanonicalSortedMap[PolicyId, Inner.Unbounded]
+        import Inner.Unbounded.Algebra as vAlgebra
 
-        @targetName("applyWithCanonicalSortedMap")
-        def apply(self: CanonicalSortedMap[PolicyId, Inner.Unbounded]): Unbounded = self
+        type InnerType = Inner.Unbounded
 
-        @targetName("applyWithSortedMap")
-        def apply(sortedMap: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = CanonicalSortedMap(
-          sortedMap
-        )
+        opaque type Unbounded =
+            Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
 
-        def zero: Unbounded = CanonicalSortedMap.empty
+        def apply(
+            m: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+        ): Unbounded = m
 
-        import Inner.Unbounded.algebra as innerAlgebra
+        def empty: Unbounded = Multiset.empty
+        def zero: Unbounded = empty
 
         extension (self: Unbounded)
-            def underlying: CanonicalSortedMap[PolicyId, Inner.Unbounded] = self
+            def underlying: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]] =
+                self
+
+            def get(policyId: PolicyId): Inner.Unbounded = underlying.get(policyId)
+
+            def get(policyId: PolicyId, assetName: AssetName): Coin.Unbounded =
+                underlying.get(policyId).get(assetName)
 
             def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
-                try { Right(self.unsafeToMultiAsset) }
-                catch { case e: MultiAsset.ArithmeticError => Left(e) }
+                try {
+                    Right(self.unsafeToMultiAsset)
+                } catch {
+                    case e: MultiAsset.ArithmeticError => Left(e)
+                }
 
             def unsafeToMultiAsset: MultiAsset = MultiAsset(
-              self.mapValuesIndexed((policyId: PolicyId, innerUnbounded: Inner.Unbounded) =>
-                  try { innerUnbounded.unsafeToInner }
-                  catch {
+              self.mapValuesIndexed((policyId: PolicyId, innerUnbounded: InnerType) =>
+                  try {
+                      innerUnbounded.unsafeToInner
+                  } catch {
                       case e: Inner.ArithmeticError =>
                           throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
                   }
-              )(using vNewMonoid = Inner.AdditiveMonoid)
+              )(using vNewMonoid = Inner.AlgebraFull)
             )
+
+            def toFractional: Fractional =
+                Fractional(self.mapValues(_.toFractional))
 
             @targetName("addCoerce_Inner")
             infix def +~(other: MultiAsset): Unbounded = Unbounded(
-              combineWith[PolicyId, Inner.Unbounded, Inner, Inner.Unbounded](
-                _ +~ _,
-                self,
-                other.underlying
-              )(using vOtherMonoid = Inner.AdditiveMonoid)
+              Multiset.combineWith(self, other.underlying)(_ +~ _)(using
+                vOtherMonoid = Inner.AlgebraFull
+              )
             )
 
             @targetName("addCoerce_Unbounded")
@@ -231,20 +233,14 @@ private object MultiAssetVariant {
 
             @targetName("addCoerce_Fractional")
             infix def +~(other: Fractional): Fractional = Fractional(
-              combineWith[PolicyId, Inner.Unbounded, Inner.Fractional, Inner.Fractional](
-                _ +~ _,
-                self,
-                other.underlying
-              )
+              Multiset.combineWith(self, other.underlying)(_ +~ _)
             )
 
             @targetName("subtractCoerce_Inner")
             infix def -~(other: MultiAsset): Unbounded = Unbounded(
-              combineWith[PolicyId, Inner.Unbounded, Inner, Inner.Unbounded](
-                _ -~ _,
-                self,
-                other.underlying
-              )(using vOtherMonoid = Inner.AdditiveMonoid)
+              Multiset.combineWith(self, other.underlying)(_ -~ _)(using
+                vOtherMonoid = Inner.AlgebraFull
+              )
             )
 
             @targetName("subtractCoerce_Unbounded")
@@ -252,11 +248,7 @@ private object MultiAssetVariant {
 
             @targetName("subtractCoerce_Fractional")
             infix def -~(other: Fractional): Fractional = Fractional(
-              combineWith[PolicyId, Inner.Unbounded, Inner.Fractional, Inner.Fractional](
-                _ -~ _,
-                self,
-                other.underlying
-              )
+              Multiset.combineWith(self, other.underlying)(_ -~ _)
             )
 
             @targetName("scale")
@@ -276,30 +268,25 @@ private object MultiAssetVariant {
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
-            override def eqv(self: Unbounded, other: Unbounded): Boolean = self == other
+            private object M
+                extends Multiset.Algebra[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
 
-            override def partialCompare(self: Unbounded, other: Unbounded): Double =
-                mapPartialOrder.partialCompare(self, other)
+            private object A
+                extends M.PartialOrder.PartiallyOrderedElements(vAlgebra.partialCompare),
+                  M.CModule[SafeLong, CRing[SafeLong], vAlgebra.type]
 
-            override def scalar: CRing[SafeLong] = CRing[SafeLong]
+            override def eqv(self: Unbounded, other: Unbounded): Boolean = A.eqv(self, other)
+            override def partialCompare(x: Unbounded, y: Unbounded): Double =
+                A.partialCompare(x, y)
 
-            override def zero: Unbounded = Unbounded.zero
+            override def zero: Unbounded = A.zero
+            override def plus(x: Unbounded, y: Unbounded): Unbounded = A.plus(x, y)
 
-            override def negate(self: Unbounded): Unbounded =
-                self.mapValues(innerAlgebra.negate)
+            override def negate(x: Unbounded): Unbounded = A.negate(x)
+            override def minus(x: Unbounded, y: Unbounded): Unbounded = A.minus(x, y)
 
-            override def plus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.plus, self, other)
-
-            override def minus(self: Unbounded, other: Unbounded): Unbounded =
-                combineWith(innerAlgebra.minus, self, other)
-
-            override def timesl(s: SafeLong, self: Unbounded): Unbounded =
-                self.mapValues(_ :* s)
-
-            private val mapPartialOrder = PartiallyOrderedElements[PolicyId, Inner.Unbounded](
-              innerAlgebra.partialCompare
-            )
+            override def scalar: CRing[SafeLong] = A.scalar
+            override def timesl(r: SafeLong, v: Unbounded): Unbounded = A.timesl(r, v)
         }
     }
 
@@ -310,53 +297,61 @@ private object MultiAssetVariant {
     type Fractional = Fractional.Fractional
 
     object Fractional {
-        opaque type Fractional = CanonicalSortedMap[PolicyId, Inner.Fractional]
+        import Inner.Fractional.Algebra as vAlgebra
 
-        @targetName("applyWithCanonicalSortedMap")
-        def apply(self: CanonicalSortedMap[PolicyId, Inner.Fractional]): Fractional = self
+        type InnerType = Inner.Fractional
 
-        @targetName("applyWithSortedMap")
-        def apply(sortedMap: SortedMap[PolicyId, Inner.Fractional]): Fractional =
-            CanonicalSortedMap(sortedMap)
+        opaque type Fractional =
+            Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
 
-        def zero: Fractional = CanonicalSortedMap.empty
+        def apply(
+            m: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+        ): Fractional = m
+
+        def empty: Fractional = Multiset.empty
+        def zero: Fractional = empty
 
         extension (self: Fractional)
-            def underlying: CanonicalSortedMap[PolicyId, Inner.Fractional] = self
+            def underlying: Multiset[PolicyId, InnerType, vAlgebra.type, Order[
+              PolicyId
+            ]] = self
+
+            def get(policyId: PolicyId): Inner.Fractional = underlying.get(policyId)
+
+            def get(policyId: PolicyId, assetName: AssetName): Coin.Fractional =
+                underlying.get(policyId).get(assetName)
 
             def toUnbounded: Unbounded =
                 Unbounded(self.mapValues(_.toUnbounded))
 
             def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
-                try { Right(self.unsafeToMultiAsset) }
-                catch { case e: MultiAsset.ArithmeticError => Left(e) }
+                try {
+                    Right(self.unsafeToMultiAsset)
+                } catch {
+                    case e: MultiAsset.ArithmeticError => Left(e)
+                }
 
             def unsafeToMultiAsset: MultiAsset = MultiAsset(
-              self.mapValuesIndexed((policyId: PolicyId, innerFractional: Inner.Fractional) =>
-                  try { innerFractional.unsafeToInner }
-                  catch {
+              self.mapValuesIndexed((policyId: PolicyId, innerFractional: InnerType) =>
+                  try {
+                      innerFractional.unsafeToInner
+                  } catch {
                       case e: Inner.ArithmeticError =>
                           throw MultiAsset.ArithmeticError.withPolicyId(e, policyId)
                   }
-              )(using vNewMonoid = Inner.AdditiveMonoid)
+              )(using vNewMonoid = Inner.AlgebraFull)
             )
 
             @targetName("addCoerce_Inner")
             infix def +~(other: MultiAsset): Fractional = Fractional(
-              combineWith[PolicyId, Inner.Fractional, Inner, Inner.Fractional](
-                _ +~ _,
-                self,
-                other.underlying
-              )(using vOtherMonoid = Inner.AdditiveMonoid)
+              Multiset.combineWith(self, other.underlying)(_ +~ _)(using
+                vOtherMonoid = Inner.AlgebraFull
+              )
             )
 
             @targetName("addCoerce_Unbounded")
             infix def +~(other: Unbounded): Fractional = Fractional(
-              combineWith[PolicyId, Inner.Fractional, Inner.Unbounded, Inner.Fractional](
-                _ +~ _,
-                self,
-                other.underlying
-              )
+              Multiset.combineWith(self, other.underlying)(_ +~ _)
             )
 
             @targetName("addCoerce_Fractional")
@@ -364,20 +359,14 @@ private object MultiAssetVariant {
 
             @targetName("subtractCoerce_Inner")
             infix def -~(other: MultiAsset): Fractional = Fractional(
-              combineWith[PolicyId, Inner.Fractional, Inner, Inner.Fractional](
-                _ -~ _,
-                self,
-                other.underlying
-              )(using vOtherMonoid = Inner.AdditiveMonoid)
+              Multiset.combineWith(self, other.underlying)(_ -~ _)(using
+                vOtherMonoid = Inner.AlgebraFull
+              )
             )
 
             @targetName("subtractCoerce_Unbounded")
             infix def -~(other: Unbounded): Fractional = Fractional(
-              combineWith[PolicyId, Inner.Fractional, Inner.Unbounded, Inner.Fractional](
-                _ -~ _,
-                self,
-                other.underlying
-              )
+              Multiset.combineWith(self, other.underlying)(_ -~ _)
             )
 
             @targetName("subtractCoerce_Fractional")
@@ -397,36 +386,31 @@ private object MultiAssetVariant {
 
         extension (self: Iterable[Fractional]) def multiAssetSum: Fractional = self.qsum
 
-        import Inner.Fractional.algebra as innerAlgebra
-
         given algebra: Algebra.type = Algebra
 
         object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
-            override def eqv(self: Fractional, other: Fractional): Boolean = self == other
+            private object M
+                extends Multiset.Algebra[PolicyId, InnerType, vAlgebra.type, Order[
+                  PolicyId
+                ]]
 
-            override def partialCompare(self: Fractional, other: Fractional): Double =
-                mapPartialOrder.partialCompare(self, other)
+            private object A
+                extends M.PartialOrder.PartiallyOrderedElements(vAlgebra.partialCompare),
+                  M.VectorSpace[Rational, Field[Rational], vAlgebra.type]
 
-            override def scalar: Field[Rational] = Field[Rational]
+            override def eqv(self: Fractional, other: Fractional): Boolean = A.eqv(self, other)
+            override def partialCompare(x: Fractional, y: Fractional): Double =
+                A.partialCompare(x, y)
 
-            override def zero: Fractional = Fractional.zero
+            override def zero: Fractional = A.zero
+            override def plus(x: Fractional, y: Fractional): Fractional = A.plus(x, y)
 
-            override def negate(self: Fractional): Fractional =
-                self.mapValues(innerAlgebra.negate)
+            override def negate(x: Fractional): Fractional = A.negate(x)
+            override def minus(x: Fractional, y: Fractional): Fractional = A.minus(x, y)
 
-            override def plus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerAlgebra.plus, self, other)
-
-            override def minus(self: Fractional, other: Fractional): Fractional =
-                combineWith(innerAlgebra.minus, self, other)
-
-            override def timesl(s: Rational, self: Fractional): Fractional =
-                self.mapValues(_ :* s)
-
-            private val mapPartialOrder =
-                PartiallyOrderedElements[PolicyId, Inner.Fractional](
-                  innerAlgebra.partialCompare
-                )
+            override def scalar: Field[Rational] = A.scalar
+            override def timesl(r: Rational, v: Fractional): Fractional = A.timesl(r, v)
         }
+
     }
 }

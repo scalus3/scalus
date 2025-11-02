@@ -31,6 +31,5 @@ object Gen {
               ma <- arbitrary[MultiAsset.Fractional]
           } yield Value.Fractional(coin, ma)
         )
-
     }
 }

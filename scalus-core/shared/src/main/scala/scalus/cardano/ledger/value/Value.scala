@@ -3,8 +3,9 @@ package scalus.cardano.ledger.value
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
 import spire.algebra.*
-import spire.implicits.*
 import spire.math.{Rational, SafeLong}
+import spire.implicits.{additiveGroupOps, additiveSemigroupOps, rms, seqOps, toRational, vectorSpaceOps}
+import spire.implicits.{orderOps, partialOrderOps}
 
 import scala.annotation.targetName
 

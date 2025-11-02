@@ -233,6 +233,12 @@ object AssetName {
         Ordering[ByteString].compare(x.bytes, y.bytes)
     }
 
+    given spire.algebra.Order[AssetName] with {
+        def compare(x: AssetName, y: AssetName): Int = {
+            Ordering[AssetName].compare(x, y)
+        }
+    }
+
     /** Empty asset name */
     val empty: AssetName = AssetName(ByteString.empty)
 
