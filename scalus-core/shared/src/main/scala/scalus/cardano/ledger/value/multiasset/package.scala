@@ -7,7 +7,7 @@ package scalus.cardano.ledger.value
   *     invariants.
   *     - We term the `Map` keyed by `AssetName` the "Inner Map".
   *   - The `quantity` can be a bounded integer, unbounded integer, or rational number (see package
-  *     docs for [[scalus.cardano.ledger.coin]].
+  *     docs for [[scalus.cardano.ledger.coin]]).
   *   - In both the inner and outer maps (the maps keyed by `AssetName` and `PolicyId`,
   *     respectively), "empty" values are removed from the map. This means that an `AssetName` with
   *     a quantity of zero will never appear in the inner map, and a `PolicyId` corresponding to an

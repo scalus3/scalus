@@ -96,7 +96,7 @@ class Unit extends AnyFunSuite, Matchers {
         assert(Try(bigCoin.unsafeToCoin).isFailure)
     }
 
-    test("Coin.Unbouned => Coin.Coin fails on big negative coin") {
+    test("Coin.Unbounded => Coin.Coin fails on big negative coin") {
         val bigCoin = Coin.Unbounded(SafeLong(Long.MaxValue) * -10)
         assert(bigCoin.toCoin === Left(Coin.ArithmeticError.Underflow))
         assert(Try(bigCoin.unsafeToCoin).isFailure)

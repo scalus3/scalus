@@ -14,7 +14,8 @@ package scalus.cardano.ledger.value
   *
   * Functions to convert safely between these three types are provided. "Safety" in this case means:
   *   - Detecting overflow/underflow when converting from bounded to unbounded types
-  *   - Tested laws-compliance for most algebraic operations (ordering, vector space, cmodule)
+  *   - Tested laws-compliance for most algebraic operations (ordering, vector space, commutative
+  *     module)
   *     - Safe projection/injection and other type-changing round-trips where applicable. For
   *       example, if we have
   *       - c : Coin.Coin

@@ -2,7 +2,7 @@ package scalus.cardano.ledger.value.multiasset
 
 import algebra.CommutativeGroup
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.AssetName
+import scalus.cardano.ledger.{AssetName, ScriptHash}
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
 import scalus.cardano.ledger.value.multiasset.Multiset.*
@@ -15,33 +15,36 @@ import scala.collection.immutable.SortedMap
 
 /** These tests use the org.scalactic.Equals instances when comparing things with `===`. */
 class Unit extends AnyFunSuite {
-    val mai: MultiAsset.Inner.Unbounded = MultiAsset.Inner.Unbounded(
-      SortedMap(
-        AssetName.fromHex("") -> Coin
-            .Unbounded(SafeLong(BigInt(1)))
+    val sm = SortedMap(
+      ScriptHash.fromHex("ff".repeat(28)) -> SortedMap(
+        AssetName.fromHex("") -> Coin.Unbounded(SafeLong(BigInt(1)))
       )
     )
 
+    val ma: MultiAsset.Unbounded = MultiAsset.Unbounded(sm)
+
+    val mai: MultiAsset.Inner.Unbounded = MultiAsset.Inner.Unbounded(sm.head._2)
+
     test("MultiAsset.Unbounded subtracted from itself equals zero") {
-        implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] =
-            MultiAsset.Inner.Unbounded.Algebra.additive
-        assert(alg.empty === (alg.inverse(mai) |+| mai))
+        implicit val alg: CommutativeGroup[MultiAsset.Unbounded] =
+            MultiAsset.Unbounded.Algebra.additive
+        assert(alg.empty === (alg.inverse(ma) |+| ma))
     }
 
     test("MultiAsset.Unbounded subtracted from itself equals zero, 2") {
-        implicit val alg: CommutativeGroup[MultiAsset.Inner.Unbounded] =
-            MultiAsset.Inner.Unbounded.Algebra.additive
-        assert(alg.empty === mai - mai)
+        implicit val alg: CommutativeGroup[MultiAsset.Unbounded] =
+            MultiAsset.Unbounded.Algebra.additive
+        assert(alg.empty === ma - ma)
     }
 
-    test("MultiAsset.Unbounded.Inner added to zero is identity") {
-        assert(mai + MultiAsset.Inner.Unbounded.zero === mai)
-        assert(MultiAsset.Inner.Unbounded.zero + mai === mai)
+    test("MultiAsset.Unbounded added to zero is identity") {
+        assert(ma + MultiAsset.Unbounded.zero === ma)
+        assert(MultiAsset.Unbounded.zero + ma === ma)
     }
 
-    test("MultiAsset.Unbounded.Inner minus zero") {
-        assert(mai - MultiAsset.Inner.Unbounded.zero === mai)
-        assert(MultiAsset.Inner.Unbounded.zero - mai === -mai)
+    test("MultiAsset.Unbounded minus zero") {
+        assert(ma - MultiAsset.Unbounded.zero === ma)
+        assert(MultiAsset.Unbounded.zero - ma === -ma)
     }
 
     import Gen.Arb.given

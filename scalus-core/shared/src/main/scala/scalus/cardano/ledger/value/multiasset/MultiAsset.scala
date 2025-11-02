@@ -20,19 +20,23 @@ type MultiAsset = MultiAsset.MultiAsset
 object MultiAsset {
     import Inner.AlgebraFull as vAlgebra
 
-    type InnerType = Inner
+    opaque type MultiAsset = Multiset[PolicyId, Inner, vAlgebra.type, Order[PolicyId]]
 
-    opaque type MultiAsset = Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+    def from(m: Multiset[PolicyId, Inner, vAlgebra.type, Order[PolicyId]]): MultiAsset = m
 
-    def from(m: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]): MultiAsset = m
+    @targetName("apply_sortedMap_inner")
+    def apply(s: SortedMap[PolicyId, Inner]): MultiAsset = Multiset(s)(using vMonoid = vAlgebra)
 
-    def apply(s: SortedMap[PolicyId, InnerType]): MultiAsset = Multiset(s)(using vMonoid = vAlgebra)
+    @targetName("apply_sortedMap_sortedMap")
+    def apply(s: SortedMap[PolicyId, SortedMap[AssetName, Coin]]): MultiAsset =
+        val sInner: SortedMap[PolicyId, Inner] = s.view.mapValues(Inner.apply).to(SortedMap)
+        apply(sInner)
 
     def empty: MultiAsset = Multiset.empty(using vMonoid = vAlgebra)
     def zero: MultiAsset = empty
 
     extension (self: MultiAsset)
-        def underlying: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]] = self
+        def underlying: Multiset[PolicyId, Inner, vAlgebra.type, Order[PolicyId]] = self
 
         def get(policyId: PolicyId): Inner = underlying.get(policyId)
 
@@ -103,7 +107,7 @@ object MultiAsset {
     object AlgebraFull extends InnerPartialOrder, InnerAdditiveMonoid
 
     private object M
-        extends Multiset.Algebra[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]](using
+        extends Multiset.Algebra[PolicyId, Inner, vAlgebra.type, Order[PolicyId]](using
           vMonoid = vAlgebra
         )
 
@@ -182,22 +186,27 @@ private object MultiAssetVariant {
     object Unbounded {
         import Inner.Unbounded.Algebra as vAlgebra
 
-        type InnerType = Inner.Unbounded
-
         opaque type Unbounded =
-            Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+            Multiset[PolicyId, Inner.Unbounded, vAlgebra.type, Order[PolicyId]]
 
         def from(
-            m: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+            m: Multiset[PolicyId, Inner.Unbounded, vAlgebra.type, Order[PolicyId]]
         ): Unbounded = m
 
-        def apply(s: SortedMap[PolicyId, InnerType]): MultiAsset.Unbounded = Multiset(s)
+        @targetName("apply_sortedMap_inner")
+        def apply(s: SortedMap[PolicyId, Inner.Unbounded]): Unbounded = Multiset(s)
+
+        @targetName("apply_sortedMap_sortedMap")
+        def apply(s: SortedMap[PolicyId, SortedMap[AssetName, Coin.Unbounded]]): Unbounded =
+            val sInner: SortedMap[PolicyId, Inner.Unbounded] =
+                s.view.mapValues(Inner.Unbounded.apply).to(SortedMap)
+            apply(sInner)
 
         def empty: Unbounded = Multiset.empty
         def zero: Unbounded = empty
 
         extension (self: Unbounded)
-            def underlying: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]] =
+            def underlying: Multiset[PolicyId, Inner.Unbounded, vAlgebra.type, Order[PolicyId]] =
                 self
 
             def get(policyId: PolicyId): Inner.Unbounded = underlying.get(policyId)
@@ -213,7 +222,7 @@ private object MultiAssetVariant {
                 }
 
             def unsafeToMultiAsset: MultiAsset = MultiAsset.from(
-              self.mapValuesIndexed((policyId: PolicyId, innerUnbounded: InnerType) =>
+              self.mapValuesIndexed((policyId: PolicyId, innerUnbounded: Inner.Unbounded) =>
                   try {
                       innerUnbounded.unsafeToInner
                   } catch {
@@ -274,7 +283,7 @@ private object MultiAssetVariant {
 
         object Algebra extends PartialOrder[Unbounded], CModule[Unbounded, SafeLong] {
             private object M
-                extends Multiset.Algebra[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+                extends Multiset.Algebra[PolicyId, Inner.Unbounded, vAlgebra.type, Order[PolicyId]]
 
             private object A
                 extends M.PartialOrder.PartiallyOrderedElements(vAlgebra.partialCompare),
@@ -304,22 +313,27 @@ private object MultiAssetVariant {
     object Fractional {
         import Inner.Fractional.Algebra as vAlgebra
 
-        type InnerType = Inner.Fractional
-
         opaque type Fractional =
-            Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+            Multiset[PolicyId, Inner.Fractional, vAlgebra.type, Order[PolicyId]]
 
         def from(
-            m: Multiset[PolicyId, InnerType, vAlgebra.type, Order[PolicyId]]
+            m: Multiset[PolicyId, Inner.Fractional, vAlgebra.type, Order[PolicyId]]
         ): Fractional = m
 
-        def apply(s: SortedMap[PolicyId, InnerType]): MultiAsset.Fractional = Multiset(s)
+        @targetName("apply_sortedMap_innerUnbounded")
+        def apply(s: SortedMap[PolicyId, Inner.Fractional]): Fractional = Multiset(s)
+
+        @targetName("apply_sortedMap_sortedMap")
+        def apply(s: SortedMap[PolicyId, SortedMap[AssetName, Coin.Fractional]]): Fractional =
+            val sInner: SortedMap[PolicyId, Inner.Fractional] =
+                s.view.mapValues(Inner.Fractional.apply).to(SortedMap)
+            apply(sInner)
 
         def empty: Fractional = Multiset.empty
         def zero: Fractional = empty
 
         extension (self: Fractional)
-            def underlying: Multiset[PolicyId, InnerType, vAlgebra.type, Order[
+            def underlying: Multiset[PolicyId, Inner.Fractional, vAlgebra.type, Order[
               PolicyId
             ]] = self
 
@@ -339,7 +353,7 @@ private object MultiAssetVariant {
                 }
 
             def unsafeToMultiAsset: MultiAsset = MultiAsset.from(
-              self.mapValuesIndexed((policyId: PolicyId, innerFractional: InnerType) =>
+              self.mapValuesIndexed((policyId: PolicyId, innerFractional: Inner.Fractional) =>
                   try {
                       innerFractional.unsafeToInner
                   } catch {
@@ -397,7 +411,7 @@ private object MultiAssetVariant {
 
         object Algebra extends PartialOrder[Fractional], VectorSpace[Fractional, Rational] {
             private object M
-                extends Multiset.Algebra[PolicyId, InnerType, vAlgebra.type, Order[
+                extends Multiset.Algebra[PolicyId, Inner.Fractional, vAlgebra.type, Order[
                   PolicyId
                 ]]
 
