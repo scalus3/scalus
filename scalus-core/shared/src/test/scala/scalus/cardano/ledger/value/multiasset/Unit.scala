@@ -16,11 +16,9 @@ import scala.collection.immutable.SortedMap
 /** These tests use the org.scalactic.Equals instances when comparing things with `===`. */
 class Unit extends AnyFunSuite {
     val mai: MultiAsset.Inner.Unbounded = MultiAsset.Inner.Unbounded(
-      Multiset.apply(
-        SortedMap(
-          AssetName.fromHex("") -> Coin
-              .Unbounded(SafeLong(BigInt(1)))
-        )
+      SortedMap(
+        AssetName.fromHex("") -> Coin
+            .Unbounded(SafeLong(BigInt(1)))
       )
     )
 

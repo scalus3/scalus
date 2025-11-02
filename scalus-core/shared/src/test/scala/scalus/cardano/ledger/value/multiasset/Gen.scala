@@ -3,13 +3,10 @@ package scalus.cardano.ledger.value.multiasset
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen as Gen0}
 import scalus.cardano.ledger.ArbitraryInstances.{given_Arbitrary_AssetName, given_Arbitrary_Hash}
-import scalus.cardano.ledger.value.multiasset.MultiAsset.Inner
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
 import scalus.cardano.ledger.{AssetName, PolicyId}
 import scalus.cardano.ledger.value.coin.Gen.Arb.given
-import scalus.cardano.ledger.value.multiasset.Multiset.*
-import spire.algebra.{AdditiveMonoid, Order}
 
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
@@ -44,10 +41,8 @@ object Gen {
         maxAssets: Int = 8
     ): Gen0[MultiAsset] = {
         val innerArb = Arbitrary(genConfigurableInner(minAssets, maxAssets))
-        genConfigurableMultiAssetPolymorphic(minPolicies, maxPolicies)(using
-          innerArb = innerArb,
-          iMonoid = Inner.AlgebraFull
-        ).map(MultiAsset.apply)
+        genConfigurableMultiAssetPolymorphic(minPolicies, maxPolicies)(using innerArb)
+            .map(MultiAsset.apply)
     }
 
     def genConfigurableInnerFractional(
@@ -68,19 +63,13 @@ object Gen {
         minAssets: Int = 1,
         maxAssets: Int = 8
     ): Gen0[MultiAsset.Inner] =
-        genInnerPolymorphic[Coin](minAssets, maxAssets)(using cMonoid = Coin.AlgebraFull)
+        genInnerPolymorphic[Coin](minAssets, maxAssets)
             .map(MultiAsset.Inner.apply)
 
-    private def genConfigurableMultiAssetPolymorphic[
-        I <: Inner | Inner.Unbounded | Inner.Fractional
-    ](
+    private def genConfigurableMultiAssetPolymorphic[I](
         minPolicies: Int = 1,
         maxPolicies: Int = 8
-    )(using
-        innerArb: Arbitrary[I],
-        iMonoid: AdditiveMonoid[I],
-        kOrdering: Ordering[PolicyId]
-    ): Gen0[Multiset[PolicyId, I, iMonoid.type, Order[PolicyId]]] = for {
+    )(using innerArb: Arbitrary[I]): Gen0[SortedMap[PolicyId, I]] = for {
         policies <- Gen0.choose(minPolicies, maxPolicies)
         list <- Gen0.containerOfN[List, (PolicyId, I)](
           policies,
@@ -89,15 +78,12 @@ object Gen {
               inner <- innerArb.arbitrary
           } yield policy -> inner
         )
-    } yield Multiset(list.to(SortedMap))
+    } yield list.to(SortedMap)
 
-    private def genInnerPolymorphic[C <: Coin | Coin.Unbounded | Coin.Fractional](
+    private def genInnerPolymorphic[C](
         minAssets: Int = 1,
         maxAssets: Int = 8
-    )(using
-        coinArb: Arbitrary[C],
-        cMonoid: AdditiveMonoid[C]
-    ): Gen0[Multiset[AssetName, C, cMonoid.type, Order[AssetName]]] = for {
+    )(using coinArb: Arbitrary[C]): Gen0[SortedMap[AssetName, C]] = for {
         assets <- Gen0.choose(minAssets, maxAssets)
         list <- Gen0.containerOfN[List, (AssetName, C)](
           assets,
@@ -106,7 +92,7 @@ object Gen {
               coin <- coinArb.arbitrary
           } yield assetName -> coin
         )
-    } yield Multiset(list.to(SortedMap))
+    } yield list.to(SortedMap)
 
     object Arb {
         implicit val multiAssetArb: Arbitrary[MultiAsset] =

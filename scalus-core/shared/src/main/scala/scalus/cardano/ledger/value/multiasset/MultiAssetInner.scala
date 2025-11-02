@@ -7,8 +7,9 @@ import spire.math.{Rational, SafeLong}
 import spire.implicits.{additiveGroupOps, additiveSemigroupOps, rms, seqOps, toRational, vectorSpaceOps, IntAlgebra}
 
 import scala.annotation.targetName
-
 import Multiset.*
+
+import scala.collection.immutable.SortedMap
 
 private object MultiAssetInner {
 
@@ -23,7 +24,10 @@ private object MultiAssetInner {
 
         opaque type Inner = Multiset[AssetName, Coin, vAlgebra.type, Order[AssetName]]
 
-        def apply(m: Multiset[AssetName, Coin, vAlgebra.type, Order[AssetName]]): Inner = m
+        def from(m: Multiset[AssetName, Coin, vAlgebra.type, Order[AssetName]]): Inner = m
+
+        def apply(sortedMap: SortedMap[AssetName, Coin]): Inner =
+            Multiset(sortedMap)(using vMonoid = vAlgebra)
 
         def empty: Inner = Multiset.empty(using vMonoid = vAlgebra)
         def zero: Inner = empty
@@ -34,10 +38,10 @@ private object MultiAssetInner {
             def get(assetName: AssetName): Coin = underlying.get(assetName)
 
             @targetName("negate")
-            infix def unary_- : Unbounded = Unbounded(self.mapValues(-_))
+            infix def unary_- : Unbounded = Unbounded.from(self.mapValues(-_))
 
             @targetName("addCoerce_Inner")
-            infix def +~(other: Inner): Unbounded = Unbounded(
+            infix def +~(other: Inner): Unbounded = Unbounded.from(
               Multiset.combineWith(self, other)(_ +~ _)(using
                 vSelfMonoid = vAlgebra,
                 vOtherMonoid = vAlgebra
@@ -45,17 +49,17 @@ private object MultiAssetInner {
             )
 
             @targetName("addCoerce_Unbounded")
-            infix def +~(other: Unbounded): Unbounded = Unbounded(
+            infix def +~(other: Unbounded): Unbounded = Unbounded.from(
               Multiset.combineWith(self, other.underlying)(_ +~ _)(using vSelfMonoid = vAlgebra)
             )
 
             @targetName("addCoerce_Fractional")
-            infix def +~(other: Fractional): Fractional = Fractional(
+            infix def +~(other: Fractional): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ +~ _)(using vSelfMonoid = vAlgebra)
             )
 
             @targetName("subtractCoerce_Inner")
-            infix def -~(other: Inner): Unbounded = Unbounded(
+            infix def -~(other: Inner): Unbounded = Unbounded.from(
               Multiset.combineWith(self, other)(_ -~ _)(using
                 vSelfMonoid = vAlgebra,
                 vOtherMonoid = vAlgebra
@@ -63,26 +67,26 @@ private object MultiAssetInner {
             )
 
             @targetName("subtractCoerce_Unbounded")
-            infix def -~(other: Unbounded): Unbounded = Unbounded(
+            infix def -~(other: Unbounded): Unbounded = Unbounded.from(
               Multiset.combineWith(self, other.underlying)(_ -~ _)(using vSelfMonoid = vAlgebra)
             )
 
             @targetName("subtractCoerce_Fractional")
-            infix def -~(other: Fractional): Fractional = Fractional(
+            infix def -~(other: Fractional): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ -~ _)(using vSelfMonoid = vAlgebra)
             )
 
             @targetName("scale")
-            infix def *~(c: SafeLong): Unbounded = Unbounded(self.mapValues(_ *~ c))
+            infix def *~(c: SafeLong): Unbounded = Unbounded.from(self.mapValues(_ *~ c))
 
             @targetName("scale")
-            infix def *~(c: Rational): Fractional = Fractional(self.mapValues(_ *~ c))
+            infix def *~(c: Rational): Fractional = Fractional.from(self.mapValues(_ *~ c))
 
             @targetName("div")
-            infix def /~(c: SafeLong): Fractional = Fractional(self.mapValues(_ /~ c))
+            infix def /~(c: SafeLong): Fractional = Fractional.from(self.mapValues(_ /~ c))
 
             @targetName("div")
-            infix def /~(c: Rational): Fractional = Fractional(self.mapValues(_ /~ c))
+            infix def /~(c: Rational): Fractional = Fractional.from(self.mapValues(_ /~ c))
 
         extension (self: Iterable[Inner])
             def multiAssetSum: Unbounded = self.foldRight(Unbounded.empty)(_ +~ _)
@@ -149,9 +153,11 @@ private object MultiAssetInner {
         opaque type Unbounded =
             Multiset[AssetName, Coin.Unbounded, vAlgebra.type, Order[AssetName]]
 
-        def apply(
+        def from(
             m: Multiset[AssetName, Coin.Unbounded, vAlgebra.type, Order[AssetName]]
         ): Unbounded = m
+
+        def apply(sortedMap: SortedMap[AssetName, Coin.Unbounded]): Unbounded = Multiset(sortedMap)
 
         def empty: Unbounded = Multiset.empty
         def zero: Unbounded = empty
@@ -169,7 +175,7 @@ private object MultiAssetInner {
                     case e: Inner.ArithmeticError => Left(e)
                 }
 
-            def unsafeToInner: Inner = Inner(
+            def unsafeToInner: Inner = Inner.from(
               self.mapValuesIndexed((assetName: AssetName, coinUnbounded: Coin.Unbounded) =>
                   try {
                       coinUnbounded.unsafeToCoin
@@ -181,10 +187,10 @@ private object MultiAssetInner {
             )
 
             def toFractional: Fractional =
-                Fractional(self.mapValues(_.toFractional))
+                Fractional.from(self.mapValues(_.toFractional))
 
             @targetName("addCoerce_Inner")
-            infix def +~(other: Inner): Unbounded = Unbounded(
+            infix def +~(other: Inner): Unbounded = Unbounded.from(
               Multiset.combineWith(self, other.underlying)(_ +~ _)(using
                 vOtherMonoid = Coin.AlgebraFull
               )
@@ -194,12 +200,12 @@ private object MultiAssetInner {
             infix def +~(other: Unbounded): Unbounded = self + other
 
             @targetName("addCoerce_Fractional")
-            infix def +~(other: Fractional): Fractional = Fractional(
+            infix def +~(other: Fractional): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ +~ _)
             )
 
             @targetName("subtractCoerce_Inner")
-            infix def -~(other: Inner): Unbounded = Unbounded(
+            infix def -~(other: Inner): Unbounded = Unbounded.from(
               Multiset.combineWith(self, other.underlying)(_ -~ _)(using
                 vOtherMonoid = Coin.AlgebraFull
               )
@@ -209,7 +215,7 @@ private object MultiAssetInner {
             infix def -~(other: Unbounded): Unbounded = self - other
 
             @targetName("subtractCoerce_Fractional")
-            infix def -~(other: Fractional): Fractional = Fractional(
+            infix def -~(other: Fractional): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ -~ _)
             )
 
@@ -217,13 +223,13 @@ private object MultiAssetInner {
             infix def *~(c: SafeLong): Unbounded = self :* c
 
             @targetName("scale")
-            infix def *~(c: Rational): Fractional = Fractional(self.mapValues(_ *~ c))
+            infix def *~(c: Rational): Fractional = Fractional.from(self.mapValues(_ *~ c))
 
             @targetName("div")
-            infix def /~(c: SafeLong): Fractional = Fractional(self.mapValues(_ /~ c))
+            infix def /~(c: SafeLong): Fractional = Fractional.from(self.mapValues(_ /~ c))
 
             @targetName("div")
-            infix def /~(c: Rational): Fractional = Fractional(self.mapValues(_ /~ c))
+            infix def /~(c: Rational): Fractional = Fractional.from(self.mapValues(_ /~ c))
 
         extension (self: Iterable[Unbounded]) def multiAssetSum: Unbounded = self.qsum
 
@@ -264,9 +270,13 @@ private object MultiAssetInner {
         opaque type Fractional =
             Multiset[AssetName, Coin.Fractional, vAlgebra.type, Order[AssetName]]
 
-        def apply(
+        def from(
             m: Multiset[AssetName, Coin.Fractional, vAlgebra.type, Order[AssetName]]
         ): Fractional = m
+
+        def apply(sortedMap: SortedMap[AssetName, Coin.Fractional]): Fractional = Multiset(
+          sortedMap
+        )
 
         def empty: Fractional = Multiset.empty
         def zero: Fractional = empty
@@ -279,7 +289,7 @@ private object MultiAssetInner {
             def get(assetName: AssetName): Coin.Fractional = underlying.get(assetName)
 
             def toUnbounded: Unbounded =
-                Unbounded(self.mapValues(_.toUnbounded))
+                Unbounded.from(self.mapValues(_.toUnbounded))
 
             def toInner: Either[Inner.ArithmeticError, Inner] =
                 try {
@@ -288,7 +298,7 @@ private object MultiAssetInner {
                     case e: Inner.ArithmeticError => Left(e)
                 }
 
-            def unsafeToInner: Inner = Inner(
+            def unsafeToInner: Inner = Inner.from(
               self.mapValuesIndexed((assetName: AssetName, coinFractional: Coin.Fractional) =>
                   try {
                       coinFractional.unsafeToCoin
@@ -300,14 +310,14 @@ private object MultiAssetInner {
             )
 
             @targetName("addCoerce_Inner")
-            infix def +~(other: Inner): Fractional = Fractional(
+            infix def +~(other: Inner): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ +~ _)(using
                 vOtherMonoid = Coin.AlgebraFull
               )
             )
 
             @targetName("addCoerce_Unbounded")
-            infix def +~(other: Unbounded): Fractional = Fractional(
+            infix def +~(other: Unbounded): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ +~ _)
             )
 
@@ -315,14 +325,14 @@ private object MultiAssetInner {
             infix def +~(other: Fractional): Fractional = self + other
 
             @targetName("subtractCoerce_Inner")
-            infix def -~(other: Inner): Fractional = Fractional(
+            infix def -~(other: Inner): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ -~ _)(using
                 vOtherMonoid = Coin.AlgebraFull
               )
             )
 
             @targetName("subtractCoerce_Unbounded")
-            infix def -~(other: Unbounded): Fractional = Fractional(
+            infix def -~(other: Unbounded): Fractional = Fractional.from(
               Multiset.combineWith(self, other.underlying)(_ -~ _)
             )
 
