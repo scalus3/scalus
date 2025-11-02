@@ -32,7 +32,8 @@ object Property extends Properties("Coin/MultiAsset/Value") {
         }
 
     property("Scale bounded multiasset by integral an inverse fractional") =
-        forAll(arbitrary[MultiAsset], arbitrary[SafeLong].suchThat(sl => sl != 0)) { (ma, i) =>
+        forAll(arbitrary[MultiAsset], arbitrary[SafeLong]) { (ma, i0) =>
+            val i = i0 + 1
             (ma *~ i /~ i).toMultiAsset === Right(ma)
         }
 }

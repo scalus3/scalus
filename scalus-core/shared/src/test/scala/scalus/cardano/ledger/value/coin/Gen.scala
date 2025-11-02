@@ -15,20 +15,18 @@ object Gen {
             for {
                 size <- Gen0.choose(minSize, maxSize)
                 result <- Gen0
-                    .containerOfN[List, Rational](size, gen.rational.suchThat(_ >= Rational(0)))
+                    .containerOfN[List, Rational](size, gen.rational.map(_.abs))
                     .suchThat(_.sum > 0)
             } yield NonEmptyList(result.head, result.tail)
     }
 
     def genBadRawWeights(minSize: Int = 0, maxSize: Int = 10): Gen0[NonEmptyList[Rational]] = {
-        import spire.compat.fractional
         if minSize < 1 || maxSize < 1 then throw IllegalArgumentException("Bad generator args")
         else
             for {
                 size <- Gen0.choose(minSize, maxSize)
                 result <- Gen0
-                    .containerOfN[List, Rational](size, gen.rational.suchThat(_ >= Rational(0)))
-                    .suchThat(_.sum > 0)
+                    .containerOfN[List, Rational](size, gen.rational)
             } yield NonEmptyList(result.head, result.tail)
     }
 
@@ -50,7 +48,7 @@ object Gen {
             Arbitrary(Arbitrary.arbitrary[SafeLong].map(Coin.Unbounded.apply))
 
         implicit val coinFractionalArb: Arbitrary[Coin.Fractional] =
-            Arbitrary(gen.rational.map(Coin.Fractional(_)))
+            Arbitrary(gen.rational.map(Coin.Fractional.apply))
 
         implicit val normalizedWeights: Arbitrary[Distribution.NormalizedWeights] =
             Arbitrary(genNormalizedWeights())
