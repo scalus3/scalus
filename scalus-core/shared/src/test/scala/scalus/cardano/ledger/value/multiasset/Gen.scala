@@ -8,7 +8,7 @@ import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
 import scalus.cardano.ledger.{AssetName, PolicyId}
 import scalus.cardano.ledger.value.coin.Gen.Arb.given
-import scalus.cardano.ledger.value.multiasset.lib.Multiset
+import scalus.cardano.ledger.value.multiasset.Multiset.*
 import spire.algebra.{AdditiveMonoid, Order}
 
 import scala.collection.immutable

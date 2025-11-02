@@ -5,7 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.AssetName
 import scalus.cardano.ledger.value.coin.Coin
 import scalus.cardano.ledger.value.multiasset.MultiAsset
-import scalus.cardano.ledger.value.multiasset.lib.Multiset
+import scalus.cardano.ledger.value.multiasset.Multiset.*
 import spire.algebra.{AdditiveMonoid, Order}
 import spire.laws.GroupLaws
 import spire.math.SafeLong

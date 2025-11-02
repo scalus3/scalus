@@ -1,7 +1,6 @@
 package scalus.cardano.ledger.value.multiasset
 
 import scalus.cardano.ledger.value.coin.Coin
-import scalus.cardano.ledger.value.multiasset.lib.Multiset
 import scalus.cardano.ledger.{AssetName, PolicyId}
 
 import spire.algebra.*
@@ -9,6 +8,8 @@ import spire.math.{Rational, SafeLong}
 import spire.implicits.{additiveGroupOps, additiveSemigroupOps, rms, seqOps, toRational, vectorSpaceOps, DoubleAlgebra}
 
 import scala.annotation.targetName
+
+import Multiset.*
 
 // ===================================
 // MultiAsset
