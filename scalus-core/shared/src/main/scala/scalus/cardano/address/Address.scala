@@ -389,7 +389,7 @@ case class StakeAddress(network: Network, payload: StakePayload) extends Address
 
     def keyHashOption: Option[AddrKeyHash | StakeKeyHash] = payload match
         case StakePayload.Stake(hash) => Some(hash)
-        case StakePayload.Script(_)   => None
+        case _                        => None
 
     def scriptHashOption: Option[ScriptHash] = payload match
         case StakePayload.Script(hash) => Some(hash)

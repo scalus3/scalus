@@ -12,7 +12,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program
 
 class TmpValidatorTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironment
+    private val env = TestUtil.testEnvironmentWithoutEvaluator
     private val compiledContract = TmpContract.debugCompiledContract
 
     private val address1 = TestUtil.createTestAddress("a" * 56)
@@ -69,13 +69,13 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
         (tx, result)
     }
 
-    private def runValidator(tx: Transaction, utxo: Utxos) = {
+    private def runValidator(tx: Transaction, utxos: Utxos) = {
         val scriptContext =
-            TestUtil.getScriptContextV3(tx, utxo, lockUtxo._1, RedeemerTag.Spend, env)
+            TestUtil.getScriptContextV3(tx, utxos, lockUtxo._1, RedeemerTag.Spend, env)
 
-        val allScripts = AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxo).toOption.get
+        val allScripts = AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
         val script = scriptAddress.scriptHashOption.flatMap(allScripts.get).get
-        val program = Program.fromCbor(script.script.bytes)
+        val program = Program.fromCborByteString(script.script)
 
         val result = program.runWithDebug(scriptContext)
 

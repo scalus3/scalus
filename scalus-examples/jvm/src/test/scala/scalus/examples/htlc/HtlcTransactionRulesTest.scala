@@ -13,7 +13,7 @@ import scalus.cardano.txbuilder.BuilderContext
 import scalus.cardano.ledger.rules.*
 
 class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironment
+    private val env = TestUtil.testEnvironmentWithoutEvaluator
     private val compiledContract = HtlcContract.debugCompiledContract
 
     private val committerAddress = TestUtil.createTestAddress("a" * 56)
@@ -29,9 +29,12 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     private val lockAmount: Long = 100_000_000L
     private val amount: Long = 50_000_000L
 
-    private val timeout: PosixTime = 1_745_261_347_000L
-    private val beforeTimeout: PosixTime = 1_745_261_346_000L
-    private val afterTimeout: PosixTime = 1_745_261_348_000L
+    private val slot: SlotNo = 10
+    private val beforeSlot: SlotNo = slot - 1
+    private val afterSlot: SlotNo = slot + 1
+    private val timeout: PosixTime = env.slotConfig.slotToTime(slot)
+    private val beforeTimeout: PosixTime = env.slotConfig.slotToTime(beforeSlot)
+    private val afterTimeout: PosixTime = env.slotConfig.slotToTime(afterSlot)
 
     private val validPreimage: ByteString = genByteStringOfN(32).sample.get
     private val wrongPreimage = genByteStringOfN(12).sample.get
@@ -64,80 +67,93 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         preimage: ByteString,
         receiverPkh: ByteString,
         time: PosixTime
-    ): Either[TransactionException, Unit] = {
+    ): Map[String, TransactionException] = {
         val wallet = TestUtil.createTestWallet(receiverAddress, amount)
         val context = BuilderContext(env, wallet)
-        val validityStartSlot =
-            CardanoInfo.mainnet.slotConfig.timeToSlot(time.toLong)
         val tx = new Transactions(context, compiledContract)
-            .reveal(htlcUtxo, preimage, receiverAddress, receiverPkh, validityStartSlot)
+            .reveal(htlcUtxo, preimage, receiverAddress, receiverPkh, time)
             .toOption
             .get
 
         val utxos: Utxos = Map(htlcUtxo) ++ wallet.utxo
-        CardanoMutator.transit(Context.testMainnet(), State(utxos = utxos), tx).map(_ => ())
+        runValidator(tx, utxos, time)
     }
 
     private def timeoutHtlc(
         committerPkh: ByteString,
         time: PosixTime
-    ): Either[TransactionException, Unit] = {
+    ): Map[String, TransactionException] = {
         val wallet = TestUtil.createTestWallet(committerAddress, amount)
         val context = BuilderContext(env, wallet)
-        val validityStartSlot =
-            CardanoInfo.mainnet.slotConfig.timeToSlot(time.toLong)
         val tx = new Transactions(context, compiledContract)
-            .timeout(htlcUtxo, committerAddress, committerPkh, validityStartSlot)
+            .timeout(htlcUtxo, committerAddress, committerPkh, time)
             .toOption
             .get
 
         val utxos: Utxos = Map(htlcUtxo) ++ wallet.utxo
-        CardanoMutator.transit(Context.testMainnet(), State(utxos = utxos), tx).map(_ => ())
+        runValidator(tx, utxos, time)
+    }
+
+    private def runValidator(
+        tx: Transaction,
+        utxos: Utxos,
+        time: PosixTime
+    ): Map[String, TransactionException] = {
+        CardanoMutator.allSTSs.view
+            .mapValues(v =>
+                v.apply(
+                  Context.testMainnet(env.slotConfig.timeToSlot(time.toLong)),
+                  State(utxos = utxos),
+                  tx
+                )
+            )
+            .filter(_._2.isLeft)
+            .mapValues(_.swap.toOption.get)
+            .toMap
     }
 
     ignore("receiver reveals preimage before timeout") {
         val result = revealHtlc(validPreimage, receiverPkh, beforeTimeout)
-//        println(result)
-        assert(result.isRight)
+        assert(result.isEmpty)
     }
 
     ignore("receiver fails with wrong preimage") {
         val result = revealHtlc(wrongPreimage, receiverPkh, beforeTimeout)
 
-        assert(result.isLeft)
+        assert(result.nonEmpty)
 //        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverPreimage))
     }
 
     ignore("receiver fails with wrong receiver pubkey hash") {
         val result = revealHtlc(validPreimage, wrongReceiverPkh, beforeTimeout)
 
-        assert(result.isLeft)
+        assert(result.nonEmpty)
 //        assert(result.logs.last.contains(HtlcValidator.UnsignedReceiverTransaction))
     }
 
     ignore("receiver fails after timeout") {
         val result = revealHtlc(validPreimage, receiverPkh, afterTimeout)
 
-        assert(result.isLeft)
+        assert(result.nonEmpty)
 //        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverTimePoint))
     }
 
     ignore("committer reclaims after timeout") {
         val result = timeoutHtlc(committerPkh, afterTimeout)
-        assert(result.isRight)
+        assert(result.isEmpty)
     }
 
     ignore("committer fails before timeout") {
         val result = timeoutHtlc(committerPkh, beforeTimeout)
 
-        assert(result.isLeft)
+        assert(result.nonEmpty)
 //        assert(result.logs.last.contains(HtlcValidator.InvalidCommitterTimePoint))
     }
 
     ignore("committer fails with wrong committer pubkey hash") {
         val result = timeoutHtlc(wrongCommitterPkh, afterTimeout)
 
-        assert(result.isLeft)
+        assert(result.nonEmpty)
 //        assert(result.logs.last.contains(HtlcValidator.UnsignedCommitterTransaction))
     }
 }

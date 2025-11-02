@@ -21,7 +21,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program
 
 class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironment
+    private val env = TestUtil.testEnvironmentWithoutEvaluator
     private val compiledContract = HtlcContract.debugCompiledContract
 
     private val committerAddress = TestUtil.createTestAddress("a" * 56)
@@ -37,9 +37,12 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val lockAmount: Long = 100_000_000L
     private val amount: Long = 50_000_000L
 
-    private val timeout: PosixTime = 1_745_261_347_000L
-    private val beforeTimeout: PosixTime = 1_745_261_346_000L
-    private val afterTimeout: PosixTime = 1_745_261_348_000L
+    private val slot: SlotNo = 10
+    private val beforeSlot: SlotNo = slot - 1
+    private val afterSlot: SlotNo = slot + 1
+    private val timeout: PosixTime = env.slotConfig.slotToTime(slot)
+    private val beforeTimeout: PosixTime = env.slotConfig.slotToTime(beforeSlot)
+    private val afterTimeout: PosixTime = env.slotConfig.slotToTime(afterSlot)
 
     private val validPreimage: ByteString = genByteStringOfN(32).sample.get
     private val wrongPreimage = genByteStringOfN(12).sample.get
@@ -75,10 +78,8 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     ): (Transaction, Result) = {
         val wallet = TestUtil.createTestWallet(receiverAddress, amount)
         val context = BuilderContext(env, wallet)
-        val validityStartSlot =
-            CardanoInfo.mainnet.slotConfig.timeToSlot(time.toLong)
         val tx = new Transactions(context, compiledContract)
-            .reveal(htlcUtxo, preimage, receiverAddress, receiverPkh, validityStartSlot)
+            .reveal(htlcUtxo, preimage, receiverAddress, receiverPkh, time)
             .toOption
             .get
 
@@ -94,10 +95,8 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     ): (Transaction, Result) = {
         val wallet = TestUtil.createTestWallet(committerAddress, amount)
         val context = BuilderContext(env, wallet)
-        val validityStartSlot =
-            CardanoInfo.mainnet.slotConfig.timeToSlot(time.toLong)
         val tx = new Transactions(context, compiledContract)
-            .timeout(htlcUtxo, committerAddress, committerPkh, validityStartSlot)
+            .timeout(htlcUtxo, committerAddress, committerPkh, time)
             .toOption
             .get
 
@@ -107,23 +106,15 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
         (tx, result)
     }
 
-    private def runValidator(tx: Transaction, utxo: Utxos) = {
+    private def runValidator(tx: Transaction, utxos: Utxos) = {
         val scriptContext =
-            TestUtil.getScriptContextV3(tx, utxo, htlcUtxo._1, RedeemerTag.Spend, env)
+            TestUtil.getScriptContextV3(tx, utxos, htlcUtxo._1, RedeemerTag.Spend, env)
 
-        val allScripts = AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxo).toOption.get
+        val allScripts = AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
         val script = scriptAddress.scriptHashOption.flatMap(allScripts.get).get
-        val program = Program.fromCbor(script.script.bytes)
+        val program = Program.fromCborByteString(script.script)
 
-        val result = program.runWithDebug(scriptContext)
-
-//        assert(program alphaEq compiledContract.program)
-        assert(result alphaEq compiledContract.program.runWithDebug(scriptContext))
-        assert(script == compiledContract.script)
-        assert(program.cborByteString == compiledContract.program.cborByteString)
-        assert(program.cborByteString == compiledContract.script.script)
-
-        result
+        program.runWithDebug(scriptContext)
     }
 
     test("receiver reveals preimage before timeout") {

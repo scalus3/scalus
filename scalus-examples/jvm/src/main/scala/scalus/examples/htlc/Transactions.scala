@@ -37,7 +37,7 @@ class Transactions(
         preimage: Preimage,
         recipientAddress: Address,
         receiverPkh: PubKeyHash,
-        validityStartSlot: Long
+        time: PosixTime
     ): Either[String, Transaction] = {
         val (input, output) = lockedUtxo
         val redeemer = Action.Reveal(preimage).toData
@@ -47,6 +47,7 @@ class Transactions(
           datum = Datum.DatumInlined,
           additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(receiverPkh)))
         )
+        val validityStartSlot = context.env.slotConfig.timeToSlot(time.toLong)
 
         PaymentBuilder(context)
             .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockedUtxo), witness))
@@ -59,7 +60,7 @@ class Transactions(
         lockedUtxo: (TransactionInput, TransactionOutput),
         committerAddress: Address,
         committerPkh: PubKeyHash,
-        validityStartSlot: Long
+        time: PosixTime
     ): Either[String, Transaction] = {
         val (input, output) = lockedUtxo
         val redeemer = Action.Timeout.toData
@@ -69,6 +70,7 @@ class Transactions(
           datum = Datum.DatumInlined,
           additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(committerPkh)))
         )
+        val validityStartSlot = context.env.slotConfig.timeToSlot(time.toLong)
 
         PaymentBuilder(context)
             .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockedUtxo), witness))

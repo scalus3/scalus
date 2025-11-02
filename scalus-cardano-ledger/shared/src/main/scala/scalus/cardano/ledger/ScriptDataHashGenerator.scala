@@ -73,7 +73,7 @@ object ScriptDataHashGenerator {
       *
       * @param transaction
       *   The transaction to compute the script data hash for.
-      * @param utxo
+      * @param utxos
       *   The UTxO set to use for resolving inputs and reference inputs.
       * @param protocolParams
       *   The protocol parameters to use for getting the cost models.
@@ -83,7 +83,7 @@ object ScriptDataHashGenerator {
       */
     def computeScriptDataHash(
         transaction: Transaction,
-        utxo: Utxos,
+        utxos: Utxos,
         protocolParams: ProtocolParams
     ): Either[
       TransactionException.BadInputsUTxOException |
@@ -95,11 +95,11 @@ object ScriptDataHashGenerator {
         val datums = witnessSet.plutusData
 
         for
-            allNeededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(transaction, utxo)
+            allNeededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(transaction, utxos)
 
             allResolvedPlutusScripts <- AllResolvedScripts.allResolvedPlutusScriptsView(
               transaction,
-              utxo
+              utxos
             )
         yield
             val usedLanguages = TreeSet.from(

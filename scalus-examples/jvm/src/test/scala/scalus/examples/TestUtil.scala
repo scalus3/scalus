@@ -13,7 +13,7 @@ object TestUtil extends ScalusTest {
 
     val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
-    val testEnvironment: Environment = Environment(
+    val testEnvironmentWithoutEvaluator: Environment = Environment(
       protocolParams = testProtocolParams,
       slotConfig = CardanoInfo.mainnet.slotConfig,
       evaluator = (_: Transaction, _: Map[TransactionInput, TransactionOutput]) => Seq.empty,
@@ -126,7 +126,7 @@ object TestUtil extends ScalusTest {
         utxos: Utxos,
         input: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironment
+        environment: Environment = testEnvironmentWithoutEvaluator
     ): v3.ScriptContext = {
         val inputs = tx.body.value.inputs
         // assume 1 script input
@@ -162,7 +162,7 @@ object TestUtil extends ScalusTest {
         wallet: WalletTrait,
         scriptInput: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironment
+        environment: Environment = testEnvironmentWithoutEvaluator
     ) = {
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxo, scriptInput, redeemerTag, environment)
