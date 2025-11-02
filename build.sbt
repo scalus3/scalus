@@ -451,6 +451,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.1",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.4",
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test"
