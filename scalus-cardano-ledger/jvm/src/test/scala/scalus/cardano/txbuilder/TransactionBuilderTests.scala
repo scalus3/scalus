@@ -17,6 +17,8 @@ import scalus.cardano.ledger.Certificate.UnregCert
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.Timelock.AllOf
 import scalus.cardano.ledger.TransactionOutput.Babbage
+import scalus.cardano.ledger.TransactionWitnessSet.given
+import scalus.cardano.ledger.{Mint as TxBodyMint, *}
 import scalus.cardano.txbuilder.*
 import scalus.cardano.txbuilder.Datum.DatumInlined
 import scalus.cardano.txbuilder.RedeemerPurpose.{ForCert, ForMint}
@@ -26,11 +28,9 @@ import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TestPeer.Alice
 import scalus.cardano.txbuilder.TransactionBuilder.{build, Context, ResolvedUtxos, WitnessKind}
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint, *}
-import scalus.cardano.ledger.{Mint as TxBodyMint, *}
 import scalus.|>
-import TransactionWitnessSet.given
 
-import scala.collection.immutable.{SortedMap, SortedSet}
+import scala.collection.immutable.SortedMap
 
 class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
