@@ -38,23 +38,20 @@ private object Multiset {
         /** Apply a function to every value in the multiset's canonical map. */
         def mapValues[VNew, MNew <: AdditiveMonoid[VNew]](
             f: V => VNew
-        )(using vNewMonoid: MNew): Multiset[K, VNew, MNew, O] = {
+        )(using vNewMonoid: MNew): Multiset[K, VNew, MNew, O] =
             Multiset.apply(multiplicityMap.view.mapValues(f).to(SortedMap))
-        }
 
         /** Apply a function to every value in the canonical sorted map, exposing the value's key to
           * the function as an additional argument.
           */
         def mapValuesIndexed[VNew, MNew <: AdditiveMonoid[VNew]](
             f: (K, V) => VNew
-        )(using vNewMonoid: MNew): Multiset[K, VNew, MNew, O] = {
+        )(using vNewMonoid: MNew): Multiset[K, VNew, MNew, O] =
             def g(kv: (K, V)): (K, VNew) = (kv._1, f(kv._1, kv._2))
-
             Multiset.apply(multiplicityMap.view.map(g).to(SortedMap))
-        }
-        
+
         /** Filter the entries of the multiplicity map. */
-        def filter(f: ((K, V)) => Boolean): Multiset[K,V,M,O] =
+        def filter(f: ((K, V)) => Boolean): Multiset[K, V, M, O] =
             new Multiset(multiplicityMap.filter(f))
 
         def combineWith[
