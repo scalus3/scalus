@@ -633,6 +633,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.3.0" % "test",
+      libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.0" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.82" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.bitcoin-s" % "bitcoin-s-crypto_2.13" % "1.9.11" % "test",

@@ -3,6 +3,8 @@ package rules
 
 import scalus.cardano.address.Network
 
+import scala.annotation.threadUnsafe
+
 // It's mutable state for transient calculation
 class Context(
     var fee: Coin = Coin.zero,
@@ -27,7 +29,7 @@ case class State(
 case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network)
 object UtxoEnv {
     // TODO: remove
-    val default: UtxoEnv =
+    @threadUnsafe lazy val default: UtxoEnv =
 
         val params: ProtocolParams = ProtocolParams.fromBlockfrostJson(
           this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
