@@ -49,7 +49,7 @@ private[scalus] class ScalusUtxoResolver(
         }
 
         val allInputs =
-            transaction.body.value.inputs.toSortedSet.view ++ transaction.body.value.referenceInputs.toSortedSet.view
+            transaction.body.value.inputs.toSet.view ++ transaction.body.value.referenceInputs.toSet.view
         for input <- allInputs do
             if !utxos.contains(input) then
                 utxoSupplier.getTxOutput(input.transactionId.toHex, input.index).toScala match

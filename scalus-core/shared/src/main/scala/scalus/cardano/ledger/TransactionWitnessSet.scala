@@ -37,9 +37,9 @@ case class TransactionWitnessSet(
 ):
     /** Check if the witness set is empty */
     def isEmpty: Boolean =
-        vkeyWitnesses.toSortedSet.isEmpty &&
+        vkeyWitnesses.toSet.isEmpty &&
             nativeScripts.toMap.isEmpty &&
-            bootstrapWitnesses.toSortedSet.isEmpty &&
+            bootstrapWitnesses.toSet.isEmpty &&
             plutusV1Scripts.toMap.isEmpty &&
             plutusData.value.toMap.isEmpty &&
             redeemers.isEmpty &&
@@ -87,9 +87,9 @@ object TransactionWitnessSet:
             // Count the number of fields to write
             var mapSize = 0
 
-            if value.vkeyWitnesses.toSortedSet.nonEmpty then mapSize += 1
+            if value.vkeyWitnesses.toSet.nonEmpty then mapSize += 1
             if value.nativeScripts.toMap.nonEmpty then mapSize += 1
-            if value.bootstrapWitnesses.toSortedSet.nonEmpty then mapSize += 1
+            if value.bootstrapWitnesses.toSet.nonEmpty then mapSize += 1
             if value.plutusV1Scripts.toMap.nonEmpty then mapSize += 1
             if value.plutusData.value.toMap.nonEmpty then mapSize += 1
             if value.redeemers.isDefined then mapSize += 1
@@ -99,7 +99,7 @@ object TransactionWitnessSet:
             w.writeMapHeader(mapSize)
 
             // VKey witnesses (key 0)
-            if value.vkeyWitnesses.toSortedSet.nonEmpty then
+            if value.vkeyWitnesses.toSet.nonEmpty then
                 w.writeInt(0)
                 w.write(value.vkeyWitnesses)
 
@@ -109,7 +109,7 @@ object TransactionWitnessSet:
                 w.write(value.nativeScripts)
 
             // Bootstrap witnesses (key 2)
-            if value.bootstrapWitnesses.toSortedSet.nonEmpty then
+            if value.bootstrapWitnesses.toSet.nonEmpty then
                 w.writeInt(2)
                 w.write(value.bootstrapWitnesses)
 

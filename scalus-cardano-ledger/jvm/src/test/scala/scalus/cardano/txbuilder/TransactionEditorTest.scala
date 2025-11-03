@@ -17,7 +17,7 @@ private def addInput(input: TransactionInput): Transaction => Transaction =
         .refocus(_.inputs)
         .modify((is: TaggedSortedSet[TransactionInput]) =>
             TaggedSortedSet.from(
-              is.toSortedSet + input
+              is.toSet + input
             )
         )
 

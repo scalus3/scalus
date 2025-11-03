@@ -95,8 +95,8 @@ object RedeemersContext {
             /** Certificates for delegation, stake operations, etc. */
             certificates: TaggedSet[Certificate] = TaggedSet.empty,
            */
-          certs = body.certificates.toIndexedSeq.toVector,
-          proposals = body.proposalProcedures.toIndexedSeq.toVector,
+          certs = body.certificates.toSeq.toVector,
+          proposals = body.proposalProcedures.toSeq.toVector,
           voters = body.votingProcedures match {
               case Some(voters) =>
                   voters.procedures.keys.toVector

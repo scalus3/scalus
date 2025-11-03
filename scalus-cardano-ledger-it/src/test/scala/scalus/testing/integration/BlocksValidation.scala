@@ -515,7 +515,7 @@ class BlocksValidation extends AnyFunSuite {
                         .zip(block.transactionWitnessSets)
                     case (scriptHash, native) <- w.nativeScripts.toMap
                 do
-                    val keyHashes = w.vkeyWitnesses.toSortedSet.map { w =>
+                    val keyHashes = w.vkeyWitnesses.toSet.map { w =>
                         val key = w.vkey
                         AddrKeyHash(platform.blake2b_224(key))
                     }
@@ -634,7 +634,7 @@ class BlocksValidation extends AnyFunSuite {
             block.transactionWitnessSets.exists { _.plutusV2Scripts.toMap.nonEmpty } &&
             block.transactionWitnessSets.exists { _.plutusV3Scripts.toMap.nonEmpty } &&
             block.transactionWitnessSets.exists { _.nativeScripts.toMap.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSortedSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSet.nonEmpty } &&
             block.transactionWitnessSets.exists { _.plutusData.value.toMap.nonEmpty }
         }
         println(s"Interesting blocks ${interestingBlocks.size} of ${blocks.size}")

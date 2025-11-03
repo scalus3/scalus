@@ -41,7 +41,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                 // TODO full transition
                 success(
                   state.copy(
-                    utxos = state.utxos -- event.body.value.inputs.toSortedSet ++ addedUtxo,
+                    utxos = state.utxos -- event.body.value.inputs.toSet ++ addedUtxo,
                     fees = state.fees + event.body.value.fee,
                     donation = state.donation + event.body.value.donation.getOrElse(Coin.zero)
                   )
@@ -73,7 +73,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                         .map(v => v.value.value.coin)
                         .getOrElse(Coin.zero)
 
-                    val collateralCoins = event.body.value.collateralInputs.toSortedSet.view
+                    val collateralCoins = event.body.value.collateralInputs.toSet.view
                         .map { input =>
                             utxo.get(input) match {
                                 case Some(output) => output.value.coin
@@ -92,8 +92,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                     // TODO full transition
                     success(
                       state.copy(
-                        utxos =
-                            state.utxos -- event.body.value.collateralInputs.toSortedSet ++ addedUtxo,
+                        utxos = state.utxos -- event.body.value.collateralInputs.toSet ++ addedUtxo,
                         fees = state.fees + (collateralCoins - collateralReturnCoins)
                       )
                     )

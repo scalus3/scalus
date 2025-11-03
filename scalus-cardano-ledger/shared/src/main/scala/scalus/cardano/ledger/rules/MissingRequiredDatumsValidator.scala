@@ -67,7 +67,7 @@ object MissingRequiredDatumsValidator extends STS.Validator {
         val txInsNoDataHash = mutable.Set.empty[TransactionInput]
 
         for {
-            input <- txBody.inputs.toSortedSet
+            input <- txBody.inputs.toSet
             resolvedInput <- utxo.get(input)
             if isTwoPhaseScriptAddress(resolvedInput.address, scriptsProvided)
         } do {

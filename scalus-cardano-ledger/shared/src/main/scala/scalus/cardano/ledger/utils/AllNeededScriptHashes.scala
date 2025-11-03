@@ -43,7 +43,7 @@ object AllNeededScriptHashes {
       (Int, ScriptHash, TransactionOutput)
     ]] = boundary {
         val transactionId = transaction.id
-        val inputs = transaction.body.value.inputs.toSortedSet.view
+        val inputs = transaction.body.value.inputs.toSet.view
 
         val result = for
             (input, index) <- inputs.zipWithIndex
@@ -177,7 +177,7 @@ object AllNeededScriptHashes {
     def allNeededProposalProceduresScriptIndexHashesView(
         transaction: Transaction
     ): View[(Int, ScriptHash)] = {
-        val govActions = transaction.body.value.proposalProcedures.toIndexedSeq.view
+        val govActions = transaction.body.value.proposalProcedures.toSeq.view
             .map(_.govAction)
 
         for
@@ -208,7 +208,7 @@ object AllNeededScriptHashes {
         transaction: Transaction
     ): View[(Int, ScriptHash)] = {
         // FIXME: should be sorted
-        val certificates = transaction.body.value.certificates.toIndexedSeq.view
+        val certificates = transaction.body.value.certificates.toSeq.view
 
         for
             (certificate, index) <- certificates.zipWithIndex

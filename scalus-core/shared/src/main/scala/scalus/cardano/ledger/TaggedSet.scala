@@ -1,6 +1,8 @@
 package scalus.cardano.ledger
 
-import io.bullet.borer.{DataItem, Decoder, Encoder, Reader, Tag, Writer}
+import io.bullet.borer.{Decoder, Encoder}
+
+import scala.collection.immutable.ListSet
 
 /** Represents a tagged set, which is an indexed sequence of elements with a tag.
   *
@@ -19,44 +21,16 @@ import io.bullet.borer.{DataItem, Decoder, Encoder, Reader, Tag, Writer}
   * Important: This implementation allows duplicates in input (i.e. does not throw exception) and
   * keeps order of data (does not sort) .
   */
-opaque type TaggedSet[+A] = IndexedSeq[A]
-object TaggedSet {
-    inline def empty[A]: TaggedSet[A] = IndexedSeq.empty[A]
+opaque type TaggedSet[A] = IndexedSeq[A]
+object TaggedSet extends TaggedSeq {
+    inline def apply[A](elems: A*): TaggedSet[A] = from(elems)
+    inline def empty[A]: TaggedSet[A] = IndexedSeq.empty
+    inline def from[A](a: IterableOnce[A]): TaggedSet[A] = ListSet.from(a).toIndexedSeq
 
-    extension [A](s: TaggedSet[A]) {
+    extension [A](s: TaggedSet[A])
+        inline def toSeq: IndexedSeq[A] = s
+        inline def toSet: Set[A] = ListSet.from(s)
 
-        /** Converts a `TaggedSet` to an `IndexedSeq` */
-        inline def toIndexedSeq: IndexedSeq[A] = s
-    }
-
-    inline def apply[A](s: IndexedSeq[A]): TaggedSet[A] = from(s)
-
-    /** Creates a `TaggedSet` with the specified elements.
-      * @tparam A
-      *   the type of the `TaggedSet`'s elements
-      * @param elems
-      *   the elements of the created `TaggedSet`
-      * @return
-      *   a new `TaggedSet` with elements `elems`
-      */
-    def apply[A](elems: A*): TaggedSet[A] = from(elems)
-
-    def from[A](it: IterableOnce[A]): TaggedSet[A] = Set.from(it).toIndexedSeq
-
-    given [A: Encoder]: Encoder[TaggedSet[A]] with
-        def write(w: Writer, value: TaggedSet[A]): Writer = {
-            w.writeTag(Tag.Other(258))
-            w.writeArrayHeader(value.size)
-            value.foreach(w.write(_))
-            w
-        }
-
-    given [A: Decoder]: Decoder[TaggedSet[A]] with
-        def read(r: Reader): TaggedSet[A] = {
-            // Check for indefinite array tag (258)
-            if r.dataItem() == DataItem.Tag then
-                val tag = r.readTag()
-                if tag.code != 258 then r.validationFailure(s"Expected tag 258, got $tag")
-            from(Decoder.fromFactory[A, IndexedSeq].read(r))
-        }
+    given [A: Encoder]: Encoder[TaggedSet[A]] = writeTagged(_, _)
+    given [A: Decoder]: Decoder[TaggedSet[A]] = r => from(readTagged(r))
 }

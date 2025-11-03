@@ -20,7 +20,7 @@ object InputsAndReferenceInputsDisjointValidator extends STS.Validator {
 
         val inputs = body.inputs
         val referenceInputs = body.referenceInputs
-        val intersection = inputs.toSortedSet.intersect(referenceInputs.toSortedSet)
+        val intersection = inputs.toSet.intersect(referenceInputs.toSet)
 
         if intersection.nonEmpty then
             return failure(

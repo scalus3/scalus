@@ -1245,7 +1245,7 @@ object TransactionBuilder:
                   .refocus(_.certificates)
                   .modify(certificates =>
                       TaggedOrderedSet.from(
-                        appendDistinct(issueCertificate.cert, certificates.toIndexedSeq)
+                        appendDistinct(issueCertificate.cert, certificates.toSeq)
                       )
                   )
             )
@@ -1399,7 +1399,7 @@ object TransactionBuilder:
                   .refocus(_.proposalProcedures)
                   .modify(proposals =>
                       TaggedOrderedSet.from(
-                        appendDistinct(submitProposal.proposal, proposals.toIndexedSeq)
+                        appendDistinct(submitProposal.proposal, proposals.toSeq)
                       )
                   )
             )
@@ -1740,7 +1740,7 @@ object TransactionBuilder:
         for {
             state <- get0
             _ <-
-                if (state.transaction.body.value.inputs.toSortedSet ++ state.transaction.body.value.referenceInputs.toSortedSet)
+                if (state.transaction.body.value.inputs.toSet ++ state.transaction.body.value.referenceInputs.toSet)
                         .contains(input)
                 then liftF0(Left(InputAlreadyExists(input, step)))
                 else pure0(())
@@ -1757,7 +1757,7 @@ object TransactionBuilder:
                   .refocus(_.requiredSigners)
                   .modify((s: TaggedSortedSet[AddrKeyHash]) =>
                       TaggedSortedSet.from(
-                        s.toSortedSet ++ additionalSigners.map(_.hash)
+                        s.toSet ++ additionalSigners.map(_.hash)
                       )
                   )
             )
@@ -2144,7 +2144,7 @@ def txBodyL: Lens[Transaction, TransactionBody] = {
 /** add at most 256 keys */
 def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
     tx.focus(_.witnessSet.vkeyWitnesses)
-        .modify(s => TaggedSortedSet.from(s.toSortedSet ++ generateUniqueKeys(numberOfKeys)))
+        .modify(s => TaggedSortedSet.from(s.toSet ++ generateUniqueKeys(numberOfKeys)))
 }
 
 /** remove at most 256 keys, must be used in conjunction with addDummyVKeys */
@@ -2153,7 +2153,7 @@ def removeDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
       tx,
       ws =>
           ws.copy(vkeyWitnesses =
-              TaggedSortedSet.from(ws.vkeyWitnesses.toSortedSet -- generateUniqueKeys(numberOfKeys))
+              TaggedSortedSet.from(ws.vkeyWitnesses.toSet -- generateUniqueKeys(numberOfKeys))
           )
     )
 }

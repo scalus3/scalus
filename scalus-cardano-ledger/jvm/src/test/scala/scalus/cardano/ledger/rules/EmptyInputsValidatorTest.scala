@@ -22,7 +22,7 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val result = EmptyInputsValidator.validate(context, state, transaction)
         assert(result.isRight)
-        assert(transaction.body.value.inputs.toSortedSet.nonEmpty)
+        assert(transaction.body.value.inputs.toSet.nonEmpty)
     }
 
     test("EmptyInputsValidator rule failure") {
@@ -41,6 +41,6 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val result = EmptyInputsValidator.validate(context, state, transaction)
         assert(result.isLeft)
-        assert(transaction.body.value.inputs.toSortedSet.isEmpty)
+        assert(transaction.body.value.inputs.toSet.isEmpty)
     }
 }

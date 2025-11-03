@@ -44,7 +44,7 @@ private[scalus] class ResourcesUtxoResolver {
         // Initialize UTXOs with provided input UTXOs
         val utxos = mutable.HashMap[TransactionInput, TransactionOutput]()
         val allInputs =
-            transaction.body.value.inputs.toSortedSet.view ++ transaction.body.value.referenceInputs.toSortedSet.view
+            transaction.body.value.inputs.toSet.view ++ transaction.body.value.referenceInputs.toSet.view
         for input <- allInputs do
             if !utxos.contains(input) then {
                 val stream = getClass.getResourceAsStream(
@@ -93,7 +93,7 @@ private[scalus] class ResourcesUtxoResolver {
 
     def copyToResources(transaction: Transaction): Unit = {
         val allInputs =
-            transaction.body.value.inputs.toSortedSet.view ++ transaction.body.value.referenceInputs.toSortedSet.view
+            transaction.body.value.inputs.toSet.view ++ transaction.body.value.referenceInputs.toSet.view
         for input <- allInputs do
             val file = Path.of(s"utxos/${input.transactionId.toHex}-${input.index}")
             if !file.toFile.exists() then

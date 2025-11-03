@@ -46,7 +46,7 @@ object AllNeededKeyHashes {
     ): Either[TransactionException.BadInputsUTxOException, Set[AddrKeyHash | StakeKeyHash]] = {
         neededInputsKeyHashes(
           transaction.id,
-          transaction.body.value.inputs.toSortedSet,
+          transaction.body.value.inputs.toSet,
           utxo,
           TransactionException.BadInputsUTxOException(_)
         )
@@ -60,7 +60,7 @@ object AllNeededKeyHashes {
     ]] = {
         neededInputsKeyHashes(
           transaction.id,
-          transaction.body.value.collateralInputs.toSortedSet,
+          transaction.body.value.collateralInputs.toSet,
           utxo,
           TransactionException.BadCollateralInputsUTxOException(_)
         )
@@ -112,14 +112,14 @@ object AllNeededKeyHashes {
     ): View[AddrKeyHash | PoolKeyHash] = {
         val certificates = transaction.body.value.certificates
         for
-            certificate <- certificates.toIndexedSeq.view
+            certificate <- certificates.toSeq.view
             keyHashes <- certificate.keyHashes
         yield keyHashes
     }
 
     def allNeededRequiredSignersKeyHashes(
         transaction: Transaction
-    ): Set[AddrKeyHash] = transaction.body.value.requiredSigners.toSortedSet
+    ): Set[AddrKeyHash] = transaction.body.value.requiredSigners.toSet
 
     private def neededInputsKeyHashes[
         ExceptionT <: TransactionException.BadInputsUTxOException |

@@ -41,7 +41,7 @@ object FeesOkValidator extends STS.Validator {
                       notVKeyAddressCollaterals,
                       notOnlyADACollaterals,
                       totalSumOfCollaterals
-                    ) = collateralInputs.toSortedSet.view
+                    ) = collateralInputs.toSet.view
                         .map { collateralInput =>
                             utxo.get(collateralInput) match
                                 case Some(collateralOutput) => collateralInput -> collateralOutput
@@ -230,7 +230,7 @@ object FeesOkValidator extends STS.Validator {
     private def isAtLeastOneCollateralInput(
         event: Event
     ): Result = {
-        if event.body.value.collateralInputs.toSortedSet.isEmpty then
+        if event.body.value.collateralInputs.toSet.isEmpty then
             failure(
               TransactionException.NoCollateralInputsException(event.id)
             )
