@@ -4,10 +4,9 @@ import org.scalacheck.Test.Parameters
 import org.scalacheck.{Arbitrary, Prop, Properties}
 import scalus.cardano.ledger.value.multiasset.MultiAsset
 import spire.syntax.all.*
-import spire.laws.arb.given
-import spire.math.SafeLong
 import Arbitrary.arbitrary
 import Gen.Arb.given
+import scalus.cardano.ledger.value.coin.Gen.genNonZeroSafeLong
 import Prop.forAll
 import cats.implicits.catsSyntaxEither
 
@@ -32,8 +31,7 @@ object Property extends Properties("Coin/MultiAsset/Value") {
         }
 
     property("Scale bounded multiasset by integral an inverse fractional") =
-        forAll(arbitrary[MultiAsset], arbitrary[SafeLong]) { (ma, i0) =>
-            val i = i0.abs + 1
+        forAll(arbitrary[MultiAsset], genNonZeroSafeLong) { (ma, i) =>
             (ma *~ i /~ i).toMultiAsset === Right(ma)
         }
 }

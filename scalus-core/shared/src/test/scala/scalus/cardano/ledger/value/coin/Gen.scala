@@ -40,6 +40,11 @@ object Gen {
                 rawWeights <- genRawWeights(minSize, maxSize)
             } yield Distribution.unsafeNormalizeWeights(rawWeights)
 
+    def genNonZeroSafeLong: Gen0[SafeLong] =
+        for {
+            i <- Arbitrary.arbitrary[SafeLong]
+        } yield if i.isZero then i + 1 else i
+
     object Arb {
         implicit val coinArb: Arbitrary[Coin.Coin] =
             Arbitrary(Gen0.choose(0L, Long.MaxValue).map(Coin.unsafeApply))
