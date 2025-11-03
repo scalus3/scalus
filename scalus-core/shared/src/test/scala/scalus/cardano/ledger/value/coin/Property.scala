@@ -72,7 +72,7 @@ object Property extends Properties("Coin") {
     // Scaling round trips
     property("Scale bounded coin by integral and inverse fractional") =
         forAll(arbitrary[Coin], arbitrary[SafeLong]) { (coin, i0) =>
-            val i = i0 + 1
+            val i = i0.abs + 1
             (coin *~ i /~ i).toCoin === Right(coin)
         }
 
