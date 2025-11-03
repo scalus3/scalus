@@ -37,6 +37,12 @@ private object MultiAssetInner {
 
             def get(assetName: AssetName): Coin = underlying.get(assetName)
 
+            def filter(f: (assetName: AssetName, coin: Coin) => Boolean): Inner =
+                underlying.filter(f.tupled)
+
+            def filterCoins(f: (coin: Coin) => Boolean): Inner =
+                filter((_, c: Coin) => f(c))
+
             @targetName("negate")
             infix def unary_- : Unbounded = Unbounded.from(self.mapValues(-_))
 
@@ -166,8 +172,6 @@ private object MultiAssetInner {
             def underlying: Multiset[AssetName, Coin.Unbounded, vAlgebra.type, Order[AssetName]] =
                 self
 
-            def get(assetName: AssetName): Coin.Unbounded = underlying.get(assetName)
-
             def toInner: Either[Inner.ArithmeticError, Inner] =
                 try {
                     Right(self.unsafeToInner)
@@ -188,6 +192,18 @@ private object MultiAssetInner {
 
             def toFractional: Fractional =
                 Fractional.from(self.mapValues(_.toFractional))
+
+            def get(assetName: AssetName): Coin.Unbounded = underlying.get(assetName)
+
+            def filter(f: (assetName: AssetName, coin: Coin.Unbounded) => Boolean): Unbounded =
+                underlying.filter(f.tupled)
+
+            def filterCoins(f: (coin: Coin.Unbounded) => Boolean): Unbounded =
+                filter((_, c: Coin.Unbounded) => f(c))
+
+            def positives: Unbounded = filterCoins(_.underlying > 0)
+
+            def negatives: Unbounded = filterCoins(_.underlying < 0)
 
             @targetName("addCoerce_Inner")
             infix def +~(other: Inner): Unbounded = Unbounded.from(
@@ -286,8 +302,6 @@ private object MultiAssetInner {
               AssetName
             ]] = self
 
-            def get(assetName: AssetName): Coin.Fractional = underlying.get(assetName)
-
             def toUnbounded: Unbounded =
                 Unbounded.from(self.mapValues(_.toUnbounded))
 
@@ -308,6 +322,18 @@ private object MultiAssetInner {
                   }
               )(using vNewMonoid = Coin.AlgebraFull)
             )
+
+            def get(assetName: AssetName): Coin.Fractional = underlying.get(assetName)
+
+            def filter(f: (assetName: AssetName, coin: Coin.Fractional) => Boolean): Fractional =
+                underlying.filter(f.tupled)
+
+            def filterCoins(f: (coin: Coin.Fractional) => Boolean): Fractional =
+                filter((_, c: Coin.Fractional) => f(c))
+
+            def positives: Fractional = filterCoins(_.underlying > 0)
+
+            def negatives: Fractional = filterCoins(_.underlying < 0)
 
             @targetName("addCoerce_Inner")
             infix def +~(other: Inner): Fractional = Fractional.from(

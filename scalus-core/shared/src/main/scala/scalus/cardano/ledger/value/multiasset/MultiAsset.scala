@@ -43,6 +43,16 @@ object MultiAsset {
         def get(policyId: PolicyId, assetName: AssetName): Coin =
             underlying.get(policyId).get(assetName)
 
+        def filter(
+            f: (policyId: PolicyId) => (assetName: AssetName, coin: Coin) => Boolean
+        ): MultiAsset =
+            underlying.mapValuesIndexed((p: PolicyId, i: Inner) => i.filter(f(p)))(using
+              vNewMonoid = vAlgebra
+            )
+
+        def filterCoins(f: (coin: Coin) => Boolean): MultiAsset =
+            underlying.mapValues(_.filterCoins(f))(using vNewMonoid = vAlgebra)
+
         @targetName("negate")
         infix def unary_- : Unbounded = Unbounded.from(self.mapValues(-_))
 
@@ -209,11 +219,6 @@ private object MultiAssetVariant {
             def underlying: Multiset[PolicyId, Inner.Unbounded, vAlgebra.type, Order[PolicyId]] =
                 self
 
-            def get(policyId: PolicyId): Inner.Unbounded = underlying.get(policyId)
-
-            def get(policyId: PolicyId, assetName: AssetName): Coin.Unbounded =
-                underlying.get(policyId).get(assetName)
-
             def toMultiAsset: Either[MultiAsset.ArithmeticError, MultiAsset] =
                 try {
                     Right(self.unsafeToMultiAsset)
@@ -234,6 +239,23 @@ private object MultiAssetVariant {
 
             def toFractional: Fractional =
                 Fractional.from(self.mapValues(_.toFractional))
+
+            def get(policyId: PolicyId): Inner.Unbounded = underlying.get(policyId)
+
+            def get(policyId: PolicyId, assetName: AssetName): Coin.Unbounded =
+                underlying.get(policyId).get(assetName)
+
+            def filter(
+                f: (policyId: PolicyId) => (assetName: AssetName, coin: Coin.Unbounded) => Boolean
+            ): Unbounded =
+                underlying.mapValuesIndexed((p: PolicyId, i: Inner.Unbounded) => i.filter(f(p)))
+
+            def filterCoins(f: (coin: Coin.Unbounded) => Boolean): Unbounded =
+                underlying.mapValues(_.filterCoins(f))
+
+            def positives: Unbounded = underlying.mapValues(_.positives)
+
+            def negatives: Unbounded = underlying.mapValues(_.negatives)
 
             @targetName("addCoerce_Inner")
             infix def +~(other: MultiAsset): Unbounded = Unbounded.from(
@@ -337,11 +359,6 @@ private object MultiAssetVariant {
               PolicyId
             ]] = self
 
-            def get(policyId: PolicyId): Inner.Fractional = underlying.get(policyId)
-
-            def get(policyId: PolicyId, assetName: AssetName): Coin.Fractional =
-                underlying.get(policyId).get(assetName)
-
             def toUnbounded: Unbounded =
                 Unbounded.from(self.mapValues(_.toUnbounded))
 
@@ -362,6 +379,23 @@ private object MultiAssetVariant {
                   }
               )(using vNewMonoid = Inner.AlgebraFull)
             )
+
+            def get(policyId: PolicyId): Inner.Fractional = underlying.get(policyId)
+
+            def get(policyId: PolicyId, assetName: AssetName): Coin.Fractional =
+                underlying.get(policyId).get(assetName)
+
+            def filter(
+                f: (policyId: PolicyId) => (assetName: AssetName, coin: Coin.Fractional) => Boolean
+            ): Fractional =
+                underlying.mapValuesIndexed((p: PolicyId, i: Inner.Fractional) => i.filter(f(p)))
+
+            def filterCoins(f: (coin: Coin.Fractional) => Boolean): Fractional =
+                underlying.mapValues(_.filterCoins(f))
+
+            def positives: Fractional = underlying.mapValues(_.positives)
+
+            def negatives: Fractional = underlying.mapValues(_.negatives)
 
             @targetName("addCoerce_Inner")
             infix def +~(other: MultiAsset): Fractional = Fractional.from(

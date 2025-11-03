@@ -52,6 +52,10 @@ private object Multiset {
 
             Multiset.apply(multiplicityMap.view.map(g).to(SortedMap))
         }
+        
+        /** Filter the entries of the multiplicity map. */
+        def filter(f: ((K, V)) => Boolean): Multiset[K,V,M,O] =
+            new Multiset(multiplicityMap.filter(f))
 
         def combineWith[
             VOther,
