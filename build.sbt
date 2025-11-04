@@ -702,7 +702,7 @@ addCommandAlias(
 addCommandAlias("benchmark", "bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*")
 addCommandAlias(
   "benchmark-jit",
-  "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff bench/target/benchmark-jit.txt .*(JIT|Cek).*"
+  "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff last-bench-result.txt  .*(JIT|Cek).*"
 )
 addCommandAlias(
   "it",
