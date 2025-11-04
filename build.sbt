@@ -2,7 +2,8 @@ import sbt.internal.util.ManagedLogger
 import sbtwelcome.*
 
 import java.net.URI
-import scala.scalanative.build.*
+// TODO: Reactivate Scala Native when we remove `spire`
+//import scala.scalanative.build.*
 import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, MissingClassProblem, ProblemFilters}
 
 // =============================================================================
@@ -111,20 +112,21 @@ lazy val PluginDependency: List[Def.Setting[?]] = List(scalacOptions ++= {
 // =============================================================================
 // AGGREGATE PROJECTS
 // =============================================================================
-
 lazy val root: Project = project
     .in(file("."))
     .aggregate(
       scalusPlugin,
       scalus.js,
       scalus.jvm,
-      scalus.native,
+      // TODO: Reactivate Scala Native when we remove `spire`
+      // scalus.native,
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
       scalusCardanoLedger.js,
       scalusTestkit.js,
       scalusTestkit.jvm,
-      scalusTestkit.native,
+      // TODO: Reactivate Scala Native when we remove `spire`
+      // scalusTestkit.native,
       scalusExamples.js,
       scalusExamples.jvm,
       scalusDesignPatterns,
@@ -168,17 +170,17 @@ lazy val js: Project = project
     .settings(
       publish / skip := true
     )
-
 // all Native projects are aggregated in the native project just for convenience
-lazy val native: Project = project
-    .in(file("native"))
-    .aggregate(
-      scalus.native,
-      scalusTestkit.native,
-    )
-    .settings(
-      publish / skip := true
-    )
+// TODO: Reactivate Scala Native when we remove `spire`
+//lazy val native: Project = project
+//    .in(file("native"))
+//    .aggregate(
+//      scalus.native,
+//      scalusTestkit.native,
+//    )
+//    .settings(
+//      publish / skip := true
+//    )
 
 // =============================================================================
 // PROJECTS
@@ -275,7 +277,8 @@ lazy val scalusPluginTests = project
     )
 
 // Scalus Core and Standard Library for JVM and JS
-lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+// TODO: Reactivate Scala Native when we remove `spire`
+lazy val scalus = crossProject(JSPlatform, JVMPlatform)//, NativePlatform)
     .in(file("scalus-core"))
     .settings(
       name := "scalus",
@@ -350,14 +353,15 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       scalaJSUseMainModuleInitializer := false
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
-    .nativeSettings(
-      nativeConfig ~= {
-          _.withBuildTarget(BuildTarget.libraryStatic)
-//              .withLTO(LTO.thin)
-              .withMode(Mode.releaseFast)
-              .withGC(GC.immix)
-      }
-    )
+// TODO: Reactivate Scala Native when we remove `spire`
+//    .nativeSettings(
+//      nativeConfig ~= {
+//          _.withBuildTarget(BuildTarget.libraryStatic)
+////              .withLTO(LTO.thin)
+//              .withMode(Mode.releaseFast)
+//              .withGC(GC.immix)
+//      }
+//    )
 
 // Scalus UPLC JIT Compiler - experimental JIT compiler for UPLC
 lazy val scalusUplcJitCompiler = project
@@ -385,7 +389,8 @@ lazy val scalusUplcJitCompiler = project
     )
 
 // Scalus Testkit library for testing Scalus applications
-lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+// TODO: Reactivate Scala Native when we remove `spire`
+lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)//, NativePlatform)
     .in(file("scalus-testkit"))
     .dependsOn(scalus)
     .settings(
@@ -439,11 +444,12 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       scalaJSUseMainModuleInitializer := false
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
-    .nativeSettings(
-      nativeConfig ~= {
-          _.withBuildTarget(BuildTarget.libraryStatic)
-      }
-    )
+// TODO: Reactivate Scala Native when we remove `spire`
+//    .nativeSettings(
+//      nativeConfig ~= {
+//          _.withBuildTarget(BuildTarget.libraryStatic)
+//      }
+//    )
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
