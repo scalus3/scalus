@@ -1,0 +1,29 @@
+package scalus.cardano.node
+
+import scalus.cardano.ledger.*
+import scalus.cardano.address.Address
+
+trait Provider {
+    type Context
+
+    def submit(transaction: Transaction, context: Context): Either[RuntimeException, Unit]
+
+    def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo]
+
+    def findUtxos(inputs: Set[TransactionInput]): Either[RuntimeException, Utxos]
+
+    def findUtxo(
+        address: Address,
+        transactionId: Option[TransactionHash] = None,
+        datum: Option[DatumOption] = None,
+        minAmount: Option[Coin] = None
+    ): Either[RuntimeException, Utxo]
+
+    def findUtxos(
+        address: Address,
+        transactionId: Option[TransactionHash] = None,
+        datum: Option[DatumOption] = None,
+        minAmount: Option[Coin] = None,
+        minRequiredAmount: Option[Coin] = None
+    ): Either[RuntimeException, Utxos]
+}

@@ -68,9 +68,9 @@ trait ValidatorRulesTestKit extends ArbitraryInstances {
     protected def generateKeyPair(): (ByteString, ByteString) = {
         val asymmetricCipherKeyPair: AsymmetricCipherKeyPair = keyPairGenerator.generateKeyPair()
         val privateKeyParams: Ed25519PrivateKeyParameters =
-            asymmetricCipherKeyPair.getPrivate.asInstanceOf[Ed25519PrivateKeyParameters];
+            asymmetricCipherKeyPair.getPrivate.asInstanceOf[Ed25519PrivateKeyParameters]
         val publicKeyParams: Ed25519PublicKeyParameters =
-            asymmetricCipherKeyPair.getPublic.asInstanceOf[Ed25519PublicKeyParameters];
+            asymmetricCipherKeyPair.getPublic.asInstanceOf[Ed25519PublicKeyParameters]
         val privateKey: ByteString = ByteString.fromArray(privateKeyParams.getEncoded)
         val publicKey: ByteString = ByteString.fromArray(publicKeyParams.getEncoded)
         (privateKey, publicKey)

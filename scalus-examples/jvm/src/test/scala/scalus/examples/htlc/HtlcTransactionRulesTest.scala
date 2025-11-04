@@ -6,11 +6,11 @@ import scalus.testkit.ScalusTest
 import scalus.ledger.api.v1.PosixTime
 import scalus.builtin.ByteString
 import scalus.examples.TestUtil
-import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.builtin.ToData.*
 import scalus.cardano.txbuilder.BuilderContext
 import scalus.cardano.ledger.rules.*
+import scalus.cardano.node.LedgerProvider
 
 class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironmentWithoutEvaluator
@@ -18,6 +18,25 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
 
     private val committerAddress = TestUtil.createTestAddress("a" * 56)
     private val receiverAddress = TestUtil.createTestAddress("b" * 56)
+
+    private val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+    private val provider: LedgerProvider = LedgerProvider(
+      initialUtxos = Map(
+        TransactionInput(genesisHash, 0) ->
+            TransactionOutput.Babbage(
+              address = committerAddress,
+              value = Value.lovelace(1_000_000_000L)
+            ),
+        TransactionInput(genesisHash, 1) ->
+            TransactionOutput.Babbage(
+              address = receiverAddress,
+              value = Value.lovelace(1_000_000_000L)
+            )
+      ),
+      validators =
+          LedgerProvider.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
+      mutators = LedgerProvider.defaultMutators - PlutusScriptsTransactionMutator
+    )
 
     private val committerPkh = ByteString.fromArray(committerAddress.payment.asHash.bytes)
     private val receiverPkh = ByteString.fromArray(receiverAddress.payment.asHash.bytes)
@@ -40,8 +59,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     private val wrongPreimage = genByteStringOfN(12).sample.get
     private val validImage: ByteString = sha3_256(validPreimage)
 
-    private val scriptAddress =
-        Address(env.network, Credential.ScriptHash(compiledContract.script.scriptHash))
+    private val scriptAddress = compiledContract.address(env.network)
     private val datum = ContractDatum(
       committerPkh,
       receiverPkh,
@@ -50,110 +68,104 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     ).toData
 
     private val lockHtlc: Transaction = {
-        val wallet = TestUtil.createTestWallet(committerAddress, lockAmount + amount)
+        val wallet = TestUtil.createTestWallet(provider, committerAddress)
         val context = BuilderContext(env, wallet)
         val value = Value.lovelace(lockAmount)
-        new Transactions(context, compiledContract)
+
+        val tx = new Transactions(context, compiledContract)
             .lock(value, committerPkh, receiverPkh, validImage, timeout)
             .toOption
             .get
+
+        assert(provider.submit(tx, Context.testMainnet()).isRight)
+        tx
     }
 
-    private val htlcUtxo = TestUtil
-        .findUtxoByAddressAndDatum(lockHtlc, scriptAddress, Some(DatumOption.Inline(datum)))
+    private val htlcUtxo = provider
+        .findUtxo(
+          address = scriptAddress,
+          transactionId = Some(lockHtlc.id),
+          datum = Some(DatumOption.Inline(datum)),
+          minAmount = Some(Coin(lockAmount))
+        )
+        .toOption
         .get
+
+    assert(htlcUtxo._2.value.coin == Coin(lockAmount))
 
     private def revealHtlc(
         preimage: ByteString,
         receiverPkh: ByteString,
         time: PosixTime
-    ): Map[String, TransactionException] = {
-        val wallet = TestUtil.createTestWallet(receiverAddress, amount)
+    ): Either[RuntimeException, Unit] = {
+        val snapshot = provider.snapshot()
+        val wallet = TestUtil.createTestWallet(snapshot, receiverAddress)
         val context = BuilderContext(env, wallet)
         val tx = new Transactions(context, compiledContract)
             .reveal(htlcUtxo, preimage, receiverAddress, receiverPkh, time)
             .toOption
             .get
 
-        val utxos: Utxos = Map(htlcUtxo) ++ wallet.utxo
-        runValidator(tx, utxos, time)
+        snapshot.submit(tx, Context.testMainnet(env.slotConfig.timeToSlot(time.toLong)))
     }
 
     private def timeoutHtlc(
         committerPkh: ByteString,
         time: PosixTime
-    ): Map[String, TransactionException] = {
-        val wallet = TestUtil.createTestWallet(committerAddress, amount)
+    ): Either[RuntimeException, Unit] = {
+        val snapshot = provider.snapshot()
+        val wallet = TestUtil.createTestWallet(snapshot, committerAddress)
         val context = BuilderContext(env, wallet)
         val tx = new Transactions(context, compiledContract)
             .timeout(htlcUtxo, committerAddress, committerPkh, time)
             .toOption
             .get
 
-        val utxos: Utxos = Map(htlcUtxo) ++ wallet.utxo
-        runValidator(tx, utxos, time)
+        snapshot.submit(tx, Context.testMainnet(env.slotConfig.timeToSlot(time.toLong)))
     }
 
-    private def runValidator(
-        tx: Transaction,
-        utxos: Utxos,
-        time: PosixTime
-    ): Map[String, TransactionException] = {
-        CardanoMutator.allSTSs.view
-            .mapValues(v =>
-                v.apply(
-                  Context.testMainnet(env.slotConfig.timeToSlot(time.toLong)),
-                  State(utxos = utxos),
-                  tx
-                )
-            )
-            .filter(_._2.isLeft)
-            .mapValues(_.swap.toOption.get)
-            .toMap
-    }
-
-    ignore("receiver reveals preimage before timeout") {
+    test("receiver reveals preimage before timeout") {
         val result = revealHtlc(validPreimage, receiverPkh, beforeTimeout)
-        assert(result.isEmpty)
+        assert(result.isRight)
     }
 
-    ignore("receiver fails with wrong preimage") {
-        val result = revealHtlc(wrongPreimage, receiverPkh, beforeTimeout)
-
-        assert(result.nonEmpty)
-//        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverPreimage))
-    }
-
-    ignore("receiver fails with wrong receiver pubkey hash") {
-        val result = revealHtlc(validPreimage, wrongReceiverPkh, beforeTimeout)
-
-        assert(result.nonEmpty)
-//        assert(result.logs.last.contains(HtlcValidator.UnsignedReceiverTransaction))
-    }
-
-    ignore("receiver fails after timeout") {
-        val result = revealHtlc(validPreimage, receiverPkh, afterTimeout)
-
-        assert(result.nonEmpty)
-//        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverTimePoint))
-    }
-
-    ignore("committer reclaims after timeout") {
+//    ignore("receiver fails with wrong preimage") {
+//        val result = revealHtlc(wrongPreimage, receiverPkh, beforeTimeout)
+//
+//        assert(result.nonEmpty)
+////        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverPreimage))
+//    }
+//
+//    ignore("receiver fails with wrong receiver pubkey hash") {
+//        val result = revealHtlc(validPreimage, wrongReceiverPkh, beforeTimeout)
+//
+//        assert(result.nonEmpty)
+////        assert(result.logs.last.contains(HtlcValidator.UnsignedReceiverTransaction))
+//    }
+//
+//    ignore("receiver fails after timeout") {
+//        val result = revealHtlc(validPreimage, receiverPkh, afterTimeout)
+//
+//        assert(result.nonEmpty)
+////        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverTimePoint))
+//    }
+//
+    test("committer reclaims after timeout") {
         val result = timeoutHtlc(committerPkh, afterTimeout)
-        assert(result.isEmpty)
+        assert(result.isRight)
     }
-
-    ignore("committer fails before timeout") {
-        val result = timeoutHtlc(committerPkh, beforeTimeout)
-
-        assert(result.nonEmpty)
-//        assert(result.logs.last.contains(HtlcValidator.InvalidCommitterTimePoint))
-    }
-
-    ignore("committer fails with wrong committer pubkey hash") {
-        val result = timeoutHtlc(wrongCommitterPkh, afterTimeout)
-
-        assert(result.nonEmpty)
-//        assert(result.logs.last.contains(HtlcValidator.UnsignedCommitterTransaction))
-    }
+//
+//    ignore("committer fails before timeout") {
+//        val result = timeoutHtlc(committerPkh, beforeTimeout)
+//
+//        assert(result.nonEmpty)
+////        assert(result.logs.last.contains(HtlcValidator.InvalidCommitterTimePoint))
+//    }
+//
+//    ignore("committer fails with wrong committer pubkey hash") {
+//        val result = timeoutHtlc(wrongCommitterPkh, afterTimeout)
+//
+//        assert(result.nonEmpty)
+////        assert(result.logs.last.contains(HtlcValidator.UnsignedCommitterTransaction))
+//    }
 }

@@ -1,9 +1,10 @@
 package scalus.cardano.blueprint
 
 import scalus.*
-import scalus.cardano.ledger.{Language, PlutusScript, Script}
+import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.sir.SIR
 import scalus.uplc.Program
+import scalus.cardano.address.*
 
 /** A description of a Scalus application, containing one or more contracts.
   */
@@ -47,6 +48,11 @@ trait CompiledContract {
     def script: PlutusScript
     def describeValidator: Validator
     def blueprint: Blueprint
+
+    def address(network: Network): Address = Address(
+      network,
+      Credential.ScriptHash(script.scriptHash)
+    )
 }
 
 class PlutusV3CompiledContract(
