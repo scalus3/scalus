@@ -9,8 +9,8 @@ import scala.collection.immutable.SortedSet
   * Under the hood it's a `SortedSet` because we need to enforce the order of elements. Also, it
   * allows make right CBOR serialization with tag 258.
   *
-  * Important: This implementation does not allow duplicates in input (i.e. throws exception) and
-  * does not keep order in data (sorts).
+  * Important: This implementation allows duplicates in input (i.e. does not throw exception),
+  * silently removes duplicates and does not keep order in data (sorts elements by given ordering).
   */
 opaque type TaggedSortedSet[A] = SortedSet[A]
 object TaggedSortedSet extends TaggedSeq:

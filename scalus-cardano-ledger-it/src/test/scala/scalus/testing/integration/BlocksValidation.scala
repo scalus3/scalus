@@ -339,12 +339,19 @@ class BlocksValidation extends AnyFunSuite {
                         errors += error
                         println(s"\n${Console.RED}[error# ${errors.size}] ${error}${Console.RESET}")
                     case e: IllegalStateException =>
+                        val error = s"${path.getFileName}: $e"
                         if e.getMessage.startsWith("Reference UTXO not found for input") then {
-                            println(s"${path.getFileName}: $e")
+                            println(error)
                             println("Cannot resolve UTXO, stopping test ...")
                             break()
-                        } else println(s"${path.getFileName}: $e")
-                    case e: Exception => println(s"${path.getFileName}: $e")
+                        } else {
+                            errors += error
+                            println(error)
+                        }
+                    case e: Exception =>
+                        val error = s"${path.getFileName}: $e"
+                        errors += error
+                        println(error)
                 }
         println(
           s"\n${Console.GREEN}Total txs: $totalTx, errors ${errors.size}, blocks: ${blocks.size}, epoch: $epoch${Console.RESET}"
@@ -361,7 +368,7 @@ class BlocksValidation extends AnyFunSuite {
         println(s"Scripts v$ver: $runs runs of $scripts scripts")
         val top = stats.toSeq.sortBy(_._2)(using Ordering[Int].reverse)
         println(
-            s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
+          s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
         )
         val top10 = top.take(10).map(_._2).sum
         println(
@@ -369,7 +376,7 @@ class BlocksValidation extends AnyFunSuite {
         )
         val top100 = top.take(100).map(_._2).sum
         println(
-            s"  Top 100: ${top100} (${100 * top100 / runs}%) runs by 100 (${100 * 100 / scripts}%) scripts "
+          s"  Top 100: ${top100} (${100 * top100 / runs}%) runs by 100 (${100 * 100 / scripts}%) scripts "
         )
     }
 

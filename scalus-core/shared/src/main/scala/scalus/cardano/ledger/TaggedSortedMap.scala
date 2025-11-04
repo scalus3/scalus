@@ -10,7 +10,7 @@ import scala.collection.immutable.{ListSet, SortedMap}
   * allows make right CBOR serialization with tag 258.
   *
   * Important: This implementation allows duplicate keys in input (i.e. does not throw exception)
-  * and does not keep order in data (sorts by keys).
+  * silently removes duplicates and does not keep order in data (sorts by keys).
   */
 opaque type TaggedSortedMap[K, A] = SortedMap[K, A]
 object TaggedSortedMap extends TaggedSeq:

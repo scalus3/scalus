@@ -2,7 +2,15 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 
-// indefinite array tag (258)
+/** Tags in sets Conway introduced optional 258 tags in certain items that are considered sets
+  * semantically but encoded as arrays in CBOR.
+  *
+  * Semantics: Tag 258 can be applied to a CBOR array data item to indicate that it is a set. Sets
+  * should be handled similarly to CBOR maps: a set that has duplicate items may be well-formed, but
+  * it is not valid. Like CBOR map keys, data items in a set do not need to be of the same type.
+  *
+  * https://github.com/input-output-hk/cbor-sets-spec/blob/master/CBOR_SETS.md
+  */
 trait TaggedSeq(tag: Tag = Tag.Other(258)):
 
     def checkDuplicates[A](seq: IndexedSeq[A]): IndexedSeq[A] =
