@@ -1,11 +1,11 @@
-package scalus.uplc.jit.jitcommon
+package scalus.uplc.jit
 
 import cats.syntax.semigroup.*
 import scalus.builtin.{Builtins, ByteString, Data}
-import scalus.uplc.{Expr as _, *}
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.*
 import scalus.uplc.eval.ExBudgetCategory.{BuiltinApp, Step}
+import scalus.uplc.{Expr as _, *}
 
 import scala.quoted.*
 

@@ -1,9 +1,8 @@
 package scalus.uplc.jit.hybrid
 
 import scalus.uplc.eval.*
-import scalus.uplc.jit.jitcommon.{JitRunner, RuntimeHelper}
-import scalus.uplc.jit.mincont
 import scalus.uplc.jit.nativestack.{JIT, StackTresholdException}
+import scalus.uplc.jit.{mincont, JitRunner, RuntimeHelper}
 import scalus.uplc.{DeBruijn, Term}
 
 object HybridJIT extends JitRunner {

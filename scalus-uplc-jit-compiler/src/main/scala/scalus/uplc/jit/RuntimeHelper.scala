@@ -1,7 +1,7 @@
-package scalus.uplc.jit.jitcommon
+package scalus.uplc.jit
 
-import scalus.uplc.*
 import scalus.builtin.*
+import scalus.uplc.*
 
 object RuntimeHelper {
 

@@ -1,6 +1,6 @@
-package scalus.uplc.jit.jitcommon
+package scalus.uplc.jit
 
-import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, BuiltinPair, ByteString, Data}
+import scalus.builtin.*
 import scalus.uplc.Constant
 
 import scala.quoted.*

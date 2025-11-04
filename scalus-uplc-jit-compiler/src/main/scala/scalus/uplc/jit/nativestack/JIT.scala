@@ -1,12 +1,11 @@
 package scalus.uplc.jit.nativestack
 
-import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, BuiltinPair, Builtins, ByteString, Data}
-import scalus.uplc.{Constant, DefaultFun, Term}
-import scalus.uplc.DefaultUni.asConstant
 import scalus.*
-import scalus.uplc.eval.{BudgetSpender, CekValue, ExBudgetCategory, Logger, MachineParams, StepKind}
+import scalus.builtin.*
+import scalus.uplc.eval.*
 import scalus.uplc.eval.ExBudgetCategory.{Startup, Step}
-import scalus.uplc.jit.jitcommon.{BuiltinAppliedGenerator, BuiltinEmitter, JitEvaluationFailure, JitRunner, UplcTermHelper}
+import scalus.uplc.jit.*
+import scalus.uplc.{Constant, Term}
 
 import scala.quoted.*
 

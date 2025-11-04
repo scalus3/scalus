@@ -1,8 +1,8 @@
-package scalus.uplc.jit.jitcommon
+package scalus.uplc.jit
 
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultFun.{SubtractInteger, VerifyEd25519Signature}
-import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams, StepKind}
+import scalus.uplc.eval.*
 
 import scala.quoted.*
 
