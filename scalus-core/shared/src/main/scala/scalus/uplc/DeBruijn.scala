@@ -20,7 +20,7 @@ object DeBruijn:
     def deBruijnTerm(term: Term): Term =
         deBruijnTerm(term, false)
 
-    def deBruijnTerm(term: Term, errrOnUnresolvedVariable: Boolean): Term =
+    def deBruijnTerm(term: Term, throwOnFreeVariable: Boolean): Term =
         var unique = 0
 
         def process(term: Term, env: List[String]): Term =
@@ -28,7 +28,7 @@ object DeBruijn:
                 case Var(name) =>
                     val idx = env.indexOf(name.name)
                     if idx == -1 then
-                        if errrOnUnresolvedVariable then
+                        if throwOnFreeVariable then
                             throw new IllegalArgumentException(
                               s"Unresolved variable '${name.name}' in De Bruijn conversion. Available variables in scope: [${env.mkString(", ")}]"
                             )
