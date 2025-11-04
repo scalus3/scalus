@@ -107,6 +107,24 @@ object Program:
     def fromCborHex(cborHex: String): Program =
         DeBruijnedProgram.fromCborHex(cborHex).toProgram
 
+    /** Deserializes a program from a CBOR-encoded byte array.
+      * @param cbor
+      *   the CBOR-encoded byte array
+      * @return
+      *   the program
+      */
+    def fromCbor(cbor: Array[Byte]): Program =
+        DeBruijnedProgram.fromCbor(cbor).toProgram
+
+    /** Deserializes a program from a CBOR-encoded [[ByteString]].
+      * @param cbor
+      *   the CBOR-encoded ByteString
+      * @return
+      *   the program
+      */
+    def fromCborByteString(cbor: ByteString): Program =
+        DeBruijnedProgram.fromCbor(cbor.bytes).toProgram
+
     /** Deserializes a program from a flat-encoded byte array.
       *
       * @param flatEncoded

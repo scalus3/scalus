@@ -22,7 +22,7 @@ object ScriptDataHashGenerator {
       */
     def computeScriptDataHash(
         redeemers: Option[KeepRaw[Redeemers]],
-        datums: KeepRaw[TaggedSet[KeepRaw[Data]]],
+        datums: KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]],
         usedCostModels: CostModels
     ): ScriptDataHash = {
         /* ; script data format:
@@ -35,7 +35,7 @@ object ScriptDataHashGenerator {
             case Some(value) => value.raw
             case None        => Array(0xa0.toByte) // Empty map in CBOR
         val plutusDataBytes =
-            if datums.value.toIndexedSeq.isEmpty then Array.empty[Byte]
+            if datums.value.toMap.isEmpty then Array.empty[Byte]
             else datums.raw
         val costModelsBytes = usedCostModels.getLanguageViewEncoding
         val encodedBytes = redeemerBytes ++ plutusDataBytes ++ costModelsBytes
@@ -55,7 +55,7 @@ object ScriptDataHashGenerator {
         protocolParams: ProtocolParams,
         usedLanguages: TreeSet[Language],
         redeemers: Option[KeepRaw[Redeemers]],
-        datums: KeepRaw[TaggedSet[KeepRaw[Data]]]
+        datums: KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]]
     ): Option[ScriptDataHash] = {
         val costModels = CostModels(
           usedLanguages.view
@@ -63,8 +63,7 @@ object ScriptDataHashGenerator {
               .to(ListMap)
         )
 
-        if redeemers.isEmpty && datums.value.toIndexedSeq.isEmpty && costModels.models.isEmpty then
-            None
+        if redeemers.isEmpty && datums.value.toMap.isEmpty && costModels.models.isEmpty then None
         else Some(computeScriptDataHash(redeemers, datums, costModels))
     }
 
@@ -74,7 +73,7 @@ object ScriptDataHashGenerator {
       *
       * @param transaction
       *   The transaction to compute the script data hash for.
-      * @param utxo
+      * @param utxos
       *   The UTxO set to use for resolving inputs and reference inputs.
       * @param protocolParams
       *   The protocol parameters to use for getting the cost models.
@@ -84,7 +83,7 @@ object ScriptDataHashGenerator {
       */
     def computeScriptDataHash(
         transaction: Transaction,
-        utxo: Utxos,
+        utxos: Utxos,
         protocolParams: ProtocolParams
     ): Either[
       TransactionException.BadInputsUTxOException |
@@ -96,11 +95,11 @@ object ScriptDataHashGenerator {
         val datums = witnessSet.plutusData
 
         for
-            allNeededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(transaction, utxo)
+            allNeededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(transaction, utxos)
 
             allResolvedPlutusScripts <- AllResolvedScripts.allResolvedPlutusScriptsView(
               transaction,
-              utxo
+              utxos
             )
         yield
             val usedLanguages = TreeSet.from(

@@ -7,6 +7,7 @@ import scalus.builtin.platform
 import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 
 import scala.collection.immutable.SortedMap
+import TransactionWitnessSet.given
 
 class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("MissingOrExtraScriptHashesValidator rule success") {
@@ -27,13 +28,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.from(Set(referenceInput)),
+                  inputs = TaggedSortedSet.from(Set(input)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
                   mint = Some(
                     Mint(
                       MultiAsset(
@@ -95,7 +96,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                           )
                     )
                   ),
-                  certificates = TaggedSet(
+                  certificates = TaggedOrderedSet(
                     Certificate
                         .StakeDelegation(credential3, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -158,19 +159,19 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
                 ),
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set(plutusV1Script),
-                plutusV2Scripts = Set(plutusV2Script),
-                plutusV3Scripts = Set(plutusV3Script)
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap(plutusV1Script),
+                plutusV2Scripts = TaggedSortedMap(plutusV2Script),
+                plutusV3Scripts = TaggedSortedMap(plutusV3Script)
               )
             )
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             input -> TransactionOutput(
               Arbitrary
                   .arbitrary[StakeAddress]

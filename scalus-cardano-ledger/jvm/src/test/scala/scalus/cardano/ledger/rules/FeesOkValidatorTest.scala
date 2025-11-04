@@ -5,6 +5,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.builtin.platform
 import org.scalatest.funsuite.AnyFunSuite
+import TransactionWitnessSet.given
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator rule success") {
@@ -21,12 +22,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -37,25 +38,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -75,7 +76,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -126,12 +127,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -142,25 +143,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(1L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -180,7 +181,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -226,34 +227,34 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = None,
                   totalCollateral = None,
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -273,7 +274,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -319,12 +320,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -343,25 +344,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -381,7 +382,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -427,12 +428,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -443,25 +444,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(60000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -481,7 +482,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -527,12 +528,12 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   collateralReturnOutput = Some(
                     Sized(
                       TransactionOutput(
@@ -543,25 +544,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
                   totalCollateral = Some(Coin(50000000L)),
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(
@@ -581,7 +582,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[ShelleyAddress]
@@ -621,34 +622,34 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
                   collateralReturnOutput = None,
                   totalCollateral = None,
                   fee = Coin(10000000L),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,
                   mint = None,
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedSet.empty,
-                  requiredSigners = TaggedOrderedSet.empty
+                  certificates = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               auxiliaryData = None,
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
                     Redeemers.Array(

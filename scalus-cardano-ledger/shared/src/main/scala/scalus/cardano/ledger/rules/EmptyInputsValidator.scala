@@ -10,7 +10,7 @@ object EmptyInputsValidator extends STS.Validator {
         val transactionId = event.id
         val inputs = event.body.value.inputs
 
-        if inputs.toSortedSet.isEmpty then
+        if inputs.toSet.isEmpty then
             return failure(TransactionException.EmptyInputsException(transactionId))
 
         success

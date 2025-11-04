@@ -12,7 +12,7 @@ import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, IncompatibleMet
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.12.0"
+val scalusStableVersion = "0.13.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
@@ -362,13 +362,21 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 // Scalus UPLC JIT Compiler - experimental JIT compiler for UPLC
 lazy val scalusUplcJitCompiler = project
     .in(file("scalus-uplc-jit-compiler"))
-    .dependsOn(scalus.jvm)
+    .dependsOn(scalus.jvm % "compile->compile")
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-uplc-jit-compiler",
       scalaVersion := scalaVersion.value,
       scalacOptions ++= commonScalacOptions,
       Test / fork := true,
+      Test / javaOptions ++= Seq(
+        "-Xss64m", // Increase stack size to 64MB for JIT compilation of deeply nested UPLC terms
+        "-Xmx4g" // Increase heap to 4GB for large compilations
+      ),
+      // Skip scalus.jvm compilation when -DskipScalusRecompile=true
+      scalus.jvm / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
+      scalus.jvm / Test / skip := sys.props.get("skipScalusRecompile").contains("true"),
+      scalusPlugin / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test",
@@ -487,47 +495,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.Interop.getScriptInfoFromScriptRef"
-        ),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptInfo"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptInfo$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV1"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV1$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV2"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV2$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV3"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.ScriptVersion$PlutusV3$"),
-        ProblemFilters.exclude[MissingClassProblem](
-          "scalus.bloxbean.TxEvaluator$RestrictingBudgetSpenderWithScripDump"
-        ),
-        // SlotConfig moved from scalus.bloxbean to scalus.cardano.ledger
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.SlotConfig"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.SlotConfig$"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getInterval"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getScriptContextV2"),
-        ProblemFilters
-            .exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getScriptContextV3"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV1"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV2"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.getTxInfoV3"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.this"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.getSlotConfig"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.slotConfig"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.TxEvaluator.this"),
-        ProblemFilters
-            .exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.TxEvaluator.slotConfig")
-      ),
+      mimaBinaryIssueFilters ++= Seq(),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
@@ -668,6 +636,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.3.0" % "test",
+      libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.0" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.82" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.bitcoin-s" % "bitcoin-s-crypto_2.13" % "1.9.11" % "test",
@@ -735,7 +704,10 @@ addCommandAlias(
   "clean;native/Test/compile;native/test"
 )
 addCommandAlias("benchmark", "bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*")
-addCommandAlias("benchmark-jit", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*(JIT|Cek).*")
+addCommandAlias(
+  "benchmark-jit",
+  "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff bench/target/benchmark-jit.txt .*(JIT|Cek).*"
+)
 addCommandAlias(
   "it",
   "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test"

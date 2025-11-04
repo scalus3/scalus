@@ -8,12 +8,12 @@ object ProtocolParamsViewHashesMatchValidator extends STS.Validator {
         TransactionException.InvalidScriptDataHashException
 
     override def validate(context: Context, state: State, event: Event): Result = {
-        val utxo = state.utxo
+        val utxo = state.utxos
         val protocolParams = context.env.params
-        val expectedScriptDataHash = event.body.value.scriptDataHash
+        val actualScriptDataHash = event.body.value.scriptDataHash
 
         for
-            actualScriptDataHash <- ScriptDataHashGenerator.computeScriptDataHash(
+            expectedScriptDataHash <- ScriptDataHashGenerator.computeScriptDataHash(
               event,
               utxo,
               protocolParams

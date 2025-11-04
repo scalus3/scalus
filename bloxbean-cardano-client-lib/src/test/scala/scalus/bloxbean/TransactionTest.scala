@@ -18,7 +18,7 @@ class TransactionTest extends AnyFunSuite {
         def scalusTransactionHash = {
             val tx = Transaction(
               TransactionBody(
-                inputs = TaggedOrderedSet.from(
+                inputs = TaggedSortedSet.from(
                   Set(
                     TransactionInput(Hash(ByteString.fill(32, 0)), 0)
                   )

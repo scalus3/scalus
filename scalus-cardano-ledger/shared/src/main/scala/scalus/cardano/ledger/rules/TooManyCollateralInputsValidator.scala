@@ -13,7 +13,7 @@ object TooManyCollateralInputsValidator extends STS.Validator {
         tx: Event
     ): TooManyCollateralInputsValidator.Result = {
         val maxColl = context.env.params.maxCollateralInputs
-        val numColl = tx.body.value.collateralInputs.toSortedSet.size
+        val numColl = tx.body.value.collateralInputs.toSet.size
 
         if numColl > maxColl then {
             failure(

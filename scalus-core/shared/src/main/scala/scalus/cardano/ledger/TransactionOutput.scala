@@ -10,6 +10,7 @@ import monocle.Lens
 sealed trait TransactionOutput:
     def address: Address
     def value: Value
+    def datumOption: Option[DatumOption]
     def scriptRef: Option[ScriptRef]
 
 object TransactionOutput:
@@ -32,13 +33,14 @@ object TransactionOutput:
         override val value: Value,
         datumHash: Option[DataHash] = None
     ) extends TransactionOutput:
+        def datumOption: Option[DatumOption] = datumHash.map(DatumOption.Hash(_))
         override def scriptRef: Option[ScriptRef] = None
 
     /** Babbage-era transaction output format with extended features */
     final case class Babbage(
         override val address: Address,
         override val value: Value,
-        datumOption: Option[DatumOption] = None,
+        override val datumOption: Option[DatumOption] = None,
         override val scriptRef: Option[ScriptRef] = None
     ) extends TransactionOutput
 

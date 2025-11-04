@@ -1,55 +1,36 @@
 package scalus.cardano.ledger
 
-import scala.collection.immutable.SortedSet
-import io.bullet.borer.{DataItem, Decoder, Encoder, Reader, Tag, Writer}
+import io.bullet.borer.{Decoder, Encoder}
 
-/** Represents a tagged ordered set, which is a sorted set of elements with a tag.
+import scala.collection.immutable.ListSet
+
+/** Represents a tagged set, which is an indexed sequence of elements with a tag.
   *
-  * Under the hood it's a `SortedSet` because we need to preserve the order of elements. Also, it
-  * allows make right CBOR serialization with tag 258.
+  * It's a new requirement for the Cardano ledger to have a tagged set. It's a stupid idea and God
+  * knows why they came up with it, but now we have to implement it.
+  *
+  * Under the hood it's an `IndexedSeq` because we need to preserve the order of elements and need a
+  * fast access by index. And technically, it can contain duplicates in CBOR.
+  *
+  * Unfortunately, we cannot make it as
+  *
+  * `opaque type TaggedSet[+A] <: IndexedSeq[A] = IndexedSeq[A]`
+  *
+  * because then `Encoder[TaggedSet[A]]` conflicts with [[Encoder.forIndexedSeq]]
+  *
+  * Important: This implementation does not allow duplicates in input (i.e. throws exception) and
+  * keeps order of data (does not sort).
   */
-opaque type TaggedOrderedSet[A] = SortedSet[A]
-object TaggedOrderedSet {
-    inline def empty[A: Ordering]: TaggedOrderedSet[A] = SortedSet.empty[A]
+opaque type TaggedOrderedSet[+A] = IndexedSeq[A]
+object TaggedOrderedSet extends TaggedSeq:
+    inline def apply[A](elems: A*): TaggedOrderedSet[A] = from(elems)
+    inline def empty[A]: TaggedOrderedSet[A] = IndexedSeq.empty[A]
+    inline def from[A](a: IterableOnce[A]): TaggedOrderedSet[A] =
+        checkDuplicates(IndexedSeq.from(a))
 
-    extension [A](s: TaggedOrderedSet[A]) {
+    extension [A](s: TaggedOrderedSet[A])
+        inline def toSeq: IndexedSeq[A] = s
+        inline def toSet: Set[A] = ListSet.from(s)
 
-        /** Converts a `TaggedOrderedSet` to a `SortedSet` */
-        inline def toSortedSet: SortedSet[A] = s
-
-        /** Converts a `TaggedOrderedSet` to a `Seq` */
-        inline def toSeq: Seq[A] = s.toSeq
-    }
-
-    inline def apply[A](s: SortedSet[A]): TaggedOrderedSet[A] = s
-
-    /** Creates a `TaggedOrderedSet` with the specified elements.
-      * @tparam A
-      *   the type of the `TaggedOrderedSet`'s elements
-      * @param elems
-      *   the elements of the created `TaggedOrderedSet`
-      * @return
-      *   a new `TaggedOrderedSet` with elements `elems`
-      */
-    def apply[A: Ordering](elems: A*): TaggedOrderedSet[A] = SortedSet(elems*)
-
-    def from[A: Ordering](it: IterableOnce[A]): TaggedOrderedSet[A] = SortedSet.from(it)
-
-    given [A: Encoder]: Encoder[TaggedOrderedSet[A]] with
-        def write(w: Writer, value: TaggedOrderedSet[A]): Writer = {
-            w.writeTag(Tag.Other(258))
-            w.writeArrayHeader(value.size)
-            value.foreach(w.write(_))
-            w
-        }
-
-    given [A: Decoder: Ordering]: Decoder[TaggedOrderedSet[A]] with
-        def read(r: Reader): TaggedOrderedSet[A] = {
-            // Check for indefinite array tag (258)
-            if r.dataItem() == DataItem.Tag then
-                val tag = r.readTag()
-                if tag.code != 258 then
-                    r.validationFailure(s"Expected tag 258 for definite Set, got $tag")
-            Decoder.fromFactory[A, SortedSet].read(r)
-        }
-}
+    given [A: Encoder]: Encoder[TaggedOrderedSet[A]] = writeTagged(_, _)
+    given [A: Decoder]: Decoder[TaggedOrderedSet[A]] = r => from(readTagged(r))

@@ -8,17 +8,17 @@ class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTest
     test("AllInputsMustBeInUtxoValidator rule success") {
         val context = Context()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  collateralInputs = TaggedOrderedSet.from(
+                  collateralInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  referenceInputs = TaggedOrderedSet.from(
+                  referenceInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   )
                 )
@@ -26,35 +26,35 @@ class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
         }
         val state = State(
-          utxo = transaction.body.value.inputs.toSortedSet.view
-              .concat(transaction.body.value.collateralInputs.toSortedSet)
-              .concat(transaction.body.value.referenceInputs.toSortedSet)
+          utxos = transaction.body.value.inputs.toSet.view
+              .concat(transaction.body.value.collateralInputs.toSet)
+              .concat(transaction.body.value.referenceInputs.toSet)
               .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
               .toMap
         )
 
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
         assert(result.isRight)
-        assert(transaction.body.value.inputs.toSortedSet.forall(state.utxo.contains))
-        assert(transaction.body.value.collateralInputs.toSortedSet.forall(state.utxo.contains))
-        assert(transaction.body.value.referenceInputs.toSortedSet.forall(state.utxo.contains))
+        assert(transaction.body.value.inputs.toSet.forall(state.utxos.contains))
+        assert(transaction.body.value.collateralInputs.toSet.forall(state.utxos.contains))
+        assert(transaction.body.value.referenceInputs.toSet.forall(state.utxos.contains))
     }
 
     test("AllInputsMustBeInUtxoValidator rule failure") {
         val context = Context()
         val state = State()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  collateralInputs = TaggedOrderedSet.from(
+                  collateralInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   ),
-                  referenceInputs = TaggedOrderedSet.from(
+                  referenceInputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   )
                 )
@@ -64,8 +64,8 @@ class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTest
 
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
         assert(result.isLeft)
-        assert(!transaction.body.value.inputs.toSortedSet.forall(state.utxo.contains))
-        assert(!transaction.body.value.collateralInputs.toSortedSet.forall(state.utxo.contains))
-        assert(!transaction.body.value.referenceInputs.toSortedSet.forall(state.utxo.contains))
+        assert(!transaction.body.value.inputs.toSet.forall(state.utxos.contains))
+        assert(!transaction.body.value.collateralInputs.toSet.forall(state.utxos.contains))
+        assert(!transaction.body.value.referenceInputs.toSet.forall(state.utxos.contains))
     }
 }

@@ -11,6 +11,6 @@ object AddOutputsToUtxoMutator extends STS.Mutator {
                 TransactionInput(event.id, index) -> output
         }.toMap
 
-        success(state.copy(utxo = state.utxo ++ addedUtxo))
+        success(state.copy(utxos = state.utxos ++ addedUtxo))
     }
 }

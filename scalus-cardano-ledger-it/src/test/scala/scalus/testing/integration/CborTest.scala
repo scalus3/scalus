@@ -35,7 +35,7 @@ class CborTest extends AnyFunSuite {
         val blockFile = BlockFile.fromCborArray(block)
         for
             tx <- blockFile.block.transactions
-            data <- tx.witnessSet.plutusData.value.toIndexedSeq
+            data <- tx.witnessSet.plutusData.value.toMap.values
         do {
             println(ByteString.fromArray(data.raw))
             assert(data.value != null)
@@ -50,7 +50,7 @@ class CborTest extends AnyFunSuite {
             val blockFile = BlockFile.fromCborArray(block)
             for
                 tx <- blockFile.block.transactions
-                data <- tx.witnessSet.plutusData.value.toIndexedSeq
+                data <- tx.witnessSet.plutusData.value.toMap.values
             do assert(data.value != null)
         }
     }

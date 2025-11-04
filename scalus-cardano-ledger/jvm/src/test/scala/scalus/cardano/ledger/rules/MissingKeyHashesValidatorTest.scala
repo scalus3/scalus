@@ -18,21 +18,21 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val input2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.from(Set(input1, input2)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
@@ -41,7 +41,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             input1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[StakeAddress]
@@ -79,21 +79,21 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val input2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.from(Set(input1, input2)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
                 )
               )
@@ -101,7 +101,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             input1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[StakeAddress]
@@ -143,21 +143,21 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
@@ -166,7 +166,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[StakeAddress]
@@ -208,21 +208,21 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.from(Set(collateralInput1, collateralInput2)),
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                 )
               )
@@ -230,7 +230,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val state = State(
-          utxo = Map(
+          utxos = Map(
             collateralInput1 -> TransactionOutput(
               Arbitrary
                   .arbitrary[StakeAddress]
@@ -266,13 +266,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val (privateKey3, publicKey3) = generateKeyPair()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = Some(
                     VotingProcedures(
                       SortedMap(
@@ -294,13 +294,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
                   VKeyWitness(publicKey3, platform.signEd25519(privateKey3, tx.id))
@@ -323,13 +323,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val (privateKey3, publicKey3) = generateKeyPair()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = Some(
                     VotingProcedures(
                       SortedMap(
@@ -351,13 +351,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
@@ -378,15 +378,15 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val (privateKey2, publicKey2) = generateKeyPair()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = Some(
                     Withdrawals(
                       SortedMap(
@@ -415,11 +415,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
@@ -440,15 +440,15 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val (privateKey2, publicKey2) = generateKeyPair()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = Some(
                     Withdrawals(
                       SortedMap(
@@ -477,11 +477,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
                 )
               )
@@ -503,15 +503,15 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet(
+                  certificates = TaggedOrderedSet(
                     Certificate
                         .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -571,11 +571,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                     )
                   ),
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
                 )
               )
@@ -597,15 +597,15 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet(
+                  certificates = TaggedOrderedSet(
                     Certificate
                         .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -665,11 +665,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                     )
                   ),
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.empty
+                  requiredSigners = TaggedSortedSet.empty
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty
+                vkeyWitnesses = TaggedSortedSet.empty
               )
             )
         }
@@ -687,17 +687,17 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val (privateKey2, publicKey2) = generateKeyPair()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.from(
+                  requiredSigners = TaggedSortedSet.from(
                     Set(
                       Hash(platform.blake2b_224(publicKey1)),
                       Hash(platform.blake2b_224(publicKey2))
@@ -706,7 +706,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
@@ -727,17 +727,17 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val (privateKey2, publicKey2) = generateKeyPair()
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty,
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  requiredSigners = TaggedOrderedSet.from(
+                  requiredSigners = TaggedSortedSet.from(
                     Set(
                       Hash(platform.blake2b_224(publicKey1)),
                       Hash(platform.blake2b_224(publicKey2))
@@ -746,7 +746,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
                 )
               )

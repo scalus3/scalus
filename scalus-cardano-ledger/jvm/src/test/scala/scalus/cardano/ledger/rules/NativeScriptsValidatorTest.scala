@@ -5,6 +5,7 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.platform
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
+import TransactionWitnessSet.given
 
 class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("NativeScriptsValidator rule success") {
@@ -38,29 +39,31 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val referenceInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input1, input2, input3, input4, input5)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.from(Set(referenceInput1, referenceInput2)),
+                  inputs = TaggedSortedSet.from(Set(input1, input2, input3, input4, input5)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.from(Set(referenceInput1, referenceInput2)),
                   validityStartSlot = Some(10),
                   ttl = Some(15)
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 ),
-                nativeScripts = Set(
-                  signatureTimelock1,
-                  signatureTimelock2,
-                  allOfTimelock,
-                  anyOfTimelock,
-                  mOfTimelock
-                ).map(Script.Native.apply)
+                nativeScripts = TaggedSortedMap.from(
+                  Set(
+                    signatureTimelock1,
+                    signatureTimelock2,
+                    allOfTimelock,
+                    anyOfTimelock,
+                    mOfTimelock
+                  ).map(Script.Native.apply)
+                )
               )
             )
         }
@@ -122,7 +125,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
 
             State(
-              utxo = Map(
+              utxos = Map(
                 input1 -> TransactionOutput(
                   signatureTimelock1Address,
                   Value(Coin(1000L)),
@@ -173,20 +176,20 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val input2 = Arbitrary.arbitrary[TransactionInput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(Set(input1, input2)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                  inputs = TaggedSortedSet.from(Set(input1, input2)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   validityStartSlot = Some(10),
                   ttl = Some(25)
                 )
               ),
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                nativeScripts = Set(Script.Native(timeExpireTimelock))
+                vkeyWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap(Script.Native(timeExpireTimelock))
               )
             )
         }
@@ -208,7 +211,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
 
             State(
-              utxo = Map(
+              utxos = Map(
                 input1 -> TransactionOutput(
                   timeStartTimelockAddress,
                   Value(Coin(1000L)),

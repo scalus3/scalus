@@ -216,3 +216,4 @@ Run `sbtn precommit` before considering work complete.
 - Follow conventional commit style
 - Never add yourself to the commit messages, no "Co-authored by Claude Code" or similar
 - Suggest a commit message when you complete a task.
+- Commit messages should be short: 1 or 2 paragraphs

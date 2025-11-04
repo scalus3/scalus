@@ -6,16 +6,16 @@ import scalus.builtin.Data
 /** Represents the witness set for a transaction in Cardano */
 case class TransactionWitnessSet(
     /** VKey witnesses */
-    vkeyWitnesses: Set[VKeyWitness] = Set.empty,
+    vkeyWitnesses: TaggedSortedSet[VKeyWitness] = TaggedSortedSet.empty,
 
     /** Native scripts */
-    nativeScripts: Set[Script.Native] = Set.empty,
+    nativeScripts: TaggedSortedMap[ScriptHash, Script.Native] = TaggedSortedMap.empty,
 
     /** Bootstrap witnesses (for Byron addresses) */
-    bootstrapWitnesses: Set[BootstrapWitness] = Set.empty,
+    bootstrapWitnesses: TaggedSortedSet[BootstrapWitness] = TaggedSortedSet.empty,
 
     /** Plutus V1 scripts */
-    plutusV1Scripts: Set[Script.PlutusV1] = Set.empty,
+    plutusV1Scripts: TaggedSortedMap[ScriptHash, Script.PlutusV1] = TaggedSortedMap.empty,
 
     /** Plutus data values
       *
@@ -23,27 +23,28 @@ case class TransactionWitnessSet(
       *   We need raw CBOR bytes of all `plutusData` for [[ScriptDataHash]] calculation. Also, we
       *   need raw bytes for each datum for [[DataHash]] calculation.
       */
-    plutusData: KeepRaw[TaggedSet[KeepRaw[Data]]] = KeepRaw(TaggedSet.empty),
+    plutusData: KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]] = KeepRaw(TaggedSortedMap.empty),
 
     /** Redeemers */
+    // TODO Map ...
     redeemers: Option[KeepRaw[Redeemers]] = None,
 
     /** Plutus V2 scripts */
-    plutusV2Scripts: Set[Script.PlutusV2] = Set.empty,
+    plutusV2Scripts: TaggedSortedMap[ScriptHash, Script.PlutusV2] = TaggedSortedMap.empty,
 
     /** Plutus V3 scripts */
-    plutusV3Scripts: Set[Script.PlutusV3] = Set.empty
+    plutusV3Scripts: TaggedSortedMap[ScriptHash, Script.PlutusV3] = TaggedSortedMap.empty
 ):
     /** Check if the witness set is empty */
     def isEmpty: Boolean =
-        vkeyWitnesses.isEmpty &&
-            nativeScripts.isEmpty &&
-            bootstrapWitnesses.isEmpty &&
-            plutusV1Scripts.isEmpty &&
-            plutusData.value.toIndexedSeq.isEmpty &&
+        vkeyWitnesses.toSet.isEmpty &&
+            nativeScripts.toMap.isEmpty &&
+            bootstrapWitnesses.toSet.isEmpty &&
+            plutusV1Scripts.toMap.isEmpty &&
+            plutusData.value.toMap.isEmpty &&
             redeemers.isEmpty &&
-            plutusV2Scripts.isEmpty &&
-            plutusV3Scripts.isEmpty
+            plutusV2Scripts.toMap.isEmpty &&
+            plutusV3Scripts.toMap.isEmpty
 
 object TransactionWitnessSet:
     /** Empty witness set */
@@ -56,61 +57,69 @@ object TransactionWitnessSet:
         vkeyWitnesses: Set[VKeyWitness],
         plutusData: Seq[Data]
     ): TransactionWitnessSet = {
-        val nativeScripts = scripts.collect { case s: Script.Native => s }.toSet
-        val plutusV1Scripts = scripts.collect { case s: Script.PlutusV1 => s }.toSet
-        val plutusV2Scripts = scripts.collect { case s: Script.PlutusV2 => s }.toSet
-        val plutusV3Scripts = scripts.collect { case s: Script.PlutusV3 => s }.toSet
+        val nativeScripts = TaggedSortedMap.from[ScriptHash, Script.Native](scripts.collect {
+            case s: Script.Native => s
+        })
+        val plutusV1Scripts = TaggedSortedMap.from[ScriptHash, Script.PlutusV1](scripts.collect {
+            case s: Script.PlutusV1 => s
+        })
+        val plutusV2Scripts = TaggedSortedMap.from[ScriptHash, Script.PlutusV2](scripts.collect {
+            case s: Script.PlutusV2 => s
+        })
+        val plutusV3Scripts = TaggedSortedMap.from[ScriptHash, Script.PlutusV3](scripts.collect {
+            case s: Script.PlutusV3 => s
+        })
 
         TransactionWitnessSet(
-          vkeyWitnesses = vkeyWitnesses,
+          vkeyWitnesses = TaggedSortedSet.from(vkeyWitnesses),
           nativeScripts = nativeScripts,
           plutusV1Scripts = plutusV1Scripts,
           plutusV2Scripts = plutusV2Scripts,
           plutusV3Scripts = plutusV3Scripts,
-          plutusData = KeepRaw(TaggedSet(plutusData.map(KeepRaw(_))*)),
+          plutusData = KeepRaw(TaggedSortedMap(plutusData.map(KeepRaw(_))*)),
           redeemers = Some(KeepRaw(redeemers))
         )
     }
 
     /** CBOR encoder for TransactionWitnessSet */
     given Encoder[TransactionWitnessSet] with
-        def write(w: Writer, value: TransactionWitnessSet): Writer =
+        def write(w: Writer, value: TransactionWitnessSet): Writer = {
             // Count the number of fields to write
             var mapSize = 0
 
-            if value.vkeyWitnesses.nonEmpty then mapSize += 1
-            if value.nativeScripts.nonEmpty then mapSize += 1
-            if value.bootstrapWitnesses.nonEmpty then mapSize += 1
-            if value.plutusV1Scripts.nonEmpty then mapSize += 1
-            if value.plutusData.value.toIndexedSeq.nonEmpty then mapSize += 1
+            if value.vkeyWitnesses.toSet.nonEmpty then mapSize += 1
+            if value.nativeScripts.toMap.nonEmpty then mapSize += 1
+            if value.bootstrapWitnesses.toSet.nonEmpty then mapSize += 1
+            if value.plutusV1Scripts.toMap.nonEmpty then mapSize += 1
+            if value.plutusData.value.toMap.nonEmpty then mapSize += 1
             if value.redeemers.isDefined then mapSize += 1
-            if value.plutusV2Scripts.nonEmpty then mapSize += 1
-            if value.plutusV3Scripts.nonEmpty then mapSize += 1
+            if value.plutusV2Scripts.toMap.nonEmpty then mapSize += 1
+            if value.plutusV3Scripts.toMap.nonEmpty then mapSize += 1
 
             w.writeMapHeader(mapSize)
 
             // VKey witnesses (key 0)
-            if value.vkeyWitnesses.nonEmpty then
+            if value.vkeyWitnesses.toSet.nonEmpty then
                 w.writeInt(0)
-                writeSet(w, value.vkeyWitnesses)
+                w.write(value.vkeyWitnesses)
 
             // Native scripts (key 1)
-            if value.nativeScripts.nonEmpty then
+            if value.nativeScripts.toMap.nonEmpty then
                 w.writeInt(1)
-                writeSet(w, value.nativeScripts)
+                w.write(value.nativeScripts)
 
             // Bootstrap witnesses (key 2)
-            if value.bootstrapWitnesses.nonEmpty then
+            if value.bootstrapWitnesses.toSet.nonEmpty then
                 w.writeInt(2)
-                writeSet(w, value.bootstrapWitnesses)
+                w.write(value.bootstrapWitnesses)
 
             // Plutus V1 scripts (key 3)
-            if value.plutusV1Scripts.nonEmpty then
+            if value.plutusV1Scripts.toMap.nonEmpty then
                 w.writeInt(3)
-                writeSet(w, value.plutusV1Scripts)
+                w.write(value.plutusV1Scripts)
 
             // Plutus data (key 4)
-            if value.plutusData.value.toIndexedSeq.nonEmpty then
+            if value.plutusData.value.toMap.nonEmpty then
                 w.writeInt(4)
                 // TODO: handle KeepRaw properly when this is implemented: https://github.com/sirthias/borer/issues/764
                 w.write(value.plutusData)
@@ -122,66 +131,59 @@ object TransactionWitnessSet:
             }
 
             // Plutus V2 scripts (key 6)
-            if value.plutusV2Scripts.nonEmpty then
+            if value.plutusV2Scripts.toMap.nonEmpty then
                 w.writeInt(6)
-                writeSet(w, value.plutusV2Scripts)
+                w.write(value.plutusV2Scripts)
 
             // Plutus V3 scripts (key 7)
-            if value.plutusV3Scripts.nonEmpty then
+            if value.plutusV3Scripts.toMap.nonEmpty then
                 w.writeInt(7)
-                writeSet(w, value.plutusV3Scripts)
+                w.write(value.plutusV3Scripts)
 
             w
-
-    /** Helper to write a Set as CBOR */
-    private def writeSet[A](w: Writer, set: Set[A])(using encoder: Encoder[A]): Writer =
-        // Use indefinite array
-        w.writeTag(Tag.Other(258))
-        w.writeArrayHeader(set.size)
-        set.foreach(encoder.write(w, _))
-        w
+        }
 
     /** CBOR decoder for TransactionWitnessSet */
     given decoder(using OriginalCborByteArray): Decoder[TransactionWitnessSet] with
-        def read(r: Reader): TransactionWitnessSet =
+        def read(r: Reader): TransactionWitnessSet = {
             val mapSize = r.readMapHeader()
 
-            var vkeyWitnesses = Set.empty[VKeyWitness]
-            var nativeScripts = Set.empty[Script.Native]
-            var bootstrapWitnesses = Set.empty[BootstrapWitness]
-            var plutusV1Scripts = Set.empty[Script.PlutusV1]
-            var plutusData = KeepRaw(TaggedSet.empty[KeepRaw[Data]])
+            var vkeyWitnesses = TaggedSortedSet.empty[VKeyWitness]
+            var nativeScripts = TaggedSortedMap.empty[ScriptHash, Script.Native]
+            var bootstrapWitnesses = TaggedSortedSet.empty[BootstrapWitness]
+            var plutusV1Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV1]
+            var plutusData = KeepRaw(TaggedSortedMap.empty[DataHash, KeepRaw[Data]])
             var redeemers: Option[KeepRaw[Redeemers]] = None
-            var plutusV2Scripts = Set.empty[Script.PlutusV2]
-            var plutusV3Scripts = Set.empty[Script.PlutusV3]
+            var plutusV2Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV2]
+            var plutusV3Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV3]
 
             for _ <- 0L until mapSize do
                 val key = r.readInt()
 
                 key match
                     case 0 => // VKey witnesses
-                        vkeyWitnesses = readSet(r)
+                        vkeyWitnesses = r.read()
 
                     case 1 => // Native scripts
-                        nativeScripts = readSet(r)
+                        nativeScripts = r.read()
 
                     case 2 => // Bootstrap witnesses
-                        bootstrapWitnesses = readSet(r)
+                        bootstrapWitnesses = r.read()
 
                     case 3 => // Plutus V1 scripts
-                        plutusV1Scripts = readSet(r)
+                        plutusV1Scripts = r.read()
 
                     case 4 => // Plutus data
-                        plutusData = r.read[KeepRaw[TaggedSet[KeepRaw[Data]]]]()
+                        plutusData = r.read[KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]]]()
 
                     case 5 => // Redeemers
                         redeemers = Some(r.read[KeepRaw[Redeemers]]())
 
                     case 6 => // Plutus V2 scripts
-                        plutusV2Scripts = readSet(r)
+                        plutusV2Scripts = r.read()
 
                     case 7 => // Plutus V3 scripts
-                        plutusV3Scripts = readSet(r)
+                        plutusV3Scripts = r.read()
 
                     case _ => r.skipDataItem() // Skip unknown fields
 
@@ -195,15 +197,10 @@ object TransactionWitnessSet:
               plutusV2Scripts = plutusV2Scripts,
               plutusV3Scripts = plutusV3Scripts
             )
+        }
 
-    /** Helper to read a Set from CBOR */
-    private def readSet[A](r: Reader)(using decoder: Decoder[A]): Set[A] =
-        // Check for indefinite array tag (258)
-        if r.dataItem() == DataItem.Tag then
-            val tag = r.readTag()
-            if tag.code != 258 then
-                r.validationFailure(s"Expected tag 258 for definite Set, got $tag")
-            val set = r.read[Set[A]]()
-            if set.isEmpty then r.validationFailure("Set must be non-empty")
-            set
-        else r.read[Set[A]]()
+    given TaggedSortedMap.KeyOf[ScriptHash, Script.Native] = _.scriptHash
+    given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV1] = _.scriptHash
+    given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV2] = _.scriptHash
+    given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV3] = _.scriptHash
+    given TaggedSortedMap.KeyOf[DataHash, KeepRaw[Data]] = _.dataHash

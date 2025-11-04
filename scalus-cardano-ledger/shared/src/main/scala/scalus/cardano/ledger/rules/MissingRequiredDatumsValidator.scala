@@ -14,7 +14,7 @@ object MissingRequiredDatumsValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transaction = event
-        val utxo = state.utxo
+        val utxo = state.utxos
 
         val result = for {
             scriptsProvided <- AllResolvedScripts.allResolvedScriptsMap(transaction, utxo)
@@ -23,9 +23,7 @@ object MissingRequiredDatumsValidator extends STS.Validator {
               transaction,
               scriptsProvided
             )
-            txHashes = transaction.witnessSet.plutusData.value.toIndexedSeq
-                .map(datum => datum.value.dataHash)
-                .toSet
+            txHashes = transaction.witnessSet.plutusData.value.toMap.keys.toSet[ByteString]
 
             unmatchedDatumHashes = inputHashes -- txHashes
             allowedSupplementalDataHashes = getSupplementalDataHashes(utxo, transaction)
@@ -69,7 +67,7 @@ object MissingRequiredDatumsValidator extends STS.Validator {
         val txInsNoDataHash = mutable.Set.empty[TransactionInput]
 
         for {
-            input <- txBody.inputs.toSortedSet
+            input <- txBody.inputs.toSet
             resolvedInput <- utxo.get(input)
             if isTwoPhaseScriptAddress(resolvedInput.address, scriptsProvided)
         } do {

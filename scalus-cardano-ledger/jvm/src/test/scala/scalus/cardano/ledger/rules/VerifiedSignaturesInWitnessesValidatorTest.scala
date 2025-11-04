@@ -11,15 +11,15 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
                   VKeyWitness(publicKey3, platform.signEd25519(privateKey3, tx.id))
                 ),
-                bootstrapWitnesses = Set.empty
+                bootstrapWitnesses = TaggedSortedSet.empty
               )
             )
         }
@@ -35,10 +35,10 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
                   VKeyWitness(
@@ -50,7 +50,7 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
                     }
                   )
                 ),
-                bootstrapWitnesses = Set.empty
+                bootstrapWitnesses = TaggedSortedSet.empty
               )
             )
         }
@@ -66,11 +66,11 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet(
                   BootstrapWitness(
                     publicKey1,
                     platform.signEd25519(privateKey1, tx.id),
@@ -105,11 +105,11 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey1, publicKey1) = generateKeyPair()
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set(
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet(
                   BootstrapWitness(
                     publicKey1,
                     platform.signEd25519(privateKey1, tx.id),

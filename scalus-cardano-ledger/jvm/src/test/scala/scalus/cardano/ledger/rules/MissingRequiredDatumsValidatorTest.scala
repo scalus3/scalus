@@ -5,6 +5,7 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
+import TransactionWitnessSet.given
 
 class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
@@ -19,7 +20,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
@@ -27,7 +28,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           witnessSet = TransactionWitnessSet()
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -49,22 +50,22 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = Set(plutusScript),
+            plutusV1Scripts = TaggedSortedMap(plutusScript),
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -86,22 +87,22 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV2Scripts = Set(plutusScript),
+            plutusV2Scripts = TaggedSortedMap(plutusScript),
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -122,17 +123,17 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = Set(plutusScript)
+            plutusV1Scripts = TaggedSortedMap(plutusScript)
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -151,17 +152,17 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = Set(plutusScript)
+            plutusV1Scripts = TaggedSortedMap(plutusScript)
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -181,7 +182,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq(
                 Sized(
                   TransactionOutput(
@@ -196,14 +197,14 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           ),
           witnessSet = TransactionWitnessSet(
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -222,21 +223,21 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
           ),
           witnessSet = TransactionWitnessSet(
             plutusData = KeepRaw(
-              TaggedSet.from(
+              TaggedSortedMap.from(
                 Set(KeepRaw(datum))
               )
             )
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 
@@ -256,17 +257,17 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val transaction = Transaction(
           body = KeepRaw(
             TransactionBody(
-              inputs = TaggedOrderedSet.from(Set(input)),
+              inputs = TaggedSortedSet.from(Set(input)),
               outputs = IndexedSeq.empty,
               fee = Coin.zero
             )
           ),
           witnessSet = TransactionWitnessSet(
-            nativeScripts = Set(Script.Native(nativeScript))
+            nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
 

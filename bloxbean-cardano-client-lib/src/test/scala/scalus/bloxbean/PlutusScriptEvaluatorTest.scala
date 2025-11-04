@@ -53,7 +53,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val redeemer = Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(0, 0))
         val tx = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet(SortedSet(input)),
+            inputs = TaggedSortedSet(SortedSet(input)),
             outputs = Vector(
               Sized(
                 TransactionOutput(
@@ -63,7 +63,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
               )
             ),
             fee = Coin(0),
-            requiredSigners = TaggedOrderedSet.from(Set(Hash(requiredPubKeyHash))),
+            requiredSigners = TaggedSortedSet.from(Set(Hash(requiredPubKeyHash))),
           ),
           witnessSet = TransactionWitnessSet(
             scripts = Seq(s),
@@ -110,7 +110,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val redeemer = Redeemer(RedeemerTag.Spend, 0, Data.unit, ExUnits(0, 0))
         val tx = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet(SortedSet(input)),
+            inputs = TaggedSortedSet(SortedSet(input)),
             outputs = Vector(
               Sized(
                 TransactionOutput(
@@ -120,7 +120,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
               )
             ),
             fee = Coin(0),
-            requiredSigners = TaggedOrderedSet.from(Set(Hash(requiredPubKeyHash))),
+            requiredSigners = TaggedSortedSet.from(Set(Hash(requiredPubKeyHash))),
           ),
           witnessSet = TransactionWitnessSet(
             scripts = Seq(s),

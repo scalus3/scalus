@@ -19,21 +19,19 @@ object TraitObjectScanner:
       * @return
       *   A map of simple class names (without $) to instances of the objects implementing the trait
       */
-    def findImplementors[T: ClassTag](packageName: String): Map[String, T] =
+    def findImplementors[T: ClassTag](packageName: String): Set[T] =
         val classLoader = Thread.currentThread().getContextClassLoader
         val path = packageName.replace('.', '/')
 
         // getResources returns an Enumeration - no resources to close
         val resources = classLoader.getResources(path).asScala.toSeq
 
-        val implementors = resources.view.flatMap { url =>
+        resources.view.flatMap { url =>
             url.getProtocol match
                 case "file" => findObjectsInDirectory[T](url, packageName, classLoader)
                 case "jar"  => findObjectsInJar[T](url, packageName, classLoader)
                 case _      => Seq.empty
         }.toSet // Convert to Set for automatic deduplication
-
-        implementors.view.map(obj => obj.getClass.getSimpleName.dropRight(1) -> obj).toMap
 
     /** Finds objects in a directory (filesystem).
       */

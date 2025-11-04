@@ -6,16 +6,29 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{Environment, PubKeyWitness, TransactionUnspentOutput, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v3
 import scalus.uplc.Program
+import scalus.uplc.eval.ExBudget
 import scalus.testkit.ScalusTest
 
 object TestUtil extends ScalusTest {
 
     val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
-    val testEnvironment: Environment = Environment(
+    val testEnvironmentWithoutEvaluator: Environment = Environment(
       protocolParams = testProtocolParams,
       slotConfig = CardanoInfo.mainnet.slotConfig,
       evaluator = (_: Transaction, _: Map[TransactionInput, TransactionOutput]) => Seq.empty,
+      network = CardanoInfo.mainnet.network
+    )
+
+    val testEnvironmentWithEvaluator: Environment = Environment(
+      protocolParams = testProtocolParams,
+      slotConfig = CardanoInfo.mainnet.slotConfig,
+      evaluator = PlutusScriptEvaluator(
+        slotConfig = CardanoInfo.mainnet.slotConfig,
+        initialBudget = ExBudget.enormous,
+        protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
+        costModels = testProtocolParams.costModels
+      ),
       network = CardanoInfo.mainnet.network
     )
 
@@ -67,14 +80,22 @@ object TestUtil extends ScalusTest {
         (TransactionInput(tx.id, index), transactionOutput)
     }
 
-    def findUtxoByAddress(
+    def findUtxoByAddressAndDatum(
         tx: Transaction,
-        address: Address
+        address: Address,
+        datum: Option[DatumOption] = None
     ): Option[(TransactionInput, TransactionOutput)] = {
         tx.body.value.outputs.view
             .map(_.value)
             .zipWithIndex
-            .find { (transactionOutput, _) => transactionOutput.address == address }
+            .find { (transactionOutput, _) =>
+                address == transactionOutput.address && (
+                  (datum, transactionOutput.datumOption) match
+                      case (Some(d1), Some(d2)) => d1.contentEquals(d2)
+                      case (None, None)         => true
+                      case _                    => false
+                )
+            }
             .map { (transactionOutput, index) =>
                 (TransactionInput(tx.id, index), transactionOutput)
             }
@@ -84,11 +105,10 @@ object TestUtil extends ScalusTest {
         tx: Transaction,
         output: TransactionOutput
     ): Option[Data] = {
-        def getDatum(dataHash: DataHash) = tx.witnessSet.plutusData.value.toIndexedSeq
-            .find { datum =>
-                datum.dataHash == dataHash
-            }
-            .map(_.value)
+        def getDatum(dataHash: DataHash) =
+            tx.witnessSet.plutusData.value.toMap
+                .get(dataHash)
+                .map(_.value)
 
         output match
             case TransactionOutput.Shelley(_, _, Some(datumHash)) =>
@@ -106,7 +126,7 @@ object TestUtil extends ScalusTest {
         utxos: Utxos,
         input: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironment
+        environment: Environment = testEnvironmentWithoutEvaluator
     ): v3.ScriptContext = {
         val inputs = tx.body.value.inputs
         // assume 1 script input
@@ -142,7 +162,7 @@ object TestUtil extends ScalusTest {
         wallet: WalletTrait,
         scriptInput: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironment
+        environment: Environment = testEnvironmentWithoutEvaluator
     ) = {
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxo, scriptInput, redeemerTag, environment)

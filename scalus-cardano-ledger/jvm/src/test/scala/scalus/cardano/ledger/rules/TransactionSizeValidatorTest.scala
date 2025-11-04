@@ -4,6 +4,7 @@ package rules
 import org.scalacheck.Arbitrary
 import scalus.cardano.address.ByronAddress
 import org.scalatest.funsuite.AnyFunSuite
+import TransactionWitnessSet.given
 
 import scala.collection.immutable.SortedSet
 
@@ -11,25 +12,25 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("TransactionSizeValidator rule success") {
         val context = Context()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = Set.empty,
-                bootstrapWitnesses = Set.empty,
-                nativeScripts = Set.empty,
-                plutusV1Scripts = Set.empty,
-                plutusV2Scripts = Set.empty,
-                plutusV3Scripts = Set.empty,
-                plutusData = KeepRaw(TaggedSet.empty),
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap.empty,
+                plutusV2Scripts = TaggedSortedMap.empty,
+                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = None
               ),
               auxiliaryData = None,
               body = KeepRaw(
                 tx.body.value.copy(
                   inputs =
-                      TaggedOrderedSet.from(Set(Arbitrary.arbitrary[TransactionInput].sample.get)),
-                  collateralInputs = TaggedOrderedSet.empty,
-                  referenceInputs = TaggedOrderedSet.empty,
+                      TaggedSortedSet.from(Set(Arbitrary.arbitrary[TransactionInput].sample.get)),
+                  collateralInputs = TaggedSortedSet.empty,
+                  referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq(
                     Sized(
                       TransactionOutput(
@@ -41,9 +42,9 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   proposalProcedures = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  certificates = TaggedSet.empty,
+                  certificates = TaggedOrderedSet.empty,
                   mint = None,
-                  requiredSigners = TaggedOrderedSet.empty,
+                  requiredSigners = TaggedSortedSet.empty,
                   collateralReturnOutput = None
                 )
               )
@@ -61,11 +62,11 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet(inputs)
+                  inputs = TaggedSortedSet(inputs)
                 )
               )
             )

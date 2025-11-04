@@ -12,7 +12,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
         val output = Arbitrary.arbitrary[TransactionOutput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -47,7 +47,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -71,7 +71,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
         val collateralReturnOutput = Arbitrary.arbitrary[TransactionOutput].sample.get
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -106,7 +106,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
         )
 
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(

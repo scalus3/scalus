@@ -12,9 +12,6 @@ import java.security.SecureRandom
 import scala.collection.immutable
 
 trait ValidatorRulesTestKit extends ArbitraryInstances {
-    protected def randomValidTransaction: Transaction =
-        Arbitrary.arbitrary[Transaction].sample.get.copy(isValid = true)
-
     extension (tx: Transaction)
         def withNetwork(network: Network): Transaction = tx.copy(
           body = KeepRaw(
@@ -63,11 +60,10 @@ trait ValidatorRulesTestKit extends ArbitraryInstances {
           )
         )
 
-    private val keyPairGenerator = {
-        val keyPairGenerator = new Ed25519KeyPairGenerator()
-        keyPairGenerator.init(new Ed25519KeyGenerationParameters(new SecureRandom()))
-        keyPairGenerator
-    }
+    end extension
+
+    protected def randomTransactionWithIsValidField: Transaction =
+        Arbitrary.arbitrary[Transaction].sample.get.copy(isValid = true)
 
     protected def generateKeyPair(): (ByteString, ByteString) = {
         val asymmetricCipherKeyPair: AsymmetricCipherKeyPair = keyPairGenerator.generateKeyPair()
@@ -78,5 +74,11 @@ trait ValidatorRulesTestKit extends ArbitraryInstances {
         val privateKey: ByteString = ByteString.fromArray(privateKeyParams.getEncoded)
         val publicKey: ByteString = ByteString.fromArray(publicKeyParams.getEncoded)
         (privateKey, publicKey)
+    }
+
+    private val keyPairGenerator = {
+        val keyPairGenerator = new Ed25519KeyPairGenerator()
+        keyPairGenerator.init(new Ed25519KeyGenerationParameters(new SecureRandom()))
+        keyPairGenerator
     }
 }

@@ -8,11 +8,11 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val state = State()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.from(
+                  inputs = TaggedSortedSet.from(
                     genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
                   )
                 )
@@ -22,18 +22,18 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val result = EmptyInputsValidator.validate(context, state, transaction)
         assert(result.isRight)
-        assert(transaction.body.value.inputs.toSortedSet.nonEmpty)
+        assert(transaction.body.value.inputs.toSet.nonEmpty)
     }
 
     test("EmptyInputsValidator rule failure") {
         val context = Context()
         val state = State()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
-                  inputs = TaggedOrderedSet.empty
+                  inputs = TaggedSortedSet.empty
                 )
               )
             )
@@ -41,6 +41,6 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val result = EmptyInputsValidator.validate(context, state, transaction)
         assert(result.isLeft)
-        assert(transaction.body.value.inputs.toSortedSet.isEmpty)
+        assert(transaction.body.value.inputs.toSet.isEmpty)
     }
 }

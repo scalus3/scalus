@@ -17,10 +17,10 @@ class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTe
             )
         }.toSet
 
-        val tx = randomValidTransaction.copy(
+        val tx = randomTransactionWithIsValidField.copy(
           body = KeepRaw(
-            randomValidTransaction.body.value.copy(
-              collateralInputs = TaggedOrderedSet.from(collateralInputs)
+            randomTransactionWithIsValidField.body.value.copy(
+              collateralInputs = TaggedSortedSet.from(collateralInputs)
             )
           )
         )
@@ -39,10 +39,10 @@ class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTe
             )
         }.toSet
 
-        val tx = randomValidTransaction.copy(
+        val tx = randomTransactionWithIsValidField.copy(
           body = KeepRaw(
-            randomValidTransaction.body.value.copy(
-              collateralInputs = TaggedOrderedSet.from(collateralInputs)
+            randomTransactionWithIsValidField.body.value.copy(
+              collateralInputs = TaggedSortedSet.from(collateralInputs)
             )
           )
         )

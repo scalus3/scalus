@@ -48,7 +48,7 @@ object Offchain:
             .spendUsingDelayedRedeemer(
               utxo = scriptUtxo,
               redeemerBuilder = tx => {
-                  val inputCount = tx.body.value.inputs.toSortedSet.size
+                  val inputCount = tx.body.value.inputs.toSet.size
                   InputCountRedeemer(BigInt(inputCount)).toData
               },
               validator = plutusScript,

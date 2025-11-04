@@ -4,7 +4,7 @@ import io.bullet.borer.*
 
 case class TransactionBody(
     /** Transaction inputs to spend */
-    inputs: TaggedOrderedSet[TransactionInput],
+    inputs: TaggedSortedSet[TransactionInput],
 
     /** Transaction outputs to create */
     outputs: IndexedSeq[Sized[TransactionOutput]],
@@ -16,7 +16,7 @@ case class TransactionBody(
     ttl: Option[Long] = None,
 
     /** Certificates for delegation, stake operations, etc. */
-    certificates: TaggedSet[Certificate] = TaggedSet.empty,
+    certificates: TaggedOrderedSet[Certificate] = TaggedOrderedSet.empty,
 
     /** Withdrawals from reward accounts */
     withdrawals: Option[Withdrawals] = None,
@@ -34,10 +34,10 @@ case class TransactionBody(
     scriptDataHash: Option[ScriptDataHash] = None,
 
     /** Collateral inputs */
-    collateralInputs: TaggedOrderedSet[TransactionInput] = TaggedOrderedSet.empty,
+    collateralInputs: TaggedSortedSet[TransactionInput] = TaggedSortedSet.empty,
 
     /** Required signers */
-    requiredSigners: TaggedOrderedSet[AddrKeyHash] = TaggedOrderedSet.empty,
+    requiredSigners: TaggedSortedSet[AddrKeyHash] = TaggedSortedSet.empty,
 
     /** Network ID */
     networkId: Option[Int] = None,
@@ -49,7 +49,7 @@ case class TransactionBody(
     totalCollateral: Option[Coin] = None,
 
     /** Reference inputs */
-    referenceInputs: TaggedOrderedSet[TransactionInput] = TaggedOrderedSet.empty,
+    referenceInputs: TaggedSortedSet[TransactionInput] = TaggedSortedSet.empty,
 
     /** Voting procedures */
     votingProcedures: Option[VotingProcedures] = None,
@@ -94,20 +94,20 @@ object TransactionBody:
             var mapSize = 3 // inputs, outputs, fee are required
 
             if value.ttl.isDefined then mapSize += 1
-            if value.certificates.toIndexedSeq.nonEmpty then mapSize += 1
+            if value.certificates.toSeq.nonEmpty then mapSize += 1
             if value.withdrawals.isDefined then mapSize += 1
             if value.auxiliaryDataHash.isDefined then mapSize += 1
             if value.validityStartSlot.isDefined then mapSize += 1
             if value.mint.isDefined then mapSize += 1
             if value.scriptDataHash.isDefined then mapSize += 1
-            if value.collateralInputs.toSortedSet.nonEmpty then mapSize += 1
-            if value.requiredSigners.toSortedSet.nonEmpty then mapSize += 1
+            if value.collateralInputs.toSet.nonEmpty then mapSize += 1
+            if value.requiredSigners.toSet.nonEmpty then mapSize += 1
             if value.networkId.isDefined then mapSize += 1
             if value.collateralReturnOutput.isDefined then mapSize += 1
             if value.totalCollateral.isDefined then mapSize += 1
-            if value.referenceInputs.toSortedSet.nonEmpty then mapSize += 1
+            if value.referenceInputs.toSet.nonEmpty then mapSize += 1
             if value.votingProcedures.isDefined then mapSize += 1
-            if value.proposalProcedures.toSortedSet.nonEmpty then mapSize += 1
+            if value.proposalProcedures.toSeq.nonEmpty then mapSize += 1
             if value.currentTreasuryValue.isDefined then mapSize += 1
             if value.donation.isDefined then mapSize += 1
 
@@ -136,7 +136,7 @@ object TransactionBody:
             }
 
             // Certificates (key 4)
-            if value.certificates.toIndexedSeq.nonEmpty then
+            if value.certificates.toSeq.nonEmpty then
                 w.writeInt(4)
                 w.write(value.certificates)
 
@@ -171,11 +171,11 @@ object TransactionBody:
             }
 
             // Collateral inputs (key 13)
-            if value.collateralInputs.toSortedSet.nonEmpty then
+            if value.collateralInputs.toSet.nonEmpty then
                 w.writeInt(13)
                 w.write(value.collateralInputs)
 
-            if value.requiredSigners.toSortedSet.nonEmpty then
+            if value.requiredSigners.toSet.nonEmpty then
                 // Required signers (key 14)
                 w.writeInt(14)
                 w.write(value.requiredSigners)
@@ -199,7 +199,7 @@ object TransactionBody:
             }
 
             // Reference inputs (key 18)
-            if value.referenceInputs.toSortedSet.nonEmpty then
+            if value.referenceInputs.toSet.nonEmpty then
                 w.writeInt(18)
                 w.write(value.referenceInputs)
 
@@ -210,7 +210,7 @@ object TransactionBody:
             }
 
             // Proposal procedures (key 20)
-            if value.proposalProcedures.toSortedSet.nonEmpty then
+            if value.proposalProcedures.toSeq.nonEmpty then
                 w.writeInt(20)
                 w.write(value.proposalProcedures)
 
@@ -233,22 +233,22 @@ object TransactionBody:
         def read(r: Reader): TransactionBody =
             val mapSize = r.readMapHeader()
 
-            var inputs = TaggedOrderedSet.empty[TransactionInput]
+            var inputs = TaggedSortedSet.empty[TransactionInput]
             var outputs = IndexedSeq.empty[Sized[TransactionOutput]]
             var fee: Option[Coin] = None
             var ttl: Option[Long] = None
-            var certificates = TaggedSet.empty[Certificate]
+            var certificates = TaggedOrderedSet.empty[Certificate]
             var withdrawals: Option[Withdrawals] = None
             var auxiliaryDataHash: Option[AuxiliaryDataHash] = None
             var validityStartSlot: Option[Long] = None
             var mint: Option[Mint] = None
             var scriptDataHash: Option[ScriptDataHash] = None
-            var collateralInputs = TaggedOrderedSet.empty[TransactionInput]
-            var requiredSigners = TaggedOrderedSet.empty[AddrKeyHash]
+            var collateralInputs = TaggedSortedSet.empty[TransactionInput]
+            var requiredSigners = TaggedSortedSet.empty[AddrKeyHash]
             var networkId: Option[Int] = None
             var collateralReturnOutput: Option[Sized[TransactionOutput]] = None
             var totalCollateral: Option[Coin] = None
-            var referenceInputs = TaggedOrderedSet.empty[TransactionInput]
+            var referenceInputs = TaggedSortedSet.empty[TransactionInput]
             var votingProcedures: Option[VotingProcedures] = None
             var proposalProcedures = TaggedOrderedSet.empty[ProposalProcedure]
             var currentTreasuryValue: Option[Coin] = None
@@ -260,7 +260,7 @@ object TransactionBody:
 
                 key match
                     case 0 => // Inputs
-                        inputs = r.read[TaggedOrderedSet[TransactionInput]]()
+                        inputs = r.read[TaggedSortedSet[TransactionInput]]()
 
                     case 1 => // Outputs
                         outputs = r.read[IndexedSeq[Sized[TransactionOutput]]]()
@@ -272,7 +272,7 @@ object TransactionBody:
                         if r.hasOverLong then ttl = Some(r.readOverLong())
                         else ttl = Some(r.readLong())
                     case 4 => // Certificates
-                        certificates = r.read[TaggedSet[Certificate]]()
+                        certificates = r.read[TaggedOrderedSet[Certificate]]()
 
                     case 5 => // Withdrawals
                         withdrawals = Some(r.read[Withdrawals]())
@@ -290,10 +290,10 @@ object TransactionBody:
                         scriptDataHash = Some(r.read[ScriptDataHash]())
 
                     case 13 => // Collateral inputs
-                        collateralInputs = r.read[TaggedOrderedSet[TransactionInput]]()
+                        collateralInputs = r.read[TaggedSortedSet[TransactionInput]]()
 
                     case 14 => // Required signers
-                        requiredSigners = r.read[TaggedOrderedSet[AddrKeyHash]]()
+                        requiredSigners = r.read[TaggedSortedSet[AddrKeyHash]]()
 
                     case 15 => // Network ID
                         val id = r.readInt()
@@ -308,7 +308,7 @@ object TransactionBody:
                         totalCollateral = Some(r.read[Coin]())
 
                     case 18 => // Reference inputs
-                        referenceInputs = r.read[TaggedOrderedSet[TransactionInput]]()
+                        referenceInputs = r.read[TaggedSortedSet[TransactionInput]]()
 
                     case 19 => // Voting procedures
                         votingProcedures = Some(r.read[VotingProcedures]())

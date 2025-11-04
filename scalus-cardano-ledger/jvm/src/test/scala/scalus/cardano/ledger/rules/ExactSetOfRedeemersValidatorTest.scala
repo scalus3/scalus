@@ -5,7 +5,7 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
-
+import TransactionWitnessSet.given
 import scala.collection.immutable.SortedMap
 
 class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
@@ -20,14 +20,14 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         )
         val transaction = Transaction(
           body = TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero
           ),
           witnessSet = TransactionWitnessSet()
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
@@ -45,7 +45,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
           ),
@@ -57,7 +57,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
     }
@@ -75,7 +75,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
             mint = Some(
@@ -96,7 +96,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
@@ -115,7 +115,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
           ),
@@ -130,7 +130,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
 
@@ -150,7 +150,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val dummyExUnits = Arbitrary.arbitrary[ExUnits].sample.get
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
             mint = Some(
@@ -164,12 +164,12 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             ),
           ),
           TransactionWitnessSet(
-            plutusV2Scripts = Set(plutusScript),
+            plutusV2Scripts = TaggedSortedMap(plutusScript),
             redeemers = None // no redeemer
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
 
@@ -188,7 +188,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         )
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(Set(input)),
+            inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
             mint = Some(
@@ -202,12 +202,12 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             ),
           ),
           TransactionWitnessSet(
-            nativeScripts = Set(Script.Native(nativeScript)),
+            nativeScripts = TaggedSortedMap(Script.Native(nativeScript)),
             redeemers = None
           ),
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)
@@ -257,7 +257,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
 
         val transaction = Transaction(
           TransactionBody(
-            inputs = TaggedOrderedSet.from(inputsSet),
+            inputs = TaggedSortedSet.from(inputsSet),
             outputs = IndexedSeq.empty,
             fee = Coin.zero,
           ),
@@ -272,7 +272,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           )
         )
         val context = Context()
-        val state = State(utxo = utxo)
+        val state = State(utxos = utxo)
 
         val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
         assert(result.isRight)

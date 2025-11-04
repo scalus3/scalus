@@ -25,7 +25,7 @@ case class Transaction(
       platform.blake2b_256(ByteString.unsafeFromArray(body.raw))
     )
 
-    @transient lazy val validityInterval: ValidityInterval =
+    def validityInterval: ValidityInterval =
         ValidityInterval(body.value.validityStartSlot, body.value.ttl)
 
     def toCbor: Array[Byte] = {
@@ -61,7 +61,7 @@ object Transaction {
 
     /** An empty transaction */
     def empty: Transaction = Transaction(
-      TransactionBody(TaggedOrderedSet.empty, IndexedSeq.empty, Coin.zero),
+      TransactionBody(TaggedSortedSet.empty, IndexedSeq.empty, Coin.zero),
       TransactionWitnessSet.empty,
     )
 

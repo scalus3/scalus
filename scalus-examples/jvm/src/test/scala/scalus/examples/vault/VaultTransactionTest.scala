@@ -9,7 +9,7 @@ import scalus.uplc.eval.{ExCPU, ExMemory}
 
 class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
-    private val env = TestUtil.testEnvironment
+    private val env = TestUtil.testEnvironmentWithoutEvaluator
 
     private val ownerAddress = TestUtil.createTestAddress("a" * 56)
 

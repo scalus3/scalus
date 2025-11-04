@@ -18,3 +18,7 @@ case class VKeyWitness(
     @transient lazy val vkeyHash: AddrKeyHash = Hash(
       platform.blake2b_224(vkey)
     )
+
+object VKeyWitness:
+    given Ordering[VKeyWitness] =
+        Ordering.by[VKeyWitness, ByteString](_.vkey).orElseBy[ByteString](_.signature)

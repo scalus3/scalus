@@ -8,7 +8,7 @@ class AddOutputsToUtxoMutatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val state = State()
         val transaction = {
-            val tx = randomValidTransaction
+            val tx = randomTransactionWithIsValidField
             tx.copy(
               body = KeepRaw(
                 tx.body.value.copy(
@@ -19,9 +19,9 @@ class AddOutputsToUtxoMutatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         val result = AddOutputsToUtxoMutator.transit(context, state, transaction)
-        assert(state.utxo.isEmpty)
+        assert(state.utxos.isEmpty)
         assert(result.isRight)
-        assert(result.toOption.get.utxo.values.toSeq == transaction.body.value.outputs.map {
+        assert(result.toOption.get.utxos.values.toSeq == transaction.body.value.outputs.map {
             _.value
         })
     }

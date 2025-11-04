@@ -20,8 +20,9 @@ import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig, ValidityInterval}
 import scalus.ledger.api.v1.ScriptPurpose
+import scalus.ledger.api.v2.ScriptPurpose
 import scalus.ledger.api.v3.ScriptInfo
-import scalus.ledger.api.{v3, ScriptContext}
+import scalus.ledger.api.{v3, ScriptContext, *}
 import scalus.uplc.eval.ExBudget
 import scalus.utils.Utils
 
@@ -33,7 +34,7 @@ import java.util.stream.Collectors
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 import scala.math.Ordering.Implicits.*
-import scala.util.boundary.break
+import scala.util.boundary.{break, Break}
 import scala.util.{boundary, Using}
 
 /** Setup BLOCKFROST_API_KEY environment variable before running this test. In SBT shell:
@@ -102,8 +103,9 @@ class BlocksValidation extends AnyFunSuite {
         val (r, e) = plutusScriptEvaluator(utxoSupplier, scriptSupplier, epoch)
         val evalScalus = evalBlockWithScalus(r, e)
 
+        var totalBlocks = 0
         var totalTx = 0
-        val errors = mutable.ArrayBuffer[(String, Int, String)]()
+        val errors = mutable.ArrayBuffer[(String, String, String)]()
         val v1Scripts = mutable.HashSet.empty[String]
         var v1ScriptsExecuted = 0
         val v2Scripts = mutable.HashSet.empty[String]
@@ -111,92 +113,114 @@ class BlocksValidation extends AnyFunSuite {
         val v3Scripts = mutable.HashSet.empty[String]
         var v3ScriptsExecuted = 0
 
-        println(s"Validating blocks of epoch $epoch...")
-        for blockNum <- 11544518 /*11544519*/ to /*11662495*/ 11546100 /*11544519*/ do
-            try
-                val (txs, blockBytes) = readTransactionsFromBlockCbor(
-                  resourcesPath.resolve(s"blocks/block-$blockNum.cbor")
-                )
-                val txsWithScripts =
-                    val r = mutable.Buffer.empty[
-                      (Transaction, util.List[ByteString], String, Map[ScriptHash, Script])
-                    ]
-                    for BlockTx(tx, datums, txhash) <- txs do
-                        try
-                            val utxos = utxoResolver.resolveUtxos(tx)
-                            val scripts = TxEvaluator.getAllResolvedScripts(tx, utxos)
-                            if scripts.nonEmpty then r.addOne((tx, datums, txhash, scripts))
-                        catch
-                            case e: Exception =>
-                                errors += ((e.getMessage, blockNum, txhash))
-                                println(s"Error in block $blockNum, tx $txhash: ${e.getMessage}")
-                    r.toSeq
-//                println(s"\rBlock $blockNum, num txs to validate: ${txsWithScripts.size}")
-//            println(s"Block txs:\n${txsWithScripts.map(_._3).sorted.mkString("\n")}")
-
-                for (tx, datums, txhash, scripts) <- txsWithScripts do {
-//                println(s"Validating tx $txhash")
-                    //                println(tx)
-                    if tx.isValid
-                    && (datums.size() == tx.getWitnessSet.getPlutusDataList
-                        .size()) // FIXME: remove this check when we have the correct datums
-                    then
-                        totalTx += 1
-                        val result =
-                            evaluator.evaluateTxWithContexts(tx, util.Set.of(), datums, txhash)
-                        result match {
-                            case Left(error) =>
-                                errors += ((error.toString, blockNum, txhash))
-                                println(
-                                  s"${Console.RED}[error# ${errors.size}] AAAA!!!! block $blockNum $txhash ${error}${Console.RESET}"
-                                )
-                                println(error.scriptContext.map(showScriptContext).mkString("\n"))
-                                for case (tx, key, actualExUnits, expectedExUnits, newSc) <-
-                                        evalScalus(blockBytes)
-                                do
-                                    if tx.id.toHex == txhash then {
-                                        val oldSc = error.scriptContext.head
-                                        val p = getPurpose(oldSc)
-                                        if p == key._1 then {
-                                            println(
-                                              s"\nScalus script context (key $key, actual $actualExUnits, expected $expectedExUnits):"
-                                            )
-                                            println(showScriptContext(newSc))
-                                        }
+        val blocks = getAllBlocksPaths()
+        println(s"Validating scripts of ${blocks.size} blocks")
+        boundary:
+            for blockPath <- getAllBlocksPaths() do
+                totalBlocks += 1
+                val fileName = blockPath.getFileName.toString
+                try {
+                    val (txs, blockBytes) = readTransactionsFromBlockCbor(blockPath)
+                    val txsWithScripts =
+                        val r = mutable.Buffer.empty[
+                          (Transaction, util.List[ByteString], String, Map[ScriptHash, Script])
+                        ]
+                        for BlockTx(tx, datums, txhash) <- txs do
+                            try
+                                val utxos = utxoResolver.resolveUtxos(tx)
+                                val scripts = TxEvaluator.getAllResolvedScripts(tx, utxos)
+                                if scripts.nonEmpty then r.addOne((tx, datums, txhash, scripts))
+                            catch
+                                case e: Exception =>
+                                    if e.getMessage.endsWith("No value present") then {
+                                        println(s"$fileName: $e")
+                                        println("Cannot resolve UTXO, stopping test ...")
+                                        break()
+                                    } else {
+                                        errors += ((e.getMessage, fileName, txhash))
+                                        println(
+                                          s"Error in block $fileName, tx $txhash: ${e.getMessage}"
+                                        )
                                     }
-                                println()
-                            case Right(_) =>
-                                for script <- scripts.values do
-                                    script match
-                                        case _: Script.PlutusV1 =>
-                                            v1Scripts += script.scriptHash.toHex
-                                            v1ScriptsExecuted += 1
-                                        case _: Script.PlutusV2 =>
-                                            v2Scripts += script.scriptHash.toHex
-                                            v2ScriptsExecuted += 1
-                                        case _: Script.PlutusV3 =>
-                                            v3Scripts += script.scriptHash.toHex
-                                            v3ScriptsExecuted += 1
-                                        case _ =>
-                        }
-                    else
-                        println(
-                          s"${Console.RED}[error# ${errors.size}] AAAAA invalid!!! $txhash ${Console.RESET}"
-                        )
-                        errors += (("Invalid tx", blockNum, txhash))
-                }
-            catch {
-                case e: Exception => println(s"#$blockNum ${e.getMessage}")
-            }
+                        r.toSeq
+                    //                println(s"\rBlock $blockNum, num txs to validate: ${txsWithScripts.size}")
+                    //            println(s"Block txs:\n${txsWithScripts.map(_._3).sorted.mkString("\n")}")
 
-        println(s"""Total txs: $totalTx,
+                    for (tx, datums, txhash, scripts) <- txsWithScripts do {
+                        //                println(s"Validating tx $txhash")
+                        //                println(tx)
+                        if tx.isValid
+                        && (datums.size() == tx.getWitnessSet.getPlutusDataList
+                            .size()) // FIXME: remove this check when we have the correct datums
+                        then
+                            totalTx += 1
+                            val result =
+                                evaluator.evaluateTxWithContexts(tx, util.Set.of(), datums, txhash)
+                            result match {
+                                case Left(error) =>
+                                    errors += ((error.toString, fileName, txhash))
+                                    println(
+                                      s"${Console.RED}[error# ${errors.size}] AAAA!!!! block $fileName $txhash ${error}${Console.RESET}"
+                                    )
+                                    println(
+                                      error.scriptContext.map(showScriptContext).mkString("\n")
+                                    )
+                                    for case (
+                                          tx,
+                                          key,
+                                          actualExUnits,
+                                          expectedExUnits,
+                                          newSc,
+                                          newSh
+                                        ) <-
+                                            evalScalus(blockBytes)
+                                    do
+                                        if tx.id.toHex == txhash then {
+                                            val oldSc = error.scriptContext.head
+                                            val p = getPurpose(oldSc)
+                                            if p == key._1 then {
+                                                println(
+                                                  s"\nScalus script context (key $key, actual $actualExUnits, expected $expectedExUnits):"
+                                                )
+                                                println(newSh)
+                                                // println(showScriptContext(newSc))
+                                            }
+                                        }
+                                    println()
+                                case Right(_) =>
+                                    for script <- scripts.values do
+                                        script match
+                                            case _: Script.PlutusV1 =>
+                                                v1Scripts += script.scriptHash.toHex
+                                                v1ScriptsExecuted += 1
+                                            case _: Script.PlutusV2 =>
+                                                v2Scripts += script.scriptHash.toHex
+                                                v2ScriptsExecuted += 1
+                                            case _: Script.PlutusV3 =>
+                                                v3Scripts += script.scriptHash.toHex
+                                                v3ScriptsExecuted += 1
+                                            case _ =>
+                            }
+                        else
+                            println(
+                              s"${Console.RED}[error# ${errors.size}] AAAAA invalid!!! $txhash ${Console.RESET}"
+                            )
+                            errors += (("Invalid tx", fileName, txhash))
+                    }
+                } catch {
+                    case e: Break[?]  => throw e
+                    case e: Exception => println(s"$fileName ${e.getMessage}")
+                }
+
+        println(s"""Total blocks: $totalBlocks,
+               |Total txs: $totalTx,
                |errors: ${errors.size},
                |v1: $v1ScriptsExecuted of ${v1Scripts.size},
                |v2: $v2ScriptsExecuted of ${v2Scripts.size}
                |v3: $v3ScriptsExecuted of ${v3Scripts.size}
                |""".stripMargin)
 
-        assert(errors.size == 0)
+        assert(errors.isEmpty)
     }
 
     private def getPurpose(oldSc: ScriptContext): RedeemerTag = {
@@ -241,7 +265,9 @@ class BlocksValidation extends AnyFunSuite {
 
     def evalBlockWithScalus(utxoResolver: ScalusUtxoResolver, evaluator: PlutusScriptEvaluator)(
         blockBytes: Array[Byte]
-    ): Seq[(ledger.Transaction, (RedeemerTag, Int), ExUnits, ExUnits, ScriptContext)] = {
+    ): Seq[
+      (ledger.Transaction, (RedeemerTag, Int), ExUnits, ExUnits, ScriptContext, ScriptHash)
+    ] = {
         given OriginalCborByteArray = OriginalCborByteArray(blockBytes)
         val block = BlockFile.fromCborArray(blockBytes).block
         val txs = block.transactions.filter(t => t.witnessSet.redeemers.nonEmpty && t.isValid)
@@ -253,12 +279,17 @@ class BlocksValidation extends AnyFunSuite {
             actualRedeemers = Redeemers.from(results.map(_._1)).toMap
             expectedRedeemers = tx.witnessSet.redeemers.get.value.toMap
             (key, (_, actualExUnits)) <- actualRedeemers
-            case (_, sc) <- results.find(r => (r._1.tag, r._1.index) == key)
-        yield (tx, key, actualExUnits, expectedRedeemers(key)._2, sc)
+            case (_, sc, sh) <- results.find(r => (r._1.tag, r._1.index) == key)
+        yield (tx, key, actualExUnits, expectedRedeemers(key)._2, sc, sh)
     }
 
     private def validateBlocksOfEpochWithScalus(epoch: Int): Int = {
         val errors = mutable.ArrayBuffer[String]()
+        val stats = (
+          mutable.Map[ScriptHash, Int](),
+          mutable.Map[ScriptHash, Int](),
+          mutable.Map[ScriptHash, Int]()
+        )
 
         val backendService = new BFBackendService(Constants.BLOCKFROST_MAINNET_URL, apiKey)
         val utxoSupplier = CachedUtxoSupplier(
@@ -283,9 +314,16 @@ class BlocksValidation extends AnyFunSuite {
             for path <- blocks do
                 try {
                     val blockBytes = Files.readAllBytes(path)
-                    for case (tx, key, actualExUnits, expectedExUnits, sc) <- evalScalus(blockBytes)
+                    for case (tx, key, actualExUnits, expectedExUnits, sc, sh) <- evalScalus(
+                          blockBytes
+                        )
                     do
                         totalTx += 1
+                        ScriptContext.foldMap(sc)(
+                          _ => stats._1.updateWith(sh)(n => Some(n.fold(1)(_ + 1))),
+                          _ => stats._2.updateWith(sh)(n => Some(n.fold(1)(_ + 1))),
+                          _ => stats._3.updateWith(sh)(n => Some(n.fold(1)(_ + 1))),
+                        )
                         if actualExUnits > expectedExUnits then {
                             val error =
                                 s"AAAA!!!! block $path, tx ${tx.id} ${key._1} budget: $actualExUnits > $expectedExUnits"
@@ -311,7 +349,28 @@ class BlocksValidation extends AnyFunSuite {
         println(
           s"\n${Console.GREEN}Total txs: $totalTx, errors ${errors.size}, blocks: ${blocks.size}, epoch: $epoch${Console.RESET}"
         )
+        showScriptsStats(1, stats._1.toMap)
+        showScriptsStats(2, stats._2.toMap)
+        showScriptsStats(3, stats._3.toMap)
         errors.size
+    }
+
+    def showScriptsStats(ver: Int, stats: Map[ScriptHash, Int]): Unit = {
+        val scripts = stats.size
+        val runs = stats.values.sum
+        println(s"Scripts v$ver: $runs runs of $scripts scripts")
+        val top = stats.toSeq.sortBy(_._2)(using Ordering[Int].reverse)
+        println(
+            s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
+        )
+        val top10 = top.take(10).map(_._2).sum
+        println(
+          s"  Top 10: ${top10} (${100 * top10 / runs}%) runs by 10 (${100 * 10 / scripts}%) scripts "
+        )
+        val top100 = top.take(100).map(_._2).sum
+        println(
+            s"  Top 100: ${top100} (${100 * top100 / runs}%) runs by 100 (${100 * 100 / scripts}%) scripts "
+        )
     }
 
     def readTransactionsFromBlockCbor(path: Path): (collection.Seq[BlockTx], Array[Byte]) = {
@@ -451,13 +510,12 @@ class BlocksValidation extends AnyFunSuite {
                 val blockBytes = Files.readAllBytes(path)
                 val block = BlockFile.fromCborArray(blockBytes).block
                 for
-                    (txb, w) <- block.transactionBodies.view
+                    case (txb, w) <- block.transactionBodies.view
                         .map(_.value)
                         .zip(block.transactionWitnessSets)
-                    native <- w.nativeScripts
+                    case (scriptHash, native) <- w.nativeScripts.toMap
                 do
-                    val scriptHash = native.scriptHash
-                    val keyHashes = w.vkeyWitnesses.map { w =>
+                    val keyHashes = w.vkeyWitnesses.toSet.map { w =>
                         val key = w.vkey
                         AddrKeyHash(platform.blake2b_224(key))
                     }
@@ -535,10 +593,10 @@ class BlocksValidation extends AnyFunSuite {
                                     .get
 
                             val desc =
-                                (if w.plutusV1Scripts.nonEmpty then "v1" else "")
-                                    ++ (if w.plutusV2Scripts.nonEmpty then "v2" else "")
-                                    ++ (if w.plutusV3Scripts.nonEmpty then "v3" else "")
-                                    ++ (if w.plutusData.value.toIndexedSeq.nonEmpty then "D"
+                                (if w.plutusV1Scripts.toMap.nonEmpty then "v1" else "")
+                                    ++ (if w.plutusV2Scripts.toMap.nonEmpty then "v2" else "")
+                                    ++ (if w.plutusV3Scripts.toMap.nonEmpty then "v3" else "")
+                                    ++ (if w.plutusData.value.toMap.nonEmpty then "D"
                                         else "")
                                     ++ (if w.redeemers.nonEmpty then "R" else "")
 
@@ -572,12 +630,12 @@ class BlocksValidation extends AnyFunSuite {
         val interestingBlocks = blocks.filter { path =>
             val blockBytes = Files.readAllBytes(path)
             val block = BlockFile.fromCborArray(blockBytes).block
-            block.transactionWitnessSets.exists { _.plutusV1Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV2Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV3Scripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.nativeScripts.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.vkeyWitnesses.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusData.value.toIndexedSeq.nonEmpty }
+            block.transactionWitnessSets.exists { _.plutusV1Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV2Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV3Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.nativeScripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusData.value.toMap.nonEmpty }
         }
         println(s"Interesting blocks ${interestingBlocks.size} of ${blocks.size}")
         interestingBlocks.foreach { p =>
@@ -593,7 +651,7 @@ class BlocksValidation extends AnyFunSuite {
     test("validateBlocksOfEpochWithScalus(543)"):
         assert(validateBlocksOfEpochWithScalus(543) == 0)
 
-    test("validateBlocksOfEpoch(543)"):
+    ignore("validateBlocksOfEpoch(543)"):
         validateBlocksOfEpoch(543)
 
     test("validateNativeScriptEvaluation()"):

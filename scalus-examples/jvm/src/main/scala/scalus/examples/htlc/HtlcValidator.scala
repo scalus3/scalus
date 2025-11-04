@@ -20,10 +20,16 @@ case class ContractDatum(
 ) derives FromData,
       ToData
 
+@Compile
+object ContractDatum
+
 // Redeemer
 enum Action derives FromData, ToData:
     case Timeout
     case Reveal(preimage: Preimage)
+
+@Compile
+object Action
 
 @Compile
 object HtlcValidator extends Validator:
