@@ -1,8 +1,9 @@
-package scalus.uplc.eval
+package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
+import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM}
 
 class MincontCompareTest extends AnyFunSuiteLike {
     test("Mincont if-then-else works") {

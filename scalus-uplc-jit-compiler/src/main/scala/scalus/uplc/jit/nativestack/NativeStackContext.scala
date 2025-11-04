@@ -1,4 +1,4 @@
-package scalus.uplc.eval.nativestack
+package scalus.uplc.jit.nativestack
 
 class StackTresholdException extends RuntimeException("max-stack-depth", null, false, false) {}
 

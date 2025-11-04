@@ -1,9 +1,10 @@
-package scalus.uplc.eval.jitcommon
+package scalus.uplc.jit.jitcommon
 
 import scalus.builtin.{BuiltinPair, Builtins, ByteString, Data}
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams}
 import scalus.uplc.eval.ExBudgetCategory.BuiltinApp
+import scalus.uplc.jit.jitcommon
 
 /** Pre-compiled builtin function implementations for NativeStack JIT.
   *
@@ -257,7 +258,7 @@ object BuiltinSnippets {
               params.builtinCostModel.unListData.constantCost,
               Nil
             )
-            scalus.uplc.eval.jitcommon.RuntimeHelper.unListData(x)
+            jitcommon.RuntimeHelper.unListData(x)
         }
 
     @inline def unIData(budget: BudgetSpender, params: MachineParams): Data => BigInt =

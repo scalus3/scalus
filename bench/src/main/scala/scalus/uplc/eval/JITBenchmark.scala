@@ -2,6 +2,7 @@ package scalus.uplc.eval
 
 import org.openjdk.jmh.annotations.*
 import scalus.*
+import scalus.uplc.jit.JITImplementation
 import scalus.uplc.{DeBruijnedProgram, DefaultFun, Program, Term}
 
 import java.nio.file.{Files, Path, Paths}

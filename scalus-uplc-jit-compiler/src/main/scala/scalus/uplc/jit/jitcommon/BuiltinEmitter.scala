@@ -1,4 +1,4 @@
-package scalus.uplc.eval.jitcommon
+package scalus.uplc.jit.jitcommon
 
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultFun.{SubtractInteger, VerifyEd25519Signature}

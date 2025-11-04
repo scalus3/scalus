@@ -1,4 +1,4 @@
-package scalus.uplc.eval.mincont
+package scalus.uplc.jit.mincont
 
 /** Minimal continuation representation for JIT-compiled code.
   *

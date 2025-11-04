@@ -1,9 +1,10 @@
-package scalus.uplc.eval.hybrid
+package scalus.uplc.jit.hybrid
 
+import scalus.uplc.eval.*
+import scalus.uplc.jit.jitcommon.{JitRunner, RuntimeHelper}
+import scalus.uplc.jit.mincont
+import scalus.uplc.jit.nativestack.{JIT, StackTresholdException}
 import scalus.uplc.{DeBruijn, Term}
-import scalus.uplc.eval.{BudgetSpender, CekMachine, EvaluationFailure, Logger, MachineError, MachineParams, PlutusVM}
-import scalus.uplc.eval.jitcommon.{JitRunner, RuntimeHelper}
-import scalus.uplc.eval.nativestack.StackTresholdException
 
 object HybridJIT extends JitRunner {
 
@@ -30,12 +31,12 @@ object HybridJIT extends JitRunner {
                             )
 
             case FailBackStrategy.Mincont =>
-                val mincontFun = scalus.uplc.eval.mincont.JIT.jitUplc(term)
+                val mincontFun = mincont.JIT.jitUplc(term)
                 (logger: Logger, budgetSpender: BudgetSpender, machineParams: MachineParams) =>
                     mincontFun(logger, budgetSpender, machineParams)
         }
         val deBruijnedTerm = DeBruijn.deBruijnTerm(term, true)
-        val nativeStackFun = scalus.uplc.eval.nativestack.JIT.jitUplc(term)
+        val nativeStackFun = JIT.jitUplc(term)
 
         (logger, budgetSpender, machineParams) =>
             try {

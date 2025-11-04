@@ -1,4 +1,4 @@
-package scalus.uplc.eval
+package scalus.uplc.jit
 
 import scalus.uplc.DefaultUni
 

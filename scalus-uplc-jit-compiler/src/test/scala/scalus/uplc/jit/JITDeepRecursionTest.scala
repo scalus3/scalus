@@ -1,15 +1,20 @@
-package scalus.uplc.eval
+package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
+import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM, Result}
+import scalus.uplc.jit.hybrid.HybridJIT
+import scalus.uplc.jit.mincont
+import scalus.uplc.jit.nativestack.JIT
 import scalus.uplc.{Constant, Term}
+
 import java.lang.management.ManagementFactory
 
 class JITDeepRecursionTest extends AnyFunSuiteLike {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    val jits = List(nativestack.JIT, mincont.JIT, hybrid.HybridJIT)
+    val jits = List(JIT, mincont.JIT, HybridJIT)
 
     private def getThreadStackInfo(): String =
         val thread = Thread.currentThread()

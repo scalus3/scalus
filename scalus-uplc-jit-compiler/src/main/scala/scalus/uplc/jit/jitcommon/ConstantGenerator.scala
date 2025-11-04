@@ -1,4 +1,4 @@
-package scalus.uplc.eval.jitcommon
+package scalus.uplc.jit.jitcommon
 
 import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, BuiltinPair, ByteString, Data}
 import scalus.uplc.Constant

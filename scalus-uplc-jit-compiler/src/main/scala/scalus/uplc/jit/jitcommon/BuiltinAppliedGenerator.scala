@@ -1,4 +1,4 @@
-package scalus.uplc.eval.jitcommon
+package scalus.uplc.jit.jitcommon
 
 import cats.syntax.semigroup.*
 import scalus.builtin.{Builtins, ByteString, Data}

@@ -1,14 +1,18 @@
-package scalus.uplc.eval
+package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
+import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM}
+import scalus.uplc.jit.hybrid.HybridJIT
+import scalus.uplc.jit.mincont
+import scalus.uplc.jit.nativestack.JIT
 import scalus.uplc.{Constant, Term}
 
 class SimpleDebugTest extends AnyFunSuiteLike {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    val jits = List(nativestack.JIT, mincont.JIT, hybrid.HybridJIT)
+    val jits = List(JIT, mincont.JIT, HybridJIT)
 
     for jit <- jits do {
         test(s"Simple constant for ${jit.getClass.getName}") {

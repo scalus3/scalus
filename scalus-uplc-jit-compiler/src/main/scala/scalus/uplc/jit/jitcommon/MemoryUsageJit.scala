@@ -1,4 +1,5 @@
-package scalus.uplc.eval.jitcommon
+package scalus.uplc.jit.jitcommon
+
 import scalus.builtin.*
 import scalus.uplc.eval.*
 

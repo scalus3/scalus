@@ -1,6 +1,7 @@
-package scalus.uplc.eval
+package scalus.uplc.jit
 
 import scalus.uplc.Term
+import scalus.uplc.eval.*
 
 /** Represents different JIT compilation strategies for UPLC terms.
   *

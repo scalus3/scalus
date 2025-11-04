@@ -1,16 +1,20 @@
-package scalus.uplc.eval
+package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
 import scalus.uplc.Term
+import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM}
+import scalus.uplc.jit.hybrid.HybridJIT
+import scalus.uplc.jit.mincont
+import scalus.uplc.jit.nativestack.JIT
 
 import scala.util.Try
 
 class JITTest extends AnyFunSuiteLike {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    val jits = List(nativestack.JIT, mincont.JIT, hybrid.HybridJIT)
+    val jits = List(JIT, mincont.JIT, HybridJIT)
 
     for jit <- jits do {
         test(s"UPLC JIT compilation works for ${jit.getClass.getName}") {
