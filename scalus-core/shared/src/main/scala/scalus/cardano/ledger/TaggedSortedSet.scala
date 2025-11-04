@@ -1,67 +1,27 @@
 package scalus.cardano.ledger
 
+import io.bullet.borer.{Decoder, Encoder}
+
 import scala.collection.immutable.SortedSet
-import io.bullet.borer.{DataItem, Decoder, Encoder, Reader, Tag, Writer}
 
 /** Represents a tagged sorted set, which is a sorted set of elements with a tag.
   *
   * Under the hood it's a `SortedSet` because we need to enforce the order of elements. Also, it
   * allows make right CBOR serialization with tag 258.
   *
-  * Important: This implementation does not allow duplicates in input (i.e. throws exception) and
-  * does not keep order in data (sorts).
+  * Important: This implementation allows duplicates in input (i.e. does not throw exception),
+  * silently removes duplicates and does not keep order in data (sorts elements by given ordering).
   */
 opaque type TaggedSortedSet[A] = SortedSet[A]
-object TaggedSortedSet {
-    inline def empty[A: Ordering]: TaggedSortedSet[A] = SortedSet.empty[A]
-
-    extension [A](s: TaggedSortedSet[A]) {
-
-        /** Converts a `TaggedOrderedSet` to a `SortedSet` */
-        inline def toSortedSet: SortedSet[A] = s
-
-        /** Converts a `TaggedOrderedSet` to a `Seq` */
-        inline def toSeq: Seq[A] = s.toSeq
-    }
-
+object TaggedSortedSet extends TaggedSeq:
     inline def apply[A](s: SortedSet[A]): TaggedSortedSet[A] = s
+    inline def apply[A: Ordering](elems: A*): TaggedSortedSet[A] = from(elems)
+    inline def empty[A: Ordering]: TaggedSortedSet[A] = SortedSet.empty
+    inline def from[A: Ordering](s: IterableOnce[A]): TaggedSortedSet[A] = SortedSet.from(s)
 
-    /** Creates a `TaggedOrderedSet` with the specified elements.
-      * @tparam A
-      *   the type of the `TaggedOrderedSet`'s elements
-      * @param elems
-      *   the elements of the created `TaggedOrderedSet`
-      * @return
-      *   a new `TaggedOrderedSet` with elements `elems`
-      */
-    def apply[A: Ordering](elems: A*): TaggedSortedSet[A] = from(elems)
+    extension [A](s: TaggedSortedSet[A])
+        inline def toSet: SortedSet[A] = s
+        inline def toSeq: IndexedSeq[A] = s.toIndexedSeq
 
-    def from[A: Ordering](it: IterableOnce[A]): TaggedSortedSet[A] = {
-        val seq = IndexedSeq.from(it)
-        val set = SortedSet.from(seq)
-        require(
-          seq.size == set.size,
-          s"Final number of elements: ${seq.size}" +
-              s" does not match the total count that was decoded: ${set.size}"
-        )
-        set
-    }
-
-    given [A: Encoder]: Encoder[TaggedSortedSet[A]] with
-        def write(w: Writer, value: TaggedSortedSet[A]): Writer = {
-            w.writeTag(Tag.Other(258))
-            w.writeArrayHeader(value.size)
-            value.foreach(w.write(_))
-            w
-        }
-
-    given [A: Decoder: Ordering]: Decoder[TaggedSortedSet[A]] with
-        def read(r: Reader): TaggedSortedSet[A] = {
-            // Check for indefinite array tag (258)
-            if r.dataItem() == DataItem.Tag then
-                val tag = r.readTag()
-                if tag.code != 258 then
-                    r.validationFailure(s"Expected tag 258 for definite Set, got $tag")
-            Decoder.fromFactory[A, SortedSet].read(r)
-        }
-}
+    given [A: Encoder]: Encoder[TaggedSortedSet[A]] = writeTagged(_, _)
+    given [A: Decoder: Ordering]: Decoder[TaggedSortedSet[A]] = r => from(readTagged(r))

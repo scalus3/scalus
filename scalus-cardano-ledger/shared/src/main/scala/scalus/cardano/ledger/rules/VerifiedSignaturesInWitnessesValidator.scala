@@ -34,7 +34,7 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
         val transactionId = event.id
         val vkeyWitnesses = event.witnessSet.vkeyWitnesses
 
-        vkeyWitnesses.toSortedSet.filterNot(vkeyWitness =>
+        vkeyWitnesses.toSet.filterNot(vkeyWitness =>
             verifyWitnessSignature(transactionId, vkeyWitness.vkey, vkeyWitness.signature)
         )
     }
@@ -45,7 +45,7 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
         val transactionId = event.id
         val bootstrapWitnesses = event.witnessSet.bootstrapWitnesses
 
-        bootstrapWitnesses.toSortedSet.filterNot(bootstrapWitness =>
+        bootstrapWitnesses.toSet.filterNot(bootstrapWitness =>
             verifyWitnessSignature(
               transactionId,
               bootstrapWitness.publicKey,

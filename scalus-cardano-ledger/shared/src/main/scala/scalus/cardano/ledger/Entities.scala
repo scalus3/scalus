@@ -189,10 +189,10 @@ object TransactionException {
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
-        supplied: ExUnits,
+        actual: ExUnits,
         max: ExUnits
     ) extends TransactionException(
-          s"Execution units for transaction $transactionId exceed the maximum. Maximum: $max, actual: $supplied"
+          s"Execution units for transaction $transactionId exceed the maximum. Actual: $actual, maximum: $max"
         )
 
     // It's Babbage.NoCollateralInputs in cardano-ledger
@@ -202,10 +202,10 @@ object TransactionException {
     // It's Alonzo.TooManyCollateralInputs in cardano-ledger
     final case class TooManyCollateralInputsException(
         transactionId: TransactionHash,
-        supplied: Int,
+        actual: Int,
         expected: Long
     ) extends TransactionException(
-          s"Too many collateral inputs for transactionId $transactionId. Expected at most: $expected, actual: $supplied"
+          s"Too many collateral inputs for transactionId $transactionId. Actual: $actual, expected at most: $expected"
         )
 
     // It's Alonzo.PPViewHashesDontMatch in cardano-ledger
@@ -214,7 +214,7 @@ object TransactionException {
         actual: Option[ScriptDataHash],
         expected: Option[ScriptDataHash]
     ) extends TransactionException(
-          s"Invalid script data hash for transactionId $transactionId. Expected: $expected, actual: $actual"
+          s"Invalid script data hash for transactionId $transactionId. Actual: $actual, expected: $expected"
         )
 
     // It's Babbage.MalformedScriptWitnesses and Babbage.MalformedReferenceScripts in cardano-ledger
@@ -270,7 +270,7 @@ object TransactionException {
             actual: AuxiliaryDataHash,
             expected: AuxiliaryDataHash
         ) extends MetadataException(
-              s"Invalid auxiliary data hash for transactionId $transactionId, expected: $expected, actual: $actual"
+              s"Invalid auxiliary data hash for transactionId $transactionId. Actual: $actual, expected: $expected"
             )
 
         // It's Shelley.InvalidMetadata in cardano-ledger

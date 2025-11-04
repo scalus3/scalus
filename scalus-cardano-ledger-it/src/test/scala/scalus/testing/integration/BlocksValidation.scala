@@ -339,12 +339,19 @@ class BlocksValidation extends AnyFunSuite {
                         errors += error
                         println(s"\n${Console.RED}[error# ${errors.size}] ${error}${Console.RESET}")
                     case e: IllegalStateException =>
+                        val error = s"${path.getFileName}: $e"
                         if e.getMessage.startsWith("Reference UTXO not found for input") then {
-                            println(s"${path.getFileName}: $e")
+                            println(error)
                             println("Cannot resolve UTXO, stopping test ...")
                             break()
-                        } else println(s"${path.getFileName}: $e")
-                    case e: Exception => println(s"${path.getFileName}: $e")
+                        } else {
+                            errors += error
+                            println(error)
+                        }
+                    case e: Exception =>
+                        val error = s"${path.getFileName}: $e"
+                        errors += error
+                        println(error)
                 }
         println(
           s"\n${Console.GREEN}Total txs: $totalTx, errors ${errors.size}, blocks: ${blocks.size}, epoch: $epoch${Console.RESET}"
@@ -361,7 +368,7 @@ class BlocksValidation extends AnyFunSuite {
         println(s"Scripts v$ver: $runs runs of $scripts scripts")
         val top = stats.toSeq.sortBy(_._2)(using Ordering[Int].reverse)
         println(
-            s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
+          s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
         )
         val top10 = top.take(10).map(_._2).sum
         println(
@@ -369,7 +376,7 @@ class BlocksValidation extends AnyFunSuite {
         )
         val top100 = top.take(100).map(_._2).sum
         println(
-            s"  Top 100: ${top100} (${100 * top100 / runs}%) runs by 100 (${100 * 100 / scripts}%) scripts "
+          s"  Top 100: ${top100} (${100 * top100 / runs}%) runs by 100 (${100 * 100 / scripts}%) scripts "
         )
     }
 
@@ -510,13 +517,12 @@ class BlocksValidation extends AnyFunSuite {
                 val blockBytes = Files.readAllBytes(path)
                 val block = BlockFile.fromCborArray(blockBytes).block
                 for
-                    (txb, w) <- block.transactionBodies.view
+                    case (txb, w) <- block.transactionBodies.view
                         .map(_.value)
                         .zip(block.transactionWitnessSets)
-                    native <- w.nativeScripts.toSortedSet
+                    case (scriptHash, native) <- w.nativeScripts.toMap
                 do
-                    val scriptHash = native.scriptHash
-                    val keyHashes = w.vkeyWitnesses.toSortedSet.map { w =>
+                    val keyHashes = w.vkeyWitnesses.toSet.map { w =>
                         val key = w.vkey
                         AddrKeyHash(platform.blake2b_224(key))
                     }
@@ -594,10 +600,10 @@ class BlocksValidation extends AnyFunSuite {
                                     .get
 
                             val desc =
-                                (if w.plutusV1Scripts.toSortedSet.nonEmpty then "v1" else "")
-                                    ++ (if w.plutusV2Scripts.toSortedSet.nonEmpty then "v2" else "")
-                                    ++ (if w.plutusV3Scripts.toSortedSet.nonEmpty then "v3" else "")
-                                    ++ (if w.plutusData.value.toIndexedSeq.nonEmpty then "D"
+                                (if w.plutusV1Scripts.toMap.nonEmpty then "v1" else "")
+                                    ++ (if w.plutusV2Scripts.toMap.nonEmpty then "v2" else "")
+                                    ++ (if w.plutusV3Scripts.toMap.nonEmpty then "v3" else "")
+                                    ++ (if w.plutusData.value.toMap.nonEmpty then "D"
                                         else "")
                                     ++ (if w.redeemers.nonEmpty then "R" else "")
 
@@ -631,12 +637,12 @@ class BlocksValidation extends AnyFunSuite {
         val interestingBlocks = blocks.filter { path =>
             val blockBytes = Files.readAllBytes(path)
             val block = BlockFile.fromCborArray(blockBytes).block
-            block.transactionWitnessSets.exists { _.plutusV1Scripts.toSortedSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV2Scripts.toSortedSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV3Scripts.toSortedSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.nativeScripts.toSortedSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSortedSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusData.value.toIndexedSeq.nonEmpty }
+            block.transactionWitnessSets.exists { _.plutusV1Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV2Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusV3Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.nativeScripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.plutusData.value.toMap.nonEmpty }
         }
         println(s"Interesting blocks ${interestingBlocks.size} of ${blocks.size}")
         interestingBlocks.foreach { p =>

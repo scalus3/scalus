@@ -524,6 +524,12 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
       genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedSet.from)
     )
 
+    given [A: Arbitrary, K: Ordering](using
+        TaggedSortedMap.KeyOf[K, A]
+    ): Arbitrary[TaggedSortedMap[K, A]] = Arbitrary(
+      genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedMap.from[K, A])
+    )
+
     given Arbitrary[TransactionWitnessSet] = autoDerived
 
     given Arbitrary[UnitInterval] = Arbitrary {

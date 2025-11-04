@@ -571,15 +571,15 @@ object LedgerToPlutusTranslation {
         val body = tx.body.value
 
         v1.TxInfo(
-          inputs = prelude.List.from(body.inputs.toSortedSet.view.map(getTxInInfoV1(_, utxos))),
+          inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV1(_, utxos))),
           outputs = prelude.List.from(body.outputs.view.map(getTxOutV1)),
           fee = v1.Value.lovelace(body.fee.value),
           mint = getMintValueV1V2(body.mint),
-          dcert = prelude.List.from(body.certificates.toIndexedSeq.view.map(getDCert)),
+          dcert = prelude.List.from(body.certificates.toSeq.view.map(getDCert)),
           withdrawals = getWithdrawals(body.withdrawals),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
           signatories = prelude.List.from(
-            body.requiredSigners.toSortedSet.view
+            body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
           data = prelude.List.from(datums.to(immutable.SortedMap)),
@@ -604,17 +604,17 @@ object LedgerToPlutusTranslation {
             tx.witnessSet.redeemers.map(_.value.toIndexedSeq).getOrElse(IndexedSeq.empty)
 
         v2.TxInfo(
-          inputs = prelude.List.from(body.inputs.toSortedSet.view.map(getTxInInfoV2(_, utxos))),
+          inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV2(_, utxos))),
           referenceInputs =
-              prelude.List.from(body.referenceInputs.toSortedSet.view.map(getTxInInfoV2(_, utxos))),
+              prelude.List.from(body.referenceInputs.toSet.view.map(getTxInInfoV2(_, utxos))),
           outputs = prelude.List.from(body.outputs.view.map(getTxOutV2)),
           fee = v1.Value.lovelace(body.fee.value),
           mint = getMintValueV1V2(body.mint),
-          dcert = prelude.List.from(body.certificates.toIndexedSeq.view.map(getDCert)),
+          dcert = prelude.List.from(body.certificates.toSeq.view.map(getDCert)),
           withdrawals = SortedMap.fromList(getWithdrawals(body.withdrawals)),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
           signatories = prelude.List.from(
-            body.requiredSigners.toSortedSet.view
+            body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
           redeemers = SortedMap.unsafeFromList(prelude.List.from(redeemers.sorted.map { redeemer =>
@@ -662,17 +662,17 @@ object LedgerToPlutusTranslation {
         }
 
         v3.TxInfo(
-          inputs = prelude.List.from(body.inputs.toSortedSet.view.map(getTxInInfoV3(_, utxos))),
+          inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV3(_, utxos))),
           referenceInputs =
-              prelude.List.from(body.referenceInputs.toSortedSet.view.map(getTxInInfoV3(_, utxos))),
+              prelude.List.from(body.referenceInputs.toSet.view.map(getTxInInfoV3(_, utxos))),
           outputs = prelude.List.from(body.outputs.view.map(getTxOutV2)),
           fee = body.fee.value,
           mint = getMintValueV3(body.mint),
-          certificates = prelude.List.from(body.certificates.toIndexedSeq.view.map(getTxCertV3)),
+          certificates = prelude.List.from(body.certificates.toSeq.view.map(getTxCertV3)),
           withdrawals = SortedMap.fromList(withdrawals),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
           signatories = prelude.List.from(
-            body.requiredSigners.toSortedSet.view
+            body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
           redeemers = SortedMap.unsafeFromList(prelude.List.from(redeemers.sorted.map { redeemer =>
@@ -683,7 +683,7 @@ object LedgerToPlutusTranslation {
           id = v3.TxId(tx.id),
           votes = getVotingProcedures(body.votingProcedures),
           proposalProcedures = prelude.List.from(
-            body.proposalProcedures.toIndexedSeq.view.map(getProposalProcedureV3)
+            body.proposalProcedures.toSeq.view.map(getProposalProcedureV3)
           ),
           currentTreasuryAmount = body.currentTreasuryValue
               .map(coin => prelude.Option.Some(BigInt(coin.value)))
@@ -722,7 +722,7 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Policy ID not found: $index")
 
             case RedeemerTag.Cert =>
-                val certs = body.certificates.toIndexedSeq
+                val certs = body.certificates.toSeq
                 if certs.isDefinedAt(index) then v1.ScriptPurpose.Certifying(getDCert(certs(index)))
                 else throw new IllegalStateException(s"Certificate not found: $index")
 
@@ -773,7 +773,7 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Policy ID not found: $index")
 
             case RedeemerTag.Cert =>
-                val certs = body.certificates.toIndexedSeq
+                val certs = body.certificates.toSeq
                 if certs.isDefinedAt(index) then
                     v3.ScriptPurpose.Certifying(index, getTxCertV3(certs(index)))
                 else throw new IllegalStateException(s"Certificate not found: $index")
@@ -786,7 +786,7 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Withdrawal not found: $index")
 
             case RedeemerTag.Proposing =>
-                val proposals = body.proposalProcedures.toIndexedSeq
+                val proposals = body.proposalProcedures.toSeq
                 if proposals.isDefinedAt(index) then
                     v3.ScriptPurpose.Proposing(index, getProposalProcedureV3(proposals(index)))
                 else throw new IllegalStateException(s"Proposal not found: $index")
@@ -970,8 +970,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v2.ScriptContext = {
         val purpose = getScriptPurposeV2(tx, redeemer)
-        val datums = tx.witnessSet.plutusData.value.toIndexedSeq
-            .map(r => r.dataHash -> r.value)
+        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
         val txInfo = getTxInfoV2(tx, datums, utxos, slotConfig, protocolVersion)
         v2.ScriptContext(txInfo, purpose)
     }
@@ -987,8 +986,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v3.ScriptContext = {
         val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
-        val datums = tx.witnessSet.plutusData.value.toIndexedSeq
-            .map(r => r.dataHash -> r.value)
+        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
         val txInfo = getTxInfoV3(tx, datums, utxos, slotConfig, protocolVersion)
         v3.ScriptContext(txInfo, redeemer.data, scriptInfo)
     }

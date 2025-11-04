@@ -14,10 +14,19 @@ object CardanoMutator extends STS.Mutator {
     private val packageName = getClass.getPackage.getName
 
     val allValidators: Map[String, STS.Validator] =
-        TraitObjectScanner.findImplementors[STS.Validator](packageName)
+        TraitObjectScanner
+            .findImplementors[STS.Validator](packageName)
+            .view
+            .map(v => v.name -> v)
+            .toMap
 
     val allMutators: Map[String, STS.Mutator] =
-        TraitObjectScanner.findImplementors[STS.Mutator](packageName) - this.name
+        TraitObjectScanner
+            .findImplementors[STS.Mutator](packageName)
+            .view
+            .filter(_.name != this.name) // Exclude self to prevent infinite recursion
+            .map(v => v.name -> v)
+            .toMap
 
     val allSTSs: Map[String, STS] = allValidators ++ allMutators
 }

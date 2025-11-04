@@ -15,7 +15,7 @@ object TxBalance {
     ): Either[BadInputsUTxOException, Value] = boundary {
         val txBody = tx.body.value
         val mint = txBody.mint.getOrElse(MultiAsset.empty)
-        val inputs = txBody.inputs.toSortedSet.view
+        val inputs = txBody.inputs.toSet.view
             .map { input =>
                 utxo.get(input) match {
                     case Some(output) => output.value
@@ -43,11 +43,11 @@ object TxBalance {
             Certificate.shelleyTotalRefundsTxCerts(
               lookupStakingDeposit,
               protocolParams,
-              txBody.certificates.toIndexedSeq
+              txBody.certificates.toSeq
             ) + Certificate
                 .conwayDRepRefundsTxCerts(
                   lookupDRepDeposit,
-                  txBody.certificates.toIndexedSeq
+                  txBody.certificates.toSeq
                 )
         val getTotalRefundsTxCerts = conwayTotalRefundsTxCerts
         // Compute the total refunds from the Certificates of a TransactionBody

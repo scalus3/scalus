@@ -3,12 +3,18 @@ package rules
 
 import scalus.cardano.address.Network
 
+import scala.annotation.threadUnsafe
+
 // It's mutable state for transient calculation
 class Context(
     var fee: Coin = Coin.zero,
     val env: UtxoEnv = UtxoEnv.default,
     val slotConfig: SlotConfig = SlotConfig.Mainnet
 )
+
+object Context {
+    def testMainnet(slot: SlotNo = 0): Context = Context(env = UtxoEnv.testMainnet(slot))
+}
 
 case class State(
     utxos: Utxos = Map.empty,
@@ -23,7 +29,7 @@ case class State(
 case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network)
 object UtxoEnv {
     // TODO: remove
-    val default: UtxoEnv =
+    @threadUnsafe lazy val default: UtxoEnv =
 
         val params: ProtocolParams = ProtocolParams.fromBlockfrostJson(
           this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
@@ -35,6 +41,21 @@ object UtxoEnv {
           params,
           CertState.empty,
           Network.Testnet
+        )
+
+    // TODO: remove
+    def testMainnet(slot: SlotNo = 0): UtxoEnv =
+
+        val params: ProtocolParams = ProtocolParams.fromBlockfrostJson(
+          this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
+        )
+
+        // Load protocol parameters from a JSON file
+        UtxoEnv(
+          slot,
+          params,
+          CertState.empty,
+          Network.Mainnet
         )
 }
 

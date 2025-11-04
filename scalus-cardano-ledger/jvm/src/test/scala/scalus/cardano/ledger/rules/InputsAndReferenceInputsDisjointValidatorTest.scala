@@ -24,7 +24,7 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
         val result = InputsAndReferenceInputsDisjointValidator.validate(context, state, transaction)
         assert(result.isRight)
         assert(
-          transaction.body.value.inputs.toSortedSet.nonEmpty && transaction.body.value.referenceInputs.toSortedSet.isEmpty
+          transaction.body.value.inputs.toSet.nonEmpty && transaction.body.value.referenceInputs.toSet.isEmpty
         )
     }
 
@@ -47,10 +47,10 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
         val result = InputsAndReferenceInputsDisjointValidator.validate(context, state, transaction)
         assert(result.isLeft)
         assert(
-          transaction.body.value.inputs.toSortedSet.nonEmpty && transaction.body.value.referenceInputs.toSortedSet.nonEmpty
+          transaction.body.value.inputs.toSet.nonEmpty && transaction.body.value.referenceInputs.toSet.nonEmpty
         )
         assert(
-          transaction.body.value.inputs.toSortedSet == transaction.body.value.referenceInputs.toSortedSet
+          transaction.body.value.inputs.toSet == transaction.body.value.referenceInputs.toSet
         )
     }
 }

@@ -162,10 +162,10 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
                 ),
-                nativeScripts = TaggedSortedSet.empty,
-                plutusV1Scripts = TaggedSortedSet(plutusV1Script),
-                plutusV2Scripts = TaggedSortedSet(plutusV2Script),
-                plutusV3Scripts = TaggedSortedSet(plutusV3Script)
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedMap(plutusV1Script),
+                plutusV2Scripts = TaggedSortedMap(plutusV2Script),
+                plutusV3Scripts = TaggedSortedMap(plutusV3Script)
               )
             )
         }

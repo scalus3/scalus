@@ -48,10 +48,8 @@ private[scalus] class ScalusUtxoResolver(
             utxos.put(input, output)
         }
 
-        val scripts = mutable.HashMap[ScriptHash, Script]()
-
         val allInputs =
-            transaction.body.value.inputs.toSortedSet.view ++ transaction.body.value.referenceInputs.toSortedSet.view
+            transaction.body.value.inputs.toSet.view ++ transaction.body.value.referenceInputs.toSet.view
         for input <- allInputs do
             if !utxos.contains(input) then
                 utxoSupplier.getTxOutput(input.transactionId.toHex, input.index).toScala match
@@ -76,17 +74,6 @@ private[scalus] class ScalusUtxoResolver(
                         throw new IllegalStateException(
                           s"Reference UTXO not found for input $input"
                         )
-
-        // Collect witness scripts
-        val witnessSet = transaction.witnessSet
-        val witnessScripts = witnessSet.nativeScripts.toSortedSet ++
-            witnessSet.plutusV1Scripts.toSortedSet ++
-            witnessSet.plutusV2Scripts.toSortedSet ++
-            witnessSet.plutusV3Scripts.toSortedSet
-
-        witnessScripts.foreach { script =>
-            scripts.put(script.scriptHash, script)
-        }
 
         // Return resolved UTXOs for all inputs (regular and reference)
         allInputs.map { input =>

@@ -55,7 +55,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 ),
-                nativeScripts = TaggedSortedSet.from(
+                nativeScripts = TaggedSortedMap.from(
                   Set(
                     signatureTimelock1,
                     signatureTimelock2,
@@ -189,7 +189,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
               ),
               witnessSet = tx.witnessSet.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedSet(Script.Native(timeExpireTimelock))
+                nativeScripts = TaggedSortedMap(Script.Native(timeExpireTimelock))
               )
             )
         }
