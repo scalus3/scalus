@@ -13,7 +13,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.testkit.*
 import scalus.ledger.api.v3.*
 
-/** Aiken require that redeemper is ADT with constructor with arguments.
+/** Aiken require that redeemer is ADT with constructor with arguments.
   * @param message
   */
 case class PaymentSplitterRedeemer(message: String)
@@ -32,7 +32,7 @@ object PaymentSplitterDatum {
     given FromData[PaymentSplitterDatum] = FromData.derived
 }
 
-class CompabilityWithAikenTest extends AnyFunSuite, ScalusTest {
+class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
 
     import Payee.*
 

@@ -1,8 +1,9 @@
 package scalus.cardano.ledger
 package rules
 
+import scalus.cardano.ledger.utils.AllResolvedScripts
+
 import scala.collection.View
-import scalus.cardano.ledger.utils.{AllResolvedScripts, PlutusScript}
 
 // It's Babbage.validateScriptsWellFormed in cardano-ledger
 object ScriptsWellFormedValidator extends STS.Validator {
@@ -55,7 +56,7 @@ object ScriptsWellFormedValidator extends STS.Validator {
         majorProtocolVersion: MajorProtocolVersion
     ): Set[ScriptHash] = {
         plutusScripts
-            .filterNot(PlutusScript.isWellFormed(_, majorProtocolVersion))
+            .filterNot(_.isWellFormed(majorProtocolVersion))
             .map(_.scriptHash)
             .toSet
     }
