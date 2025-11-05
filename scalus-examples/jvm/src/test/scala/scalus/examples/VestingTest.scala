@@ -11,12 +11,12 @@ import scalus.ledger.api.v1.IntervalBoundType.*
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.testkit.*
 import scalus.uplc.eval.*
 import scalus.prelude.Option.*
 
 import scala.language.implicitConversions
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.kit.{Mock, ScalusTest}
 
 class VestingTest extends AnyFunSuite, ScalusTest {
     private val ownerPKH: PubKeyHash = Mock.mockPubKeyHash(0)

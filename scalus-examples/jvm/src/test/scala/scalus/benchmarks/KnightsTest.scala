@@ -6,7 +6,7 @@ import scalus.prelude.*
 import scalus.uplc.*
 import scalus.uplc.eval.*
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.testkit.ScalusTest
+import scalus.testing.kit.ScalusTest
 
 class KnightsTest extends AnyFunSuite, ScalusTest:
     import KnightsTest.{*, given}

@@ -9,7 +9,7 @@ import scalus.builtin.Data.toData
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.testkit.ScalusTest
+import scalus.testing.kit.ScalusTest
 
 class SimpleTransferTest extends AnyFunSuite with ScalusTest {
     val fee = 10

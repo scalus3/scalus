@@ -5,7 +5,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString.*
 import scalus.ledger.api.v1.*
 import scalus.prelude.Option.*
-import scalus.testkit.ArbitraryInstances
+import scalus.testing.kit.ArbitraryInstances
 import scalus.uplc.*
 import scalus.uplc.eval.{BuiltinError, PlutusVM}
 
