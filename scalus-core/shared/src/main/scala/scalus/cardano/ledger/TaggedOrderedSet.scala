@@ -25,8 +25,7 @@ opaque type TaggedOrderedSet[+A] = IndexedSeq[A]
 object TaggedOrderedSet extends TaggedSeq:
     inline def apply[A](elems: A*): TaggedOrderedSet[A] = from(elems)
     inline def empty[A]: TaggedOrderedSet[A] = IndexedSeq.empty[A]
-    inline def from[A](a: IterableOnce[A]): TaggedOrderedSet[A] =
-        checkDuplicates(IndexedSeq.from(a))
+    inline def from[A](a: IterableOnce[A]): TaggedOrderedSet[A] = checkDuplicates(a)
 
     extension [A](s: TaggedOrderedSet[A])
         inline def toSeq: IndexedSeq[A] = s

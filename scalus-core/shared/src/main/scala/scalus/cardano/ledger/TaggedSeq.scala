@@ -13,7 +13,8 @@ import io.bullet.borer.*
   */
 trait TaggedSeq(tag: Tag = Tag.Other(258)):
 
-    def checkDuplicates[A](seq: IndexedSeq[A]): IndexedSeq[A] =
+    def checkDuplicates[A](src: IterableOnce[A]): IndexedSeq[A] =
+        val seq = IndexedSeq.from(src)
         val set = Set.from(seq)
         require(
           seq.size == set.size,
