@@ -4,9 +4,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.address.Address
 
 trait Provider {
-    type Context
-
-    def submit(transaction: Transaction, context: Context): Either[RuntimeException, Unit]
+    def submit(transaction: Transaction): Either[RuntimeException, Unit]
 
     def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo]
 
@@ -26,4 +24,6 @@ trait Provider {
         minAmount: Option[Coin] = None,
         minRequiredAmount: Option[Coin] = None
     ): Either[RuntimeException, Utxos]
+
+    def setSlot(slot: SlotNo): Unit
 }

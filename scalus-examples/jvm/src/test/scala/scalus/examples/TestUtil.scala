@@ -8,7 +8,7 @@ import scalus.ledger.api.v3
 import scalus.uplc.Program
 import scalus.uplc.eval.ExBudget
 import scalus.testkit.ScalusTest
-import scalus.cardano.node.LedgerProvider
+import scalus.cardano.node.Provider
 
 object TestUtil extends ScalusTest {
 
@@ -71,7 +71,7 @@ object TestUtil extends ScalusTest {
         }
     }
 
-    def createTestWallet(provider: LedgerProvider, address: Address): WalletTrait =
+    def createTestWallet(provider: Provider, address: Address): WalletTrait =
         new WalletTrait {
             override val owner: Address = address
             override lazy val utxo: Utxos = provider.findUtxos(address).toOption.get

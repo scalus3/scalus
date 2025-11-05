@@ -33,6 +33,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
               value = Value.lovelace(1_000_000_000L)
             )
       ),
+      context = Context.testMainnet(),
       validators =
           LedgerProvider.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
       mutators = LedgerProvider.defaultMutators - PlutusScriptsTransactionMutator
@@ -77,7 +78,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        assert(provider.submit(tx, Context.testMainnet()).isRight)
+        assert(provider.submit(tx).isRight)
         tx
     }
 
@@ -106,7 +107,8 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        snapshot.submit(tx, Context.testMainnet(env.slotConfig.timeToSlot(time.toLong)))
+        snapshot.setSlot(env.slotConfig.timeToSlot(time.toLong))
+        snapshot.submit(tx)
     }
 
     private def timeoutHtlc(
@@ -121,7 +123,8 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        snapshot.submit(tx, Context.testMainnet(env.slotConfig.timeToSlot(time.toLong)))
+        snapshot.setSlot(env.slotConfig.timeToSlot(time.toLong))
+        snapshot.submit(tx)
     }
 
     test("receiver reveals preimage before timeout") {

@@ -42,6 +42,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
               value = Value.lovelace(1_000_000_000L)
             )
       ),
+      context = Context.testMainnet(),
       validators =
           LedgerProvider.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
       mutators = LedgerProvider.defaultMutators - PlutusScriptsTransactionMutator
@@ -86,7 +87,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        assert(provider.submit(tx, Context.testMainnet()).isRight)
+        assert(provider.submit(tx).isRight)
         tx
     }
 
@@ -147,9 +148,8 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
               .isRight
         )
 
-        assert(
-          snapshot.submit(tx, Context.testMainnet(env.slotConfig.timeToSlot(time.toLong))).isRight
-        )
+        snapshot.setSlot(env.slotConfig.timeToSlot(time.toLong))
+        assert(snapshot.submit(tx).isRight)
 
         assert(
           snapshot

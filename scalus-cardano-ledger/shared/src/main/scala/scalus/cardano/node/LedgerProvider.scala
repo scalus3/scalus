@@ -1,18 +1,17 @@
 package scalus.cardano.node
 
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.{CardanoMutator, STS, State}
+import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
 import scalus.cardano.address.Address
 
 class LedgerProvider(
     initialUtxos: Utxos = Map.empty,
+    private var context: Context = Context.testMainnet(),
     val validators: Iterable[STS.Validator] = LedgerProvider.defaultValidators,
     val mutators: Iterable[STS.Mutator] = LedgerProvider.defaultMutators
 ) extends Provider {
-    override type Context = scalus.cardano.ledger.rules.Context
-
-    def submit(transaction: Transaction, context: Context): Either[RuntimeException, Unit] = {
-        processTransaction(transaction, context) match {
+    def submit(transaction: Transaction): Either[RuntimeException, Unit] = {
+        processTransaction(transaction) match {
             case Right(newState) =>
                 state = newState
                 Right(())
@@ -104,8 +103,17 @@ class LedgerProvider(
             )
     }
 
+    override def setSlot(slot: SlotNo): Unit = {
+        context = Context(
+          fee = context.fee,
+          env = context.env.copy(slot = slot),
+          slotConfig = context.slotConfig
+        )
+    }
+
     def snapshot(): LedgerProvider = LedgerProvider(
       initialUtxos = this.utxos,
+      context = this.context,
       validators = this.validators,
       mutators = this.mutators
     )
@@ -115,8 +123,7 @@ class LedgerProvider(
     private def utxos: Utxos = state.utxos
 
     private def processTransaction(
-        transaction: Transaction,
-        context: Context
+        transaction: Transaction
     ): Either[TransactionException, State] = {
         STS.Mutator.transit(validators, mutators, context, state, transaction)
     }
