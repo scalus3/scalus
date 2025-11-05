@@ -83,15 +83,16 @@ class BooleanOrMatchTest extends AnyFunSuite:
             val datum2 = TestDatum(BigInt(2), Status.Complete(BigInt(100), BigInt(200)))
 
             // Using || directly on parenthesized match expressions
+            // @formatter:off
             if ((datum1.status match {
                     case Status.Pending(_)     => true
                     case Status.Complete(_, _) => false
                 }) || (datum2.status match {
                     case Status.Pending(_)     => true
                     case Status.Complete(_, _) => false
-                }))
-            then BigInt(1)
-            else BigInt(0)
+                })) then BigInt(1)
+                    else BigInt(0)
+            // @formatter:on
         }
 
         val uplc = sir.toUplc()
@@ -106,15 +107,16 @@ class BooleanOrMatchTest extends AnyFunSuite:
                 val continuing = datum
                 val removed = other
                 // Pattern closer to user's original code
+                // @formatter:off
                 if ((continuing.status match {
                         case Status.Pending(_)     => true
                         case Status.Complete(_, _) => false
                     }) || (removed.status match {
                         case Status.Pending(_)     => true
                         case Status.Complete(_, _) => false
-                    }))
-                then BigInt(1)
-                else BigInt(0)
+                    })) then BigInt(1)
+                       else BigInt(0)
+                // @formatter:on
             }
 
             val d1 = TestDatum(BigInt(1), Status.Pending(BigInt(42)))
