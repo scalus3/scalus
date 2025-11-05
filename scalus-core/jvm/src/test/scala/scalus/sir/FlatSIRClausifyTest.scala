@@ -88,7 +88,6 @@ class FlatSIRClausifyTest extends AnyFunSuite {
             "../../scalus-examples/jvm/target/scala-3.3.6/test-classes/scalus/benchmarks/ClausifyTest$.sir"
 
         val fname1 = "../../scalus-examples"
-        println(s"exists ${fname1}: ${new File(fname1).exists()}")
         val file = new File(fname)
         if !file.exists() then {
             pending // (s"File ${fname} does not exist")

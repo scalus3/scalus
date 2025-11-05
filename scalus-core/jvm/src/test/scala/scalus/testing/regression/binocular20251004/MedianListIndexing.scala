@@ -34,7 +34,7 @@ class MedianListIndexing extends AnyFunSuite {
 
             getMedian(List(BigInt(1), BigInt(2), BigInt(3)), BigInt(3))
         }
-        println(s"sir:\n${sir.showHighlighted}")
+//        println(s"sir:\n${sir.showHighlighted}")
 
         // This should compile to UPLC without "Cannot upcast Unit -> Int to Int" error
         sir.toUplcOptimized().plutusV3

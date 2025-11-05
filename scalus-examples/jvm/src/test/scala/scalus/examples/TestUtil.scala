@@ -7,8 +7,8 @@ import scalus.cardano.txbuilder.{Environment, PubKeyWitness, TransactionUnspentO
 import scalus.ledger.api.v3
 import scalus.uplc.Program
 import scalus.uplc.eval.ExBudget
-import scalus.testkit.ScalusTest
 import scalus.cardano.node.Provider
+import scalus.testing.kit.ScalusTest
 
 object TestUtil extends ScalusTest {
 

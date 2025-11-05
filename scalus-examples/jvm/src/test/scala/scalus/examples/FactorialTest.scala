@@ -2,7 +2,7 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.testkit.ScalusTest
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.{IfThenElse, LessThanEqualsInteger, MultiplyInteger, SubtractInteger}
 import scalus.uplc.Term.{asTerm, λλ}

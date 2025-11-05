@@ -1,7 +1,6 @@
 package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.testkit.ScalusTest
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
@@ -9,6 +8,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.ToData.*
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 
 class TmpValidatorTest extends AnyFunSuite, ScalusTest {
@@ -79,8 +79,10 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
 
         val result = program.runWithDebug(scriptContext)
 
-        // TODO: Fix alphaEq for Program
-        assert(program alphaEq compiledContract.program)
+        val deBruijnedProgram = program.deBruijnedProgram
+        val deBruijnedCompiledProgram = compiledContract.program.deBruijnedProgram
+
+        assert(deBruijnedProgram alphaEq deBruijnedCompiledProgram)
         assert(result alphaEq compiledContract.program.runWithDebug(scriptContext))
         assert(script == compiledContract.script)
         assert(program.cborByteString == compiledContract.program.cborByteString)
@@ -89,7 +91,7 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
         result
     }
 
-    ignore("unlock TmpContract UTXO") {
+    test("unlock TmpContract UTXO") {
         val (tx, result) = unlockTx
         assert(result.isSuccess)
     }

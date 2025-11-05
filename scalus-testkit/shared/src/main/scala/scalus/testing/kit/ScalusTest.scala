@@ -1,4 +1,4 @@
-package scalus.testkit
+package scalus.testing.kit
 
 import org.scalacheck.Arbitrary
 import scalus.*

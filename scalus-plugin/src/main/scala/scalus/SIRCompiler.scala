@@ -2279,17 +2279,19 @@ final class SIRCompiler(
             // throw new Exception("error msg")
             // Supports any exception type that uses first argument as message
             case Apply(Ident(nme.throw_), immutable.List(ex)) => compileThrowException(env, ex)
-            // Boolean
-            case Select(lhs, op) if lhs.tpe.widen =:= defn.BooleanType && op == nme.UNARY_! =>
+            // Boolean operators
+            // Use <:< (subtype) instead of =:= (equality) to handle union types like
+            // OrType(ConstantType(true), ConstantType(false)) which appears in match expressions
+            case Select(lhs, op) if lhs.tpe.widen <:< defn.BooleanType && op == nme.UNARY_! =>
                 val lhsExpr = compileExpr(env, lhs)
                 SIR.Not(lhsExpr, AnnotationsDecl.fromSrcPos(tree.srcPos))
-            case Apply(Select(lhs, op), List(rhs))
-                if lhs.tpe.widen =:= defn.BooleanType && op == nme.ZAND =>
+            case app @ Apply(Select(lhs, op), List(rhs))
+                if lhs.tpe.widen <:< defn.BooleanType && op == nme.ZAND =>
                 val lhsExpr = compileExpr(env, lhs)
                 val rhsExpr = compileExpr(env, rhs)
                 SIR.And(lhsExpr, rhsExpr, AnnotationsDecl.fromSrcPos(tree.srcPos))
-            case Apply(Select(lhs, op), List(rhs))
-                if lhs.tpe.widen =:= defn.BooleanType && op == nme.ZOR =>
+            case app @ Apply(Select(lhs, op), List(rhs))
+                if lhs.tpe.widen <:< defn.BooleanType && op == nme.ZOR =>
                 val lhsExpr = compileExpr(env, lhs)
                 val rhsExpr = compileExpr(env, rhs)
                 SIR.Or(lhsExpr, rhsExpr, AnnotationsDecl.fromSrcPos(tree.srcPos))

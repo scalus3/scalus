@@ -529,7 +529,12 @@ lazy val docs = project // documentation project
         "VERSION" -> scalusStableVersion,
         "SCALA3_VERSION" -> scalaVersion.value
       ),
-      ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(scalus.jvm),
+      ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
+        scalus.jvm,
+        scalusCardanoLedger.jvm,
+        `scalus-bloxbean-cardano-client-lib`,
+        scalusTestkit.jvm
+      ),
       ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
       cleanFiles += (ScalaUnidoc / unidoc / target).value,
       docusaurusCreateSite := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
@@ -597,12 +602,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
-    .jvmSettings(
-      // temporary, needed for current PlutusScriptEvaluator implementation
-      // TODO: remove when PlutusScriptEvaluator uses different logger
-      libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
-    )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.4.2",
       // copy scalus-*-bundle.js to dist for publishing on npm
@@ -624,7 +623,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
 
 lazy val scalusCardanoLedgerIt = project
     .in(file("scalus-cardano-ledger-it"))
-    .dependsOn(scalusCardanoLedger.jvm, `scalus-bloxbean-cardano-client-lib`)
+    .dependsOn(scalusCardanoLedger.jvm, `scalus-bloxbean-cardano-client-lib`, scalusExamples.jvm)
     .settings(
       name := "scalus-cardano-ledger-it",
       scalacOptions ++= commonScalacOptions,
@@ -709,7 +708,7 @@ addCommandAlias(
   "ci-native",
   "clean;native/Test/compile;native/test"
 )
-addCommandAlias("benchmark", "bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*")
+addCommandAlias("benchmark", "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*")
 addCommandAlias(
   "benchmark-jit",
   "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff last-bench-result.txt  .*(JIT|Cek).*"

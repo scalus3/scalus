@@ -13,7 +13,7 @@ import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.*
 import scalus.ledger.api.v3.ScriptInfo.SpendingScript
 import scalus.prelude.{List, Option, *}
-import scalus.testkit.*
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 import scalus.uplc.eval.*
 
