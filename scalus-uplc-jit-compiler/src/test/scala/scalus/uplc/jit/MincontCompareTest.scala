@@ -12,11 +12,11 @@ class MincontCompareTest extends AnyFunSuiteLike {
             if x <= BigInt(10) then BigInt(1) else BigInt(2)
         }.toUplc(true)
 
-        println(s"UPLC: ${term.show}")
+//        println(s"UPLC: ${term.show}")
         val result = JITImplementation.Mincont
             .compile(term)
             .apply(Log(), NoBudgetSpender, PlutusVM.makePlutusV3VM().machineParams)
-        println(s"Mincont result: $result")
+//        println(s"Mincont result: $result")
         assert(result == BigInt(1))
     }
 }

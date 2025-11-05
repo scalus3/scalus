@@ -37,7 +37,7 @@ class CborTest extends AnyFunSuite {
             tx <- blockFile.block.transactions
             data <- tx.witnessSet.plutusData.value.toMap.values
         do {
-            println(ByteString.fromArray(data.raw))
+//            println(ByteString.fromArray(data.raw))
             assert(data.value != null)
         }
     }

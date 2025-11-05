@@ -19,7 +19,7 @@ class SimpleDebugTest extends AnyFunSuiteLike {
             val term = compile {
                 BigInt(42)
             }.toUplc(true)
-            println(s"UPLC: ${term.show}")
+//            println(s"UPLC: ${term.show}")
             val result =
                 jit.jitUplc(term).apply(Log(), NoBudgetSpender, summon[PlutusVM].machineParams)
             assert(result == BigInt(42))
@@ -30,7 +30,7 @@ class SimpleDebugTest extends AnyFunSuiteLike {
                 val x = BigInt(5)
                 x <= BigInt(10)
             }.toUplc(true)
-            println(s"UPLC: ${term.show}")
+//            println(s"UPLC: ${term.show}")
             val result = jit
                 .jitUplc(term)
                 .apply(
@@ -38,7 +38,7 @@ class SimpleDebugTest extends AnyFunSuiteLike {
                   NoBudgetSpender,
                   summon[PlutusVM].machineParams
                 )
-            println(s"Result: $result")
+//            println(s"Result: $result")
             assert(result == true)
         }
 
@@ -47,7 +47,7 @@ class SimpleDebugTest extends AnyFunSuiteLike {
                 val x = BigInt(5)
                 if x <= BigInt(10) then BigInt(1) else BigInt(2)
             }.toUplc(true)
-            println(s"UPLC: ${term.show}")
+//            println(s"UPLC: ${term.show}")
             val result = jit
                 .jitUplc(term)
                 .apply(
@@ -55,7 +55,7 @@ class SimpleDebugTest extends AnyFunSuiteLike {
                   NoBudgetSpender,
                   summon[PlutusVM].machineParams
                 )
-            println(s"Result: $result")
+//            println(s"Result: $result")
             assert(result == BigInt(1))
         }
     }
