@@ -4,6 +4,9 @@ import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.derivation.key
 import scalus.builtin.{platform, ByteString}
+import scalus.uplc.{DeBruijnedProgram, ProgramFlatCodec}
+
+import scala.util.control.NonFatal
 
 /** Represents a script in Cardano */
 sealed trait Script {
@@ -18,6 +21,33 @@ sealed trait PlutusScript extends Script {
     def language: Language
 
     def toHex: String = script.toHex
+
+    def isWellFormed(majorProtocolVersion: MajorProtocolVersion): Boolean = {
+        PlutusScript.isWellFormed(script, language, majorProtocolVersion)
+    }
+}
+
+object PlutusScript {
+    def isWellFormed(
+        script: ByteString,
+        language: Language,
+        majorProtocolVersion: MajorProtocolVersion
+    ): Boolean = {
+        if majorProtocolVersion < language.introducedInVersion then return false
+
+        val ProgramFlatCodec.DecodeResult(DeBruijnedProgram(_, term), remaining) =
+            try DeBruijnedProgram.fromCborWithRemainingBytes(script.bytes)
+            catch case NonFatal(_) => return false
+
+        if language != Language.PlutusV1 && language != Language.PlutusV2 && remaining.nonEmpty
+        then return false
+
+        val collectedBuiltins = term.collectBuiltins
+        val foundBuiltinsIntroducedIn =
+            Builtins.findBuiltinsIntroducedIn(language, majorProtocolVersion)
+
+        collectedBuiltins.subsetOf(foundBuiltinsIntroducedIn)
+    }
 }
 
 object Script {

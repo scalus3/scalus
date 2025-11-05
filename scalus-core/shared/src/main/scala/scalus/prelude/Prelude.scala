@@ -3,9 +3,9 @@ package scalus.prelude
 import scalus.{Compile, Ignore}
 import scalus.builtin.Builtins.*
 import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.macros.Macros
 
 import scalus.cardano.onchain.{ImpossibleLedgerStateError, OnchainError, RequirementError}
+import scalus.utils.Macros
 
 extension [A](self: A)
     inline def let[B](inline fn: A => B): B = fn(self)

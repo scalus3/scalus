@@ -1,7 +1,6 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.cardano.ledger.utils.PlutusScript
 import scalus.builtin.{platform, ByteString}
 
 import java.nio.charset.StandardCharsets

@@ -1,8 +1,8 @@
 package scalus
 
-import scalus.macros.Macros
 import scalus.sir.{SIR, SIRDefaultOptions, SIRType}
 import scalus.builtin.Data
+import scalus.utils.Macros
 
 import scala.annotation.Annotation
 

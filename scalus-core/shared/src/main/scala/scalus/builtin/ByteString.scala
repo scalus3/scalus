@@ -93,8 +93,8 @@ object ByteString extends ByteStringOffchainApi {
       *   ByteString.fromBigIntBigEndian(1_000_000, 1) => 💥
       *   }}}
       */
-    inline def fromBigIntBigEndian(value: BigInt, size: BigInt): ByteString =
-        Builtins.integerToByteString(true, value, size)
+    inline def fromBigIntBigEndian(value: BigInt, size: BigInt = 0): ByteString =
+        Builtins.integerToByteString(true, size, value)
 
     /** Encodes a BigInt value as a Little-Endian (least-significant bytes first) `ByteString`.
       *
@@ -110,8 +110,8 @@ object ByteString extends ByteStringOffchainApi {
       *   ByteString.fromBigIntLittleEndian(1_000_000, 1) => 💥
       *   }}}
       */
-    inline def fromBigIntLittleEndian(value: BigInt, size: BigInt): ByteString =
-        Builtins.integerToByteString(false, value, size)
+    inline def fromBigIntLittleEndian(value: BigInt, size: BigInt = 0): ByteString =
+        Builtins.integerToByteString(false, size, value)
 
     // TODO it's not truly overriding and doesn't work in generic function,
     //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]

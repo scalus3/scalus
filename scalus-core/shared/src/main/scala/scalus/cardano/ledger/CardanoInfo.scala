@@ -1,6 +1,7 @@
 package scalus.cardano.ledger
 
 import scalus.cardano.address.Network
+import scalus.utils.Macros
 
 import scala.annotation.threadUnsafe
 
@@ -27,5 +28,5 @@ object CardanoInfo {
         )
 
     private inline def inlineResource(name: String): String =
-        ${ scalus.macros.Macros.inlineResource('name) }
+        ${ Macros.inlineResource('name) }
 }

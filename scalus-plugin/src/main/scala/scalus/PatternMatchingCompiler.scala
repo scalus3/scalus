@@ -2343,7 +2343,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             embedding match {
                 case SirCaseDecisionTree.EmbeddingType.Inline => acc
                 case SirCaseDecisionTree.EmbeddingType.ByReference =>
-                    val tp = decisions.tp
+                    val tp = SIRType.Fun(SIRType.Unit, decisions.tp)
                     val posAnns = AnnotationsDecl.apply(pos = sir.anns.pos)
                     val dtreeLambda = SIR.LamAbs(
                       SIR.Var("u", SIRType.Unit, posAnns),

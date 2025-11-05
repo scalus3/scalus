@@ -14,7 +14,6 @@ The Scalus JIT compiler achieves **8x speedup** over the baseline CekMachine int
 | **JIT NativeStack** | 30.9 ± 0.9 | **7.93x faster** | ⚠️ Not stack-safe |
 | **JIT Mincont** | 139.9 ± 8.8 | 1.75x faster | ✓ Stack-safe |
 
-**Recommendation**: Use **JIT Hybrid** for production - it provides NativeStack performance with Mincont's stack safety.
 
 ---
 
@@ -375,8 +374,7 @@ sbt -DskipScalusRecompile=true "bench/Jmh/run .*auction.* -f 1"
 ## Benchmark Data Files
 
 Latest benchmark results are saved to:
-- `/tmp/bench-final.log` - JIT implementations
-- `/tmp/bench-cek-final.log` - CekJVM baseline
+- `./bench/last-bench-results.txt` - JIT implementations
 
 ---
 

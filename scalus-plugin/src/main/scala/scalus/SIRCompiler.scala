@@ -1033,6 +1033,7 @@ final class SIRCompiler(
                                     println(
                                       s"tpt.symbol ${tpt.tpe.typeSymbol}, ==thisTypeSymbol: ${tpt.symbol == env.thisTypeSymbol}, thisTypeSymbol: ${env.thisTypeSymbol}"
                                     )
+                                case _ =>
                             throw ex
             if debug then
                 println(

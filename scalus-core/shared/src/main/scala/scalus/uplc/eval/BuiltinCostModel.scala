@@ -1,9 +1,9 @@
 package scalus.uplc.eval
 
 import scalus.cardano.ledger.{CardanoInfo, Language}
-import scalus.macros.Macros
 import scalus.uplc.eval.MachineParams.fromProtocolParams
 import scalus.uplc.{BuiltinSemanticsVariant, PlutusParams}
+import scalus.utils.Macros
 import upickle.default.*
 
 case class BuiltinCostModel(
