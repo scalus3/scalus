@@ -18,7 +18,8 @@ case class PaymentBuilder(
     def payToScript(address: Address, value: Value, datum: Data): PaymentBuilder =
         payTo(address, value, Some(DatumOption.Inline(datum)))
 
-    def collateral(c: (TransactionUnspentOutput, Witness)) = copy(collateral = Some(c))
+    def collateral(collat: TransactionUnspentOutput, w: Witness) =
+        copy(collateral = Some(collat, w))
 
     def spendScriptOutputs(
         utxo: (TransactionInput, TransactionOutput),

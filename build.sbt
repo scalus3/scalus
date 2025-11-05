@@ -614,7 +614,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
 
 lazy val scalusCardanoLedgerIt = project
     .in(file("scalus-cardano-ledger-it"))
-    .dependsOn(scalusCardanoLedger.jvm, `scalus-bloxbean-cardano-client-lib`)
+    .dependsOn(scalusCardanoLedger.jvm, `scalus-bloxbean-cardano-client-lib`, scalusExamples.jvm)
     .settings(
       name := "scalus-cardano-ledger-it",
       scalacOptions ++= commonScalacOptions,

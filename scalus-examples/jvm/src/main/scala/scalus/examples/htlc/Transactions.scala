@@ -41,6 +41,7 @@ class Transactions(
     ): Either[String, Transaction] = {
         val (input, output) = lockedUtxo
         val redeemer = Action.Reveal(preimage).toData
+        val (collat, collatWitness) = wallet.collateralInputs.head
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer,
@@ -53,6 +54,7 @@ class Transactions(
             .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockedUtxo), witness))
             .withStep(TransactionBuilderStep.ValidityStartSlot(validityStartSlot))
             .payTo(recipientAddress, output.value)
+            .collateral(collat, collatWitness)
             .build()
     }
 
@@ -64,6 +66,7 @@ class Transactions(
     ): Either[String, Transaction] = {
         val (input, output) = lockedUtxo
         val redeemer = Action.Timeout.toData
+        val (collat, collatWitness) = wallet.collateralInputs.head
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer,
@@ -76,6 +79,7 @@ class Transactions(
             .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockedUtxo), witness))
             .withStep(TransactionBuilderStep.ValidityStartSlot(validityStartSlot))
             .payTo(committerAddress, output.value)
+            .collateral(collat, collatWitness)
             .build()
     }
 }
