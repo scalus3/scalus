@@ -1,4 +1,4 @@
-package scalus.macros
+package scalus.utils
 
 import scalus.Compiler
 import scalus.builtin.Builtins
@@ -15,6 +15,23 @@ import scala.collection.mutable.ListBuffer
 
 object Macros {
 
+    /** Converts a quoted lambda value of type Exp[A] => Exp[B] into a quoted UPLC lambda expression
+      * of type Exp[A => B].
+      *
+      * This macro extracts the parameter name from the provided lambda and creates a Trm.LamAbs
+      * term wrapping the body. It expects a simple lambda value (e.g. lam(x => ...)).
+      *
+      * @tparam A
+      *   the input Exp type
+      * @tparam B
+      *   the output Exp type
+      * @param f
+      *   quoted function value of type Exp[A] => Exp[B]
+      * @return
+      *   a quoted Exp representing a UPLC lambda of A => B
+      * @throws scala.quoted.Report.errorAndAbort
+      *   if the supplied expression does not match the expected lambda shape
+      */
     @nowarn
     def lamMacro[A: Type, B: Type](f: Expr[Exp[A] => Exp[B]])(using Quotes): Expr[Exp[A => B]] =
         import quotes.reflect.*
@@ -38,6 +55,23 @@ object Macros {
             Exp(Trm.LamAbs($name, $f(vr($name)).term))
         }
 
+    /** Create a quoted getter function of type Exp[Data] => Exp[Data] from a field selection lambda
+      * (e.g. (_.txInfo.id)).
+      *
+      * The macro accepts an expression selecting nested case-class fields and generates an
+      * expression that, at runtime, extracts the corresponding Data from an Exp[Data] value.
+      *
+      * Supported input shapes: chain of Select/Ident nodes corresponding to nested fields.
+      *
+      * @param e
+      *   quoted function A => Any that selects a field path (e.g. _.a.b)
+      * @tparam A
+      *   the root type of the selection
+      * @return
+      *   quoted function Exp[Data] => Exp[Data] extracting the selected nested field
+      * @throws scala.quoted.Report.errorAndAbort
+      *   on unsupported shapes or missing fields
+      */
     def fieldAsExprDataMacro[A: Type](e: Expr[A => Any])(using
         Quotes
     ): Expr[Exp[Data] => Exp[Data]] =
@@ -91,10 +125,37 @@ object Macros {
                 composeGetters(select)
             case x => report.errorAndAbort(s"fieldAsExprDataMacro: $x")
 
+    /** Build a runtime Data => Data getter from a field-selection expression.
+      *
+      * This is a convenience wrapper that forwards to the term-level implementation. Accepts a
+      * quoted lambda selecting nested fields of A and returns a plain function that reads nested
+      * Data values.
+      *
+      * @param e
+      *   quoted selection A => Any
+      * @tparam A
+      *   root type of selection
+      * @return
+      *   a Data => Data function performing the extraction
+      */
     def fieldAsDataMacro[A: Type](e: Expr[A => Any])(using Quotes): Expr[Data => Data] =
         import quotes.reflect.*
         fieldAsDataMacroTerm(e.asTerm)
 
+    /** Term-level implementation of the field-as-Data getter macro.
+      *
+      * This function performs the reflection on the quoted Term and builds an Expr[Data => Data]
+      * that navigates the builtin Data representation according to the nested selects in `e`.
+      *
+      * Supported shapes are nested Select nodes; other shapes will abort compilation.
+      *
+      * @param e
+      *   reflected term representing the selection
+      * @return
+      *   Expr[Data => Data] that extracts the nested field
+      * @throws scala.quoted.Report.errorAndAbort
+      *   on unsupported tree shapes or missing fields
+      */
     def fieldAsDataMacroTerm(using q: Quotes)(e: q.reflect.Term): Expr[Data => Data] =
         import quotes.reflect.*
         e match
@@ -182,6 +243,19 @@ object Macros {
 
             case x => report.errorAndAbort(x.toString)
 
+    /** Derive an upickle ReadWriter[A] for a mutable class-like type whose fields are longs.
+      *
+      * The macro inspects declared fields of A and generates a readwriter that serializes to
+      * ujson.Value and deserializes by constructing a new instance of A and assigning fields from
+      * the JSON object.
+      *
+      * Note: generated code assumes fields are of type Long and that A has a no-arg constructor.
+      *
+      * @tparam A
+      *   the target type for which a ReadWriter is derived
+      * @return
+      *   an Expr of ReadWriter[A]
+      */
     import upickle.default.*
     def mkReadWriterImpl[A: Type](using Quotes): Expr[ReadWriter[A]] = {
         import scala.quoted.*
@@ -304,21 +378,67 @@ object Macros {
         impl
     }
 
+    /** Deprecated alias for inlineResource.
+      *
+      * @param name
+      *   resource filename
+      * @return
+      *   resource contents as a string at compile time
+      * @deprecated
+      *   use inlineResource
+      */
     @deprecated("use inlineResource", "0.11.0")
     def inlineBuiltinCostModelJsonImpl(using Quotes)(name: Expr[String]): Expr[String] =
         inlineResource(name)
 
+    /** Read a textual resource from the project sources at compile time.
+      *
+      * This macro reads the resource file named `name` from the compile-time source root (defaults
+      * to src/main/resources) and returns its contents as a quoted String.
+      *
+      * @param name
+      *   quoted resource filename
+      * @return
+      *   quoted resource contents
+      * @throws java.lang.IllegalArgumentException
+      *   if the resource file is not found
+      */
     def inlineResource(using Quotes)(name: Expr[String]): Expr[String] = {
         val string = readResource(name.value.get)
         Expr(string)
     }
 
+    /** Read a resource file from disk using the compile-time source root.
+      *
+      * This inline helper computes the path to the resource and returns its contents.
+      *
+      * @param name
+      *   the resource file name
+      * @param resPath
+      *   the resources subpath relative to the source root (default "resources")
+      * @return
+      *   file contents as string
+      * @throws java.lang.IllegalArgumentException
+      *   if the file is missing
+      */
     inline def readResource(using Quotes)(name: String, resPath: String = "resources"): String = {
         val path = sourcesRoot().resolve(resPath).resolve(name)
         require(Files.exists(path), s"Resource $name is not found on path $path")
         Files.readString(path)
     }
 
+    /** Compute the project's source root Path at compile time.
+      *
+      * The function locates SourceFile.current.path and searches backward for `srcRoot` to
+      * determine the project root. Defaults to "/src/main/".
+      *
+      * @param srcRoot
+      *   path fragment to locate the project source root (default: "/src/main/")
+      * @return
+      *   Path pointing to the located source root directory
+      * @throws java.lang.IllegalArgumentException
+      *   if the fragment is not found in current path
+      */
     inline def sourcesRoot(using
         Quotes
     )(srcRoot: String = File.separator + "src" + File.separator + "main" + File.separator): Path = {
@@ -328,6 +448,16 @@ object Macros {
         Paths.get(path.substring(0, pos), srcRoot)
     }
 
+    /** Return quoted boolean expression that traces when condition is false.
+      *
+      * This helper expands to an if-expression that returns true when the input is true; otherwise
+      * it calls Builtins.trace with a diagnostic string and returns false.
+      *
+      * @param x
+      *   quoted boolean expression
+      * @return
+      *   quoted boolean that is identical to x when true, and traces + returns false otherwise
+      */
     def questionMark(using Quotes)(x: Expr[Boolean]): Expr[Boolean] = {
         import scala.quoted.*
         '{ if $x then true else Builtins.trace(${ Expr(x.show + " ? False") })(false) }
@@ -358,10 +488,26 @@ object Macros {
         }
     }
 
+    /** Compile the provided quoted AST into a SIR using the project's Compiler.
+      *
+      * @param code
+      *   quoted code/term to be compiled
+      * @return
+      *   quoted SIR representation
+      */
     def generateCompileCall(code: Expr[Any])(using Quotes): Expr[SIR] = '{
         Compiler.compile($code)
     }
 
+    /** Compile the provided quoted AST into a SIR using Compiler with options.
+      *
+      * @param options
+      *   quoted Compiler.Options
+      * @param code
+      *   quoted code/term to be compiled
+      * @return
+      *   quoted SIR representation
+      */
     def generateCompileCall(options: Expr[scalus.Compiler.Options], code: Expr[Any])(using
         Quotes
     ): Expr[SIR] = '{

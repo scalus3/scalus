@@ -6,6 +6,7 @@ import scalus.uplc.Constant.given
 import scalus.uplc.DefaultUni.{asConstant, Bool, Integer, given}
 import scalus.uplc.eval.CekValue.*
 import scalus.uplc.eval.*
+import scalus.utils.Macros
 
 import scala.collection.immutable
 import scala.collection.immutable.ArraySeq
@@ -1100,7 +1101,7 @@ class BuiltinsMeaning(
         )
 
     private inline def mkGetBuiltinRuntime: DefaultFun => BuiltinRuntime = ${
-        scalus.macros.Macros.mkGetBuiltinRuntime('this)
+        Macros.mkGetBuiltinRuntime('this)
     }
 
     def getBuiltinRuntime(fun: DefaultFun): BuiltinRuntime = mkGetBuiltinRuntime(fun)

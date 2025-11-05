@@ -4,6 +4,7 @@ import io.bullet.borer.Cbor
 import scalus.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
+import scalus.utils.Macros
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
@@ -93,7 +94,7 @@ object JScalus {
     }
 
     private inline def inlineResource(name: String): String =
-        ${ scalus.macros.Macros.inlineResource('name) }
+        ${ Macros.inlineResource('name) }
 
     /** Evaluates all Plutus scripts in a transaction against the provided UTxO set.
       *
