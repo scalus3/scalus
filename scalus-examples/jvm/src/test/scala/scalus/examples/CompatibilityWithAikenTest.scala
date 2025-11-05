@@ -10,8 +10,8 @@ import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.eval.{ExBudget, ExCPU, ExMemory}
 import scalus.uplc.eval.Result
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.testkit.*
 import scalus.ledger.api.v3.*
+import scalus.testing.kit.ScalusTest
 
 /** Aiken require that redeemer is ADT with constructor with arguments.
   * @param message

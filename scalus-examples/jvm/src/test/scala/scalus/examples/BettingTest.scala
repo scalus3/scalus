@@ -13,7 +13,7 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.testkit.*
+import scalus.testing.kit.{Mock, ScalusTest}
 
 import scala.language.implicitConversions
 

@@ -1,5 +1,6 @@
 package scalus.uplc
 
+import scalus.utils.Macros
 import upickle.default.*
 
 import java.lang.reflect.Modifier
@@ -1318,7 +1319,7 @@ private object JsonUtils {
       *   }}}
       */
     inline def mkClassFieldsReadWriter[A]: ReadWriter[A] = ${
-        scalus.macros.Macros.mkReadWriterImpl[A]
+        Macros.mkReadWriterImpl[A]
     }
 
     /** Generates a pair of functions to convert a class with fields to a sequence of longs and back
@@ -1337,7 +1338,7 @@ private object JsonUtils {
       *   }}}
       */
     inline def mkClassFieldsFromSeqIso[A]: (A => Seq[Long], Seq[Long] => A) = ${
-        scalus.macros.Macros.mkClassFieldsFromSeqIsoImpl[A]
+        Macros.mkClassFieldsFromSeqIsoImpl[A]
     }
 }
 

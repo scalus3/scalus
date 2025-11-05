@@ -7,7 +7,8 @@ import scalus.cardano.txbuilder.{Environment, PubKeyWitness, TransactionUnspentO
 import scalus.ledger.api.v3
 import scalus.uplc.Program
 import scalus.uplc.eval.ExBudget
-import scalus.testkit.ScalusTest
+import scalus.cardano.node.Provider
+import scalus.testing.kit.ScalusTest
 
 object TestUtil extends ScalusTest {
 
@@ -69,6 +70,29 @@ object TestUtil extends ScalusTest {
             }
         }
     }
+
+    def createTestWallet(provider: Provider, address: Address): WalletTrait =
+        new WalletTrait {
+            override val owner: Address = address
+            override lazy val utxo: Utxos = provider.findUtxos(address).toOption.get
+            override val collateralInputs: Seq[(TransactionUnspentOutput, Witness)] = Seq(
+              (TransactionUnspentOutput(provider.findUtxo(address).toOption.get), PubKeyWitness)
+            )
+
+            override def selectInputs(
+                required: Value
+            ): Option[Seq[(TransactionUnspentOutput, Witness)]] = {
+                val available = provider.findUtxos(address, minRequiredAmount = Some(required.coin))
+                available match
+                    case Left(_) => None
+                    case Right(utxos) =>
+                        Some(
+                          utxos.view.map { entry =>
+                              (TransactionUnspentOutput(entry), PubKeyWitness)
+                          }.toSeq
+                        )
+            }
+        }
 
     def getScriptUtxo(tx: Transaction): (TransactionInput, TransactionOutput) = {
         val (transactionOutput, index) = tx.body.value.outputs.view

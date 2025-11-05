@@ -10,12 +10,11 @@ import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.testkit.Mock
-import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
 
 import scalus.examples.{OrderedLinkedListContract, OrderedNodeAction}
 import scalus.patterns.OrderedLinkedList as LinkedList
+import scalus.testing.kit.{Mock, ScalusTest}
 
 import scala.language.implicitConversions
 
@@ -106,10 +105,13 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
               )
             )
         if fails != result.isSuccess then
-            if result.budget.cpu > budget.cpu || result.budget.memory > budget.memory then
-                println(result.budget)
-                println("Costs: " + result.costs)
-                fail("Performance regression")
+            if result.budget.cpu > budget.cpu || result.budget.memory > budget.memory
+            then
+                fail:
+                    s"""Performance regression,
+                    |expected: $budget,
+                    |but got: ${result.budget};
+                    |costs: ${result.costs}""".stripMargin
         else
             result.logs.foreach(println)
             val reason = result match
