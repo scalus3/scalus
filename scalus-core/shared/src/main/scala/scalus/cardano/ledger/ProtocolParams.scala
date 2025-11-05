@@ -147,14 +147,33 @@ object ProtocolParams {
                   ),
                   hardForkInitiation =
                       UnitInterval.fromDouble(json("dvt_hard_fork_initiation").numOpt.getOrElse(0)),
-                  ppNetworkGroup =
-                      UnitInterval.fromDouble(json("dvt_p_p_network_group").numOpt.getOrElse(0)),
-                  ppEconomicGroup =
-                      UnitInterval.fromDouble(json("dvt_p_p_economic_group").numOpt.getOrElse(0)),
-                  ppTechnicalGroup =
-                      UnitInterval.fromDouble(json("dvt_p_p_technical_group").numOpt.getOrElse(0)),
-                  ppGovGroup =
-                      UnitInterval.fromDouble(json("dvt_p_p_gov_group").numOpt.getOrElse(0)),
+                  ppNetworkGroup = UnitInterval.fromDouble(
+                    Try(json("dvt_p_p_network_group"))
+                        .getOrElse(json("dvt_ppnetwork_group"))
+                        .numOpt
+                        .getOrElse(0)
+                  ),
+                  ppEconomicGroup = UnitInterval
+                      .fromDouble(
+                        Try(json("dvt_p_p_economic_group"))
+                            .getOrElse(json("dvt_ppeconomic_group"))
+                            .numOpt
+                            .getOrElse(0)
+                      ),
+                  ppTechnicalGroup = UnitInterval
+                      .fromDouble(
+                        Try(json("dvt_p_p_technical_group"))
+                            .getOrElse(json("dvt_pptechnical_group"))
+                            .numOpt
+                            .getOrElse(0)
+                      ),
+                  ppGovGroup = UnitInterval
+                      .fromDouble(
+                        Try(json("dvt_p_p_gov_group"))
+                            .getOrElse(json("dvt_ppgov_group"))
+                            .numOpt
+                            .getOrElse(0)
+                      ),
                   treasuryWithdrawal =
                       UnitInterval.fromDouble(json("dvt_treasury_withdrawal").numOpt.getOrElse(0))
                 ),
