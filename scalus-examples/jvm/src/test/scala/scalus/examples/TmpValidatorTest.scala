@@ -79,8 +79,10 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
 
         val result = program.runWithDebug(scriptContext)
 
-        // TODO: Fix alphaEq for Program
-        assert(program alphaEq compiledContract.program)
+        val deBruijnedProgram = program.deBruijnedProgram
+        val deBruijnedCompiledProgram = compiledContract.program.deBruijnedProgram
+
+        assert(deBruijnedProgram alphaEq deBruijnedCompiledProgram)
         assert(result alphaEq compiledContract.program.runWithDebug(scriptContext))
         assert(script == compiledContract.script)
         assert(program.cborByteString == compiledContract.program.cborByteString)
@@ -89,7 +91,7 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
         result
     }
 
-    ignore("unlock TmpContract UTXO") {
+    test("unlock TmpContract UTXO") {
         val (tx, result) = unlockTx
         assert(result.isSuccess)
     }
