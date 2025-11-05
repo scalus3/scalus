@@ -1,7 +1,6 @@
 package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.testkit.ScalusTest
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
@@ -9,6 +8,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.ToData.*
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 
 class TmpValidatorTest extends AnyFunSuite, ScalusTest {

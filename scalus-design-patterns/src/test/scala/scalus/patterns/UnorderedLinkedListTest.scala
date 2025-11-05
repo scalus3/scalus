@@ -10,12 +10,11 @@ import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.testkit.Mock
-import scalus.testkit.ScalusTest
 import scalus.uplc.eval.Result
 
 import scalus.examples.{UnorderedLinkedListContract, UnorderedNodeAction}
 import scalus.patterns.UnorderedLinkedList as LinkedList
+import scalus.testing.kit.{Mock, ScalusTest}
 
 import scala.language.implicitConversions
 

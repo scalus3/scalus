@@ -7,9 +7,9 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.testkit.ScalusTest
 import scalus.uplc.eval.*
 import scalus.builtin.Builtins
+import scalus.testing.kit.ScalusTest
 
 import scala.util.Try
 

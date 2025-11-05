@@ -5,7 +5,7 @@ import scalus.*
 import scalus.Compiler.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString
-import scalus.testkit.ScalusTest
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.*

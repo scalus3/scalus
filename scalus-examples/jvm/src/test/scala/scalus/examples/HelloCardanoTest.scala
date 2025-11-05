@@ -8,7 +8,7 @@ import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.prelude.*
-import scalus.testkit.ScalusTest
+import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.eval.*
 
