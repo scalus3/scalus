@@ -1937,7 +1937,6 @@ object StepError {
                 s"UTxO: $utxo"
     }
 
-
     case class WrongCredentialType(
         action: Operation,
         expectedType: WitnessKind,
