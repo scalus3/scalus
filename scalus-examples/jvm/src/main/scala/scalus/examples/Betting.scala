@@ -198,31 +198,35 @@ object Betting extends Validator:
         @annotation.unused redeemer: Data,
         policyId: PolicyId,
         tx: TxInfo
-    ): Unit = tx.outputs.filter(_.address === Address.fromScriptHash(policyId)) match
-        case List.Cons(OutputDatum.OutputDatum(datum), List.Nil) =>
-            val BetDatum(player1, player2, oracle, expiration) =
-                datum.to[BetDatum]
-            require(
-              tx.signatories.contains(player1),
-              "Player1 must sign the transaction (they're creating the bet)"
-            )
-            require(
-              player2.hash.isEmpty,
-              "Player2 must be empty (no one has joined yet)"
-            )
-            require(
-              oracle !== player1,
-              "Oracle cannot be the same as player1 (conflict of interest)"
-            )
-            require(
-              tx.validRange.isEntirelyBefore(expiration),
-              "The bet must have a valid expiration time (after the current time)"
-            )
-        case _ =>
-            fail(
-              "There's must be a single output that goes to the script (the bet UTXO),\n" +
-                  "Bet datum must be inline"
-            )
+    ): Unit =
+        // Find all outputs going to this script's address
+        tx.outputs.filter(_.address === Address.fromScriptHash(policyId)) match
+            case List.Cons(betOutput, tail) =>
+                tail match // ???: headOrFail or matchOrFail
+                    case List.Nil =>
+                        betOutput.datum match // FIME: nested pattern matching
+                            case OutputDatum.OutputDatum(datum) =>
+                                val BetDatum(player1, player2, oracle, expiration) =
+                                    datum.to[BetDatum]
+                                require(
+                                  tx.signatories.contains(player1),
+                                  "Player1 must sign the transaction (they're creating the bet)"
+                                )
+                                require(
+                                  player2.hash.isEmpty,
+                                  "Player2 must be empty (no one has joined yet)"
+                                )
+                                require(
+                                  oracle !== player1,
+                                  "Oracle cannot be the same as player1 (conflict of interest)"
+                                )
+                                require(
+                                  tx.validRange.isEntirelyBefore(expiration),
+                                  "The bet must have a valid expiration time (after the current time)"
+                                )
+                            case _ => fail("Bet datum must be inline")
+                    case _ => fail("Output to the script (the bet UTXO) must be single")
+            case _ => fail("There's must be an output that goes to the script (the bet UTXO)")
 
 object BettingContract:
 
