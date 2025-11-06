@@ -232,7 +232,8 @@ object OrderedLinkedList:
             case List.Cons(
                   (adaPolicy, adaToken, _),
                   List.Cons((policyId, token, amount), List.Nil)
-            ) => (adaPolicy, adaToken, policyId, token, amount)
+                ) =>
+                (adaPolicy, adaToken, policyId, token, amount)
             case _ =>
                 fail(
                   "There's must be only a token key and a lovelace values for each policy output"
@@ -314,7 +315,7 @@ object OrderedLinkedList:
     def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node =
         val parentIn = common.inputs match
             case List.Cons(parentIn, List.Nil) => parentIn
-            case _ => fail("There must be a single covering node input")
+            case _                             => fail("There must be a single covering node input")
         val PubKeyHash(key) = insertKey
         val (parentOut, insertNode) = common.outputs match
             case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) => fstOut.sort(sndOut)
@@ -356,7 +357,7 @@ object OrderedLinkedList:
             case _ => fail("There must be parent and remove node inputs only")
         val parentOut = common.outputs match
             case List.Cons(parentOut, List.Nil) => parentOut
-            case _ => fail("There must be a single parent output")
+            case _                              => fail("There must be a single parent output")
         require(
           cell.chKey(key) === removeNode.cell,
           "The covering cell must be referenced by removed key at inputs,\n" +
@@ -506,7 +507,8 @@ object UnorderedLinkedList:
             case List.Cons(
                   (adaPolicy, adaToken, _),
                   List.Cons((policyId, token, amount), List.Nil)
-            ) => (adaPolicy, adaToken, policyId, token, amount)
+                ) =>
+                (adaPolicy, adaToken, policyId, token, amount)
             case _ =>
                 fail(
                   "There's must be only a token key and a lovelace values for each policy output"
@@ -588,7 +590,7 @@ object UnorderedLinkedList:
     def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node =
         val parentIn = common.inputs match
             case List.Cons(parentIn, List.Nil) => parentIn
-            case _ => fail("There must be a single covering node input")
+            case _                             => fail("There must be a single covering node input")
         val PubKeyHash(key) = insertKey
         val (parentOut, insertNode) = common.outputs match
             case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) => fstOut.sortByKey(sndOut, key)
@@ -636,7 +638,7 @@ object UnorderedLinkedList:
             case _ => fail("There must be parent and remove node inputs only")
         val parentOut = common.outputs match
             case List.Cons(parentOut, List.Nil) => parentOut
-            case _ => fail("There must be a single parent output")
+            case _                              => fail("There must be a single parent output")
         require(
           cell.chKey(key) === removeNode.cell,
           "The covering cell must be referenced by removed key at inputs,\n" +

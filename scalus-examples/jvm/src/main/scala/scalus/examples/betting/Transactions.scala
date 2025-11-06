@@ -24,21 +24,43 @@ class Transactions(
         oracle: PubKeyHash,
         expiration: PosixTime,
         player2: PubKeyHash = PubKeyHash(hex""), // supposed to be empty
-        token: AssetName = AssetName(utf8"lucky_number_slevin"), // minted token asset name, shouldn't matter
+        token: AssetName = AssetName(
+          utf8"lucky_number_slevin"
+        ), // minted token asset name, shouldn't matter
         amount: Long = 1L // minted token amount, shouldn't matter
     ): Either[String, Transaction] = PaymentBuilder(context)
-            .withStep(TransactionBuilderStep.Mint(script.scriptHash, token, amount, TwoArgumentPlutusScriptWitness(
+        .withStep(
+          TransactionBuilderStep.Mint(
+            script.scriptHash,
+            token,
+            amount,
+            TwoArgumentPlutusScriptWitness(
               scriptSource = ScriptSource.PlutusScriptValue(script),
               redeemer = Data.unit,
               additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player1.hash)))
-            )))
-            .payToScript(
-              scriptAddress, Value.asset(script.scriptHash, token, amount, Coin(bet)),
-              BetDatum(player1, player2, oracle, expiration).toData
-            ).build()
+            )
+          )
+        )
+        .payToScript(
+          scriptAddress,
+          Value.asset(script.scriptHash, token, amount, Coin(bet)),
+          BetDatum(player1, player2, oracle, expiration).toData
+        )
+        .build()
 
-
-    def join(bet: BigInt, player1: PubKeyHash, player2: PubKeyHash, oracle: PubKeyHash, expiration: PosixTime): Either[String, Transaction] = ???
+    def join(
+        bet: BigInt,
+        player1: PubKeyHash,
+        player2: PubKeyHash,
+        oracle: PubKeyHash,
+        expiration: PosixTime
+    ): Either[String, Transaction] = ???
 
     // winner: true - 'player2', false - 'player1'
-    def win(winner: Boolean, player1: PubKeyHash, player2: PubKeyHash, oracle: PubKeyHash, expiration: PosixTime): Either[String, Transaction] = ???
+    def win(
+        winner: Boolean,
+        player1: PubKeyHash,
+        player2: PubKeyHash,
+        oracle: PubKeyHash,
+        expiration: PosixTime
+    ): Either[String, Transaction] = ???
