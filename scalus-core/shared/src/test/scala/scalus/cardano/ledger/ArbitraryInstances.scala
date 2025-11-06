@@ -630,20 +630,20 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[TransactionBody] = Arbitrary {
         for
-            inputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(TaggedSortedSet.from)
-            outputs <- genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](0, 4)
+            inputs <- genSetOfSizeFromArbitrary[TransactionInput](1, 4).map(TaggedSortedSet.from)
+            outputs <- genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](1, 4)
             fee <- arbitrary[Coin]
             ttl <- Gen.option(Gen.choose(0L, Long.MaxValue))
-            certificates <- genSetOfSizeFromArbitrary[Certificate](0, 4).map(TaggedOrderedSet.from)
+            certificates <- genSetOfSizeFromArbitrary[Certificate](1, 4).map(TaggedOrderedSet.from)
             withdrawals <- arbitrary[Option[Withdrawals]]
             auxiliaryDataHash <- arbitrary[Option[AuxiliaryDataHash]]
             validityStartSlot <- Gen.option(Gen.choose(0L, Long.MaxValue))
             mint <- arbitrary[Option[Mint]]
             scriptDataHash <- arbitrary[Option[ScriptDataHash]]
-            collateralInputs <- genSetOfSizeFromArbitrary[TransactionInput](0, 4).map(
+            collateralInputs <- genSetOfSizeFromArbitrary[TransactionInput](1, 4).map(
               TaggedSortedSet.from
             )
-            requiredSigners <- genSetOfSizeFromArbitrary[AddrKeyHash](0, 4).map(set =>
+            requiredSigners <- genSetOfSizeFromArbitrary[AddrKeyHash](1, 4).map(set =>
                 TaggedSortedSet.from(set)
             )
             networkId <- Gen.option(Gen.oneOf(Gen.const(0), Gen.const(1)))

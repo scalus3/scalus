@@ -32,4 +32,4 @@ object TaggedOrderedSet extends TaggedSeq:
         inline def toSet: Set[A] = ListSet.from(s)
 
     given [A: Encoder]: Encoder[TaggedOrderedSet[A]] = writeTagged(_, _)
-    given [A: Decoder]: Decoder[TaggedOrderedSet[A]] = r => from(readTagged(r))
+    given [A: Decoder]: Decoder[TaggedOrderedSet[A]] = r => from(checkNonEmpty(readTagged(r)))

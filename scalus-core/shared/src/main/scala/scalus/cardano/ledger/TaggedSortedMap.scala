@@ -28,4 +28,4 @@ object TaggedSortedMap extends TaggedSeq:
 
     given [K, A: Encoder]: Encoder[TaggedSortedMap[K, A]] = (w, a) => writeTagged(w, a.values)
     given [K: Ordering, A: Decoder](using K KeyOf A): Decoder[TaggedSortedMap[K, A]] = r =>
-        from(readTagged(r))
+        from(checkNonEmpty(readTagged(r)))

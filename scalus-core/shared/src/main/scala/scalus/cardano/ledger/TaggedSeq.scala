@@ -13,6 +13,11 @@ import io.bullet.borer.*
   */
 trait TaggedSeq(tag: Tag = Tag.Other(258)):
 
+    def checkNonEmpty[A](src: IterableOnce[A]): IndexedSeq[A] =
+        val seq = IndexedSeq.from(src)
+        require(seq.nonEmpty, "Empty list found, expected non-empty")
+        seq
+
     def checkDuplicates[A](src: IterableOnce[A]): IndexedSeq[A] =
         val seq = IndexedSeq.from(src)
         val set = Set.from(seq)

@@ -24,4 +24,5 @@ object TaggedSortedSet extends TaggedSeq:
         inline def toSeq: IndexedSeq[A] = s.toIndexedSeq
 
     given [A: Encoder]: Encoder[TaggedSortedSet[A]] = writeTagged(_, _)
-    given [A: Decoder: Ordering]: Decoder[TaggedSortedSet[A]] = r => from(readTagged(r))
+    given [A: Decoder: Ordering]: Decoder[TaggedSortedSet[A]] = r =>
+        from(checkNonEmpty(readTagged(r)))
