@@ -213,15 +213,83 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def mkNilData(): BuiltinList[Data] = BuiltinList.empty
     def mkNilPairData(): BuiltinList[BuiltinPair[Data, Data]] = BuiltinList.empty
 
-    /** Conversion from [[BigInt]] to [[ByteString]], as per
-      * [CIP-121](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121).
+    /** Convert a [[BigInt]] into a [[ByteString]].
+      *
+      * The conversion uses fixed-width output and explicit endianness.
+      * If `lengthArg` is 0, the result is a minimal-length encoding.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121 CIP-121]]
+      *
+      * @param endiannessArg
+      *   `true` for big-endian output,
+      *   `false` for little-endian output.
+      *
+      * @param lengthArg
+      *   Desired output length in bytes.
+      *   If zero, the result is minimally sized.
+      *   If positive, the output must fit into the exact width,
+      *   otherwise an exception is thrown.
+      *
+      * @param input
+      *   Unsigned integer to convert. Negative integers are rejected.
+      *
+      * @throws BuiltinException
+      *   If the requested length is negative, exceeds the maximum,
+      *   or the integer cannot be represented in the requested number of bytes.
+      *
+      * @example
+      *   {{{
+      *   // Big-endian, length 2:
+      *   integerToByteString(true, 2, 4660) == hex"1234"
+      *
+      *   // Little-endian, length 2:
+      *   integerToByteString(false, 2, 4660) == hex"3412"
+      *
+      *   // Minimal representation:
+      *   integerToByteString(true, 0, 4660) == hex"1234"
+      *   }}}
+      *
+      * @return
+      *   A byte string encoded with the requested width and endianness.
+      *
+      * @see [[scalus.builtin.Builtins.byteStringToInteger]]
       */
     def integerToByteString(endianness: Boolean, length: BigInt, input: BigInt): ByteString = {
         IntegerToByteString.integerToByteString(endianness, length, input)
     }
 
-    /** Conversion from [[ByteString]] to [[BigInt]], as per
-      * [CIP-121](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121).
+    /** Convert a [[ByteString]] into a non-negative [[BigInt]].
+      *
+      * Leading zero bytes are ignored. The interpretation is unsigned.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121 CIP-121]]
+      *
+      * @note
+      *   This function mirrors `integerToByteString`.
+      *
+      * @param statedEndiannessArg
+      *   `true` for big-endian interpretation,
+      *   `false` for little-endian interpretation.
+      *
+      * @param input
+      *   The byte string to convert. Empty or all-zero strings yield `0`.
+      *
+      * @example
+      *   {{{
+      *   // Big-endian
+      *   byteStringToInteger(true, hex"1234") == 4660
+      *
+      *   // Little-endian
+      *   byteStringToInteger(false, hex"3412") == 4660
+      *
+      *   // Leading zeros ignored
+      *   byteStringToInteger(true,  hex"001234") == 4660
+      *   }}}
+      *
+      * @return
+      *   The unsigned integer represented by the input bytes.
+      *
+      * @see [[scalus.builtin.Builtins.integerToByteString]]
       */
     def byteStringToInteger(endianness: Boolean, input: ByteString): BigInt = {
         ByteStringToInteger.byteStringToInteger(endianness, input)

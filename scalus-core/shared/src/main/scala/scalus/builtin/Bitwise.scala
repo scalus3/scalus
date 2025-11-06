@@ -14,9 +14,47 @@ object IntegerToByteString:
     private enum IntegerToByteStringError:
         case NegativeInput, NotEnoughDigits
 
-    /** Conversion from [[BigInt]] to [[ByteString]], as per
-      * [CIP-121](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121).
-      */
+  /** Convert a [[BigInt]] into a [[ByteString]].
+    *
+    * The conversion uses fixed-width output and explicit endianness.
+    * If `lengthArg` is 0, the result is a minimal-length encoding.
+    *
+    * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121 CIP-121]]
+    *
+    * @param endiannessArg
+    *   `true` for big-endian output,
+    *   `false` for little-endian output.
+    *
+    * @param lengthArg
+    *   Desired output length in bytes.
+    *   If zero, the result is minimally sized.
+    *   If positive, the output must fit into the exact width,
+    *   otherwise an exception is thrown.
+    *
+    * @param input
+    *   Unsigned integer to convert. Negative integers are rejected.
+    *
+    * @throws BuiltinException
+    *   If the requested length is negative, exceeds the maximum,
+    *   or the integer cannot be represented in the requested number of bytes.
+    *
+    * @example
+    *   {{{
+    *   // Big-endian, length 2:
+    *   integerToByteString(true, 2, 4660) == hex"1234"
+    *
+    *   // Little-endian, length 2:
+    *   integerToByteString(false, 2, 4660) == hex"3412"
+    *
+    *   // Minimal representation:
+    *   integerToByteString(true, 0, 4660) == hex"1234"
+    *   }}}
+    *
+    * @return
+    *   A byte string encoded with the requested width and endianness.
+    *
+    * @see [[scalus.builtin.ByteStringToInteger.byteStringToInteger]]
+    */
     def integerToByteString(
         endiannessArg: Boolean,
         lengthArg: BigInt,
@@ -48,6 +86,7 @@ object IntegerToByteString:
                     )
                 case Right(result) => result
 
+    /** Internal CIP-121 conversion without range checks. */
     private def unsafeIntegerToByteString(
         requestedByteOrder: ByteOrder,
         requestedLength: Int,
@@ -68,6 +107,7 @@ object IntegerToByteString:
                 case None        => Left(IntegerToByteStringError.NotEnoughDigits)
                 case Some(bytes) => Right(ByteString.unsafeFromArray(bytes.toArray))
 
+    /** Produce a little-endian byte sequence truncated/padded to a limit. */
     private def goLELimit(remaining: BigInt, requestedLength: Int): Option[ArrayBuffer[Byte]] =
         val builder = new ArrayBuffer[Byte](requestedLength)
         var current = remaining
@@ -82,6 +122,7 @@ object IntegerToByteString:
             Some(result)
         else None
 
+    /** Produce minimal little-endian representation of a positive integer. */
     private def goLENoLimit(input: BigInt): ArrayBuffer[Byte] =
         val builder = new ArrayBuffer[Byte](input.bitLength / 8 + 1)
         var remaining = input
@@ -99,13 +140,44 @@ object ByteStringToInteger:
     enum ByteOrder:
         case LittleEndian, BigEndian
 
-    /** Conversion from [[ByteString]] to [[BigInt]], as per
-      * [CIP-121](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121).
+    /** Convert a [[ByteString]] into a non-negative [[BigInt]].
+      *
+      * Leading zero bytes are ignored. The interpretation is unsigned.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0121 CIP-121]]
+      *
+      * @note
+      *   This function mirrors `integerToByteString`.
+      *
+      * @param statedEndiannessArg
+      *   `true` for big-endian interpretation,
+      *   `false` for little-endian interpretation.
+      *
+      * @param input
+      *   The byte string to convert. Empty or all-zero strings yield `0`.
+      *
+      * @example
+      *   {{{
+      *   // Big-endian
+      *   byteStringToInteger(true, hex"1234") == 4660
+      *
+      *   // Little-endian
+      *   byteStringToInteger(false, hex"3412") == 4660
+      *
+      *   // Leading zeros ignored
+      *   byteStringToInteger(true,  hex"001234") == 4660
+      *   }}}
+      *
+      * @return
+      *   The unsigned integer represented by the input bytes.
+      *
+      * @see [[scalus.builtin.IntegerToByteString.integerToByteString]]
       */
     def byteStringToInteger(statedEndiannessArg: Boolean, input: ByteString): BigInt =
         val endianness = if statedEndiannessArg then ByteOrder.BigEndian else ByteOrder.LittleEndian
         unsafeByteStringToInteger(endianness, input)
 
+    /** Internal CIP-121 conversion with explicit byte order handling. */
     private def unsafeByteStringToInteger(statedByteOrder: ByteOrder, input: ByteString): BigInt =
         val bytes = statedByteOrder match
             case ByteOrder.LittleEndian =>
@@ -116,6 +188,7 @@ object ByteStringToInteger:
         if nonZeroInput.isEmpty then BigInt(0)
         else goBE(nonZeroInput.toArray)
 
+    /** Accumulate the big-endian integer value from a byte array. */
     private def goBE(input: Array[Byte]): BigInt =
         var result = BigInt(0)
         var i = 0
@@ -125,25 +198,155 @@ object ByteStringToInteger:
             i += 1
         result
 
+    /** Drop trailing bytes matching a predicate when scanning from the end. */
     private def reverseTakeWhile(bs: ByteString, p: Byte => Boolean): Array[Byte] =
         var lastNonZeroIndex = bs.size - 1
         while lastNonZeroIndex >= 0 && p(bs.bytes(lastNonZeroIndex)) do lastNonZeroIndex -= 1
         if lastNonZeroIndex == -1 then Array.empty
         else bs.bytes.slice(0, lastNonZeroIndex + 1)
 
+/** CIP-122 + shifts & rotations from CIP-123 */
 object BitwiseLogicalOperations:
+    /** Bitwise AND between two byte strings.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122 CIP-122]]
+      *
+      * @note
+      *   Bit 0 is the least-significant bit of the last byte.
+      *
+      * @param shouldPad
+      *   `true` - padding semantics (pad the shorter input at high-index bytes).
+      *   `false` - truncation semantics (truncate to the shorter input).
+      *
+      * @param lhs
+      *   Left operand.
+      *
+      * @param rhs
+      *   Right operand.
+      *
+      * @example
+      *   {{{
+      *   andByteString(false, hex"0f0f", hex"0fff") == hex"0f0f"
+      *   andByteString(true,  hex"0f0f", hex"0fff") == hex"0f0f"
+      *   }}}
+      *
+      * @return
+      *   A new byte string representing the bitwise AND of the two inputs,
+      *   using the chosen padding/truncation.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.orByteString]]
+      * @see [[scalus.builtin.BitwiseLogicalOperations.xorByteString]]
+      */
     def andByteString(shouldPad: Boolean, lhs: ByteString, rhs: ByteString): ByteString =
         combineByteStrings(shouldPad, lhs, rhs)((lhsByte, rhsByte) => (lhsByte & rhsByte).toByte)
 
+    /** Bitwise OR between two byte strings.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122 CIP-122]]
+      *
+      * @param shouldPad
+      *   `true` - padding semantics (pad the shorter input at high-index bytes).
+      *   `false` - truncation semantics (truncate to the shorter input).
+      *
+      * @param lhs
+      *   Left operand.
+      *
+      * @param rhs
+      *   Right operand.
+      *
+      * @example
+      *   {{{
+      *   orByteString(false, hex"0f0f", hex"f000") == hex"0000"
+      *   orByteString(true,  hex"0f0f", hex"f000") == hex"ff0f"
+      *   }}}
+      *
+      * @return
+      *   A new byte string representing the bitwise OR of the two inputs,
+      *   using the chosen padding/truncation.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.andByteString]]
+      * @see [[scalus.builtin.BitwiseLogicalOperations.xorByteString]]
+      */
     def orByteString(shouldPad: Boolean, lhs: ByteString, rhs: ByteString): ByteString =
         combineByteStrings(shouldPad, lhs, rhs)((lhsByte, rhsByte) => (lhsByte | rhsByte).toByte)
 
+    /** Bitwise XOR between two byte strings.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122 CIP-122]]
+      *
+      * @param shouldPad
+      *   `true` - padding semantics (pad the shorter input at high-index bytes).
+      *   `false` - truncation semantics (truncate to the shorter input).
+      *
+      * @param lhs
+      *   Left operand.
+      *
+      * @param rhs
+      *   Right operand.
+      *
+      * @example
+      *   {{{
+      *   xorByteString(false, hex"0f0f", hex"ffff") == hex"f0f0"
+      *   xorByteString(true,  hex"0f0f", hex"ffff") == hex"f0f0"
+      *   }}}
+      *
+      * @return
+      *   A new byte string representing the bitwise XOR of the two inputs,
+      *   using the chosen padding/truncation.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.andByteString]]
+      * @see [[scalus.builtin.BitwiseLogicalOperations.orByteString]]
+      */
     def xorByteString(shouldPad: Boolean, lhs: ByteString, rhs: ByteString): ByteString =
         combineByteStrings(shouldPad, lhs, rhs)((lhsByte, rhsByte) => (lhsByte ^ rhsByte).toByte)
 
+    /** Bitwise NOT of a byte string (flip all bits).
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122 CIP-122]]
+      *
+      * @param byteString
+      *   Input byte string.
+      *
+      * @example
+      *   {{{
+      *   complementByteString(hex"00ff") == hex"ff00"
+      *   }}}
+      *
+      * @return
+      *   A new byte string where each byte is replaced by `0xff - byte`.
+      */
     def complementByteString(byteString: ByteString): ByteString =
         transformByteString(byteString)(byte => (byte ^ 255).toByte)
 
+    /** Read a single bit from a byte string.
+      * Bit index `0` refers to the least significant bit of the last byte.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122 CIP-122]]
+      *
+      * @note
+      *   Bit indexed 0 is the least-significant bit of the last byte.
+      *
+      * @param byteString
+      *   Input byte string.
+      *
+      * @param index
+      *   Bit index in the range `[0, byteString.length * 8)`.
+      *
+      * @throws BuiltinException
+      *   If the byte string is empty, or if the index is out of bounds.
+      *
+      * @example
+      *   {{{
+      *   // Last byte: 10010000
+      *   readBit(hex"1098", 4) == true
+      *   readBit(hex"1098", 0) == false
+      *   }}}
+      *
+      * @return
+      *   `true` if the bit is 1, `false` if the bit is 0.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.writeBits]]
+      */
     def readBit(byteString: ByteString, index: BigInt): Boolean = {
         if byteString.isEmpty then
             throw new BuiltinException(
@@ -164,6 +367,39 @@ object BitwiseLogicalOperations:
         ((bytes(byteIndex) >> bitIndex) & 1) == 1
     }
 
+    /** Write multiple bits in a byte string.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0122 CIP-122]]
+      *
+      * @note
+      *   Bulk updates are intentionally more efficient than repeated `setBit`
+      *   calls (see CIP-122 design rationale).
+      *
+      * @note
+      *   Bit indexed 0 is the least-significant bit of the last byte.
+      *
+      * @param byteString
+      *   Input byte string to modify.
+      *
+      * @param indexes
+      *   Sequence of bit indexes to change. Must be within bounds.
+      *
+      * @param bit
+      *   The new bit value (`true` - set to 1, `false` - set to 0).
+      *
+      * @throws BuiltinException
+      *   If the byte string is empty or any index lies outside the valid bit range.
+      *
+      * @example
+      *   {{{
+      *   writeBits(hex"00", List(0, 3), true) == hex"09" // Set bits 0 and 3 in a single byte
+      *   }}}
+      *
+      * @return
+      *   A new byte string with all specified bits updated.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.readBit]]
+      */
     def writeBits(
         byteString: ByteString,
         indexes: Seq[BigInt],
@@ -196,6 +432,28 @@ object BitwiseLogicalOperations:
         ByteString.unsafeFromArray(resultArray)
     }
 
+    /** Construct a byte string by repeating a single byte.
+      *
+      * @param length
+      *   Number of bytes to generate. Must be within `[0, maximumOutputLength]`.
+      *
+      * @param byte
+      *   Byte value in the range `[0, 255]`.
+      *
+      * @throws BuiltinException
+      *   If the requested length or byte value is outside the permitted range.
+      *
+      * @example
+      *   {{{
+      *   replicateByte(4, 0xFF) == hex"ffffffff"
+      *   replicateByte(0, 1) == hex""
+      *   }}}
+      *
+      * @return
+      *   A new byte string consisting of `length` copies of `byte`.
+      *
+      * @see [[scalus.builtin.IntegerToByteString.maximumOutputLength]]
+      */
     def replicateByte(length: BigInt, byte: BigInt): ByteString = {
         if length < 0 || length > IntegerToByteString.maximumOutputLength then
             throw new BuiltinException(
@@ -214,6 +472,37 @@ object BitwiseLogicalOperations:
         ByteString.fill(lengthValue, byteValue)
     }
 
+    /** Logical bit shift of a byte string.
+      *
+      * Positive `shift` performs a left shift.
+      * Negative `shift` performs a right shift.
+      * Bits shifted out are discarded; zeros are shifted in.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0123 CIP-123]]
+      *
+      * @note
+      *   Shifts never sign-extend; they are logical, not arithmetic.
+      *
+      * @param byteString
+      *   Input byte string.
+      *
+      * @param shift
+      *   Number of bits to shift. Must fit in a 32-bit signed integer.
+      *
+      * @throws BuiltinException
+      *   If the shift value does not fit into a 32-bit signed integer.
+      *
+      * @example
+      *   {{{
+      *   shiftByteString  hex"11ff"  4 == hex"1ff0"
+      *   shiftByteString  hex"11ff" -4 == hex"011f"
+      *   }}}
+      *
+      * @return
+      *   The shifted byte string.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.rotateByteString]]
+      */
     def shiftByteString(byteString: ByteString, shift: BigInt): ByteString = {
         if byteString.isEmpty || shift == 0 then return byteString
 
@@ -237,6 +526,33 @@ object BitwiseLogicalOperations:
         ByteString.unsafeFromArray(resultArray)
     }
 
+    /** Rotate all bits of a byte string left or right, modulo its bit length.
+      *
+      * @see [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0123 CIP-123]]
+      *
+      * @note
+      *   Rotation wraps around the bitstring width (`n * 8` bits).
+      *
+      * @param byteString
+      *   Input byte string.
+      *
+      * @param rotation
+      *   Number of bits to rotate. Positive - rotate left, negative - rotate right.
+      *
+      * @throws BuiltinException
+      *   If the rotation remainder does not fit in a 32-bit signed integer.
+      *
+      * @example
+      *   {{{
+      *   rotateByteString(hex"80", 1) == hex"01"
+      *   rotateByteString(hex"01", -1) == hex"80"
+      *   }}}
+      *
+      * @return
+      *   A byte string of identical length with bits rotated.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.shiftByteString]]
+      */
     def rotateByteString(byteString: ByteString, rotation: BigInt): ByteString = {
         if byteString.isEmpty then return byteString
 
@@ -260,6 +576,20 @@ object BitwiseLogicalOperations:
         ByteString.unsafeFromArray(resultArray)
     }
 
+    /** Count the number of 1-bits in the byte string (Hamming weight).
+      *
+      * @param byteString
+      *   Input byte string.
+      *
+      * @example
+      *   {{{
+      *   countSetBits(hex"0f0f") == 8
+      *   countSetBits(hex"0000") == 0
+      *   }}}
+      *
+      * @return
+      *   Number of set bits.
+      */
     def countSetBits(byteString: ByteString): Int = {
         if byteString.isEmpty then return 0
 
@@ -278,6 +608,24 @@ object BitwiseLogicalOperations:
         count
     }
 
+    /** Find the index of the least significant 1-bit.
+      *
+      * Scans from bit 0 (LSB of last byte) upwards.
+      *
+      * @param byteString
+      *   Input byte string.
+      *
+      * @example
+      *   {{{
+      *   findFirstSetBit(hex"10") == 4 // 00010000
+      *   findFirstSetBit(hex"00") == -1
+      *   }}}
+      *
+      * @return
+      *   Index of the first set bit `>= 0`, or `-1` if all bits are zero.
+      *
+      * @see [[scalus.builtin.BitwiseLogicalOperations.countSetBits]]
+      */
     def findFirstSetBit(byteString: ByteString): Int = {
         if byteString.isEmpty then return -1
 
@@ -300,6 +648,7 @@ object BitwiseLogicalOperations:
         -1
     }
 
+    /** Internal combine logic for AND/OR/XOR with CIP-122 padding/truncation rules. */
     private inline def combineByteStrings(
         shouldPad: Boolean,
         lhs: ByteString,
@@ -328,6 +677,7 @@ object BitwiseLogicalOperations:
         ByteString.unsafeFromArray(resultArray)
     }
 
+    /** Apply a unary byte transformation across the entire byte string. */
     private inline def transformByteString(
         byteString: ByteString
     )(inline op: Byte => Byte): ByteString = {
@@ -343,6 +693,7 @@ object BitwiseLogicalOperations:
         ByteString.unsafeFromArray(resultArray)
     }
 
+    /** Internal left-shift implementation. */
     private def shiftLeft(inputBytes: Array[Byte], shift: Int): Array[Byte] = {
         val shiftMod = shift % 8
         val carryMask = ((1 << shiftMod) - 1).toByte
@@ -370,6 +721,7 @@ object BitwiseLogicalOperations:
         resultBytes
     }
 
+    /** Internal right-shift implementation. */
     private def shiftRight(inputBytes: Array[Byte], shift: Int): Array[Byte] = {
         val shiftMod = shift % 8
         val carryMask = (0xff << (8 - shiftMod)).toByte
@@ -396,6 +748,7 @@ object BitwiseLogicalOperations:
         resultBytes
     }
 
+    /** Internal rotate-left implementation. */
     private def rotateLeft(inputBytes: Array[Byte], rotation: Int): Array[Byte] = {
         val shiftMod = rotation % 8
         val carryMask = ((1 << shiftMod) - 1).toByte
@@ -420,6 +773,7 @@ object BitwiseLogicalOperations:
         resultBytes
     }
 
+    /** Internal rotate-left implementation. */
     private def rotateRight(inputBytes: Array[Byte], rotation: Int): Array[Byte] = {
         val shiftMod = rotation % 8
         val carryMask = (0xff << (8 - shiftMod)).toByte
