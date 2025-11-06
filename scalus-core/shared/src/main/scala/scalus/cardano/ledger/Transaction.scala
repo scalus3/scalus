@@ -65,9 +65,11 @@ object Transaction {
       TransactionWitnessSet.empty,
     )
 
-    def fromCbor(bytes: Array[Byte]): Transaction = {
+    def fromCbor(
+        bytes: Array[Byte]
+    )(using pv: ProtocolVersion = ProtocolVersion.conwayPV): Transaction = {
         given OriginalCborByteArray = OriginalCborByteArray(bytes)
-        Cbor.decode(bytes)
+        Cbor.decode[Transaction](bytes)
     }
 
     /** CBOR codec for Transaction */
