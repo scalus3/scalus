@@ -20,7 +20,9 @@ import scala.language.implicitConversions
 case class WalletId(name: String)
 
 // Pure function to add a key witness to a transaction.
-def addWitness(tx: Transaction, wit: VKeyWitness)(using ProtocolVersion): Transaction =
+def addWitness(tx: Transaction, wit: VKeyWitness)(using
+    pv: ProtocolVersion = ProtocolVersion.conwayPV
+): Transaction =
     val txBytes = TransactionBytes(Cbor.encode(tx).toByteArray)
     val witnessSetDI = CborSerializationUtil.deserialize(txBytes.getTxWitnessBytes)
     val witnessSetMap = witnessSetDI.asInstanceOf[Map]
