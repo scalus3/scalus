@@ -144,7 +144,7 @@ object TransactionWitnessSet:
         }
 
     /** CBOR decoder for TransactionWitnessSet */
-    given decoder(using OriginalCborByteArray): Decoder[TransactionWitnessSet] with
+    given decoder(using OriginalCborByteArray, ProtocolVersion): Decoder[TransactionWitnessSet] with
         def read(r: Reader): TransactionWitnessSet = {
             val mapSize = r.readMapHeader()
 

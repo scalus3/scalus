@@ -72,6 +72,6 @@ object Transaction {
 
     /** CBOR codec for Transaction */
     given Encoder[Transaction] = Encoder.derived
-    given decoder(using OriginalCborByteArray): Decoder[Transaction] =
+    given decoder(using OriginalCborByteArray, ProtocolVersion): Decoder[Transaction] =
         Decoder.derived[Transaction]
 }

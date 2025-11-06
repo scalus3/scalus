@@ -216,6 +216,7 @@ class CborSerializationTest extends AnyFunSuite, ScalaCheckPropertyChecks, Arbit
     test(s"Transaction should serialize and deserialize correctly"):
         testSerializationRoundTrip[Transaction]
 
+    given ProtocolVersion = ProtocolVersion.conwayPV
     // Helper method to test serialization/deserialization for a given type
     private def testSerializationRoundTrip[A: Arbitrary: Encoder](using
         OriginalCborByteArray ?=> Decoder[A]

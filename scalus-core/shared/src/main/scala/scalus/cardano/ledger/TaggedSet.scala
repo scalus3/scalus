@@ -4,7 +4,7 @@ import io.bullet.borer.{Decoder, Encoder}
 
 import scala.collection.immutable.ListSet
 
-/** Represents a tagged set, which is an indexed sequence of elements with a tag.
+/** Represents a tagged set, which is an indexed sequence of unique elements with a tag.
   *
   * It's a new requirement for the Cardano ledger to have a tagged set. It's a stupid idea and God
   * knows why they came up with it, but now we have to implement it.
@@ -19,7 +19,7 @@ import scala.collection.immutable.ListSet
   * because then `Encoder[TaggedSet[A]]` conflicts with [[Encoder.forIndexedSeq]]
   *
   * Important: This implementation allows duplicates in input (i.e. does not throw exception) and
-  * keeps order of data (does not sort) .
+  * keeps order of data (does not sort) but eliminates duplicates.
   */
 opaque type TaggedSet[A] = IndexedSeq[A]
 object TaggedSet extends TaggedSeq {

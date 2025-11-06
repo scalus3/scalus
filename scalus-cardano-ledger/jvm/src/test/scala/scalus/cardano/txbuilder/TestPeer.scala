@@ -11,7 +11,7 @@ import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.ledger.{Hash, Transaction as STransaction}
+import scalus.cardano.ledger.{Hash, ProtocolVersion, Transaction as STransaction}
 
 import scala.collection.mutable
 
@@ -95,7 +95,7 @@ extension [K, V](map: mutable.Map[K, V])
     }
 
 // TODO: refactor all of this to make it just use the scalus types.
-def signTx(peer: TestPeer, txUnsigned: STransaction): STransaction =
+def signTx(peer: TestPeer, txUnsigned: STransaction)(using ProtocolVersion): STransaction =
     val keyWitness = TestPeer.mkWallet(peer).createTxKeyWitness(txUnsigned)
     addWitness(txUnsigned, keyWitness)
 

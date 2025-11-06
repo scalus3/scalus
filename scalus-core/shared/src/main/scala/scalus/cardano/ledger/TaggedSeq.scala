@@ -35,7 +35,7 @@ trait TaggedSeq(tag: Tag = Tag.Other(258)):
         Decoder.fromFactory[A, IndexedSeq].read(r)
 
     def writeTagged[A: Encoder](w: Writer, v: IterableOnce[A]): Writer =
-        val s = Seq.from(v)
+        val s = IndexedSeq.from(v)
         w.writeTag(tag)
         w.writeArrayHeader(s.size)
         s.foreach(w.write(_))

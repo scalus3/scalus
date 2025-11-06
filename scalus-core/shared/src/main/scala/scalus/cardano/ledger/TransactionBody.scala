@@ -229,7 +229,7 @@ object TransactionBody:
             w
 
     /** CBOR decoder for TransactionBody */
-    given (using OriginalCborByteArray): Decoder[TransactionBody] with
+    given (using OriginalCborByteArray, ProtocolVersion): Decoder[TransactionBody] with
         def read(r: Reader): TransactionBody =
             val mapSize = r.readMapHeader()
 

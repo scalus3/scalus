@@ -75,7 +75,18 @@ object Block:
     /** CBOR encoder for Block */
     given Encoder[Block] = Encoder.derived
     given decoder(using OriginalCborByteArray): Decoder[Block] =
-        Decoder.derived[Block]
+        // Decoder.derived[Block]
+        r =>
+            r.readArrayHeader()
+            val blockHeader = r.read[BlockHeader]()
+            given ProtocolVersion = blockHeader.headerBody.protocolVersion
+            Block(
+              blockHeader,
+              r.read[IndexedSeq[KeepRaw[TransactionBody]]](),
+              r.read[IndexedSeq[TransactionWitnessSet]](),
+              r.read[Map[Int, KeepRaw[AuxiliaryData]]](),
+              r.read[IndexedSeq[Int]]()
+            )
 
 case class BlockFile(era: Int, block: Block)
 object BlockFile:

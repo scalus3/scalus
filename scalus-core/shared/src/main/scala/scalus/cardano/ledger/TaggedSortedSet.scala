@@ -24,5 +24,9 @@ object TaggedSortedSet extends TaggedSeq:
         inline def toSeq: IndexedSeq[A] = s.toIndexedSeq
 
     given [A: Encoder]: Encoder[TaggedSortedSet[A]] = writeTagged(_, _)
-    given [A: Decoder: Ordering]: Decoder[TaggedSortedSet[A]] = r =>
-        from(checkNonEmpty(readTagged(r)))
+    given [A: Decoder: Ordering](using
+        pv: ProtocolVersion = ProtocolVersion.conwayPV
+    ): Decoder[TaggedSortedSet[A]] =
+        if pv >= ProtocolVersion.conwayPV
+        then r => from(checkNonEmpty(readTagged(r)))
+        else r => from(readTagged(r))
