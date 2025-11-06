@@ -1,7 +1,7 @@
 package scalus.cardano.ledger.utils
 
 import java.io.File
-import java.net.URL
+import java.net.{URI, URL}
 import java.util.jar.JarFile
 import scala.jdk.CollectionConverters.*
 import scala.reflect.ClassTag
@@ -63,7 +63,9 @@ object TraitObjectScanner:
     ): Seq[T] =
         // Extract JAR file path from URL
         // Format: jar:file:/path/to/file.jar!/package/path
-        val jarPath = url.getPath.split("!")(0).stripPrefix("file:")
+        val jarUrlString = url.getPath.split("!")(0)
+        val uri = URI.create(jarUrlString)
+        val jarPath = uri.getPath
 
         // Properly handle JarFile resource with exception safety
         val result = Using.resource(new JarFile(jarPath)) { jar =>
