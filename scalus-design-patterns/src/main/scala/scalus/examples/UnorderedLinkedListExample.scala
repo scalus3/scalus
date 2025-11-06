@@ -1,6 +1,5 @@
 package scalus.examples
 
-import scalus.Compiler.compile
 import scalus.Compiler.compileWithOptions
 import scalus.builtin.Builtins
 import scalus.builtin.Data
@@ -194,16 +193,9 @@ object UnorderedLinkedList extends DataParameterizedValidator:
 
 object UnorderedLinkedListContract:
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
-      generateErrorTraces = true,
-      optimizeUplc = true,
-      debug = false
-    )
-
-    inline def make(param: Config)(using scalus.Compiler.Options) =
+    inline def make(param: Config)(using options: scalus.Compiler.Options) =
         import scalus.builtin.ToData.toData
-        compile(UnorderedLinkedList.validate).toUplc().plutusV3 $ param.toData
+        compileWithOptions(options, UnorderedLinkedList.validate).toUplc().plutusV3 $ param.toData
 
     inline def compiled(using options: scalus.Compiler.Options) =
         compileWithOptions(options, UnorderedLinkedList.validate)
