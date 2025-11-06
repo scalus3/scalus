@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.betting
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
@@ -18,12 +18,28 @@ import scalus.testing.kit.{Mock, ScalusTest}
 import scala.language.implicitConversions
 
 class BettingTest extends AnyFunSuite, ScalusTest:
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
-      generateErrorTraces = true,
-      optimizeUplc = true,
-      debug = false
-    )
+    private lazy val program = BettingContract.debugCompiledContract.program
+
+    /*
+    case class TestCase(
+        expiration: PosixTime
+    ):
+
+        def check: Result =
+            val testTransaction = TxInfo.placeholder
+            val action = Nothing
+            val result = BettingContract.compiled.runScript(
+              ScriptContext(
+                txInfo = testTransaction,
+                redeemer = action.toData,
+                scriptInfo = ScriptInfo.SpendingScript(
+                  txOutRef = tx
+                )
+              )
+            )
+            println(result.logs)
+            result
+     */
 
     test("Verify that a bet can be properly initialized"):
         val player1 = Mock.mockPubKeyHash(1)
@@ -55,7 +71,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
           // 20th of July 2025 - for 5 minutes
           validRange = Interval.between(1752989540, 1752990020)
         )
-        val result = BettingContract.compiled.runScript(
+        val result = program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,
             scriptInfo = ScriptInfo.MintingScript(policyId = policyId)
@@ -123,7 +139,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
           validRange = Interval.between(1753162820, 1753163120)
         )
         val joinAction: Action = Action.Join
-        val result = BettingContract.compiled.runScript(
+        val result = program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,
             redeemer = joinAction.toData,
@@ -187,7 +203,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
           validRange = Interval.between(1754027120, 1754027420)
         )
         val announceWinnerAction: Action = Action.AnnounceWinner(player2)
-        val result = BettingContract.compiled.runScript(
+        val result = program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,
             redeemer = announceWinnerAction.toData,

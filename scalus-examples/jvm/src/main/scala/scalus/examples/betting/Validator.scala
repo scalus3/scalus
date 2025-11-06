@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.betting
 
 import scalus.Compiler.compileWithOptions
 import scalus.builtin.ByteString.*
@@ -74,9 +74,6 @@ object Betting extends Validator:
 
         redeemer.to[Action] match
             case Action.Join =>
-                val hasBetToken = value.policyIds
-                    .map(Address.fromScriptHash)
-                    .contains(address)
                 val outputLovelace = txInfo.outputs.filter(_.address === address) match
                     case List.Cons(TxOut(_, value, _, _), List.Nil) => value.getLovelace
                     case _ => fail("There must be a single continuing output")
@@ -89,7 +86,7 @@ object Betting extends Validator:
                   "Current bet must not have a player2 yet"
                 )
                 require(
-                  hasBetToken,
+                  value.policyIds.map(Address.fromScriptHash).contains(address),
                   "Input must contain the bet token"
                 )
                 require(
@@ -168,8 +165,9 @@ object Betting extends Validator:
                   "The bet must have been expired (no future bets allowed) before announcing"
                 )
 
-    /** Minting policy: Controls the creation of bet tokens This ensures proper initialization of a
-      * new bet
+    /** Minting policy:
+      *
+      * Controls the creation of bet tokens This ensures proper initialization of a new bet
       */
     inline override def mint(
         @annotation.unused redeemer: Data,
@@ -202,18 +200,3 @@ object Betting extends Validator:
           tx.validRange.isEntirelyBefore(expiration),
           "The bet must have a valid expiration time (after the current time)"
         )
-
-object BettingContract:
-
-    inline def compiled(using options: scalus.Compiler.Options) =
-        compileWithOptions(options, Betting.validate)
-
-    def application: Application = Application
-        .ofSingleValidator[BetDatum, Action](
-          "Betting validator",
-          "Decentralized two-player betting system with trustless wagering and oracle-based resolution",
-          "1.0.0",
-          Betting.validate
-        )
-
-    def blueprint: Blueprint = application.blueprint
