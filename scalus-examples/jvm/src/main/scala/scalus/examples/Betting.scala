@@ -5,9 +5,10 @@ import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
-import scalus.cardano.blueprint.{Application, Blueprint}
+import scalus.cardano.blueprint.Application
+import scalus.cardano.blueprint.Blueprint
 import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v2.OutputDatum
+import scalus.ledger.api.v2.OutputDatum.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
@@ -61,135 +62,116 @@ object Betting extends Validator:
         redeemer: Data,
         txInfo: TxInfo,
         txOutRef: TxOutRef
-    ): Unit =
-        // Find the input being spent
-        txInfo.findOwnInput(txOutRef) match
-            case Some(spentInput) =>
-                val input = spentInput.resolved
-                redeemer.to[Action] match
-                    // Handle player2 joining the bet
-                    case Action.Join =>
-                        // Verify the input contains the bet token (proves it's a valid bet UTXO)
-                        val hasBetToken = input.value.policyIds
-                            .map(Address.fromScriptHash)
-                            .contains(input.address)
-                        // Find the continuing output (bet UTXO with updated datum)
-                        txInfo.outputs.filter(_.address === input.address) match
-                            case List.Cons(continuingOutput, tail) =>
-                                tail match // ???: headOrFail or matchOrFail
-                                    // Ensure exactly one continuing output
-                                    case List.Nil =>
-                                        val outputValue = continuingOutput.value
-                                        input.datum match // FIME: nested pattern matching
-                                            // Extract the current bet state
-                                            case OutputDatum.OutputDatum(currentDatum) =>
-                                                val currentBetDatum = currentDatum.to[BetDatum]
-                                                datum match
-                                                    // Extract the updated bet state
-                                                    case Some(newDatum) =>
-                                                        val newBetDatum = newDatum.to[BetDatum]
-                                                        val joiningPlayer = newBetDatum.player2
-                                                        // Validation rules for joining:
-                                                        require(
-                                                          currentBetDatum.player2.hash.length === BigInt(
-                                                            0
-                                                          ),
-                                                          "Current bet must not have a player2 yet"
-                                                        )
-                                                        require(
-                                                          hasBetToken,
-                                                          "Input must contain the bet token"
-                                                        )
-                                                        require(
-                                                          txInfo.signatories.contains(
-                                                            joiningPlayer
-                                                          ),
-                                                          "Player2 must sign the transaction"
-                                                        )
-                                                        require(
-                                                          newBetDatum.oracle === currentBetDatum.oracle,
-                                                          "Oracle must remain unchanged"
-                                                        )
-                                                        require(
-                                                          newBetDatum.player1 === currentBetDatum.player1,
-                                                          "Player1 must remain unchanged"
-                                                        )
-                                                        require(
-                                                          joiningPlayer !== currentBetDatum.player1,
-                                                          "Player2 cannot be the same as player1"
-                                                        )
-                                                        require(
-                                                          joiningPlayer !== currentBetDatum.oracle,
-                                                          "Player2 cannot be the same as oracle"
-                                                        )
-                                                        require(
-                                                          outputValue.getLovelace === BigInt(
-                                                            2
-                                                          ) * input.value.getLovelace,
-                                                          "The bet amount must double (player2 matches player1's bet)"
-                                                        )
-                                                        require(
-                                                          newBetDatum.expiration === currentBetDatum.expiration,
-                                                          "The updated datum must have the same expiration as the current one"
-                                                        )
-                                                        require(
-                                                          txInfo.validRange.isEntirelyBefore(
-                                                            newBetDatum.expiration
-                                                          ),
-                                                          "Joining must happen before the bet expiration"
-                                                        )
-                                                    case _ => fail("New datum must be present")
-                                            case _ => fail("Current bet datum must be inline")
-                                    case _ => fail("Continuing output must be single")
-                            case _ => fail("There must be a continuing output")
-                    // Handle oracle announcing the winner
-                    case Action.AnnounceWinner(winner) =>
-                        input.datum match // FIME: nested pattern matching
-                            // Extract the current bet state
-                            case OutputDatum.OutputDatum(currentDatum) =>
-                                val BetDatum(player1, player2, oracle, expiration) =
-                                    currentDatum.to[BetDatum]
-                                txInfo.outputs match
-                                    case List.Cons(payoutOutput, tail) =>
-                                        tail match // ???: headOrFail or matchOrFail
-                                            // Ensure there's exactly one output (the payout to winner)
-                                            case List.Nil =>
-                                                require(
-                                                  winner === player1 || winner === player2,
-                                                  "Winner must be either player1 or player2"
-                                                )
-                                                require(
-                                                  player2.hash.length != BigInt(
-                                                    0
-                                                  ),
-                                                  "Both players must have joined (player2 is not None)"
-                                                )
-                                                require(
-                                                  datum === None,
-                                                  "No continuing datum (bet is being closed)"
-                                                )
-                                                require(
-                                                  payoutOutput.address === Address.fromPubKeyHash(
-                                                    winner
-                                                  ),
-                                                  "Payout goes to the winner's address"
-                                                )
-                                                require(
-                                                  txInfo.signatories.contains(
-                                                    oracle
-                                                  ),
-                                                  "Oracle must sign the transaction"
-                                                )
-                                                require(
-                                                  txInfo.validRange.isEntirelyAfter(
-                                                    expiration
-                                                  ),
-                                                  "The bet must have been expired (no future bets allowed) before announcing"
-                                                )
-                                            case _ => fail("Payout output must be single")
-                                    case _ => fail("There's must be a payout output")
-                            case _ => fail("Current bet datum must be inline")
-            case _ => fail("Initial bet spent input must be present")
+    ): Unit = txInfo.findOwnInput(txOutRef) match
+        case Some(TxInInfo(_, TxOut(address, value, OutputDatum(currentDatum), _))) =>
+            val BetDatum(player1, player2, oracle, expiration) = currentDatum.to[BetDatum]
+            redeemer.to[Action] match
+                // Handle player2 joining the bet
+                case Action.Join =>
+                    // Verify the input contains the bet token (proves it's a valid bet UTXO)
+                    val hasBetToken = value.policyIds
+                        .map(Address.fromScriptHash)
+                        .contains(address)
+                    // Find the continuing output (bet UTXO with updated datum)
+                    txInfo.outputs.filter(_.address === address) match
+                        case List.Cons(TxOut(_, outputValue, _, _), List.Nil) =>
+                            datum match
+                                // Extract the updated bet state
+                                case Some(newDatum) =>
+                                    val newBetDatum = newDatum.to[BetDatum]
+                                    val joiningPlayer = newBetDatum.player2
+                                    // Validation rules for joining:
+                                    require(
+                                      player2.hash.length === BigInt(
+                                        0
+                                      ),
+                                      "Current bet must not have a player2 yet"
+                                    )
+                                    require(
+                                      hasBetToken,
+                                      "Input must contain the bet token"
+                                    )
+                                    require(
+                                      txInfo.signatories.contains(
+                                        joiningPlayer
+                                      ),
+                                      "Player2 must sign the transaction"
+                                    )
+                                    require(
+                                      newBetDatum.oracle === oracle,
+                                      "Oracle must remain unchanged"
+                                    )
+                                    require(
+                                      newBetDatum.player1 === player1,
+                                      "Player1 must remain unchanged"
+                                    )
+                                    require(
+                                      joiningPlayer !== player1,
+                                      "Player2 cannot be the same as player1"
+                                    )
+                                    require(
+                                      joiningPlayer !== oracle,
+                                      "Player2 cannot be the same as oracle"
+                                    )
+                                    require(
+                                      outputValue.getLovelace === BigInt(
+                                        2
+                                      ) * value.getLovelace,
+                                      "The bet amount must double (player2 matches player1's bet)"
+                                    )
+                                    require(
+                                      newBetDatum.expiration === expiration,
+                                      "The updated datum must have the same expiration as the current one"
+                                    )
+                                    require(
+                                      txInfo.validRange.isEntirelyBefore(
+                                        newBetDatum.expiration
+                                      ),
+                                      "Joining must happen before the bet expiration"
+                                    )
+                                case _ => fail("New datum must be present")
+                        case _ => fail("There must be a single continuing output")
+                // Handle oracle announcing the winner
+                case Action.AnnounceWinner(winner) =>
+                    txInfo.outputs match
+                        case List.Cons(payoutOutput, List.Nil) =>
+                            require(
+                              winner === player1 || winner === player2,
+                              "Winner must be either player1 or player2"
+                            )
+                            require(
+                              player2.hash.length != BigInt(
+                                0
+                              ),
+                              "Both players must have joined (player2 is not None)"
+                            )
+                            require(
+                              datum === None,
+                              "No continuing datum (bet is being closed)"
+                            )
+                            require(
+                              payoutOutput.address === Address.fromPubKeyHash(
+                                winner
+                              ),
+                              "Payout goes to the winner's address"
+                            )
+                            require(
+                              txInfo.signatories.contains(
+                                oracle
+                              ),
+                              "Oracle must sign the transaction"
+                            )
+                            require(
+                              txInfo.validRange.isEntirelyAfter(
+                                expiration
+                              ),
+                              "The bet must have been expired (no future bets allowed) before announcing"
+                            )
+                        case _ => fail("There's must be a single payout output")
+        case _ =>
+            fail:
+                "Initial bet spent input must be present,\n" +
+                    "current bet datum must be inline"
 
     /** Minting policy: Controls the creation of bet tokens This ensures proper initialization of a
       * new bet
@@ -198,35 +180,29 @@ object Betting extends Validator:
         @annotation.unused redeemer: Data,
         policyId: PolicyId,
         tx: TxInfo
-    ): Unit =
-        // Find all outputs going to this script's address
-        tx.outputs.filter(_.address === Address.fromScriptHash(policyId)) match
-            case List.Cons(betOutput, tail) =>
-                tail match // ???: headOrFail or matchOrFail
-                    case List.Nil =>
-                        betOutput.datum match // FIME: nested pattern matching
-                            case OutputDatum.OutputDatum(datum) =>
-                                val BetDatum(player1, player2, oracle, expiration) =
-                                    datum.to[BetDatum]
-                                require(
-                                  tx.signatories.contains(player1),
-                                  "Player1 must sign the transaction (they're creating the bet)"
-                                )
-                                require(
-                                  player2.hash.isEmpty,
-                                  "Player2 must be empty (no one has joined yet)"
-                                )
-                                require(
-                                  oracle !== player1,
-                                  "Oracle cannot be the same as player1 (conflict of interest)"
-                                )
-                                require(
-                                  tx.validRange.isEntirelyBefore(expiration),
-                                  "The bet must have a valid expiration time (after the current time)"
-                                )
-                            case _ => fail("Bet datum must be inline")
-                    case _ => fail("Output to the script (the bet UTXO) must be single")
-            case _ => fail("There's must be an output that goes to the script (the bet UTXO)")
+    ): Unit = tx.outputs.filter(_.address === Address.fromScriptHash(policyId)) match
+        case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) =>
+            val BetDatum(player1, player2, oracle, expiration) = datum.to[BetDatum]
+            require(
+              tx.signatories.contains(player1),
+              "Player1 must sign the transaction (they're creating the bet)"
+            )
+            require(
+              player2.hash.isEmpty,
+              "Player2 must be empty (no one has joined yet)"
+            )
+            require(
+              oracle !== player1,
+              "Oracle cannot be the same as player1 (conflict of interest)"
+            )
+            require(
+              tx.validRange.isEntirelyBefore(expiration),
+              "The bet must have a valid expiration time (after the current time)"
+            )
+        case _ =>
+            fail:
+                "There's must be a single output that goes to the script (the bet UTXO),\n" +
+                    "Bet datum must be inline"
 
 object BettingContract:
 
