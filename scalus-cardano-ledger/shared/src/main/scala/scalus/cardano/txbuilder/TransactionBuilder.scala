@@ -567,6 +567,11 @@ object TransactionBuilder:
     val unsafeCtxTxOutputsL: Lens[Context, IndexedSeq[Sized[TransactionOutput]]] =
         Focus[Context](_.transaction) >>> txOutputsL
 
+    /** Hydrozoa use case: tx upgrade that requires promoting a reference input into a spent input.
+      */
+    val unsafeCtxTxReferenceInputsL: Lens[Context, TaggedSortedSet[TransactionInput]] =
+        Focus[Context](_.transaction) >>> txReferenceInputsL
+
     /** Update the given transaction output to have the minimum required ada, only changing its
       * Coin.
       */
