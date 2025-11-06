@@ -190,21 +190,18 @@ object OrderedLinkedList:
         val policyOutputs = withPolicy(tx.outputs)
         val nodeOuts = policyInOuts ++ policyOutputs
 
-        nodeOuts.headOption match
-            case Some(head) =>
-                require(
-                  nodeOuts.forall(head.address === _.address),
-                  "All node outputs must have same address"
-                )
-                val inputs = policyInOuts.map(getNode)
-                val outputs = policyOutputs.map(out =>
-                    val node = getNode(out)
-                    validateNode(policy, node)
-                    node
-                )
-                val common = Common(policy, tx.mint, inputs, outputs)
-                (common, tx.inputs, tx.outputs, tx.signatories, tx.validRange)
-            case _ => fail("There's must be at least one output")
+        val head = nodeOuts.headOption.getOrFail("There's must be at least one output")
+        require(
+          nodeOuts.forall(head.address === _.address),
+          "All node outputs must have same address"
+        )
+        val inputs = policyInOuts.map(getNode)
+        val outputs = policyOutputs.map: out =>
+            val node = getNode(out)
+            validateNode(policy, node)
+            node
+        val common = Common(policy, tx.mint, inputs, outputs)
+        (common, tx.inputs, tx.outputs, tx.signatories, tx.validRange)
 
     /** Collect node output.
       *
@@ -231,35 +228,35 @@ object OrderedLinkedList:
           cell.key.forall(key => cell.ref.forall(key < _)),
           "Nodes must be ordered by keys"
         )
-        value.flatten match
+        val (adaPolicy, adaToken, policyId, token, amount) = value.flatten match
             case List.Cons(
-                  (adaPolicy, adaToken, _amount),
+                  (adaPolicy, adaToken, _),
                   List.Cons((policyId, token, amount), List.Nil)
-                ) =>
-                require(
-                  adaPolicy === Value.adaPolicyId && adaToken === Value.adaTokenName,
-                  "There's must be a lovelace value for each policy output"
-                )
-                require(
-                  policyId === policy,
-                  "There's must be a token key for the policy output"
-                )
-                require(
-                  amount == BigInt(1),
-                  "Minted token be exactly one per output"
-                )
-                require(
-                  isNodeToken(token),
-                  "Must be valid node token"
-                )
-                require(
-                  nodeKey(token) === cell.key,
-                  "Datum must contain a valid node key"
-                )
+            ) => (adaPolicy, adaToken, policyId, token, amount)
             case _ =>
                 fail(
                   "There's must be only a token key and a lovelace values for each policy output"
                 )
+        require(
+          adaPolicy === Value.adaPolicyId && adaToken === Value.adaTokenName,
+          "There's must be a lovelace value for each policy output"
+        )
+        require(
+          policyId === policy,
+          "There's must be a token key for the policy output"
+        )
+        require(
+          amount == BigInt(1),
+          "Minted token be exactly one per output"
+        )
+        require(
+          isNodeToken(token),
+          "Must be valid node token"
+        )
+        require(
+          nodeKey(token) === cell.key,
+          "Datum must contain a valid node key"
+        )
 
     // MARK: State transition handlers (used in list minting policy)
     //       aka list natural transformations
@@ -314,37 +311,31 @@ object OrderedLinkedList:
       * @return
       *   Parent node.
       */
-    def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node = common.inputs match
-        case List.Cons(parentIn, List.Nil) =>
-            common.outputs match
-                case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
-                    val PubKeyHash(key) = insertKey
-                    val (parentOut, insertNode) = fstOut.sort(sndOut)
-                    require(
-                      cell.chKey(key) === insertNode.cell,
-                      "The covering cell must be preserved by inserted key at outputs,\n" +
-                          "the inserted key must be present at the cell of inserted node"
-                    )
-                    require(
-                      parentOut === Node(parentIn.value, cell.chRef(key)),
-                      "The inserted key must be referenced by the parent's key at outputs,\n" +
-                          "the parent node's value must be preserved"
-                    ) // NEW: cell.key === parentIn.cell.key
-                    require(
-                      common.mint.flatten === List.single(
-                        (common.policy, nodeToken(key), BigInt(1))
-                      ),
-                      "Must mint an NFT value for the inserted key for this linked list"
-                    )
-                    parentIn
-                case _ => fail("There must be only a parent and an inserted node outputs")
-        case _ => fail("There must be a single covering node input")
-
-    // FIXME: linking
-    //
-    // (common.inputs, common.outputs) match
-    //     case (List.Cons(fstIn, List.Cons(sndIn, List.Nil)), List.Cons(parentOut, List.Nil)) =>
-    //
+    def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node =
+        val parentIn = common.inputs match
+            case List.Cons(parentIn, List.Nil) => parentIn
+            case _ => fail("There must be a single covering node input")
+        val PubKeyHash(key) = insertKey
+        val (parentOut, insertNode) = common.outputs match
+            case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) => fstOut.sort(sndOut)
+            case _ => fail("There must be only a parent and an inserted node outputs")
+        require(
+          cell.chKey(key) === insertNode.cell,
+          "The covering cell must be preserved by inserted key at outputs,\n" +
+              "the inserted key must be present at the cell of inserted node"
+        )
+        require(
+          parentOut === Node(parentIn.value, cell.chRef(key)),
+          "The inserted key must be referenced by the parent's key at outputs,\n" +
+              "the parent node's value must be preserved"
+        ) // NEW: cell.key === parentIn.cell.key
+        require(
+          common.mint.flatten === List.single(
+            (common.policy, nodeToken(key), BigInt(1))
+          ),
+          "Must mint an NFT value for the inserted key for this linked list"
+        )
+        parentIn
 
     /** Remove a non-root node `removeKey` at covering `cell` at the linked list.
       *
@@ -358,36 +349,36 @@ object OrderedLinkedList:
       * @return
       *   Removed node.
       */
-    def remove(common: Common, removeKey: PubKeyHash, cell: Cons): Node = common.inputs match
-        case List.Cons(fstIn, List.Cons(sndIn, List.Nil)) =>
-            common.outputs match
-                case List.Cons(parentOut, List.Nil) =>
-                    val PubKeyHash(key) = removeKey
-                    val (parentIn, removeNode) = fstIn.sort(sndIn)
-                    require(
-                      cell.chKey(key) === removeNode.cell,
-                      "The covering cell must be referenced by removed key at inputs,\n" +
-                          "the removed key must be present at the cell of removed node"
-                    )
-                    require(
-                      cell.chRef(key) === parentIn.cell,
-                      "The remove key must be referenced by parent's cell at inputs,\n" +
-                          "the parent key must be present at the covering cell"
-                    )
-                    require(
-                      parentOut === Node(parentIn.value, cell),
-                      "The covering cell must be referenced by the parent's key at outputs,\n" +
-                          "the parent node's value must be kept unchanged"
-                    )
-                    require(
-                      common.mint.flatten === List.single(
-                        (common.policy, nodeToken(key), BigInt(-1))
-                      ),
-                      "Must burn an NFT value for the removed key for this linked list"
-                    )
-                    removeNode
-                case _ => fail("There must be a single parent output")
-        case _ => fail("There must be parent and remove node inputs only")
+    def remove(common: Common, removeKey: PubKeyHash, cell: Cons): Node =
+        val PubKeyHash(key) = removeKey
+        val (parentIn, removeNode) = common.inputs match
+            case List.Cons(fstIn, List.Cons(sndIn, List.Nil)) => fstIn.sort(sndIn)
+            case _ => fail("There must be parent and remove node inputs only")
+        val parentOut = common.outputs match
+            case List.Cons(parentOut, List.Nil) => parentOut
+            case _ => fail("There must be a single parent output")
+        require(
+          cell.chKey(key) === removeNode.cell,
+          "The covering cell must be referenced by removed key at inputs,\n" +
+              "the removed key must be present at the cell of removed node"
+        )
+        require(
+          cell.chRef(key) === parentIn.cell,
+          "The remove key must be referenced by parent's cell at inputs,\n" +
+              "the parent key must be present at the covering cell"
+        )
+        require(
+          parentOut === Node(parentIn.value, cell),
+          "The covering cell must be referenced by the parent's key at outputs,\n" +
+              "the parent node's value must be kept unchanged"
+        )
+        require(
+          common.mint.flatten === List.single(
+            (common.policy, nodeToken(key), BigInt(-1))
+          ),
+          "Must burn an NFT value for the removed key for this linked list"
+        )
+        removeNode
 
     /** Prepend a new node to the beginning of the list.
       *
@@ -476,21 +467,19 @@ object UnorderedLinkedList:
         val policyOutputs = withPolicy(tx.outputs)
         val nodeOuts = policyInOuts ++ policyOutputs
 
-        nodeOuts.headOption match
-            case Some(head) =>
-                require(
-                  nodeOuts.forall(head.address === _.address),
-                  "All node outputs must have same address"
-                )
-                val inputs = policyInOuts.map(getNode)
-                val outputs = policyOutputs.map(out =>
-                    val node = getNode(out)
-                    validateNode(policy, node)
-                    node
-                )
-                val common = Common(policy, tx.mint, inputs, outputs)
-                (common, tx.inputs, tx.outputs, tx.signatories, tx.validRange)
-            case _ => fail("There's must be at least one output")
+        val head = nodeOuts.headOption.getOrFail("There's must be at least one output")
+        require(
+          nodeOuts.forall(head.address === _.address),
+          "All node outputs must have same address"
+        )
+        val inputs = policyInOuts.map(getNode)
+        val outputs = policyOutputs.map(out =>
+            val node = getNode(out)
+            validateNode(policy, node)
+            node
+        )
+        val common = Common(policy, tx.mint, inputs, outputs)
+        (common, tx.inputs, tx.outputs, tx.signatories, tx.validRange)
 
     /** Collect node output.
       *
@@ -513,35 +502,35 @@ object UnorderedLinkedList:
       */
     def validateNode(policy: PolicyId, node: Node): Unit =
         val Node(value, cell) = node
-        value.flatten match
+        val (adaPolicy, adaToken, policyId, token, amount) = value.flatten match
             case List.Cons(
-                  (adaPolicy, adaToken, _amount),
+                  (adaPolicy, adaToken, _),
                   List.Cons((policyId, token, amount), List.Nil)
-                ) =>
-                require(
-                  adaPolicy === Value.adaPolicyId && adaToken === Value.adaTokenName,
-                  "There's must be a lovelace value for each policy output"
-                )
-                require(
-                  policyId === policy,
-                  "There's must be a token key for the policy output"
-                )
-                require(
-                  amount == BigInt(1),
-                  "Minted token be exactly one per output"
-                )
-                require(
-                  isNodeToken(token),
-                  "Must be valid node token"
-                )
-                require(
-                  nodeKey(token) === cell.key,
-                  "Datum must contain a valid node key"
-                )
+            ) => (adaPolicy, adaToken, policyId, token, amount)
             case _ =>
                 fail(
                   "There's must be only a token key and a lovelace values for each policy output"
                 )
+        require(
+          adaPolicy === Value.adaPolicyId && adaToken === Value.adaTokenName,
+          "There's must be a lovelace value for each policy output"
+        )
+        require(
+          policyId === policy,
+          "There's must be a token key for the policy output"
+        )
+        require(
+          amount == BigInt(1),
+          "Minted token be exactly one per output"
+        )
+        require(
+          isNodeToken(token),
+          "Must be valid node token"
+        )
+        require(
+          nodeKey(token) === cell.key,
+          "Datum must contain a valid node key"
+        )
 
     // MARK: State transition handlers (used in list minting policy)
     //       aka list natural transformations
@@ -596,32 +585,31 @@ object UnorderedLinkedList:
       * @return
       *   Parent node.
       */
-    private inline def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node =
-        common.inputs match
-            case List.Cons(parentIn, List.Nil) =>
-                common.outputs match
-                    case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) =>
-                        val PubKeyHash(key) = insertKey
-                        val (parentOut, insertNode) = fstOut.sortByKey(sndOut, key)
-                        require(
-                          cell.chKey(key) === insertNode.cell,
-                          "The covering cell must be preserved by inserted key at outputs,\n" +
-                              "the inserted key must be present at the cell of inserted node"
-                        )
-                        require(
-                          parentOut === Node(parentIn.value, cell.chRef(key)),
-                          "The inserted key must be referenced by the parent's key at outputs,\n" +
-                              "the parent node's value must be preserved"
-                        ) // NEW: cell.key === parentIn.cell.key
-                        require(
-                          common.mint.flatten === List.single(
-                            (common.policy, nodeToken(key), BigInt(1))
-                          ),
-                          "Must mint an NFT value for the inserted key for this linked list"
-                        )
-                        parentIn
-                    case _ => fail("There must be only a parent and an inserted node outputs")
+    def insert(common: Common, insertKey: PubKeyHash, cell: Cons): Node =
+        val parentIn = common.inputs match
+            case List.Cons(parentIn, List.Nil) => parentIn
             case _ => fail("There must be a single covering node input")
+        val PubKeyHash(key) = insertKey
+        val (parentOut, insertNode) = common.outputs match
+            case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) => fstOut.sortByKey(sndOut, key)
+            case _ => fail("There must be only a parent and an inserted node outputs")
+        require(
+          cell.chKey(key) === insertNode.cell,
+          "The covering cell must be preserved by inserted key at outputs,\n" +
+              "the inserted key must be present at the cell of inserted node"
+        )
+        require(
+          parentOut === Node(parentIn.value, cell.chRef(key)),
+          "The inserted key must be referenced by the parent's key at outputs,\n" +
+              "the parent node's value must be preserved"
+        ) // NEW: cell.key === parentIn.cell.key
+        require(
+          common.mint.flatten === List.single(
+            (common.policy, nodeToken(key), BigInt(1))
+          ),
+          "Must mint an NFT value for the inserted key for this linked list"
+        )
+        parentIn
 
     // FIXME: linking
     //
@@ -641,36 +629,36 @@ object UnorderedLinkedList:
       * @return
       *   Removed node.
       */
-    def remove(common: Common, removeKey: PubKeyHash, cell: Cons): Node = common.inputs match
-        case List.Cons(fstIn, List.Cons(sndIn, List.Nil)) =>
-            common.outputs match
-                case List.Cons(parentOut, List.Nil) =>
-                    val PubKeyHash(key) = removeKey
-                    val (parentIn, removeNode) = fstIn.sortByKey(sndIn, key)
-                    require(
-                      cell.chKey(key) === removeNode.cell,
-                      "The covering cell must be referenced by removed key at inputs,\n" +
-                          "the removed key must be present at the cell of removed node"
-                    )
-                    require(
-                      cell.chRef(key) === parentIn.cell,
-                      "The remove key must be referenced by parent's cell at inputs,\n" +
-                          "the parent key must be present at the covering cell"
-                    )
-                    require(
-                      parentOut === Node(parentIn.value, cell),
-                      "The covering cell must be referenced by the parent's key at outputs,\n" +
-                          "the parent node's value must be kept unchanged"
-                    )
-                    require(
-                      common.mint.flatten === List.single(
-                        (common.policy, nodeToken(key), BigInt(-1))
-                      ),
-                      "Must burn an NFT value for the removed key for this linked list"
-                    )
-                    removeNode
-                case _ => fail("There must be a single parent output")
-        case _ => fail("There must be parent and remove node inputs only")
+    def remove(common: Common, removeKey: PubKeyHash, cell: Cons): Node =
+        val PubKeyHash(key) = removeKey
+        val (parentIn, removeNode) = common.inputs match
+            case List.Cons(fstIn, List.Cons(sndIn, List.Nil)) => fstIn.sortByKey(sndIn, key)
+            case _ => fail("There must be parent and remove node inputs only")
+        val parentOut = common.outputs match
+            case List.Cons(parentOut, List.Nil) => parentOut
+            case _ => fail("There must be a single parent output")
+        require(
+          cell.chKey(key) === removeNode.cell,
+          "The covering cell must be referenced by removed key at inputs,\n" +
+              "the removed key must be present at the cell of removed node"
+        )
+        require(
+          cell.chRef(key) === parentIn.cell,
+          "The remove key must be referenced by parent's cell at inputs,\n" +
+              "the parent key must be present at the covering cell"
+        )
+        require(
+          parentOut === Node(parentIn.value, cell),
+          "The covering cell must be referenced by the parent's key at outputs,\n" +
+              "the parent node's value must be kept unchanged"
+        )
+        require(
+          common.mint.flatten === List.single(
+            (common.policy, nodeToken(key), BigInt(-1))
+          ),
+          "Must burn an NFT value for the removed key for this linked list"
+        )
+        removeNode
 
     /** Prepend a new node to the beginning of the list.
       *
