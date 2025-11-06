@@ -4,7 +4,7 @@ import io.bullet.borer.{Decoder, Encoder}
 
 import scala.collection.immutable.ListSet
 
-/** Represents a tagged ordered set, which is an indexed sequence of unique elements with a tag.
+/** Represents a tagged set, which is an indexed sequence of unique elements with a tag.
   *
   * It's a new requirement for the Cardano ledger to have a tagged set. It's a stupid idea and God
   * knows why they came up with it, but now we have to implement it.
@@ -14,28 +14,23 @@ import scala.collection.immutable.ListSet
   *
   * Unfortunately, we cannot make it as
   *
-  * `opaque type TaggedOrderedSet[+A] <: IndexedSeq[A] = IndexedSeq[A]`
+  * `opaque type TaggedSet[+A] <: IndexedSeq[A] = IndexedSeq[A]`
   *
-  * because then `Encoder[TaggedOrderedSet[A]]` conflicts with [[Encoder.forIndexedSeq]]
+  * because then `Encoder[TaggedSet[A]]` conflicts with [[Encoder.forIndexedSeq]]
   *
-  * Important: This implementation does not allow duplicates in input (i.e. throws exception) and
-  * keeps order of data (does not sort).
+  * Important: This implementation allows duplicates in input (i.e. does not throw exception) and
+  * keeps order of data (does not sort) but eliminates duplicates.
   */
-opaque type TaggedOrderedSet[+A] = IndexedSeq[A]
-object TaggedOrderedSet extends TaggedSeq:
+opaque type TaggedOrderedSet[A] = IndexedSeq[A]
+object TaggedOrderedSet extends TaggedSeq {
     inline def apply[A](elems: A*): TaggedOrderedSet[A] = from(elems)
-    inline def empty[A]: TaggedOrderedSet[A] = IndexedSeq.empty[A]
-    inline def from[A](s: IterableOnce[A]): TaggedOrderedSet[A] =
-        ListSet.from(checkDuplicates(s)).toIndexedSeq
+    inline def empty[A]: TaggedOrderedSet[A] = IndexedSeq.empty
+    inline def from[A](a: IterableOnce[A]): TaggedOrderedSet[A] = ListSet.from(a).toIndexedSeq
 
     extension [A](s: TaggedOrderedSet[A])
         inline def toSeq: IndexedSeq[A] = s
         inline def toSet: Set[A] = ListSet.from(s)
 
     given [A: Encoder]: Encoder[TaggedOrderedSet[A]] = writeTagged(_, _)
-    given [A: Decoder](using
-        pv: ProtocolVersion = ProtocolVersion.conwayPV
-    ): Decoder[TaggedOrderedSet[A]] =
-        if pv >= ProtocolVersion.conwayPV
-        then r => from(checkNonEmpty(readTagged(r)))
-        else r => from(readTagged(r))
+    given [A: Decoder]: Decoder[TaggedOrderedSet[A]] = r => from(readTagged(r))
+}

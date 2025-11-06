@@ -16,7 +16,7 @@ case class TransactionBody(
     ttl: Option[Long] = None,
 
     /** Certificates for delegation, stake operations, etc. */
-    certificates: TaggedOrderedSet[Certificate] = TaggedOrderedSet.empty,
+    certificates: TaggedOrderedStrictSet[Certificate] = TaggedOrderedStrictSet.empty,
 
     /** Withdrawals from reward accounts */
     withdrawals: Option[Withdrawals] = None,
@@ -237,7 +237,7 @@ object TransactionBody:
             var outputs = IndexedSeq.empty[Sized[TransactionOutput]]
             var fee: Option[Coin] = None
             var ttl: Option[Long] = None
-            var certificates = TaggedOrderedSet.empty[Certificate]
+            var certificates = TaggedOrderedStrictSet.empty[Certificate]
             var withdrawals: Option[Withdrawals] = None
             var auxiliaryDataHash: Option[AuxiliaryDataHash] = None
             var validityStartSlot: Option[Long] = None
@@ -272,7 +272,7 @@ object TransactionBody:
                         if r.hasOverLong then ttl = Some(r.readOverLong())
                         else ttl = Some(r.readLong())
                     case 4 => // Certificates
-                        certificates = r.read[TaggedOrderedSet[Certificate]]()
+                        certificates = r.read[TaggedOrderedStrictSet[Certificate]]()
 
                     case 5 => // Withdrawals
                         withdrawals = Some(r.read[Withdrawals]())

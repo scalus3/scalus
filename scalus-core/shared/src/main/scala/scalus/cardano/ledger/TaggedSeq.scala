@@ -2,8 +2,10 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 
-/** Tags in sets Conway introduced optional 258 tags in certain items that are considered sets
-  * semantically but encoded as arrays in CBOR.
+/** Tags in sets
+  *
+  * Conway introduced optional 258 tags in certain items that are considered sets semantically but
+  * encoded as arrays in CBOR.
   *
   * Semantics: Tag 258 can be applied to a CBOR array data item to indicate that it is a set. Sets
   * should be handled similarly to CBOR maps: a set that has duplicate items may be well-formed, but

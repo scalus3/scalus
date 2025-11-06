@@ -96,7 +96,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                           )
                     )
                   ),
-                  certificates = TaggedOrderedSet(
+                  certificates = TaggedOrderedStrictSet(
                     Certificate
                         .StakeDelegation(credential3, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -163,9 +163,9 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                   VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
                 ),
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap(plutusV1Script),
-                plutusV2Scripts = TaggedSortedMap(plutusV2Script),
-                plutusV3Scripts = TaggedSortedMap(plutusV3Script)
+                plutusV1Scripts = TaggedSortedStrictMap(plutusV1Script),
+                plutusV2Scripts = TaggedSortedStrictMap(plutusV2Script),
+                plutusV3Scripts = TaggedSortedStrictMap(plutusV3Script)
               )
             )
         }

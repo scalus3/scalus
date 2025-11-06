@@ -6,12 +6,12 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.builtin
 import scalus.builtin.Data.*
 import scalus.builtin.{ByteString, Data}
+import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.testutil.ArbitraryDerivation.autoDerived
 
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
 import scala.math.pow
-import TransactionWitnessSet.given
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
@@ -512,12 +512,12 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         yield Script.PlutusV3(bytes)
     }
 
-    given [A: Arbitrary]: Arbitrary[TaggedSet[A]] = Arbitrary(
-      genSetOfSizeFromArbitrary(1, 3).map(TaggedSet.from)
-    )
-
     given [A: Arbitrary]: Arbitrary[TaggedOrderedSet[A]] = Arbitrary(
       genSetOfSizeFromArbitrary(1, 3).map(TaggedOrderedSet.from)
+    )
+
+    given [A: Arbitrary]: Arbitrary[TaggedOrderedStrictSet[A]] = Arbitrary(
+      genSetOfSizeFromArbitrary(1, 3).map(TaggedOrderedStrictSet.from)
     )
 
     given [A: Arbitrary: Ordering]: Arbitrary[TaggedSortedSet[A]] = Arbitrary(
@@ -528,6 +528,12 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         TaggedSortedMap.KeyOf[K, A]
     ): Arbitrary[TaggedSortedMap[K, A]] = Arbitrary(
       genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedMap.from[K, A])
+    )
+
+    given [A: Arbitrary, K: Ordering](using
+        TaggedSortedStrictMap.KeyOf[K, A]
+    ): Arbitrary[TaggedSortedStrictMap[K, A]] = Arbitrary(
+      genSetOfSizeFromArbitrary(1, 3).map(TaggedSortedStrictMap.from[K, A])
     )
 
     given Arbitrary[TransactionWitnessSet] = autoDerived
@@ -634,7 +640,9 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
             outputs <- genVectorOfSizeFromArbitrary[Sized[TransactionOutput]](1, 4)
             fee <- arbitrary[Coin]
             ttl <- Gen.option(Gen.choose(0L, Long.MaxValue))
-            certificates <- genSetOfSizeFromArbitrary[Certificate](1, 4).map(TaggedOrderedSet.from)
+            certificates <- genSetOfSizeFromArbitrary[Certificate](1, 4).map(
+              TaggedOrderedStrictSet.from
+            )
             withdrawals <- arbitrary[Option[Withdrawals]]
             auxiliaryDataHash <- arbitrary[Option[AuxiliaryDataHash]]
             validityStartSlot <- Gen.option(Gen.choose(0L, Long.MaxValue))

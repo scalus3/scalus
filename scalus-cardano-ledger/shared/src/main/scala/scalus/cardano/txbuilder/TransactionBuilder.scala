@@ -1244,7 +1244,7 @@ object TransactionBuilder:
               unsafeCtxBodyL
                   .refocus(_.certificates)
                   .modify(certificates =>
-                      TaggedOrderedSet.from(
+                      TaggedOrderedStrictSet.from(
                         appendDistinct(issueCertificate.cert, certificates.toSeq)
                       )
                   )
@@ -1776,7 +1776,9 @@ object TransactionBuilder:
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV1Scripts)
                                   .modify(s =>
-                                      TaggedSortedMap.from(appendDistinct(v1, s.toMap.values.toSeq))
+                                      TaggedSortedStrictMap.from(
+                                        appendDistinct(v1, s.toMap.values.toSeq)
+                                      )
                                   )
                             )
                         case v2: Script.PlutusV2 =>
@@ -1784,7 +1786,9 @@ object TransactionBuilder:
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV2Scripts)
                                   .modify(s =>
-                                      TaggedSortedMap.from(appendDistinct(v2, s.toMap.values.toSeq))
+                                      TaggedSortedStrictMap.from(
+                                        appendDistinct(v2, s.toMap.values.toSeq)
+                                      )
                                   )
                             )
                         case v3: Script.PlutusV3 =>
@@ -1792,7 +1796,9 @@ object TransactionBuilder:
                               unsafeCtxWitnessL
                                   .refocus(_.plutusV3Scripts)
                                   .modify(s =>
-                                      TaggedSortedMap.from(appendDistinct(v3, s.toMap.values.toSeq))
+                                      TaggedSortedStrictMap.from(
+                                        appendDistinct(v3, s.toMap.values.toSeq)
+                                      )
                                   )
                             )
                     }

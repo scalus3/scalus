@@ -44,7 +44,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -53,9 +53,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -149,7 +149,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -158,9 +158,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -242,7 +242,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -251,9 +251,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -350,7 +350,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -359,9 +359,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -450,7 +450,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -459,9 +459,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -550,7 +550,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -559,9 +559,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(
@@ -637,7 +637,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   withdrawals = None,
                   proposalProcedures = TaggedOrderedSet.empty,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
@@ -646,9 +646,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = Some(
                   KeepRaw(

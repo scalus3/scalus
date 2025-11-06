@@ -18,9 +18,9 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedMap.empty,
-                plutusV2Scripts = TaggedSortedMap.empty,
-                plutusV3Scripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = None
               ),
@@ -42,7 +42,7 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   votingProcedures = None,
                   proposalProcedures = TaggedOrderedSet.empty,
                   withdrawals = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   mint = None,
                   requiredSigners = TaggedSortedSet.empty,
                   collateralReturnOutput = None

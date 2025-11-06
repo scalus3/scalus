@@ -26,7 +26,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
                 )
@@ -87,7 +87,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
                 )
@@ -151,7 +151,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
                 )
@@ -216,7 +216,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
                 )
@@ -294,7 +294,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
                 )
@@ -351,7 +351,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
                 )
@@ -386,7 +386,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = Some(
                     Withdrawals(
                       SortedMap(
@@ -448,7 +448,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = Some(
                     Withdrawals(
                       SortedMap(
@@ -511,7 +511,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet(
+                  certificates = TaggedOrderedStrictSet(
                     Certificate
                         .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -605,7 +605,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet(
+                  certificates = TaggedOrderedStrictSet(
                     Certificate
                         .StakeDelegation(credential, Arbitrary.arbitrary[PoolKeyHash].sample.get),
                     Certificate.PoolRegistration(
@@ -695,7 +695,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.from(
                     Set(
@@ -735,7 +735,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   collateralInputs = TaggedSortedSet.empty,
                   referenceInputs = TaggedSortedSet.empty,
                   votingProcedures = None,
-                  certificates = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.from(
                     Set(

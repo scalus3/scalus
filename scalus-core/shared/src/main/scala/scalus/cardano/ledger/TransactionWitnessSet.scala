@@ -15,7 +15,8 @@ case class TransactionWitnessSet(
     bootstrapWitnesses: TaggedSortedSet[BootstrapWitness] = TaggedSortedSet.empty,
 
     /** Plutus V1 scripts */
-    plutusV1Scripts: TaggedSortedMap[ScriptHash, Script.PlutusV1] = TaggedSortedMap.empty,
+    plutusV1Scripts: TaggedSortedStrictMap[ScriptHash, Script.PlutusV1] =
+        TaggedSortedStrictMap.empty,
 
     /** Plutus data values
       *
@@ -30,10 +31,12 @@ case class TransactionWitnessSet(
     redeemers: Option[KeepRaw[Redeemers]] = None,
 
     /** Plutus V2 scripts */
-    plutusV2Scripts: TaggedSortedMap[ScriptHash, Script.PlutusV2] = TaggedSortedMap.empty,
+    plutusV2Scripts: TaggedSortedStrictMap[ScriptHash, Script.PlutusV2] =
+        TaggedSortedStrictMap.empty,
 
     /** Plutus V3 scripts */
-    plutusV3Scripts: TaggedSortedMap[ScriptHash, Script.PlutusV3] = TaggedSortedMap.empty
+    plutusV3Scripts: TaggedSortedStrictMap[ScriptHash, Script.PlutusV3] =
+        TaggedSortedStrictMap.empty
 ):
     /** Check if the witness set is empty */
     def isEmpty: Boolean =
@@ -60,15 +63,18 @@ object TransactionWitnessSet:
         val nativeScripts = TaggedSortedMap.from[ScriptHash, Script.Native](scripts.collect {
             case s: Script.Native => s
         })
-        val plutusV1Scripts = TaggedSortedMap.from[ScriptHash, Script.PlutusV1](scripts.collect {
-            case s: Script.PlutusV1 => s
-        })
-        val plutusV2Scripts = TaggedSortedMap.from[ScriptHash, Script.PlutusV2](scripts.collect {
-            case s: Script.PlutusV2 => s
-        })
-        val plutusV3Scripts = TaggedSortedMap.from[ScriptHash, Script.PlutusV3](scripts.collect {
-            case s: Script.PlutusV3 => s
-        })
+        val plutusV1Scripts =
+            TaggedSortedStrictMap.from[ScriptHash, Script.PlutusV1](scripts.collect {
+                case s: Script.PlutusV1 => s
+            })
+        val plutusV2Scripts =
+            TaggedSortedStrictMap.from[ScriptHash, Script.PlutusV2](scripts.collect {
+                case s: Script.PlutusV2 => s
+            })
+        val plutusV3Scripts =
+            TaggedSortedStrictMap.from[ScriptHash, Script.PlutusV3](scripts.collect {
+                case s: Script.PlutusV3 => s
+            })
 
         TransactionWitnessSet(
           vkeyWitnesses = TaggedSortedSet.from(vkeyWitnesses),
@@ -151,11 +157,11 @@ object TransactionWitnessSet:
             var vkeyWitnesses = TaggedSortedSet.empty[VKeyWitness]
             var nativeScripts = TaggedSortedMap.empty[ScriptHash, Script.Native]
             var bootstrapWitnesses = TaggedSortedSet.empty[BootstrapWitness]
-            var plutusV1Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV1]
+            var plutusV1Scripts = TaggedSortedStrictMap.empty[ScriptHash, Script.PlutusV1]
             var plutusData = KeepRaw(TaggedSortedMap.empty[DataHash, KeepRaw[Data]])
             var redeemers: Option[KeepRaw[Redeemers]] = None
-            var plutusV2Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV2]
-            var plutusV3Scripts = TaggedSortedMap.empty[ScriptHash, Script.PlutusV3]
+            var plutusV2Scripts = TaggedSortedStrictMap.empty[ScriptHash, Script.PlutusV2]
+            var plutusV3Scripts = TaggedSortedStrictMap.empty[ScriptHash, Script.PlutusV3]
 
             for _ <- 0L until mapSize do
                 val key = r.readInt()
@@ -199,8 +205,8 @@ object TransactionWitnessSet:
             )
         }
 
-    given TaggedSortedMap.KeyOf[ScriptHash, Script.Native] = _.scriptHash
-    given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV1] = _.scriptHash
-    given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV2] = _.scriptHash
-    given TaggedSortedMap.KeyOf[ScriptHash, Script.PlutusV3] = _.scriptHash
     given TaggedSortedMap.KeyOf[DataHash, KeepRaw[Data]] = _.dataHash
+    given TaggedSortedMap.KeyOf[ScriptHash, Script.Native] = _.scriptHash
+    given TaggedSortedStrictMap.KeyOf[ScriptHash, Script.PlutusV1] = _.scriptHash
+    given TaggedSortedStrictMap.KeyOf[ScriptHash, Script.PlutusV2] = _.scriptHash
+    given TaggedSortedStrictMap.KeyOf[ScriptHash, Script.PlutusV3] = _.scriptHash
