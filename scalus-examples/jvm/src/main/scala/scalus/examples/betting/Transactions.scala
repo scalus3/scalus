@@ -49,12 +49,35 @@ class Transactions(
         .build()
 
     def join(
-        bet: BigInt,
+        bet: Long, // lovelace to bet by 'player2'
         player1: PubKeyHash,
         player2: PubKeyHash,
         oracle: PubKeyHash,
-        expiration: PosixTime
-    ): Either[String, Transaction] = ???
+        expiration: PosixTime,
+        tokenUtxo: (TransactionInput, TransactionOutput) // token issued by an initial bet
+    ): Either[String, Transaction] = wallet
+        .selectInputs(Value.lovelace(bet))
+        .get
+        .foldLeft(PaymentBuilder(context)):
+            case (builder, (utxo, witness)) =>
+                builder.spendOutputs((utxo.input, utxo.output), witness)
+        .withStep(
+          TransactionBuilderStep.Spend(
+            TransactionUnspentOutput(tokenUtxo),
+            ThreeArgumentPlutusScriptWitness(
+              scriptSource = ScriptSource.PlutusScriptValue(script),
+              redeemer = Action.Join.toData,
+              datum = Datum.DatumInlined,
+              additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player2.hash)))
+            )
+          )
+        )
+        .payToScript(
+          scriptAddress,
+          tokenUtxo._2.value + Value.lovelace(bet),
+          BetDatum(player1, player2, oracle, expiration).toData
+        )
+        .build()
 
     // winner: true - 'player2', false - 'player1'
     def win(

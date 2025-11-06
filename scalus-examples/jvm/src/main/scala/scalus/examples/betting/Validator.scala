@@ -1,12 +1,9 @@
 package scalus.examples.betting
 
-import scalus.Compiler.compileWithOptions
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
-import scalus.cardano.blueprint.Application
-import scalus.cardano.blueprint.Blueprint
 import scalus.ledger.api.v1.Address
 import scalus.ledger.api.v2.OutputDatum.OutputDatum
 import scalus.ledger.api.v3.*
@@ -128,6 +125,8 @@ object Betting extends Validator:
                   "Joining must happen before the bet expiration"
                 )
 
+            // ???: oracle can spend token to create a malformed bet, e.g. oracle === player1
+            // TODO: all minted tokens should be burnt
             case Action.AnnounceWinner(winner) =>
                 val payoutAddress = txInfo.outputs match
                     case List.Cons(payoutOutput, List.Nil) => payoutOutput.address
