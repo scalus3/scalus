@@ -174,6 +174,7 @@ lazy val native: Project = project
     .in(file("native"))
     .aggregate(
       scalus.native,
+      scalusCardanoLedger.native,
       scalusTestkit.native,
     )
     .settings(
@@ -384,7 +385,7 @@ lazy val scalusUplcJitCompiler = project
 // Scalus Testkit library for testing Scalus applications
 lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     .in(file("scalus-testkit"))
-    .dependsOn(scalus)
+    .dependsOn(scalus, scalusCardanoLedger)
     .settings(
       name := "scalus-testkit",
       scalaVersion := scalaVersion.value,
@@ -566,7 +567,7 @@ lazy val bench = project
     )
 
 // Cardano Ledger domain model and CBOR serialization
-lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
+lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     .in(file("scalus-cardano-ledger"))
     .dependsOn(scalus % "compile->compile;test->test")
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
@@ -611,6 +612,14 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       }
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+    .nativeSettings(
+      nativeConfig ~= {
+          _.withBuildTarget(BuildTarget.libraryStatic)
+//              .withLTO(LTO.thin)
+              .withMode(Mode.releaseFast)
+              .withGC(GC.immix)
+      }
+    )
 
 lazy val scalusCardanoLedgerIt = project
     .in(file("scalus-cardano-ledger-it"))

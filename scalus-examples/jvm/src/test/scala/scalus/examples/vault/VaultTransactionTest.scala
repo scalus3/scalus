@@ -3,8 +3,7 @@ package scalus.examples.vault
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{BuilderContext, Wallet}
-import scalus.examples.TestUtil
-import scalus.testing.kit.ScalusTest
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.{ExCPU, ExMemory}
 
 class VaultTransactionTest extends AnyFunSuite, ScalusTest {

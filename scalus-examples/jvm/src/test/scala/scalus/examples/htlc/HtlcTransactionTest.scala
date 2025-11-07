@@ -10,7 +10,6 @@ import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.utils.ScriptFeeComparison
 import scalus.cardano.ledger.utils.ScriptFeeComparison.{ComparisonResult, FeeComparison}
 import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
-import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
 import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
@@ -19,7 +18,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program
 import scalus.cardano.node.LedgerProvider
 import scalus.cardano.ledger.rules.*
-import scalus.testing.kit.ScalusTest
+import scalus.testing.kit.{ScalusTest, TestUtil}
 
 class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironmentWithoutEvaluator
