@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
+WHITE='\033[1;37m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+# Function to normalize author names
+normalize_author() {
+  awk -F'|' '
+  {
+    author = $1
+    # Normalize author names
+    if (author == "rhulenko" || author == "roman-hulenko") author = "Roman Hulenko"
+    if (author == "rssh") author = "Ruslan Shevchenko"
+    if (author == "otto") author = "Otto Edgar"
+    if (author == "fernweh0" || author == "Aleksey Khodakovskiy") author = "Oleksii Khodakivskyi"
+    if (length(author) == 0) author = "(unknown)"
+
+    added[author]+=$2
+    deleted[author]+=$3
+  }
+  END {
+    for (author in added) {
+      total = added[author] + deleted[author]
+      printf "%d|%s|%d|%d\n", total, author, added[author], deleted[author]
+    }
+  }'
+}
+
+# Function to get git stats for a date range
+get_git_stats() {
+  local since=$1
+  local until=$2
+
+  git log --all --numstat --since="$since" --until="$until" --pretty=format:'AUTHOR:%aN' | awk '
+    /^AUTHOR:/ {
+      author=substr($0, 8)
+    }
+    /^[0-9]/ && NF==3 {
+      plus+=$1
+      minus+=$2
+    }
+    /^$/ {
+      if (author) {
+        print author "|" plus "|" minus
+        plus=0
+        minus=0
+      }
+    }
+  ' | normalize_author | sort -rn
+}
+
+# Function to display author stats table
+display_author_stats() {
+  local stats=$1
+  local threshold=${2:-0}
+
+  echo "$stats" | awk -F'|' -v green="$GREEN" -v white="$WHITE" -v cyan="$CYAN" -v magenta="$MAGENTA" -v yellow="$YELLOW" -v reset="$RESET" -v bold="$BOLD" -v threshold="$threshold" '
+  BEGIN {
+    printf "%s%-30s %15s %15s %15s%s\n", bold white, "Author", "Lines Added", "Lines Deleted", "Total Changes", reset
+    printf "%s%-30s %15s %15s %15s%s\n", cyan, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━━", "━━━━━━━━━━━━━", "━━━━━━━━━━━━━", reset
+  }
+  {
+    if ($1 > threshold) {
+      # Color code based on contribution size
+      color = green
+      if ($1 > 10000) color = bold magenta
+      else if ($1 > 5000) color = bold yellow
+      else if ($1 > 1000) color = yellow
+
+      printf "%s%-30s%s %s%15d%s %s%15d%s %s%15d%s\n",
+        white, $2, reset,
+        green, $3, reset,
+        cyan, $4, reset,
+        color, $1, reset
+    }
+  }'
+}
+
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${BOLD}${WHITE}                         Scalus Project Statistics${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo ""
+
+# Count lines of Scala code
+echo -e "${BOLD}${YELLOW}📊 Lines of Code${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+
+total_lines=$(find . -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+
+echo -e "${GREEN}Total Scala lines:${RESET} ${BOLD}${WHITE}${total_lines}${RESET}"
+echo ""
+
+# Git statistics by author
+echo -e "${BOLD}${YELLOW}👥 Contributions by Author${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+
+git log --all --numstat --pretty=format:'AUTHOR:%aN' | awk '
+  /^AUTHOR:/ {
+    author=substr($0, 8)
+  }
+  /^[0-9]/ && NF==3 {
+    plus+=$1
+    minus+=$2
+  }
+  /^$/ {
+    if (author) {
+      print author "|" plus "|" minus
+      plus=0
+      minus=0
+    }
+  }
+' | awk -F'|' '
+{
+  author = $1
+  # Normalize author names
+  if (author == "rhulenko" || author == "roman-hulenko") author = "Roman Hulenko"
+  if (author == "rssh") author = "Ruslan Shevchenko"
+  if (author == "otto") author = "Otto Edgar"
+  if (author == "fernweh0" || author == "Aleksey Khodakovskiy") author = "Oleksii Khodakivskyi"
+  if (length(author) == 0) author = "(unknown)"
+
+  added[author]+=$2
+  deleted[author]+=$3
+}
+END {
+  for (author in added) {
+    total = added[author] + deleted[author]
+    printf "%d|%s|%d|%d\n", total, author, added[author], deleted[author]
+  }
+}' | sort -rn | awk -F'|' -v green="$GREEN" -v white="$WHITE" -v cyan="$CYAN" -v magenta="$MAGENTA" -v yellow="$YELLOW" -v reset="$RESET" -v bold="$BOLD" '
+BEGIN {
+  printf "%s%-30s %15s %15s %15s%s\n", bold white, "Author", "Lines Added", "Lines Deleted", "Total Changes", reset
+  printf "%s%-30s %15s %15s %15s%s\n", cyan, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━━", "━━━━━━━━━━━━━", "━━━━━━━━━━━━━", reset
+}
+{
+  # Color code based on contribution size
+  color = green
+  if ($1 > 100000) color = bold magenta
+  else if ($1 > 50000) color = bold yellow
+  else if ($1 > 20000) color = yellow
+
+  printf "%s%-30s%s %s%15d%s %s%15d%s %s%15d%s\n",
+    white, $2, reset,
+    green, $3, reset,
+    cyan, $4, reset,
+    color, $1, reset
+}'
+
+echo ""
+
+# Previous month stats
+echo -e "${BOLD}${YELLOW}📅 Previous Month Contributions${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+
+# Calculate previous month date range
+prev_month_start=$(date -v-1m -v1d -v0H -v0M -v0S "+%Y-%m-%d 00:00:00" 2>/dev/null || date -d "$(date +%Y-%m-01) -1 month" "+%Y-%m-%d 00:00:00")
+prev_month_end=$(date -v1d -v-1d -v23H -v59M -v59S "+%Y-%m-%d 23:59:59" 2>/dev/null || date -d "$(date +%Y-%m-01) -1 day" "+%Y-%m-%d 23:59:59")
+
+prev_month_name=$(date -v-1m "+%B %Y" 2>/dev/null || date -d "$(date +%Y-%m-01) -1 month" "+%B %Y")
+echo -e "${CYAN}Period: ${WHITE}$prev_month_name${RESET}"
+echo ""
+
+prev_month_stats=$(get_git_stats "$prev_month_start" "$prev_month_end")
+if [ -n "$prev_month_stats" ]; then
+  display_author_stats "$prev_month_stats" 0
+else
+  echo -e "${YELLOW}No commits in previous month${RESET}"
+fi
+
+echo ""
+
+# Current month stats
+echo -e "${BOLD}${YELLOW}📅 Current Month Contributions${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+
+curr_month_start=$(date -v1d -v0H -v0M -v0S "+%Y-%m-%d 00:00:00" 2>/dev/null || date -d "$(date +%Y-%m-01)" "+%Y-%m-%d 00:00:00")
+curr_month_name=$(date "+%B %Y")
+echo -e "${CYAN}Period: ${WHITE}$curr_month_name${RESET}"
+echo ""
+
+curr_month_stats=$(get_git_stats "$curr_month_start" "now")
+if [ -n "$curr_month_stats" ]; then
+  display_author_stats "$curr_month_stats" 0
+else
+  echo -e "${YELLOW}No commits in current month${RESET}"
+fi
+
+echo ""
+
+# Monthly breakdown for last year
+echo -e "${BOLD}${YELLOW}📊 Monthly Activity (Last 12 Months)${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo ""
+
+printf "${BOLD}${WHITE}%-15s %15s %15s %15s${RESET}\n" "Month" "Lines Added" "Lines Deleted" "Total Changes"
+printf "${CYAN}%-15s %15s %15s %15s${RESET}\n" "━━━━━━━━━━━━━━━" "━━━━━━━━━━━" "━━━━━━━━━━━━━" "━━━━━━━━━━━━━"
+
+for i in {11..0}; do
+  # Calculate month start and end dates
+  if date -v-${i}m > /dev/null 2>&1; then
+    # macOS date command
+    month_start=$(date -v-${i}m -v1d -v0H -v0M -v0S "+%Y-%m-%d 00:00:00")
+    month_end=$(date -v-${i}m -v1d -v+1m -v-1d -v23H -v59M -v59S "+%Y-%m-%d 23:59:59")
+    month_name=$(date -v-${i}m "+%B %Y")
+  else
+    # GNU date command (Linux)
+    month_start=$(date -d "$(date +%Y-%m-01) -${i} month" "+%Y-%m-%d 00:00:00")
+    month_end=$(date -d "$(date -d "$(date +%Y-%m-01) -${i} month" +%Y-%m-01) +1 month -1 day" "+%Y-%m-%d 23:59:59")
+    month_name=$(date -d "$(date +%Y-%m-01) -${i} month" "+%B %Y")
+  fi
+
+  month_stats=$(get_git_stats "$month_start" "$month_end")
+
+  if [ -n "$month_stats" ]; then
+    total_added=$(echo "$month_stats" | awk -F'|' '{sum+=$3} END {print sum}')
+    total_deleted=$(echo "$month_stats" | awk -F'|' '{sum+=$4} END {print sum}')
+    total_changes=$((total_added + total_deleted))
+
+    # Color code based on activity level
+    if [ $total_changes -gt 10000 ]; then
+      color="${BOLD}${MAGENTA}"
+    elif [ $total_changes -gt 5000 ]; then
+      color="${BOLD}${YELLOW}"
+    elif [ $total_changes -gt 1000 ]; then
+      color="${YELLOW}"
+    else
+      color="${GREEN}"
+    fi
+
+    printf "${WHITE}%-15s${RESET} ${GREEN}%15d${RESET} ${CYAN}%15d${RESET} ${color}%15d${RESET}\n" \
+      "$month_name" "$total_added" "$total_deleted" "$total_changes"
+  else
+    printf "${WHITE}%-15s${RESET} ${GREEN}%15d${RESET} ${CYAN}%15d${RESET} ${GREEN}%15d${RESET}\n" \
+      "$month_name" 0 0 0
+  fi
+done
+
+echo ""
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"

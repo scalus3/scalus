@@ -19,7 +19,8 @@ scalus-plugin/src/main/shared
 scalus-testkit/core-shared
 cardano-cli
 cardano-address
-scripts/
+scalus-cardano-ledger-it/scripts
+bloxbean-cardano-client-lib/scripts/
 bloxbean-cardano-client-lib/blocks
 utxos/
 !bloxbean-cardano-client-lib/src/test/resources/utxos/
