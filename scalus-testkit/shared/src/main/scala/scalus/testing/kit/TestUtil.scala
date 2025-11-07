@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.testing.kit
 
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}

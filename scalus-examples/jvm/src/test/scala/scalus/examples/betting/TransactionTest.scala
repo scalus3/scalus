@@ -7,9 +7,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.txbuilder.BuilderContext
-import scalus.examples.TestUtil
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.testing.kit.{Mock, MockLedgerApi, ScalusTest}
+import scalus.testing.kit.{Mock, MockLedgerApi, ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 
