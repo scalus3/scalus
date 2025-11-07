@@ -2,9 +2,10 @@ package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
-import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.testing.kit.ScalusTest
 import scalus.ledger.api.v1.PosixTime
 import scalus.builtin.ByteString
+import scalus.examples.TestUtil
 import scalus.cardano.ledger.*
 import scalus.builtin.ToData.*
 import scalus.cardano.txbuilder.BuilderContext

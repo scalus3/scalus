@@ -11,6 +11,7 @@ import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.utils.ScriptFeeComparison
 import scalus.cardano.ledger.utils.ScriptFeeComparison.{ComparisonResult, FeeComparison}
 import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
+import scalus.examples.TestUtil
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.uplc.eval.Result
@@ -18,7 +19,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program
 import scalus.cardano.node.LedgerProvider
 import scalus.cardano.ledger.rules.*
-import scalus.testing.kit.{Mock, ScalusTest, TestUtil}
+import scalus.testing.kit.{Mock, ScalusTest}
 
 class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
@@ -30,6 +31,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private val player1 = Mock.mockPubKeyHash(8)
     private val player2 = Mock.mockPubKeyHash(16)
     private val oracle = Mock.mockPubKeyHash(32)
+
+    extension (key: PubKeyHash) def address = TestUtil.createTestAddress(key.hash.toHex)
 
     private val gen = BigInt(64)
 
