@@ -3,6 +3,7 @@ package scalus.prelude
 import scalus.{Compile, CompileDerivations}
 import scalus.builtin.Builtins.*
 import scalus.builtin.{BuiltinPair, Data}
+import scala.annotation.nowarn
 
 @FunctionalInterface
 trait Ord[-A] extends ((A, A) => Order) with CompileDerivations {
@@ -27,10 +28,12 @@ object Ord:
     //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]
     //  Don't accidentally mixed with standard scala math.Ordering.BigInt
     extension (self: BigInt)
-        inline infix def <(inline other: BigInt): Boolean = lessThanInteger(self, other)
-        inline infix def <=(inline other: BigInt): Boolean = lessThanEqualsInteger(self, other)
-        inline infix def >(inline other: BigInt): Boolean = lessThanInteger(other, self)
-        inline infix def >=(inline other: BigInt): Boolean = lessThanEqualsInteger(other, self)
+        @nowarn inline infix def <(inline other: BigInt): Boolean = lessThanInteger(self, other)
+        @nowarn inline infix def <=(inline other: BigInt): Boolean =
+            lessThanEqualsInteger(self, other)
+        @nowarn inline infix def >(inline other: BigInt): Boolean = lessThanInteger(other, self)
+        @nowarn inline infix def >=(inline other: BigInt): Boolean =
+            lessThanEqualsInteger(other, self)
         inline infix def equiv(inline other: BigInt): Boolean = equalsInteger(self, other)
         inline infix def nonEquiv(inline other: BigInt): Boolean = !equalsInteger(self, other)
 
@@ -45,13 +48,13 @@ object Ord:
     //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]
     //  Don't accidentally mixed with standard scala math.Ordering.BigInt
     extension (self: Boolean)
-        inline infix def <(inline other: Boolean): Boolean =
+        @nowarn inline infix def <(inline other: Boolean): Boolean =
             if self then false else other
-        inline infix def <=(inline other: Boolean): Boolean =
+        @nowarn inline infix def <=(inline other: Boolean): Boolean =
             if self then other else true
-        infix def >(other: Boolean): Boolean =
+        @nowarn infix def >(other: Boolean): Boolean =
             if self then if other then false else true else false
-        infix def >=(other: Boolean): Boolean =
+        @nowarn infix def >=(other: Boolean): Boolean =
             if self then true else if other then false else true
         infix def equiv(other: Boolean): Boolean =
             if self then other else if other then false else true

@@ -19,7 +19,7 @@ package scalus.cardano.txbuilder
 
 import cats.implicits.*
 import monocle.Lens
-import monocle.Monocle.{focus, refocus}
+import monocle.Monocle.focus
 import scalus.builtin.Data
 import scalus.cardano.ledger.*
 

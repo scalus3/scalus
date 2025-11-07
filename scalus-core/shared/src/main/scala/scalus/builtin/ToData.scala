@@ -53,7 +53,7 @@ object ToData {
     given eitherToData[A: ToData, B: ToData]: ToData[Either[A, B]] =
         (a: Either[A, B]) =>
             a match
-                case Left(v)  => constrData(0, mkCons(v.toData, mkNilData()))
-                case Right(v) => constrData(1, mkCons(v.toData, mkNilData()))
+                case Left(v)  => constrData(0, mkCons(summon[ToData[A]](v), mkNilData()))
+                case Right(v) => constrData(1, mkCons(summon[ToData[B]](v), mkNilData()))
 
 }

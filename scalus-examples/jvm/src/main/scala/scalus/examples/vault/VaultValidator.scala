@@ -8,7 +8,7 @@ import scalus.ledger.api.v1.Credential.ScriptCredential
 import scalus.ledger.api.v1.{Credential, Interval, IntervalBoundType, PosixTime, Value}
 import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.{TxInInfo, TxInfo, TxOutRef}
-import scalus.ledger.api.{v1, v2}
+import scalus.ledger.api.v1
 import scalus.prelude.{===, fail, require, Validator}
 import scalus.*
 

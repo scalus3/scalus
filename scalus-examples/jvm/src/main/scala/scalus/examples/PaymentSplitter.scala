@@ -5,7 +5,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.blueprint.{Application, Blueprint}
 import scalus.ledger.api.v1
 import scalus.ledger.api.v1.Value.*
-import scalus.ledger.api.v1.{Credential, PubKeyHash, Value}
+import scalus.ledger.api.v1.{Credential, PubKeyHash}
 import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.{TxInfo, TxOutRef}
 import scalus.prelude.List.*

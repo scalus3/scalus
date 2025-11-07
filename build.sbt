@@ -77,7 +77,7 @@ lazy val commonScalacOptions = Seq(
   "-feature",
   "-explain",
   "-Wunused:imports",
-  "-Wunused:params",
+//  "-Wunused:params",
   "-Xcheck-macros"
   //  "-rewrite",
   //  "-source:future-migration"
@@ -191,12 +191,12 @@ lazy val scalusPlugin = project
     .settings(
       name := "scalus-plugin",
       scalacOptions ++= commonScalacOptions,
-      scalacOptions += "-Wunused:all",
+//      scalacOptions += "-Wunused:all",
       // Manually set a fixed version to avoid recompilation on every commit
       // as sbt-ci-release plugin increments the version on every commit
       // thus recompiling the plugin and all dependent projects
       // COMMENT THIS LINE TO ENABLE VERSION INCREMENT during Scalus plugin development
-//      version := "0.12.0",
+      version := " 0.13.0+166-7bb99a16+20251107-1809-SNAPSHOT",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"

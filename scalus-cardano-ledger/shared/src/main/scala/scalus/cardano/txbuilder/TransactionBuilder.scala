@@ -19,7 +19,7 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.GovAction.*
 import scalus.cardano.ledger.rules.STS.Validator
-import scalus.cardano.ledger.rules.{Context as SContext, STS, State as SState, UtxoEnv}
+import scalus.cardano.ledger.rules.{Context as SContext, State as SState, UtxoEnv}
 import scalus.cardano.ledger.utils.{AllResolvedScripts, MinCoinSizedTransactionOutput}
 import scalus.cardano.txbuilder.Datum.DatumValue
 import scalus.cardano.txbuilder.TransactionBuilder.Context
@@ -34,7 +34,6 @@ type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]
 
 import scalus.|>
 
-import scala.annotation.tailrec
 import scala.collection.immutable.SortedMap
 
 // ===================================

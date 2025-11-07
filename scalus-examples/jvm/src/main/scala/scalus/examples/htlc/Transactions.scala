@@ -1,6 +1,6 @@
 package scalus.examples.htlc
 
-import scalus.builtin.ToData.*
+import scalus.builtin.Data.*
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*

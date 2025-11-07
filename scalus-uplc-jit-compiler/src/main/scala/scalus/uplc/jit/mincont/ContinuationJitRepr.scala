@@ -51,7 +51,6 @@ object ContinuationJitRepr {
       */
     def eval(cont: ContinuationJitRepr): Any = {
         import Frame.*
-        import ContinuationJitRepr.*
 
         var current = cont
         // Array-based stack for better performance than List

@@ -7,7 +7,6 @@ import com.bloxbean.cardano.client.backend.api.DefaultProtocolParamsSupplier
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
 import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
 import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService
-import com.bloxbean.cardano.client.common.CardanoConstants
 import com.bloxbean.cardano.client.common.CardanoConstants.LOVELACE
 import com.bloxbean.cardano.client.common.model.Network
 import com.bloxbean.cardano.client.common.model.Networks
@@ -19,7 +18,7 @@ import com.bloxbean.cardano.client.quicktx.Tx
 import scalus.*
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
-import scalus.builtin.{platform, ByteString, Data, PlatformSpecific, given}
+import scalus.builtin.{platform, ByteString, Data, given}
 import scalus.utils.Utils
 
 object SendTx:

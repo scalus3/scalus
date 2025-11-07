@@ -9,7 +9,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.BloxbeanToLedgerTranslation.*
-import scalus.utils.{Hex, Utils}
+import scalus.utils.Utils
 import scalus.utils.Hex.hexToBytes
 
 import java.nio.file.{Files, Path}
