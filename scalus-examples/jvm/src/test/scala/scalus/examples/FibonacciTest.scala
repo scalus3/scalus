@@ -114,7 +114,7 @@ object BrokenFib {
     import scalus.prelude.*
     import List.*
     def fib(n: BigInt): List[BigInt] = if n > 1 then
-        fib(n - 1) match
+        (fib(n - 1): @unchecked) match
             case r @ Cons(a, Cons(b, _)) => Cons(a + b, r)
     else List(1, 0)
 }

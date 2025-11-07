@@ -4,7 +4,6 @@ package rules
 import org.scalacheck.Arbitrary
 import scalus.cardano.address.ByronAddress
 import org.scalatest.funsuite.AnyFunSuite
-import TransactionWitnessSet.given
 
 import scala.collection.immutable.SortedSet
 

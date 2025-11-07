@@ -11,7 +11,7 @@ import scalus.uplc.FlatInstantces.given
 import scalus.uplc.NamedDeBruijn
 import scalus.uplc.Term
 import scalus.uplc.Term.*
-import scalus.uplc.eval.ExBudget.{enormous, given}
+import scalus.uplc.eval.ExBudget.given
 
 import scala.math.Ordering.Implicits.*
 

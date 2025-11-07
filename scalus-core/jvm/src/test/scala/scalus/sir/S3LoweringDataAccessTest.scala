@@ -144,8 +144,6 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
             log(intervalBound.isInclusive.show)
         }
 
-        import scalus.builtin.Data.to
-
         val interval = Interval.entirelyBetween(1000L, 2000L)
         val vlFrom = interval.from
 
@@ -171,7 +169,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
         }
 
         import scalus.prelude.Option
-        import scalus.builtin.Data.{to, toData}
+        import scalus.builtin.Data.toData
 
         val data = Option.Some(BigInt(86_400_000L)).toData
         val tx = TxInfo.placeholder

@@ -658,7 +658,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     test("Compile pattern in val with three arguments") {
         import scalus.builtin.Data.{FromData, ToData}
         import scalus.ledger.api.v3.*
-        import scalus.prelude.{List, Option}
+        import scalus.prelude.Option
 
         val compiled = compile { (x: Data) =>
             val ScriptContext(txInfo, redeemer, scriptInfo) = summon[FromData[ScriptContext]](x)

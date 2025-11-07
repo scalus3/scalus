@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.{ImpossibleLedgerStateError, OnchainError, RequirementError}
 import scalus.uplc.Constant.toValue
 import scalus.uplc.eval.PlutusVM
-import scalus.uplc.{Constant, Term}
+import scalus.uplc.Term
 
 import scala.reflect.ClassTag
 

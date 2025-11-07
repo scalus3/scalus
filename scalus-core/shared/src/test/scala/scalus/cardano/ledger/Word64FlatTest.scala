@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.ledger.ArbitraryInstances.given
 import scalus.serialization.flat
-import scalus.serialization.flat.{DecoderState, EncoderState, Flat}
+import scalus.serialization.flat.{DecoderState, EncoderState}
 
 class Word64FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 

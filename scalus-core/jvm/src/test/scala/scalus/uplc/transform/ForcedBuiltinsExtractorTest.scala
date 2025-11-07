@@ -3,7 +3,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
-import scalus.uplc.Term.alphaEq
 import scalus.uplc.Constant
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.Term.*

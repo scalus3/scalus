@@ -5,7 +5,6 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.builtin.platform
 import org.scalatest.funsuite.AnyFunSuite
-import TransactionWitnessSet.given
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator rule success") {

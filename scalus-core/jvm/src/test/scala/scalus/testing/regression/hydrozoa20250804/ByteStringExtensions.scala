@@ -2,7 +2,7 @@ package scalus.testing.regression.hydrozoa20250804
 
 import scalus.*
 import scalus.builtin.Builtins.{indexByteString, lengthOfByteString, lessThanByteString, lessThanEqualsByteString, sliceByteString}
-import scalus.builtin.{Builtins, ByteString}
+import scalus.builtin.ByteString
 
 @Compile
 object ByteStringExtensions:

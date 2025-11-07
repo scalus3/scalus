@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
-import scalus.prelude.*
 
 // Simple enum similar to VoteStatus
 enum Status derives FromData, ToData:
