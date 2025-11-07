@@ -19,10 +19,10 @@ import scalus.bloxbean.TxEvaluator.ScriptHash
 import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig, ValidityInterval}
-import scalus.ledger.api.v1.ScriptPurpose
-import scalus.ledger.api.v2.ScriptPurpose
+import scalus.ledger.api.v1
+import scalus.ledger.api.v2
 import scalus.ledger.api.v3.ScriptInfo
-import scalus.ledger.api.{v3, ScriptContext, *}
+import scalus.ledger.api.{v3, *}
 import scalus.uplc.eval.ExBudget
 import scalus.utils.Utils
 
@@ -226,16 +226,16 @@ class BlocksValidation extends AnyFunSuite {
     private def getPurpose(oldSc: ScriptContext): RedeemerTag = {
         ScriptContext.foldMap(oldSc)(
           _.purpose match {
-              case ScriptPurpose.Minting(curSymbol)     => RedeemerTag.Mint
-              case ScriptPurpose.Spending(txOutRef)     => RedeemerTag.Spend
-              case ScriptPurpose.Rewarding(stakingCred) => RedeemerTag.Reward
-              case ScriptPurpose.Certifying(cert)       => RedeemerTag.Cert
+              case v1.ScriptPurpose.Minting(curSymbol)     => RedeemerTag.Mint
+              case v1.ScriptPurpose.Spending(txOutRef)     => RedeemerTag.Spend
+              case v1.ScriptPurpose.Rewarding(stakingCred) => RedeemerTag.Reward
+              case v1.ScriptPurpose.Certifying(cert)       => RedeemerTag.Cert
           },
           _.purpose match {
-              case ScriptPurpose.Minting(curSymbol)     => RedeemerTag.Mint
-              case ScriptPurpose.Spending(txOutRef)     => RedeemerTag.Spend
-              case ScriptPurpose.Rewarding(stakingCred) => RedeemerTag.Reward
-              case ScriptPurpose.Certifying(cert)       => RedeemerTag.Cert
+              case v2.ScriptPurpose.Minting(curSymbol)     => RedeemerTag.Mint
+              case v2.ScriptPurpose.Spending(txOutRef)     => RedeemerTag.Spend
+              case v2.ScriptPurpose.Rewarding(stakingCred) => RedeemerTag.Reward
+              case v2.ScriptPurpose.Certifying(cert)       => RedeemerTag.Cert
           },
           _.scriptInfo match {
               case ScriptInfo.MintingScript(policyId)           => RedeemerTag.Mint

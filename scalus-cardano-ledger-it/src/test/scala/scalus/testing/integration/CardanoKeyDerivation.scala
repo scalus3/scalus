@@ -19,22 +19,22 @@ def makeSignerFrom(derivation: String, mnemonic: String): TxSigner = {
         .role(new Segment(derivationPieces(3), false))
         .index(new Segment(derivationPieces(4), false))
         .build()
-    val account = new Account(Networks.testnet(), mnemonic, derivationPath)
+    val account = Account.createFromMnemonic(Networks.testnet(), mnemonic, derivationPath)
     val publicKeyData = account.publicKeyBytes()
     val privateKeyData = account.privateKeyBytes()
     (unsigned: Transaction) => {
         val signature = signEd25519(
-            privateKeyData,
-            publicKeyData,
-            unsigned.id.bytes
+          privateKeyData,
+          publicKeyData,
+          unsigned.id.bytes
         )
         val ws = unsigned.witnessSet
             .copy(vkeyWitnesses =
                 TaggedSortedSet(
-                    VKeyWitness(
-                        ByteString.fromArray(publicKeyData),
-                        ByteString.fromArray(signature)
-                    )
+                  VKeyWitness(
+                    ByteString.fromArray(publicKeyData),
+                    ByteString.fromArray(signature)
+                  )
                 )
             )
         unsigned.copy(witnessSet = ws)
@@ -88,4 +88,3 @@ def signEd25519(
     method.invoke(null, d, h, s, pk, 0, ctx, phflag, m, mOff, mLen, sig, sigOff)
     sig
 }
-
