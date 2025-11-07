@@ -5,9 +5,7 @@ import scalus.*
 import scalus.Compiler.compile
 import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM}
 import scalus.uplc.jit.hybrid.HybridJIT
-import scalus.uplc.jit.mincont
 import scalus.uplc.jit.nativestack.JIT
-import scalus.uplc.{Constant, Term}
 
 class SimpleDebugTest extends AnyFunSuiteLike {
     private given PlutusVM = PlutusVM.makePlutusV3VM()

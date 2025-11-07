@@ -1159,7 +1159,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
         val eqterm = eq.toUplc()
         val neterm = ne.toUplc()
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
         assert((eqterm $ true).evaluate == scalus.uplc.Term.Const(asConstant(false)))
         assert((eqterm $ false).evaluate == scalus.uplc.Term.Const(asConstant(true)))
         assert((neterm $ true).evaluate == scalus.uplc.Term.Const(asConstant(true)))
@@ -1290,7 +1290,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
         val eqterm = eqCompiled.toUplc()
         val neterm = ne.toUplc()
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
         assert(
           (eqterm $ ByteString.empty $ ByteString.empty).evaluate == scalus.uplc.Term.Const(
             asConstant(true)
@@ -1430,7 +1430,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         )
         val eqterm = eq.toUplc()
         val neterm = ne.toUplc()
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
         assert(
           (eqterm $ "" $ "").evaluate == scalus.uplc.Term.Const(
             asConstant(true)
@@ -1543,7 +1543,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         val eqterm = eq.toUplc()
         val neterm = ne.toUplc()
         import scalus.builtin.Data.toData
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
 
         assert(
           (eqterm $ 1.toData $ 1.toData).evaluate == scalus.uplc.Term.Const(

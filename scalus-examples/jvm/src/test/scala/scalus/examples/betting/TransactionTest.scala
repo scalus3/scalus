@@ -1,20 +1,12 @@
 package scalus.examples.betting
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler
-import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
-import scalus.builtin.ToData.*
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.DatumOption.Inline
-import scalus.cardano.ledger.utils.ScriptFeeComparison
-import scalus.cardano.ledger.utils.ScriptFeeComparison.{ComparisonResult, FeeComparison}
-import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
+import scalus.cardano.txbuilder.BuilderContext
 import scalus.examples.TestUtil
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program

@@ -1,7 +1,7 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.builtin.{ByteString, Data}
+import scalus.builtin.ByteString
 import scalus.builtin.Data.toData
 import scalus.ledger.api.v3.*
 import scalus.prelude.*

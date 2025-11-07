@@ -135,7 +135,7 @@ class FromDataDerivationTest
 
     test("FromData.deriveEnum") {
         import ToDataAdt.given
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
         given PlutusVM = PlutusVM.makePlutusV2VM()
         val sir = compile { (d: Data) => fromData[Adt](d).toData }
         val term = sir.toUplc()
@@ -154,7 +154,7 @@ class FromDataDerivationTest
 
     test("derived FromData.deriveEnum") {
         import ToDataAdt.given
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
         given PlutusVM = PlutusVM.makePlutusV2VM()
         val sir = compile { (d: Data) => Adt.derivedFromData(d).toData }
         val term = sir.toUplc()
@@ -178,7 +178,7 @@ class FromDataDerivationTest
     /*
     test("derived FromData.deriveEnum: concrete-case") {
         import ToDataAdt.given
-        import scalus.uplc.TermDSL.{*, given}
+        import scalus.uplc.TermDSL.given
         val sir = compile { (d: Data) => Adt.derivedFromData(d).toData }
         val term = sir.toUplc()
         val r = Adt.A

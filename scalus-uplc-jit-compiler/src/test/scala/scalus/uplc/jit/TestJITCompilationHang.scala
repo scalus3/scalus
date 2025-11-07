@@ -5,8 +5,6 @@ import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.eval.*
 import scalus.uplc.jit.mincont.JIT
 
-import java.nio.file.{Files, Paths}
-
 object TestJITCompilationHang {
     def main(args: Array[String]): Unit = {
         if args.length == 0 then

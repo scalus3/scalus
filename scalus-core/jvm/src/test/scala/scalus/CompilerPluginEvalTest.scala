@@ -117,7 +117,6 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("compile multiple inner matches") {
-        import scalus.prelude.List.*
         val compiled = compile {
             ((true, "test"), (false, "test")) match
                 case ((a, _), (b, _)) => a == b

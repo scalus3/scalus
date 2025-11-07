@@ -5,9 +5,9 @@ import scalus.builtin.Builtins.sha3_256
 import scalus.testing.kit.ScalusTest
 import scalus.ledger.api.v1.PosixTime
 import scalus.builtin.ByteString
+import scalus.builtin.Data.toData
 import scalus.examples.TestUtil
 import scalus.cardano.ledger.*
-import scalus.builtin.ToData.*
 import scalus.cardano.txbuilder.BuilderContext
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{LedgerProvider, Provider}

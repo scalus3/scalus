@@ -5,7 +5,6 @@ import scalus.*
 import scalus.Compiler.compile
 import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM, Result}
 import scalus.uplc.jit.hybrid.HybridJIT
-import scalus.uplc.jit.mincont
 import scalus.uplc.jit.nativestack.JIT
 import scalus.uplc.{Constant, Term}
 

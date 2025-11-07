@@ -5,7 +5,6 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.Compiler.{compile, fieldAsData}
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, Data}
-import scalus.ledger.api.v1.*
 import scalus.prelude.List.{Cons, Nil}
 import scalus.sir.SIR.*
 import scalus.sir.*
@@ -444,7 +443,6 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     )
 
     test("compile datatypes") {
-        import scalus.ledger.api.v1.PubKeyHash
         val compiled = compile {
             val pkh = new scalus.ledger.api.v1.PubKeyHash(hex"deadbeef")
             pkh.hash
