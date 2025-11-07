@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.testing.kit
 
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
@@ -11,6 +11,8 @@ import scalus.cardano.node.Provider
 import scalus.testing.kit.ScalusTest
 
 object TestUtil extends ScalusTest {
+
+    extension (key: PubKeyHash) def address = TestUtil.createTestAddress(key.hash.toHex)
 
     val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
