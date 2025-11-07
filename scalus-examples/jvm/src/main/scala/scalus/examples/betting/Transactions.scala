@@ -56,7 +56,7 @@ class Transactions(
         player2: PubKeyHash,
         oracle: PubKeyHash,
         expiration: PosixTime,
-        betUtxo: (TransactionInput, TransactionOutput) // player1's lovelace bet & issued token
+        betUtxo: Utxo // player1's lovelace bet & issued token
     ): Either[String, Transaction] =
         val lovelace = Value.lovelace(bet)
         wallet
@@ -85,15 +85,14 @@ class Transactions(
             .tupled(wallet.collateralInputs.head)
             .build()
 
-    // winner: true - 'player2', false - 'player1'
     def win(
-        winner: Boolean,
+        isJoinWin: Boolean,
         player1: PubKeyHash,
         player2: PubKeyHash,
         oracle: PubKeyHash,
-        betUtxo: (TransactionInput, TransactionOutput) // player2's lovelace bet & issued token
+        betUtxo: Utxo // player2's lovelace bet & issued token
     ): Either[String, Transaction] =
-        val payout = if winner then player2 else player1
+        val payout = if isJoinWin then player2 else player1
         PaymentBuilder(context)
             .withStep(
               TransactionBuilderStep.Spend(

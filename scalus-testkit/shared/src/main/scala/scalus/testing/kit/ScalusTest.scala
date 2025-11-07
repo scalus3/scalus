@@ -3,9 +3,14 @@ package scalus.testing.kit
 import org.scalacheck.Arbitrary
 import scalus.*
 import scalus.builtin.Builtins.blake2b_224
+import scalus.builtin.Builtins.blake2b_256
+import scalus.builtin.ByteString
+import scalus.builtin.Data
 import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
+import scalus.cardano.ledger.TransactionHash
+import scalus.cardano.ledger.TransactionInput
+import scalus.ledger.api.v1.Credential.PubKeyCredential
+import scalus.ledger.api.v1.Credential.ScriptCredential
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
@@ -25,15 +30,18 @@ object Mock:
     val rootTxHash: ByteString =
         hex"5a077cbcdffb88b104f292aacb9687ce93e2191e103a30a0cc5505c18b719f98"
 
-    private def mockHash(variation: BigInt, root: ByteString): ByteString =
-        val variationBytes = ByteString.fromArray(variation.toByteArray)
-        blake2b_224(appendByteString(variationBytes, root))
+    private def mockHash(
+        variation: BigInt,
+        root: ByteString,
+        hash: ByteString => ByteString
+    ): ByteString = hash:
+        appendByteString(ByteString.fromArray(variation.toByteArray), root)
 
     private def mockKeyHash(variation: BigInt): ByteString =
-        mockHash(variation, rootKeyHash)
+        mockHash(variation, rootKeyHash, blake2b_224)
 
     private def mockTxHash(variation: BigInt): TxId =
-        TxId(mockHash(variation, rootTxHash))
+        TxId(mockHash(variation, rootTxHash, blake2b_256))
 
     def mockPubKeyHash(variation: BigInt): PubKeyHash = PubKeyHash(mockKeyHash(variation))
 
@@ -42,6 +50,10 @@ object Mock:
 
     def mockTxOutRef(variation: BigInt, idx: BigInt): TxOutRef =
         TxOutRef(mockTxHash(variation), idx)
+
+    def mockTxInput(variation: BigInt, idx: BigInt): TransactionInput =
+        val TxOutRef(id, index) = mockTxOutRef(variation, idx)
+        TransactionInput(TransactionHash.fromByteString(id.hash), index.toInt)
 
 trait ScalusTest extends ArbitraryInstances {
     protected given PlutusVM = PlutusVM.makePlutusV3VM()
