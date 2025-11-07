@@ -22,7 +22,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
     private def getEnvOrSkip(name: String, testEnv: TestEnv): String = {
         val postfix = testEnv match {
-            case TestEnv.Local => "LOCAL"
+            case TestEnv.Local   => "LOCAL"
             case TestEnv.Preprod => "PREPROD"
         }
         val key = s"${name}_$postfix"
@@ -54,15 +54,13 @@ class HtlcIntegrationTest extends AnyFunSuite {
               slotConfig = yaciSlotConfig
             )
             val env = Environment(
-              cardanoInfo.protocolParams,
-              cardanoInfo.slotConfig,
+              cardanoInfo,
               evaluator = PlutusScriptEvaluator(
                 slotConfig = cardanoInfo.slotConfig,
                 initialBudget = ExBudget.enormous,
                 protocolMajorVersion = cardanoInfo.majorProtocolVersion,
                 costModels = cardanoInfo.protocolParams.costModels
-              ),
-              network = cardanoInfo.network
+              )
             )
             TestContext(client, cardanoInfo, env)
 
@@ -76,15 +74,13 @@ class HtlcIntegrationTest extends AnyFunSuite {
               slotConfig = SlotConfig.Preprod
             )
             val env = Environment(
-              cardanoInfo.protocolParams,
-              cardanoInfo.slotConfig,
+              cardanoInfo,
               evaluator = PlutusScriptEvaluator(
                 slotConfig = cardanoInfo.slotConfig,
                 initialBudget = ExBudget.enormous,
                 protocolMajorVersion = cardanoInfo.majorProtocolVersion,
                 costModels = cardanoInfo.protocolParams.costModels
-              ),
-              network = cardanoInfo.network
+              )
             )
             TestContext(client, cardanoInfo, env)
     }
@@ -136,10 +132,12 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val image = scalus.builtin.Builtins.sha3_256(preimage)
         val timeout = testEnv match {
             case TestEnv.Local =>
-                val timeoutSlot = ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
+                val timeoutSlot =
+                    ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
                 BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot))
             case TestEnv.Preprod =>
-                val timeoutSlot = ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
+                val timeoutSlot =
+                    ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
                 BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot))
         }
         val lockAmount = 8_000_000L
@@ -154,7 +152,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
           timeout
         )
 
-        val lockTx = lockTxResult.toOption.getOrElse(fail(s"Failed to build lock tx: $lockTxResult"))
+        val lockTx =
+            lockTxResult.toOption.getOrElse(fail(s"Failed to build lock tx: $lockTxResult"))
         val signer = makeSignerFrom("m/1852'/1815'/0'/0/0", mnemonic)
         val signedLockTx = signer.signTx(lockTx)
 
@@ -197,7 +196,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
                 // yaci time works a lil' differently
                 ctx.cardanoInfo.slotConfig.slotToTime(100L)
             case TestEnv.Preprod =>
-                val revealSlot = ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) - 100
+                val revealSlot =
+                    ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) - 100
                 ctx.cardanoInfo.slotConfig.slotToTime(revealSlot)
         }
 

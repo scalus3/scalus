@@ -15,22 +15,18 @@ object TestUtil extends ScalusTest {
     val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
     val testEnvironmentWithoutEvaluator: Environment = Environment(
-      protocolParams = testProtocolParams,
-      slotConfig = CardanoInfo.mainnet.slotConfig,
+      cardanoInfo = CardanoInfo.mainnet,
       evaluator = (_: Transaction, _: Map[TransactionInput, TransactionOutput]) => Seq.empty,
-      network = CardanoInfo.mainnet.network
     )
 
     val testEnvironmentWithEvaluator: Environment = Environment(
-      protocolParams = testProtocolParams,
-      slotConfig = CardanoInfo.mainnet.slotConfig,
+      cardanoInfo = CardanoInfo.mainnet,
       evaluator = PlutusScriptEvaluator(
         slotConfig = CardanoInfo.mainnet.slotConfig,
         initialBudget = ExBudget.enormous,
         protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
         costModels = testProtocolParams.costModels
       ),
-      network = CardanoInfo.mainnet.network
     )
 
     def createTestAddress(keyHash: String): ShelleyAddress = {

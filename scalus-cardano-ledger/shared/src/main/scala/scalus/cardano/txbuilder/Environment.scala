@@ -1,7 +1,7 @@
 package scalus.cardano.txbuilder
 
 import scalus.cardano.address.Network
-import scalus.cardano.ledger.{Era, PlutusScriptEvaluator, ProtocolParams, SlotConfig}
+import scalus.cardano.ledger.*
 
 case class Environment(
     protocolParams: ProtocolParams,
@@ -10,3 +10,14 @@ case class Environment(
     network: Network,
     era: Era = Era.Conway,
 )
+
+object Environment {
+    def apply(cardanoInfo: CardanoInfo, evaluator: PlutusScriptEvaluator): Environment =
+        Environment(
+          protocolParams = cardanoInfo.protocolParams,
+          slotConfig = cardanoInfo.slotConfig,
+          evaluator = evaluator,
+          network = cardanoInfo.network,
+          era = Era.Conway
+        )
+}
