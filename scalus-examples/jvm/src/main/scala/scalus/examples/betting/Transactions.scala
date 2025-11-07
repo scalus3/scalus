@@ -2,7 +2,7 @@ package scalus.examples.betting
 
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
-import scalus.builtin.ToData.*
+import scalus.builtin.Data.*
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*

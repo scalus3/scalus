@@ -6,6 +6,7 @@ import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
 import scalus.builtin.ToData.*
+import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.utils.ScriptFeeComparison

@@ -15,7 +15,7 @@ import Scalar as ScalusScalar
 import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString.hex
-import scalus.builtin.ToData.toData
+import scalus.builtin.Data.toData
 import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, ByteString, Data, FromData, ToData}
 import scalus.ledger.api.v1.{PosixTime, Value}
 import scalus.ledger.api.v1.Value.+

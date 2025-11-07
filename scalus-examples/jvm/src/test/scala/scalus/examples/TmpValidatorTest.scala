@@ -6,6 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.builtin.ByteString
 import scalus.builtin.ToData.*
+import scalus.builtin.Data.toData
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.testing.kit.ScalusTest

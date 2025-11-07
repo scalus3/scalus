@@ -30,7 +30,7 @@ object InputCountValidatorContract:
     val script: Program = compiledValidator.toUplc(generateErrorTraces = true).plutusV3
 
 object Offchain:
-    import scalus.builtin.ToData.toData
+    import scalus.builtin.Data.toData
     import scalus.cardano.address.Address
     import scalus.cardano.ledger.{Transaction, TransactionInput, TransactionOutput}
     import scalus.cardano.ledger.Script.PlutusV3

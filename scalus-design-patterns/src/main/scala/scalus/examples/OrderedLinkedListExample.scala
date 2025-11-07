@@ -216,7 +216,7 @@ object OrderedLinkedList extends DataParameterizedValidator:
 object OrderedLinkedListContract:
 
     inline def make(param: Config)(using options: scalus.Compiler.Options) =
-        import scalus.builtin.ToData.toData
+        import scalus.builtin.Data.toData
         compileWithOptions(options, OrderedLinkedList.validate).toUplc().plutusV3 $ param.toData
 
     inline def compiled(using options: scalus.Compiler.Options) =

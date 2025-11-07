@@ -16,7 +16,7 @@ import ValueExtensions.{containsCurrencySymbol, containsExactlyOneAsset, onlyNon
 import scalus.*
 import scalus.builtin.Builtins.{serialiseData, verifyEd25519Signature}
 import scalus.builtin.ByteString.hex
-import scalus.builtin.ToData.toData
+import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, FromData, ToData}
 import scalus.ledger.api.v1.{PosixTime, Value}
 import scalus.ledger.api.v1.IntervalBoundType.Finite
