@@ -41,6 +41,8 @@ class BettingTest extends AnyFunSuite, ScalusTest:
             result
      */
 
+    // TODO: test wrong tx fails
+
     test("Verify that a bet can be properly initialized"):
         val player1 = Mock.mockPubKeyHash(1)
         // Create test datum for a new bet

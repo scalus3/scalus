@@ -46,6 +46,8 @@ class Transactions(
           Value.asset(script.scriptHash, token, amount, Coin(bet)),
           BetDatum(player1, player2, oracle, expiration).toData
         )
+        .collateral
+        .tupled(wallet.collateralInputs.head)
         .build()
 
     def join(
@@ -54,30 +56,34 @@ class Transactions(
         player2: PubKeyHash,
         oracle: PubKeyHash,
         expiration: PosixTime,
-        tokenUtxo: (TransactionInput, TransactionOutput) // token issued by an initial bet
-    ): Either[String, Transaction] = wallet
-        .selectInputs(Value.lovelace(bet))
-        .get
-        .foldLeft(PaymentBuilder(context)):
-            case (builder, (utxo, witness)) =>
-                builder.spendOutputs((utxo.input, utxo.output), witness)
-        .withStep(
-          TransactionBuilderStep.Spend(
-            TransactionUnspentOutput(tokenUtxo),
-            ThreeArgumentPlutusScriptWitness(
-              scriptSource = ScriptSource.PlutusScriptValue(script),
-              redeemer = Action.Join.toData,
-              datum = Datum.DatumInlined,
-              additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player2.hash)))
+        betUtxo: (TransactionInput, TransactionOutput) // player1's lovelace bet & issued token
+    ): Either[String, Transaction] =
+        val lovelace = Value.lovelace(bet)
+        wallet
+            .selectInputs(lovelace)
+            .get
+            .foldLeft(PaymentBuilder(context)):
+                case (builder, (utxo, witness)) =>
+                    builder.spendOutputs((utxo.input, utxo.output), witness)
+            .withStep(
+              TransactionBuilderStep.Spend(
+                TransactionUnspentOutput(betUtxo),
+                ThreeArgumentPlutusScriptWitness(
+                  scriptSource = ScriptSource.PlutusScriptValue(script),
+                  redeemer = Action.Join.toData,
+                  datum = Datum.DatumInlined,
+                  additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player2.hash)))
+                )
+              )
             )
-          )
-        )
-        .payToScript(
-          scriptAddress,
-          tokenUtxo._2.value + Value.lovelace(bet),
-          BetDatum(player1, player2, oracle, expiration).toData
-        )
-        .build()
+            .payToScript(
+              scriptAddress,
+              betUtxo._2.value + lovelace,
+              BetDatum(player1, player2, oracle, expiration).toData
+            )
+            .collateral
+            .tupled(wallet.collateralInputs.head)
+            .build()
 
     // winner: true - 'player2', false - 'player1'
     def win(
@@ -85,5 +91,22 @@ class Transactions(
         player1: PubKeyHash,
         player2: PubKeyHash,
         oracle: PubKeyHash,
-        expiration: PosixTime
-    ): Either[String, Transaction] = ???
+        betUtxo: (TransactionInput, TransactionOutput) // player2's lovelace bet & issued token
+    ): Either[String, Transaction] =
+        val payout = if winner then player2 else player1
+        PaymentBuilder(context)
+            .withStep(
+              TransactionBuilderStep.Spend(
+                TransactionUnspentOutput(betUtxo),
+                ThreeArgumentPlutusScriptWitness(
+                  scriptSource = ScriptSource.PlutusScriptValue(script),
+                  redeemer = Action.AnnounceWinner(payout).toData,
+                  datum = Datum.DatumInlined,
+                  additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(oracle.hash)))
+                )
+              )
+            )
+            .payTo(Address.fromByteString(payout.hash), betUtxo._2.value)
+            .collateral
+            .tupled(wallet.collateralInputs.head)
+            .build()

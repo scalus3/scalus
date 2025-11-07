@@ -69,6 +69,8 @@ object Betting extends Validator:
                         "Initial bet spent input must be present,\n" +
                             "current bet datum must be inline"
 
+        // ???: player2 can spend extra token to create a malformed bet, e.g. oracle === player1
+        // TODO: minted token should be single
         redeemer.to[Action] match
             case Action.Join =>
                 val outputLovelace = txInfo.outputs.filter(_.address === address) match
