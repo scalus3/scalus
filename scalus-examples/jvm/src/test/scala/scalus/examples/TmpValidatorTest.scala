@@ -8,7 +8,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.ToData.*
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
-import scalus.testing.kit.ScalusTest
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 
 class TmpValidatorTest extends AnyFunSuite, ScalusTest {
