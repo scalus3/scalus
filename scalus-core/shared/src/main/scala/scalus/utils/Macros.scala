@@ -378,19 +378,6 @@ object Macros {
         impl
     }
 
-    /** Deprecated alias for inlineResource.
-      *
-      * @param name
-      *   resource filename
-      * @return
-      *   resource contents as a string at compile time
-      * @deprecated
-      *   use inlineResource
-      */
-    @deprecated("use inlineResource", "0.11.0")
-    def inlineBuiltinCostModelJsonImpl(using Quotes)(name: Expr[String]): Expr[String] =
-        inlineResource(name)
-
     /** Read a textual resource from the project sources at compile time.
       *
       * This macro reads the resource file named `name` from the compile-time source root (defaults

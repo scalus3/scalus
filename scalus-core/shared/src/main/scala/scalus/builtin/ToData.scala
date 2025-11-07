@@ -1,7 +1,7 @@
 package scalus.builtin
 
-import scalus.CompileDerivations
-import scalus.builtin.Builtins.{bData, constrData, encodeUtf8, iData, mkCons, mkNilData}
+import scalus.builtin.Builtins.*
+import scalus.{Compile, CompileDerivations, Ignore}
 
 import scala.quoted.*
 
@@ -12,29 +12,16 @@ trait ToData[-A] extends Function1[A, Data] with CompileDerivations {
 
 /** ToData[A] derivation macros.
   */
-@scalus.Compile
+@Compile
 object ToData {
 
-    extension [A: ToData](a: A) inline def toData: Data = summon[ToData[A]].apply(a)
+    extension [A: ToData](a: A)
+        @deprecated("Use Data.toData instead", "0.13.0")
+        inline def toData: Data = summon[ToData[A]].apply(a)
 
-    inline def derived[A]: ToData[A] = ${
-        ToDataMacros.toDataImpl[A]
-    }
-
-    @deprecated
-    inline def deriveCaseClass[T](inline constrIdx: Int): ToData[T] = ${
-        ToDataMacros.deriveCaseClassMacro[T]('{ constrIdx })
-    }
-
-    /** Derive a ToData instance for an enum.
-      *
-      * @tparam T
-      *   the enum type
-      * @return
-      *   a ToData instance for T
+    /** Derives a ToData instance for type A
       */
-    @deprecated
-    inline def deriveEnum[T]: ToData[T] = ${ ToDataMacros.deriveEnumMacro[T] }
+    inline def derived[A]: ToData[A] = ${ ToDataMacros.toDataImpl[A] }
 
     given ToData[Boolean] = (a: Boolean) =>
         if a then constrData(1, mkNilData()) else constrData(0, mkNilData())
@@ -42,9 +29,9 @@ object ToData {
     @uplcIntrinsic("iData")
     given bigIntToData: ToData[BigInt] = (a: BigInt) => iData(a)
     given ToData[Data] = (a: Data) => a
-    @scalus.Ignore
+    @Ignore
     given ToData[Int] = (a: Int) => iData(a)
-    @scalus.Ignore
+    @Ignore
     given ToData[Long] = (a: Long) => iData(a)
     @uplcIntrinsic("bData")
     given ToData[ByteString] = (a: ByteString) => bData(a)
@@ -62,7 +49,7 @@ object ToData {
             )
 
     // TODO: are we need this?
-    @scalus.Ignore
+    @Ignore
     given eitherToData[A: ToData, B: ToData]: ToData[Either[A, B]] =
         (a: Either[A, B]) =>
             a match

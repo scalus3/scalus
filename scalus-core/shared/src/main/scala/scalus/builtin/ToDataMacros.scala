@@ -1,9 +1,8 @@
 package scalus.builtin
 
-import scala.collection.immutable.List
 import scala.quoted.*
 
-object ToDataMacros {
+private object ToDataMacros {
 
     def toDataImpl[A: Type](using Quotes): Expr[ToData[A]] = {
         '{ (a: A) =>
@@ -11,7 +10,7 @@ object ToDataMacros {
         }
     }
 
-    def generateToDataApply[A: Type](a: Expr[A])(using Quotes): Expr[Data] = {
+    private def generateToDataApply[A: Type](a: Expr[A])(using Quotes): Expr[Data] = {
         import quotes.reflect.*
         // TODO:  SIRValue(SIRType[A]).generateToDataApply(a)
         val tpe = TypeRepr.of[A].dealias.widen
@@ -38,7 +37,7 @@ object ToDataMacros {
             )
     }
 
-    def deriveToDataCaseClassApply[A: Type](
+    private def deriveToDataCaseClassApply[A: Type](
         a: Expr[A],
         constrIdx: Int
     )(using quotes0: Quotes): Expr[Data] = {
@@ -106,7 +105,7 @@ object ToDataMacros {
 
     }
 
-    def deriveToDataSumCaseClassApply[A: Type](
+    private def deriveToDataSumCaseClassApply[A: Type](
         value: Expr[A]
     )(using quotes0: Quotes): Expr[Data] = {
         import quotes.reflect.*
@@ -195,155 +194,6 @@ object ToDataMacros {
         }
 
         genMatch(value.asTerm).asExprOf[Data]
-    }
-
-    def deriveEnumMacro[T: Type](using quotes0: Quotes): Expr[ToData[T]] = {
-        import quotes.reflect.*
-
-        val constrTpe = TypeRepr.of[T]
-        val typeSymbol = TypeRepr.of[T].widen.dealias.typeSymbol
-        if !typeSymbol.flags.is(Flags.Enum) then
-            report.errorAndAbort(
-              s"deriveEnum can only be used with enums, got ${typeSymbol.fullName}"
-            )
-
-        def genRhs(constrIdx: Int, bindings: List[(Symbol, TypeRepr)])(using Quotes) = '{
-            Builtins.constrData(
-              BigInt(${ Expr(constrIdx) }),
-              ${
-                  val args = bindings
-                      .map { case (binding, tpe) =>
-                          tpe.asType match
-                              case '[t] =>
-                                  Expr.summon[ToData[t]] match
-                                      case None =>
-                                          report.errorAndAbort(
-                                            s"Could not find given ToData[${tpe.widen.show}]"
-                                          )
-                                      case Some(toData) =>
-                                          val arg = Ident(binding.termRef).asExprOf[t]
-                                          '{ $toData($arg) }
-                      }
-                      .asInstanceOf[List[Expr[Data]]]
-                  args.foldRight('{ scalus.builtin.Builtins.mkNilData() }) { (data, acc) =>
-                      '{ scalus.builtin.Builtins.mkCons($data, $acc) }
-                  }
-              }
-            )
-        }
-
-        def genMatch(prodTerm: Term)(using Quotes) = {
-            val cases = typeSymbol.children.zipWithIndex.map { (childTypeSymbol, tag) =>
-                if childTypeSymbol.caseFields.isEmpty then
-                    val rhs = genRhs(tag, Nil).asTerm
-                    CaseDef(Ident(childTypeSymbol.termRef), None, rhs)
-                else
-                    val classSym = childTypeSymbol
-                    val companionModuleRef = classSym.companionModule
-                    val unapplyRef = companionModuleRef.methodMember("unapply").head.termRef
-                    val constr = classSym.primaryConstructor
-                    val params = constr.paramSymss.flatten
-                    val paramsNameType = params.map(p => p.name -> p.typeRef)
-                    val bindingsSymbols = paramsNameType.map { (name, tpe) =>
-                        (Symbol.newBind(Symbol.noSymbol, name, Flags.EmptyFlags, tpe), tpe)
-                    }
-
-                    val bindings = bindingsSymbols.map { (symbol, _) =>
-                        Bind(symbol, Wildcard())
-                    }
-                    val rhs = genRhs(tag, bindingsSymbols).asTerm
-                    CaseDef(
-                      Typed(
-                        Unapply(Ident(unapplyRef), Nil, bindings).asInstanceOf[Term],
-                        TypeTree.ref(childTypeSymbol)
-                      ),
-                      None,
-                      rhs
-                    )
-            }
-            // val uncheckedAnn: Term = New(
-            //  TypeIdent(Symbol.requiredClass("scala.unchecked"))
-            // )
-            // val annotatedType = Annotated(Inferred(prodTerm.tpe), uncheckedAnn)
-            val uncheckedProdTerm = annotateUnchecked(using quotes0)(prodTerm)
-            val m =
-                Match(uncheckedProdTerm, cases)
-            m
-        }
-
-        '{ (product: T) =>
-            ${
-                val prodTerm = '{ product }.asTerm
-                val code = genMatch(prodTerm).asExprOf[Data]
-                code
-            }
-        }
-    }
-
-    def deriveCaseClassMacro[T: Type](constrIdx: Expr[Int])(using Quotes): Expr[ToData[T]] = {
-        import quotes.reflect.*
-        val classSym = TypeTree.of[T].symbol
-        val companionModuleRef = classSym.companionModule
-        val unapplyRef = companionModuleRef.methodMember("unapply").head.termRef
-        val constr = classSym.primaryConstructor
-        val params = constr.paramSymss.flatten
-        val paramsNameType = params.map(p => p.name -> p.typeRef)
-
-        /*
-      Generate a pattern match to introduce all the params,
-      to avoid a.field1, a.field2, etc.
-      Something ike:
-        a match
-          case A(field1, field2, ...) =>
-            constrData(
-              BigInt($constrIdx),
-              mkCons(field1.toData, mkCons(field2.toData, ...))
-            )
-         */
-        def genMatch(prodTerm: Term, params: List[(String, TypeRepr)])(using Quotes) = {
-            val bindingsSymbols = params.map { (name, tpe) =>
-                (Symbol.newBind(Symbol.noSymbol, name, Flags.EmptyFlags, tpe), tpe)
-            }
-
-            val bindings = bindingsSymbols.map { (symbol, _) =>
-                Bind(symbol, Wildcard())
-            }
-            val rhs = genRhs(bindingsSymbols).asTerm
-            Match(prodTerm, List(CaseDef(Unapply(Ident(unapplyRef), Nil, bindings), None, rhs)))
-        }
-
-        def genRhs(bindings: List[(Symbol, TypeRepr)])(using Quotes) = '{
-            Builtins.constrData(
-              BigInt($constrIdx),
-              ${
-                  val args = bindings
-                      .map { case (binding, tpe) =>
-                          tpe.asType match
-                              case '[t] =>
-                                  Expr.summon[ToData[t]] match
-                                      case None =>
-                                          report.errorAndAbort(
-                                            s"Could not find given ToData[${tpe.widen.show}]"
-                                          )
-                                      case Some(toData) =>
-                                          val arg = Ident(binding.termRef).asExprOf[t]
-                                          '{ $toData($arg) }
-                      }
-                      .asInstanceOf[List[Expr[Data]]]
-                  args.foldRight('{ scalus.builtin.Builtins.mkNilData() }) { (data, acc) =>
-                      '{ scalus.builtin.Builtins.mkCons($data, $acc) }
-                  }
-              }
-            )
-        }
-
-        '{ (product: T) =>
-            ${
-                val prodTerm = '{ product }.asTerm
-                genMatch(prodTerm, paramsNameType).asExprOf[Data]
-            }
-        }
-
     }
 
     /** Find the index of the given type constructor in the ADT. 0 if this index is not a giving
