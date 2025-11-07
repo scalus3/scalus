@@ -153,14 +153,51 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
     }
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValue = {
-        throw LoweringException("Function type can't be upcasted", pos)
+        // For function types, we need to create a wrapper due to variance:
+        // Fun(A1, B1) <: Fun(A2, B2) if A2 <: A1 (contravariant) and B1 <: B2 (covariant)
+        // Wrapper: \x:A2 -> upcast[B1, B2](originalFunc(upcast[A2, A1](x)))
+
+        (input.sirType, targetType) match {
+            case (SIRType.Fun(inType1, outType1), SIRType.Fun(inType2, outType2)) =>
+                val argName = lctx.uniqueVarName("upcast_arg")
+                val inRepr2 = lctx.typeGenerator(inType2).defaultRepresentation(inType2)
+                val outRepr2 = lctx.typeGenerator(outType2).defaultRepresentation(outType2)
+                val outRepr1 = lctx.typeGenerator(outType1).defaultRepresentation(outType1)
+
+                lvLamAbs(
+                  argName,
+                  inType2,
+                  inRepr2,
+                  arg =>
+                      // Upcast argument from A2 to A1 (contravariant position)
+                      val convertedArg = arg.maybeUpcast(inType1, pos)
+                      // Apply original function
+                      val result = lvApply(
+                        input,
+                        convertedArg,
+                        pos,
+                        Some(outType1),
+                        Some(outRepr1)
+                      )
+                      // Upcast result from B1 to B2 (covariant position)
+                      result.maybeUpcast(outType2, pos)
+                  ,
+                  pos
+                )
+
+            case _ =>
+                throw LoweringException(
+                  s"Function type upcast requires both types to be functions: ${input.sirType.show} to ${targetType.show}",
+                  pos
+                )
+        }
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue = {
+    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
         throw LoweringException(
-          "Constr can't be generated for function type",
+          s"Constr can't be generated for function type: name=${constr.name}, tp=${constr.tp.show}",
           constr.anns.pos
         )
     }

@@ -179,7 +179,27 @@ object Lowering {
                   param,
                   lctx.typeGenerator(param.tp).defaultRepresentation(param.tp),
                   _id => {
-                      summon[LoweringContext].lower(term, optTermTargetType)
+                      val loweredBody = summon[LoweringContext].lower(term, optTermTargetType)
+                      // If there's a target return type, try to upcast the body
+                      // This handles cases where body returns a subtype of the declared return type
+                      optTermTargetType match
+                          case Some(targetType) =>
+                              if lctx.debug then
+                                  lctx.log(
+                                    s"[Lambda body upcast] Upcasting body from ${loweredBody.sirType.show} to ${targetType.show}, representation: ${loweredBody.representation}"
+                                  )
+                              val result = loweredBody.maybeUpcast(targetType, anns.pos)
+                              if lctx.debug then
+                                  lctx.log(
+                                    s"[Lambda body upcast] After upcast: ${result.sirType.show}, representation: ${result.representation}"
+                                  )
+                              result
+                          case None =>
+                              if lctx.debug then
+                                  lctx.log(
+                                    s"[Lambda body upcast] No target type, body type: ${loweredBody.sirType.show}, representation: ${loweredBody.representation}"
+                                  )
+                              loweredBody
                   },
                   anns.pos
                 )
@@ -320,7 +340,16 @@ object Lowering {
                 if !flags.isRec then
                     val bindingValues = bindings.map { b =>
                         var prevDebug = lctx.debug
-                        val rhs = lowerSIR(b.value).maybeUpcast(b.tp, anns.pos)
+                        val loweredRhs = lowerSIR(b.value)
+                        if lctx.debug then
+                            lctx.log(
+                              s"[LET binding] ${b.name}: lowered RHS type ${loweredRhs.sirType.show}, repr ${loweredRhs.representation}, target type ${b.tp.show}"
+                            )
+                        val rhs = loweredRhs.maybeUpcast(b.tp, anns.pos)
+                        if lctx.debug then
+                            lctx.log(
+                              s"[LET binding] ${b.name}: after upcast type ${rhs.sirType.show}, repr ${rhs.representation}"
+                            )
                         val varId = lctx.uniqueVarName(b.name)
                         lctx.debug = prevDebug
                         val varVal = VariableLoweredValue(

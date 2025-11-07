@@ -743,11 +743,6 @@ object SIRUnify {
 
         val env = env0.withUpcasting
 
-        if env.debug then
-            println(
-              s"subtypeSeq: \nchildCandidate=$childCandidate\nparentCandidate=$parentCandidate"
-            )
-
         (childCandidate, parentCandidate) match
             case (SIRType.TypeNothing, SIRType.TypeNothing) => List(SIRType.TypeNothing)
             case (SIRType.TypeNothing, _)                   => List(childCandidate, parentCandidate)
@@ -800,7 +795,18 @@ object SIRUnify {
                             case Nil   => List.empty
                             case other => cc1 :: other
             case (ccLeft: SIRType.SumCaseClass, tlRight: SIRType.CaseClass) =>
-                List.empty
+                // Check if this is upcasting a sum case to its parent sum type
+                // e.g. Order.Less <: Order
+                // CaseClass has a parent field pointing to the sum class
+                tlRight.parent match
+                    case Some(parent) =>
+                        unifyType(ccLeft, parent, env) match
+                            case UnificationSuccess(_, _) =>
+                                List(tlRight)
+                            case UnificationFailure(_, _, _) =>
+                                List.empty
+                    case None =>
+                        List.empty
             case (ccLeft: SIRType.SumCaseClass, ccRight: SIRType.SumCaseClass) =>
                 unifyDataDecl(ccLeft.decl, ccRight.decl, env) match
                     case UnificationSuccess(env, decl1) =>
@@ -853,15 +859,46 @@ object SIRUnify {
                 //                    List.empty
                 //        }
             case (SIRType.Fun(inLeft, outLeft), SIRType.Fun(inRight, outRight)) =>
-                // TODO: add covariance/contravariance to env upcasting.
+                // Check if function types can be related through subtyping
+                // Function types are contravariant in parameters and covariant in return type
+                if env.debug then
+                    println(
+                      s"[subtypeSeq Fun] Checking ${SIRType.Fun(inLeft, outLeft).show} <: ${SIRType.Fun(inRight, outRight).show}"
+                    )
                 unifyType(inLeft, inRight, env.withoutUpcasting) match
                     case UnificationSuccess(env1, in) =>
                         unifyType(outLeft, outRight, env1) match
                             case UnificationSuccess(env2, out) =>
+                                if env.debug then
+                                    println(
+                                      s"[subtypeSeq Fun] Types unify, returning [${SIRType.Fun(in, out).show}]"
+                                    )
                                 List(SIRType.Fun(in, out))
                             case UnificationFailure(_, _, _) =>
-                                List.empty
+                                // Try subtyping on return types (covariant position)
+                                val outSeq = subtypeSeq(outLeft, outRight, env)
+                                if outSeq.nonEmpty then
+                                    // Return type can be upcasted, so function type can be upcasted
+                                    // Return both source and target so maybeUpcast can skip the first and upcast to the rest
+                                    val result = List(
+                                      SIRType.Fun(inLeft, outLeft),
+                                      SIRType.Fun(inRight, outRight)
+                                    )
+                                    if env.debug then
+                                        println(
+                                          s"[subtypeSeq Fun] Return type can upcast, outSeq = ${outSeq.map(_.show)}"
+                                        )
+                                        println(s"[subtypeSeq Fun] Returning ${result.map(_.show)}")
+                                    result
+                                else
+                                    if env.debug then
+                                        println(
+                                          s"[subtypeSeq Fun] Return type cannot upcast, returning empty"
+                                        )
+                                    List.empty
                     case UnificationFailure(_, _, _) =>
+                        if env.debug then
+                            println(s"[subtypeSeq Fun] Parameters don't unify, returning empty")
                         List.empty
             case (leftProxy: SIRType.TypeProxy, right) =>
                 if leftProxy.ref == null then
@@ -1234,7 +1271,7 @@ object SIRUnify {
                         env.filledTypes.get(v2) match {
                             case Some(tp2) =>
                                 unifyType(tp1, tp2, env) match {
-                                    case UnificationSuccess(env1, tp) =>
+                                    case UnificationSuccess(env1, _) =>
                                         UnificationSuccess(env1, v1)
                                     case failure @ UnificationFailure(path, left, right) =>
                                         failure

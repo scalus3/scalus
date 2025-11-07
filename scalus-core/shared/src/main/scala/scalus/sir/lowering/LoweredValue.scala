@@ -83,7 +83,13 @@ trait LoweredValue {
                 // if we cannot unify types, we need to upcast
                 //  to the target type.
                 val parentsSeq =
-                    SIRUnify.subtypeSeq(sirType, targetType, SIRUnify.Env.empty)
+                    SIRUnify.subtypeSeq(sirType, targetType, SIRUnify.Env.empty.withDebug)
+                if lctx.debug then
+                    println(s"[maybeUpcast] from ${sirType.show} to ${targetType.show}")
+                    println(s"[maybeUpcast] parentsSeq = ${parentsSeq.map(_.show)}")
+                    println(
+                      s"[maybeUpcast] will upcast to parentsSeq.tail = ${parentsSeq.tail.map(_.show)}"
+                    )
                 if parentsSeq.isEmpty then {
                     if lctx.debug then
                         lctx.log(

@@ -938,6 +938,12 @@ final class SIRCompiler(
 
                 val call = Ident(TermRef(NoPrefix, ddef.symbol))
                 Some(Block(List(ddef), Closure(Nil, call, EmptyTree)))
+            // Handle blocks with local definitions followed by a lambda
+            // This handles cases like: { val x = ...; val y = ...; (a, b) => ... }
+            case Block(stats, expr) =>
+                tryFixFunctionalInterface(env, expr).map { fixedExpr =>
+                    Block(stats, fixedExpr)
+                }
             case other =>
                 // report.error("Function interface not found")
                 // println(s"transstate functoon interface call unchanged: ${other.show}")
