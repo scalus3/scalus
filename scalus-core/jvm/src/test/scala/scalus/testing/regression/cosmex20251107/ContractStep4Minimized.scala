@@ -1,4 +1,4 @@
-package scalus.testing.regression.cosmex20251107.step4
+package scalus.testing.regression.cosmex20251107.minimized
 import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.toData
@@ -21,11 +21,7 @@ case class SignedSnapshot(
 )
 
 enum Action:
-    case Close(party: Party, signedSnapshot: SignedSnapshot)
-
-enum Party:
-    case Client
-    case Exchange
+    case Close(signedSnapshot: SignedSnapshot)
 
 case class OnChainState(
     clientPkh: PubKeyHash,
@@ -38,7 +34,6 @@ object CosmexToDataInstances {
     given Data.ToData[Snapshot] = ToData.derived
     given Data.ToData[SignedSnapshot] = ToData.derived
     given Data.ToData[Action] = ToData.derived
-    given Data.ToData[Party] = ToData.derived
     given Data.ToData[OnChainState] = ToData.derived
 }
 
@@ -47,7 +42,6 @@ object CosmexFromDataInstances {
     given Data.FromData[Snapshot] = FromData.derived
     given Data.FromData[SignedSnapshot] = FromData.derived
     given Data.FromData[Action] = FromData.derived
-    given Data.FromData[Party] = FromData.derived
     given Data.FromData[OnChainState] = FromData.derived
 }
 
@@ -59,13 +53,7 @@ object CosmexContract extends DataParameterizedValidator {
 
     def validSignedSnapshot(
         signedSnapshot: SignedSnapshot
-    ): Boolean = {
-        signedSnapshot match
-            case SignedSnapshot(signedSnapshot, _, _) =>
-                // This should trigger type error: signedSnapshot is Snapshot, not SignedSnapshot
-                // But we're passing it where SignedSnapshot is expected
-                true
-    }
+    ): Boolean = true
 
     inline def handleClose(
         state: OnChainState,
@@ -78,11 +66,7 @@ object CosmexContract extends DataParameterizedValidator {
                     case SignedSnapshot(signedSnapshot, _, _) =>
                         ownTxInResolvedTxOut match
                             case TxOut(_, _, _, _) =>
-                                // Here newSignedSnapshot should work, but due to shadowing bug
-                                // the compiler might resolve it to the wrong variable
-                                validSignedSnapshot(newSignedSnapshot) &&
-                                // Let's also try to use signedSnapshot in a type-sensitive way
-                                (signedSnapshot.snapshotVersion > 0)
+                                validSignedSnapshot(newSignedSnapshot)
     }
 
     inline override def spend(
@@ -95,13 +79,13 @@ object CosmexContract extends DataParameterizedValidator {
         val key = ByteString.fromHex("aabbccdd")
         val snap = Snapshot(1)
         val signed = SignedSnapshot(snap, key, key)
-        val action = Action.Close(Party.Client, signed)
+        val action = Action.Close(signed)
         val state = OnChainState(PubKeyHash(key), key, ownRef)
         val txOut = TxOut(Address(Credential.PubKeyCredential(PubKeyHash(key)), Option.None), Value.zero, v2.OutputDatum.NoOutputDatum, Option.None)
         
         import Action.*
         val result = action match
-            case Close(party, signedSnapshot) =>
+            case Close(signedSnapshot) =>
                 handleClose(
                   state,
                   signedSnapshot,
