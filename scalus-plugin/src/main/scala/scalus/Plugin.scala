@@ -254,7 +254,9 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                                       "Error building deps tree,  myModuleName=" + myModuleName
                                     )
                                     throw ex;
-                        val SIRLinkerModule = requiredModule("scalus.sir.linking.SIRLinker")
+                        val SIRLinkerModule = requiredModule(
+                          "scalus.compiler.sir.linking.SIRLinker"
+                        )
                         val SIRLinkerMethod = SIRLinkerModule.requiredMethod("link")
                         val sirPos =
                             createSIRPositionTree(SIRPosition.fromSrcPos(tree.srcPos), tree.span)
@@ -647,7 +649,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
         pos: SrcPos
     )(using Context): tpd.Tree = {
         import tpd.*
-        val linkerOptionsModule = requiredModule("scalus.sir.linking.SIRLinkerOptions")
+        val linkerOptionsModule = requiredModule("scalus.compiler.sir.linking.SIRLinkerOptions")
         val linkerCreateTree = ref(linkerOptionsModule).select(
           linkerOptionsModule.requiredMethod("fromCompilerOptions")
         )

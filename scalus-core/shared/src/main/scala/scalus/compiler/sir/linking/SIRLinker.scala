@@ -1,4 +1,4 @@
-package scalus.sir.linking
+package scalus.compiler.sir.linking
 
 import scalus.sir.*
 
