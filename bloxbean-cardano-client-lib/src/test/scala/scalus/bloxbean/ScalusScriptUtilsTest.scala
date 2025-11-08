@@ -8,7 +8,6 @@ import scalus.builtin.Data
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
-import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
 
 import java.math.BigInteger

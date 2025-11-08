@@ -6,7 +6,6 @@ import scalus.serialization.flat.EncoderState
 import scalus.serialization.flat.Flat
 
 object ProgramFlatCodec:
-    import FlatInstantces.given
     private val flatCodec = summon[Flat[DeBruijnedProgram]]
 
     /** Encodes [[DeBruijnedProgram]] as Flat encoded bytes.

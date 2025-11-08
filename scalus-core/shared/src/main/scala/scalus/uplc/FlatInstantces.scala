@@ -3,7 +3,7 @@ package scalus.uplc
 import io.bullet.borer.Cbor
 import scalus.builtin.Data
 import scalus.cardano.ledger.Word64
-import scalus.serialization.flat.{DecoderState, EncoderState, Flat, Natural, given}
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.serialization.flat
 import scalus.uplc.CommonFlatInstances.*
 import scalus.uplc.CommonFlatInstances.given
@@ -124,24 +124,3 @@ object FlatInstantces:
                     )
                 case 9 =>
                     Term.Case(arg = decode(decoder), cases = flat.decode(decoder))
-
-    given Flat[DeBruijnedProgram] with
-        val fn = summon[Flat[Natural]]
-        def bitSize(a: DeBruijnedProgram): Int =
-            fn.bitSize(Natural(BigInt(a.version._1))) +
-                fn.bitSize(Natural(BigInt(a.version._2))) +
-                fn.bitSize(Natural(BigInt(a.version._3))) +
-                summon[Flat[Term]].bitSize(a.term)
-
-        def encode(a: DeBruijnedProgram, enc: EncoderState): Unit =
-            fn.encode(Natural(BigInt(a.version._1)), enc)
-            fn.encode(Natural(BigInt(a.version._2)), enc)
-            fn.encode(Natural(BigInt(a.version._3)), enc)
-            flat.encode(a.term, enc)
-
-        def decode(decoder: DecoderState): DeBruijnedProgram =
-            val v1 = fn.decode(decoder).n.toInt
-            val v2 = fn.decode(decoder).n.toInt
-            val v3 = fn.decode(decoder).n.toInt
-            val term = flat.decode[Term](decoder)
-            DeBruijnedProgram((v1, v2, v3), term)

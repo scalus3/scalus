@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
 import scalus.uplc.Constant.given
-import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM, Result}
 import scalus.uplc.jit.hybrid.HybridJIT
 import scalus.uplc.jit.nativestack.JIT
