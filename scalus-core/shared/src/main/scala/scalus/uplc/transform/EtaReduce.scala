@@ -93,7 +93,7 @@ object EtaReduce:
         case app @ Apply(_, _) =>
             extractBuiltinInfo(app) match
                 case Some((bn, numForces, numApplies, appliedArgs)) =>
-                    val meaning = Meaning.allBuiltins.BuiltinMeanings(bn)
+                    val meaning = Meaning.allBuiltins.getBuiltinRuntime(bn)
                     val requiredTypeArgs = meaning.typeScheme.numTypeVars
                     val requiredValueArgs = meaning.typeScheme.arity
                     // Saturated if all type and value arguments are applied
@@ -113,10 +113,10 @@ object EtaReduce:
         // (lam x [(error) x]) can't be eta-reduced to (error)
         case Error => false
         case Force(Force(Builtin(bn)))
-            if Meaning.allBuiltins.BuiltinMeanings(bn).typeScheme.numTypeVars >= 2 =>
+            if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 2 =>
             true // this is pure
         case Force(Builtin(bn))
-            if Meaning.allBuiltins.BuiltinMeanings(bn).typeScheme.numTypeVars >= 1 =>
+            if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 1 =>
             true // this is pure
         // force can halt the evaluation if the argument is not delayed
         // (lam x [(force t) x]) can't be eta-reduced in general

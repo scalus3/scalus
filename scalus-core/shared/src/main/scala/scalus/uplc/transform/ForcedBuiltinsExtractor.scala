@@ -40,12 +40,12 @@ object ForcedBuiltinsExtractor {
             case Apply(f, arg)      => Apply(go(f, env), go(arg, env))
             case LamAbs(name, body) => LamAbs(name, go(body, env - name))
             case Force(Force(Builtin(bn)))
-                if Meaning.allBuiltins.BuiltinMeanings(bn).typeScheme.numTypeVars == 2 =>
+                if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2 =>
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
                 logs += s"Replacing Forced builtin with Var: $name"
                 Var(NamedDeBruijn(name))
             case Force(Builtin(bn))
-                if Meaning.allBuiltins.BuiltinMeanings(bn).typeScheme.numTypeVars == 1 =>
+                if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1 =>
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
                 logs += s"Replacing Forced builtin with Var: $name"
                 Var(NamedDeBruijn(name))
