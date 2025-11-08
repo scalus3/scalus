@@ -1,6 +1,5 @@
-package scalus
+package scalus.compiler.plugin
 
-import scala.annotation.unused
 import dotty.tools.dotc.*
 import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Contexts.Context
@@ -10,6 +9,7 @@ import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.SrcPos
 import scalus.sir.*
 
+import scala.annotation.unused
 import scala.util.control.NonFatal
 
 case class SIRTypeEnv(

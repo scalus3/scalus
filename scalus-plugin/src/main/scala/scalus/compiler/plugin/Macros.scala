@@ -1,8 +1,8 @@
-package scalus
+package scalus.compiler.plugin
+
 import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.Symbols
-import scalus.sir.SIR
-import scalus.sir.SIRBuiltins
+import scalus.sir.{SIR, SIRBuiltins}
 import scalus.uplc.DefaultFun
 
 object Macros {

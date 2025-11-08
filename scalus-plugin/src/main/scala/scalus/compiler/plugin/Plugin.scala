@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler.plugin
 
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd
@@ -9,8 +9,9 @@ import dotty.tools.dotc.core.DenotTransformers.IdentityDenotTransformer
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.plugins.*
 import dotty.tools.dotc.transform.{ElimByName, Pickler, PostTyper}
-import dotty.tools.dotc.util.SrcPos
 import dotty.tools.dotc.typer.Implicits
+import dotty.tools.dotc.util.SrcPos
+import scalus.*
 import scalus.serialization.flat.FlatInstances.SIRHashConsedFlat
 import scalus.sir.SIRPosition
 

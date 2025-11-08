@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler.plugin
 
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.Trees.*
@@ -16,10 +16,11 @@ import scalus.serialization.flat.FlatInstances.{ModuleHashSetReprFlat, given}
 import scalus.serialization.flat.{EncoderState, Flat}
 import scalus.sir.{AnnotatedSIR, AnnotationsDecl, Binding, ConstrDecl, DataDecl, Module, SIR, SIRBuiltins, SIRDefaultOptions, SIRPosition, SIRType, SIRUnify, SIRVersion, TargetLoweringBackend, TypeBinding}
 import scalus.uplc.DefaultUni
+import scalus.*
 
 import scala.annotation.{tailrec, unused}
-import scala.collection.{immutable, mutable}
 import scala.collection.mutable.ListBuffer
+import scala.collection.{immutable, mutable}
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
 

@@ -1,18 +1,18 @@
-package scalus
+package scalus.compiler.plugin
 
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.ast.tpd.*
 import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Constants.Constant
-import dotty.tools.dotc.core.Decorators.*
 import dotty.tools.dotc.core.Contexts.Context
+import dotty.tools.dotc.core.Decorators.*
 import dotty.tools.dotc.core.Flags.*
 import dotty.tools.dotc.core.Names.*
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
-import scalus.sir.{Module as SIRModule, *}
 import scalus.serialization.flat.FlatInstances.ModuleHashSetReprFlat
+import scalus.sir.{Module as SIRModule, *}
 
 /** Preprocess SIR - run before the Pickling and sbt.ExtreactApi phases and add toSIR-compiled
   * modules fields, which later set in Scalus phase and used during linking.

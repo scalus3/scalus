@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler.plugin
 
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd.*

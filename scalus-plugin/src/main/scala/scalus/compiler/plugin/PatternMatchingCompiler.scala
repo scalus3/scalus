@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler.plugin
 
 import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd
@@ -8,9 +8,9 @@ import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.{SourcePosition, SrcPos}
-import scalus.SirCaseDecisionTree.SplitStrategy.{DuplicateChecks, DuplicateRows}
-import scalus.SirParsedCase.ActionRef.FailMatch
-import scalus.SirParsedCase.{ActionRef, BindingNameInfo, GroupedTuples, Pattern}
+import SirCaseDecisionTree.SplitStrategy.{DuplicateChecks, DuplicateRows}
+import SirParsedCase.ActionRef.FailMatch
+import SirParsedCase.{ActionRef, BindingNameInfo, GroupedTuples, Pattern}
 import scalus.sir.*
 
 import scala.annotation.{tailrec, unused}
