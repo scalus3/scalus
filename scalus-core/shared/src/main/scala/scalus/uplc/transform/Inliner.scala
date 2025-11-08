@@ -3,6 +3,7 @@ package scalus.uplc.transform
 import scalus.*
 import scalus.uplc.Term.*
 import scalus.uplc.{NamedDeBruijn, Term}
+import TermAnalysis.isPure
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -93,13 +94,11 @@ object Inliner:
 
         go(term, Set.empty)
 
-    def isPure(t: Term): Boolean = t match
-        case _: Var | _: Const | _: Builtin | _: LamAbs | _: Delay => true
-        case Force(_)                   => false // Force can halt if argument isn't delayed
-        case _: Apply | _: Case | Error => false
-        case Constr(_, args)            => args.forall(isPure)
-
-    /** Main inlining function */
+    /** Main inlining function
+      *
+      * Uses [[TermAnalysis.isPure]] to determine if unused arguments can be safely eliminated
+      * during dead code elimination.
+      */
     def inlinePass(shouldInline: (String, Term, Term, Int) => Boolean)(
         term: Term
     ): (Term, collection.Seq[String]) =
@@ -122,7 +121,7 @@ object Inliner:
                     case LamAbs(name, body) =>
                         // Count occurrences to decide if we should inline
                         val occurrences = countOccurrences(body, name)
-                        if occurrences == 0 && isPure(inlinedArg) then
+                        if occurrences == 0 && inlinedArg.isPure then
                             // Dead code elimination - variable is never used
                             logs += s"Eliminating dead code: $name"
                             go(body, env)

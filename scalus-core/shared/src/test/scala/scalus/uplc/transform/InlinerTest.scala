@@ -159,40 +159,42 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(term) == expected)
     }
 
-    // TDD: Tests for isPure bug with Force - these should FAIL initially
+    // Tests for Term.isPure extension method from TermAnalysis.
+    // These tests verify that Force terms are correctly identified as impure
+    // to prevent incorrect dead code elimination.
     test("should not eliminate Force of constant as dead code - it will error") {
         // (λx. 42) (Force (Const 1))
         // Force of non-delayed term errors at runtime, must be preserved
+        // TermAnalysis.isPure correctly identifies Force(Const) as impure
         val term = λ("x")(42) $ Force(Const(Constant.Integer(1)))
         val expected = λ("x")(42) $ Force(Const(Constant.Integer(1)))
         assert(Inliner(term) == expected)
-        // WILL FAIL: Current isPure incorrectly treats Force(Const) as pure
     }
 
     test("should not eliminate Force of builtin as dead code") {
         // (λx. 100) (Force AddInteger)
         // Forcing a builtin (not delayed) will error
+        // TermAnalysis.isPure correctly identifies this as impure
         val term = λ("x")(100) $ Force(AddInteger)
         val expected = λ("x")(100) $ Force(AddInteger)
         assert(Inliner(term) == expected)
-        // WILL FAIL: Current isPure treats Force recursively as pure
     }
 
     test("should not eliminate Force of variable as dead code") {
         // (λy. (λx. 42) (Force y))
         // We don't know if y is delayed, so Force y could error
+        // TermAnalysis.isPure conservatively treats Force as impure
         val term = λ("y")(λ("x")(42) $ Force(vr"y"))
         val expected = λ("y")(λ("x")(42) $ Force(vr"y"))
         assert(Inliner(term) == expected)
-        // WILL FAIL: Force(Var) treated as pure if Var is pure
     }
 
     test("should eliminate unused pure Delay as dead code") {
         // (λx. 42) (Delay (Const 1))
         // Delay IS pure - can be safely eliminated
+        // TermAnalysis.isPure correctly identifies Delay as pure
         val term = λ("x")(42) $ Delay(Const(Constant.Integer(1)))
         val expected = Const(Constant.Integer(42))
         assert(Inliner(term) == expected)
-        // SHOULD PASS: Delay is correctly treated as pure
     }
 }
