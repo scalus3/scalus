@@ -277,7 +277,6 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
     test("encode/decode Constant") {
         import scalus.builtin.Data.*
         import scalus.uplc.CommonFlatInstances.*
-        import scalus.uplc.FlatInstantces.given
         val fl = flatConstant
         assert(fl.bitSize(Constant.Unit) == 6)
         assert(fl.bitSize(Constant.Bool(true)) == 7)

@@ -5,6 +5,8 @@ import io.bullet.borer.Tag.{NegativeBigNum, Other, PositiveBigNum}
 import io.bullet.borer.{ByteAccess, Cbor, DataItem as DI, Decoder, Encoder, Reader, Tag}
 import scalus.Compiler
 import scalus.builtin.Data.{B, Constr, FromData, I, Map}
+import scalus.serialization.flat
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import upickle.default.*
 
 import java.io.InputStream
@@ -258,4 +260,16 @@ private trait DataApi {
       *   `Success(value)` if decoding was successful, `Failure(exception)` otherwise
       */
     def tryFromData[T](d: Data)(using fd: FromData[T]): Try[T] = Try(fd(d))
+
+    given Flat[Data] with
+        def bitSize(a: Data): Int =
+            summon[Flat[Array[Byte]]].bitSize(Cbor.encode(a).toByteArray)
+
+        def encode(a: Data, encode: EncoderState): Unit =
+            flat.encode(Cbor.encode(a).toByteArray, encode)
+
+        def decode(decode: DecoderState): Data =
+            val bytes = summon[Flat[Array[Byte]]].decode(decode)
+            Cbor.decode(bytes).to[Data].value
+    end given
 }
