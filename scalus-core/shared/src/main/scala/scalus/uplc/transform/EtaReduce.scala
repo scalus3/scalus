@@ -1,7 +1,7 @@
 package scalus.uplc.transform
 
 import scalus.*
-import scalus.uplc.{Meaning, NamedDeBruijn, Term}
+import scalus.uplc.{DefaultFun, Meaning, NamedDeBruijn, Term}
 import scalus.uplc.Term.*
 
 /** Performs eta-reduction on a term.
@@ -59,6 +59,27 @@ object EtaReduce:
         case Delay(term)                 => freeNames(term)
         case _                           => Set.empty
 
+    /** Extracts builtin information from a term with Force and Apply nodes
+      *
+      * @return
+      *   Some((builtin, numForces, numApplies, appliedArgs)) or None if not a builtin application
+      */
+    private def extractBuiltinInfo(
+        term: Term
+    ): Option[(DefaultFun, Int, Int, List[Term])] =
+        def go(
+            t: Term,
+            forces: Int,
+            applies: Int,
+            args: List[Term]
+        ): Option[(DefaultFun, Int, Int, List[Term])] =
+            t match
+                case Builtin(bn)   => Some((bn, forces, applies, args.reverse))
+                case Force(inner)  => go(inner, forces + 1, applies, args)
+                case Apply(f, arg) => go(f, forces, applies + 1, arg :: args)
+                case _             => None
+        go(term, 0, 0, List.empty)
+
     /** Checks if a term is pure
       *
       * TODO: this is a very conservative definition of purity. We can improve it by considering the
@@ -68,8 +89,19 @@ object EtaReduce:
       */
     private def isPure(term: Term): Boolean = term match
         case Apply(LamAbs(_, body), a) if isPure(a) && isPure(body) => true
-        // in general not pure
-        case Apply(_, _) => false
+        // Check if this is a partially applied builtin with pure arguments
+        case app @ Apply(_, _) =>
+            extractBuiltinInfo(app) match
+                case Some((bn, numForces, numApplies, appliedArgs)) =>
+                    val meaning = Meaning.allBuiltins.BuiltinMeanings(bn)
+                    val requiredTypeArgs = meaning.typeScheme.numTypeVars
+                    val requiredValueArgs = meaning.typeScheme.arity
+                    // Saturated if all type and value arguments are applied
+                    val isSaturated =
+                        numForces >= requiredTypeArgs && numApplies >= requiredValueArgs
+                    // Pure if not saturated and all applied arguments are pure
+                    !isSaturated && appliedArgs.forall(isPure)
+                case None => false
         // (lam x [(lam ...) x]) can be eta-reduced to (lam ...)
         case LamAbs(_, _) => true
         // we had (lam x [(delay t) x]), it can be eta-reduced to (delay t)
