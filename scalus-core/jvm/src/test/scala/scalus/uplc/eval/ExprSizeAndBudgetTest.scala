@@ -7,7 +7,6 @@ import scalus.builtin.Builtins.*
 import scalus.builtin.Data
 import scalus.cardano.ledger.CardanoInfo
 import scalus.serialization.flat.Flat
-import scalus.uplc.FlatInstantces.given
 import scalus.uplc.NamedDeBruijn
 import scalus.uplc.Term
 import scalus.uplc.Term.*

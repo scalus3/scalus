@@ -299,7 +299,6 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
 
     test("encode/decode Term") {
         import scalus.builtin.Data.toData
-        import scalus.uplc.FlatInstantces.given
         val fl = summon[Flat[Term]]
         assert(fl.bitSize(Term.Error) == 4)
         assert(fl.bitSize(Term.Var(NamedDeBruijn("any name", 12))) == 12)

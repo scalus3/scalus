@@ -5,9 +5,7 @@ import org.typelevel.paiges.Doc
 import scalus.*
 import scalus.builtin.{ByteString, Data}
 import scalus.serialization.flat
-import scalus.serialization.flat.given
-import scalus.serialization.flat.{DecoderState, EncoderState, Flat, Natural}
-import scalus.uplc.FlatInstantces.given
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat, Natural, given}
 import scalus.uplc.Term.Const
 import scalus.utils.Hex
 import scalus.utils.Hex.hexToBytes
