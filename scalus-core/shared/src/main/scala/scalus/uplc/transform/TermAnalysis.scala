@@ -22,8 +22,8 @@ object TermAnalysis:
       *   - builtin: the DefaultFun found
       *   - numForces: number of Force nodes wrapping the builtin
       *   - numApplies: number of Apply nodes wrapping the builtin
-      *   - appliedArgs: list of arguments applied to the builtin (in application order) Returns None
-      *     if no builtin is found.
+      *   - appliedArgs: list of arguments applied to the builtin (in application order) Returns
+      *     None if no builtin is found.
       */
     private[transform] def extractBuiltinInfo(
         term: Term
@@ -59,6 +59,8 @@ object TermAnalysis:
           *   - '''Builtins''' (`Builtin`): Builtin functions (unapplied)
           *   - '''Lambda abstractions''' (`LamAbs`): Function definitions
           *   - '''Delays''' (`Delay`): Suspended computations
+          *   - '''Force of Delay''': `Force(Delay(t))` is pure for any t because it's essentially a
+          *     no-op that evaluates to t
           *   - '''Forced polymorphic builtins''': `Force(Builtin(bn))` where the builtin expects
           *     type arguments (e.g., `Force(HeadList)` is pure because HeadList needs a type
           *     argument before it can be applied)
@@ -76,9 +78,10 @@ object TermAnalysis:
           * The following terms are considered impure because they can halt evaluation:
           *
           *   - '''Error''' (`Error`): Always fails with an error
-          *   - '''Force of non-builtin terms''': `Force(t)` where t is not a builtin awaiting type
-          *     arguments. Forcing a non-delayed term will error at runtime. For example,
-          *     `Force(Const(1))` will fail because you cannot force a constant.
+          *   - '''Force of non-delayed, non-builtin terms''': `Force(t)` where t is not `Delay(_)`
+          *     and not a builtin awaiting type arguments. Forcing a non-delayed term will error at
+          *     runtime. For example, `Force(Const(1))` will fail because you cannot force a
+          *     constant. However, `Force(Delay(t))` is pure because it's a no-op.
           *   - '''Saturated builtin applications''': Builtin applications where all required type
           *     and value arguments are provided. These may fail depending on the arguments (e.g.,
           *     `DivideInteger $ 1 $ 0` will error due to division by zero).
@@ -108,9 +111,9 @@ object TermAnalysis:
           * Var(NamedDeBruijn("x", 0)).isPure      // true - variable
           * LamAbs("x", Var("x")).isPure           // true - lambda
           * Delay(Const(1)).isPure                 // true - delay
+          * Force(Delay(Const(1))).isPure          // true - Force(Delay) is a no-op
           *
           * Force(Const(1)).isPure                 // false - forcing non-delayed term
-          * Force(Delay(Const(1))).isPure          // false - Force is conservatively impure
           * Error.isPure                           // false - always fails
           *
           * // Builtins
@@ -164,6 +167,8 @@ object TermAnalysis:
             case Force(Builtin(bn))
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 1 =>
                 true // this is pure
+            // Force(Delay(x)) is pure - it's essentially a no-op that evaluates to x
+            case Force(Delay(_)) => true
             // force can halt the evaluation if the argument is not delayed
             // (lam x [(force t) x]) can't be eta-reduced in general
             // e.g. (lam x [(force (error)) x]) can't be eta-reduced to (force (error))

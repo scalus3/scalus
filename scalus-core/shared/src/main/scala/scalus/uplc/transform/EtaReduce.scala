@@ -26,7 +26,8 @@ object EtaReduce:
       *
       * Purity checking is handled by [[TermAnalysis.isPure]]. A term is pure if it does not contain
       * any side effects, such as `Error`, `Force` of non-delayed terms, or saturated builtin
-      * applications. See [[TermAnalysis.isPure]] for comprehensive documentation on purity semantics.
+      * applications. See [[TermAnalysis.isPure]] for comprehensive documentation on purity
+      * semantics.
       *
       * @see
       *   [[https://en.wikipedia.org/wiki/Lambda_calculus#%CE%B7-reduction Eta reduction]]
