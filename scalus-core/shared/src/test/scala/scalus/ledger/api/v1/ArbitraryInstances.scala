@@ -5,7 +5,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.*
 import scalus.builtin.ByteString
 import scalus.prelude.{List, Option, Ord, Order}
-import scalus.testutil.ArbitraryDerivation.autoDerived
+import scalus.testing.ArbitraryDerivation.autoDerived
 import scalus.uplc.test
 
 object ArbitraryInstances extends ArbitraryInstances

@@ -1,9 +1,9 @@
-package scalus.testutil
+package scalus.testing
 
-import scalus.sir.Module
 import scalus.serialization.flat
 import scalus.serialization.flat.DecoderState
 import scalus.serialization.flat.FlatInstances.given
+import scalus.sir.Module
 
 object SIRModules {
 

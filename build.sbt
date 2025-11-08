@@ -401,7 +401,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / scalacOptions += "-color:never",
       copySharedFiles := {
           val sharedFiles = Seq(
-            "scalus/testutil/ArbitraryDerivation.scala",
+            "scalus/testing/ArbitraryDerivation.scala",
             "scalus/uplc/test/ArbitraryInstances.scala",
             "scalus/ledger/api/v1/ArbitraryInstances.scala",
             "scalus/ledger/api/v2/ArbitraryInstances.scala",

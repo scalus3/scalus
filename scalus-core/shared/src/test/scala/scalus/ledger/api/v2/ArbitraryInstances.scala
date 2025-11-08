@@ -5,7 +5,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.builtin.Data
 import scalus.cardano.ledger.DataHash
 import scalus.ledger.api.v1
-import scalus.testutil.ArbitraryDerivation.autoDerived
+import scalus.testing.ArbitraryDerivation.autoDerived
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends v1.ArbitraryInstances {

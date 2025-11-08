@@ -1,4 +1,4 @@
-package scalus.testutil
+package scalus.testing
 
 import magnolia1.{AutoDerivation, CaseClass, Monadic, SealedTrait}
 import org.scalacheck.{Arbitrary, Gen}

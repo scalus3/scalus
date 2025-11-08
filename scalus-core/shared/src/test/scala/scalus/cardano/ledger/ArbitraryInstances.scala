@@ -7,7 +7,7 @@ import scalus.builtin
 import scalus.builtin.Data.*
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.testutil.ArbitraryDerivation.autoDerived
+import scalus.testing.ArbitraryDerivation.autoDerived
 
 import scala.collection.immutable
 import scala.collection.immutable.SortedMap
