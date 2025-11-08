@@ -25,7 +25,7 @@ import scalus.uplc.*
   *   whether to generate error traces
   */
 class SirToUplc110Lowering(sir: SIR, generateErrorTraces: Boolean = false)
-    extends BaseSimpleSirToUplcLowering(sir, generateErrorTraces):
+    extends BaseSimpleLowering(sir, generateErrorTraces):
 
     /** For wildcard patterns in SirToUplc110Lowering, use unused binding names */
     override protected def getWildcardBindings(constrDecl: ConstrDecl): List[String] =

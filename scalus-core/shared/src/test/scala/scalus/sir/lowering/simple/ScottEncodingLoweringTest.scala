@@ -19,13 +19,13 @@ import scalus.uplc.test.ArbitraryInstances
 
 import scala.language.implicitConversions
 
-class SimpleSirToUplcLoweringTest
+class ScottEncodingLoweringTest
     extends AnyFunSuite
     with ScalaCheckPropertyChecks
     with ArbitraryInstances:
     extension (sir: SIR)
         infix def lowersTo(r: Term): Unit =
-            assert(SimpleSirToUplcLowering(sir, generateErrorTraces = false).lower() == r)
+            assert(ScottEncodingLowering(sir, generateErrorTraces = false).lower() == r)
 
     private val ae = AnnotationsDecl.empty
 

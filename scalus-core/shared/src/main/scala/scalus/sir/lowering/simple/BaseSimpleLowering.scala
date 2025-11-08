@@ -21,7 +21,7 @@ import scala.collection.mutable
   * @param generateErrorTraces
   *   whether to generate error traces
   */
-abstract class BaseSimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolean = false):
+abstract class BaseSimpleLowering(sir: SIR, generateErrorTraces: Boolean = false):
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
 

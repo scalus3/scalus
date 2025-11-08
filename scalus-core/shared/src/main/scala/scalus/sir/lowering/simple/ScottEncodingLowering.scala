@@ -6,6 +6,9 @@ package simple
 import scalus.sir.SIR.Pattern
 import scalus.uplc.*
 
+@deprecated("Use ScottEncodingLowering instead", "0.13.0")
+type SimpleSirToUplcLowering = ScottEncodingLowering
+
 /** Scott encoding-based lowering from Scalus Intermediate Representation [[SIR]] to UPLC [[Term]].
   *
   * This implementation uses Scott encoding for data types:
@@ -17,8 +20,8 @@ import scalus.uplc.*
   * @param generateErrorTraces
   *   whether to generate error traces
   */
-class SimpleSirToUplcLowering(sir: SIR, generateErrorTraces: Boolean = false)
-    extends BaseSimpleSirToUplcLowering(sir, generateErrorTraces):
+class ScottEncodingLowering(sir: SIR, generateErrorTraces: Boolean = false)
+    extends BaseSimpleLowering(sir, generateErrorTraces):
 
     override protected def lowerConstr(
         name: String,
