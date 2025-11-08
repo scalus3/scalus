@@ -1,7 +1,6 @@
 package scalus.uplc.transform
 
 import scalus.*
-import scalus.serialization.flat.FlatInstances.given
 import scalus.uplc.Term.*
 import scalus.uplc.transform.TermAnalysis.isPure
 import scalus.uplc.{CommonFlatInstances, NamedDeBruijn, Term}

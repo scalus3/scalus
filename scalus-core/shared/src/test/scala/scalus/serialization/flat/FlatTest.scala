@@ -260,7 +260,6 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
 
     test("encode/decode DefaulnUni") {
         import scalus.uplc.DefaultFun.*
-        import scalus.uplc.CommonFlatInstances.given
         val fl = summon[Flat[DefaultFun]]
         assert(fl.bitSize(AddInteger) == 7)
         forAll(Gen.oneOf(DefaultFun.values.toSeq)) { (f: DefaultFun) =>

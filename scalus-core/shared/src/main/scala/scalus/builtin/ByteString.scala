@@ -2,6 +2,8 @@ package scalus.builtin
 
 import scalus.Compile
 import scalus.prelude.*
+import scalus.serialization.flat.Flat
+import scalus.uplc.CommonFlatInstances
 import scalus.utils.Hex.toHex
 
 import scala.annotation.threadUnsafe
@@ -66,7 +68,7 @@ class ByteString private[builtin] (val bytes: Array[Byte]) {
 }
 
 @Compile
-object ByteString extends ByteStringOffchainApi {
+object ByteString extends ByteStringOffchainApi, ByteStringFlatInstance {
     given Show[ByteString] = (x: ByteString) =>
         Builtins.appendString(Builtins.appendString("\"", Prelude.encodeHex(x)), "\"")
 
@@ -214,4 +216,8 @@ object ByteString extends ByteStringOffchainApi {
     extension (b: BigInt)
         /** Prepends a BigInt to a ByteString and returns a new ByteString */
         inline infix def +:(bs: ByteString): ByteString = Builtins.consByteString(b, bs)
+}
+
+private trait ByteStringFlatInstance {
+    given Flat[ByteString] = CommonFlatInstances.given_Flat_ByteString
 }

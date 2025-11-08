@@ -12,8 +12,6 @@ import scalus.uplc.DefaultFun
 import scala.util.control.NonFatal
 
 object FlatInstances:
-    // val termTagWidth = 4
-
     final val hashConsTagSIRType = HashConsed.tag(0x01)
     final val hashConsTagDecl = HashConsed.tag(0x02)
     final val hashConsTagConstr = HashConsed.tag(0x03)
