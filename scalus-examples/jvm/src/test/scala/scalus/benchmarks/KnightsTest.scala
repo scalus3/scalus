@@ -34,7 +34,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
-            then ExBudget(ExCPU(92468_381030L), ExMemory(325_211274L))
+            then ExBudget(ExCPU(92468_333030L), ExMemory(325_210974L))
             else if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering
@@ -135,7 +135,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             summon[scalus.Compiler.Options].targetLoweringBackend match
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExBudget(ExCPU(228427_886079L), ExMemory(823_021659L))
+                    ExBudget(ExCPU(228427_838079L), ExMemory(823_021359L))
                 case scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering =>
                     ExBudget(ExCPU(115775_218834L), ExMemory(645_799142L))
                 case _ =>
@@ -234,7 +234,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget = {
             summon[scalus.Compiler.Options].targetLoweringBackend match {
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExBudget(ExCPU(453159_633705L), ExMemory(1646_886953L))
+                    ExBudget(ExCPU(453159_585705L), ExMemory(1646_886653L))
                 case scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering =>
                     ExBudget(ExCPU(235822_700067L), ExMemory(1315_097779L))
                 case scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering =>

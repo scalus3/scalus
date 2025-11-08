@@ -10,7 +10,7 @@ import scala.collection.mutable.ArrayBuffer
 
 object Inliner:
     def apply(term: Term): Term =
-        val (inlined, logs) = inlinePass(inlineConstAndVar)(term)
+        val (inlined, logs) = inlinePass(inlineConstVarBuiltin)(term)
         inlined
 
     /** Counts number of occurrences of a variable in a term */
@@ -28,13 +28,14 @@ object Inliner:
         case Const(_) | Builtin(_) | Error => 0
 
     /** Checks if a term is safe to inline multiple times */
-    def inlineConstAndVar(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
+    def inlineConstVarBuiltin(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
         inlining match
             case Var(_) => true // Variables are safe to duplicate
             case Const(c) =>
                 if occurances == 1 then true
                 else CommonFlatInstances.flatConstant.bitSize(c) <= 64 // Small constants are safe
-            case _ => false
+            case Builtin(_) => true
+            case _          => false
 
     /** Implements capture-avoiding substitution [x -> s]t */
     def substitute(term: Term, name: String, replacement: Term): Term =
