@@ -16,7 +16,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     // use simple backend, this test is bound to it
     given Compiler.Options = Compiler.Options.default.copy(
-      targetLoweringBackend = Compiler.TargetLoweringBackend.SimpleSirToUplcLowering,
+      targetLoweringBackend = Compiler.TargetLoweringBackend.ScottEncodingLowering,
       optimizeUplc = false
     )
 

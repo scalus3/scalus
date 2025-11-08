@@ -1,8 +1,10 @@
 package scalus.sir
 
 enum TargetLoweringBackend:
-    case SimpleSirToUplcLowering
-    case SirToUplc110Lowering
+    case ScottEncodingLowering
+    case SumOfProductsLowering
+    @deprecated("Use ScottEncodingLowering instead", "0.13.0") case SimpleSirToUplcLowering
+    @deprecated("Use SumOfProductsLowering instead", "0.13.0") case SirToUplc110Lowering
     case SirToUplcV3Lowering
 
 /** Default compiler options for SIR processing. Here to have a single place for default options,

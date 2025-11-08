@@ -19,7 +19,7 @@ class CaseConstrApplyTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering
+      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering
     )
 
     test("replace (apply (apply (apply f a) b) c) with (case (constr 0 [a, b, c]) f)") {

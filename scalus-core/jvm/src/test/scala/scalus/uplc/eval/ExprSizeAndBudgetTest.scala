@@ -25,7 +25,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
 
     // SimpleSirToUplcLowering is used to have stable sizes in terms, not in data representation.
     given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering
+      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering
     )
 
     test("unit bit size is 10") {

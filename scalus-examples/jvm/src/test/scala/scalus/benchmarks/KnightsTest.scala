@@ -37,7 +37,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             then ExBudget(ExCPU(92468_333030L), ExMemory(325_210974L))
             else if summon[
                   scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering
+                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
             then ExBudget(ExCPU(44783_358238L), ExMemory(247_807177L))
             else {
                 // actually we don't know, need recheck
@@ -136,7 +136,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             summon[scalus.Compiler.Options].targetLoweringBackend match
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
                     ExBudget(ExCPU(228427_838079L), ExMemory(823_021359L))
-                case scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering =>
+                case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
                     ExBudget(ExCPU(115775_218834L), ExMemory(645_799142L))
                 case _ =>
                     throw new IllegalStateException("Unsupported target lowering backend")
@@ -235,9 +235,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             summon[scalus.Compiler.Options].targetLoweringBackend match {
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
                     ExBudget(ExCPU(453159_585705L), ExMemory(1646_886653L))
-                case scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering =>
+                case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
                     ExBudget(ExCPU(235822_700067L), ExMemory(1315_097779L))
-                case scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering =>
+                case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
                     ExBudget(ExCPU(235822_700067L), ExMemory(1315_097779L))
             }
         }

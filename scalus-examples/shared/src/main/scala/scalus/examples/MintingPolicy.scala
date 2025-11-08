@@ -165,7 +165,7 @@ object MintingPolicyV2 {
 object MintingPolicySimpleBackend {
     // Use SimpleSirToUplcLowering backend explicitly
     given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering
+      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering
     )
 
     val compiledOptimizedMintingPolicyScript = compile(

@@ -116,7 +116,7 @@ class ScriptContextV1DataSerializationTest extends BaseValidatorTest:
 
     // in Data-based backend, to/from Data is no-op, so use simple backend
     given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering,
+      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

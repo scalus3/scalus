@@ -41,7 +41,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             then ExBudget(ExCPU(22604298040L), ExMemory(75069177L))
             else if summon[
                   scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering
+                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
             then ExBudget(ExCPU(7879192811L), ExMemory(45835971L))
             else {
                 // not tested
@@ -74,9 +74,9 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val scalusBudget = compilerOptions.targetLoweringBackend match {
             case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
                 ExBudget(ExCPU(28009023766L), ExMemory(93190393L))
-            case scalus.Compiler.TargetLoweringBackend.SirToUplc110Lowering =>
+            case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
                 ExBudget(ExCPU(9813458115L), ExMemory(57029883L))
-            case scalus.Compiler.TargetLoweringBackend.SimpleSirToUplcLowering =>
+            case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
                 // not tested
                 ExBudget(ExCPU(1000000000L), ExMemory(100000L))
         }

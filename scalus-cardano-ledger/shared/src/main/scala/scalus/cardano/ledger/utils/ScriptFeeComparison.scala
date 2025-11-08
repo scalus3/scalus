@@ -5,7 +5,7 @@ import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPay
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.cardano.txbuilder.Datum.DatumInlined
-import scalus.sir.TargetLoweringBackend.{SimpleSirToUplcLowering, SirToUplc110Lowering, SirToUplcV3Lowering}
+import scalus.sir.TargetLoweringBackend.{ScottEncodingLowering, SirToUplcV3Lowering, SumOfProductsLowering}
 import scalus.{plutusV3, toUplc, Compiler}
 import scalus.uplc.Program
 
@@ -137,7 +137,7 @@ object ScriptFeeComparison {
     }
 
     private def enumerateOptions: Seq[Compiler.Options] = for {
-        backend <- Seq(SimpleSirToUplcLowering, SirToUplc110Lowering, SirToUplcV3Lowering)
+        backend <- Seq(ScottEncodingLowering, SumOfProductsLowering, SirToUplcV3Lowering)
         traces <- Seq(true, false)
         optimize <- Seq(true, false)
         debug <- Seq(true, false)
