@@ -1,7 +1,11 @@
 package scalus.uplc
 
-import scalus.builtin.ByteString
-import scalus.builtin.Data
+import scalus.builtin
+import scalus.builtin.{ByteString, Data}
+import scalus.serialization.flat.{listFlat, Flat, given}
+import scalus.uplc.CommonFlatInstances.given
+
+import scala.collection.immutable.List
 
 sealed abstract class DefaultUni:
     type Unlifted
@@ -55,3 +59,51 @@ object DefaultUni:
 
     def Pair(a: DefaultUni, b: DefaultUni): DefaultUni = Apply(Apply(ProtoPair, a), b)
     def List(a: DefaultUni): DefaultUni = Apply(ProtoList, a)
+
+    def flatForUni(uni: DefaultUni)(using Flat[builtin.Data]): Flat[Any] =
+        import DefaultUni.*
+        uni match
+            case Integer             => summon[Flat[BigInt]].asInstanceOf[Flat[Any]]
+            case ByteString          => summon[Flat[builtin.ByteString]].asInstanceOf[Flat[Any]]
+            case String              => summon[Flat[String]].asInstanceOf[Flat[Any]]
+            case Unit                => summon[Flat[Unit]].asInstanceOf[Flat[Any]]
+            case Bool                => summon[Flat[Boolean]].asInstanceOf[Flat[Any]]
+            case Data                => summon[Flat[builtin.Data]].asInstanceOf[Flat[Any]]
+            case Apply(ProtoList, a) => listFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
+            case Apply(Apply(ProtoPair, a), b) =>
+                pairFlat(using flatForUni(a), flatForUni(b)).asInstanceOf[Flat[Any]]
+            case _ => throw new Exception(s"Unsupported uni: $uni")
+
+    def encodeUni(uni: DefaultUni): List[Int] =
+        uni match
+            case DefaultUni.Integer              => scala.List(0)
+            case DefaultUni.ByteString           => scala.List(1)
+            case DefaultUni.String               => scala.List(2)
+            case DefaultUni.Unit                 => scala.List(3)
+            case DefaultUni.Bool                 => scala.List(4)
+            case DefaultUni.ProtoList            => scala.List(5)
+            case DefaultUni.ProtoPair            => scala.List(6)
+            case DefaultUni.Apply(uniF, uniA)    => 7 :: encodeUni(uniF) ++ encodeUni(uniA)
+            case DefaultUni.Data                 => scala.List(8)
+            case DefaultUni.BLS12_381_G1_Element => scala.List(9)
+            case DefaultUni.BLS12_381_G2_Element => scala.List(10)
+            case DefaultUni.BLS12_381_MlResult   => scala.List(11)
+
+    def decodeUni(state: List[Int]): (DefaultUni, List[Int]) =
+        state match
+            case 0 :: tail => (DefaultUni.Integer, tail)
+            case 1 :: tail => (DefaultUni.ByteString, tail)
+            case 2 :: tail => (DefaultUni.String, tail)
+            case 3 :: tail => (DefaultUni.Unit, tail)
+            case 4 :: tail => (DefaultUni.Bool, tail)
+            case 5 :: tail => (DefaultUni.ProtoList, tail)
+            case 6 :: tail => (DefaultUni.ProtoPair, tail)
+            case 7 :: tail =>
+                val (uniF, tail1) = decodeUni(tail)
+                val (uniA, tail2) = decodeUni(tail1)
+                (DefaultUni.Apply(uniF, uniA), tail2)
+            case 8 :: tail  => (DefaultUni.Data, tail)
+            case 9 :: tail  => (DefaultUni.BLS12_381_G1_Element, tail)
+            case 10 :: tail => (DefaultUni.BLS12_381_G2_Element, tail)
+            case 11 :: tail => (DefaultUni.BLS12_381_MlResult, tail)
+            case _          => throw new Exception(s"Invalid uni: $state")

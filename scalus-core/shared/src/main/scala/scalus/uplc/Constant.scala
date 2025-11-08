@@ -2,7 +2,7 @@ package scalus.uplc
 
 import scalus.builtin
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
-import scalus.uplc.CommonFlatInstances.{decodeUni, encodeUni, flatForUni}
+import scalus.uplc.DefaultUni.{decodeUni, encodeUni, flatForUni}
 
 import scala.collection.immutable
 
