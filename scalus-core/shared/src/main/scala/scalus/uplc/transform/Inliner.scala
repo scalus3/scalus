@@ -95,9 +95,9 @@ object Inliner:
 
     def isPure(t: Term): Boolean = t match
         case _: Var | _: Const | _: Builtin | _: LamAbs | _: Delay => true
-        case Force(t)                                              => isPure(t)
-        case _: Apply | _: Case | Error                            => false
-        case Constr(_, args)                                       => args.forall(isPure)
+        case Force(_)                   => false // Force can halt if argument isn't delayed
+        case _: Apply | _: Case | Error => false
+        case Constr(_, args)            => args.forall(isPure)
 
     /** Main inlining function */
     def inlinePass(shouldInline: (String, Term, Term, Int) => Boolean)(
