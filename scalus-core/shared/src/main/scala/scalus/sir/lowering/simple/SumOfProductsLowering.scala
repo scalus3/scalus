@@ -7,6 +7,9 @@ import scalus.cardano.ledger.Word64
 import scalus.sir.SIR.Pattern
 import scalus.uplc.*
 
+@deprecated("Use SumOfProductsLowering instead", "0.13.0")
+type SirToUplc110Lowering = SumOfProductsLowering
+
 /** UPLC 1.1.0-based lowering from Scalus Intermediate Representation [[SIR]] to UPLC [[Term]].
   *
   * We use UPLC version 1.1.0 and generate Sums of Products (SoP) constructors `case` and `constr`
@@ -24,7 +27,7 @@ import scalus.uplc.*
   * @param generateErrorTraces
   *   whether to generate error traces
   */
-class SirToUplc110Lowering(sir: SIR, generateErrorTraces: Boolean = false)
+class SumOfProductsLowering(sir: SIR, generateErrorTraces: Boolean = false)
     extends BaseSimpleLowering(sir, generateErrorTraces):
 
     /** For wildcard patterns in SirToUplc110Lowering, use unused binding names */

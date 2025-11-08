@@ -17,11 +17,11 @@ import scalus.uplc.{Constant, DeBruijn, Term}
 
 import scala.language.implicitConversions
 
-class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, ArbitraryInstances {
+class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, ArbitraryInstances {
     extension (sir: SIR)
 
         infix def lowersTo(r: Term): Unit = {
-            val r1 = SirToUplc110Lowering(sir, generateErrorTraces = false).lower()
+            val r1 = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
             val deBruijnR1 = DeBruijn.deBruijnTerm(r1)
             val deBruijnR = DeBruijn.deBruijnTerm(r)
             assert(deBruijnR1 α_== deBruijnR)
@@ -98,7 +98,7 @@ class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, Ar
 
     test("lower Constr") {
         val sir = compile { prelude.List.Nil: prelude.List[BigInt] }
-        val uplc = SirToUplc110Lowering(sir, generateErrorTraces = false).lower()
+        val uplc = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
         // println("compiled:" + uplc.pretty.render(100))
         val expected = Term.Constr(Word64.Zero, List.empty)
         // println("expected:" + expected.pretty.render(100))
@@ -146,7 +146,7 @@ class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, Ar
           lam("scrutinee")(vr"scrutinee") $ Term.Constr(Word64.Zero, List.empty),
           List(BigInt(1), λ("h", "tl")(BigInt(2)))
         )
-        val compiled = SirToUplc110Lowering(sir, generateErrorTraces = false).lower()
+        val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
         val djCompiled = DeBruijn.deBruijnTerm(compiled)
@@ -175,7 +175,7 @@ class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, Ar
         // With LetFloating optimization, the scrutinee lazy let is floated
         // The newtype unwrapping creates: (lam id BODY) ((lam scrutinee scrutinee) VALUE)
         val expected = lam("id")(BigInt(1)) $ (lam("scrutinee")(vr"scrutinee") $ hex"DEADBEEF")
-        val compiled = SirToUplc110Lowering(sir, generateErrorTraces = false).lower()
+        val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
         val djCompiled = DeBruijn.deBruijnTerm(compiled)

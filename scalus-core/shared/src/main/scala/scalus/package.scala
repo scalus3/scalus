@@ -2,7 +2,7 @@ import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.Language
 import scalus.sir.PrettyPrinter.Style
 import scalus.sir.lowering.*
-import scalus.sir.lowering.simple.{ScottEncodingLowering, SirToUplc110Lowering}
+import scalus.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.sir.*
 import scalus.uplc.eval.*
 import scalus.uplc.transform.{CaseConstrApply, EtaReduce, ForcedBuiltinsExtractor, Inliner}
@@ -48,7 +48,7 @@ package object scalus {
                 case TargetLoweringBackend.SimpleSirToUplcLowering =>
                     ScottEncodingLowering(sir, generateErrorTraces).lower()
                 case TargetLoweringBackend.SirToUplc110Lowering =>
-                    SirToUplc110Lowering(sir, generateErrorTraces).lower()
+                    SumOfProductsLowering(sir, generateErrorTraces).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
                     SirToUplcV3Lowering(
                       sir,
@@ -97,7 +97,7 @@ package object scalus {
                 case TargetLoweringBackend.SimpleSirToUplcLowering =>
                     ScottEncodingLowering(sir, options.generateErrorTraces).lower()
                 case TargetLoweringBackend.SirToUplc110Lowering =>
-                    SirToUplc110Lowering(sir, options.generateErrorTraces).lower()
+                    SumOfProductsLowering(sir, options.generateErrorTraces).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
                     SirToUplcV3Lowering(
                       sir,
