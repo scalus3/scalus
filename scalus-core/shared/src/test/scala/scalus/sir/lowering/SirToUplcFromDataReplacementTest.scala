@@ -10,6 +10,8 @@ import scalus.ledger.api.v3.ScriptInfo.SpendingScript
 import scalus.builtin.Data.toData
 import scalus.sir.*
 import scalus.uplc.*
+import scalus.uplc.Constant.given
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.eval.Result
 
@@ -42,14 +44,14 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
           signatories = scalus.prelude.List(ownerPkh)
         )
 
-        val termWithSc = term $ Term.Const(Constant.Data(Data.toData(scriptContext)))
+        val termWithSc = term $ Data.toData(scriptContext).asTerm
 
         val l = termWithSc.evaluateDebug
 
         // println(l)
         l match {
             case Result.Success(term, budget, costs, logs) =>
-                assert(term == Term.Const(Constant.Bool(false)), "Expected term to be false")
+                assert(term == false.asTerm, "Expected term to be false")
             case Result.Failure(_, _, _, _) =>
                 fail(s"Lowered code failed with result: $l")
         }
@@ -83,7 +85,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
           signatories = scalus.prelude.List(ownerPkh)
         )
 
-        val termWithSc = term $ Term.Const(Constant.Data(Data.toData(scriptContext.scriptInfo)))
+        val termWithSc = term $ Data.toData(scriptContext.scriptInfo).asTerm
 
         val l = termWithSc.evaluateDebug
 
@@ -122,7 +124,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
             case _                    => scalus.prelude.Option.None
         }
 
-        val termWithSc = term $ Term.Const(Constant.Data(Data.toData(optDatum)))
+        val termWithSc = term $ Data.toData(optDatum).asTerm
 
         val l = termWithSc.evaluateDebug
 
@@ -163,7 +165,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
         val scData = Data.toData(scriptContext)
         val scD1 = Data.fromData[ScriptContext](scData)
         assert(scD1 == scriptContext, "ScriptContext deserialization failed")
-        val termWithSc = term $ Term.Const(Constant.Data(Data.toData(scriptContext)))
+        val termWithSc = term $ Data.toData(scriptContext).asTerm
         val res = termWithSc.evaluateDebug
         assert(res.isSuccess, s"Lowered code failed with result: $res")
     }

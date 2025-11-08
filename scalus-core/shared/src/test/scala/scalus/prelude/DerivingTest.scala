@@ -4,6 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import scalus.*
 import scalus.uplc.*
+import scalus.uplc.Term.asTerm
+import scalus.uplc.Constant.given
 import scalus.uplc.eval.*
 import scalus.builtin.*
 
@@ -99,7 +101,7 @@ class DerivingTest extends AnyFunSuite {
         // assert(result1.isSuccess)
         result1 match
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(1)))
+                assert(term == BigInt(1).asTerm)
             case Result.Failure(e, _, _, logs) =>
                 e.printStackTrace()
                 println(s"logs=${logs}")
@@ -140,7 +142,7 @@ class DerivingTest extends AnyFunSuite {
         // assert(result1.isSuccess)
         result1 match
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(1)))
+                assert(term == BigInt(1).asTerm)
             case Result.Failure(e, _, _, logs) =>
                 e.printStackTrace()
                 println(s"logs=${logs}")
@@ -177,7 +179,7 @@ class DerivingTest extends AnyFunSuite {
         // assert(result1.isSuccess)
         result1 match
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(2)))
+                assert(term == BigInt(2).asTerm)
             case Result.Failure(e, _, _, logs) =>
                 e.printStackTrace()
                 println(s"logs=${logs}")

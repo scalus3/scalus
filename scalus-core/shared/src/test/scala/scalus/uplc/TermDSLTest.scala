@@ -6,6 +6,7 @@ import scalus.*
 import scalus.builtin.ByteString
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.Term.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.TermDSL.given
 import scalus.uplc.test.ArbitraryInstances
 
@@ -41,37 +42,30 @@ class TermDSLTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitra
     }
     test("constant as Term") {
         val int: Term = 2
-        assert(int == Term.Const(Constant.Integer(2)))
+        assert(int == 2.asTerm)
         val bigint: Term = BigInt(2)
-        assert(bigint == Term.Const(Constant.Integer(2)))
+        assert(bigint == BigInt(2).asTerm)
         val bool: Term = true
-        assert(bool == Term.Const(Constant.Bool(true)))
+        assert(bool == true.asTerm)
         val ba: Term = ByteString(2, 3)
-        assert(ba == Term.Const(Constant.ByteString(ByteString(2, 3))))
+        assert(ba == ByteString(2, 3).asTerm)
         val s: Term = "Hello"
-        assert(s == Term.Const(Constant.String("Hello")))
+        assert(s == "Hello".asTerm)
         val u: Term = ()
-        assert(u == Term.Const(Constant.Unit))
+        assert(u == ().asTerm)
         val li: Term = Seq(1, 2)
         assert(
-          li == Term.Const(
-            Constant.List(DefaultUni.Integer, Constant.Integer(1) :: Constant.Integer(2) :: Nil)
-          )
+          li == Seq(1, 2).asTerm
         )
         val p: Term = (1, false)
         assert(
-          p == Term.Const(
-            Constant.Pair(
-              Constant.Integer(1),
-              Constant.Bool(false)
-            )
-          )
+          p == (1, false).asTerm
         )
     }
 
     test("exists an implicit conversion from Constant to Term") {
         val int: Term = Constant.Integer(2)
-        assert(int == Term.Const(Constant.Integer(2)))
+        assert(int == 2.asTerm)
     }
 
     test("force/delay/λ/apply/vr") {

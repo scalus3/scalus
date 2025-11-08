@@ -12,6 +12,7 @@ import scalus.sir.SirDSL.{*, given}
 import scalus.sir.*
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.PlutusVM
 
@@ -1087,7 +1088,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
         // println(evaled.show)
-        assert(evaled == scalus.uplc.Term.Const(Constant.Bool(true)))
+        assert(evaled == true.asTerm)
     }
 
     test("compile Boolean equality") {

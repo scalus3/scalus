@@ -8,7 +8,8 @@ import scalus.builtin.ByteString.hex
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.uplc.*
-import scalus.uplc.Term.*
+import scalus.uplc.Constant.given
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.{PlutusVM, Result}
 
 import scala.language.implicitConversions
@@ -80,7 +81,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
         // println(term.showHighlighted)
         val Result.Success(result, _, _, _) = term.evaluateDebug: @unchecked
 
-        assert(result == Term.Const(Constant.Bool(true)))
+        assert(result == true.asTerm)
     }
 
     test("pattern match on txId") {
@@ -97,9 +98,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
         // println(term.showHighlighted)
         val Result.Success(r, _, _, _) = term.evaluateDebug: @unchecked
         assert(
-          r == Term.Const(
-            Constant.ByteString(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6")
-          )
+          r == hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6".asTerm
         )
     }
 
@@ -132,8 +131,8 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
 
     test("IntervalBound data representation") {
         // Test each part separately then use in isEntirelyBefore
-        import scalus.prelude.show
         import scalus.builtin.Data.toData
+        import scalus.prelude.show
         val sir = compile { (data: Data) =>
             val intervalBound = data.to[IntervalBound]
             log("from:")
@@ -168,8 +167,8 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
             ctx.validRange.isEntirelyBefore(extracted)
         }
 
-        import scalus.prelude.Option
         import scalus.builtin.Data.toData
+        import scalus.prelude.Option
 
         val data = Option.Some(BigInt(86_400_000L)).toData
         val tx = TxInfo.placeholder

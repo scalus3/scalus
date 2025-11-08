@@ -9,6 +9,8 @@ import scalus.ledger.api.v1.*
 import scalus.sir.*
 import scalus.sir.SIR.*
 import scalus.uplc.*
+import scalus.uplc.Term.asTerm
+import scalus.uplc.Constant.given
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{MachineParams, PlutusVM, Result}
 
@@ -36,7 +38,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         }
         // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
-        assert(evaled == scalus.uplc.Term.Const(Constant.Bool(false)))
+        assert(evaled == false.asTerm)
     }
 
     test("compile match on a case class") {
@@ -47,7 +49,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         }
         // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
-        assert(evaled == scalus.uplc.Term.Const(Constant.ByteString(hex"deadbeef")))
+        assert(evaled == hex"deadbeef".asTerm)
     }
 
     test("compile match on ADT") {
@@ -66,7 +68,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         try
             val evaled = compiledToUplc.evaluate
             // println(evaled.show)
-            assert(evaled == scalus.uplc.Term.Const(Constant.Integer(1)))
+            assert(evaled == BigInt(1).asTerm)
         catch
             case e: Throwable =>
                 println(s"compile match on ADT: error in evaled: ${e.getMessage}")
@@ -97,7 +99,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         }
         val uplc = compiled.toUplc()
         val evaled = uplc.evaluate
-        assert(evaled == scalus.uplc.Term.Const(Constant.Integer(1)))
+        assert(evaled == BigInt(1).asTerm)
     }
 
     test("compile inner matches") {
@@ -113,7 +115,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
         // println(evaled.show)
-        assert(evaled == scalus.uplc.Term.Const(Constant.Integer(3)))
+        assert(evaled == BigInt(3).asTerm)
     }
 
     test("compile multiple inner matches") {
@@ -124,7 +126,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
         // println(evaled.show)
-        assert(evaled == scalus.uplc.Term.Const(Constant.Bool(false)))
+        assert(evaled == false.asTerm)
     }
 
     test("? operator produces a debug log") {
@@ -136,7 +138,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         val script = compiled.toUplc().plutusV2
         script.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
-                assert(evaled == scalus.uplc.Term.Const(Constant.Bool(false)))
+                assert(evaled == false.asTerm)
                 val logExpr = "oneEqualsTwo \\? False.*".r
                 logs.head match {
                     case `logExpr`() =>
@@ -202,7 +204,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         // check that the custom builtin is correctly evaluated on the JVM
         assert(CustomBuiltins.sha2_256(hex"12") == hex"deadbeef")
         // check that PlutusVM uses the custom builtin
-        assert(sir.toUplc().evaluate == Term.Const(Constant.ByteString(hex"deadbeef")))
+        assert(sir.toUplc().evaluate == hex"deadbeef".asTerm)
     }
 
     test("compile valargs") {
@@ -221,7 +223,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         // println(s"sir=${compiled.pretty.render(100)}")
         val uplc = compiled.toUplc(generateErrorTraces = true)
         val evaluated = uplc.evaluate
-        assert(evaluated == scalus.uplc.Term.Const(Constant.Integer(15)))
+        assert(evaluated == BigInt(15).asTerm)
 
         def mySum(x: BigInt*) = {
             x.list.foldLeft(BigInt(0))(_ + _)
@@ -251,11 +253,11 @@ class CompilerPluginEvalTest extends AnyFunSuite {
             List.Nil: List[Option[BigInt]]
         }.toUplc()
         val r1 = (uplc $ arg1).evaluate
-        assert(r1 == Term.Const(Constant.Integer(42)))
+        assert(r1 == BigInt(42).asTerm)
         val r2 = (uplc $ arg2).evaluate
-        assert(r2 == Term.Const(Constant.Integer(0)))
+        assert(r2 == BigInt(0).asTerm)
         val r3 = (uplc $ arg3).evaluate
-        assert(r3 == Term.Const(Constant.Integer(-1)))
+        assert(r3 == BigInt(-1).asTerm)
     }
 
 }

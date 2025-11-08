@@ -11,6 +11,7 @@ import scalus.sir.*
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.Term.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.TermDSL.given
 import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.{Constant, DeBruijn, Term}
@@ -107,7 +108,7 @@ class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, A
 
     test("lower newtype Constr") {
         val sir = compile { TxId(hex"DEADBEEF") }
-        sir lowersTo Term.Const(Constant.ByteString(hex"DEADBEEF"))
+        sir lowersTo hex"DEADBEEF".asTerm
     }
 
     test("lower And, Or, Not") {
@@ -229,7 +230,7 @@ class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, A
         val sir = compile {
             TxId(hex"DEADBEEF").hash
         }
-        sir lowersTo Term.Const(Constant.ByteString(hex"DEADBEEF"))
+        sir lowersTo hex"DEADBEEF".asTerm
     }
 
 }

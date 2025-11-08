@@ -6,6 +6,9 @@ import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.Data
 import scalus.uplc.*
+import scalus.uplc.Constant.given
+import scalus.uplc.Term.asTerm
+import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
 
 import java.math.BigInteger
@@ -26,7 +29,7 @@ class ScalusScriptUtilsTest extends AnyFunSuite:
           BigIntPlutusData(BigInteger.TWO)
         )
         val script = DeBruijnedProgram.fromDoubleCborHex(applied)
-        assert(script.evaluate == Term.Const(Constant.Integer(3)))
+        assert(script.evaluate == BigInt(3).asTerm)
     }
 
     test("applyParamsToScript with ListPlutusData") {
@@ -40,5 +43,5 @@ class ScalusScriptUtilsTest extends AnyFunSuite:
                 .build();
         val applied = ScalusScriptUtils.applyParamsToScript(program, params)
         val script = DeBruijnedProgram.fromDoubleCborHex(applied)
-        assert(script.evaluate == Term.Const(Constant.Integer(3)))
+        assert(script.evaluate == BigInt(3).asTerm)
     }

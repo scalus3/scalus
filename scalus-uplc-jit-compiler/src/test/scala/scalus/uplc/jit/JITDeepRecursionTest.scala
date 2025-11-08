@@ -3,10 +3,13 @@ package scalus.uplc.jit
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
 import scalus.Compiler.compile
+import scalus.uplc.Constant.given
+import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM, Result}
 import scalus.uplc.jit.hybrid.HybridJIT
 import scalus.uplc.jit.nativestack.JIT
 import scalus.uplc.{Constant, Term}
+import scalus.uplc.Term.asTerm
 
 import java.lang.management.ManagementFactory
 
@@ -63,12 +66,12 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     jit.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
                 // JIT returns raw value, CekMachine returns Term.Const
                 val expectedValue = BigInt(2432902008176640000L)
-                assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
+                assert(cekValue == expectedValue.asTerm)
                 assert(jitResult == expectedValue)
             } catch {
                 case e: RuntimeException if e.getMessage.contains("not yet supported") =>
                     info(s"JIT doesn't support some builtins yet: ${e.getMessage}")
-                    assert(cekValue == Term.Const(Constant.Integer(2432902008176640000L)))
+                    assert(cekValue == BigInt(2432902008176640000L).asTerm)
             }
         }
 
@@ -94,12 +97,12 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     jit.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
                 // JIT returns raw value, CekMachine returns Term.Const
                 val expectedValue = BigInt(610)
-                assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
+                assert(cekValue == expectedValue.asTerm)
                 assert(jitResult == expectedValue)
             } catch {
                 case e: RuntimeException if e.getMessage.contains("not yet supported") =>
                     info(s"JIT doesn't support some builtins yet: ${e.getMessage}")
-                    assert(cekValue == Term.Const(Constant.Integer(610)))
+                    assert(cekValue == BigInt(610).asTerm)
             }
         }
 
@@ -125,12 +128,12 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
                     jit.jitUplc(uplc)(logger, NoBudgetSpender, summon[PlutusVM].machineParams)
                 // JIT returns raw value, CekMachine returns Term.Const
                 val expectedValue = BigInt(5050)
-                assert(cekValue == Term.Const(Constant.Integer(expectedValue)))
+                assert(cekValue == expectedValue.asTerm)
                 assert(jitResult == expectedValue)
             } catch {
                 case e: RuntimeException if e.getMessage.contains("not yet supported") =>
                     info(s"JIT doesn't support some builtins yet: ${e.getMessage}")
-                    assert(cekValue == Term.Const(Constant.Integer(5050)))
+                    assert(cekValue == BigInt(5050).asTerm)
             }
         }
 
@@ -150,7 +153,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
 
             def testDepth(n: Int): Unit = {
                 // Apply the compiled function to a constant argument
-                val uplc: Term = sumFunctionUplc $ Term.Const(Constant.Integer(BigInt(n)))
+                val uplc: Term = sumFunctionUplc $ BigInt(n).asTerm
 
                 // CekMachine should handle this fine (it's iterative)
                 val cekResult = uplc.evaluateDebug
@@ -231,7 +234,7 @@ class JITDeepRecursionTest extends AnyFunSuiteLike {
         val testDepths = List(1000, 1500, 2250, 3375, 5062, 7593)
         val jitCompiledFunctions = testDepths
             .map { depth =>
-                val uplc = sumFunctionUplc $ Term.Const(Constant.Integer(BigInt(depth)))
+                val uplc = sumFunctionUplc $ BigInt(depth).asTerm
                 try {
                     // JIT compile on main thread - this returns a compiled function
                     val compiledFn = JIT.jitUplc(uplc)

@@ -10,6 +10,7 @@ import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.*
 import scalus.uplc.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.test.ArbitraryInstances
 
@@ -126,10 +127,10 @@ class FromDataDerivationTest
             val out = UplcCli.evalFlat(script)
             out match
                 case UplcEvalResult.Success(term, _) =>
-                    assert(term == Term.Const(Constant.Data(d)))
+                    assert(term == d.asTerm)
                 case UplcEvalResult.UplcFailure(errorCode, error) => fail(error)
                 case UplcEvalResult.TermParsingError(error)       => fail(error)
-            assert(script.term.evaluate == Term.Const(Constant.Data(d)))
+            assert(script.term.evaluate == d.asTerm)
         }
     }
 
@@ -145,10 +146,10 @@ class FromDataDerivationTest
             val out = UplcCli.evalFlat(Program.plutusV2(term $ d))
             out match
                 case UplcEvalResult.Success(term, _) =>
-                    assert(term == Term.Const(Constant.Data(d)))
+                    assert(term == d.asTerm)
                 case UplcEvalResult.UplcFailure(errorCode, error) => fail(error)
                 case UplcEvalResult.TermParsingError(error)       => fail(error)
-            assert((term $ d).evaluate == Term.Const(Constant.Data(d)))
+            assert((term $ d).evaluate == d.asTerm)
         }
     }
 
@@ -164,14 +165,14 @@ class FromDataDerivationTest
             val out = UplcCli.evalFlat(Program.plutusV2(term $ d))
             out match
                 case UplcEvalResult.Success(term, _) =>
-                    assert(term == Term.Const(Constant.Data(d)))
+                    assert(term == d.asTerm)
                 case UplcEvalResult.UplcFailure(errorCode, error) =>
                     println(s"UplcFailure: r=${r},  d=${d}")
                     fail(error)
                 case UplcEvalResult.TermParsingError(error) =>
                     fail(error)
 
-            assert((term $ d).evaluate == Term.Const(Constant.Data(d)))
+            assert((term $ d).evaluate == d.asTerm)
         }
     }
 
@@ -206,7 +207,7 @@ class FromDataDerivationTest
             val out = UplcCli.evalFlat(Program((1, 0, 0), term $ d))
             out match
                 case UplcEvalResult.Success(term, _) =>
-                    assert(term == Term.Const(Constant.Data(d)))
+                    assert(term == d.asTerm)
                 case UplcEvalResult.UplcFailure(errorCode, error) =>
                     println(s"UplcFailure: d=${d}")
                     val errorMsg = if error.length > 100 error.take(100)+"..." else error
@@ -214,7 +215,7 @@ class FromDataDerivationTest
                 case UplcEvalResult.TermParsingError(error) =>
                     fail(error)
 
-            assert(VM.evaluateTerm(term $ d) == Term.Const(Constant.Data(d)))
+            assert(VM.evaluateTerm(term $ d) == d.asTerm)
         //}
     }
 

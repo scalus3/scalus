@@ -11,6 +11,7 @@ import scalus.sir.*
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.Term.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.*
@@ -224,7 +225,7 @@ class SirToUplcSmLoweringTest
             scalus.sir.lowering.typegens.SirTypeUplcGenerator(SIRType.List(SIRType.Data))
 
         val origin1 = lower(originSir1)
-        val expected1 = Term.Builtin(DefaultFun.MkNilData) $ Term.Const(Constant.Unit)
+        val expected1 = Term.Builtin(DefaultFun.MkNilData) $ ().asTerm
         // println(s"Lowered SIR: ${origin1.pretty.render(100)}")
         // println(s"Expected UPLC: ${expected1.pretty.render(100)}")
 
@@ -311,7 +312,7 @@ class SirToUplcSmLoweringTest
         val resultAnd1 = andLetUplc1.evaluateDebug
         resultAnd1 match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Bool(true)))
+                assert(term == true.asTerm)
             case _ =>
                 fail(s"Expected success, got: ${resultAnd1}")
         }
@@ -492,7 +493,7 @@ class SirToUplcSmLoweringTest
 
         resultMatchUplc2 match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(1)))
+                assert(term == 1.asTerm)
             case _ =>
                 fail(s"Expected success, got: ${resultMatchUplc2}")
         }
@@ -556,7 +557,7 @@ class SirToUplcSmLoweringTest
 
         val uplcExpected1 = !DefaultFun.HeadList $ (
           !DefaultFun.MkCons $
-              (DefaultFun.IData $ Term.Const(Constant.Integer(42)))
+              (DefaultFun.IData $ 42.asTerm)
               $ Term.Builtin(DefaultFun.MkNilData)
         )
 
@@ -567,7 +568,7 @@ class SirToUplcSmLoweringTest
         result1 match {
             case Result.Success(term, _, _, _) =>
                 // from option - in PackedData representation.
-                assert(term == Term.Const(Constant.Data(I(42))))
+                assert(term == I(42).asTerm)
             case _ =>
                 fail(s"Expected success, got: ${result1}")
         }
@@ -634,7 +635,7 @@ class SirToUplcSmLoweringTest
         result2 match {
             case Result.Success(term, _, _, _) =>
                 // from option - in PackedData representation.
-                assert(term == Term.Const(Constant.Data(I(42))))
+                assert(term == I(42).asTerm)
             case _ =>
                 fail(s"Expected success, got: ${result2}")
         }
@@ -682,7 +683,7 @@ class SirToUplcSmLoweringTest
 
         result match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(10)))
+                assert(term == 10.asTerm)
             case _ =>
                 fail(s"Expected success with result 10, got: ${result}")
         }
@@ -698,7 +699,7 @@ class SirToUplcSmLoweringTest
         val result2 = lower(sirWithLet2).evaluateDebug
         result2 match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(20)))
+                assert(term == 20.asTerm)
             case _ =>
                 fail(s"Expected success with result 20, got: ${result2}")
         }
@@ -714,7 +715,7 @@ class SirToUplcSmLoweringTest
         val result3 = lower(sirWithLet3).evaluateDebug
         result3 match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(30)))
+                assert(term == 30.asTerm)
             case _ =>
                 fail(s"Expected success with result 30, got: ${result3}")
         }
@@ -753,7 +754,7 @@ class SirToUplcSmLoweringTest
         val resultTrue = lower(sirWithLetTrue).evaluateDebug
         resultTrue match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(1)))
+                assert(term == 1.asTerm)
             case _ =>
                 fail(s"Expected success with result 1, got: ${resultTrue}")
         }
@@ -768,7 +769,7 @@ class SirToUplcSmLoweringTest
         val resultFalse = lower(sirWithLetFalse).evaluateDebug
         resultFalse match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(0)))
+                assert(term == 0.asTerm)
             case _ =>
                 fail(s"Expected success with result 0, got: ${resultFalse}")
         }
@@ -804,7 +805,7 @@ class SirToUplcSmLoweringTest
 
         result match {
             case Result.Success(term, _, _, _) =>
-                assert(term == Term.Const(Constant.Integer(10)))
+                assert(term == 10.asTerm)
             case _ =>
                 fail(s"Expected success with result 10, got: ${result}")
         }

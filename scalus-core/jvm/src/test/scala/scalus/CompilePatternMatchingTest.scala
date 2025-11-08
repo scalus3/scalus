@@ -5,6 +5,7 @@ import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.ledger.api.v1.*
 import scalus.uplc.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
 
 import scala.language.implicitConversions
@@ -35,17 +36,17 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             List.Cons(Option.Some(BigInt(42)), List.Nil)
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile {
             List.Cons(Option.None, List.Nil)
         }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(0)))
+        assert((uplc $ arg2).evaluate == 0.asTerm)
 
         val arg3 = compile {
             List.Nil: List[Option[BigInt]]
         }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.Integer(-1)))
+        assert((uplc $ arg3).evaluate == (-1).asTerm)
     }
 
     // Test nested pattern matching with multiple levels
@@ -65,27 +66,27 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             List.Cons(Option.Some(These.This(BigInt(42))), List.Nil)
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile {
             List.Cons(Option.Some(These.That(true)), List.Nil)
         }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(1)))
+        assert((uplc $ arg2).evaluate == 1.asTerm)
 
         val arg3 = compile {
             List.Cons(Option.Some(These.These(BigInt(5), false)), List.Nil)
         }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.Integer(105)))
+        assert((uplc $ arg3).evaluate == 105.asTerm)
 
         val arg4 = compile {
             List.Cons(Option.None: Option[These[BigInt, Boolean]], List.Nil)
         }.toUplc()
-        assert((uplc $ arg4).evaluate == Term.Const(Constant.Integer(-1)))
+        assert((uplc $ arg4).evaluate == (-1).asTerm)
 
         val arg5 = compile {
             List.Nil: List[Option[These[BigInt, Boolean]]]
         }.toUplc()
-        assert((uplc $ arg5).evaluate == Term.Const(Constant.Integer(-2)))
+        assert((uplc $ arg5).evaluate == (-2).asTerm)
     }
 
     // Test pattern matching with case classes
@@ -97,7 +98,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
         val uplc = compiled.toUplc()
         val arg = compile { PubKeyHash(hex"deadbeef") }.toUplc()
-        assert((uplc $ arg).evaluate == Term.Const(Constant.ByteString(hex"deadbeef")))
+        assert((uplc $ arg).evaluate == hex"deadbeef".asTerm)
     }
 
     // Test nested case class pattern matching
@@ -114,10 +115,10 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc(generateErrorTraces = true)
 
         val arg1 = compile { Outer(Inner(BigInt(42)), true) }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile { Outer(Inner(BigInt(42)), false) }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(142)))
+        assert((uplc $ arg2).evaluate == 142.asTerm)
     }
 
     // Test wildcard patterns
@@ -132,10 +133,10 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc()
 
         val arg1 = compile { Option.Some(BigInt(42)) }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile { Option.None: Option[BigInt] }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(0)))
+        assert((uplc $ arg2).evaluate == 0.asTerm)
     }
 
     // Test wildcard in nested patterns
@@ -153,12 +154,12 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             List.Cons(Option.Some(BigInt(42)), List.Nil)
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile {
             List.Cons(Option.None: Option[BigInt], List.Cons(Option.Some(BigInt(1)), List.Nil))
         }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(1)))
+        assert((uplc $ arg2).evaluate == 1.asTerm)
     }
 
     // Test constant patterns with integers
@@ -177,16 +178,16 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc()
 
         val arg0 = compile { BigInt(0) }.toUplc()
-        assert((uplc $ arg0).evaluate == Term.Const(Constant.String("zero")))
+        assert((uplc $ arg0).evaluate == "zero".asTerm)
 
         val arg1 = compile { BigInt(1) }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.String("one")))
+        assert((uplc $ arg1).evaluate == "one".asTerm)
 
         val arg2 = compile { BigInt(2) }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.String("two")))
+        assert((uplc $ arg2).evaluate == "two".asTerm)
 
         val arg3 = compile { BigInt(42) }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.String("other")))
+        assert((uplc $ arg3).evaluate == "other".asTerm)
     }
     
      */
@@ -202,10 +203,10 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc()
 
         val argTrue = compile { true }.toUplc()
-        assert((uplc $ argTrue).evaluate == Term.Const(Constant.Integer(1)))
+        assert((uplc $ argTrue).evaluate == 1.asTerm)
 
         val argFalse = compile { false }.toUplc()
-        assert((uplc $ argFalse).evaluate == Term.Const(Constant.Integer(0)))
+        assert((uplc $ argFalse).evaluate == 0.asTerm)
     }
 
     // Test constant patterns with strings
@@ -220,13 +221,13 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc()
 
         val arg1 = compile { "hello" }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(1)))
+        assert((uplc $ arg1).evaluate == 1.asTerm)
 
         val arg2 = compile { "world" }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(2)))
+        assert((uplc $ arg2).evaluate == 2.asTerm)
 
         val arg3 = compile { "other" }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.Integer(0)))
+        assert((uplc $ arg3).evaluate == 0.asTerm)
     }
 
     // Test constant patterns with ByteString
@@ -243,13 +244,13 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc()
 
         val arg1 = compile { hex"dead" }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(1)))
+        assert((uplc $ arg1).evaluate == 1.asTerm)
 
         val arg2 = compile { hex"beef" }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(2)))
+        assert((uplc $ arg2).evaluate == 2.asTerm)
 
         val arg3 = compile { hex"cafe" }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.Integer(0)))
+        assert((uplc $ arg3).evaluate == 0.asTerm)
     }
      */
 
@@ -269,16 +270,16 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc(generateErrorTraces = true)
 
         val arg0 = compile { Option.Some(BigInt(0)) }.toUplc()
-        assert((uplc $ arg0).evaluate == Term.Const(Constant.String("zero")))
+        assert((uplc $ arg0).evaluate == "zero".asTerm)
 
         val arg1 = compile { Option.Some(BigInt(1)) }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.String("one")))
+        assert((uplc $ arg1).evaluate == "one".asTerm)
 
         val arg42 = compile { Option.Some(BigInt(42)) }.toUplc()
-        assert((uplc $ arg42).evaluate == Term.Const(Constant.String("some")))
+        assert((uplc $ arg42).evaluate == "some".asTerm)
 
         val argNone = compile { Option.None: Option[BigInt] }.toUplc()
-        assert((uplc $ argNone).evaluate == Term.Const(Constant.String("none")))
+        assert((uplc $ argNone).evaluate == "none".asTerm)
     }
      */
 
@@ -296,16 +297,16 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc(generateErrorTraces = true)
 
         val argPos = compile { Option.Some(BigInt(42)) }.toUplc()
-        assert((uplc $ argPos).evaluate == Term.Const(Constant.String("positive")))
+        assert((uplc $ argPos).evaluate == "positive".asTerm)
 
         val argNeg = compile { Option.Some(BigInt(-42)) }.toUplc()
-        assert((uplc $ argNeg).evaluate == Term.Const(Constant.String("negative")))
+        assert((uplc $ argNeg).evaluate == "negative".asTerm)
 
         val argZero = compile { Option.Some(BigInt(0)) }.toUplc()
-        assert((uplc $ argZero).evaluate == Term.Const(Constant.String("zero")))
+        assert((uplc $ argZero).evaluate == "zero".asTerm)
 
         val argNone = compile { Option.None: Option[BigInt] }.toUplc()
-        assert((uplc $ argNone).evaluate == Term.Const(Constant.String("none")))
+        assert((uplc $ argNone).evaluate == "none".asTerm)
     }
 
     // Test guards with complex conditions
@@ -324,22 +325,22 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             List.Cons(BigInt(1), List.Cons(BigInt(2), List.Nil))
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.String("positive head with tail")))
+        assert((uplc $ arg1).evaluate == "positive head with tail".asTerm)
 
         val arg2 = compile {
             List.Cons(BigInt(1), List.Nil)
         }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.String("positive head no tail")))
+        assert((uplc $ arg2).evaluate == "positive head no tail".asTerm)
 
         val arg3 = compile {
             List.Cons(BigInt(-1), List.Cons(BigInt(2), List.Nil))
         }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.String("has tail")))
+        assert((uplc $ arg3).evaluate == "has tail".asTerm)
 
         val arg4 = compile {
             List.Nil: List[BigInt]
         }.toUplc()
-        assert((uplc $ arg4).evaluate == Term.Const(Constant.String("other")))
+        assert((uplc $ arg4).evaluate == "other".asTerm)
     }
 
     // Test tuple pattern matching
@@ -356,13 +357,13 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc(generateErrorTraces = true)
 
         val arg1 = compile { (BigInt(0), true, "zero") }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.String("zero")))
+        assert((uplc $ arg1).evaluate == "zero".asTerm)
 
         val arg2 = compile { (BigInt(42), false, "ignored") }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.String("42")))
+        assert((uplc $ arg2).evaluate == "42".asTerm)
 
         val arg3 = compile { (BigInt(42), true, "ignored") }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.String("142")))
+        assert((uplc $ arg3).evaluate == "142".asTerm)
     }
      */
 
@@ -380,13 +381,13 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc(generateErrorTraces = true)
 
         val arg1 = compile { ((BigInt(0), true), "zero") }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.String("zero")))
+        assert((uplc $ arg1).evaluate == "zero".asTerm)
 
         val arg2 = compile { ((BigInt(42), false), "ignored") }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.String("42")))
+        assert((uplc $ arg2).evaluate == "42".asTerm)
 
         val arg3 = compile { ((BigInt(42), true), "ignored") }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.String("142")))
+        assert((uplc $ arg3).evaluate == "142".asTerm)
     }
      */
 
@@ -406,17 +407,17 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             List.Cons(Option.Some(BigInt(42)), List.Nil)
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile {
             List.Cons(Option.None: Option[BigInt], List.Cons(Option.Some(BigInt(1)), List.Nil))
         }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(1)))
+        assert((uplc $ arg2).evaluate == 1.asTerm)
 
         val arg3 = compile {
             List.Nil: List[Option[BigInt]]
         }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.Integer(-1)))
+        assert((uplc $ arg3).evaluate == (-1).asTerm)
     }
 
     // Test exhaustiveness checking with @unchecked
@@ -430,7 +431,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val uplc = compiled.toUplc(generateErrorTraces = true)
 
         val argSome = compile { Option.Some(BigInt(42)) }.toUplc()
-        assert((uplc $ argSome).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ argSome).evaluate == 42.asTerm)
 
         // This should fail with an error
         val argNone = compile { Option.None: Option[BigInt] }.toUplc()
@@ -457,17 +458,17 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             Option.Some(List.Cons(BigInt(42), List.Nil))
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Integer(42)))
+        assert((uplc $ arg1).evaluate == 42.asTerm)
 
         val arg2 = compile {
             Option.Some(List.Nil: List[BigInt])
         }.toUplc()
-        assert((uplc $ arg2).evaluate == Term.Const(Constant.Integer(0)))
+        assert((uplc $ arg2).evaluate == 0.asTerm)
 
         val arg3 = compile {
             Option.None: Option[List[BigInt]]
         }.toUplc()
-        assert((uplc $ arg3).evaluate == Term.Const(Constant.Integer(-1)))
+        assert((uplc $ arg3).evaluate == (-1).asTerm)
     }
      */
 
@@ -487,7 +488,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
         val arg1 = compile {
             List.Cons(List.Cons(BigInt(1), List.Nil), List.Nil)
         }.toUplc()
-        assert((uplc $ arg1).evaluate == Term.Const(Constant.Unit))
+        assert((uplc $ arg1).evaluate == ().asTerm)
 
         // Test case 2: Empty list (should match default case and fail)
         val arg2 = compile {

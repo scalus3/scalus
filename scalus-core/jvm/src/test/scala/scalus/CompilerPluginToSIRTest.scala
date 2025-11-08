@@ -10,6 +10,7 @@ import scalus.sir.SIR.*
 import scalus.sir.*
 import scalus.sir.SIRType.{Boolean, Fun, TypeVar}
 import scalus.uplc.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{PlutusVM, Result}
 
@@ -424,7 +425,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         }
         // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
-        assert(evaled == scalus.uplc.Term.Const(Constant.Bool(true)))
+        assert(evaled == true.asTerm)
     }
 
     private val pubKeyHashDataDecl = DataDecl(
@@ -540,10 +541,9 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
               ),
               ScriptPurpose.Spending(TxOutRef(TxId(hex"deadbeef"), 0))
             )
-        import DefaultUni.asConstant
         import scalus.builtin.Data.*
         val appliedScript = term.plutusV1 $ scriptContext.toData
-        assert(appliedScript.evaluate == scalus.uplc.Term.Const(asConstant(hex"deadbeef")))
+        assert(appliedScript.evaluate == hex"deadbeef".asTerm)
         val flatBytesLength = appliedScript.flatEncoded.length
         summon[Compiler.Options].targetLoweringBackend match
             case Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -575,18 +575,18 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         val uplcFun = compiled.toUplc(generateErrorTraces = true)
 
         val dataSome1 = summon[ToData[Option[BigInt]]].apply(Option.Some(BigInt(1)))
-        val uplc1 = uplcFun $ Term.Const(Constant.Data(dataSome1))
+        val uplc1 = uplcFun $ dataSome1.asTerm
         val script1 = uplc1.plutusV3
 
         script1.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
-                assert(evaled == scalus.uplc.Term.Const(Constant.Integer(1)))
+                assert(evaled == 1.asTerm)
             case Result.Failure(exception, _, _, _) =>
                 println("failure: exception=" + exception.getMessage)
                 fail(exception)
 
         val dataNone = summon[ToData[Option[BigInt]]].apply(Option.None)
-        val uplc2 = uplcFun $ Term.Const(Constant.Data(dataNone))
+        val uplc2 = uplcFun $ dataNone.asTerm
         val script2 = uplc2.plutusV3
 
         script2.evaluateDebug match
@@ -617,28 +617,28 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         val uplcFun = compiled.toUplc(generateErrorTraces = true)
 
         val dataCons1 = summon[ToData[List[BigInt]]].apply(List.Cons(BigInt(1), List.Nil))
-        val uplc1 = uplcFun $ Term.Const(Constant.Data(dataCons1))
+        val uplc1 = uplcFun $ dataCons1.asTerm
         val script1 = uplc1.plutusV3
         script1.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
-                assert(evaled == scalus.uplc.Term.Const(Constant.Integer(1)))
+                assert(evaled == 1.asTerm)
             case Result.Failure(exception, _, _, logs) =>
                 println("failure: exception=" + exception.getMessage)
                 fail(exception)
 
         val dataCons2 =
             summon[ToData[List[BigInt]]].apply(List.Cons(BigInt(1), List.Cons(BigInt(2), List.Nil)))
-        val uplc2 = uplcFun $ Term.Const(Constant.Data(dataCons2))
+        val uplc2 = uplcFun $ dataCons2.asTerm
         val script2 = uplc2.plutusV3
         script2.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
-                assert(evaled == scalus.uplc.Term.Const(Constant.Integer(2)))
+                assert(evaled == 2.asTerm)
             case Result.Failure(exception, _, _, logs) =>
                 println("failure: exception=" + exception.getMessage)
                 fail(exception)
 
         val dataNil = summon[ToData[List[BigInt]]].apply(List.Nil)
-        val uplc3 = uplcFun $ Term.Const(Constant.Data(dataNil))
+        val uplc3 = uplcFun $ dataNil.asTerm
         val script3 = uplc3.plutusV3
         script3.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
@@ -679,7 +679,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         )
         val dataScriptInfo =
             summon[ToData[ScriptContext]].apply(ScriptContext(txInfo, redeemer, scriptInfo))
-        val uplc1 = uplcFun $ Term.Const(Constant.Data(dataScriptInfo))
+        val uplc1 = uplcFun $ dataScriptInfo.asTerm
         val script1 = uplc1.plutusV3
         script1.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
@@ -699,7 +699,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val evaluated = compiled.toUplc().evaluate
 
-        assert(evaluated == scalus.uplc.Term.Const(Constant.Integer(1)))
+        assert(evaluated == 1.asTerm)
 
     }
 
@@ -717,7 +717,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val evaluated = compiled.toUplc().evaluate
 
-        assert(evaluated == scalus.uplc.Term.Const(Constant.Bool(true)))
+        assert(evaluated == true.asTerm)
 
         // println(s"evaluated=${evaluated}")
     }
@@ -782,7 +782,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val uplc = compiled.toUplcOptimized(generateErrorTraces = true)
         val evaluated = uplc.evaluate
-        assert(evaluated == scalus.uplc.Term.Const(Constant.Integer(0)))
+        assert(evaluated == 0.asTerm)
 
     }
 
@@ -798,6 +798,6 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val uplc = compiled.toUplcOptimized(generateErrorTraces = true)
         val evaluated = uplc.evaluate
-        assert(evaluated == scalus.uplc.Term.Const(Constant.Integer(0)))
+        assert(evaluated == 0.asTerm)
 
     }
