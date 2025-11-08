@@ -1,9 +1,10 @@
 package scalus.uplc.transform
 
 import scalus.*
+import scalus.serialization.flat.FlatInstances.given
 import scalus.uplc.Term.*
-import scalus.uplc.{NamedDeBruijn, Term}
-import TermAnalysis.isPure
+import scalus.uplc.transform.TermAnalysis.isPure
+import scalus.uplc.{CommonFlatInstances, NamedDeBruijn, Term}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -29,9 +30,11 @@ object Inliner:
     /** Checks if a term is safe to inline multiple times */
     def inlineConstAndVar(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
         inlining match
-            case Const(_) => true
-            case Var(_)   => true // Variables are safe to duplicate
-            case _        => false
+            case Var(_) => true // Variables are safe to duplicate
+            case Const(c) =>
+                if occurances == 1 then true
+                else CommonFlatInstances.flatConstant.bitSize(c) <= 64 // Small constants are safe
+            case _ => false
 
     /** Implements capture-avoiding substitution [x -> s]t */
     def substitute(term: Term, name: String, replacement: Term): Term =
