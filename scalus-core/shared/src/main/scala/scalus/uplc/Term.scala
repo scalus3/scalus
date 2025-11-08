@@ -4,7 +4,7 @@ import scalus.*
 import scalus.cardano.ledger.Word64
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
-import scalus.uplc.CommonFlatInstances.flatConstant
+import scalus.uplc.Constant.flatConstant
 
 import scala.annotation.targetName
 import scala.collection.immutable

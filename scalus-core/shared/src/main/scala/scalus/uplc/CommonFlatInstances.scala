@@ -5,8 +5,6 @@ import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 
 object CommonFlatInstances:
-    val constantWidth = 4
-
     given Flat[builtin.ByteString] with
         val flatArray = summon[Flat[Array[Byte]]]
 
@@ -66,33 +64,3 @@ object CommonFlatInstances:
             case 10 :: tail => (DefaultUni.BLS12_381_G2_Element, tail)
             case 11 :: tail => (DefaultUni.BLS12_381_MlResult, tail)
             case _          => throw new Exception(s"Invalid uni: $state")
-
-    def flatConstant(using Flat[builtin.Data]): Flat[Constant] = new Flat[Constant]:
-
-        val constantTypeTagFlat = new Flat[Int]:
-            def bitSize(a: Int): Int = constantWidth
-
-            def encode(a: Int, encode: EncoderState): Unit = encode.bits(constantWidth, a.toByte)
-
-            def decode(decode: DecoderState): Int = decode.bits8(constantWidth)
-
-        def bitSize(a: Constant): Int =
-            val uniSize = encodeUni(
-              a.tpe
-            ).length * (1 + constantWidth) + 1 // List Cons (1 bit) + constant + List Nil (1 bit)
-            val valueSize = flatForUni(a.tpe).bitSize(Constant.toValue(a))
-            val retval = uniSize + valueSize
-            retval
-
-        def encode(a: Constant, encoder: EncoderState): Unit =
-            val tags = encodeUni(a.tpe)
-            listFlat[Int](using constantTypeTagFlat).encode(tags, encoder)
-            flatForUni(a.tpe).encode(Constant.toValue(a), encoder)
-
-        def decode(decoder: DecoderState): Constant =
-            val tags = listFlat[Int](using constantTypeTagFlat).decode(decoder)
-            val (tpe, _) = decodeUni(tags)
-            val uniDecoder = flatForUni(tpe)
-            val decoded = uniDecoder.decode(decoder)
-            val result = Constant.fromValue(tpe, decoded)
-            result

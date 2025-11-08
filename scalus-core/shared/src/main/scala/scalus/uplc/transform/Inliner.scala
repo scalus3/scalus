@@ -3,7 +3,8 @@ package scalus.uplc.transform
 import scalus.*
 import scalus.uplc.Term.*
 import scalus.uplc.transform.TermAnalysis.isPure
-import scalus.uplc.{CommonFlatInstances, NamedDeBruijn, Term}
+import scalus.uplc.{NamedDeBruijn, Term}
+import scalus.uplc.Constant.flatConstant
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -32,7 +33,7 @@ object Inliner:
             case Var(_) => true // Variables are safe to duplicate
             case Const(c) =>
                 if occurances == 1 then true
-                else CommonFlatInstances.flatConstant.bitSize(c) <= 64 // Small constants are safe
+                else flatConstant.bitSize(c) <= 64 // Small constants are safe
             case Builtin(_) => true
             case _          => false
 
