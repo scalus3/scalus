@@ -1,7 +1,6 @@
 package scalus.builtin
 
 import java.nio.file.{Files, Paths}
-import scala.scalanative.runtime
 import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
 

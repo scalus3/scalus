@@ -1,7 +1,6 @@
 package scalus.uplc
 
 import scalus.*
-import scalus.uplc.TermDSL.*
 
 import scala.reflect.ClassTag
 import scala.scalajs.js

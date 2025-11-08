@@ -1,7 +1,6 @@
 package scalus.builtin
 
 import scala.scalajs.js
-import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.*
 import scala.scalajs.js.typedarray.Uint8Array
 import NodeJsPlatformSpecific.{toByteString, toJsBigInt, toUint8Array}

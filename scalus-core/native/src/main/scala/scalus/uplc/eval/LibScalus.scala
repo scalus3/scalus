@@ -6,7 +6,6 @@ import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.uplc
 
 import java.nio.charset.Charset
-import scala.scalanative.runtime.Intrinsics.{castIntToRawSizeUnsigned, unsignedOf}
 import scala.scalanative.runtime.ffi
 import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
