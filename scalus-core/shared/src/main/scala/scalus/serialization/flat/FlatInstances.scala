@@ -6,7 +6,6 @@ import scalus.serialization.flat.HashConsed.CachedTaggedRef
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.sir.*
 import scalus.sir.SIR.{LetFlags, Pattern}
-import scalus.uplc.CommonFlatInstances.given
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.DefaultFun
 

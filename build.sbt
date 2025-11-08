@@ -214,8 +214,9 @@ lazy val scalusPlugin = project
        */
       copySharedFiles := {
           val sharedFiles = Seq(
-            "scalus/builtin/Data.scala",
             "scalus/builtin/BuiltinList.scala",
+            "scalus/builtin/ByteStringFlatInstance.scala",
+            "scalus/builtin/Data.scala",
             "scalus/serialization/flat/package.scala",
             "scalus/serialization/flat/FlatInstances.scala",
             "scalus/serialization/flat/HashConsed.scala",
@@ -233,7 +234,6 @@ lazy val scalusPlugin = project
             "scalus/uplc/Constant.scala",
             "scalus/uplc/DefaultFun.scala",
             "scalus/uplc/DefaultUni.scala",
-            "scalus/uplc/CommonFlatInstances.scala",
             "scalus/uplc/TypeScheme.scala",
             "scalus/utils/Hex.scala",
           )

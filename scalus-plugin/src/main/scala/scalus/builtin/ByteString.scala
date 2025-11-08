@@ -7,7 +7,7 @@ class ByteString private (val bytes: Array[Byte]) {
     def toHex: String = Hex.bytesToHex(bytes)
 }
 
-object ByteString {
+object ByteString extends ByteStringFlatInstance {
 
     /** Creates an empty ByteString
       *

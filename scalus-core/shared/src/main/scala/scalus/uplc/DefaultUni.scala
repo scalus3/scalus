@@ -3,7 +3,6 @@ package scalus.uplc
 import scalus.builtin
 import scalus.builtin.{ByteString, Data}
 import scalus.serialization.flat.{listFlat, Flat, given}
-import scalus.uplc.CommonFlatInstances.given
 
 import scala.collection.immutable.List
 
@@ -61,7 +60,6 @@ object DefaultUni:
     def List(a: DefaultUni): DefaultUni = Apply(ProtoList, a)
 
     def flatForUni(uni: DefaultUni)(using Flat[builtin.Data]): Flat[Any] =
-        import DefaultUni.*
         uni match
             case Integer             => summon[Flat[BigInt]].asInstanceOf[Flat[Any]]
             case ByteString          => summon[Flat[builtin.ByteString]].asInstanceOf[Flat[Any]]
