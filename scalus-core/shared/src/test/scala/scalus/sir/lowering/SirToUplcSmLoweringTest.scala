@@ -44,7 +44,7 @@ class SirToUplcSmLoweringTest
 
     extension (term: Term)
         infix def alphaEq(other: Term): Boolean =
-            Term.alphaEq(DeBruijn.deBruijnTerm(term), DeBruijn.deBruijnTerm(other))
+            DeBruijn.deBruijnTerm(term) α_== DeBruijn.deBruijnTerm(other)
 
     private val ae = AnnotationsDecl.empty
 

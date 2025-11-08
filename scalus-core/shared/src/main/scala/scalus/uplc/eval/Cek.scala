@@ -429,7 +429,7 @@ enum Result:
       */
     infix def alphaEq(that: Result): Boolean = (this, that) match
         case (Success(term1, budget1, costs1, logs1), Success(term2, budget2, costs2, logs2)) =>
-            Term.alphaEq(term1, term2) && budget1 == budget2 && costs1 == costs2 && logs1 == logs2
+            (term1 α_== term2) && budget1 == budget2 && costs1 == costs2 && logs1 == logs2
         case (Failure(ex1, budget1, costs1, logs1), Failure(ex2, budget2, costs2, logs2)) =>
             ex1.getClass == ex2.getClass &&
             Option(ex1.getMessage) == Option(ex2.getMessage) &&

@@ -3,6 +3,7 @@ package scalus.uplc
 import scalus.*
 import scalus.cardano.ledger.Word64
 
+import scala.annotation.targetName
 import scala.collection.immutable
 
 case class NamedDeBruijn(name: String, index: Int = 0):
@@ -64,10 +65,14 @@ enum Term:
         case Constr(tag, args)  => s"Constr($tag, ${args.mkString(", ")})"
         case Case(arg, cases)   => s"Case($arg, ${cases.mkString(", ")})"
 
-object Term:
-
-    def alphaEq(t1: Term, t2: Term): Boolean =
-
+    /** Alpha-equivalence check between two terms.
+      *
+      * @note
+      *   This method assumes that the terms are debruijn-indexed properly. Call
+      *   [[DeBruijn.deBruijnTerm]] before using this method to ensure correct indexing.
+      */
+    @targetName("alphaEq")
+    infix def α_==(that: Term): Boolean = {
         def eqName(n1: NamedDeBruijn, n2: NamedDeBruijn): Boolean =
             assert(n1.index != 0)
             assert(n2.index != 0)
@@ -92,7 +97,13 @@ object Term:
                     .forall((t1, t2) => equals(t1, t2))
             case _ => false
 
-        equals(t1, t2)
+        equals(this, that)
+    }
+
+object Term:
+
+    @deprecated("Use alphaEq or α_== methods instead", "0.13.0")
+    def alphaEq(t1: Term, t2: Term): Boolean = t1 α_== t2
 
     extension (sc: StringContext)
         /** Creates a variable term.

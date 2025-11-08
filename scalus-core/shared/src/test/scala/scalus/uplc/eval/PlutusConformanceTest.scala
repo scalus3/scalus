@@ -660,7 +660,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
             // println(eval(code).show)
             (eval(code), parseExpected(expected), expectedBudget) match
                 case (Right(Result.Success(actualTerm, budget, _, _)), Right(expectedTerm), expectedBudget) =>
-                    assert(Term.alphaEq(actualTerm, expectedTerm), s"Expected $expectedTerm but got $actualTerm")
+                    assert(actualTerm α_== expectedTerm, s"Expected $expectedTerm but got $actualTerm")
                     expectedBudget match
                         case Right(expectedBudget) =>
                             assert(budget == expectedBudget, s"Expected $expectedBudget but got $budget")

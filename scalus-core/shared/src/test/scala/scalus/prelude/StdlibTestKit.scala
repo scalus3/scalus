@@ -204,7 +204,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
 
         val expectedTerm = Compiler.compileInline(expected).toUplc(true).evaluate
         assert(
-          Term.alphaEq(codeTerm, expectedTerm),
+          codeTerm α_== expectedTerm,
           s"Expected term $expectedTerm, but got $codeTerm"
         )
     }
@@ -218,7 +218,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         val codeTerm = Compiler.compileInline(code).toUplc(true).evaluate
         val expectedTerm = Compiler.compileInline(expected).toUplc(true).evaluate
         assert(
-          !Term.alphaEq(codeTerm, expectedTerm),
+          !(codeTerm α_== expectedTerm),
           s"Expected term not equal to $expectedTerm, but got $codeTerm"
         )
     }
@@ -227,7 +227,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         assert(code)
 
         val codeTerm = Compiler.compileInline(code).toUplc(true).evaluate
-        assert(Term.alphaEq(codeTerm, trueTerm))
+        assert(codeTerm α_== trueTerm)
     }
 
     protected final inline def assertEvalCompile(inline code: Any): Unit = {
@@ -257,7 +257,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
             //    sir $ SIR.Const(Constant.Data(payload.toData), SIRType.Data, AnnotationsDecl.empty)
             val applied = uplc $ Term.Const(Constant.Data(toData[A1](payload)))
             val resultTerm = applied.evaluate
-            Term.alphaEq(resultTerm, trueTerm) && f(payload)
+            (resultTerm α_== trueTerm) && f(payload)
         }
 
         check(handler, configParams*)
@@ -292,7 +292,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
               Constant.Data(payload2.toData)
             )
             val resultTerm = applied.evaluate
-            Term.alphaEq(resultTerm, trueTerm) && f(payload1, payload2)
+            (resultTerm α_== trueTerm) && f(payload1, payload2)
         }
 
         check(handler, configParams*)
@@ -332,7 +332,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
               Constant.Data(payload2.toData)
             ) $ Term.Const(Constant.Data(payload3.toData))
             val resultTerm = applied.evaluate
-            Term.alphaEq(resultTerm, trueTerm) && f(payload1, payload2, payload3)
+            (resultTerm α_== trueTerm) && f(payload1, payload2, payload3)
         }
 
         check(handler, configParams*)
@@ -379,7 +379,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
               Constant.Data(payload4.toData)
             )
             val resultTerm = applied.evaluate
-            Term.alphaEq(resultTerm, trueTerm) && f(payload1, payload2, payload3, payload4)
+            (resultTerm α_== trueTerm) && f(payload1, payload2, payload3, payload4)
         }
 
         check(handler, configParams*)
@@ -443,7 +443,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
               Constant.Data(payload4.toData)
             ) $ Term.Const(Constant.Data(payload5.toData))
             val resultTerm = applied.evaluate
-            Term.alphaEq(resultTerm, trueTerm) && f(
+            (resultTerm α_== trueTerm) && f(
               payload1,
               payload2,
               payload3,
@@ -523,7 +523,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
               Constant.Data(payload6.toData)
             )
             val resultTerm = applied.evaluate
-            Term.alphaEq(resultTerm, trueTerm) && f(
+            (resultTerm α_== trueTerm) && f(
               payload1,
               payload2,
               payload3,

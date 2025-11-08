@@ -20,7 +20,7 @@ class ProgramFlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arb
             // deBruijn first to get the indexes right
             val program = p.deBruijnedProgram.toProgram
             val decoded = Program.fromFlatEncoded(p.flatEncoded)
-            assert(program alphaEq decoded)
+            assert(program α_== decoded)
         }
     }
 }

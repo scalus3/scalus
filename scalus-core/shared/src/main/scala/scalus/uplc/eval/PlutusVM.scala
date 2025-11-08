@@ -4,8 +4,6 @@ import scalus.builtin.{platform, PlatformSpecific, given}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.uplc.*
 
-import scala.collection.mutable
-
 /** Plutus VM facade.
   *
   *   - Term is a representation of a UPLC term.

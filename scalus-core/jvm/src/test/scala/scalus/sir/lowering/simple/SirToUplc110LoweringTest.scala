@@ -24,7 +24,7 @@ class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, Ar
             val r1 = SirToUplc110Lowering(sir, generateErrorTraces = false).lower()
             val deBruijnR1 = DeBruijn.deBruijnTerm(r1)
             val deBruijnR = DeBruijn.deBruijnTerm(r)
-            assert(alphaEq(deBruijnR1, deBruijnR))
+            assert(deBruijnR1 α_== deBruijnR)
         }
 
     private val ae = AnnotationsDecl.empty
@@ -151,7 +151,7 @@ class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, Ar
         val djExpected = DeBruijn.deBruijnTerm(expected)
         val djCompiled = DeBruijn.deBruijnTerm(compiled)
 
-        val isEq = Term.alphaEq(djCompiled, djExpected)
+        val isEq = djCompiled α_== djExpected
 
         if !isEq then
             println(s"Expected: ${expected.pretty.render(100)}")
@@ -180,7 +180,7 @@ class SirToUplc110LoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, Ar
         val djExpected = DeBruijn.deBruijnTerm(expected)
         val djCompiled = DeBruijn.deBruijnTerm(compiled)
 
-        val isEq = Term.alphaEq(djCompiled, djExpected)
+        val isEq = djCompiled α_== djExpected
 
         if !isEq then
             println(s"Expected: ${expected.pretty.render(100)}")

@@ -230,7 +230,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
         val Result.Success(t, _, _, _) = term.evaluateDebug: @unchecked
         // println(t.showHighlighted)
         // println(ctx.txInfo.validRange.toData.asTerm.showHighlighted)
-        assert(Term.alphaEq(t, ctx.txInfo.validRange.toData.asTerm))
+        assert(t α_== ctx.txInfo.validRange.toData.asTerm)
     }
 
 }

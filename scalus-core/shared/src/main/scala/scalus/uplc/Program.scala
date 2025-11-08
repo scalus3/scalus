@@ -32,8 +32,21 @@ case class Program(version: (Int, Int, Int), term: Term):
       * @return
       *   true if the programs are alpha-equal, false otherwise
       */
-    infix def alphaEq(that: Program): Boolean =
-        version == that.version && Term.alphaEq(this.term, that.term)
+    infix def alphaEq(that: Program): Boolean = this α_== that
+
+    /** Checks if two programs are equal.
+      *
+      * Two programs are equal if their versions are equal and their terms are alpha-equivalent.
+      * This means that the names of the variables are not important, only their De Bruijn indices.
+      * We use unique negative indices to represent free variables.
+      *
+      * @param that
+      *   the other program
+      * @return
+      *   true if the programs are alpha-equal, false otherwise
+      */
+    infix def α_==(that: Program): Boolean =
+        version == that.version && (this.term α_== that.term)
 
     /** Flat-encoded representation of the program.
       *
@@ -175,7 +188,7 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
       *   true if the programs are alpha-equal, false otherwise
       */
     infix def alphaEq(that: DeBruijnedProgram): Boolean =
-        version == that.version && Term.alphaEq(this.term, that.term)
+        version == that.version && (this.term α_== that.term)
 
     /** Flat-encoded representation of the program.
       *
