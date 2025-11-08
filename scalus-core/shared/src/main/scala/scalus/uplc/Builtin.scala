@@ -8,6 +8,7 @@ import scalus.uplc.eval.CekValue.*
 import scalus.uplc.eval.*
 import scalus.utils.Macros
 
+import scala.annotation.threadUnsafe
 import scala.collection.immutable
 import scala.collection.immutable.ArraySeq
 
@@ -1106,6 +1107,7 @@ class BuiltinsMeaning(
 
     def getBuiltinRuntime(fun: DefaultFun): BuiltinRuntime = mkGetBuiltinRuntime(fun)
 
+    @deprecated("Use getBuiltinRuntime instead", "0.13.0")
     lazy val BuiltinMeanings: immutable.Map[DefaultFun, BuiltinRuntime] = DefaultFun.values.map {
         fun => fun -> getBuiltinRuntime(fun)
     }.toMap
@@ -1122,9 +1124,15 @@ class BuiltinsMeaning(
       *
       * This map provides the forced versions of all builtins.
       */
-    lazy val forcedBuiltins: Map[DefaultFun, Term] =
+    @threadUnsafe lazy val forcedBuiltins: collection.Map[DefaultFun, Term] = {
         def forceBuiltin(scheme: TypeScheme, term: Term): Term = scheme match
             case TypeScheme.All(_, t) => Term.Force(forceBuiltin(t, term))
             case _                    => term
 
-        BuiltinMeanings.map((bi, rt) => bi -> forceBuiltin(rt.typeScheme, Term.Builtin(bi)))
+        val hm = scala.collection.mutable.HashMap.empty[DefaultFun, Term]
+        for bi <- DefaultFun.values do
+            val rt = getBuiltinRuntime(bi)
+            val forced = forceBuiltin(rt.typeScheme, Term.Builtin(bi))
+            hm.put(bi, forced)
+        hm
+    }

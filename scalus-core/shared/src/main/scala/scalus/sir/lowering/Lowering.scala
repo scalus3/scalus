@@ -26,7 +26,7 @@ object Lowering {
             ) $ ~Term.Error)
         else Term.Error
 
-    private lazy val builtinTerms: Map[DefaultFun, Term] = Meaning.allBuiltins.forcedBuiltins
+    private lazy val builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
     def lowerSIR(
         sir: SIR,
