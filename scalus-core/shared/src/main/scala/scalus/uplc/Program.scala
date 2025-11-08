@@ -137,6 +137,13 @@ object Program:
     def plutusV2(term: Term): Program = Program((1, 0, 0), term)
     def plutusV3(term: Term): Program = Program((1, 1, 0), term)
 
+    /** Parse UPLC program from string using the default version (1, 1, 0) */
+    def parseUplc(s: String): Either[String, Program] = UplcParser().parseProgram(s)
+
+    /** Parse UPLC program from string using a specific version */
+    def parseUplc(s: String, version: (Int, Int, Int)): Either[String, Program] =
+        UplcParser(version).parseProgram(s)
+
 /** A De Bruijn-indexed program.
   *
   * A De Bruijn-indexed program is a versioned [[Term]] where the variables are indexed using De

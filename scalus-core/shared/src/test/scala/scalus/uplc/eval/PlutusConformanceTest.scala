@@ -620,7 +620,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
             case "evaluation failure" => Left("evaluation failure")
             case "parse error"        => Left("parse error")
             case _ =>
-                UplcParser().parseProgram(code) match
+                Program.parseUplc(code) match
                     case Left(value) => fail(s"Unexpected parse error: $value")
                     case Right(program) =>
                         Right(DeBruijn.deBruijnTerm(program.term))
@@ -628,7 +628,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     }
 
     private def eval(code: String): Either[Error, Result] = {
-        UplcParser().parseProgram(code) match
+        Program.parseUplc(code) match
             case Right(program) =>
                 Right(program.term.evaluateDebug)
             case Left(_) =>

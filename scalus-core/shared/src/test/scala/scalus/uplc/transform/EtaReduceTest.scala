@@ -47,12 +47,11 @@ class EtaReduceTest extends AnyFunSuite:
 
     test("nested eta-reductions") {
         val term = "(lam x44 (lam y45 [(builtin equalsByteString) x44 y45]))"
-        val parsedTerm = UplcParser().term
-            .parse(term)
+        val parsedTerm = Term
+            .parseUplc(term)
             .getOrElse(
               throw new Exception("Failed to parse term in EtaReduceTest")
             )
-            ._2
         val reducedTerm = etaReduce(parsedTerm)
         assert(
           reducedTerm == Builtin(EqualsByteString),

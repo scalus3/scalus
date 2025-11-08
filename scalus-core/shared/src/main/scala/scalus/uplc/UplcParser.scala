@@ -23,9 +23,9 @@ import scala.collection.immutable
   * It's a collection of parsers for the UPLC language. `Term` and `Program` parsers are statefull
   * and are program version dependent, that's why this is a class and not an object.
   */
-class UplcParser:
+class UplcParser(initialVersion: (Int, Int, Int) = (1, 1, 0)):
     import UplcParser.*
-    private var version = (1, 1, 0) // use latest version by default
+    private var version = initialVersion
 
     // TODO and FIXME:
     // - support nested block comments as in the Haskell parser
@@ -88,7 +88,16 @@ class UplcParser:
             case Right((_, result)) => Right(result)
             case Left(f)            => Left(f.show)
 
+    def parseTerm(s: String): Either[String, Term] =
+        val parser = term.surroundedBy(whitespaces0) <* P.end
+        parser.parse(s) match
+            case Right((_, result)) => Right(result)
+            case Left(f)            => Left(f.show)
+
 object UplcParser:
+    def apply(): UplcParser = new UplcParser()
+    def apply(version: (Int, Int, Int)): UplcParser = new UplcParser(version)
+
     private lazy val cached: immutable.Map[String, DefaultFun] =
         DefaultFun.values.map(v => Utils.lowerFirst(v.toString) -> v).toMap
 

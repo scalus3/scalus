@@ -28,9 +28,9 @@ class CekBuiltinsJsTest extends CekBuiltinsTest:
         )
         if r.status.asInstanceOf[Int] != 0 then throw new Exception(r.stderr.toString)
 //    println(r.stdout.toString())
-        UplcParser().term.parse(r.stdout.toString()) match
-            case Left(value)       => throw new Exception(s"Parse error: $value")
-            case Right((_, value)) => value
+        Term.parseUplc(r.stdout.toString()) match
+            case Left(value)  => throw new Exception(s"Parse error: $value")
+            case Right(value) => value
 
     override def assertEvalEq(a: Term, b: Term): Unit =
         assert(eval(a) == b, s"$a != $b")

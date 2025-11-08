@@ -113,3 +113,10 @@ object Term:
     def λλ(name: String)(f: Term => Term): Term = lam(name)(f(vr(name)))
     def lam(names: String*)(term: Term): Term = names.foldRight(term)(Term.LamAbs(_, _))
     def vr(name: String): Term = Term.Var(NamedDeBruijn(name))
+
+    /** Parse UPLC term from string using the default version (1, 1, 0) */
+    def parseUplc(s: String): Either[String, Term] = UplcParser().parseTerm(s)
+
+    /** Parse UPLC term from string using a specific version */
+    def parseUplc(s: String, version: (Int, Int, Int)): Either[String, Term] =
+        UplcParser(version).parseTerm(s)
