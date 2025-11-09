@@ -1938,7 +1938,7 @@ object StepError {
         step: TransactionBuilderStep
     ) extends StepError {
         override def explain: String =
-            "The UTxO you provided requires no witness, because the payment credential of the address is a `PubKeyHash`. " +
+            s"The UTxO you provided has the wrong type. We require a `$expectedType`. " +
                 s"UTxO: $utxo"
     }
 
