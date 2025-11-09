@@ -93,9 +93,23 @@ echo ""
 echo -e "${BOLD}${YELLOW}📊 Lines of Code${RESET}"
 echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 
-total_lines=$(find . -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+# Count Scala files
+total_scala_files=$(find . -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | wc -l | awk '{print $1}')
+main_scala_files=$(find . -path "*/src/main/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | wc -l | awk '{print $1}')
+test_scala_files=$(find . -path "*/src/test/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | wc -l | awk '{print $1}')
 
-echo -e "${GREEN}Total Scala lines:${RESET} ${BOLD}${WHITE}${total_lines}${RESET}"
+# Count lines of code
+total_lines=$(find . -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+main_lines=$(find . -path "*/src/main/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+test_lines=$(find . -path "*/src/test/*" -name "*.scala" -type f -not -path "*/target/*" -not -path "*/.bloop/*" -not -path "*/.metals/*" | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1}')
+
+echo -e "${GREEN}Total Scala files:${RESET}  ${BOLD}${WHITE}${total_scala_files}${RESET}"
+echo -e "${GREEN}Main files:${RESET}         ${BOLD}${WHITE}${main_scala_files}${RESET}"
+echo -e "${GREEN}Test files:${RESET}         ${BOLD}${WHITE}${test_scala_files}${RESET}"
+echo ""
+echo -e "${GREEN}Total Scala lines:${RESET}  ${BOLD}${WHITE}${total_lines}${RESET}"
+echo -e "${GREEN}Main code lines:${RESET}    ${BOLD}${WHITE}${main_lines}${RESET}"
+echo -e "${GREEN}Test code lines:${RESET}    ${BOLD}${WHITE}${test_lines}${RESET}"
 echo ""
 
 # Git statistics by author
@@ -201,7 +215,7 @@ echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━
 echo ""
 
 printf "${BOLD}${WHITE}%-15s %15s %15s %15s${RESET}\n" "Month" "Lines Added" "Lines Deleted" "Total Changes"
-printf "${CYAN}%-15s %15s %15s %15s${RESET}\n" "━━━━━━━━━━━━━━━" "━━━━━━━━━━━" "━━━━━━━━━━━━━" "━━━━━━━━━━━━━"
+printf "${CYAN}%-15s %15s %15s %15s${RESET}\n" "━━━━━━━━━━━━━━━━━━━" "━━━━━━━━━━━" "━━━━━━━━━━━━━" "━━━━━━━━━━━━━"
 
 for i in {11..0}; do
   # Calculate month start and end dates
