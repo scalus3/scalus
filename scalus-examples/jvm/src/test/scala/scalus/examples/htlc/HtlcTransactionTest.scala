@@ -15,7 +15,7 @@ import scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
-import scalus.testing.kit.{LedgerProvider, ScalusTest}
+import scalus.testing.kit.{MockLedgerApi, ScalusTest}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 
@@ -27,7 +27,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val receiverAddress = TestUtil.createTestAddress("b" * 56)
 
     private val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-    private val provider: LedgerProvider = LedgerProvider(
+    private val provider: MockLedgerApi = MockLedgerApi(
       initialUtxos = Map(
         TransactionInput(genesisHash, 0) ->
             TransactionOutput.Babbage(
@@ -42,8 +42,8 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
       ),
       context = Context.testMainnet(),
       validators =
-          LedgerProvider.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
-      mutators = LedgerProvider.defaultMutators - PlutusScriptsTransactionMutator
+          MockLedgerApi.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
+      mutators = MockLedgerApi.defaultMutators - PlutusScriptsTransactionMutator
     )
 
     private val committerPkh = ByteString.fromArray(committerAddress.payment.asHash.bytes)
@@ -134,7 +134,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
         (tx, result)
     }
 
-    private def runValidator(tx: Transaction, snapshot: LedgerProvider, time: PosixTime) = {
+    private def runValidator(tx: Transaction, snapshot: MockLedgerApi, time: PosixTime) = {
         assert(
           snapshot
               .findUtxo(

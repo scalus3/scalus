@@ -9,7 +9,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.txbuilder.BuilderContext
 import scalus.examples.TestUtil
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.testing.kit.{LedgerProvider, Mock, ScalusTest}
+import scalus.testing.kit.{Mock, MockLedgerApi, ScalusTest}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 
@@ -28,7 +28,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     private val gen = BigInt(64)
 
-    private val provider: LedgerProvider = LedgerProvider(
+    private val provider: MockLedgerApi = MockLedgerApi(
       initialUtxos = Map(
         Mock.mockTxInput(gen, 0) ->
             TransactionOutput.Babbage(
@@ -48,8 +48,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
       ),
       context = Context.testMainnet(),
       validators =
-          LedgerProvider.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
-      mutators = LedgerProvider.defaultMutators - PlutusScriptsTransactionMutator
+          MockLedgerApi.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
+      mutators = MockLedgerApi.defaultMutators - PlutusScriptsTransactionMutator
     )
 
     private val betAmount = 1000L
@@ -80,7 +80,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     )
 
     private def initUtxo(
-        ledgerProvider: LedgerProvider
+        ledgerProvider: MockLedgerApi
     ): Either[RuntimeException, Utxo] = ledgerProvider
         .findUtxo(
           address = scriptAddress,
@@ -113,7 +113,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private val joinDatum = initDatum.copy(player2 = player2)
 
     private def joinUtxo(
-        ledgerProvider: LedgerProvider
+        ledgerProvider: MockLedgerApi
     ): Either[RuntimeException, Utxo] = ledgerProvider
         .findUtxo(
           address = scriptAddress,
@@ -144,7 +144,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     private def runValidator(
         tx: Transaction,
-        snapshot: LedgerProvider,
+        snapshot: MockLedgerApi,
         betUtxo: Either[RuntimeException, Utxo],
         time: Option[PosixTime] = None,
     ) =

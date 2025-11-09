@@ -10,7 +10,7 @@ import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.BuilderContext
 import scalus.examples.TestUtil
 import scalus.ledger.api.v1.PosixTime
-import scalus.testing.kit.{LedgerProvider, ScalusTest}
+import scalus.testing.kit.{MockLedgerApi, ScalusTest}
 
 class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment
@@ -49,10 +49,10 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
       timeout
     ).toData
 
-    private def createProvider(): LedgerProvider = {
+    private def createProvider(): MockLedgerApi = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-        LedgerProvider(
+        MockLedgerApi(
           initialUtxos = Map(
             TransactionInput(genesisHash, 0) ->
                 TransactionOutput.Babbage(
@@ -67,8 +67,8 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
           ),
           context = Context.testMainnet(),
           validators =
-              LedgerProvider.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
-          mutators = LedgerProvider.defaultMutators - PlutusScriptsTransactionMutator
+              MockLedgerApi.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
+          mutators = MockLedgerApi.defaultMutators - PlutusScriptsTransactionMutator
         )
     }
 

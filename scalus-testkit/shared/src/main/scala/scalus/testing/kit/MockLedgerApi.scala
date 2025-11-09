@@ -5,11 +5,11 @@ import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Provider
 
-class LedgerProvider(
+class MockLedgerApi(
     initialUtxos: Utxos = Map.empty,
     private var context: Context = Context.testMainnet(),
-    val validators: Iterable[STS.Validator] = LedgerProvider.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = LedgerProvider.defaultMutators
+    val validators: Iterable[STS.Validator] = MockLedgerApi.defaultValidators,
+    val mutators: Iterable[STS.Mutator] = MockLedgerApi.defaultMutators
 ) extends Provider {
     def submit(transaction: Transaction): Either[RuntimeException, Unit] = {
         processTransaction(transaction) match {
@@ -112,7 +112,7 @@ class LedgerProvider(
         )
     }
 
-    def snapshot(): LedgerProvider = LedgerProvider(
+    def snapshot(): MockLedgerApi = MockLedgerApi(
       initialUtxos = this.utxos,
       context = this.context,
       validators = this.validators,
@@ -130,7 +130,7 @@ class LedgerProvider(
     }
 }
 
-object LedgerProvider {
+object MockLedgerApi {
     val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
     val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
 }
