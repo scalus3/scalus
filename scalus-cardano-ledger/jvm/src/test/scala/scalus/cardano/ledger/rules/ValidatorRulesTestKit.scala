@@ -16,7 +16,7 @@ trait ValidatorRulesTestKit extends ArbitraryInstances {
         def withNetwork(network: Network): Transaction = tx.copy(
           body = KeepRaw(
             tx.body.value.copy(
-              networkId = Some(network.value),
+              networkId = Some(network.networkId),
               outputs = tx.body.value.outputs
                   .map(x =>
                       Sized(

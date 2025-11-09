@@ -47,13 +47,13 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Network enum should handle all cases correctly") {
-        assert(Network.fromByte(0x00) == Network.Testnet)
-        assert(Network.fromByte(0x01) == Network.Mainnet)
-        assert(Network.fromByte(0x05) == Network.Other(0x05))
+        assert(Network.fromNetworkId(0x00) == Network.Testnet)
+        assert(Network.fromNetworkId(0x01) == Network.Mainnet)
+        assert(Network.fromNetworkId(0x05) == Network.Other(0x05))
 
-        assert(Network.Testnet.value == 0x00)
-        assert(Network.Mainnet.value == 0x01)
-        assert(Network.Other(0x05).value == 0x05)
+        assert(Network.Testnet.networkId == 0x00)
+        assert(Network.Mainnet.networkId == 0x01)
+        assert(Network.Other(0x05).networkId == 0x05)
 
         assert(Network.Mainnet.isMainnet == true)
         assert(Network.Testnet.isMainnet == false)
