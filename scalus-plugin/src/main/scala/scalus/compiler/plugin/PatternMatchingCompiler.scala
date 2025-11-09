@@ -4,7 +4,7 @@ import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Contexts.Context
-import dotty.tools.dotc.core.StdNames.{nme, tpnme}
+import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.{SourcePosition, SrcPos}
@@ -15,30 +15,6 @@ import scalus.sir.*
 
 import scala.annotation.{tailrec, unused}
 import scala.collection.mutable.ListBuffer
-
-//import scala.language.implicitConversions
-
-/*
-enum SirBinding:
-    case Name(name: String, tp: SIRType, pos: SourcePosition)
-    case CaseClass(
-        name: String,
-        constructorSymbol: Symbol,
-        bindings: List[SirBinding],
-        constType: SIRType,
-        pos: SourcePosition
-    )
-    case Error(error: CompilationError)
-
-case class PatternInfo(
-    allBindings: Map[String, SIRType],
-    generator: SIR => SIR, /// generates inner Match for nested case classes
-    bindings: List[String], /// current level bindings to generate SirCase.Case
-    // rhsType: SIRType /// SIR type of the rhs expression in the match case
-    pos: SourcePosition
-)
-
- */
 
 class PatternMatchingContext(
     val globalPrefix: String,
