@@ -1,6 +1,6 @@
 import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.Language
-import scalus.compiler.sir.lowering.LoweredValue
+import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.sir.*
 import scalus.sir.PrettyPrinter.Style

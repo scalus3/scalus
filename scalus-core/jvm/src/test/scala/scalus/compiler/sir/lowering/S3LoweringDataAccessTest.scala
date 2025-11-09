@@ -1,4 +1,4 @@
-package scalus.sir
+package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
