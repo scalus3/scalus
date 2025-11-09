@@ -7,7 +7,7 @@ addSbtPlugin("ch.epfl.scala" % "sbt-scalajs-bundler" % "0.21.1")
 addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.9")
 addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.3.2")
 // other
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.5")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.6")
 addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.8.0")
 addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.11.2")
 // show welcome message
