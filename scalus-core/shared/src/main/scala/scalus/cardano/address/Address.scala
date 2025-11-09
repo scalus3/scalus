@@ -85,36 +85,43 @@ sealed trait Network {
     /** Check if this is mainnet */
     def isMainnet: Boolean = this == Network.Mainnet
 
+    @deprecated("Use networkId instead", "0.13.0")
+    def value: Byte = networkId
+
     /** Get the numeric value for this network */
-    def value: Byte = this match
-        case Network.Testnet  => 0x00
-        case Network.Mainnet  => 0x01
-        case Network.Other(v) => v
+    def networkId: Byte
 }
 
 object Network {
     case object Testnet extends Network {
         override def toString: String = "Testnet"
+
+        def networkId: Byte = 0
     }
 
     case object Mainnet extends Network {
         override def toString: String = "Mainnet"
+        def networkId: Byte = 1
     }
 
     case class Other(v: Byte) extends Network {
         require(v >= 2 && v <= 15, s"Invalid network byte: $v, must be in range 2-15")
 
         override def toString: String = s"Other($v)"
+        def networkId: Byte = v
     }
 
-    /** Create Network from byte value */
-    def fromByte(value: Byte): Network = value match
+    @deprecated("Use fromNetworkId instead", "0.13.0")
+    def fromByte(value: Byte): Network = fromNetworkId(value)
+
+    /** Creates Network from network id byte value */
+    def fromNetworkId(value: Byte): Network = value match
         case 0x00 => Testnet
         case 0x01 => Mainnet
         case v    => Other(v)
 
     given Ordering[Network] with
-        def compare(x: Network, y: Network): Int = x.value - y.value
+        def compare(x: Network, y: Network): Int = x.networkId - y.networkId
 
 }
 
@@ -292,7 +299,7 @@ case class ShelleyAddress(
         case (ShelleyPaymentPart.Script(_), ShelleyDelegationPart.Null)       => 0x07
 
     /** Build header byte combining type ID and network */
-    def toHeader: Byte = ((typeId << 4) | (network.value & 0x0f)).toByte
+    def toHeader: Byte = ((typeId << 4) | (network.networkId & 0x0f)).toByte
 
     /** Get human-readable prefix for bech32 encoding */
     def hrp: Try[String] = network match
@@ -360,7 +367,7 @@ case class StakeAddress(network: Network, payload: StakePayload) extends Address
         case StakePayload.Script(_) => 0x0f
 
     /** Build header byte */
-    def toHeader: Byte = ((typeId << 4) | (network.value & 0x0f)).toByte
+    def toHeader: Byte = ((typeId << 4) | (network.networkId & 0x0f)).toByte
 
     /** Get human-readable prefix for bech32 encoding */
     def hrp: Try[String] = network match
@@ -572,7 +579,7 @@ object Address {
           s"Invalid Type-0 address length: ${payload.length}, expected 56"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val paymentHash = AddrKeyHash(ByteString.fromArray(payload.slice(0, 28)))
         val stakeHash = Hash.stakeKeyHash(ByteString.fromArray(payload.slice(28, 56)))
 
@@ -589,7 +596,7 @@ object Address {
           s"Invalid Type-1 address length: ${payload.length}, expected 56"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val scriptHash = Hash.scriptHash(ByteString.fromArray(payload.slice(0, 28)))
         val stakeHash = Hash.stakeKeyHash(ByteString.fromArray(payload.slice(28, 56)))
 
@@ -606,7 +613,7 @@ object Address {
           s"Invalid Type-2 address length: ${payload.length}, expected 56"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val paymentHash = AddrKeyHash(ByteString.fromArray(payload.slice(0, 28)))
         val scriptHash = Hash.scriptHash(ByteString.fromArray(payload.slice(28, 56)))
 
@@ -623,7 +630,7 @@ object Address {
           s"Invalid Type-3 address length: ${payload.length}, expected 56"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val scriptHash1 = Hash.scriptHash(ByteString.fromArray(payload.slice(0, 28)))
         val scriptHash2 = Hash.scriptHash(ByteString.fromArray(payload.slice(28, 56)))
 
@@ -640,7 +647,7 @@ object Address {
           s"Invalid Type-4 address length: ${payload.length}, expected > 28"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val paymentHash = AddrKeyHash(ByteString.fromArray(payload.slice(0, 28)))
         val pointerBytes = payload.slice(28, payload.length)
 
@@ -663,7 +670,7 @@ object Address {
           s"Invalid Type-5 address length: ${payload.length}, expected > 28"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val scriptHash = Hash.scriptHash(ByteString.fromArray(payload.slice(0, 28)))
         val pointerBytes = payload.slice(28, payload.length)
 
@@ -686,7 +693,7 @@ object Address {
           s"Invalid Type-6 address length: ${payload.length}, expected 28"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val paymentHash = AddrKeyHash(ByteString.fromArray(payload))
 
         val payment = ShelleyPaymentPart.Key(paymentHash)
@@ -702,7 +709,7 @@ object Address {
           s"Invalid Type-7 address length: ${payload.length}, expected 28"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val scriptHash = Hash.scriptHash(ByteString.fromArray(payload))
 
         val payment = ShelleyPaymentPart.Script(scriptHash)
@@ -725,7 +732,7 @@ object Address {
           s"Invalid Type-14 address length: ${payload.length}, expected 28"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val stakeHash = Hash.stakeKeyHash(ByteString.fromArray(payload))
 
         val stakePayload = StakePayload.Stake(stakeHash)
@@ -739,7 +746,7 @@ object Address {
           s"Invalid Type-15 address length: ${payload.length}, expected 28"
         )
 
-        val network = Network.fromByte((header & 0x0f).toByte)
+        val network = Network.fromNetworkId((header & 0x0f).toByte)
         val scriptHash = Hash.scriptHash(ByteString.fromArray(payload))
 
         val stakePayload = StakePayload.Script(scriptHash)

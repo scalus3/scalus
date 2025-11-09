@@ -2096,10 +2096,8 @@ object TransactionUnspentOutput:
 case class StakeCredential(credential: Credential)
 
 extension (network: Network)
-    def toNetworkId: Int = network match
-        case Network.Testnet  => 0
-        case Network.Mainnet  => 1
-        case Network.Other(b) => b.toInt
+    @deprecated("Use network.networkId instead", "0.13.0")
+    def toNetworkId: Int = network.networkId.toInt
 
 object NetworkExtensions:
     /** Convert integer network ID to Network */
