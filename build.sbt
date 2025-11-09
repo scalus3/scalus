@@ -124,7 +124,6 @@ lazy val root: Project = project
       scalusCardanoLedger.js,
       scalusTestkit.js,
       scalusTestkit.jvm,
-      scalusTestkit.native,
       scalusExamples.js,
       scalusExamples.jvm,
       scalusDesignPatterns,
@@ -174,7 +173,6 @@ lazy val native: Project = project
     .in(file("native"))
     .aggregate(
       scalus.native,
-      scalusTestkit.native,
     )
     .settings(
       publish / skip := true
@@ -196,7 +194,7 @@ lazy val scalusPlugin = project
       // as sbt-ci-release plugin increments the version on every commit
       // thus recompiling the plugin and all dependent projects
       // COMMENT THIS LINE TO ENABLE VERSION INCREMENT during Scalus plugin development
-//      version := " 0.13.0+166-7bb99a16+20251107-1809-SNAPSHOT",
+      version := "0.13.0+233-494259c4-SNAPSHOT",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
@@ -382,9 +380,9 @@ lazy val scalusUplcJitCompiler = project
     )
 
 // Scalus Testkit library for testing Scalus applications
-lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
+lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-testkit"))
-    .dependsOn(scalus)
+    .dependsOn(scalus, scalusCardanoLedger)
     .settings(
       name := "scalus-testkit",
       scalaVersion := scalaVersion.value,
@@ -438,11 +436,6 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       scalaJSUseMainModuleInitializer := false
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
-    .nativeSettings(
-      nativeConfig ~= {
-          _.withBuildTarget(BuildTarget.libraryStatic)
-      }
-    )
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
