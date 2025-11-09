@@ -1,11 +1,11 @@
 package scalus.cardano.txbuilder
 
-import com.bloxbean.cardano.client.account.Account
 import scalus.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.cardano.wallet.Account
 
-import java.time.{Duration, Instant}
+import java.time.Instant
 
 case class Context(
     env: Environment,
@@ -13,7 +13,6 @@ case class Context(
 
 trait Builder {
     def spend(utxo: Utxo): Builder = ???
-    def from(address: Address): Builder = ???
     def from(account: Account): Builder = ???
     def withdraw(credential: Credential.KeyHash): Builder = ???
     def withdraw(credential: Credential.ScriptHash): Builder = ???
@@ -29,8 +28,7 @@ trait Builder {
     def validity(interval: ValidityInterval): Builder = ???
     def validFrom(from: Instant): Builder = ???
     def validTo(to: Instant): Builder = ???
-    def validFor(duration: Duration): Builder = ???
-    def feePayer(address: Address): Builder = ???
+    def feePayer(account: Account): Builder = ???
     def changeTo(address: Address): Builder = ???
     def build(): Builder = ???
     def sign(): Transaction = ???
