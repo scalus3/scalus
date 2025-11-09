@@ -26,20 +26,20 @@ class Transactions(
         val inputsToSpend = wallet.selectInputs(value).get
         val builder = inputsToSpend.foldLeft(PaymentBuilder(context)) {
             case (builder, (utxo, witness)) =>
-                builder.spendOutputs((utxo.input, utxo.output), witness)
+                builder.spendOutputs(utxo, witness)
         }
         val datum = ContractDatum(committer, receiver, image, timeout).toData
         builder.payToScript(scriptAddress, value, datum).build()
     }
 
     def reveal(
-        lockedUtxo: (TransactionInput, TransactionOutput),
+        lockedUtxo: Utxo,
         preimage: Preimage,
         recipientAddress: Address,
         receiverPkh: PubKeyHash,
         time: PosixTime
     ): Either[String, Transaction] = {
-        val (input, output) = lockedUtxo
+        val Utxo(input, output) = lockedUtxo
         val redeemer = Action.Reveal(preimage).toData
         val (collat, collatWitness) = wallet.collateralInputs.head
         val witness = ThreeArgumentPlutusScriptWitness(
@@ -51,7 +51,7 @@ class Transactions(
         val validityStartSlot = context.env.slotConfig.timeToSlot(time.toLong)
 
         PaymentBuilder(context)
-            .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockedUtxo), witness))
+            .withStep(TransactionBuilderStep.Spend(lockedUtxo, witness))
             .withStep(TransactionBuilderStep.ValidityStartSlot(validityStartSlot))
             .payTo(recipientAddress, output.value)
             .collateral(collat, collatWitness)
@@ -59,12 +59,12 @@ class Transactions(
     }
 
     def timeout(
-        lockedUtxo: (TransactionInput, TransactionOutput),
+        lockedUtxo: Utxo,
         committerAddress: Address,
         committerPkh: PubKeyHash,
         time: PosixTime
     ): Either[String, Transaction] = {
-        val (input, output) = lockedUtxo
+        val Utxo(input, output) = lockedUtxo
         val redeemer = Action.Timeout.toData
         val (collat, collatWitness) = wallet.collateralInputs.head
         val witness = ThreeArgumentPlutusScriptWitness(
@@ -76,7 +76,7 @@ class Transactions(
         val validityStartSlot = context.env.slotConfig.timeToSlot(time.toLong)
 
         PaymentBuilder(context)
-            .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockedUtxo), witness))
+            .withStep(TransactionBuilderStep.Spend(lockedUtxo, witness))
             .withStep(TransactionBuilderStep.ValidityStartSlot(validityStartSlot))
             .payTo(committerAddress, output.value)
             .collateral(collat, collatWitness)

@@ -84,7 +84,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
 
     private def revealHtlc(
         provider: Provider,
-        lockUtxo: (TransactionInput, TransactionOutput),
+        lockUtxo: Utxo,
         preimage: ByteString,
         receiverPkh: ByteString,
         time: PosixTime
@@ -99,7 +99,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
 
     private def timeoutHtlc(
         provider: Provider,
-        lockUtxo: (TransactionInput, TransactionOutput),
+        lockUtxo: Utxo,
         committerPkh: ByteString,
         time: PosixTime
     ): Transaction = {

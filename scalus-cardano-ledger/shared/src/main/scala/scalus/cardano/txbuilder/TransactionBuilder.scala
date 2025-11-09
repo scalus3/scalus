@@ -53,7 +53,7 @@ object TransactionBuilderStep {
       * [[ReferenceOutput]] or [[Spend]] steps.
       */
     case class Spend(
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         witness: PubKeyWitness.type | NativeScriptWitness | ThreeArgumentPlutusScriptWitness =
             PubKeyWitness
     ) extends TransactionBuilderStep
@@ -68,7 +68,7 @@ object TransactionBuilderStep {
       * transaction contents, e.g. to include the indices of inputs or outputs.
       */
     case class SpendWithDelayedRedeemer(
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         redeemerBuilder: Transaction => Data,
         validator: PlutusScript,
         datum: Option[Data] = None
@@ -94,8 +94,8 @@ object TransactionBuilderStep {
         witness: NativeScriptWitness | TwoArgumentPlutusScriptWitness
     ) extends TransactionBuilderStep
 
-    /** Add a [[TransactionUnspentOutput]] as a CIP-31 reference input. Consuming the same UTxO
-      * twice (reference or spend) is an error
+    /** Add a [[Utxo]] as a CIP-31 reference input. Consuming the same UTxO twice (reference or
+      * spend) is an error
       *
       * The reason that action is represented as a step is that reference utxos should be added to
       * the context and also may be required to create a [[WitnessForSpend]].
@@ -103,7 +103,7 @@ object TransactionBuilderStep {
       * @param utxo
       *   any utxo
       */
-    case class ReferenceOutput(utxo: TransactionUnspentOutput) extends TransactionBuilderStep
+    case class ReferenceOutput(utxo: Utxo) extends TransactionBuilderStep
 
     /** Set the minimal fee. */
     case class Fee(fee: Coin) extends TransactionBuilderStep
@@ -120,7 +120,7 @@ object TransactionBuilderStep {
       * optics.
       */
     case class AddCollateral(
-        utxo: TransactionUnspentOutput
+        utxo: Utxo
     ) extends TransactionBuilderStep
 
     case class ModifyAuxiliaryData(f: Option[AuxiliaryData] => Option[AuxiliaryData])
@@ -154,7 +154,7 @@ object TransactionBuilderStep {
 }
 
 case class DelayedRedeemerSpec(
-    utxo: TransactionUnspentOutput,
+    utxo: Utxo,
     redeemerBuilder: Transaction => Data,
     validator: PlutusScript,
     datum: Option[Data],
@@ -336,7 +336,7 @@ object TransactionBuilder:
           *   - If the UTxO exists in the map with a different output associated, return None
           *   - If the UTxO exists in the map with the same output, return the map unmodified
           */
-        def addUtxo(utxo: TransactionUnspentOutput): Option[ResolvedUtxos] =
+        def addUtxo(utxo: Utxo): Option[ResolvedUtxos] =
             utxos.get(utxo.input) match {
                 case None => Some(ResolvedUtxos(utxos + utxo.toTuple))
                 case Some(existingOutput) =>
@@ -347,10 +347,10 @@ object TransactionBuilder:
 
         /** Tries to add multiple UTxOs, returning invalid additions. See [[addUtxo]] */
         def addUtxos(
-            utxos: Seq[TransactionUnspentOutput]
-        ): Either[Seq[TransactionUnspentOutput], ResolvedUtxos] = {
-            val res: (Seq[TransactionUnspentOutput], ResolvedUtxos) =
-                utxos.foldLeft((Seq.empty[TransactionUnspentOutput], this))((acc, utxo) =>
+            utxos: Seq[Utxo]
+        ): Either[Seq[Utxo], ResolvedUtxos] = {
+            val res: (Seq[Utxo], ResolvedUtxos) =
+                utxos.foldLeft((Seq.empty[Utxo], this))((acc, utxo) =>
                     acc._2.addUtxo(utxo) match {
                         case Some(newResolved) => (acc._1, newResolved)
                         case None              => (acc._1.appended(utxo), acc._2)
@@ -529,7 +529,7 @@ object TransactionBuilder:
         // Tries to add the output to the resolved utxo set, throwing an error if
         // the input is already mapped to another output
         def addResolvedUtxo(
-            utxo: TransactionUnspentOutput,
+            utxo: Utxo,
             step: TransactionBuilderStep
         ): BuilderM[Unit] =
             for {
@@ -823,7 +823,7 @@ object TransactionBuilder:
 
     private def useDatum(
         // TODO: this is used for errors only, I think utxoId should be sufficient
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         datum: Datum,
         step: TransactionBuilderStep
     ): BuilderM[Unit] =
@@ -1196,7 +1196,7 @@ object TransactionBuilder:
 
     /** Ensure that the output is a pubkey output containing only ada. */
     private def assertAdaOnlyPubkeyUtxo(
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         step: TransactionBuilderStep
     ): BuilderM[Unit] =
         for {
@@ -1895,8 +1895,7 @@ object StepError {
                 s"\nIncoherent Output: $incoherentOutput"
     }
 
-    case class CollateralNotPubKey(utxo: TransactionUnspentOutput, step: TransactionBuilderStep)
-        extends StepError {
+    case class CollateralNotPubKey(utxo: Utxo, step: TransactionBuilderStep) extends StepError {
         override def explain: String =
             s"The UTxO passed as a collateral input is not a PubKey UTxO. UTxO: $utxo"
     }
@@ -1907,14 +1906,13 @@ object StepError {
             s"Could not extract signatures via _.additionalSigners from $step"
     }
 
-    case class DatumIsMissing(utxo: TransactionUnspentOutput, step: TransactionBuilderStep)
-        extends StepError {
+    case class DatumIsMissing(utxo: Utxo, step: TransactionBuilderStep) extends StepError {
         override def explain: String =
             "Given witness to spend an output requires a datum that is missing: $utxo"
     }
 
     case class IncorrectDatumHash(
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         datum: Data,
         datumHash: DataHash,
         step: TransactionBuilderStep
@@ -1947,7 +1945,7 @@ object StepError {
 
     case class WrongOutputType(
         expectedType: WitnessKind,
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         step: TransactionBuilderStep
     ) extends StepError {
         override def explain: String =
@@ -1965,15 +1963,14 @@ object StepError {
             s"${action.explain} ($action) requires a $expectedType witness: $cred"
     }
 
-    case class DatumWitnessNotProvided(utxo: TransactionUnspentOutput, step: TransactionBuilderStep)
-        extends StepError {
+    case class DatumWitnessNotProvided(utxo: Utxo, step: TransactionBuilderStep) extends StepError {
         override def explain: String =
             "The output you are trying to spend contains a datum hash, you need to provide " +
                 s"a `DatumValue`, output: $utxo"
     }
 
     case class DatumValueForUtxoWithInlineDatum(
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         datum: Datum,
         step: TransactionBuilderStep
     ) extends StepError {
@@ -2031,7 +2028,7 @@ object StepError {
     }
 
     case class CollateralWithTokens(
-        utxo: TransactionUnspentOutput,
+        utxo: Utxo,
         step: TransactionBuilderStep
     ) extends StepError {
         override def explain: String =
@@ -2082,15 +2079,10 @@ object StepError {
 // auxiliary types, extensions, helpers
 // -------------------------------------------------------------------------
 
-// TODO: itd be nice to make this opaque and only return from chain queries
-// NOTE (Peter, 2025-09-23): this comes from
-// https://github.com/mlabs-haskell/purescript-cardano-types/blob/master/src/Cardano/Types/TransactionUnspentOutput.purs
-case class TransactionUnspentOutput(input: TransactionInput, output: TransactionOutput):
-    def toTuple: (TransactionInput, TransactionOutput) = (input, output)
-
-object TransactionUnspentOutput:
-    def apply(utxo: (TransactionInput, TransactionOutput)): TransactionUnspentOutput =
-        TransactionUnspentOutput(utxo._1, utxo._2)
+@deprecated("Use scalus.cardano.ledger.Utxo instead", "0.13.0")
+type TransactionUnspentOutput = Utxo
+@deprecated("Use scalus.cardano.ledger.Utxo instead", "0.13.0")
+val TransactionUnspentOutput = Utxo
 
 // NOTE (Peter, 2025-09-23): this comes from https://github.com/mlabs-haskell/purescript-cardano-types/blob/master/src/Cardano/Types/StakeCredential.purs
 case class StakeCredential(credential: Credential)

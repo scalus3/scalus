@@ -19,7 +19,7 @@ class Transactions(context: BuilderContext) {
         val inputsToSpend = wallet.selectInputs(value).get
         val builder = inputsToSpend.foldLeft(PaymentBuilder(context)) {
             case (builder, (utxo, witness)) =>
-                builder.spendOutputs((utxo.input, utxo.output), witness)
+                builder.spendOutputs(utxo, witness)
         }
         val ownerCredentialHash = owner match {
             case addr: scalus.cardano.address.ShelleyAddress =>

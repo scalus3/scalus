@@ -3,7 +3,7 @@ package scalus.examples
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.{Environment, PubKeyWitness, TransactionUnspentOutput, Wallet as WalletTrait, Witness}
+import scalus.cardano.txbuilder.{Environment, PubKeyWitness, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v3
 import scalus.uplc.Program
 import scalus.uplc.eval.ExBudget
@@ -48,16 +48,16 @@ object TestUtil extends ScalusTest {
           datumOption = None,
           scriptRef = None
         )
-        private val txUnspentOutput = TransactionUnspentOutput(testInput, testOutput)
+        private val txUnspentOutput = Utxo(testInput, testOutput)
 
         override def owner: Address = address
         override def utxo: Utxos = Map((testInput, testOutput))
-        override def collateralInputs: Seq[(TransactionUnspentOutput, Witness)] = Seq(
+        override def collateralInputs: Seq[(Utxo, Witness)] = Seq(
           (txUnspentOutput, PubKeyWitness)
         )
         override def selectInputs(
             required: Value
-        ): Option[Seq[(TransactionUnspentOutput, Witness)]] = {
+        ): Option[Seq[(Utxo, Witness)]] = {
             val available = testOutput.value
             if available.coin.value >= required.coin.value then {
                 Some(Seq((txUnspentOutput, PubKeyWitness)))
@@ -71,20 +71,20 @@ object TestUtil extends ScalusTest {
         new WalletTrait {
             override val owner: Address = address
             override lazy val utxo: Utxos = provider.findUtxos(address).toOption.get
-            override val collateralInputs: Seq[(TransactionUnspentOutput, Witness)] = Seq(
-              (TransactionUnspentOutput(provider.findUtxo(address).toOption.get), PubKeyWitness)
+            override val collateralInputs: Seq[(Utxo, Witness)] = Seq(
+              (provider.findUtxo(address).toOption.get, PubKeyWitness)
             )
 
             override def selectInputs(
                 required: Value
-            ): Option[Seq[(TransactionUnspentOutput, Witness)]] = {
+            ): Option[Seq[(Utxo, Witness)]] = {
                 val available = provider.findUtxos(address, minRequiredAmount = Some(required.coin))
                 available match
                     case Left(_) => None
                     case Right(utxos) =>
                         Some(
                           utxos.view.map { entry =>
-                              (TransactionUnspentOutput(entry), PubKeyWitness)
+                              (Utxo(entry), PubKeyWitness)
                           }.toSeq
                         )
             }

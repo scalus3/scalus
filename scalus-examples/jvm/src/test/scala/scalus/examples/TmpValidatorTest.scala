@@ -34,7 +34,7 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
         val inputsToSpend = wallet.selectInputs(value).get
         val builder = inputsToSpend.foldLeft(PaymentBuilder(context)) {
             case (builder, (utxo, witness)) =>
-                builder.spendOutputs((utxo.input, utxo.output), witness)
+                builder.spendOutputs(utxo, witness)
         }
         builder.payToScript(scriptAddress, value, datum).build().toOption.get
     }
@@ -56,7 +56,7 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
             )
 
             PaymentBuilder(context)
-                .withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(lockUtxo), witness))
+                .withStep(TransactionBuilderStep.Spend(Utxo(lockUtxo), witness))
                 .payTo(address2, output.value)
                 .build()
                 .toOption

@@ -64,10 +64,10 @@ class Transactions(
             .get
             .foldLeft(PaymentBuilder(context)):
                 case (builder, (utxo, witness)) =>
-                    builder.spendOutputs((utxo.input, utxo.output), witness)
+                    builder.spendOutputs(utxo, witness)
             .withStep(
               TransactionBuilderStep.Spend(
-                TransactionUnspentOutput(betUtxo),
+                betUtxo,
                 ThreeArgumentPlutusScriptWitness(
                   scriptSource = ScriptSource.PlutusScriptValue(script),
                   redeemer = Action.Join.toData,
@@ -96,7 +96,7 @@ class Transactions(
         PaymentBuilder(context)
             .withStep(
               TransactionBuilderStep.Spend(
-                TransactionUnspentOutput(betUtxo),
+                betUtxo,
                 ThreeArgumentPlutusScriptWitness(
                   scriptSource = ScriptSource.PlutusScriptValue(script),
                   redeemer = Action.AnnounceWinner(payout).toData,

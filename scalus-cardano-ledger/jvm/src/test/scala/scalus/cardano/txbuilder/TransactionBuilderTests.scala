@@ -66,8 +66,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             assert(res.map(_.toTuple) == Right(expected))
         }
 
-    val pkhUtxo = TransactionUnspentOutput(input = input1, output = pkhOutput)
-    val skhUtxo = TransactionUnspentOutput(input1, skhOutput)
+    val pkhUtxo = Utxo(input = input1, output = pkhOutput)
+    val skhUtxo = Utxo(input1, skhOutput)
 
     val ns: Script.Native = Script.Native(AllOf(IndexedSeq.empty))
     val nsSigners: Set[ExpectedSigner] =
@@ -100,9 +100,9 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             )
 
     // A Utxo at the address for script 1
-    val script1Utxo: TransactionUnspentOutput = {
+    val script1Utxo: Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        TransactionUnspentOutput(
+        Utxo(
           setScriptAddr(script1.scriptHash, utxo)
               .focus(_._2.datumOption)
               .replace(Some(Inline(Data.List(List.empty))))
@@ -110,9 +110,9 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     }
 
     // A Utxo at the address for script 2
-    val script2Utxo: TransactionUnspentOutput = {
+    val script2Utxo: Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        TransactionUnspentOutput(setScriptAddr(script2.scriptHash, utxo))
+        Utxo(setScriptAddr(script2.scriptHash, utxo))
     }
 
     // Expected Signers for the plutus script1 ref witness
@@ -126,15 +126,15 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         utxo.focus(_._2.scriptRef).replace(Some(ScriptRef(script)))
 
     // A utxo carrying a reference script for script 1
-    val utxoWithScript1ReferenceScript: TransactionUnspentOutput = {
+    val utxoWithScript1ReferenceScript: Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        TransactionUnspentOutput(setRefScript(script1, utxo))
+        Utxo(setRefScript(script1, utxo))
     }
 
     // A utxo carrying a reference script for script 2
     val utxoWithScript2ReferenceStep: ReferenceOutput = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        ReferenceOutput(TransactionUnspentOutput(setRefScript(script2, utxo)))
+        ReferenceOutput(Utxo(setRefScript(script2, utxo)))
     }
 
     val plutusScript1RefWitness = ThreeArgumentPlutusScriptWitness(
@@ -221,7 +221,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     // ============================================================================
 
     val pkhUtxoTestNet =
-        TransactionUnspentOutput(
+        Utxo(
           input = input0,
           output = Babbage(
             address = ShelleyAddress(
@@ -401,7 +401,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
         val step =
             TransactionBuilderStep.Spend(
-              utxo = TransactionUnspentOutput(
+              utxo = Utxo(
                 txInput,
                 Babbage(
                   address = ShelleyAddress(Mainnet, ShelleyPaymentPart.Script(ns.scriptHash), Null),
@@ -425,7 +425,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
         val step =
             TransactionBuilderStep.Spend(
-              utxo = TransactionUnspentOutput(
+              utxo = Utxo(
                 txInput,
                 Babbage(
                   address =

@@ -63,7 +63,7 @@ object ScriptFeeComparison {
           datumOption = datum,
           scriptRef = None
         )
-        val scriptUtxo = TransactionUnspentOutput(scriptUtxoInput, scriptUtxoOutput)
+        val scriptUtxo = Utxo(scriptUtxoInput, scriptUtxoOutput)
 
         def createDirect = {
             val directWitness = ThreeArgumentPlutusScriptWitness(
@@ -90,7 +90,7 @@ object ScriptFeeComparison {
               datumOption = None,
               scriptRef = Some(ScriptRef(script: Script))
             )
-            val refScriptUtxo = TransactionUnspentOutput(refScriptUtxoInput, refScriptUtxoOutput)
+            val refScriptUtxo = Utxo(refScriptUtxoInput, refScriptUtxoOutput)
 
             val refWitness = ThreeArgumentPlutusScriptWitness(
               scriptSource = ScriptSource.PlutusScriptAttached,

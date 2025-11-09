@@ -21,7 +21,7 @@ class LedgerProvider(
 
     def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] = {
         utxos.get(input) match {
-            case Some(output) => Right(input -> output)
+            case Some(output) => Right(Utxo(input, output))
             case None         => Left(new RuntimeException(s"Utxo not found for input: $input"))
         }
     }
@@ -54,7 +54,7 @@ class LedgerProvider(
             ) &&
             minAmount.forall(amount => output.value.coin >= amount)
         } match
-            case Some(utxo) => Right(utxo)
+            case Some(utxo) => Right(Utxo(utxo))
             case None =>
                 Left(
                   new RuntimeException(

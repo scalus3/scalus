@@ -7,8 +7,8 @@ import scalus.cardano.ledger.*
 case class PaymentBuilder(
     context: BuilderContext,
     payments: Seq[(Address, Value, Option[DatumOption])] = Seq.empty,
-    scriptInputs: Set[(TransactionUnspentOutput, Witness)] = Set.empty,
-    collateral: Option[(TransactionUnspentOutput, Witness)] = None,
+    scriptInputs: Set[(Utxo, Witness)] = Set.empty,
+    collateral: Option[(Utxo, Witness)] = None,
     additionalSteps: Seq[TransactionBuilderStep] = Seq.empty
 ) {
 
@@ -18,7 +18,7 @@ case class PaymentBuilder(
     def payToScript(address: Address, value: Value, datum: Data): PaymentBuilder =
         payTo(address, value, Some(DatumOption.Inline(datum)))
 
-    def collateral(collat: TransactionUnspentOutput, w: Witness) =
+    def collateral(collat: Utxo, w: Witness) =
         copy(collateral = Some(collat, w))
 
     def spendScriptOutputs(
@@ -34,7 +34,7 @@ case class PaymentBuilder(
           additionalSigners = Set.empty
         )
         copy(
-          scriptInputs = scriptInputs + ((TransactionUnspentOutput(utxo), witness))
+          scriptInputs = scriptInputs + ((Utxo(utxo), witness))
         )
     }
 
@@ -46,7 +46,7 @@ case class PaymentBuilder(
     ): PaymentBuilder = {
         withStep(
           TransactionBuilderStep.SpendWithDelayedRedeemer(
-            utxo = TransactionUnspentOutput(utxo),
+            utxo = Utxo(utxo),
             redeemerBuilder = redeemerBuilder,
             validator = validator,
             datum = datum
@@ -55,15 +55,15 @@ case class PaymentBuilder(
     }
 
     def spendOutputs(
-        utxo: (TransactionInput, TransactionOutput),
+        utxo: Utxo,
         witness: Witness
     ) = witness match {
         case w: PubKeyWitness.type =>
-            withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(utxo), w))
+            withStep(TransactionBuilderStep.Spend(utxo, w))
         case w: NativeScriptWitness =>
-            withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(utxo), w))
+            withStep(TransactionBuilderStep.Spend(utxo, w))
         case w: ThreeArgumentPlutusScriptWitness =>
-            withStep(TransactionBuilderStep.Spend(TransactionUnspentOutput(utxo), w))
+            withStep(TransactionBuilderStep.Spend(utxo, w))
         case _: TwoArgumentPlutusScriptWitness =>
             ???
     }

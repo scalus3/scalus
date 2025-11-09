@@ -298,7 +298,22 @@ object TransactionException {
 @deprecated("Use Utxos instead", "0.12.1")
 type UTxO = Map[TransactionInput, TransactionOutput]
 type Utxos = Map[TransactionInput, TransactionOutput]
-type Utxo = (TransactionInput, TransactionOutput)
+
+/** Unspent Transaction Output
+  *
+  * @note
+  *   It's common to use UTXO as a resolved transaction input-output pair, regardless whether it's
+  *   spent or unspent. We use [[Utxo]] in both cases for simplicity.
+  */
+case class Utxo(input: TransactionInput, output: TransactionOutput) {
+    def toTuple: (TransactionInput, TransactionOutput) = (input, output)
+}
+
+object Utxo {
+    def apply(utxo: (TransactionInput, TransactionOutput)): Utxo =
+        Utxo(utxo._1, utxo._2)
+}
+
 type GovState = Unit
 type StakeMap = Map[Credential, Coin]
 case class UTxOState(

@@ -1,16 +1,16 @@
 package scalus.cardano.txbuilder
 
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.{Utxos, Value}
+import scalus.cardano.ledger.{Utxo, Utxos, Value}
 
 /** Owns a set of pubkey-controlled UTXOs. */
 trait Wallet {
 
-    def selectInputs(required: Value): Option[Seq[(TransactionUnspentOutput, Witness)]]
+    def selectInputs(required: Value): Option[Seq[(Utxo, Witness)]]
 
     def utxo: Utxos
 
-    def collateralInputs: Seq[(TransactionUnspentOutput, Witness)]
+    def collateralInputs: Seq[(Utxo, Witness)]
 
     def owner: Address
 }
@@ -21,12 +21,12 @@ object Wallet {
 
         override def utxo: Utxos = Map.empty
 
-        override def collateralInputs: Seq[(TransactionUnspentOutput, Witness)] = Seq.empty
+        override def collateralInputs: Seq[(Utxo, Witness)] = Seq.empty
 
         override def owner: Address = changeAddr
 
         override def selectInputs(
             required: Value
-        ): Option[Seq[(TransactionUnspentOutput, Witness)]] = None
+        ): Option[Seq[(Utxo, Witness)]] = None
     }
 }

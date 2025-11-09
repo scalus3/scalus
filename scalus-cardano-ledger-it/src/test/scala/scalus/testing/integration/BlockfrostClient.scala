@@ -1,6 +1,6 @@
 package scalus.testing.integration
 
-import com.bloxbean.cardano.client.api.model.Utxo
+import com.bloxbean.cardano.client.api.model as bloxbean
 import com.fasterxml.jackson.databind.ObjectMapper
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress}
@@ -85,7 +85,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
 
     override def findUtxo(
         input: TransactionInput
-    ): Either[RuntimeException, (TransactionInput, TransactionOutput)] =
+    ): Either[RuntimeException, Utxo] =
         Left(new RuntimeException("Unimplemented, use `findUtxos(address)`"))
 
     override def findUtxos(inputs: Set[TransactionInput]): Either[RuntimeException, Utxos] = Left(
@@ -97,7 +97,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
         transactionId: Option[TransactionHash],
         datum: Option[DatumOption],
         minAmount: Option[Coin]
-    ): Either[RuntimeException, (TransactionInput, TransactionOutput)] = Left(
+    ): Either[RuntimeException, Utxo] = Left(
       new RuntimeException("Unimplemented, use `findUtxos(address)`")
     )
 
@@ -116,7 +116,7 @@ object BlockfrostClient {
         case LedgerError(description: String)
 
     def parseUtxos(mapper: ObjectMapper, json: String): Utxos = {
-        val utxos = mapper.readValue(json, classOf[Array[Utxo]])
+        val utxos = mapper.readValue(json, classOf[Array[bloxbean.Utxo]])
         utxos.map { utxo =>
             val txInput = TransactionInput(
               TransactionHash.fromHex(utxo.getTxHash),

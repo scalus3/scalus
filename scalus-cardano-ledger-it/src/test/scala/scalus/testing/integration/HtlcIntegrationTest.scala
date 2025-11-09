@@ -88,11 +88,11 @@ class HtlcIntegrationTest extends AnyFunSuite {
     private def buildWalletWithCollateral(address: Address, utxos: Utxos): Wallet = new Wallet {
         override def selectInputs(
             required: Value
-        ): Option[Seq[(TransactionUnspentOutput, Witness)]] = {
+        ): Option[Seq[(Utxo, Witness)]] = {
             utxos.toSeq
                 .filter { case (_, output) => output.value.coin.value >= required.coin.value }
                 .map { case (input, output) =>
-                    (TransactionUnspentOutput(input, output), PubKeyWitness)
+                    (Utxo(input, output), PubKeyWitness)
                 }
                 .headOption
                 .map(Seq(_))
@@ -100,13 +100,13 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
         override def utxo: Utxos = utxos
 
-        override def collateralInputs: Seq[(TransactionUnspentOutput, Witness)] = {
+        override def collateralInputs: Seq[(Utxo, Witness)] = {
             utxos.toSeq
                 .filter { case (_, output) =>
                     output.value.coin.value >= 5_000_000 && output.value.assets.isEmpty
                 }
                 .map { case (input, output) =>
-                    (TransactionUnspentOutput(input, output), PubKeyWitness)
+                    (Utxo(input, output), PubKeyWitness)
                 }
                 .take(1)
         }
@@ -182,7 +182,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
         // Fetch the locked UTXO from script address
         val scriptUtxos = ctx.client.findUtxos(scriptAddress).toOption.get
         assert(scriptUtxos.nonEmpty, s"No UTXOs found at script address")
-        val lockedUtxo = scriptUtxos.find(_._2.value.coin.value > 7_000_000L).get
+        val lockedUtxo = Utxo(scriptUtxos.find(_._2.value.coin.value > 7_000_000L).get)
 
         // Fetch sender UTXOs for fees and collateral
         val senderUtxos = ctx.client.findUtxos(senderAddr).toOption.get
