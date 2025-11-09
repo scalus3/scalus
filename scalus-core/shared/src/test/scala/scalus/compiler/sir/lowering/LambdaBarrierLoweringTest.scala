@@ -1,8 +1,8 @@
 package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.sir.*
-import scalus.sir.SIRType.Integer
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIRType.Integer
 import scalus.uplc.Term
 import LoweredValue.Builder.*
 

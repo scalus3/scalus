@@ -4,8 +4,8 @@ import scalus.builtin
 import scalus.builtin.Data
 import scalus.serialization.flat.HashConsed.CachedTaggedRef
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
-import scalus.sir.*
-import scalus.sir.SIR.{LetFlags, Pattern}
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.{LetFlags, Pattern}
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.DefaultFun
 

@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.sir.*
-import scalus.sir.EnrichedSIR.*
+import scalus.compiler.sir.*
+import scalus.compiler.sir.EnrichedSIR.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable

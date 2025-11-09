@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 import scala.collection.mutable.Map as MutableMap
 

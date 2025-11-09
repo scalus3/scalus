@@ -10,7 +10,7 @@ import scalus.builtin.Data
 import scalus.builtin.Data.fromData
 import scalus.builtin.Data.toData
 import scalus.prelude.*
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.Constant
 import scalus.uplc.Term
 import scalus.uplc.TermDSL.given
@@ -43,8 +43,8 @@ class ContextTest
     }
 
     test("Interval Eq") {
-        import scalus.sir.SirDSL.*
-        import scalus.sir.*
+        import scalus.compiler.sir.SirDSL.*
+        import scalus.compiler.sir.*
         val sir = compile { (d: Data) =>
             val i = fromData[Interval](d)
             i === i

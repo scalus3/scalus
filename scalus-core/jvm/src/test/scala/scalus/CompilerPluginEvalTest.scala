@@ -6,8 +6,8 @@ import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, JVMPlatformSpecific}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.ledger.api.v1.*
-import scalus.sir.*
-import scalus.sir.SIR.*
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.*
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.Constant.given
@@ -21,7 +21,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV2VM()
 
     given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

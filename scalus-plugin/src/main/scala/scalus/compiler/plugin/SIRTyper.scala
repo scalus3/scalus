@@ -7,7 +7,7 @@ import dotty.tools.dotc.core.StdNames.*
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.SrcPos
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 import scala.annotation.unused
 import scala.util.control.NonFatal

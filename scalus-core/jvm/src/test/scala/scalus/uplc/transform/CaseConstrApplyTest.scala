@@ -41,9 +41,7 @@ class CaseConstrApplyTest extends AnyFunSuite {
         // println(s"expected UPLC:  ${expected.pretty.render(100)}")
         val djOptimized = DeBruijn.deBruijnTerm(optimized)
         val djExpected = DeBruijn.deBruijnTerm(expected)
-        assert(
-          scalus.uplc.Term.alphaEq(djOptimized, djExpected),
-        )
+        assert(djOptimized α_== djExpected)
         assert(logs == Seq("Replacing 3 Apply with Case/Constr"))
         (uplc.evaluateDebug, optimized.evaluateDebug) match
             case (orig: Success, opt: Success) =>

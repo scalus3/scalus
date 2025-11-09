@@ -12,7 +12,7 @@ import dotty.tools.dotc.core.Names.*
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import scalus.serialization.flat.FlatInstances.ModuleHashSetReprFlat
-import scalus.sir.{Module as SIRModule, *}
+import scalus.compiler.sir.{Module as SIRModule, *}
 
 /** Preprocess SIR - run before the Pickling and sbt.ExtreactApi phases and add toSIR-compiled
   * modules fields, which later set in Scalus phase and used during linking.
@@ -31,7 +31,7 @@ import scalus.sir.{Module as SIRModule, *}
   * object Mybjs {
   *   ...
   *
-  *   val sirModule: scalus.sir.Module = [NOT-SET]
+  *   val sirModule: scalus.compiler.sir.Module = [NOT-SET]
   *   val sirDeps: List[SIRCompiled] = [NOT-SETT]
   * }
   * }}}
@@ -44,8 +44,8 @@ class SIRPreprocessor(thisPhase: ScalusPreparePhase, debugLevel: Int)(using ctx:
 
     private val ignoreAnnotRef = requiredClassRef("scalus.Ignore")
     private val ignoreAnnot = ignoreAnnotRef.symbol.asClass
-    private val sirModuleType = requiredClassRef("scalus.sir.Module")
-    private val sirModuleWithDepsType = requiredClassRef("scalus.sir.SIRModuleWithDeps")
+    private val sirModuleType = requiredClassRef("scalus.compiler.sir.Module")
+    private val sirModuleWithDepsType = requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")
     private val listSirModuleWithDepsType = defn.ListClass.typeRef.appliedTo(sirModuleWithDepsType)
 
     def transformTypeDef(tree: tpd.TypeDef)(using Context): tpd.Tree = {
@@ -62,7 +62,7 @@ class SIRPreprocessor(thisPhase: ScalusPreparePhase, debugLevel: Int)(using ctx:
                 sirSym.addAnnotation(ignoreAnnot)
                 sirSym.enteredAfter(thisPhase)
                 val module = SIRModule(SIRVersion, "init", false, None, List.empty)
-                val moduleToExprSym = Symbols.requiredModule("scalus.sir.ModuleToExpr")
+                val moduleToExprSym = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
                 val moduleTree =
                     convertFlatToTree(
                       module,

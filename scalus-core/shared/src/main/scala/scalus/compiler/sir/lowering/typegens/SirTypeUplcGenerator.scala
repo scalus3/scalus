@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 import java.util.IdentityHashMap
 

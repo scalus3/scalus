@@ -1,8 +1,8 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import scalus.serialization.flat.*
 import scalus.serialization.flat.FlatInstances.{SIRHashConsedFlat, SIRTypeHashConsedFlat}
-import scalus.sir.SIRType.checkAllProxiesFilled
+import scalus.compiler.sir.SIRType.checkAllProxiesFilled
 
 import java.nio.charset.StandardCharsets
 import scala.annotation.nowarn

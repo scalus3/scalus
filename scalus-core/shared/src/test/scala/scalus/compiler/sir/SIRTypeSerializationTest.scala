@@ -1,11 +1,11 @@
-package scalus.sir
+package scalus.compiler.sir
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.*
-import scalus.prelude.*
-import scalus.ledger.api.v3.*
-import org.scalatest.funsuite.AnyFunSuite
 import scalus.ledger.api.v2.OutputDatum
+import scalus.ledger.api.v3.*
+import scalus.prelude.*
 
 class SIRTypeSerializationTest extends AnyFunSuite {
 

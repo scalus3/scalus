@@ -3,7 +3,7 @@ package scalus.testing
 import scalus.serialization.flat
 import scalus.serialization.flat.DecoderState
 import scalus.serialization.flat.FlatInstances.given
-import scalus.sir.Module
+import scalus.compiler.sir.Module
 
 object SIRModules {
 

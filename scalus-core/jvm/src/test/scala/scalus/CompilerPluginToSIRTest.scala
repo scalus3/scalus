@@ -6,9 +6,9 @@ import scalus.Compiler.{compile, fieldAsData}
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, Data}
 import scalus.prelude.List.{Cons, Nil}
-import scalus.sir.SIR.*
-import scalus.sir.*
-import scalus.sir.SIRType.{Boolean, Fun, TypeVar}
+import scalus.compiler.sir.SIR.*
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIRType.{Boolean, Fun, TypeVar}
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success

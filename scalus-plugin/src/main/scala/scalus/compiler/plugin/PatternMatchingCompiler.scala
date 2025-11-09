@@ -8,10 +8,10 @@ import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.{SourcePosition, SrcPos}
-import SirCaseDecisionTree.SplitStrategy.{DuplicateChecks, DuplicateRows}
-import SirParsedCase.ActionRef.FailMatch
-import SirParsedCase.{ActionRef, BindingNameInfo, GroupedTuples, Pattern}
-import scalus.sir.*
+import scalus.compiler.plugin.SirCaseDecisionTree.SplitStrategy.{DuplicateChecks, DuplicateRows}
+import scalus.compiler.plugin.SirParsedCase.ActionRef.FailMatch
+import scalus.compiler.plugin.SirParsedCase.{ActionRef, BindingNameInfo, GroupedTuples, Pattern}
+import scalus.compiler.sir.*
 
 import scala.annotation.{tailrec, unused}
 import scala.collection.mutable.ListBuffer

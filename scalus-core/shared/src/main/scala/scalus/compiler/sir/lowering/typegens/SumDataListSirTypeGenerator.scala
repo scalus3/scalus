@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 /** Internal representation - Plutus List, element type should be data-compatibe List[E] when E is
   * data-compatible type is mapped to this type.

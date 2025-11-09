@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 

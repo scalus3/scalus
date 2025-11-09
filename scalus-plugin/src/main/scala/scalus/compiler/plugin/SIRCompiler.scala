@@ -14,7 +14,7 @@ import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.{NoSourcePosition, SourcePosition, SrcPos}
 import scalus.serialization.flat.FlatInstances.{ModuleHashSetReprFlat, given}
 import scalus.serialization.flat.{EncoderState, Flat}
-import scalus.sir.{AnnotatedSIR, AnnotationsDecl, Binding, ConstrDecl, DataDecl, Module, SIR, SIRBuiltins, SIRDefaultOptions, SIRPosition, SIRType, SIRUnify, SIRVersion, TargetLoweringBackend, TypeBinding}
+import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, ConstrDecl, DataDecl, Module, SIR, SIRBuiltins, SIRDefaultOptions, SIRPosition, SIRType, SIRUnify, SIRVersion, TargetLoweringBackend, TypeBinding}
 import scalus.uplc.DefaultUni
 import scalus.*
 
@@ -117,10 +117,10 @@ final class SIRCompiler(
     private val ByteStringSymbolHex = ByteStringModuleSymbol.requiredMethod("hex")
     private val FromDataSymbol = requiredClass("scalus.builtin.FromData")
     private val ToDataSymbol = requiredClass("scalus.builtin.ToData")
-    private val moduleToExprSymbol = Symbols.requiredModule("scalus.sir.ModuleToExpr")
-    private val sirBodyAnnotation = requiredClass("scalus.sir.SIRBodyAnnotation")
-    private val sirModuleWithDepsType = requiredClassRef("scalus.sir.SIRModuleWithDeps")
-    private val sirModuleWithDepsModule = requiredModule("scalus.sir.SIRModuleWithDeps")
+    private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
+    private val sirBodyAnnotation = requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
+    private val sirModuleWithDepsType = requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")
+    private val sirModuleWithDepsModule = requiredModule("scalus.compiler.sir.SIRModuleWithDeps")
 
     private val typer = new SIRTyper
     private val pmCompiler = new PatternMatchingCompiler(this)
@@ -551,7 +551,7 @@ final class SIRCompiler(
           SIRPosition.fromSourcePosition(sourcePos),
           optComment
         )
-        scalus.sir.DataDecl(dataFullName.name, constrDecls, dataTypeParams, anns)
+        scalus.compiler.sir.DataDecl(dataFullName.name, constrDecls, dataTypeParams, anns)
     }
 
     def makeConstrDecl(env: Env, srcPos: SrcPos, constrSymbol: Symbol): ConstrDecl = {
@@ -587,7 +587,7 @@ final class SIRCompiler(
             }
             .getOrElse(Nil)
         // TODO: add substitution for parent type params
-        // scalus.sir.ConstrDecl(sym.name.show, SIRVarStorage.DEFAULT, params, typeParams, baseTypeArgs)
+        // scalus.compiler.sir.ConstrDecl(sym.name.show, SIRVarStorage.DEFAULT, params, typeParams, baseTypeArgs)
         val pos = SIRPosition.fromSrcPos(srcPos)
         val comment = constrSymbol.defTree match
             case memberDef: MemberDef =>
@@ -595,7 +595,7 @@ final class SIRCompiler(
             case _ => None
         val anns = AnnotationsDecl(pos, comment)
         try
-            scalus.sir.ConstrDecl(
+            scalus.compiler.sir.ConstrDecl(
               constrSymbol.fullName.show,
               params,
               pcTypeParams,
@@ -2901,7 +2901,7 @@ final class SIRCompiler(
     /*
     private def applyStaticInheritanceInModule(
         parentSym: Symbol,
-        module: scalus.sir.Module,
+        module: scalus.compiler.sir.Module,
         env: Env,
         possibleOverrides: Map[String, LocalBinding]
     ): List[SuperBinding] = {
@@ -3335,7 +3335,7 @@ final class SIRCompiler(
                             )
                             // write empty module instean.
                             Module(SIRVersion, s"notfound:${cName}", false, None, List.empty)
-                    val moduleToExprSym = Symbols.requiredModule("scalus.sir.ModuleToExpr")
+                    val moduleToExprSym = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
                     val moduleTree = {
                         convertFlatToTree(
                           module,

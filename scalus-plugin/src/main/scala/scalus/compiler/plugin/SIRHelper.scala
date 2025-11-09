@@ -9,8 +9,8 @@ import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.util.Spans.Span
 import dotty.tools.dotc.util.{NoSourcePosition, SourcePosition, Spans, SrcPos}
+import scalus.compiler.sir.{AnnotationsDecl, SIRPosition}
 import scalus.serialization.flat.{DecoderState, HSRIdentityHashMap, HashConsed, HashConsedDecoderState, HashConsedEncoderState, HashConsedReprRefFlat}
-import scalus.sir.{AnnotationsDecl, SIRPosition}
 
 import java.nio.charset.StandardCharsets
 import scala.annotation.nowarn
@@ -32,7 +32,7 @@ import scala.annotation.nowarn
   * This is a bit of a hack. Otherwise, we need to convert every SIR node to a [[Tree]] manually by
   * something like
   * {{{
-  *   val sirVar = requiredModule("scalus.sir.SIR.Var").requiredMethod("apply")
+  *   val sirVar = requiredModule("scalus.compiler.sir.SIR.Var").requiredMethod("apply")
   *   val varTree = ref(sirVar).appliedTo(arg)
   *   ...
   * }}}
@@ -110,8 +110,8 @@ private def convertFlatToTree[T <: AnyRef](
         Files.write(path, codedStr.getBytes(StandardCharsets.ISO_8859_1))
         report.echo(s"Scalus: saved SIR to ${path}")
         report.echo(s"Scalus: SIR size: ${codedStr.length} characters, ${bitSize} bits")
-    // // Generate scalus.sir.ToExprHSSIRFlat.decodeStringLatin1(str1 + str2 + ...)
-    // val toExprFlat = requiredModule("scalus.sir.ToExprHSSIRFlat")
+    // // Generate scalus.compiler.sir.ToExprHSSIRFlat.decodeStringLatin1(str1 + str2 + ...)
+    // val toExprFlat = requiredModule("scalus.compiler.sir.ToExprHSSIRFlat")
     val decodeLatin1SIR = toExprFlatSymbol.requiredMethod("decodeStringLatin1")
     ref(toExprFlatSymbol).select(decodeLatin1SIR).appliedTo(concatenatedStrings).withSpan(span)
 }
@@ -181,7 +181,7 @@ extension (pos: SourcePosition)
         else SourcePosition(pos.source, pos.span.union(other.span), NoSourcePosition)
 
 def createSIRPositionTree(pos: SIRPosition, span: Span)(using Context): Tree = {
-    val posModule = Symbols.requiredModule("scalus.sir.SIRPosition")
+    val posModule = Symbols.requiredModule("scalus.compiler.sir.SIRPosition")
     val posTree = ref(posModule).select(posModule.requiredMethod("apply"))
     posTree
         .appliedTo(

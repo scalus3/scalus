@@ -5,7 +5,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.Data
 import scalus.examples.MintingPolicy
 import scalus.prelude.SortedMap
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.Term
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM

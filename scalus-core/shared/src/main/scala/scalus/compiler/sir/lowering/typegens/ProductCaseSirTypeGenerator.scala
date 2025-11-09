@@ -5,7 +5,7 @@ import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
-import scalus.sir.*
+import scalus.compiler.sir.*
 import scalus.uplc.*
 
 import scala.util.control.NonFatal

@@ -5,11 +5,11 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, Data, JVMPlatformSpecific}
-import scalus.sir.SIRType
-import scalus.sir.SIR.*
-import scalus.sir.SIRType.Fun
-import scalus.sir.SirDSL.{*, given}
-import scalus.sir.*
+import scalus.compiler.sir.SIRType
+import scalus.compiler.sir.SIR.*
+import scalus.compiler.sir.SIRType.Fun
+import scalus.compiler.sir.SirDSL.{*, given}
+import scalus.compiler.sir.*
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm

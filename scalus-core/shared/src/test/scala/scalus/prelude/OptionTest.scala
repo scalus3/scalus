@@ -4,7 +4,7 @@ import scalus.*
 import scalus.builtin.Data.{fromData, toData}
 import scalus.builtin.ByteString.hex
 import scalus.prelude.Option.{None, Some}
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 
 import scala.language.implicitConversions
 

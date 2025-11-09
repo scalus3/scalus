@@ -1,4 +1,4 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import org.typelevel.paiges
 import org.typelevel.paiges.Doc

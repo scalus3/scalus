@@ -4,7 +4,7 @@ package typegens
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.Lowering.tpf
-import scalus.sir.*
+import scalus.compiler.sir.*
 import scalus.uplc.{DefaultFun, Term}
 
 import scala.util.control.NonFatal

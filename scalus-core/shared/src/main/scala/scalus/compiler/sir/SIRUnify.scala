@@ -1,9 +1,9 @@
-package scalus.sir
+package scalus.compiler.sir
 
-import scala.annotation.tailrec
-import scalus.sir.SIR.Pattern
+import scalus.compiler.sir.SIR.Pattern
 
 import java.util
+import scala.annotation.tailrec
 
 object SIRUnify {
 

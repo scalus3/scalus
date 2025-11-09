@@ -1,8 +1,8 @@
 package scalus.compiler.sir.lowering
 
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.sir.*
-import scalus.sir.SIRType.TypeVar
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIRType.TypeVar
 
 object ScalusRuntime {
 

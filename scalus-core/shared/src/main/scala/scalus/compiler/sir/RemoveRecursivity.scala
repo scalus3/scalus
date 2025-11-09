@@ -1,6 +1,7 @@
-package scalus.sir
+package scalus.compiler.sir
 
-import scalus.sir.SIR.*
+import scalus.compiler.sir.SIR.*
+import scalus.compiler.sir.{AnnotatedSIR, Binding, SIR}
 
 object RemoveRecursivity:
 

@@ -8,8 +8,8 @@ import dotty.tools.dotc.util.SrcPos
 import dotty.tools.dotc.core.Symbols.Symbol
 import dotty.tools.dotc.ast.tpd.ValDef
 
-import scalus.sir.SIRType
-import scalus.sir.SIRPosition
+import scalus.compiler.sir.SIRType
+import scalus.compiler.sir.SIRPosition
 
 sealed trait CompilationError {
     def message: String

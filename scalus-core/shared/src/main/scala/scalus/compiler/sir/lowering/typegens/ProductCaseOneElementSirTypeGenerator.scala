@@ -4,8 +4,8 @@ package typegens
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.{ProdDataConstr, ProdDataList}
-import scalus.sir.*
-import scalus.sir.SIRType.Data
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIRType.Data
 import scalus.uplc.Term
 
 case class ProductCaseOneElementSirTypeGenerator(

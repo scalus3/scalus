@@ -3,7 +3,7 @@ package typegens
 
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.sir.*
+import scalus.compiler.sir.*
 import scalus.uplc.Term
 
 /** Representation is data in pack. Used like Product with have one element wibt name 'toList'

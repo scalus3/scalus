@@ -72,7 +72,7 @@ Scalus Intermediate Representation (SIR) is a low-level representation of the sc
 It's a good idea to print the SIR to understand what the compiler has generated.
 
 ```scala mdoc:compile-only
-import scalus.*, scalus.sir.SIR
+import scalus.*, scalus.compiler.sir.SIR
 val sir: SIR = ??? // from the previous example
 println(sir.show) // pretty-print the SIR
 println(sir.showHighlighted) // pretty-print the SIR with colorized syntax highlighting
@@ -84,7 +84,7 @@ Scalus Intermediate Representation (SIR) can be optimized. Currently,
 the only optimization is the `RemoveRecursivity` optimization that inlines `let` expressions.
 
 ```scala mdoc:compile-only
-import scalus.*, scalus.sir.*
+import scalus.*, scalus.compiler.sir.*
 val sir: SIR = ??? // from the previous example
 val optimized = BooleanOptimizer.optimize(sir)
 // or using the `|>` operator

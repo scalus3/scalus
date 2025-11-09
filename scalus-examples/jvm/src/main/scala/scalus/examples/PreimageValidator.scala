@@ -8,7 +8,7 @@ import scalus.builtin.Data
 import scalus.cardano.blueprint.{Application, Blueprint}
 import scalus.ledger.api.v2.*
 import scalus.prelude.*
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.*
 
 @Compile

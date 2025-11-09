@@ -6,7 +6,7 @@ import scalus.Compiler.compile
 import scalus.builtin.Data
 import scalus.ledger.api.v3.ScriptContext
 import scalus.ledger.api.v3.ScriptInfo.SpendingScript
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 class FromDataEraseLinkerTest extends AnyFunSuite {
 

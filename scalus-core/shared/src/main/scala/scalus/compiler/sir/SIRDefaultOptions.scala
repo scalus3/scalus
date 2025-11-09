@@ -1,4 +1,4 @@
-package scalus.sir
+package scalus.compiler.sir
 
 enum TargetLoweringBackend:
     case ScottEncodingLowering

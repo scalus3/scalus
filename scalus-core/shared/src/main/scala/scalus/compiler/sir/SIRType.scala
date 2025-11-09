@@ -1,8 +1,7 @@
-package scalus.sir
+package scalus.compiler.sir
 
-import scalus.uplc.DefaultUni
-import scalus.uplc.TypeScheme as UplcTypeScheme
-import scalus.sir.SIRType.TypeVar
+import scalus.compiler.sir.SIRType.TypeVar
+import scalus.uplc.{DefaultUni, TypeScheme as UplcTypeScheme}
 
 import java.util
 import scala.annotation.tailrec

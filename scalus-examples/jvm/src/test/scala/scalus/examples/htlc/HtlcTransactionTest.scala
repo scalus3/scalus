@@ -13,7 +13,7 @@ import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
 import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
 import scalus.ledger.api.v1.PosixTime
-import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
+import scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program

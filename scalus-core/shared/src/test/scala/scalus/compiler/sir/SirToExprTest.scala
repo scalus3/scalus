@@ -1,9 +1,9 @@
-package scalus.sir
+package scalus.compiler.sir
+
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.serialization.flat.*
 
 import scala.language.implicitConversions
-import org.scalatest.funsuite.AnyFunSuite
-
-import scalus.serialization.flat.*
 
 class SirToExprTest extends AnyFunSuite {
 

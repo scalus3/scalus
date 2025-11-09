@@ -3,7 +3,7 @@ package scalus.serialization.flat
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.serialization.flat.FlatInstances.given
-import scalus.sir.{AnnotationsDecl, Binding, Module, SIR, SIRType}
+import scalus.compiler.sir.{AnnotationsDecl, Binding, Module, SIR, SIRType}
 
 class SIRFlatSerializationTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 

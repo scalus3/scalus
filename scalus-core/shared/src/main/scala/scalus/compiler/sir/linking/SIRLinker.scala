@@ -1,6 +1,6 @@
 package scalus.compiler.sir.linking
 
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 import scala.annotation.unused
 import scala.collection.mutable

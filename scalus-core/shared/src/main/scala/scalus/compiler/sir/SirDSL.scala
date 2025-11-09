@@ -1,7 +1,6 @@
-package scalus.sir
+package scalus.compiler.sir
 
-import scalus.uplc.Constant
-import scalus.uplc.DefaultFun
+import scalus.uplc.{Constant, DefaultFun}
 
 object SirDSL:
 

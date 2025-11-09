@@ -1,6 +1,6 @@
 package scalus
 
-import scalus.sir.{SIR, SIRDefaultOptions, SIRType}
+import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType}
 import scalus.builtin.Data
 import scalus.utils.Macros
 
@@ -20,8 +20,8 @@ trait CompileDerivations
 object Compiler:
 
     type TargetLoweringBackend =
-        scalus.sir.TargetLoweringBackend
-    val TargetLoweringBackend = scalus.sir.TargetLoweringBackend
+        scalus.compiler.sir.TargetLoweringBackend
+    val TargetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend
 
     case class Options(
         targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,

@@ -7,7 +7,7 @@ import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.cardano.ledger.Word64
 import scalus.ledger.api.v3.TxId
-import scalus.sir.*
+import scalus.compiler.sir.*
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.Term.*

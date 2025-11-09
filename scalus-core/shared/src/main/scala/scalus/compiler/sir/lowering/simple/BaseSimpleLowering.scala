@@ -1,8 +1,8 @@
 package scalus.compiler.sir.lowering.simple
 
 import scalus.showShort
-import scalus.sir.SIR.Pattern
-import scalus.sir.*
+import scalus.compiler.sir.SIR.Pattern
+import scalus.compiler.sir.*
 import scalus.uplc.*
 
 import scala.annotation.tailrec

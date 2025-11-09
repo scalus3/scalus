@@ -1,4 +1,4 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import scalus.uplc.DefaultFun
 

@@ -2,8 +2,8 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.sir.*
-import scalus.sir.SIR.Pattern
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.Pattern
 
 import scala.collection.mutable
 

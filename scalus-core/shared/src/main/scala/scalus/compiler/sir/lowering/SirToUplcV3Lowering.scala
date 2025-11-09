@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.compiler.sir.lowering.*
 import scalus.pretty
-import scalus.sir.{SIR, SIRType}
+import scalus.compiler.sir.{SIR, SIRType}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap

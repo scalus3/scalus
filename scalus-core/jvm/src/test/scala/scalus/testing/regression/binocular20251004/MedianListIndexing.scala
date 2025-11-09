@@ -11,8 +11,8 @@ import org.scalatest.funsuite.AnyFunSuite
   *   2. Uses list indexing operator (!!) in one branch
   *   3. Returns a value from the indexed element
   *
-  * Original error from binocular project: scalus.sir.lowering.LoweringException: Cannot upcast Unit
-  * -> Int to Int at BitcoinValidator.scala:212 (getMedianTimePast function)
+  * Original error from binocular project: scalus.compiler.sir.lowering.LoweringException: Cannot
+  * upcast Unit -> Int to Int at BitcoinValidator.scala:212 (getMedianTimePast function)
   */
 class MedianListIndexing extends AnyFunSuite {
 

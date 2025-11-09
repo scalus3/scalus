@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 /** We assume that type variable can be converted to data, and it is impossible to do something
   * meaningful with it in the UPLC, except pass the value as an argument in unchanged form.

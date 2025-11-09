@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 
 import org.typelevel.paiges.Doc
-import scalus.sir.*
+import scalus.compiler.sir.*
 
 import scala.annotation.tailrec
 

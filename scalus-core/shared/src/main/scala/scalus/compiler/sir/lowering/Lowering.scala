@@ -1,11 +1,11 @@
 package scalus.compiler.sir.lowering
 
 import org.typelevel.paiges.Doc
+import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
-import scalus.sir.*
+import scalus.pretty
 import scalus.uplc.*
-import scalus.{pretty, showShort}
 
 import scala.annotation.unused
 import scala.util.control.NonFatal

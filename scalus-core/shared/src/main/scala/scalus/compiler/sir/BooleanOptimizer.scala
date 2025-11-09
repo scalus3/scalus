@@ -1,6 +1,7 @@
-package scalus.sir
+package scalus.compiler.sir
 
-import scalus.sir.SIR.*
+import scalus.compiler.sir.SIR.*
+import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, SIR, SIRType}
 import scalus.uplc.Constant
 
 /** Provides optimization functionality for boolean expressions in SIR. Applies standard boolean

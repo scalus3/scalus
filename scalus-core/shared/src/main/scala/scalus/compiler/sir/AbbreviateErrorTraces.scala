@@ -1,6 +1,7 @@
-package scalus.sir
+package scalus.compiler.sir
 
-import scalus.sir.SIR.Case
+import scalus.compiler.sir.SIR.Case
+import scalus.compiler.sir.{AnnotatedSIR, Binding, Module, SIR, SIRType}
 import scalus.uplc.Constant
 
 import scala.collection.mutable

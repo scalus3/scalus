@@ -1,7 +1,7 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.sir.BooleanOptimizer.optimize
+import scalus.compiler.sir.BooleanOptimizer.optimize
 import scalus.uplc.Constant
 
 /** Test suite for SIRBooleanOptimizer. Tests all implemented boolean optimization rules using

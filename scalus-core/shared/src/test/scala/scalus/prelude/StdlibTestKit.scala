@@ -14,7 +14,7 @@ import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
 import scalus.builtin.Data.fromData
 import scalus.builtin.Data.toData
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.Constant
 import scalus.uplc.DeBruijn
 import scalus.uplc.Term

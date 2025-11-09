@@ -1,7 +1,7 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.sir.SirDSL.given
+import scalus.compiler.sir.SirDSL.given
 
 import scala.language.implicitConversions
 

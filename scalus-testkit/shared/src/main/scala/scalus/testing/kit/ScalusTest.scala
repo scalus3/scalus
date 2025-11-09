@@ -16,7 +16,7 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
 

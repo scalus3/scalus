@@ -4,7 +4,7 @@ import scalus.*
 import scalus.builtin.Data
 import scalus.cardano.ledger.{Language, PlutusScript, Script, ScriptHash}
 import scalus.ledger.api.v3.ScriptContext
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.Program
 
 case class Config(

@@ -1,9 +1,10 @@
-package scalus.sir
+package scalus.compiler.sir
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.Constant
-import sir.SIR.*
-import sir.SIRType.{Boolean, Fun, Integer, Unit}
+import SIR.*
+import SIRType.{Boolean, Fun, Integer, Unit}
 
 class RemoveRecursivityTest extends AnyFunSuite:
     test("remove recursivity") {

@@ -2,7 +2,7 @@ package scalus.cardano.blueprint
 
 import scalus.*
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.Program
 import scalus.cardano.address.*
 

@@ -3,7 +3,7 @@ package scalus.utils
 import scalus.Compiler
 import scalus.builtin.Builtins
 import scalus.builtin.Data
-import scalus.sir.SIR
+import scalus.compiler.sir.SIR
 import scalus.uplc.{BuiltinRuntime, BuiltinsMeaning, DefaultFun, Expr as Exp, Term as Trm}
 import scalus.uplc.ExprBuilder.*
 

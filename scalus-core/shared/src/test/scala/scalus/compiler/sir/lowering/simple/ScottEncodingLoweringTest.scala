@@ -5,9 +5,9 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
 import scalus.builtin.ByteString.*
-import scalus.sir.*
-import scalus.sir.SIR.Pattern
-import scalus.sir.SIRType.{FreeUnificator, SumCaseClass, TypeNothing, TypeVar}
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.Pattern
+import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeNothing, TypeVar}
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.{Constant, Term}

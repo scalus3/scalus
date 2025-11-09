@@ -27,7 +27,6 @@ object CosmexDataInstances {
 
 @Compile
 object CosmexContract extends DataParameterizedValidator {
-    import CosmexDataInstances.given
 
     inline def handleClose(newSignedSnapshot: SignedSnapshot) = {
         newSignedSnapshot match

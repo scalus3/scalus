@@ -1,4 +1,4 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
@@ -49,7 +49,7 @@ class FlatSIRClausifyTest extends AnyFunSuite {
             r1
         }
 
-        val myDecl = findDecl(sir, "scalus.sir.FlatSIRClausifyTestScope$.Formula")
+        val myDecl = findDecl(sir, "scalus.compiler.sir.FlatSIRClausifyTestScope$.Formula")
         assert(myDecl.isDefined, "Declaration for Formula should be found")
 
         val myDeclTp = myDecl.get.tp

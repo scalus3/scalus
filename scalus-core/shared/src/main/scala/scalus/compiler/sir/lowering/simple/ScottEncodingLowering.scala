@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.sir.SIR.Pattern
-import scalus.sir.{AnnotationsDecl, DataDecl, SIR, SIRType}
+import scalus.compiler.sir.SIR.Pattern
+import scalus.compiler.sir.{AnnotationsDecl, DataDecl, SIR, SIRType}
 import scalus.uplc.*
 
 @deprecated("Use ScottEncodingLowering instead", "0.13.0")

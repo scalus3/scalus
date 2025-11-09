@@ -1,8 +1,8 @@
-package scalus.sir
+package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
 import scalus.*
+import scalus.Compiler.compile
 
 import scala.annotation.tailrec
 
@@ -28,7 +28,7 @@ object SIRTypingScalaToSIRSpecScope {
     case class LeafLevel2B[B](ib: Int) extends HierarchicalLevel2[Int]
 
     // DataDecl(
-    //    "scalus.sir.SIRTypingScalaToSIRSpecScope$.HierarchicalLevel1",
+    //    "scalus.compiler.sir.SIRTypingScalaToSIRSpecScope$.HierarchicalLevel1",
     //    List(
     //      ConstrDecl("LeafLevel1A", D, List(SIRType.Var("A",Some(1))),List(SIRType.Var("A",Some(1))))),
     //      ConstrDecl("_narrow_HierarchialLevel2", D, List(SIRType.Var("B",Some(2))),List(SIRType.Future(SIRType.Var("B",Some(1))))),
@@ -36,7 +36,7 @@ object SIRTypingScalaToSIRSpecScope {
     //    None
     //  )
     //  DataDecl(
-    //    "scalus.sir.SIRTypingScalaToSIRSpecScope$.HierarchicalLevel2",
+    //    "scalus.compiler.sir.SIRTypingScalaToSIRSpecScope$.HierarchicalLevel2",
     //    List(
 
 }
@@ -52,7 +52,9 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
 
         sir.tp match {
             case SIRType.Fun(SIRType.Integer, SIRType.CaseClass(constrDecl, Nil, None)) =>
-                assert(constrDecl.name == "scalus.sir.SIRTypingScalaToSIRSpecScope$.ClassA1")
+                assert(
+                  constrDecl.name == "scalus.compiler.sir.SIRTypingScalaToSIRSpecScope$.ClassA1"
+                )
             case _ => fail(s"unexpected type ${sir.tp}")
         }
 
@@ -69,7 +71,9 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
 
         sir.tp match {
             case SIRType.CaseClass(constrDecl, Nil, _) =>
-                assert(constrDecl.name == "scalus.sir.SIRTypingScalaToSIRSpecScope$.ClassA1")
+                assert(
+                  constrDecl.name == "scalus.compiler.sir.SIRTypingScalaToSIRSpecScope$.ClassA1"
+                )
             case _ => fail(s"unexpected type ${sir.tp}")
         }
 
@@ -102,8 +106,8 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
     }
 
     test("check that apply with implicit parameters is mapped to corret SIR.Apply") {
-        import scalus.prelude.*
         import scalus.builtin.ByteString
+        import scalus.prelude.*
         val sir = compile { (l: scalus.prelude.List[ByteString], v: ByteString) =>
             l.contains(v)
         }

@@ -1,9 +1,9 @@
 package scalus.compiler.sir.lowering.simple
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.sir.*
-import scalus.sir.SIR.*
-import scalus.sir.SIRType.{Boolean as BoolType, Integer}
+import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.*
+import scalus.compiler.sir.SIRType.{Boolean as BoolType, Integer}
 import scalus.uplc.Constant
 
 /** Test suite for LetFloating transformation.

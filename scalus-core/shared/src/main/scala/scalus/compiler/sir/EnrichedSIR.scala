@@ -1,5 +1,6 @@
-package scalus.sir
+package scalus.compiler.sir
 
+import scalus.compiler.sir.{AnnotationsDecl, DataDecl, SIR, SIRType}
 import scalus.uplc.{Constant, DefaultFun}
 
 /** EnrichedSIR[P,T] mirrors the structure of SIR trait but allows parameterization with pattern

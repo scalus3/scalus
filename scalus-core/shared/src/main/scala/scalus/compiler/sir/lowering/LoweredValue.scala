@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.Lowering.tpf
-import scalus.sir.*
+import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
 

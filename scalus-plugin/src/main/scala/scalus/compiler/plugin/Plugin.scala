@@ -13,7 +13,7 @@ import dotty.tools.dotc.typer.Implicits
 import dotty.tools.dotc.util.SrcPos
 import scalus.*
 import scalus.serialization.flat.FlatInstances.SIRHashConsedFlat
-import scalus.sir.SIRPosition
+import scalus.compiler.sir.SIRPosition
 
 import scala.language.implicitConversions
 
@@ -234,7 +234,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                 val flatTree = convertFlatToTree(
                   sirResult,
                   SIRHashConsedFlat,
-                  requiredModule("scalus.sir.ToExprHSSIRFlat"),
+                  requiredModule("scalus.compiler.sir.ToExprHSSIRFlat"),
                   tree.span,
                   isCompileDebug
                 )
@@ -295,7 +295,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
         val compileAnnot = requiredClassRef("scalus.Compile").symbol.asClass
         if tree.symbol.hasAnnotation(compileAnnot) && tree.symbol.is(Flags.Module) then {
             val sirBodyAnnotation =
-                requiredClass("scalus.sir.SIRBodyAnnotation")
+                requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
             tree.symbol.getAnnotation(sirBodyAnnotation) match
                 case Some(annotation) =>
                     val moduleSIR = annotation.arguments.head
