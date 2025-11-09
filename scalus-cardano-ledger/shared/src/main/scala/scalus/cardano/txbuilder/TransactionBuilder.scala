@@ -29,12 +29,12 @@ import scalus.cardano.txbuilder.TransactionBuilder.{Operation, WitnessKind}
 import scalus.cardano.txbuilder.modifyWs
 import TransactionWitnessSet.given
 
-// Type alias for compatibility - DiffHandler is now a function type in new Scalus API
-type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]
-
 import scalus.|>
 
 import scala.collection.immutable.SortedMap
+
+// Type alias for compatibility - DiffHandler is now a function type in new Scalus API
+type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]
 
 // ===================================
 // Tx Builder steps
@@ -557,6 +557,19 @@ object TransactionBuilder:
 
     private val unsafeCtxWitnessL: Lens[Context, TransactionWitnessSet] =
         Focus[Context](_.transaction).refocus(_.witnessSet)
+
+    /** Modifications of tx's outputs (so far) is relatively "safe" operation in terms that it can't
+      * break the transaction validity as long as outputs are correct. Moreover, the DiffHandler to
+      * some extend does the same thing, so this lens is the only way to manually edit the tx'
+      * outputs in the context, which may be useful together with [[modify]].
+      */
+    val unsafeCtxTxOutputsL: Lens[Context, IndexedSeq[Sized[TransactionOutput]]] =
+        Focus[Context](_.transaction) >>> txOutputsL
+
+    /** Hydrozoa use case: tx upgrade that requires promoting a reference input into a spent input.
+      */
+    val unsafeCtxTxReferenceInputsL: Lens[Context, TaggedSortedSet[TransactionInput]] =
+        Focus[Context](_.transaction) >>> txReferenceInputsL
 
     /** Update the given transaction output to have the minimum required ada, only changing its
       * Coin.
@@ -2175,6 +2188,10 @@ private def generateUniqueKeys(n: Int): Set[VKeyWitness] = {
 
 def txInputsL: Lens[Transaction, TaggedSortedSet[TransactionInput]] = {
     txBodyL.refocus(_.inputs)
+}
+
+def txOutputsL: Lens[Transaction, IndexedSeq[Sized[TransactionOutput]]] = {
+    txBodyL.refocus(_.outputs)
 }
 
 def txReferenceInputsL: Lens[Transaction, TaggedSortedSet[TransactionInput]] = {
