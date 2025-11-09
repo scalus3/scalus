@@ -103,7 +103,7 @@ class LedgerProvider(
             )
     }
 
-    override def setSlot(slot: SlotNo): Unit = {
+    def setSlot(slot: SlotNo): Unit = {
         context = Context(
           fee = context.fee,
           env = context.env.copy(slot = slot),

@@ -25,5 +25,5 @@ trait Provider {
         minRequiredAmount: Option[Coin] = None
     ): Either[RuntimeException, Utxos]
 
-    def setSlot(slot: SlotNo): Unit
+//    def setSlot(slot: SlotNo): Unit
 }

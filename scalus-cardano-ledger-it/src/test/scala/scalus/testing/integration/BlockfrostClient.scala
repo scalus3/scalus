@@ -100,8 +100,6 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
     ): Either[RuntimeException, Utxo] = Left(
       new RuntimeException("Unimplemented, use `findUtxos(address)`")
     )
-
-    override def setSlot(slot: SlotNo): Unit = ()
 }
 
 object BlockfrostClient {

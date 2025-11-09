@@ -49,7 +49,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
       timeout
     ).toData
 
-    private def provider(): Provider = {
+    private def createProvider(): LedgerProvider = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         LedgerProvider(
@@ -112,7 +112,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     }
 
     test("receiver reveals preimage before timeout") {
-        val provider = this.provider()
+        val provider = createProvider()
 
         val lockTx = lockHtlc(provider)
         assert(provider.submit(lockTx).isRight)
@@ -134,7 +134,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     }
 
     test("committer reclaims after timeout") {
-        val provider = this.provider()
+        val provider = this.createProvider()
 
         val lockTx = lockHtlc(provider)
         assert(provider.submit(lockTx).isRight)
