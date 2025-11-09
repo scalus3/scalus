@@ -759,7 +759,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val mLet = findLetForVar(
           retrieveLastSIRComponent(compiled),
-          x => x == "m" || x.startsWith("m#")
+          x => x == "m" || x.startsWith("m-")
         ).get
 
         val mBindingCompiled = mLet.bindings.head

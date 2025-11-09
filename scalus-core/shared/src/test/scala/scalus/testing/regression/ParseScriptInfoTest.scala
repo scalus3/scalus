@@ -192,7 +192,7 @@ class ParseScriptInfoOldBackendTest extends AnyFunSuite:
         // val appliedValidator = term $ Term.Const(Constant.Data(scriptContextData))
         given PlutusVM = PlutusVM.makePlutusV1VM()
         val result = appliedValidator.deBruijnedProgram.evaluateDebug
-        println(result)
+        // println(result)
         assert(result.isSuccess)
         assert(ParseScriptInfo.validate(scriptContext) == false)
     }

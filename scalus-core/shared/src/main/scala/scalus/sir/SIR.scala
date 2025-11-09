@@ -222,8 +222,6 @@ object SIR:
 
     case class Var(name: String, tp: SIRType, anns: AnnotationsDecl) extends AnnotatedSIR {
 
-        if name == "scDataParseScriptInfo" then throw RuntimeException("QQQ")
-
         override def toString: String = s"Var($name, ${tp.show})"
     }
 

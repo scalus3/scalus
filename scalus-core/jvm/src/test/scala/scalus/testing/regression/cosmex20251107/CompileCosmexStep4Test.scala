@@ -16,9 +16,9 @@ class CompileCosmexStep4Test extends AnyFunSuite {
         )
         val compiledValidator = Compiler.compile(step4.CosmexContract.validate)
 
-        println("=== SIR OUTPUT ===")
-        println(compiledValidator.show)
-        println("=== END SIR OUTPUT ===")
+        // println("=== SIR OUTPUT ===")
+        // println(compiledValidator.show)
+        // println("=== END SIR OUTPUT ===")
 
         val uplc = compiledValidator.toUplcOptimized().plutusV3
 
