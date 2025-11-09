@@ -7,7 +7,6 @@ case class Environment(
     protocolParams: ProtocolParams,
     slotConfig: SlotConfig,
     network: Network,
-    era: Era = Era.Conway,
 )
 
 object Environment {
@@ -16,6 +15,5 @@ object Environment {
           protocolParams = cardanoInfo.protocolParams,
           slotConfig = cardanoInfo.slotConfig,
           network = cardanoInfo.network,
-          era = Era.Conway
         )
 }
