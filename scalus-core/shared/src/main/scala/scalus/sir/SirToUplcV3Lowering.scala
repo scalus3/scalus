@@ -1,10 +1,9 @@
 package scalus.sir
 
+import scalus.compiler.sir.lowering.*
 import scalus.pretty
 
 import scala.collection.mutable.Map as MutableMap
-
-import scalus.sir.lowering.*
 import scalus.uplc.*
 
 class SirToUplcV3Lowering(
