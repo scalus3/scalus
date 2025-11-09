@@ -58,7 +58,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     private val initBetting: Transaction =
         val tx = new Transactions(
-          BuilderContext.withDummyEvaluator(
+          BuilderContext.withNoopEvaluator(
             env,
             TestUtil.createTestWallet(provider, player1.address)
           ),
@@ -95,7 +95,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private val joinBetting: (Transaction, Result) =
         val snapshot = provider.snapshot()
         val tx = new Transactions(
-          BuilderContext.withDummyEvaluator(
+          BuilderContext.withNoopEvaluator(
             env,
             TestUtil.createTestWallet(snapshot, player2.address)
           ),
@@ -128,7 +128,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private def winBetting(isJoinWin: Boolean, time: PosixTime): (Transaction, Result) =
         val snapshot = provider.snapshot()
         val tx = new Transactions(
-          BuilderContext.withDummyEvaluator(
+          BuilderContext.withNoopEvaluator(
             env,
             TestUtil.createTestWallet(snapshot, oracle.address)
           ),

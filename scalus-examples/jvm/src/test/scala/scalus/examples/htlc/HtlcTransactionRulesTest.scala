@@ -74,7 +74,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
 
     private def lockHtlc(provider: Provider): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
-        val context = BuilderContext.withDummyEvaluator(env, wallet)
+        val context = BuilderContext.withNoopEvaluator(env, wallet)
         val value = Value.lovelace(lockAmount)
         new Transactions(context, compiledContract)
             .lock(value, committerPkh, receiverPkh, validImage, timeout)
@@ -90,7 +90,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         time: PosixTime
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, receiverAddress)
-        val context = BuilderContext.withDummyEvaluator(env, wallet)
+        val context = BuilderContext.withNoopEvaluator(env, wallet)
         new Transactions(context, compiledContract)
             .reveal(lockUtxo, preimage, receiverAddress, receiverPkh, time)
             .toOption
@@ -104,7 +104,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         time: PosixTime
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
-        val context = BuilderContext.withDummyEvaluator(env, wallet)
+        val context = BuilderContext.withNoopEvaluator(env, wallet)
         new Transactions(context, compiledContract)
             .timeout(lockUtxo, committerAddress, committerPkh, time)
             .toOption

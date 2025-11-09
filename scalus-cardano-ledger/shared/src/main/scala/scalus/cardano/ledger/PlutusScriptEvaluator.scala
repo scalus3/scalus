@@ -14,6 +14,7 @@ import scalus.uplc.eval.*
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
 import scribe.Logger
 
+import scala.annotation.threadUnsafe
 import scala.util.control.NonFatal
 
 enum EvaluatorMode extends Enum[EvaluatorMode] {
@@ -69,7 +70,7 @@ object PlutusScriptEvaluator {
       * Useful for testing scenarios where script evaluation is not needed, such as transaction
       * building tests that don't require actual Plutus script execution.
       */
-    lazy val dummy: PlutusScriptEvaluator = new PlutusScriptEvaluator {
+    @threadUnsafe lazy val noop: PlutusScriptEvaluator = new PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
             utxos: Map[TransactionInput, TransactionOutput]

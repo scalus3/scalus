@@ -23,8 +23,8 @@ object BuilderContext {
       * @return
       *   BuilderContext with a no-op evaluator
       */
-    def withDummyEvaluator(env: Environment, wallet: Wallet): BuilderContext =
-        BuilderContext(env, wallet, PlutusScriptEvaluator.dummy)
+    def withNoopEvaluator(env: Environment, wallet: Wallet): BuilderContext =
+        BuilderContext(env, wallet, PlutusScriptEvaluator.noop)
 
     /** Create a BuilderContext with an evaluator built from environment parameters.
       *
