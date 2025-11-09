@@ -2,15 +2,15 @@ package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
-import scalus.testing.kit.ScalusTest
-import scalus.ledger.api.v1.PosixTime
 import scalus.builtin.ByteString
 import scalus.builtin.Data.toData
-import scalus.examples.TestUtil
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.BuilderContext
 import scalus.cardano.ledger.rules.*
-import scalus.cardano.node.{LedgerProvider, Provider}
+import scalus.cardano.node.Provider
+import scalus.cardano.txbuilder.BuilderContext
+import scalus.examples.TestUtil
+import scalus.ledger.api.v1.PosixTime
+import scalus.testing.kit.{LedgerProvider, ScalusTest}
 
 class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment

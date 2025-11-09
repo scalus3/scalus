@@ -1,8 +1,9 @@
-package scalus.cardano.node
+package scalus.testing.kit
 
-import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
 import scalus.cardano.address.Address
+import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
+import scalus.cardano.ledger.*
+import scalus.cardano.node.Provider
 
 class LedgerProvider(
     initialUtxos: Utxos = Map.empty,
