@@ -304,8 +304,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.3",
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.3" % "compile",
       libraryDependencies ++= Seq(
-        "io.bullet" %%% "borer-core" % "1.16.1",
-        "io.bullet" %%% "borer-derivation" % "1.16.1"
+        "io.bullet" %%% "borer-core" % "1.16.2",
+        "io.bullet" %%% "borer-derivation" % "1.16.2"
       ),
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
@@ -452,7 +452,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.1",
+      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test"
@@ -501,7 +501,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.0" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.1",
+      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.4" % "test",
       Test / fork := true, // needed for BlocksValidation to run in sbt
       inConfig(Test)(PluginDependency)
@@ -563,8 +563,8 @@ lazy val bench = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
       libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.1",
-      libraryDependencies += "io.bullet" %%% "borer-core" % "1.16.1",
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.1"
+      libraryDependencies += "io.bullet" %%% "borer-core" % "1.16.2",
+      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2"
     )
 
 // Cardano Ledger domain model and CBOR serialization
@@ -577,8 +577,8 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       libraryDependencies ++= Seq(
-        "io.bullet" %%% "borer-core" % "1.16.1",
-        "io.bullet" %%% "borer-derivation" % "1.16.1"
+        "io.bullet" %%% "borer-core" % "1.16.2",
+        "io.bullet" %%% "borer-derivation" % "1.16.2"
       ),
       // For tx builder
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
