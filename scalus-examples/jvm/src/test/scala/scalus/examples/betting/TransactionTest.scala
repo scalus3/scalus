@@ -16,7 +16,7 @@ import scalus.testing.kit.{Mock, ScalusTest}
 
 class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
-    private val env = TestUtil.testEnvironmentWithoutEvaluator
+    private val env = TestUtil.testEnvironment
 
     private val compiledContract = BettingContract.debugCompiledContract
     private val scriptAddress = compiledContract.address(env.network)
@@ -58,7 +58,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     private val initBetting: Transaction =
         val tx = new Transactions(
-          BuilderContext(env, TestUtil.createTestWallet(provider, player1.address)),
+          BuilderContext.withDummyEvaluator(
+            env,
+            TestUtil.createTestWallet(provider, player1.address)
+          ),
           compiledContract
         ).init(
           betAmount,
@@ -92,7 +95,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private val joinBetting: (Transaction, Result) =
         val snapshot = provider.snapshot()
         val tx = new Transactions(
-          BuilderContext(env, TestUtil.createTestWallet(snapshot, player2.address)),
+          BuilderContext.withDummyEvaluator(
+            env,
+            TestUtil.createTestWallet(snapshot, player2.address)
+          ),
           compiledContract
         ).join(
           betAmount,
@@ -122,7 +128,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private def winBetting(isJoinWin: Boolean, time: PosixTime): (Transaction, Result) =
         val snapshot = provider.snapshot()
         val tx = new Transactions(
-          BuilderContext(env, TestUtil.createTestWallet(snapshot, oracle.address)),
+          BuilderContext.withDummyEvaluator(
+            env,
+            TestUtil.createTestWallet(snapshot, oracle.address)
+          ),
           compiledContract
         ).win(
           isJoinWin,

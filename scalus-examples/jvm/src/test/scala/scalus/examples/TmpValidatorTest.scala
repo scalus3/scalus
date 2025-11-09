@@ -12,7 +12,7 @@ import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 
 class TmpValidatorTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironmentWithoutEvaluator
+    private val env = TestUtil.testEnvironment
     private val compiledContract = TmpContract.debugCompiledContract
 
     private val address1 = TestUtil.createTestAddress("a" * 56)
@@ -28,7 +28,7 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
 
     private val lockTx: Transaction = {
         val wallet = TestUtil.createTestWallet(address1, amount1 + amount2)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val value = Value.lovelace(amount1)
 
         val inputsToSpend = wallet.selectInputs(value).get
@@ -45,7 +45,7 @@ class TmpValidatorTest extends AnyFunSuite, ScalusTest {
 
     lazy private val unlockTx: (Transaction, Result) = {
         val wallet = TestUtil.createTestWallet(address2, amount2)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val tx = {
             val (input, output) = lockUtxo
             val witness = ThreeArgumentPlutusScriptWitness(

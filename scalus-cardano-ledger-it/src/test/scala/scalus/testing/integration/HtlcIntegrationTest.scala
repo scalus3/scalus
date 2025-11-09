@@ -17,7 +17,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
     case class TestContext(
         client: BlockfrostClient,
         cardanoInfo: CardanoInfo,
-        env: Environment
+        env: Environment,
+        evaluator: PlutusScriptEvaluator
     )
 
     private def getEnvOrSkip(name: String, testEnv: TestEnv): String = {
@@ -53,16 +54,14 @@ class HtlcIntegrationTest extends AnyFunSuite {
               network = Network.Testnet,
               slotConfig = yaciSlotConfig
             )
-            val env = Environment(
-              cardanoInfo,
-              evaluator = PlutusScriptEvaluator(
-                slotConfig = cardanoInfo.slotConfig,
-                initialBudget = ExBudget.enormous,
-                protocolMajorVersion = cardanoInfo.majorProtocolVersion,
-                costModels = cardanoInfo.protocolParams.costModels
-              )
+            val evaluator = PlutusScriptEvaluator(
+              slotConfig = cardanoInfo.slotConfig,
+              initialBudget = ExBudget.enormous,
+              protocolMajorVersion = cardanoInfo.majorProtocolVersion,
+              costModels = cardanoInfo.protocolParams.costModels
             )
-            TestContext(client, cardanoInfo, env)
+            val env = Environment(cardanoInfo)
+            TestContext(client, cardanoInfo, env, evaluator)
 
         case TestEnv.Preprod =>
             val apiKey = sys.env("BLOCKFROST_API_KEY")
@@ -73,16 +72,14 @@ class HtlcIntegrationTest extends AnyFunSuite {
               network = Network.Testnet,
               slotConfig = SlotConfig.Preprod
             )
-            val env = Environment(
-              cardanoInfo,
-              evaluator = PlutusScriptEvaluator(
-                slotConfig = cardanoInfo.slotConfig,
-                initialBudget = ExBudget.enormous,
-                protocolMajorVersion = cardanoInfo.majorProtocolVersion,
-                costModels = cardanoInfo.protocolParams.costModels
-              )
+            val evaluator = PlutusScriptEvaluator(
+              slotConfig = cardanoInfo.slotConfig,
+              initialBudget = ExBudget.enormous,
+              protocolMajorVersion = cardanoInfo.majorProtocolVersion,
+              costModels = cardanoInfo.protocolParams.costModels
             )
-            TestContext(client, cardanoInfo, env)
+            val env = Environment(cardanoInfo)
+            TestContext(client, cardanoInfo, env, evaluator)
     }
 
     private def buildWalletWithCollateral(address: Address, utxos: Utxos): Wallet = new Wallet {
@@ -126,7 +123,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
         assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
         val wallet = buildWalletWithCollateral(senderAddr, senderUtxos)
-        val context = BuilderContext(ctx.env, wallet)
+        val context = BuilderContext(ctx.env, wallet, ctx.evaluator)
 
         val preimage = ByteString.fromString("secret_preimage_54321")
         val image = scalus.builtin.Builtins.sha3_256(preimage)
@@ -189,7 +186,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
         assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
         val wallet = buildWalletWithCollateral(senderAddr, senderUtxos)
-        val context = BuilderContext(ctx.env, wallet)
+        val context = BuilderContext(ctx.env, wallet, ctx.evaluator)
 
         val revealTime = testEnv match {
             case TestEnv.Local =>

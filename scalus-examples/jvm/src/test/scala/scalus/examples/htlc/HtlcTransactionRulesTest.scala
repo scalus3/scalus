@@ -13,7 +13,7 @@ import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{LedgerProvider, Provider}
 
 class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironmentWithoutEvaluator
+    private val env = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.debugCompiledContract
 
     private val committerAddress = TestUtil.createTestAddress("a" * 56)
@@ -74,7 +74,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
 
     private def lockHtlc(provider: Provider): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val value = Value.lovelace(lockAmount)
         new Transactions(context, compiledContract)
             .lock(value, committerPkh, receiverPkh, validImage, timeout)
@@ -90,7 +90,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         time: PosixTime
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, receiverAddress)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         new Transactions(context, compiledContract)
             .reveal(lockUtxo, preimage, receiverAddress, receiverPkh, time)
             .toOption
@@ -104,7 +104,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         time: PosixTime
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         new Transactions(context, compiledContract)
             .timeout(lockUtxo, committerAddress, committerPkh, time)
             .toOption

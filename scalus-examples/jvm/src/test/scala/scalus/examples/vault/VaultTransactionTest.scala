@@ -9,7 +9,7 @@ import scalus.uplc.eval.{ExCPU, ExMemory}
 
 class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
-    private val env = TestUtil.testEnvironmentWithoutEvaluator
+    private val env = TestUtil.testEnvironment
 
     private val ownerAddress = TestUtil.createTestAddress("a" * 56)
 
@@ -24,7 +24,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
     def lockVault(amount: BigInt, waitTime: BigInt = defaultWaitTime): Transaction = {
         val wallet = TestUtil.createTestWallet(ownerAddress, amount + 50_000_000L)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         Transactions(context)
             .lock(Value(Coin(amount.toLong)), waitTime, ownerAddress)
             .getOrElse(???)
@@ -35,7 +35,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         validityStartSlot: Long
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(ownerAddress, 50_000_000L)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         new Transactions(context).withdraw(vaultUtxo, validityStartSlot).getOrElse(???)
     }
 
@@ -44,7 +44,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         depositAmount: BigInt
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(ownerAddress, depositAmount + 50_000_000L)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         new Transactions(context)
             .deposit(vaultUtxo, Value(Coin(depositAmount.toLong)))
             .getOrElse(???)
@@ -55,7 +55,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         overrideValiditySlot: Option[Long] = None
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(ownerAddress, 50_000_000L)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         new Transactions(context)
             .finalize(vaultUtxo, ownerAddress, overrideValiditySlot)
             .fold(
@@ -147,7 +147,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val wallet = TestUtil.createTestWallet(ownerAddress, 50_000_000L)
         val utxos: Utxos = Map(vaultUtxo) ++ wallet.utxo
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val finalizeTx = new Transactions(context).finalize(vaultUtxo, ownerAddress).getOrElse(???)
 
         val result = runValidator(finalizeTx, utxos, wallet, vaultUtxo._1)
@@ -218,7 +218,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         // premature finalization
         val wallet = TestUtil.createTestWallet(ownerAddress, 50_000_000L)
         val utxos: Utxos = Map(pendingVaultUtxo) ++ wallet.utxo
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val earlySlot = Some(withdrawSlot + 1) // Just after withdrawal, before wait time
         val finalizeTx =
             new Transactions(context)

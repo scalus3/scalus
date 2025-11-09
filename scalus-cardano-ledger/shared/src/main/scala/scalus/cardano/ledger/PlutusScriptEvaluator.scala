@@ -64,6 +64,18 @@ trait PlutusScriptEvaluator {
 
 object PlutusScriptEvaluator {
 
+    /** A no-op evaluator that returns empty sequences.
+      *
+      * Useful for testing scenarios where script evaluation is not needed, such as transaction
+      * building tests that don't require actual Plutus script execution.
+      */
+    lazy val dummy: PlutusScriptEvaluator = new PlutusScriptEvaluator {
+        override def evalPlutusScriptsWithContexts(
+            tx: Transaction,
+            utxos: Map[TransactionInput, TransactionOutput]
+        ): Seq[(Redeemer, ScriptContext, ScriptHash)] = Seq.empty
+    }
+
     /** Factory method to create a PlutusScriptEvaluator instance.
       *
       * @param slotConfig

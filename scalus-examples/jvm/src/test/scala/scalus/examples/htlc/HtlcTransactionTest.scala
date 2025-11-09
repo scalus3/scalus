@@ -22,7 +22,7 @@ import scalus.cardano.ledger.rules.*
 import scalus.testing.kit.ScalusTest
 
 class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironmentWithoutEvaluator
+    private val env = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.debugCompiledContract
 
     private val committerAddress = TestUtil.createTestAddress("a" * 56)
@@ -79,7 +79,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
 
     private val lockHtlc: Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val value = Value.lovelace(lockAmount)
 
         val tx = new Transactions(context, compiledContract)
@@ -110,7 +110,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     ): (Transaction, Result) = {
         val snapshot = provider.snapshot()
         val wallet = TestUtil.createTestWallet(snapshot, receiverAddress)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val tx = new Transactions(context, compiledContract)
             .reveal(htlcUtxo, preimage, receiverAddress, receiverPkh, time)
             .toOption
@@ -126,7 +126,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     ): (Transaction, Result) = {
         val snapshot = provider.snapshot()
         val wallet = TestUtil.createTestWallet(snapshot, committerAddress)
-        val context = BuilderContext(env, wallet)
+        val context = BuilderContext.withDummyEvaluator(env, wallet)
         val tx = new Transactions(context, compiledContract)
             .timeout(htlcUtxo, committerAddress, committerPkh, time)
             .toOption
@@ -255,8 +255,9 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
           Reveal(validPreimage).toData,
           Some(Inline(testDatum)),
           BuilderContext(
-            TestUtil.testEnvironmentWithEvaluator,
-            TestUtil.createTestWallet(receiverAddress, amount)
+            TestUtil.testEnvironment,
+            TestUtil.createTestWallet(receiverAddress, amount),
+            TestUtil.testEvaluator
           ),
           additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(receiverPkh)))
         )

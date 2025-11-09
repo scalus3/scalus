@@ -14,19 +14,13 @@ object TestUtil extends ScalusTest {
 
     val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
-    val testEnvironmentWithoutEvaluator: Environment = Environment(
-      cardanoInfo = CardanoInfo.mainnet,
-      evaluator = (_: Transaction, _: Map[TransactionInput, TransactionOutput]) => Seq.empty,
-    )
+    val testEnvironment: Environment = Environment(cardanoInfo = CardanoInfo.mainnet)
 
-    val testEnvironmentWithEvaluator: Environment = Environment(
-      cardanoInfo = CardanoInfo.mainnet,
-      evaluator = PlutusScriptEvaluator(
-        slotConfig = CardanoInfo.mainnet.slotConfig,
-        initialBudget = ExBudget.enormous,
-        protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-        costModels = testProtocolParams.costModels
-      ),
+    val testEvaluator: PlutusScriptEvaluator = PlutusScriptEvaluator(
+      slotConfig = CardanoInfo.mainnet.slotConfig,
+      initialBudget = ExBudget.enormous,
+      protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
+      costModels = testProtocolParams.costModels
     )
 
     def createTestAddress(keyHash: String): ShelleyAddress = {
@@ -146,7 +140,7 @@ object TestUtil extends ScalusTest {
         utxos: Utxos,
         input: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironmentWithoutEvaluator
+        environment: Environment = testEnvironment
     ): v3.ScriptContext = {
         val inputs = tx.body.value.inputs
         // assume 1 script input
@@ -182,7 +176,7 @@ object TestUtil extends ScalusTest {
         wallet: WalletTrait,
         scriptInput: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironmentWithoutEvaluator
+        environment: Environment = testEnvironment
     ) = {
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxo, scriptInput, redeemerTag, environment)

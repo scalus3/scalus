@@ -157,7 +157,7 @@ case class PaymentBuilder(
                 .finalizeContext(
                   protocolParams = context.env.protocolParams,
                   diffHandler = diffHandler,
-                  evaluator = context.env.evaluator,
+                  evaluator = context.evaluator,
                   validators = Seq.empty
                 )
                 .left
