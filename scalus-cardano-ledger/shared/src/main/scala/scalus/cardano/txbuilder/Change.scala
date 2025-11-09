@@ -1,8 +1,44 @@
 package scalus.cardano.txbuilder
 
+import monocle.Focus.focus
+import monocle.Lens
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
+
+class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int) {
+    def changeOutputDiffHandler(
+        diff: Long,
+        tx: Transaction
+    ): Either[TxBalancingError, Transaction] = {
+        val numOutputs = tx.body.value.outputs.size
+        require(
+          changeOutputIdx < numOutputs,
+          s"Change output index $changeOutputIdx is out of bounds for outputs of size $numOutputs"
+        )
+        val changeOut = tx.body.value.outputs(changeOutputIdx)
+        val changeLovelace = changeOut.value.value.coin.value
+        val updatedLovelaceChange = changeLovelace + diff
+        val newValue = changeOut.value.value
+            .focus(_.coin.value)
+            .replace(updatedLovelaceChange)
+        val newChangeOut = Sized(changeOut.value.withValue(newValue))
+        val minAda = MinCoinSizedTransactionOutput(newChangeOut, protocolParams)
+
+        if updatedLovelaceChange < minAda.value then {
+
+            return Left(
+              TxBalancingError.InsufficientFunds(diff, minAda.value - updatedLovelaceChange)
+            )
+        }
+
+        val tb = tx.body.value
+            .focus(_.outputs.index(changeOutputIdx))
+            .replace(newChangeOut)
+        val t = tx.copy(body = KeepRaw(tb))
+        Right(t)
+    }
+}
 
 object Change {
 

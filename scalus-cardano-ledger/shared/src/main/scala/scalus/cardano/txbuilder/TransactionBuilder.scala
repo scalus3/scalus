@@ -2088,11 +2088,12 @@ val TransactionUnspentOutput = Utxo
 case class StakeCredential(credential: Credential)
 
 extension (network: Network)
-    @deprecated("Use network.networkId instead", "0.13.0")
+    @deprecated("Use Network.networkId instead", "0.13.0")
     def toNetworkId: Int = network.networkId.toInt
 
 object NetworkExtensions:
     /** Convert integer network ID to Network */
+    @deprecated("Use Network.fromNetworkId instead", "0.13.0")
     def fromNetworkId(networkId: Int): Option[Network] = networkId match
         case 0                      => Some(Network.Testnet)
         case 1                      => Some(Network.Mainnet)

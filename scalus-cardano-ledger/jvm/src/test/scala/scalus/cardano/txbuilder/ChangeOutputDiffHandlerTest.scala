@@ -11,7 +11,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.{Context, State, ValueNotConservedUTxOValidator}
 import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee}
-import scalus.cardano.txbuilder.LowLevelTxBuilder.ChangeOutputDiffHandler
+import scalus.cardano.txbuilder.ChangeOutputDiffHandler
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
 import scalus.uplc.eval.ExBudget
 import scalus.|>
