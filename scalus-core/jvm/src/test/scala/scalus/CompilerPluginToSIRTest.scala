@@ -14,7 +14,7 @@ import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{PlutusVM, Result}
 
-import scala.annotation.nowarn
+import scala.annotation.{nowarn, tailrec}
 import scala.collection.immutable
 import scala.language.implicitConversions
 
@@ -734,15 +734,17 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         // println(s"sir=${compiled.pretty.render(100)}")
 
+        @tailrec
         def retrieveLastSIRComponent(sir: SIR): SIR =
             sir match
                 case SIR.Decl(data, term) => retrieveLastSIRComponent(term)
                 case _                    => sir
 
-        def findLetForVar(sir: SIR, name: String): Option[SIR.Let] =
+        @tailrec
+        def findLetForVar(sir: SIR, nameCheck: String => Boolean): Option[SIR.Let] =
             sir match
                 case SIR.Let(bindings, body, flags, _) =>
-                    bindings.find(_.name == name) match
+                    bindings.find(x => nameCheck(x.name)) match
                         case Some(binding) =>
                             Some(
                               SIR.Let(
@@ -752,10 +754,13 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
                                 AnE
                               )
                             )
-                        case None => findLetForVar(body, name)
+                        case None => findLetForVar(body, nameCheck)
                 case _ => None
 
-        val mLet = findLetForVar(retrieveLastSIRComponent(compiled), "m").get
+        val mLet = findLetForVar(
+          retrieveLastSIRComponent(compiled),
+          x => x == "m" || x.startsWith("m#")
+        ).get
 
         val mBindingCompiled = mLet.bindings.head
 

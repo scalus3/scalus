@@ -158,7 +158,11 @@ case class DataDecl(
                         case typeParams =>
                             val tpEnv = typeParams.zip(c.parentTypeArgs).toMap
                             SIRType.substitute(tp, tpEnv, Map.empty)
-                    val optParent = if nConstrs == 1 then None else Some(parent)
+                    // Determine if this constructor should have a parent:
+                    // - Case class: single constructor with same name as DataDecl -> no parent
+                    // - Enum case: constructor name differs from DataDecl, or multiple constructors -> has parent
+                    val isCaseClass = nConstrs == 1 && c.name == name
+                    val optParent = if isCaseClass then None else Some(parent)
                     val sirType = c.typeParams match
                         case Nil => SIRType.CaseClass(c, Nil, optParent)
                         case targs =>
@@ -218,6 +222,8 @@ object SIR:
 
     case class Var(name: String, tp: SIRType, anns: AnnotationsDecl) extends AnnotatedSIR {
 
+        if name == "scDataParseScriptInfo" then throw RuntimeException("QQQ")
+
         override def toString: String = s"Var($name, ${tp.show})"
     }
 
@@ -259,6 +265,12 @@ object SIR:
         flags: LetFlags,
         anns: AnnotationsDecl
     ) extends AnnotatedSIR {
+
+        bindings match {
+            case List(Binding("args", tp, value)) =>
+                throw RuntimeException("QQQ")
+            case _ =>
+        }
 
         override def tp: SIRType = body.tp
     }

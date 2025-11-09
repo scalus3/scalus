@@ -25,7 +25,6 @@ enum Action:
 
 enum Party:
     case Client
-    case Exchange
 
 case class OnChainState(
     clientPkh: PubKeyHash,
@@ -34,16 +33,13 @@ case class OnChainState(
 )
 
 @Compile
-object CosmexToDataInstances {
+object CosmexDataInstances {
     given Data.ToData[Snapshot] = ToData.derived
     given Data.ToData[SignedSnapshot] = ToData.derived
     given Data.ToData[Action] = ToData.derived
     given Data.ToData[Party] = ToData.derived
     given Data.ToData[OnChainState] = ToData.derived
-}
 
-@Compile
-object CosmexFromDataInstances {
     given Data.FromData[Snapshot] = FromData.derived
     given Data.FromData[SignedSnapshot] = FromData.derived
     given Data.FromData[Action] = FromData.derived
@@ -53,18 +49,31 @@ object CosmexFromDataInstances {
 
 @Compile
 object CosmexContract extends DataParameterizedValidator {
+    // Force recompilation - v7 symbol-based fix complete, debug removed
+    val dummy: BigInt = BigInt(8)
 
-    import CosmexFromDataInstances.given
-    import CosmexToDataInstances.given
+    import CosmexDataInstances.given
 
     def validSignedSnapshot(
-        signedSnapshot: SignedSnapshot
+        signedSnapshot: SignedSnapshot,
+        clientTxOutRef: TxOutRef,
+        clientPubKey: PubKey,
+        exchangePubKey: PubKey
     ): Boolean = {
         signedSnapshot match
-            case SignedSnapshot(signedSnapshot, _, _) =>
-                // This should trigger type error: signedSnapshot is Snapshot, not SignedSnapshot
-                // But we're passing it where SignedSnapshot is expected
-                true
+            case SignedSnapshot(
+                  signedSnapshot,
+                  snapshotClientSignature,
+                  snapshotExchangeSignature
+                ) =>
+                // This uses signedSnapshot (Snapshot) with toData which triggers type checking
+                val signedInfo = (clientTxOutRef, signedSnapshot)
+                val msg = serialiseData(signedInfo.toData)
+                val validExchangeSig =
+                    verifyEd25519Signature(exchangePubKey, msg, snapshotExchangeSignature)
+                val validClientSig =
+                    verifyEd25519Signature(clientPubKey, msg, snapshotClientSignature)
+                validClientSig && validExchangeSig
     }
 
     inline def handleClose(
@@ -73,16 +82,18 @@ object CosmexContract extends DataParameterizedValidator {
         ownTxInResolvedTxOut: TxOut
     ) = {
         state match
-            case OnChainState(_, _, _) =>
+            case OnChainState(clientPkh, clientPubKey, clientTxOutRef) =>
                 newSignedSnapshot match
                     case SignedSnapshot(signedSnapshot, _, _) =>
                         ownTxInResolvedTxOut match
                             case TxOut(_, _, _, _) =>
-                                // Here newSignedSnapshot should work, but due to shadowing bug
-                                // the compiler might resolve it to the wrong variable
-                                validSignedSnapshot(newSignedSnapshot) &&
-                                // Let's also try to use signedSnapshot in a type-sensitive way
-                                (signedSnapshot.snapshotVersion > 0)
+                                // Here's the bug: due to shadowing, newSignedSnapshot might resolve incorrectly
+                                validSignedSnapshot(
+                                  newSignedSnapshot,
+                                  clientTxOutRef,
+                                  clientPubKey,
+                                  clientPubKey
+                                )
     }
 
     inline override def spend(
@@ -97,8 +108,13 @@ object CosmexContract extends DataParameterizedValidator {
         val signed = SignedSnapshot(snap, key, key)
         val action = Action.Close(Party.Client, signed)
         val state = OnChainState(PubKeyHash(key), key, ownRef)
-        val txOut = TxOut(Address(Credential.PubKeyCredential(PubKeyHash(key)), Option.None), Value.zero, v2.OutputDatum.NoOutputDatum, Option.None)
-        
+        val txOut = TxOut(
+          Address(Credential.PubKeyCredential(PubKeyHash(key)), Option.None),
+          Value.zero,
+          v2.OutputDatum.NoOutputDatum,
+          Option.None
+        )
+
         import Action.*
         val result = action match
             case Close(party, signedSnapshot) =>

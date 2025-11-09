@@ -18,8 +18,8 @@ import scala.language.implicitConversions
 //@scalus.ScalusDebug(10)
 object ParseScriptInfo {
 
-    def validate(scData: Data): Boolean = {
-        val sc = scData.to[ScriptContext]
+    def validate(scDataParseScriptInfo: Data): Boolean = {
+        val sc = scDataParseScriptInfo.to[ScriptContext]
         val x = BigInt(12)
         sc.scriptInfo match
             case ScriptInfo.MintingScript(policyId) =>
@@ -192,7 +192,7 @@ class ParseScriptInfoOldBackendTest extends AnyFunSuite:
         // val appliedValidator = term $ Term.Const(Constant.Data(scriptContextData))
         given PlutusVM = PlutusVM.makePlutusV1VM()
         val result = appliedValidator.deBruijnedProgram.evaluateDebug
-        // println(result)
+        println(result)
         assert(result.isSuccess)
         assert(ParseScriptInfo.validate(scriptContext) == false)
     }

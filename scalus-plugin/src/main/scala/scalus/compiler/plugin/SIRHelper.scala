@@ -10,7 +10,7 @@ import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.util.Spans.Span
 import dotty.tools.dotc.util.{NoSourcePosition, SourcePosition, Spans, SrcPos}
 import scalus.serialization.flat.{DecoderState, HSRIdentityHashMap, HashConsed, HashConsedDecoderState, HashConsedEncoderState, HashConsedReprRefFlat}
-import scalus.sir.{AnnotationsDecl, SIRPosition}
+import scalus.sir.{AnnotationsDecl, SIR, SIRPosition}
 
 import java.nio.charset.StandardCharsets
 import scala.annotation.nowarn

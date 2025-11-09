@@ -79,8 +79,7 @@ trait LoweredValue {
             case SIRUnify.UnificationFailure(path, l, r) =>
                 // if we cannot unify types, we need to upcast
                 //  to the target type.
-                val parentsSeq =
-                    SIRUnify.subtypeSeq(sirType, targetType, SIRUnify.Env.empty.withDebug)
+                val parentsSeq = SIRUnify.subtypeSeq(sirType, targetType, SIRUnify.Env.empty)
                 if lctx.debug then
                     println(s"[maybeUpcast] from ${sirType.show} to ${targetType.show}")
                     println(s"[maybeUpcast] parentsSeq = ${parentsSeq.map(_.show)}")
@@ -1604,11 +1603,13 @@ object LoweredValue {
                 )
             }
 
-            SIRUnify.topLevelUnifyType(
+            val unifyResult = SIRUnify.topLevelUnifyType(
               expr.sirType,
               targetType,
               SIRUnify.Env.empty.withoutUpcasting
-            ) match {
+            )
+
+            unifyResult match {
                 case SIRUnify.UnificationSuccess(_, tp) =>
                     // if we can unify types, we can return the expression as is
                     castedValue(changeRepresentation = false, printWarning = false)
@@ -1619,7 +1620,8 @@ object LoweredValue {
                         if parentsSeq.isEmpty then castedValue(printWarning = true)
                         else {
                             val upcasted = parentsSeq.tail.foldLeft(expr) { (s, e) =>
-                                s.upcastOne(e, inPos)
+                                val result = s.upcastOne(e, inPos)
+                                result
                             }
                             castedValue(
                               upcasted,

@@ -81,7 +81,7 @@ class SIRTyper(using Context) {
             case tpc: ConstantType =>
                 // hmm, widen should have taken care of this
                 sirTypeInEnvWithErr(tpc.widen, env)
-            case tpc: SuperType =>
+            case _: SuperType =>
                 ???
             case tpc: RefinedType =>
 //                println(s"RefinedType ${tpc.show}")

@@ -152,9 +152,10 @@ final class SIRCompiler(
     }
 
     case class LocalBinding(
-        name: String,
+        displayName: String,
         tp: SIRType,
         symbol: Symbol,
+        isGlobalDef: Boolean,
         recursivity: Recursivity,
         body: AnnotatedSIR,
         pos: SourcePosition,
@@ -162,6 +163,13 @@ final class SIRCompiler(
     ):
 
         def fullName(using Context): FullName = FullName(symbol)
+
+        def variableKey: VariableKey =
+            if isGlobalDef then VariableKey.fromName(displayName)
+            else VariableKey(displayName, Some(symbol))
+
+        def varName: String =
+            variableKey.varName
 
     end LocalBinding
 
@@ -712,14 +720,16 @@ final class SIRCompiler(
     ): AnnotatedSIR = {
 
         val name = e.symbol.name.show
+        val symbolId = e.symbol.id
+        val variableKey = VariableKey(name, Some(symbolId))
         val fullName = FullName(e.symbol)
-        val isInLocalEnv = env.vars.contains(name)
+        val isInLocalEnv = env.vars.contains(variableKey)
         val isInGlobalEnv = globalDefs.contains(fullName)
 
         // println( s"compileIdentOrQualifiedSelect1: ${e.symbol} $name $fullName, term: ${e.show}, loc/glob: $isInLocalEnv/$isInGlobalEnv, env: ${env}" )
         val (sirVar, origType) = (isInLocalEnv, isInGlobalEnv) match
             case (true, true) =>
-                val localType = env.vars(name)
+                val localType = env.vars(variableKey)
                 globalDefs(fullName) match
                     case CompileDef.Compiled(TopLevelBinding(_, _, body)) =>
                         val globalType = body.tp
@@ -742,12 +752,12 @@ final class SIRCompiler(
                   ),
                   localType
                 )
-            // local def, use the name
+            // local def, use the name without full qualification
             case (true, false) =>
-                val localType = env.vars(name)
+                val localType = env.vars(variableKey)
                 (
                   SIR.Var(
-                    e.symbol.name.show,
+                    variableKey.varName,
                     localType,
                     AnnotationsDecl.fromSymIn(e.symbol, e.srcPos.sourcePos)
                   ),
@@ -836,7 +846,7 @@ final class SIRCompiler(
     private def compileValDef(
         env: Env,
         vd: ValDef,
-        @unused isModuleDef: Boolean
+        isModuleDef: Boolean
     ): CompileMemberDefResult = {
         val name = vd.name
         // vars are not supported
@@ -905,6 +915,7 @@ final class SIRCompiler(
                 name.show,
                 bindingSirType,
                 vd.symbol,
+                isModuleDef,
                 Recursivity.NonRec,
                 bodyExpr1,
                 vd.sourcePos,
@@ -975,35 +986,45 @@ final class SIRCompiler(
             }
             val typeParamsMap =
                 typeParams.zip(sirTypeParams).map { case (tp, tv) => (tp.symbol, tv) }.toMap
-            val paramVars =
+            val (paramVars, paramKeys) =
                 if params.isEmpty
-                then
-                    List(
-                      SIR.Var("_", SIRType.Unit, AnnotationsDecl.empty)
-                    ) /* Param for () argument */
-                else
-                    params.map { case v: ValDef =>
+                then {
+                    val unitKey = VariableKey.fromName("_")
+                    val unitVar = SIR.Var("_", SIRType.Unit, AnnotationsDecl.empty)
+                    (List(unitVar), List(unitKey))
+                } /* Param for () argument */
+                else {
+                    val keys = params.map { v =>
+                        VariableKey(v.name.show, Some(v.symbol.id))
+                    }
+                    val vars = params.map { case v: ValDef =>
                         val tEnv =
                             SIRTypeEnv(v.srcPos, env.typeVars ++ typeParamsMap)
                         val vType = sirTypeInEnv(v.tpe, tEnv)
+                        val variableKey = VariableKey(v.name.show, Some(v.symbol.id))
                         val anns = AnnotationsDecl.fromSymIn(v.symbol, v.srcPos.sourcePos)
-                        SIR.Var(v.symbol.name.show, vType, anns)
+                        SIR.Var(variableKey.varName, vType, anns)
                     }
-            val paramNameTypes = paramVars.map(p => (p.name, p.tp))
+                    (vars, keys)
+                }
+
+            val paramEnvEntries = paramKeys.zip(paramVars).map { case (k, v) => (k, v.tp) }
             val body =
                 if dd.rhs.tpe.typeSymbol.isAnonymousClass && dd.rhs.tpe.baseClasses.exists(sym =>
                         isFunctionalInterfaceSymbol(sym)
                     )
                 then tryFixFunctionalInterface(env, dd.rhs).getOrElse(dd.rhs)
                 else dd.rhs
-            val selfName = if isGlobalDef then FullName(dd.symbol).name else dd.symbol.name.show
+            val selfKey =
+                if isGlobalDef then VariableKey.fromName(FullName(dd.symbol).name)
+                else VariableKey(dd.symbol.name.show, Some(dd.symbol.id))
             val selfTypeFromDef = sirTypeInEnv(dd.tpe, SIRTypeEnv(dd.srcPos, env.typeVars))
             // Problem that when self-type is type-lambda, then typevars in params and in sekdfType can be different.
             // i.e.dd.tpe return one set of variable, params - other.
             // So, we need to reassemble them and use type variables from params, to be consistent with body type.
             // (i.e. body.tpe should be consistent with selfType)
             val nTypeVars = env.typeVars ++ typeParamsMap
-            val nVars = env.vars ++ paramNameTypes + (selfName -> selfTypeFromDef)
+            val nVars = env.vars ++ paramEnvEntries + (selfKey -> selfTypeFromDef)
             val nEnv1 = env.copy(vars = nVars, typeVars = nTypeVars)
             // println(s"compileDefDef: this valdef ${v.show}, thisTpt: ${thisTpt.show}, thisRhs: ${thisRhs.show}, thisTpt.tpe: ${thisTpt.tpe.show}, thisTpt.symbol: ${thisTpt.symbol}, thisTpt.symbol == thisTypeSymbol: ${thisTpt.symbol == env.thisTypeSymbol}, thisTypeSymbol: ${env.thisTypeSymbol}")
             // println(s"rhs tree: ${dd.rhs}")
@@ -1115,6 +1136,7 @@ final class SIRCompiler(
                 dd.name.show,
                 selfType,
                 dd.symbol,
+                isGlobalDef,
                 Recursivity.Rec,
                 bodyExpr,
                 dd.sourcePos,
@@ -1362,6 +1384,7 @@ final class SIRCompiler(
                     s"__${stmt.source.file.name.takeWhile(_.isLetterOrDigit)}_line_${stmt.srcPos.line}",
                     body.tp,
                     NoSymbol,
+                    isModuleDef,
                     Recursivity.NonRec,
                     body,
                     stmt.sourcePos,
@@ -1380,7 +1403,7 @@ final class SIRCompiler(
                 compileStmt(env, stmt) match
                     case CompileMemberDefResult.Compiled(bind) =>
                         exprs += bind
-                        env + (bind.name -> bind.tp)
+                        env + (bind.variableKey -> bind.tp)
                     case _ => env
         }
         val exprExpr = compileExpr(exprEnv, expr)
@@ -1392,7 +1415,7 @@ final class SIRCompiler(
                 if bind.recursivity == Recursivity.Rec then SIR.LetFlags.Recursivity
                 else SIR.LetFlags.None
             SIR.Let(
-              List(Binding(bind.name, bind.tp, bind.body)),
+              List(Binding(bind.variableKey.varName, bind.tp, bind.body)),
               sirExpr,
               flags,
               AnnotationsDecl.fromSourcePosition(expr.sourcePos)
@@ -2297,7 +2320,7 @@ final class SIRCompiler(
                 val lhsExpr = compileExpr(env, lhs)
                 val rhsExpr = compileExpr(env, rhs)
                 SIR.And(lhsExpr, rhsExpr, AnnotationsDecl.fromSrcPos(tree.srcPos))
-            case app @ Apply(Select(lhs, op), List(rhs))
+            case Apply(Select(lhs, op), List(rhs))
                 if lhs.tpe.widen <:< defn.BooleanType && op == nme.ZOR =>
                 val lhsExpr = compileExpr(env, lhs)
                 val rhsExpr = compileExpr(env, rhs)
@@ -3356,7 +3379,7 @@ final class SIRCompiler(
 object SIRCompiler {
 
     case class Env(
-        vars: Map[String, SIRType],
+        vars: Map[VariableKey, SIRType],
         typeVars: Map[Symbol, SIRType],
         debug: Boolean = false,
         level: Int = 0,
@@ -3370,11 +3393,11 @@ object SIRCompiler {
         createEx: RuntimeException = new RuntimeException("Env.create.stacktrace")
     ) {
 
-        def ++(bindings: Iterable[(String, SIRType)]): Env = {
+        def ++(bindings: Iterable[(VariableKey, SIRType)]): Env = {
             copy(vars = vars ++ bindings)
         }
 
-        def +(ntpe: (String, SIRType)): Env = {
+        def +(ntpe: (VariableKey, SIRType)): Env = {
             copy(vars = vars + ntpe)
         }
 

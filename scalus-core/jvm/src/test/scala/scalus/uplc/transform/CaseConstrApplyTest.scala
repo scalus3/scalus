@@ -6,7 +6,7 @@ import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.ByteString
 import scalus.cardano.ledger.Word64
-import scalus.uplc.Constant
+import scalus.uplc.{Constant, DeBruijn}
 import scalus.uplc.Term.*
 import scalus.uplc.eval.ExBudget.given
 import scalus.uplc.eval.Result.Success
@@ -26,19 +26,23 @@ class CaseConstrApplyTest extends AnyFunSuite {
         val sir = compile(((a: BigInt) => (b: BigInt) => (c: ByteString) => c)(0)(1)(hex"1012"))
         val uplc = sir.toUplc()
         val (optimized, logs) = CaseConstrApply.extractPass(uplc)
+        val expected = Case(
+          Constr(
+            Word64.Zero,
+            List(
+              Const(Constant.Integer(0)),
+              Const(Constant.Integer(1)),
+              Const(Constant.ByteString(hex"1012"))
+            )
+          ),
+          λ("a", "b", "c")(vr"c") :: Nil
+        )
+        // println(s"optimized UPLC: ${optimized.pretty.render(100)}")
+        // println(s"expected UPLC:  ${expected.pretty.render(100)}")
+        val djOptimized = DeBruijn.deBruijnTerm(optimized)
+        val djExpected = DeBruijn.deBruijnTerm(expected)
         assert(
-          optimized ==
-              Case(
-                Constr(
-                  Word64.Zero,
-                  List(
-                    Const(Constant.Integer(0)),
-                    Const(Constant.Integer(1)),
-                    Const(Constant.ByteString(hex"1012"))
-                  )
-                ),
-                λ("a", "b", "c")(vr"c") :: Nil
-              )
+          scalus.uplc.Term.alphaEq(djOptimized, djExpected),
         )
         assert(logs == Seq("Replacing 3 Apply with Case/Constr"))
         (uplc.evaluateDebug, optimized.evaluateDebug) match

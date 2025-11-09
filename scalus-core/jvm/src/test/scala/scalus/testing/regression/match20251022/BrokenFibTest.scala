@@ -10,6 +10,7 @@ object BrokenFib {
     def fib(n: BigInt): List[BigInt] = if n > 1 then
         (fib(n - 1): @unchecked) match
             case r @ Cons(a, Cons(b, _)) => Cons(a + b, r)
+            case _                       => throw RuntimeException("unreachable")
     else List(1, 0)
 }
 

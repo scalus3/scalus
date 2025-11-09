@@ -108,6 +108,17 @@ object SIRType {
                   s"Tuple3 cannot have parent, got $parent"
                 )
 
+        // Debug check: enum case classes should have a parent
+        if constrDecl.name.contains(
+              "scalus.testing.regression.cosmex20251107.minimized.Action$.Close"
+            )
+        then
+            if parent.isEmpty then
+                val stackTrace = new Exception().getStackTrace.take(10).mkString("\n  ")
+                throw new RuntimeException(
+                  s"[DEBUG] Enum case class ${constrDecl.name} was created without parent!\nStack trace:\n  $stackTrace"
+                )
+
         override def show: String =
             if typeArgs.isEmpty then constrDecl.name
             else s"${constrDecl.name}[${typeArgs.map(_.show).mkString(", ")}]"

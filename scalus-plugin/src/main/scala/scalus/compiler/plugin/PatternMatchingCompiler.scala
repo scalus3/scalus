@@ -4,7 +4,7 @@ import dotty.tools.dotc.*
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Contexts.Context
-import dotty.tools.dotc.core.StdNames.nme
+import dotty.tools.dotc.core.StdNames.{nme, tpnme}
 import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.{SourcePosition, SrcPos}
@@ -18,6 +18,7 @@ import scala.collection.mutable.ListBuffer
 
 //import scala.language.implicitConversions
 
+/*
 enum SirBinding:
     case Name(name: String, tp: SIRType, pos: SourcePosition)
     case CaseClass(
@@ -37,6 +38,8 @@ case class PatternInfo(
     pos: SourcePosition
 )
 
+ */
+
 class PatternMatchingContext(
     val globalPrefix: String,
     var env: SIRCompiler.Env,
@@ -49,6 +52,7 @@ class PatternMatchingContext(
 ) {
 
     private var tmpNameCounter: Int = 1
+    private var scopeDepth: Int = 0 // Track nesting depth for scoped variable names
 
     private var _actionsUsageCount: Map[Int, Int] = Map.empty
     private var _guardsUsageCount: Map[Int, Int] = Map.empty
@@ -119,12 +123,13 @@ class PatternMatchingContext(
                 countActionUsage(i)
             case _ =>
         }
-        val binding = row.patterns.zip(columnBinding).foldLeft(Map.empty[String, String]) {
+        val binding = row.patterns.zip(columnBinding).foldLeft(Map.empty[VariableKey, String]) {
             case (m, (p, cb)) =>
                 p.optNameInfo match {
                     case None => m
                     case Some(nameInfo) =>
-                        m + (nameInfo.name -> cb.name)
+                        val key = VariableKey(nameInfo.name, nameInfo.symbol)
+                        m + (key -> cb.name)
                 }
         }
         SirCaseDecisionTree.Leaf(binding, row.actionRef, row.pos)
@@ -158,7 +163,36 @@ object SirParsedCase:
 
         def optNameInfo: Option[BindingNameInfo]
 
-        def collectNames: Map[String, SIRType]
+        def collectBindingInfos: Map[VariableKey, BindingNameInfo]
+
+        // def collectNames: Map[String, SIRType]
+
+        /*
+        def collectSymbols: Map[String, Option[Symbol]] = {
+            def collectFromNameInfo(info: BindingNameInfo): Map[String, Option[Symbol]] =
+                Map(info.name -> info.symbol)
+
+            this match {
+                case ts: Pattern.TypeSelector =>
+                    ts.optNameInfo
+                        .map(collectFromNameInfo)
+                        .getOrElse(Map.empty) ++ ts.innerPattern.collectSymbols
+                case c: Pattern.Constructor =>
+                    val subcasesSymbols = c.subcases.flatMap(_.collectSymbols).toMap
+                    c.optNameInfo.map(collectFromNameInfo).getOrElse(Map.empty) ++ subcasesSymbols
+                case w: Pattern.Wildcard =>
+                    w.optNameInfo.map(collectFromNameInfo).getOrElse(Map.empty)
+                case _: Pattern.PrimitiveConstant =>
+                    Map.empty
+                case or: Pattern.OrPattern =>
+                    // OrPattern doesn't have bindings, collect from sub-patterns
+                    or.patterns.flatMap(_.collectSymbols).toMap
+                case _: Pattern.ErrorPattern =>
+                    Map.empty
+            }
+        }
+        
+         */
 
         def show: String
 
@@ -193,11 +227,14 @@ object SirParsedCase:
                 }
             }
 
-            def collectNames = optNameInfo match {
+            def collectBindingInfos = optNameInfo match {
                 case None =>
-                    innerPattern.collectNames
+                    innerPattern.collectBindingInfos
                 case Some(nameInfo) =>
-                    innerPattern.collectNames + (nameInfo.name -> nameInfo.tp)
+                    innerPattern.collectBindingInfos + (VariableKey(
+                      nameInfo.name,
+                      nameInfo.symbol
+                    ) -> nameInfo)
             }
 
             def show: String = s"(${innerPattern.show} : ${tp.show})"
@@ -222,13 +259,15 @@ object SirParsedCase:
                 }
             }
 
-            override def collectNames: Map[String, SIRType] = {
-                val subcasesNames = subcases.foldLeft(Map.empty[String, SIRType]) { (m, p) =>
-                    m ++ p.collectNames
+            override def collectBindingInfos: Map[VariableKey, BindingNameInfo] = {
+                val subcasesNames = subcases.foldLeft(Map.empty[VariableKey, BindingNameInfo]) {
+                    (m, p) =>
+                        m ++ p.collectBindingInfos
                 }
                 optNameInfo match {
-                    case None           => subcasesNames
-                    case Some(nameInfo) => subcasesNames + (nameInfo.name -> tp)
+                    case None => subcasesNames
+                    case Some(nameInfo) =>
+                        subcasesNames + (VariableKey(nameInfo.name, nameInfo.symbol) -> nameInfo)
                 }
             }
 
@@ -252,10 +291,10 @@ object SirParsedCase:
                 }
             }
 
-            override def collectNames: Map[String, SIRType] = {
+            override def collectBindingInfos: Map[VariableKey, BindingNameInfo] = {
                 optNameInfo match {
                     case None           => Map.empty
-                    case Some(nameInfo) => Map(nameInfo.name -> tp)
+                    case Some(nameInfo) => Map(nameInfo.variableKey -> nameInfo)
                 }
             }
 
@@ -274,10 +313,11 @@ object SirParsedCase:
                     case Some(nameInfo) => this.copy(optNameInfo = Some(nameInfo.withAlias(alias)))
                     case None           => this.copy(optNameInfo = Some(alias))
 
-            override def collectNames: Map[String, SIRType] =
+            override def collectBindingInfos: Map[VariableKey, BindingNameInfo] =
                 optNameInfo match
-                    case None           => Map.empty
-                    case Some(nameInfo) => Map(nameInfo.name -> value.tp)
+                    case None => Map.empty
+                    case Some(nameInfo) =>
+                        Map(nameInfo.variableKey -> nameInfo.copy(tp = value.tp))
 
             override def show: String = {
                 value.uplcConst.toString
@@ -291,7 +331,7 @@ object SirParsedCase:
 
             override def optNameInfo: Option[BindingNameInfo] = None
 
-            override def collectNames: Map[String, SIRType] = Map.empty
+            override def collectBindingInfos: Map[VariableKey, BindingNameInfo] = Map.empty
 
             override def show: String = patterns.map(_.show).mkString(" | ")
 
@@ -302,7 +342,7 @@ object SirParsedCase:
 
             override def optNameInfo: Option[BindingNameInfo] = None
 
-            override def collectNames: Map[String, SIRType] = Map.empty
+            override def collectBindingInfos: Map[VariableKey, BindingNameInfo] = Map.empty
 
             override def show: String = s"<ErrorPattern: $msg>"
         }
@@ -332,11 +372,22 @@ object SirParsedCase:
         name: String,
         scalaName: Option[String],
         tp: SIRType,
+        symbol: Option[Symbol],
         aliases: Set[BindingNameInfo] = Set.empty
     ) {
 
+        def variableKey: VariableKey = VariableKey(name, symbol)
+
         def withAlias(alias: BindingNameInfo): BindingNameInfo =
             this.copy(aliases = this.aliases + alias)
+
+        def show: String = {
+            val symbolStr = symbol match {
+                case Some(sym) => s"#${sym.id}"
+                case None      => ""
+            }
+            s"$name$symbolStr: ${tp.show}"
+        }
     }
 
     case class GroupedTupleRow(
@@ -366,15 +417,25 @@ end SirParsedCase
 
 case class SirParsedAction(
     sir: AnnotatedSIR,
-    bindedVariables: List[TypeBinding],
+    bindedVariables: Map[String, BindingNameInfo],
     pos: SrcPos
-)
+) {
+
+    lazy val typeBindings: List[TypeBinding] =
+        bindedVariables.map { case (name, info) => TypeBinding(name, info.tp) }.toList
+
+}
 
 case class SirParsedGuard(
     sir: AnnotatedSIR,
-    bindedVariables: List[TypeBinding],
+    bindedVariables: Map[String, BindingNameInfo],
     pos: SrcPos
-)
+) {
+
+    lazy val typeBindings: List[TypeBinding] =
+        bindedVariables.map { case (name, info) => TypeBinding(name, info.tp) }.toList
+
+}
 
 case class SirParsedMatch(
     scrutinee: AnnotatedSIR,
@@ -414,7 +475,7 @@ object SirCaseDecisionTree:
     ) extends SirCaseDecisionTree
 
     case class CheckGuard(
-        bingingMap: Map[String, String],
+        bingingMap: Map[VariableKey, String], // Use VariableKey to distinguish shadowed variables
         guard: Int,
         pos: SrcPos,
         nextTrue: SirCaseDecisionTree,
@@ -422,7 +483,7 @@ object SirCaseDecisionTree:
     ) extends SirCaseDecisionTree
 
     case class Leaf(
-        binding: Map[String, String],
+        binding: Map[VariableKey, String], // Use VariableKey to distinguish shadowed variables
         action: SirParsedCase.ActionRef,
         pos: SrcPos
     ) extends SirCaseDecisionTree
@@ -608,315 +669,6 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         if env.debug then println(s"end of compileMartch: ${sir}")
         sir
     }
-
-    /*
-    private def compileBinding(env: SIRCompiler.Env, pat: Tree, tp: Type): SirBinding = {
-        if env.debug then println(s"compileBinding: ${pat.show} ${tp.show}")
-        pat match
-            // this is case Constr(name @ _) or Constr(name)
-            case Bind(name, id @ Ident(nme.WILDCARD)) =>
-                SirBinding.Name(
-                  name.show,
-                  compiler.sirTypeInEnv(tp, pat.srcPos, env),
-                  pat.srcPos.sourcePos
-                )
-            // this is case Constr(name @ Constr2(_))
-            case Bind(name, body @ UnApply(fun, _, pats)) =>
-                // pattern Symbol probaly incorrect here (need to be tps,  can be Any).  TODO: write test
-                val typeSymbol = pat.tpe.widen.dealias.typeSymbol
-                EmptyTree.srcPos
-                SirBinding.CaseClass(
-                  name.show,
-                  typeSymbol,
-                  pats.map(p => compileBinding(env, p, p.tpe)),
-                  compiler.sirTypeInEnv(tp, pat.srcPos, env),
-                  pat.srcPos.sourcePos
-                )
-            case Bind(name, body) =>
-                SirBinding.Error(UnsupportedBinding(name.show, pat.srcPos))
-            // this is case _ =>
-            case Ident(nme.WILDCARD) =>
-                SirBinding.Name(
-                  bindingName.fresh().show,
-                  compiler.sirTypeInEnv(tp, pat.srcPos, env),
-                  pat.srcPos.sourcePos
-                )
-            // this is case case Outer(Inner(a, b)) which is case Outer(_ @ Constr.unappy(a, b)) =>
-            // thus we generate a unique patternName: case Outer($pat @ Constr(a, b)) =>
-            case UnApply(fun, _, pats) =>
-                // pattern Symbol probaly incorrect here (need to be tps,  can be Any).  TODO: write test
-                val typeSymbol = pat.tpe.widen.dealias.typeSymbol
-                val name = patternName.fresh()
-                SirBinding.CaseClass(
-                  name.show,
-                  typeSymbol,
-                  pats.map(p => compileBinding(env, p, p.tpe)),
-                  compiler.sirTypeInEnv(tp, pat.srcPos, env),
-                  pat.srcPos.sourcePos
-                )
-            case Literal(_) =>
-                SirBinding.Error(LiteralPattern(pat.srcPos))
-            case p =>
-                println(s"Unsupported binding expression: tree= ${p}")
-                println(s"Unsupported binding expression: tree.show= ${p.show}")
-                SirBinding.Error(UnsupportedMatchExpression(p, p.srcPos))
-    }
-
-
-    private def compileBindings(
-        sirBindings: List[SirBinding]
-    ): Either[List[SirBinding.Error], PatternInfo] = {
-        sirBindings.foldRight(
-          Right(PatternInfo(Map.empty, identity, Nil, NoSourcePosition)): Either[List[
-            SirBinding.Error
-          ], PatternInfo]
-        ) {
-            case (e: SirBinding.Error, Left(errors)) => Left(e :: errors)
-            case (_, Left(errors))                   => Left(errors)
-            case (e: SirBinding.Error, Right(_))     => Left(e :: Nil)
-            case (
-                  SirBinding.Name(name, tp, posLeft),
-                  Right(PatternInfo(bindings, generator, names, posRightAcc))
-                ) =>
-                val newPos = posLeft union posRightAcc
-                Right(PatternInfo(bindings + (name -> tp), generator, name :: names, newPos))
-            case (
-                  SirBinding.CaseClass(
-                    name,
-                    constructorSymbol,
-                    sirBindings,
-                    constrSirType,
-                    posLeft
-                  ),
-                  Right(
-                    PatternInfo(enclosingBindings, enclosingGenerator, enclosingNames, posRightAcc)
-                  )
-                ) =>
-                compileBindings(sirBindings) match
-                    case Left(errors) => Left(errors)
-                    case Right(
-                          PatternInfo(bindings2, generator2, innerNames, posInnerBindings)
-                        ) =>
-                        val unionPos = posLeft union posRightAcc
-                        Right(
-                          PatternInfo(
-                            (enclosingBindings ++ bindings2) + (name -> constrSirType),
-                            cont =>
-                                val (constrDecl, typeParams) = constrSirType match
-                                    case SIRType
-                                            .SumCaseClass(
-                                              DataDecl(_, constrs, _, _),
-                                              typeArgs
-                                            ) =>
-                                        (constrs.head, typeArgs)
-                                    case SIRType.CaseClass(decl, typeArgs, optParent) =>
-                                        (decl, typeArgs)
-                                    case _ => sys.error(s"AAA: $constrSirType")
-                                val contExpr = enclosingGenerator(generator2(cont))
-                                SIR.Match(
-                                  SIR.Var(
-                                    name,
-                                    constrSirType,
-                                    AnnotationsDecl.fromSourcePosition(posLeft)
-                                  ),
-                                  List(
-                                    SIR.Case(
-                                      Pattern.Constr(
-                                        constrDecl,
-                                        innerNames,
-                                        typeParams
-                                      ),
-                                      contExpr,
-                                      AnnotationsDecl.fromSourcePosition(posLeft)
-                                    )
-                                  ),
-                                  contExpr.tp,
-                                  AnnotationsDecl.fromSourcePosition(unionPos)
-                                )
-                            ,
-                            name :: enclosingNames,
-                            unionPos
-                          )
-                        )
-        }
-    }
-
-    private def compileConstructorPatterns(
-        envIn: SIRCompiler.Env,
-        unapplyExpr: UnApply,
-        constrType: Type,
-        fun: Tree,
-        patterns: List[Tree],
-        rhs: Tree,
-        srcPos: SrcPos
-    ): List[SirCase] = {
-
-        // typoes are extracted from unapply result type, because some strange behavior
-        //  of dotty,  when types of patterns (i.e. pat.tpe) are not types.
-        // we have other workaround for this case, TODO: check.
-        val (patternTypes, env) = fun.tpe.dealias.widen match
-            case mt: MethodType =>
-                val unapplyResType = mt.resultType.dealias
-                val optionBase = unapplyResType.baseType(defn.OptionClass)
-                if optionBase != NoType then
-                    optionBase match
-                        case AppliedType(tpe, List(optArgType)) =>
-                            optArgType.tupleElementTypes match
-                                case Some(tupleArgs) =>
-                                    (tupleArgs, envIn)
-                                case None =>
-                                    (List(optArgType), envIn)
-                        case _ =>
-                            throw TypingException(
-                              unapplyResType,
-                              srcPos,
-                              s"unapply result type is not applied type when type constructor of ${unapplyResType.classSymbol} have type params"
-                            )
-                else if unapplyResType.baseType(defn.ProductClass) != NoType then
-                    val unapplyPrimaryConstructor = unapplyResType.classSymbol.primaryConstructor
-                    val constrTypeParamss =
-                        unapplyPrimaryConstructor.paramSymss.filter(_.exists(_.isType))
-                    val nEnv =
-                        if !constrTypeParamss.isEmpty then
-                            unapplyResType match
-                                case AppliedType(tpe, args) =>
-                                    val newParams = (constrTypeParamss.head zip args).map {
-                                        (sym, t) =>
-                                            sym -> sirTypeInEnv(t, unapplyExpr.srcPos, envIn)
-                                    }.toMap
-                                    envIn.copy(typeVars = envIn.typeVars ++ newParams)
-                                case _ =>
-                                    throw TypingException(
-                                      unapplyResType,
-                                      srcPos,
-                                      s"unapply result type is not applied type when type constructor of ${unapplyResType.classSymbol} have type params"
-                                    )
-                        else envIn
-                    val constrParamss =
-                        unapplyPrimaryConstructor.paramSymss.filter(_.exists(_.isTerm))
-                    if constrParamss.isEmpty then (List.empty[Type], nEnv)
-                    else (constrParamss.head.map(_.info), nEnv)
-                else if unapplyResType =:= defn.BooleanType then (List.empty, envIn)
-                else
-                    // constructor patterns have no special forms
-                    // TODO: get result
-                    throw TypingException(
-                      unapplyResType,
-                      srcPos,
-                      s"unapply result type is not option or product type"
-                    )
-            case _ =>
-                throw TypingException(
-                  fun.tpe.dealias.widen,
-                  srcPos,
-                  "type of unapply fun is not a method type"
-                )
-
-        if patternTypes.length != patterns.length then
-            throw TypingException(
-              fun.tpe.widen,
-              srcPos,
-              s"we determinate ${patternTypes.length} types (${patterns}, but have ${patterns.length} patterns ${patterns
-                      .map(_.symbol.name)}"
-            )
-
-        val sirBindings = patterns.zip(patternTypes).map { case (b, bt) =>
-            compileBinding(env, b, bt)
-        }
-
-        compileBindings(sirBindings) match
-            case Left(errors) => errors.map(e => SirCase.Error(e.error))
-            case Right(PatternInfo(bindings, generateSir, names, pos)) =>
-                val nEnv = env ++ bindings
-                val constrTypeSymbol = constrType.typeSymbol
-                val constrTypeArgs = constrType match
-                    case AppliedType(tpe, args) => args
-                    case _                      => Nil
-                val sirConstrTypeArs = constrTypeArgs.map(t => sirTypeInEnv(t, srcPos, nEnv))
-                val rhsE = compiler.compileExpr(nEnv, rhs)
-                SirCase.Case(
-                  constrTypeSymbol,
-                  sirConstrTypeArs,
-                  names,
-                  generateSir(rhsE),
-                  rhs.srcPos.sourcePos
-                ) :: Nil
-
-    }
-
-    private def scalaCaseDefToSirCase(
-        env: SIRCompiler.Env,
-        c: CaseDef
-    ): List[SirCase] = c match
-        case CaseDef(_, guard, _) if !guard.isEmpty =>
-            SirCase.Error(GuardsNotSupported(guard.srcPos)) :: Nil
-        // this case is for matching on a case class
-        case CaseDef(unapply @ UnApply(fun, _, pats), _, rhs) =>
-            if env.debug then
-                println(s"Case: ${fun}, pats: ${pats}, rhs: $rhs")
-                report.debuglog(s"dl: Case: ${fun}, pats: ${pats}, rhs: $rhs")
-            // report.error(s"Case: ${fun}, pats: ${pats}, rhs: $rhs", t.pos)
-            if unapply.tpe == defn.NothingType then
-                // need to restore constructor, maybe from fun
-                fun.tpe.widen match
-                    case mt: MethodType =>
-                        val constrType = mt.paramInfos.head.dealias
-                        compileConstructorPatterns(
-                          env,
-                          unapply,
-                          constrType,
-                          fun,
-                          pats,
-                          rhs,
-                          c.srcPos
-                        )
-                    case _ =>
-                        // TODO: check PolyType
-                        throw TypingException(
-                          fun.tpe.widen,
-                          c.srcPos,
-                          "type of unapply fun is not a method type"
-                        )
-            else
-                compileConstructorPatterns(
-                  env,
-                  unapply,
-                  unapply.tpe.dealias.widen,
-                  fun,
-                  pats,
-                  rhs,
-                  c.srcPos
-                )
-        // this case is for matching on an enum
-        case CaseDef(Typed(unapply @ UnApply(fun, _, pats), constrTpe), _, rhs) =>
-            // report.info(s"Case: ${inner}, tpe ${constrTpe.tpe.widen.show}", t.pos)
-            compileConstructorPatterns(
-              env,
-              unapply,
-              constrTpe.tpe.dealias.widen,
-              fun,
-              pats,
-              rhs,
-              c.srcPos
-            )
-        // case _ => rhs, wildcard pattern, must be the last case
-        case CaseDef(Ident(nme.WILDCARD), _, rhs) =>
-            val rhsE = compiler.compileExpr(env, rhs)
-            SirCase.Wildcard(rhsE, c.srcPos.sourcePos) :: Nil
-        case CaseDef(b @ Bind(pat, _), _, _) =>
-            SirCase.Error(UnsupportedTopLevelBind(pat.show, b.srcPos)) :: Nil
-        // case object
-        case CaseDef(pat, _, rhs) if pat.symbol.is(Flags.Case) =>
-            val rhsE = compiler.compileExpr(env, rhs)
-            // no-arg constructor, it's a Val, so we use termSymbol
-            SirCase.Case(pat.tpe.termSymbol, Nil, Nil, rhsE, c.srcPos.sourcePos) :: Nil
-        case a =>
-            println(s"Unsupported case: ${a.show}")
-            println(s"Unsupported case: tree ${a}")
-            val err = UnsupportedMatchExpression(a, a.srcPos)
-            compiler.error(err, SirCase.Error(err) :: Nil)
-            
-     */
 
     def parseConstructorPattern(
         ctx: PatternMatchingContext,
@@ -1141,7 +893,13 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             // this is case Constr(name @ _) or Constr(name)
             case b @ Bind(name, pattern) =>
                 val tp = compiler.sirTypeInEnv(b.tpe.widen, b.srcPos, ctx.env)
-                val nameInfo = SirParsedCase.BindingNameInfo(name.show, Some(name.show), tp)
+                val nameInfo =
+                    SirParsedCase.BindingNameInfo(
+                      name.show,
+                      Some(name.show),
+                      tp,
+                      Some(b.symbol),
+                    )
                 parsePatternInOptBind(
                   ctx,
                   pattern,
@@ -1175,18 +933,33 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                   SirParsedCase.ActionRef.Origin(i),
                   c.srcPos.sourcePos
                 )
-                val patNames = sirPat.collectNames
-                val nEnv = ctx.env.copy(vars = ctx.env.vars ++ patNames)
+                val patBindings = sirPat.collectBindingInfos
+                val patBindingsByName =
+                    patBindings.groupBy { case (k, v) => k.varName }.map { case (name, bindings) =>
+                        if bindings.size > 1 then
+                            // multiple bindings with the same name -
+                            report.error(
+                              s"Multiple bindings with the same name ${name} detected in pattern matching. Consider renaming variables to avoid shadowing.",
+                              c.srcPos
+                            )
+                        name -> bindings.head._2
+                    }
+                val patNames = patBindings.map { case (k, v) => k.varName -> v.tp }
+                val nEnv = ctx.env.copy(vars = ctx.env.vars ++ patBindings.map { case (k, v) =>
+                    k -> v.tp
+                })
+
                 val optCompiledGuard = optGuard.map { g =>
                     val sirG = compiler.compileExpr(nEnv, g)
                     val (usedNames, unusedNames) =
                         SIR.partitionUsedFreeVarsFrom(sirG, patNames.keys.toSet)
-                    val typeBindings = usedNames.map { name =>
-                        TypeBinding(name, patNames(name))
-                    }.toList
-                    SirParsedGuard(sirG, typeBindings, g.srcPos)
+                    val bindings = usedNames.map { name =>
+                        val bindingInfo = patBindingsByName(name)
+                        name -> bindingInfo
+                    }.toMap
+                    SirParsedGuard(sirG, bindings, g.srcPos)
                 }
-                val compiledAction = parseCaseAction(ctx, patNames, nEnv, rhs)
+                val compiledAction = parseCaseAction(ctx, patBindingsByName, nEnv, rhs)
                 (sirCase, optCompiledGuard, compiledAction)
     }
 
@@ -1234,7 +1007,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
 
     private def parseCaseAction(
         ctx: PatternMatchingContext,
-        patNames: Map[String, SIRType],
+        patNames: Map[String, BindingNameInfo],
         env: SIRCompiler.Env,
         rhs: Tree,
     ): SirParsedAction = {
@@ -1242,10 +1015,10 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         val sirRhs = compiler.compileExpr(env, rhs)
         val (usedNames, unusedNames) =
             SIR.partitionUsedFreeVarsFrom(sirRhs, patNames.keys.toSet)
-        val typeBindings = usedNames.map { name =>
-            TypeBinding(name, patNames(name))
-        }.toList
-        SirParsedAction(sirRhs, typeBindings, rhs.srcPos)
+        val bindings = usedNames.map { name =>
+            name -> patNames(name)
+        }.toMap
+        SirParsedAction(sirRhs, bindings, rhs.srcPos)
     }
 
     def buildDecisionTree(
@@ -1267,7 +1040,8 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
 
         val scrutineeName = ctx.scrutineeName
 
-        val globalBindNameInfo = BindingNameInfo(scrutineeName, None, parsedMatch.scrutineeTp)
+        // TODOP: maybe we should keep in ctx BingingNameInfo (and store symbol if it exists)
+        val globalBindNameInfo = BindingNameInfo(scrutineeName, None, parsedMatch.scrutineeTp, None)
 
         val groupedTuples = SirParsedCase.GroupedTuples(
           IndexedSeq(globalBindNameInfo),
@@ -1699,6 +1473,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
               ctx.freshName(b.name),
               None,
               tp,
+              None, // No symbol information for generated bindings
               Set.empty
             )
         )
@@ -2162,15 +1937,25 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                         val (sir, embedding, name) = actions(index)
                         val applied = embedding match {
                             case SirCaseDecisionTree.EmbeddingType.Inline =>
+                                // Filter bindingMap to only include variables with matching symbols
+                                // This prevents shadowed inner variables from overwriting outer scope variables
+                                val filteredBindingMap = bindingMap
+                                    .filter { case (varKey, _) =>
+                                        action.bindedVariables.get(varKey.varName) match {
+                                            case Some(actionNameInfo) =>
+                                                // Only include if symbols match
+                                                varKey.symbolId == actionNameInfo.symbol.map(_.id)
+                                            case None =>
+                                                // Variable not in action, don't include
+                                                false
+                                        }
+                                    }
+                                    .map { case (varKey, value) => (varKey.varName, value) }
+
                                 val renamed = SIR.renameFreeVarsInExpr(
                                   sir,
-                                  bindingMap
+                                  filteredBindingMap
                                 )
-                                if ctx.env.debug then {
-                                    println(
-                                      s"compileDecisions: inlining action $index, bindedVariables: ${action.bindedVariables}"
-                                    )
-                                }
                                 renamed
                             case SirCaseDecisionTree.EmbeddingType.ByReference =>
                                 generateActionRefApply(
@@ -2248,7 +2033,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                   optNext,
                   pos
                 ) =>
-                val caseDefs = constructorEntries.map { case (constrName, entry) =>
+                val caseDefs = constructorEntries.map { case (_, entry) =>
                     val pattern = SIR.Pattern.Constr(
                       entry.caseClass.constrDecl,
                       entry.names.map(b => b.name).toList,
@@ -2383,8 +2168,9 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                     embedding match {
                         case SirCaseDecisionTree.EmbeddingType.Inline => acc
                         case SirCaseDecisionTree.EmbeddingType.ByReference =>
-                            val tp = buildGuardType(guard.bindedVariables)
+                            val tp = buildGuardType(guard.typeBindings)
                             val posAnns = AnnotationsDecl.apply(pos = guard.sir.anns.pos)
+
                             val guardLet = SIR.Let(
                               List(Binding(name, tp, guard.sir)),
                               acc,
@@ -2419,13 +2205,16 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         else
             val actionType = generateActionSirType(action)
             val actionVar = SIR.Var(name, actionType, AnnotationsDecl.fromSrcPos(pos))
-            val applySir = buildApplySeq(actionVar, action.bindedVariables, pos)
+            val typeBinding = action.bindedVariables.map { case (n, b) =>
+                TypeBinding(n, b.tp)
+            }.toList
+            val applySir = buildApplySeq(actionVar, typeBinding, pos)
             applySir
     }
 
     private def generateGuardCondition(
         context: PatternMatchingContext,
-        bindingMap: Map[String, String],
+        bindingMap: Map[VariableKey, String],
         guardIndex: Int,
         guardRecords: IndexedSeq[
           Option[(SirParsedGuard, SirCaseDecisionTree.EmbeddingType, String)]
@@ -2441,9 +2230,12 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             case Some((guard, embedding, name)) =>
                 embedding match {
                     case SirCaseDecisionTree.EmbeddingType.Inline =>
+                        val renameMap = guard.bindedVariables.map { case (n, b) =>
+                            (n, bindingMap(b.variableKey))
+                        }.toMap
                         SIR.renameFreeVars(
                           guard.sir,
-                          bindingMap
+                          renameMap
                         ).asInstanceOf[AnnotatedSIR]
                     case SirCaseDecisionTree.EmbeddingType.ByReference =>
                         generateGuardApply(name, guard, pos)
@@ -2468,9 +2260,9 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
               AnnotationsDecl.fromSrcPos(pos)
             )
         else
-            val guardType = buildGuardType(guard.bindedVariables)
+            val guardType = buildGuardType(guard.typeBindings)
             val guardVar = SIR.Var(name, guardType, AnnotationsDecl.fromSrcPos(pos))
-            val applySir = buildApplySeq(guardVar, guard.bindedVariables, pos)
+            val applySir = buildApplySeq(guardVar, guard.typeBindings, pos)
             applySir
     }
 
@@ -2509,7 +2301,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
     ): SIRType = {
         if action.bindedVariables.isEmpty then SIRType.Fun(SIRType.Unit, action.sir.tp)
         else
-            action.bindedVariables.foldRight(action.sir.tp) { (b, acc) =>
+            action.typeBindings.foldRight(action.sir.tp) { (b, acc) =>
                 SIRType.Fun(b.tp, acc)
             }
     }

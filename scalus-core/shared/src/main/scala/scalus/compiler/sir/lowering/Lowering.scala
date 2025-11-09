@@ -34,7 +34,7 @@ object Lowering {
         lctx.nestingLevel += 1
         val retval = sir match
             case SIR.Decl(data, term) =>
-                lctx.decls.put(data.name, data).foreach { decl =>
+                lctx.decls.put(data.name, data).foreach { _ =>
                     // TODO: pass logger.
                     println(s"Data declaration ${data.name} already exists")
                 }
@@ -57,20 +57,9 @@ object Lowering {
                           s"  scrutinee.tp = ${scrutinee.tp.show}\n"
                     )
                 val loweredScrutinee = lowerSIR(scrutinee)
-                val retval =
-                    try
-                        lctx
-                            .typeGenerator(loweredScrutinee.sirType)
-                            .genMatch(sirMatch, loweredScrutinee, optTargetType)
-                    catch
-                        case NonFatal(ex) =>
-                            println(
-                              s"Error lowering match: ${sir.showShort} at ${anns.pos.show}"
-                            )
-                            println(
-                              s"scrutinee: ${scrutinee.showShort} of type ${scrutinee.tp.show}"
-                            )
-                            throw ex
+                val retval = lctx
+                    .typeGenerator(loweredScrutinee.sirType)
+                    .genMatch(sirMatch, loweredScrutinee, optTargetType)
                 if lctx.debug then
                     lctx.log(
                       s"Lowered match: ${sir.pretty.render(100)}\n" +
@@ -437,6 +426,13 @@ object Lowering {
                   None // representation can depend from fun, so should be calculated.
                 )
             catch
+                case ex: SIRType.CaclulateApplyTypeException =>
+                    val location =
+                        s"${app.anns.pos.file}:${app.anns.pos.startLine + 1}:${app.anns.pos.startColumn + 1}"
+                    throw SIRType.CaclulateApplyTypeException(
+                      s"${ex.msg}\nLocation: $location",
+                      ex.cause
+                    )
                 case NonFatal(ex) =>
                     println(
                       s"Error lowering app: ${app.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}"

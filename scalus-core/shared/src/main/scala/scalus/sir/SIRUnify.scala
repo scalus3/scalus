@@ -13,6 +13,7 @@ object SIRUnify {
         eqTypes: Map[SIRType.TypeVar, Set[SIRType.TypeVar]] = Map.empty,
         parentTypes: Map[SIRType, Set[SIRType]] = Map.empty,
         topLevelTypes: Set[SIRType] = Set.empty,
+        varNames: Map[String, String] = Map.empty,
         debug: Boolean = false,
         upcasting: Boolean = false,
         var optTypeVarGenerationContext: Option[SIRType.SetBasedTypeVarGenerationContext] = None,
@@ -116,11 +117,17 @@ object SIRUnify {
         (left, right) match
             case (SIR.Var(name1, tp1, anns1), SIR.Var(name2, tp2, anns2)) =>
                 if env.debug then println(s"unifySIRExpr: vars: \nleft=$left\nright=$right")
-                if name1 == name2 then
-                    topLevelUnifyType(tp1, tp2, env.copy(path = "tp" :: env.path)) match
-                        case UnificationSuccess(env1, tp) =>
+                val (env1, sameNames) = env.varNames.get(name1) match
+                    case Some(value1) =>
+                        if value1 == name2 then (env, true)
+                        else (env, false)
+                    case None =>
+                        (env.copy(varNames = env.varNames.updated(name1, name2)), true)
+                if sameNames then
+                    topLevelUnifyType(tp1, tp2, env1.copy(path = "tp" :: env1.path)) match
+                        case UnificationSuccess(env2, tp) =>
                             UnificationSuccess(
-                              env1.copy(path = env.path, parentTypes = Map.empty),
+                              env2.copy(path = env1.path, parentTypes = Map.empty),
                               SIR.Var(name1, tp, anns1)
                             )
                         case UnificationFailure(path, tpLeft, tpRight) =>
@@ -397,10 +404,11 @@ object SIRUnify {
     }
 
     private def unifyType(left: SIRType, right: SIRType, env: Env): UnificationResult[SIRType] = {
-        if env.debug then
+        if env.debug then {
             println(
               s"unifyType: \nleft=${left.show}\nright=${right.show}, env.upcasting=${env.upcasting}"
             )
+        }
         val retval =
             if left eq right then UnificationSuccess(env, left)
             else
@@ -983,13 +991,18 @@ object SIRUnify {
     }
 
     def unifyBinding(left: Binding, right: Binding, env: Env): UnificationResult[Binding] = {
-        if left.name == right.name then
-            topLevelUnifyType(left.tp, right.tp, env.copy(path = "tp" :: env.path)) match
-                case UnificationSuccess(env1, tp) =>
-                    unifySIR(left.value, right.value, env1.copy(path = "value" :: env.path)) match
-                        case UnificationSuccess(env2, value) =>
+        val (sameName, env1) = env.varNames.get(left.name) match {
+            case Some(rightName) if rightName == right.name => (true, env)
+            case Some(_)                                    => (false, env)
+            case None => (true, env.copy(varNames = env.varNames.updated(left.name, right.name)))
+        }
+        if sameName then
+            topLevelUnifyType(left.tp, right.tp, env1.copy(path = "tp" :: env1.path)) match
+                case UnificationSuccess(env2, tp) =>
+                    unifySIR(left.value, right.value, env2.copy(path = "value" :: env1.path)) match
+                        case UnificationSuccess(env3, value) =>
                             UnificationSuccess(
-                              env2.copy(path = env.path),
+                              env3.copy(path = env1.path),
                               Binding(left.name, tp, value)
                             )
                         case failure @ UnificationFailure(path, left, right) => failure
@@ -1029,7 +1042,9 @@ object SIRUnify {
         env: Env
     ): UnificationResult[TypeBinding] = {
         if env.debug then
-            println(s"unifyTypeBinding: \nleft=$left\nright=$right, env.upcasting=${env.upcasting}")
+            println(
+              s"unifyTypeBinding: left=${left.name}:${left.tp.show}, right=${right.name}:${right.tp.show}, env.upcasting=${env.upcasting}"
+            )
         val retval =
             if left.name == right.name then
                 topLevelUnifyType(left.tp, right.tp, env.copy(path = "tp" :: env.path)) match

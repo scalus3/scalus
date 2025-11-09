@@ -29,3 +29,5 @@ website/static/api
 node_modules
 .scala-build
 .envrc.local
+*.log
+test-logs-archive/

@@ -4,11 +4,22 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.Compiler.compile
 import scalus.*
 
+import scala.annotation.tailrec
+
 object SIRTypingScalaToSIRSpecScope {
 
     case class ClassA1(a: BigInt)
 
     case class Wrapper[X](value: X)
+
+    // Test enum with multiple cases
+    enum MultiCaseEnum:
+        case CaseA(value: BigInt)
+        case CaseB(value: String)
+
+    // Test enum with single case
+    enum SingleCaseEnum:
+        case OnlyCase(value: BigInt)
 
     sealed trait HierarchicalLevel1[A]
     case class LeafLevel1A[A](a: A) extends HierarchicalLevel1[A]
@@ -178,11 +189,92 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
         }
     }
 
+    @tailrec
     private def findLastLetBody(x: SIR): SIR = {
         x match {
             case SIR.Decl(data, term)   => findLastLetBody(term)
             case SIR.Let(_, body, _, _) => findLastLetBody(body)
             case _                      => x
+        }
+    }
+
+    test("enum with multiple cases: each case should have parent") {
+        import SIRTypingScalaToSIRSpecScope.*
+
+        val sir = compile { (x: BigInt) =>
+            MultiCaseEnum.CaseA(x)
+        }
+
+        sir.tp match {
+            case SIRType.Fun(SIRType.Integer, SIRType.SumCaseClass(decl, typeArgs)) =>
+                val constrDecl: ConstrDecl = decl.constructors.find(_.name.contains("CaseA")).get
+                val caseClass = decl.constrType(constrDecl.name) match {
+                    case cc: SIRType.CaseClass => cc
+                    case other =>
+                        fail(s"Expected CaseClass but got: ${other}")
+                }
+                assert(
+                  constrDecl.name.contains("CaseA"),
+                  s"Expected CaseA but got ${constrDecl.name}"
+                )
+                val parent = caseClass.parent.get
+                assert(
+                  caseClass.show.contains("MultiCaseEnum"),
+                  s"Expected parent MultiCaseEnum but got ${parent.show}"
+                )
+            case other =>
+                fail(s"Expected Fun(Integer, CaseClass(..., Some(parent))) but got: ${other}")
+        }
+    }
+
+    test("enum with single case: case should have parent") {
+        import SIRTypingScalaToSIRSpecScope.*
+
+        val sir = compile { (x: BigInt) =>
+            SingleCaseEnum.OnlyCase(x)
+        }
+
+        val tp = findLastLetBody(sir) match {
+            case SIR.LamAbs(x, body, _, _) =>
+                body match {
+                    case SIR.Cast(term, tp, _) =>
+                        term.tp
+                    case _ =>
+                        fail(s"Expected Cast but got: ${body}")
+                }
+            case _ =>
+                fail(s"Expected LamAbs but got: ${sir}")
+        }
+
+        tp match {
+            case SIRType.CaseClass(constrDecl, Nil, Some(parent)) =>
+                assert(
+                  constrDecl.name.contains("OnlyCase"),
+                  s"Expected OnlyCase but got ${constrDecl.name}"
+                )
+                assert(
+                  parent.show.contains("SingleCaseEnum"),
+                  s"Expected parent SingleCaseEnum but got ${parent.show}"
+                )
+            case other =>
+                fail(s"Expected Fun(Integer, CaseClass(..., Some(parent))) but got: ${other}")
+        }
+    }
+
+    test("regular case class should not have parent") {
+        import SIRTypingScalaToSIRSpecScope.*
+
+        val sir = compile { (x: BigInt) =>
+            ClassA1(x)
+        }
+
+        sir.tp match {
+            case SIRType.Fun(SIRType.Integer, SIRType.CaseClass(constrDecl, Nil, None)) =>
+                assert(
+                  constrDecl.name.contains("ClassA1"),
+                  s"Expected ClassA1 but got ${constrDecl.name}"
+                )
+            case other => fail(s"Expected Fun(Integer, CaseClass(..., None)) but got: ${other}")
         }
     }
 
