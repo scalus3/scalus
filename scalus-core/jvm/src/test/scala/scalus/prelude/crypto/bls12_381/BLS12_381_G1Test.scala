@@ -19,7 +19,7 @@ class BLS12_381_G1Test extends AnyFunSuiteLike {
 
     test("generator") {
         assert(
-          bls12_381_G1_equal(generator, bls12_381_G1_uncompress(bls12_381_G1_compressed_generator))
+          bls12_381_G1_equal(generator, bls12_381_G1_uncompress(G1.generatorCompressed))
         )
     }
 

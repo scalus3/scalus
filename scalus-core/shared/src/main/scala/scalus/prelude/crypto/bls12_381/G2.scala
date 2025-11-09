@@ -2,8 +2,7 @@ package scalus.prelude.crypto.bls12_381
 
 import scalus.Compile
 import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.hex
-import scalus.builtin.{BLS12_381_G2_Element, ByteString}
+import scalus.builtin.{BLS12_381_G2_Element, ByteString, PlatformSpecific}
 import scalus.prelude.Eq
 
 @Compile
@@ -24,9 +23,9 @@ object G2 {
       *     val zeroG2 = G2.zero
       *   }}}
       */
-    def zero: BLS12_381_G2_Element = uncompress(
-      hex"c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
-    )
+    def zero: BLS12_381_G2_Element = uncompress(zeroCompressed)
+
+    val zeroCompressed: ByteString = PlatformSpecific.bls12_381_G2_compressed_zero
 
     /** The compressed generator of the G2 group of the BLS12-381 curve.
       *
@@ -39,9 +38,9 @@ object G2 {
       *     val genG2 = G2.generator
       *   }}}
       */
-    def generator: BLS12_381_G2_Element = uncompress(
-      hex"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
-    )
+    def generator: BLS12_381_G2_Element = uncompress(generatorCompressed)
+
+    val generatorCompressed: ByteString = PlatformSpecific.bls12_381_G2_compressed_generator
 
     /** Uncompresses a point in the G2 group from its compressed form. */
     inline def uncompress(bs: ByteString): BLS12_381_G2_Element = {
