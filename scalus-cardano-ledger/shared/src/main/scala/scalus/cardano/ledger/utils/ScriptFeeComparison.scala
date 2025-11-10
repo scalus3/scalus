@@ -3,6 +3,7 @@ package scalus.cardano.ledger.utils
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
+import scalus.cardano.address.Address
 import scalus.cardano.txbuilder.*
 import scalus.cardano.txbuilder.Datum.DatumInlined
 import scalus.compiler.sir.TargetLoweringBackend.{ScottEncodingLowering, SirToUplcV3Lowering, SumOfProductsLowering}
@@ -36,6 +37,13 @@ object ScriptFeeComparison {
     }
 
     case class ComparisonMatrix(results: Map[Compiler.Options, ComparisonResult])
+
+    private def arbAddress(env: Environment) = Address(
+      env.network,
+      Credential.KeyHash(
+        AddrKeyHash(ByteString.fromString("a".repeat(28)))
+      )
+    )
 
     def compareFees(
         script: PlutusScript,
@@ -75,7 +83,7 @@ object ScriptFeeComparison {
 
             PaymentBuilder(context)
                 .withStep(TransactionBuilderStep.Spend(scriptUtxo, directWitness))
-                .payTo(context.wallet.owner, scriptValue)
+                .payTo(arbAddress(context.env), scriptValue)
                 .build()
         }
 
@@ -85,7 +93,7 @@ object ScriptFeeComparison {
               0
             )
             val refScriptUtxoOutput = TransactionOutput.Babbage(
-              address = context.wallet.owner,
+              address = arbAddress(context.env),
               value = Value.lovelace(5_000_000),
               datumOption = None,
               scriptRef = Some(ScriptRef(script: Script))
@@ -102,7 +110,7 @@ object ScriptFeeComparison {
             PaymentBuilder(context)
                 .withStep(TransactionBuilderStep.ReferenceOutput(refScriptUtxo))
                 .withStep(TransactionBuilderStep.Spend(scriptUtxo, refWitness))
-                .payTo(context.wallet.owner, scriptValue)
+                .payTo(arbAddress(context.env), scriptValue)
                 .build()
         }
 
