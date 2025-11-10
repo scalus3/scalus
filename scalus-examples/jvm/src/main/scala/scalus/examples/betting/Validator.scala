@@ -4,8 +4,9 @@ import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
+import scalus.builtin.ToData.*
 import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v2.OutputDatum.OutputDatum
+import scalus.ledger.api.v2.OutputDatum.{NoOutputDatum, OutputDatum}
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
@@ -149,9 +150,16 @@ object Betting extends Validator:
             // ???: oracle can spend token to create a malformed bet, e.g. oracle === player1
             // TODO: all minted tokens should be burnt
             case Action.AnnounceWinner(winner) =>
-                val payoutAddress = txInfo.outputs match
-                    case List.Cons(payoutOutput, List.Nil) => payoutOutput.address
-                    case _ => fail("There's must be a single payout output")
+                val (payoutAddress, newDatum) = txInfo.outputs
+                    .filter:
+                        _.address !== Address.fromPubKeyHash(oracle)
+                    .match
+                        case List.Cons(
+                              TxOut(payoutAddress, _, newDatum, _),
+                              List.Nil
+                            ) =>
+                            (payoutAddress, newDatum)
+                        case _ => fail("There's must be a single payout output")
                 require(
                   winner === player1 || winner === player2,
                   "Winner must be either player1 or player2"
@@ -163,7 +171,7 @@ object Betting extends Validator:
                   "Both players must have joined (player2 is not None)"
                 )
                 require(
-                  datum === None,
+                  newDatum === NoOutputDatum,
                   "No continuing datum (bet is being closed)"
                 )
                 require(

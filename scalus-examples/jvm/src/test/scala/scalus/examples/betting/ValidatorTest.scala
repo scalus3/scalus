@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
-import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.ledger.api.v1.Address
 import scalus.ledger.api.v1.PubKeyHash

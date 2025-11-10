@@ -75,13 +75,22 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
             .getOrElse:
                 fail("Tx haven't been submitted")
 
+    private val betAmount = 10000_000L
+    private val expiration: PosixTime = BigInt(env.slotConfig.slotToTime(3L))
+    private val beginSlot: Long = env.slotConfig.slotToTime(1L)
+    private val beforeSlot: Long = env.slotConfig.slotToTime(2L)
+    private val afterSlot: Long = env.slotConfig.slotToTime(4L)
+    private val submitSlot: Long = env.slotConfig.slotToTime(5L)
+
+    provider.setSlot(env.slotConfig.timeToSlot(beginSlot))
+
     private val deployBetting: Transaction =
         new Transactions(
           BuilderContext(env, TestUtil.createTestWallet(provider, oracle.address)),
           compiledContract
         ).deploy(
           deploymentAddress,
-          provider.findUtxo(oracle.address).getOrElse(fail("There's no test wallet funds"))
+          provider.findUtxo(oracle.address).getOrElse(fail("There's no oracle test wallet funds"))
         ).assertTx(provider)
 
     private def scriptUtxo(
@@ -96,11 +105,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     val currentScriptUtxo = scriptUtxo(provider)
 
-    assert(currentScriptUtxo.isRight)
-    println(currentScriptUtxo.toOption.get._2.value.coin)
-
-    private val betAmount = 10000_000L
-    private val expiration: PosixTime = 1753939940
+    test("Verify that a bet script can be properly deployed"):
+        assert(currentScriptUtxo.isRight)
 
     private val initBetting: Transaction =
         new Transactions(
@@ -111,7 +117,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           player1,
           oracle,
           expiration,
-          currentScriptUtxo.toOption.get
+          currentScriptUtxo.toOption.get,
+          beforeSlot
         ).assertTx(provider)
 
     private val initDatum = BetDatum(
@@ -134,19 +141,22 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     private val currentInitUtxo = initUtxo(provider)
 
     // TODO: test fee constrains
-    println(scalus.cardano.ledger.utils.ScriptFeeComparison.compareAll(
-      Betting.validate,
-      Data.unit,
-      Some(Inline(initDatum.toData)),
-      BuilderContext(
-        env,
-        TestUtil.createTestWallet(provider, oracle.address)
-      ),
-      Set(ExpectedSigner(AddrKeyHash.fromByteString(deployment.hash))),
-      Value.lovelace(betAmount)
-    ))
+    println(
+      scalus.cardano.ledger.utils.ScriptFeeComparison.compareAll(
+        Betting.validate,
+        Data.unit,
+        Some(Inline(initDatum.toData)),
+        BuilderContext(
+          env,
+          TestUtil.createTestWallet(provider, oracle.address)
+        ),
+        Set(ExpectedSigner(AddrKeyHash.fromByteString(deployment.hash))),
+        Value.lovelace(betAmount)
+      )
+    )
 
-    assert(currentInitUtxo.toOption.get._2.value.coin == Coin(betAmount))
+    test("Verify that a bet can be properly initialized"):
+        assert(currentInitUtxo.toOption.get._2.value.coin == Coin(betAmount))
 
     private val joinBetting: (Transaction, Result) =
         val snapshot = provider // .snapshot()
@@ -160,7 +170,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           oracle,
           expiration,
           currentScriptUtxo.toOption.get,
-          currentInitUtxo.toOption.get
+          currentInitUtxo.toOption.get,
+          beforeSlot
         ).toOption
             .get
         (tx, runValidator(tx, snapshot, initUtxo))
@@ -179,7 +190,8 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     val currentJoinUtxo = joinUtxo(provider)
 
-    assert(currentJoinUtxo.toOption.get._2.value.coin == Coin(betAmount + betAmount))
+    test("Verify that player2 can join an existing bet"):
+        assert(currentJoinUtxo.toOption.get._2.value.coin == Coin(betAmount + betAmount))
 
     private def winBetting(isJoinWin: Boolean, time: PosixTime): (Transaction, Result) =
         val snapshot = provider // .snapshot()
@@ -192,24 +204,40 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           player2,
           oracle,
           currentScriptUtxo.toOption.get,
-          currentJoinUtxo.toOption.get // ???: provider
+          currentJoinUtxo.toOption.get,
+          provider.findUtxo(oracle.address).getOrElse(fail("There's no oracle test wallet funds")),
+          afterSlot
         ).toOption
             .get
-        (tx, runValidator(tx, snapshot, joinUtxo, Some(time))) // ???: provider
+        (tx, runValidator(tx, snapshot, joinUtxo, Some(time)))
+
+    val winner = winBetting(true, submitSlot)
+
+    private def winUtxo(
+        ledgerProvider: LedgerProvider
+    ): Either[RuntimeException, Utxo] = ledgerProvider
+        .findUtxo(
+          address = player2.address,
+          transactionId = Some(winner._1.id),
+          minAmount = Some(Coin(betAmount + betAmount))
+        )
+
+    val currentWinUtxo = winUtxo(provider)
+
+    test("Verify that the oracle can announce winner and trigger payout"):
+        assert(currentWinUtxo.toOption.get._2.value.coin == Coin(betAmount + betAmount))
 
     private def runValidator(
         tx: Transaction,
         snapshot: LedgerProvider,
         betUtxo: LedgerProvider => Either[RuntimeException, Utxo],
-        // wallet: Wallet,
-        // scriptInput: TransactionInput,
         time: Option[PosixTime] = None
     ) =
         val utxo = betUtxo(snapshot)
         assert(utxo.isRight)
 
-        // time.foreach: posixTime =>
-        //     snapshot.setSlot(env.slotConfig.timeToSlot(posixTime.toLong))
+        time.foreach: posixTime =>
+            snapshot.setSlot(env.slotConfig.timeToSlot(posixTime.toLong))
 
         val inputs =
             val body = tx.body.value
@@ -225,15 +253,6 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
         val program = Program.fromCborByteString(script.script)
 
         val res = program.runWithDebug(scriptContext)
-
-        // TestUtil.runValidator(
-        //   BettingContract.defaultCompiledContract.program,
-        //   tx,
-        //   utxos,
-        //   snapshot.wallet,
-        //   scriptInput
-        // )
-
 
         res match
             case Result.Failure(exception, budget, costs, logs) =>
