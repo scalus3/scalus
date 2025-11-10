@@ -9,7 +9,7 @@ import com.bloxbean.cardano.client.transaction.spec.{Transaction, TransactionInp
 import com.bloxbean.cardano.client.transaction.util.TransactionUtil
 import com.bloxbean.cardano.client.util.JsonUtil
 import scalus.builtin.ByteString
-import scalus.cardano.ledger.{CardanoInfo, MajorProtocolVersion, PlutusScriptEvaluator, SlotConfig}
+import scalus.cardano.ledger.{CardanoInfo, PlutusScriptEvaluator, SlotConfig}
 import scalus.ledger.api.ScriptContext
 import scalus.uplc.eval.ExBudget
 
@@ -174,18 +174,9 @@ class ScalusTransactionEvaluator(
           debugDumpFilesForTesting
         )
 
-    private lazy val params = scalus.cardano.ledger.ProtocolParams.fromBlockfrostJson(
-      this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
-    )
-
     private lazy val txEvaluator2 = PlutusScriptEvaluator(
-      CardanoInfo.mainnet.slotConfig,
-      initialBudget = ExBudget.fromCpuAndMemory(
-        protocolParams.getMaxTxExSteps.toLong,
-        protocolParams.getMaxTxExMem.toLong
-      ),
-      protocolMajorVersion = MajorProtocolVersion(protocolParams.getProtocolMajorVer.intValue()),
-      costModels = params.costModels
+      CardanoInfo.mainnet,
+      scalus.cardano.ledger.EvaluatorMode.EvaluateAndComputeCost
     )
     private val utxoResolver = CclUtxoResolver(utxoSupplier, scriptSupplier)
     private lazy val utxoResolver2 = ScalusUtxoResolver(utxoSupplier, scriptSupplier)

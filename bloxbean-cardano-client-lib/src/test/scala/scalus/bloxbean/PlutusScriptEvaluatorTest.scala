@@ -24,10 +24,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
 
     test("TxEvaluator PlutusV2") {
         val evaluator = PlutusScriptEvaluator(
-          CardanoInfo.mainnet.slotConfig,
-          initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
-          protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-          costModels = costModels
+          CardanoInfo.mainnet,
+          EvaluatorMode.EvaluateAndComputeCost
         )
 
         inline def requiredPubKeyHash =
@@ -81,10 +79,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
 
     test("TxEvaluator PlutusV3") {
         val evaluator = PlutusScriptEvaluator(
-          CardanoInfo.mainnet.slotConfig,
-          initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
-          protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-          costModels = costModels
+          CardanoInfo.mainnet,
+          EvaluatorMode.EvaluateAndComputeCost
         )
 
         inline def requiredPubKeyHash =
@@ -168,11 +164,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
 //        val utxos = bloxbeanResolveUtxo(tx)
         val utxos = resolveUtxoFromResources(tx)
         val evaluator = PlutusScriptEvaluator(
-          CardanoInfo.mainnet.slotConfig,
-          initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
-          protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-          costModels = costModels,
-          debugDumpFilesForTesting = false
+          CardanoInfo.mainnet,
+          EvaluatorMode.EvaluateAndComputeCost
         )
         //        DebugUtils.dumpTxInfo(tx, utxos)
 

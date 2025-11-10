@@ -57,12 +57,7 @@ class PlutusScriptEvaluatorBenchmark {
         Seq.empty
 
     // Create evaluator once with mainnet parameters since it doesn't change
-    private val evaluator = PlutusScriptEvaluator(
-      CardanoInfo.mainnet.slotConfig,
-      initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
-      protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-      costModels = CardanoInfo.mainnet.protocolParams.costModels
-    )
+    private val evaluator = PlutusScriptEvaluator(CardanoInfo.mainnet, EvaluatorMode.Validate)
 
     private val utxoResolver = new ResourcesUtxoResolver()
 

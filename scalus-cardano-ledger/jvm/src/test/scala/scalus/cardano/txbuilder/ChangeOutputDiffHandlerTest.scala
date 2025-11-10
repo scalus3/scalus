@@ -13,7 +13,6 @@ import scalus.cardano.ledger.rules.{Context, State, ValueNotConservedUTxOValidat
 import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee}
 import scalus.cardano.txbuilder.ChangeOutputDiffHandler
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
-import scalus.uplc.eval.ExBudget
 import scalus.|>
 
 import scala.collection.immutable.SortedSet
@@ -23,10 +22,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     private val params: ProtocolParams = CardanoInfo.mainnet.protocolParams
     private val evaluator = PlutusScriptEvaluator(
-      CardanoInfo.mainnet.slotConfig,
-      initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
-      protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-      costModels = params.costModels
+      CardanoInfo.mainnet,
+      EvaluatorMode.EvaluateAndComputeCost
     )
 
     enum Expected {

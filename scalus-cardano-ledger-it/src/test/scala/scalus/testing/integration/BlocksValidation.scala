@@ -23,7 +23,6 @@ import scalus.ledger.api.v1
 import scalus.ledger.api.v2
 import scalus.ledger.api.v3.ScriptInfo
 import scalus.ledger.api.{v3, *}
-import scalus.uplc.eval.ExBudget
 import scalus.utils.Utils
 
 import java.math.BigInteger
@@ -256,10 +255,8 @@ class BlocksValidation extends AnyFunSuite {
         val params: ProtocolParams = CardanoInfo.mainnet.protocolParams
         val utxoResolver = ScalusUtxoResolver(utxoSupplier, scriptSupplier)
         utxoResolver -> PlutusScriptEvaluator(
-          CardanoInfo.mainnet.slotConfig,
-          initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
-          protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-          costModels = params.costModels
+          CardanoInfo.mainnet,
+          scalus.cardano.ledger.EvaluatorMode.Validate
         )
     }
 

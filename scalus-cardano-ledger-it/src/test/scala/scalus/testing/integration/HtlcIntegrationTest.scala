@@ -55,10 +55,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
               slotConfig = yaciSlotConfig
             )
             val evaluator = PlutusScriptEvaluator(
-              slotConfig = cardanoInfo.slotConfig,
-              initialBudget = ExBudget.enormous,
-              protocolMajorVersion = cardanoInfo.majorProtocolVersion,
-              costModels = cardanoInfo.protocolParams.costModels
+              cardanoInfo,
+              EvaluatorMode.EvaluateAndComputeCost
             )
             val env = Environment(cardanoInfo)
             TestContext(client, cardanoInfo, env, evaluator)
@@ -73,10 +71,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
               slotConfig = SlotConfig.Preprod
             )
             val evaluator = PlutusScriptEvaluator(
-              slotConfig = cardanoInfo.slotConfig,
-              initialBudget = ExBudget.enormous,
-              protocolMajorVersion = cardanoInfo.majorProtocolVersion,
-              costModels = cardanoInfo.protocolParams.costModels
+              cardanoInfo,
+              EvaluatorMode.EvaluateAndComputeCost
             )
             val env = Environment(cardanoInfo)
             TestContext(client, cardanoInfo, env, evaluator)

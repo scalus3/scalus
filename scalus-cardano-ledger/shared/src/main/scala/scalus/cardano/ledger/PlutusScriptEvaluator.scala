@@ -103,6 +103,25 @@ object PlutusScriptEvaluator {
           debugDumpFilesForTesting
         )
 
+    /** Creates a PlutusScriptEvaluator from [[CardanoInfo]].
+      * @param cardanoInfo
+      *   The CardanoInfo containing protocol parameters and slot configuration
+      * @param mode
+      *   The evaluator mode
+      */
+    def apply(cardanoInfo: CardanoInfo, mode: EvaluatorMode): PlutusScriptEvaluator =
+        new DefaultImpl(
+          cardanoInfo.slotConfig,
+          ExBudget.fromCpuAndMemory(
+            cardanoInfo.protocolParams.maxTxExecutionUnits.steps,
+            cardanoInfo.protocolParams.maxTxExecutionUnits.memory
+          ),
+          cardanoInfo.majorProtocolVersion,
+          cardanoInfo.protocolParams.costModels,
+          EvaluatorMode.EvaluateAndComputeCost,
+          debugDumpFilesForTesting = false
+        )
+
     private class DefaultImpl(
         val slotConfig: SlotConfig,
         val initialBudget: ExBudget,

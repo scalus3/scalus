@@ -3,25 +3,18 @@ package scalus.examples
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
+import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.{Environment, PubKeyWitness, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v3
-import scalus.uplc.Program
-import scalus.uplc.eval.ExBudget
-import scalus.cardano.node.Provider
 import scalus.testing.kit.ScalusTest
+import scalus.uplc.Program
 
 object TestUtil extends ScalusTest {
 
-    val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
+    val testEnvironment: Environment = CardanoInfo.mainnet
 
-    val testEnvironment: Environment = Environment(cardanoInfo = CardanoInfo.mainnet)
-
-    val testEvaluator: PlutusScriptEvaluator = PlutusScriptEvaluator(
-      slotConfig = CardanoInfo.mainnet.slotConfig,
-      initialBudget = ExBudget.enormous,
-      protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-      costModels = testProtocolParams.costModels
-    )
+    val testEvaluator: PlutusScriptEvaluator =
+        PlutusScriptEvaluator(testEnvironment, EvaluatorMode.EvaluateAndComputeCost)
 
     def createTestAddress(keyHash: String): ShelleyAddress = {
         ShelleyAddress(

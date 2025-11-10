@@ -19,7 +19,7 @@ object IsValidFlagTransactionSetter {
               slotConfig = slotConfig,
               initialBudget =
                   ExBudget.fromCpuAndMemory(maxTxExecutionUnits.steps, maxTxExecutionUnits.memory),
-              protocolMajorVersion = MajorProtocolVersion(protocolVersion.major),
+              protocolMajorVersion = protocolVersion.toMajor,
               costModels = protocolParameters.costModels,
               mode = EvaluatorMode.Validate,
               debugDumpFilesForTesting = false

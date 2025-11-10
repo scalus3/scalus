@@ -21,15 +21,6 @@ import scala.language.postfixOps
 
 val blockfrost544Params: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
-val costModels = blockfrost544Params.costModels
-
-val evaluator = PlutusScriptEvaluator(
-  CardanoInfo.mainnet.slotConfig,
-  initialBudget = ExBudget.enormous,
-  protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-  costModels = costModels
-)
-
 val genTransactionInput: Gen[TransactionInput] =
     for {
         txId <- genByteStringOfN(32).map(TransactionHash.fromByteString)
