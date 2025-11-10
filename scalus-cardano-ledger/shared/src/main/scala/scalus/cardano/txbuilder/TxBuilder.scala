@@ -25,6 +25,12 @@ case class TxBuilder(
 
 trait Builder {
     def spend(utxo: Utxo): Builder = ???
+    def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data,
+        validator: PlutusScript,
+        datum: Option[Data] = None
+    ): Builder = ???
     def from(address: Address): Builder = ???
     def withdraw(credential: Credential.KeyHash): Builder = ???
     def withdraw(credential: Credential.ScriptHash): Builder = ???
