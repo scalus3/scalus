@@ -61,11 +61,14 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
 
     extension (txb: Either[String, Transaction])
 
-        def assertTx(ledgerProvider: MockLedgerApi): Transaction = txb match
-            case Right(tx) =>
-                assert(provider.submit(tx).isRight)
-                tx
-            case Left(error) => fail(error)
+        def assertTx(ledgerProvider: MockLedgerApi): Transaction = txb.left
+            .map: error =>
+                fail(error)
+            .toOption // https://github.com/scala/scala3/issues/17216
+            .flatMap: tx =>
+                for () <- ledgerProvider.submit(tx).toOption yield tx
+            .getOrElse:
+                fail("Tx haven't been submitted")
 
     private val deployBetting: Transaction =
         new Transactions(
@@ -74,7 +77,10 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
             TestUtil.createTestWallet(provider, oracle.address)
           ),
           compiledContract
-        ).deploy(deploymentAddress).assertTx(provider)
+        ).deploy(
+          deploymentAddress,
+          provider.findUtxo(oracle.address).getOrElse(fail("There's no test wallet funds"))
+        ).assertTx(provider)
 
     private def scriptUtxo(
         ledgerProvider: MockLedgerApi
@@ -126,8 +132,9 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
           minAmount = Some(Coin(betAmount))
         )
 
-    val currentInitUtxo = initUtxo(provider)
+    private val currentInitUtxo = initUtxo(provider)
 
+    // TODO: test fee constrains
     println(
       scalus.cardano.ledger.utils.ScriptFeeComparison.compareAll(
         BettingValidator.validate,
@@ -158,10 +165,11 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
           player2,
           oracle,
           expiration,
-          currentInitUtxo.toOption.get // ???: provider
+          currentScriptUtxo.toOption.get,
+          currentInitUtxo.toOption.get
         ).toOption
             .get
-        (tx, runValidator(tx, snapshot, initUtxo)) // ???: provider
+        (tx, runValidator(tx, snapshot, initUtxo))
 
     private val joinDatum = initDatum.copy(player2 = player2)
 
@@ -192,6 +200,7 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
           player1,
           player2,
           oracle,
+          currentScriptUtxo.toOption.get,
           currentJoinUtxo.toOption.get // ???: provider
         ).toOption
             .get
@@ -213,10 +222,7 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
             val body = tx.body.value
             (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
 
-        val utxos = provider
-            .findUtxos(inputs)
-            .toOption
-            .getOrElse(fail(provider.findUtxos(inputs).left.get)) // <-- Err None.get
+        val utxos = provider.findUtxos(inputs).toOption.getOrElse(fail("Tx UTxOs already spent"))
 
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxos, utxo.toOption.get._1, RedeemerTag.Spend, env)
@@ -235,8 +241,11 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
         //   scriptInput
         // )
 
-        assert(snapshot.submit(tx).isRight)
-
-        assert(betUtxo(snapshot).isLeft)
-
-        res
+        res match
+            case Result.Failure(exception, budget, costs, logs) =>
+                logs.foreach(println)
+                fail(s"Script failed to proceed: ${exception.getMessage}")
+            case Result.Success(term, budget, costs, logs) =>
+                assert(snapshot.submit(tx).isRight)
+                assert(betUtxo(snapshot).isLeft)
+                res

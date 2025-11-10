@@ -19,28 +19,22 @@ class Transactions(
     val scriptAddress = Address(context.env.network, Credential.ScriptHash(script.scriptHash))
 
     // utility initial script deployment tx
-    def deploy(deploymentAddress: Address): Either[String, Transaction] =
-        wallet
-            .selectInputs(
-              Value.lovelace(32945265L)
-            ) // FIXME: balanceFeeAndChange - script deployment fee
-            .get
-            .foldLeft(PaymentBuilder(context)):
-                case (builder, (utxo, witness)) =>
-                    builder.spendOutputs(Utxo(utxo.input, utxo.output), witness)
-            .withStep(
-              TransactionBuilderStep.Send(
-                TransactionOutput(
-                  deploymentAddress,
-                  Value.zero,
-                  None,
-                  Some(ScriptRef(script))
-                )
-              )
+    def deploy(
+        deploymentAddress: Address,
+        feeUtxo: Utxo
+    ): Either[String, Transaction] = PaymentBuilder(context)
+        .withStep(TransactionBuilderStep.Spend(feeUtxo, PubKeyWitness))
+        .withStep(
+          TransactionBuilderStep.Send(
+            TransactionOutput(
+              deploymentAddress,
+              Value.zero,
+              None,
+              Some(ScriptRef(script))
             )
-            .collateral
-            .tupled(wallet.collateralInputs.head)
-            .build()
+          )
+        )
+        .build()
 
     def init(
         bet: Long, // lovelace to bet by 'player1'
@@ -84,6 +78,7 @@ class Transactions(
         player2: PubKeyHash,
         oracle: PubKeyHash,
         expiration: PosixTime,
+        scriptUtxo: Utxo,
         betUtxo: Utxo // player1's lovelace bet & issued token
     ): Either[String, Transaction] =
         val lovelace = Value.lovelace(bet)
@@ -94,20 +89,23 @@ class Transactions(
                 case (builder, (utxo, witness)) =>
                     builder.spendOutputs(utxo, witness)
             .withStep(
-              TransactionBuilderStep.Spend(
-                betUtxo,
-                ThreeArgumentPlutusScriptWitness(
-                  scriptSource = ScriptSource.PlutusScriptValue(script),
-                  redeemer = Action.Join.toData,
-                  datum = Datum.DatumInlined,
-                  additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player2.hash)))
-                )
-              )
+              TransactionBuilderStep.ReferenceOutput(scriptUtxo)
             )
             .payToScript(
               scriptAddress,
               betUtxo._2.value + lovelace,
               Config(player1, player2, oracle, expiration).toData
+            )
+            .withStep(
+              TransactionBuilderStep.Spend(
+                betUtxo,
+                ThreeArgumentPlutusScriptWitness(
+                  scriptSource = ScriptSource.PlutusScriptAttached,
+                  redeemer = Action.Join.toData,
+                  datum = Datum.DatumInlined,
+                  additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player2.hash)))
+                )
+              )
             )
             .collateral
             .tupled(wallet.collateralInputs.head)
@@ -118,21 +116,24 @@ class Transactions(
         player1: PubKeyHash,
         player2: PubKeyHash,
         oracle: PubKeyHash,
+        scriptUtxo: Utxo,
         betUtxo: Utxo // player2's lovelace bet & issued token
     ): Either[String, Transaction] =
         val payout = if isJoinWin then player2 else player1
         PaymentBuilder(context)
+            .withStep(TransactionBuilderStep.ReferenceOutput(scriptUtxo))
             .withStep(
               TransactionBuilderStep.Spend(
                 betUtxo,
                 ThreeArgumentPlutusScriptWitness(
-                  scriptSource = ScriptSource.PlutusScriptValue(script),
+                  scriptSource = ScriptSource.PlutusScriptAttached,
                   redeemer = Action.AnnounceWinner(payout).toData,
                   datum = Datum.DatumInlined,
                   additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(oracle.hash)))
                 )
               )
             )
+            // .ValidityStartSlot(???) // ensure expiration
             .payTo(Address.fromByteString(payout.hash), betUtxo._2.value)
             .collateral
             .tupled(wallet.collateralInputs.head)
