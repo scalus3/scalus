@@ -50,6 +50,8 @@ object Action
 /** Main betting validator
   * @see
   *   [[https://github.com/cardano-foundation/cardano-template-and-ecosystem-monitoring/blob/main/bet/onchain/aiken/validators/bet.ak Bet]]
+  * @note
+  *   [[https://github.com/cardano-foundation/cardano-template-and-ecosystem-monitoring/issues/15 known issue]]
   */
 @Compile
 object BettingValidator extends Validator {
@@ -58,28 +60,41 @@ object BettingValidator extends Validator {
       * [[scalus.examples.Action.Join]] and [[scalus.examples.Action.AnnounceWinner]] actions
       */
     inline override def spend(
-        datum: Option[Data],
+        @annotation.unused datum: Option[Data],
         redeemer: Data,
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit =
-        val (address, value, Config(player1, player2, oracle, expiration)) =
-            txInfo.findOwnInputOrFail(txOutRef, "Initial bet spent input must be present") match
-                case TxInInfo(_, TxOut(address, value, OutputDatum(currentDatum), _)) =>
-                    (address, value, currentDatum.to[Config])
-                case _ =>
-                    fail:
-                        "Current bet datum must be inline"
+        val (scriptHash, address, value, Config(player1, player2, oracle, expiration)) =
+            txInfo.findOwnInputOrFail(txOutRef, "Bet spent input must be present") match
+                case TxInInfo(
+                      _,
+                      TxOut(
+                        address @ Address(Credential.ScriptCredential(scriptHash), _),
+                        value,
+                        OutputDatum(currentDatum),
+                        _
+                      )
+                    ) =>
+                    (scriptHash, address, value, currentDatum.to[Config])
+                case _ => fail("Initial bet datum must be inline")
 
         // ???: player2 can spend extra token to create a malformed bet, e.g. oracle === player1
         // TODO: minted token should be single
         redeemer.to[Action] match
             case Action.Join =>
-                val outputLovelace = txInfo.outputs.filter(_.address === address) match
-                    case List.Cons(TxOut(_, value, _, _), List.Nil) => value.getLovelace
-                    case _ => fail("There must be a single continuing output")
-                val Config(newPlayer1, joiningPlayer, newOracle, newExpiration) =
-                    datum.getOrFail("new datum must be present").to[Config]
+                val (
+                  outputLovelace,
+                  Config(newPlayer1, joiningPlayer, newOracle, newExpiration)
+                ) = txInfo
+                    .findOwnScriptOutputs(scriptHash)
+                    .match
+                        case List.Cons(TxOut(_, value, OutputDatum(newDatum), _), List.Nil) =>
+                            (value.getLovelace, newDatum.to[Config])
+                        case _ =>
+                            fail(
+                              "There must be a single continuing spent output with inline new bet datum that goes to the script"
+                            )
                 require(
                   player2.hash.length === BigInt(
                     0
@@ -180,8 +195,7 @@ object BettingValidator extends Validator {
                 case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[Config]
                 case _ =>
                     fail(
-                      "There's must be a single output that goes to the script (the bet UTXO),\n" +
-                          "Bet datum must be inline"
+                      "There must be a single output with inline initial bet datum that goes to the script"
                     )
         require(
           tx.isSignedBy(player1),
