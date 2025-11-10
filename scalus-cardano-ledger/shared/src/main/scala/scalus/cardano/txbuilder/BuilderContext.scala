@@ -1,6 +1,6 @@
 package scalus.cardano.txbuilder
 
-import scalus.cardano.ledger.{MajorProtocolVersion, PlutusScriptEvaluator}
+import scalus.cardano.ledger.PlutusScriptEvaluator
 import scalus.uplc.eval.ExBudget
 
 case class BuilderContext(
@@ -48,7 +48,7 @@ object BuilderContext {
         val evaluator = PlutusScriptEvaluator(
           slotConfig = env.slotConfig,
           initialBudget = initialBudget,
-          protocolMajorVersion = MajorProtocolVersion(env.protocolParams.protocolVersion.major),
+          protocolMajorVersion = env.majorProtocolVersion,
           costModels = env.protocolParams.costModels
         )
         BuilderContext(env, wallet, evaluator)

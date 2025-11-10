@@ -10,6 +10,7 @@ import scala.annotation.threadUnsafe
   */
 case class CardanoInfo(protocolParams: ProtocolParams, network: Network, slotConfig: SlotConfig) {
     def majorProtocolVersion: MajorProtocolVersion = protocolParams.protocolVersion.toMajor
+    def era: Era = Era.Conway
 }
 
 object CardanoInfo {

@@ -18,7 +18,7 @@ class BloxbeanKeyPair(override val underlying: HdKeyPair) extends KeyPair {
 class BloxbeanAccount(val account: bloxbean.Account) extends Account {
     override def paymentKeyPair: KeyPair = BloxbeanKeyPair(account.hdKeyPair())
 
-    override def changeKeyPair: KeyPair = BloxbeanKeyPair(account.changeHdKeyPair())
+    override def changeKeyPair: KeyPair = paymentKeyPair
 
     override def stakeKeyPair: KeyPair = BloxbeanKeyPair(account.stakeHdKeyPair())
 
