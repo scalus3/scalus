@@ -2,19 +2,16 @@ package scalus.examples.betting
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.Compiler
-import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.ToData.*
-import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.utils.ScriptFeeComparison
 import scalus.cardano.ledger.utils.ScriptFeeComparison.{ComparisonResult, FeeComparison}
 import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.uplc.eval.Result
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.uplc.Program
@@ -69,17 +66,23 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
 
     extension (txb: Either[String, Transaction])
 
-        def assertTx(ledgerProvider: LedgerProvider): Transaction = txb match
-            case Right(tx) =>
-                assert(provider.submit(tx).isRight)
-                tx
-            case Left(error) => fail(error)
+        def assertTx(ledgerProvider: LedgerProvider): Transaction = txb.left
+            .map: error =>
+                fail(error)
+            .toOption // https://github.com/scala/scala3/issues/17216
+            .flatMap: tx =>
+                for () <- ledgerProvider.submit(tx).toOption yield tx
+            .getOrElse:
+                fail("Tx haven't been submitted")
 
     private val deployBetting: Transaction =
         new Transactions(
           BuilderContext(env, TestUtil.createTestWallet(provider, oracle.address)),
           compiledContract
-        ).deploy(deploymentAddress).assertTx(provider)
+        ).deploy(
+          deploymentAddress,
+          provider.findUtxo(oracle.address).getOrElse(fail("There's no test wallet funds"))
+        ).assertTx(provider)
 
     private def scriptUtxo(
         ledgerProvider: LedgerProvider
@@ -128,8 +131,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           minAmount = Some(Coin(betAmount))
         )
 
-    val currentInitUtxo = initUtxo(provider)
+    private val currentInitUtxo = initUtxo(provider)
 
+    // TODO: test fee constrains
     println(scalus.cardano.ledger.utils.ScriptFeeComparison.compareAll(
       Betting.validate,
       Data.unit,
@@ -155,10 +159,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           player2,
           oracle,
           expiration,
-          currentInitUtxo.toOption.get // ???: provider
+          currentScriptUtxo.toOption.get,
+          currentInitUtxo.toOption.get
         ).toOption
             .get
-        (tx, runValidator(tx, snapshot, initUtxo)) // ???: provider
+        (tx, runValidator(tx, snapshot, initUtxo))
 
     private val joinDatum = initDatum.copy(player2 = player2)
 
@@ -186,6 +191,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           player1,
           player2,
           oracle,
+          currentScriptUtxo.toOption.get,
           currentJoinUtxo.toOption.get // ???: provider
         ).toOption
             .get
@@ -209,7 +215,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
             val body = tx.body.value
             (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
 
-        val utxos = provider.findUtxos(inputs).toOption.getOrElse(fail(provider.findUtxos(inputs).left.get)) // <-- Err None.get
+        val utxos = provider.findUtxos(inputs).toOption.getOrElse(fail("Tx UTxOs already spent"))
 
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxos, utxo.toOption.get._1, RedeemerTag.Spend, env)
@@ -228,8 +234,12 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
         //   scriptInput
         // )
 
-        assert(snapshot.submit(tx).isRight)
 
-        assert(betUtxo(snapshot).isLeft)
-
-        res
+        res match
+            case Result.Failure(exception, budget, costs, logs) =>
+                logs.foreach(println)
+                fail(s"Script failed to proceed: ${exception.getMessage}")
+            case Result.Success(term, budget, costs, logs) =>
+                assert(snapshot.submit(tx).isRight)
+                assert(betUtxo(snapshot).isLeft)
+                res
