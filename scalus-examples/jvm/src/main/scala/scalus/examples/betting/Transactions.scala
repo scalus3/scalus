@@ -18,11 +18,36 @@ class Transactions(
     val script = compiledContract.script
     val scriptAddress = Address(context.env.network, Credential.ScriptHash(script.scriptHash))
 
+    // utility initial script deployment tx
+    def deploy(deploymentAddress: Address): Either[String, Transaction] =
+        wallet
+            .selectInputs(
+              Value.lovelace(32945265L)
+            ) // FIXME: balanceFeeAndChange - script deployment fee
+            .get
+            .foldLeft(PaymentBuilder(context)):
+                case (builder, (utxo, witness)) =>
+                    builder.spendOutputs(Utxo(utxo.input, utxo.output), witness)
+            .withStep(
+              TransactionBuilderStep.Send(
+                TransactionOutput(
+                  deploymentAddress,
+                  Value.zero,
+                  None,
+                  Some(ScriptRef(script))
+                )
+              )
+            )
+            .collateral
+            .tupled(wallet.collateralInputs.head)
+            .build()
+
     def init(
         bet: Long, // lovelace to bet by 'player1'
         player1: PubKeyHash,
         oracle: PubKeyHash,
         expiration: PosixTime,
+        scriptUtxo: Utxo,
         player2: PubKeyHash = PubKeyHash(hex""), // supposed to be empty
         token: AssetName = AssetName(
           utf8"lucky_number_slevin"
@@ -30,12 +55,15 @@ class Transactions(
         amount: Long = 1L // minted token amount, shouldn't matter
     ): Either[String, Transaction] = PaymentBuilder(context)
         .withStep(
+          TransactionBuilderStep.ReferenceOutput(scriptUtxo)
+        )
+        .withStep(
           TransactionBuilderStep.Mint(
             script.scriptHash,
             token,
             amount,
-            TwoArgumentPlutusScriptWitness(
-              scriptSource = ScriptSource.PlutusScriptValue(script),
+            TwoArgumentPlutusScriptWitness( // must see a reference to a deployed script
+              scriptSource = ScriptSource.PlutusScriptAttached,
               redeemer = Data.unit,
               additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(player1.hash)))
             )
