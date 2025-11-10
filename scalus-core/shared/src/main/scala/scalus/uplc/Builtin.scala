@@ -2,6 +2,7 @@ package scalus.uplc
 
 import scalus.builtin.*
 import scalus.builtin.Builtins.*
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.Constant.given
 import scalus.uplc.DefaultUni.{asConstant, Bool, Integer, given}
 import scalus.uplc.eval.CekValue.*
@@ -20,7 +21,7 @@ case class BuiltinRuntime(
 ) {
     def apply(logger: Logger): CekValue = f(logger, args)
 
-    def calculateCost: ExBudget = costFunction.calculateCost(args*)
+    def calculateCost: ExUnits = costFunction.calculateCost(args*)
 }
 
 @annotation.nowarn(

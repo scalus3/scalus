@@ -4,12 +4,13 @@ package eval
 import cats.syntax.all.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.DefaultUni.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.eval.CekMachineCosts.defaultMachineCosts.*
 
 class CekBudgetJVMTest extends AnyFunSuite:
-    private def check(term: Term, expected: ExBudget): Unit = {
+    private def check(term: Term, expected: ExUnits): Unit = {
         val expectedBudget = expected |+| startupCost
         test(
           s"Check machine budget for terms ${term.pretty.flatten.render(100)} is $expectedBudget"

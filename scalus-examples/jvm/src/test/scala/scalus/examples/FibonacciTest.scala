@@ -9,6 +9,7 @@ import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.*
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.transform.{CaseConstrApply, Inliner}
 
 import scala.annotation.tailrec
@@ -83,7 +84,7 @@ class FibonacciTest extends AnyFunSuite with ScalusTest {
         val result = (optFibTerm $ 25.asTerm).evaluateDebug
         assert(optFibTerm.plutusV3.cborByteString.length == 118)
         assert(result.asInstanceOf[Result.Success].term == 75025.asTerm)
-        assert(result.budget == ExBudget(ExCPU(1745331), ExMemory(3009)))
+        assert(result.budget == ExUnits(memory = 3009, steps = 1745331))
     }
 
     test("fibonacci unfold") {

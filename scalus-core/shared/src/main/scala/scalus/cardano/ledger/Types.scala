@@ -10,6 +10,7 @@ import scalus.utils.Hex.toHex
 import upickle.default.ReadWriter as UpickleReadWriter
 import cats.kernel.CommutativeGroup
 import monocle.*
+import scalus.uplc.eval.ExCPU
 
 import java.util
 import scala.annotation.{targetName, threadUnsafe}
@@ -359,10 +360,21 @@ final case class Slot(slot: Long) derives Codec {
 }
 
 /** Represents execution units for Plutus scripts in Cardano */
-case class ExUnits(memory: Long, steps: Long) derives Codec, UpickleReadWriter {
-    require(memory >= 0, s"Memory units must be non-negative, got $memory")
-    require(steps >= 0, s"Step units must be non-negative, got $steps")
+case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
 
+    /** Returns CPU steps (same as steps)
+      *
+      * @deprecated
+      *   Use .steps directly
+      */
+    @deprecated("Use .steps directly", "0.13.0")
+    def cpu: ExCPU = ExCPU(steps)
+
+    /** Formats execution units as JSON string */
+    def showJson: String =
+        val memoryFormatted = String.format("%.6f", memory / 1000000d)
+        val cpuFormatted = String.format("%.6f", steps / 1000000d)
+        s"{ mem: $memoryFormatted, cpu: $cpuFormatted }"
     def +(other: ExUnits): ExUnits =
         ExUnits(memory + other.memory, steps + other.steps)
 }
@@ -370,10 +382,35 @@ case class ExUnits(memory: Long, steps: Long) derives Codec, UpickleReadWriter {
 object ExUnits {
     val zero: ExUnits = ExUnits(0, 0)
 
+    /** CBOR encoder for ExUnits */
+    given Encoder[ExUnits] = deriveEncoder
+
+    /** CBOR decoder for ExUnits with validation for non-negative values */
+    given Decoder[ExUnits] = deriveDecoder[ExUnits].mapWithReader { (r, exUnits) =>
+        if exUnits.memory < 0 then
+            throw Borer.Error.Unsupported(
+              r.position,
+              s"ExUnits memory must be non-negative, got ${exUnits.memory}"
+            )
+        if exUnits.steps < 0 then
+            throw Borer.Error.Unsupported(
+              r.position,
+              s"ExUnits steps must be non-negative, got ${exUnits.steps}"
+            )
+        exUnits
+    }
+
     given Ordering[ExUnits] = (x: ExUnits, y: ExUnits) => {
         if x.memory != y.memory then x.memory.compareTo(y.memory)
         else x.steps.compareTo(y.steps)
     }
+
+    /** Cats Group instance for ExUnits, allowing algebraic operations including negative values */
+    given cats.kernel.Group[ExUnits] with
+        def combine(x: ExUnits, y: ExUnits): ExUnits =
+            ExUnits(x.memory + y.memory, x.steps + y.steps)
+        def empty: ExUnits = ExUnits.zero
+        def inverse(x: ExUnits): ExUnits = ExUnits(-x.memory, -x.steps)
 }
 
 /** Represents execution unit prices in the Cardano blockchain.

@@ -60,7 +60,7 @@ class TxEvaluationException(
   */
 class TxEvaluator(
     val slotConfig: scalus.cardano.ledger.SlotConfig,
-    val initialBudget: ExBudget,
+    val initialBudget: scalus.cardano.ledger.ExUnits,
     val protocolMajorVersion: Int,
     val costMdls: CostMdls,
     val mode: EvaluatorMode = EvaluatorMode.EVALUATE_AND_COMPUTE_COST,
@@ -405,7 +405,7 @@ class TxEvaluator(
           redeemer.getData,
           ExUnits(
             BigInteger.valueOf(cost.memory),
-            BigInteger.valueOf(cost.cpu)
+            BigInteger.valueOf(cost.steps)
           )
         ) -> result._2
     }
@@ -417,9 +417,9 @@ class TxEvaluator(
         script: ByteString,
         args: Data*
     ) = {
-        val budget = ExBudget.fromCpuAndMemory(
-          cpu = redeemer.getExUnits.getSteps.longValue,
-          memory = redeemer.getExUnits.getMem.longValue
+        val budget = scalus.cardano.ledger.ExUnits(
+          memory = redeemer.getExUnits.getMem.longValue,
+          steps = redeemer.getExUnits.getSteps.longValue
         )
         val program = DeBruijnedProgram.fromCbor(script.bytes)
         val applied = args.foldLeft(program) { (acc, arg) =>
@@ -498,9 +498,9 @@ class TxEvaluator(
 
             // The subtraction is safe here as ex units counting is done during evaluation.
             // Redeemer would fail already if budget was negative.
-            remainingBudget = ExBudget.fromCpuAndMemory(
-              remainingBudget.cpu - evaluatedRedeemer.getExUnits.getSteps.longValue,
-              remainingBudget.memory - evaluatedRedeemer.getExUnits.getMem.longValue
+            remainingBudget = scalus.cardano.ledger.ExUnits(
+              remainingBudget.memory - evaluatedRedeemer.getExUnits.getMem.longValue,
+              remainingBudget.steps - evaluatedRedeemer.getExUnits.getSteps.longValue
             )
 
             evaluatedRedeemer -> sc

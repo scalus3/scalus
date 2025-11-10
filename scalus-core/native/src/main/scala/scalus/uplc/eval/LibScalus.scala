@@ -151,12 +151,12 @@ private object LibScalus:
             // Evaluate script
             vm.evaluateScriptDebug(program) match
                 case Result.Success(term, budget, costs, logs) =>
-                    result._1 = budget.cpu
+                    result._1 = budget.steps
                     result._2 = budget.memory
                     logs.mkString("\n").toCString(logsBuffer, logsLen)
                     0
                 case Result.Failure(exception, budget, costs, logs) =>
-                    result._1 = budget.cpu
+                    result._1 = budget.steps
                     result._2 = budget.memory
                     logs.mkString("\n").toCString(logsBuffer, logsLen)
                     exception.getMessage.toCString(errorBuffer, errorLen)

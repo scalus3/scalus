@@ -22,43 +22,43 @@ enum ExBudgetCategory:
     case BuiltinApp(bi: DefaultFun)
 
 case class CekMachineCosts(
-    startupCost: ExBudget,
-    varCost: ExBudget,
-    constCost: ExBudget,
-    lamCost: ExBudget,
-    delayCost: ExBudget,
-    forceCost: ExBudget,
-    applyCost: ExBudget,
-    builtinCost: ExBudget,
-    constrCost: ExBudget,
-    caseCost: ExBudget
+    startupCost: ExUnits,
+    varCost: ExUnits,
+    constCost: ExUnits,
+    lamCost: ExUnits,
+    delayCost: ExUnits,
+    forceCost: ExUnits,
+    applyCost: ExUnits,
+    builtinCost: ExUnits,
+    constrCost: ExUnits,
+    caseCost: ExUnits
 )
 
 object CekMachineCosts {
     val defaultMachineCostsA: CekMachineCosts = CekMachineCosts(
-      startupCost = ExBudget(ExCPU(100), ExMemory(100)),
-      varCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      constCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      lamCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      delayCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      forceCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      applyCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      builtinCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      constrCost = ExBudget(ExCPU(23000), ExMemory(100)),
-      caseCost = ExBudget(ExCPU(23000), ExMemory(100))
+      startupCost = ExUnits(100, 100),
+      varCost = ExUnits(100, 23000),
+      constCost = ExUnits(100, 23000),
+      lamCost = ExUnits(100, 23000),
+      delayCost = ExUnits(100, 23000),
+      forceCost = ExUnits(100, 23000),
+      applyCost = ExUnits(100, 23000),
+      builtinCost = ExUnits(100, 23000),
+      constrCost = ExUnits(100, 23000),
+      caseCost = ExUnits(100, 23000)
     )
 
     val defaultMachineCostsB: CekMachineCosts = CekMachineCosts(
-      startupCost = ExBudget(ExCPU(100), ExMemory(100)),
-      varCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      constCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      lamCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      delayCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      forceCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      applyCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      builtinCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      constrCost = ExBudget(ExCPU(16000), ExMemory(100)),
-      caseCost = ExBudget(ExCPU(16000), ExMemory(100))
+      startupCost = ExUnits(100, 100),
+      varCost = ExUnits(100, 16000),
+      constCost = ExUnits(100, 16000),
+      lamCost = ExUnits(100, 16000),
+      delayCost = ExUnits(100, 16000),
+      forceCost = ExUnits(100, 16000),
+      applyCost = ExUnits(100, 16000),
+      builtinCost = ExUnits(100, 16000),
+      constrCost = ExUnits(100, 16000),
+      caseCost = ExUnits(100, 16000)
     )
 
     val defaultMachineCostsC: CekMachineCosts = defaultMachineCostsB
@@ -68,13 +68,13 @@ object CekMachineCosts {
         def get(key: String) = {
             val cpu = s"${key}-exBudgetCPU"
             val memory = s"${key}-exBudgetMemory"
-            ExBudget.fromCpuAndMemory(
-              cpu = map
-                  .getOrElse(cpu, throw new IllegalArgumentException(s"Missing key: $cpu in $map")),
+            ExUnits(
               memory = map.getOrElse(
                 memory,
                 throw new IllegalArgumentException(s"Missing key: $memory in $map")
-              )
+              ),
+              steps = map
+                  .getOrElse(cpu, throw new IllegalArgumentException(s"Missing key: $cpu in $map"))
             )
         }
 
@@ -94,45 +94,45 @@ object CekMachineCosts {
 
     def fromPlutusParams(params: PlutusParams): CekMachineCosts = {
         CekMachineCosts(
-          startupCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekStartupCost-exBudgetCPU`,
-            memory = params.`cekStartupCost-exBudgetMemory`
+          startupCost = ExUnits(
+            memory = params.`cekStartupCost-exBudgetMemory`,
+            steps = params.`cekStartupCost-exBudgetCPU`
           ),
-          varCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekVarCost-exBudgetCPU`,
-            memory = params.`cekVarCost-exBudgetMemory`
+          varCost = ExUnits(
+            memory = params.`cekVarCost-exBudgetMemory`,
+            steps = params.`cekVarCost-exBudgetCPU`
           ),
-          constCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekConstCost-exBudgetCPU`,
-            memory = params.`cekConstCost-exBudgetMemory`
+          constCost = ExUnits(
+            memory = params.`cekConstCost-exBudgetMemory`,
+            steps = params.`cekConstCost-exBudgetCPU`
           ),
-          lamCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekLamCost-exBudgetCPU`,
-            memory = params.`cekLamCost-exBudgetMemory`
+          lamCost = ExUnits(
+            memory = params.`cekLamCost-exBudgetMemory`,
+            steps = params.`cekLamCost-exBudgetCPU`
           ),
-          delayCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekDelayCost-exBudgetCPU`,
-            memory = params.`cekDelayCost-exBudgetMemory`
+          delayCost = ExUnits(
+            memory = params.`cekDelayCost-exBudgetMemory`,
+            steps = params.`cekDelayCost-exBudgetCPU`
           ),
-          forceCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekForceCost-exBudgetCPU`,
-            memory = params.`cekForceCost-exBudgetMemory`
+          forceCost = ExUnits(
+            memory = params.`cekForceCost-exBudgetMemory`,
+            steps = params.`cekForceCost-exBudgetCPU`
           ),
-          applyCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekApplyCost-exBudgetCPU`,
-            memory = params.`cekApplyCost-exBudgetMemory`
+          applyCost = ExUnits(
+            memory = params.`cekApplyCost-exBudgetMemory`,
+            steps = params.`cekApplyCost-exBudgetCPU`
           ),
-          builtinCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekBuiltinCost-exBudgetCPU`,
-            memory = params.`cekBuiltinCost-exBudgetMemory`
+          builtinCost = ExUnits(
+            memory = params.`cekBuiltinCost-exBudgetMemory`,
+            steps = params.`cekBuiltinCost-exBudgetCPU`
           ),
-          constrCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekConstrCost-exBudgetCPU`,
-            memory = params.`cekConstrCost-exBudgetMemory`
+          constrCost = ExUnits(
+            memory = params.`cekConstrCost-exBudgetMemory`,
+            steps = params.`cekConstrCost-exBudgetCPU`
           ),
-          caseCost = ExBudget.fromCpuAndMemory(
-            cpu = params.`cekCaseCost-exBudgetCPU`,
-            memory = params.`cekCaseCost-exBudgetMemory`
+          caseCost = ExUnits(
+            memory = params.`cekCaseCost-exBudgetMemory`,
+            steps = params.`cekCaseCost-exBudgetCPU`
           )
         )
     }
@@ -339,7 +339,7 @@ class BuiltinError(
     env: CekValEnv
 ) extends StackTraceMachineError(s"Builtin error: $builtin $term, caused by $cause", env)
 
-class OutOfExBudgetError(budget: ExBudget, env: CekValEnv)
+class OutOfExBudgetError(budget: ExUnits, env: CekValEnv)
     extends StackTraceMachineError(s"Out of budget: $budget", env)
 
 type CekValEnv = immutable.Seq[(String, CekValue)]
@@ -394,19 +394,19 @@ enum CekValue {
 }
 
 enum Result:
-    val budget: ExBudget
+    val budget: ExUnits
     val logs: Seq[String]
-    val costs: collection.Map[ExBudgetCategory, collection.Seq[ExBudget]]
+    val costs: collection.Map[ExBudgetCategory, collection.Seq[ExUnits]]
     case Success(
         term: Term,
-        budget: ExBudget,
-        costs: Map[ExBudgetCategory, collection.Seq[ExBudget]],
+        budget: ExUnits,
+        costs: Map[ExBudgetCategory, collection.Seq[ExUnits]],
         logs: Seq[String]
     )
     case Failure(
         exception: Throwable,
-        budget: ExBudget,
-        costs: Map[ExBudgetCategory, collection.Seq[ExBudget]],
+        budget: ExUnits,
+        costs: Map[ExBudgetCategory, collection.Seq[ExUnits]],
         logs: Seq[String]
     )
 
@@ -447,8 +447,8 @@ enum Result:
     override def toString: String =
         import scalus.*
 
-        def sumBudget(budgets: collection.Seq[ExBudget]): ExBudget =
-            budgets.foldLeft(ExBudget.zero)(_ |+| _)
+        def sumBudget(budgets: collection.Seq[ExUnits]): ExUnits =
+            budgets.foldLeft(ExUnits.zero)(_ |+| _)
 
         def showCosts = costs.toArray
             .sortWith:
@@ -518,38 +518,38 @@ class Log extends Logger {
 }
 
 trait BudgetSpender {
-    def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit
-    def getSpentBudget: ExBudget
+    def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit
+    def getSpentBudget: ExUnits
 }
 
 object NoBudgetSpender extends BudgetSpender {
-    def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit = ()
-    def getSpentBudget: ExBudget = ExBudget.zero
+    def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = ()
+    def getSpentBudget: ExUnits = ExUnits.zero
 }
 
-class RestrictingBudgetSpender(val maxBudget: ExBudget) extends BudgetSpender {
-    private var cpuLeft: Long = maxBudget.cpu
+class RestrictingBudgetSpender(val maxBudget: ExUnits) extends BudgetSpender {
+    private var cpuLeft: Long = maxBudget.steps
     private var memoryLeft: Long = maxBudget.memory
 
-    def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit = {
-        cpuLeft -= budget.cpu
+    def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
+        cpuLeft -= budget.steps
         memoryLeft -= budget.memory
         if cpuLeft < 0 || memoryLeft < 0 then throw new OutOfExBudgetError(maxBudget, env)
     }
 
-    def getSpentBudget: ExBudget =
-        ExBudget.fromCpuAndMemory(maxBudget.cpu - cpuLeft, maxBudget.memory - memoryLeft)
+    def getSpentBudget: ExUnits =
+        ExUnits(maxBudget.memory - memoryLeft, maxBudget.steps - cpuLeft)
 
     def reset(): Unit = {
-        cpuLeft = maxBudget.cpu
+        cpuLeft = maxBudget.steps
         memoryLeft = maxBudget.memory
     }
 }
 
 final class TallyingBudgetSpender(val budgetSpender: BudgetSpender) extends BudgetSpender {
-    val costs: HashMap[ExBudgetCategory, ExBudget] = HashMap.empty
+    val costs: HashMap[ExBudgetCategory, ExUnits] = HashMap.empty
 
-    def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit = {
+    def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
         budgetSpender.spendBudget(cat, budget, env)
         costs.updateWith(cat) {
             case Some(b) => Some(b |+| budget)
@@ -557,26 +557,26 @@ final class TallyingBudgetSpender(val budgetSpender: BudgetSpender) extends Budg
         }
     }
 
-    def getSpentBudget: ExBudget = budgetSpender.getSpentBudget
+    def getSpentBudget: ExUnits = budgetSpender.getSpentBudget
 }
 
 final class TallyingBudgetSpenderLogger(val budgetSpender: BudgetSpender)
     extends BudgetSpender
     with Logger {
-    val costs: collection.mutable.Map[ExBudgetCategory, mutable.Buffer[ExBudget]] =
+    val costs: collection.mutable.Map[ExBudgetCategory, mutable.Buffer[ExUnits]] =
         mutable
-            .HashMap[ExBudgetCategory, mutable.Buffer[ExBudget]]()
-            .withDefault(_ => ArrayBuffer.empty[ExBudget])
+            .HashMap[ExBudgetCategory, mutable.Buffer[ExUnits]]()
+            .withDefault(_ => ArrayBuffer.empty[ExUnits])
 
-    def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit = {
+    def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
         budgetSpender.spendBudget(cat, budget, env)
         costs.update(cat, costs(cat) += budget)
     }
 
-    def getSpentBudget: ExBudget = budgetSpender.getSpentBudget
+    def getSpentBudget: ExUnits = budgetSpender.getSpentBudget
 
-    private val _logs: ArrayBuffer[(String, ExBudget)] = ArrayBuffer.empty
-    val logs: collection.IndexedSeq[(String, ExBudget)] = _logs
+    private val _logs: ArrayBuffer[(String, ExUnits)] = ArrayBuffer.empty
+    val logs: collection.IndexedSeq[(String, ExUnits)] = _logs
     def getLogs: Array[String] = _logs.map(_._1).toArray
     def getLogsWithBudget: Seq[String] =
         _logs.map((log, budget) => s"$log: ${budget.showJson}").toSeq
@@ -587,12 +587,12 @@ final class CountingBudgetSpender extends BudgetSpender {
     private var cpu: Long = 0
     private var memory: Long = 0
 
-    def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit = {
-        cpu += budget.cpu
+    def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
+        cpu += budget.steps
         memory += budget.memory
     }
 
-    def getSpentBudget: ExBudget = ExBudget.fromCpuAndMemory(cpu, memory)
+    def getSpentBudget: ExUnits = ExUnits(memory, cpu)
 }
 
 /** CEK machine implementation based on Cardano Plutus CEK machine.
@@ -857,7 +857,7 @@ class CekMachine(
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
     }
 
-    private def spendBudget(cat: ExBudgetCategory, budget: ExBudget, env: CekValEnv): Unit = {
+    private def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
         budgetSpender.spendBudget(cat, budget, env)
     }
 }

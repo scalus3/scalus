@@ -1,7 +1,6 @@
 package scalus.cardano.txbuilder
 
-import scalus.cardano.ledger.PlutusScriptEvaluator
-import scalus.uplc.eval.ExBudget
+import scalus.cardano.ledger.{ExUnits, PlutusScriptEvaluator}
 
 case class BuilderContext(
     env: Environment,
@@ -43,7 +42,7 @@ object BuilderContext {
     def withEvaluator(
         env: Environment,
         wallet: Wallet,
-        initialBudget: ExBudget = ExBudget.enormous
+        initialBudget: ExUnits = ExUnits(Long.MaxValue, Long.MaxValue)
     ): BuilderContext = {
         val evaluator = PlutusScriptEvaluator(
           slotConfig = env.slotConfig,

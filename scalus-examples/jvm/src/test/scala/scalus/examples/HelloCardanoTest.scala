@@ -6,11 +6,10 @@ import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.cardano.ledger.ExUnits
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
-import scalus.uplc.*
-import scalus.uplc.eval.*
 
 import scala.language.implicitConversions
 
@@ -38,11 +37,11 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
             then {
                 // S3 lowering backend with lambda barriers (safer optimization)
                 if compilerOptions.generateErrorTraces then
-                    ExBudget(ExCPU(10_605903), ExMemory(33594L))
-                else ExBudget(ExCPU(0L), ExMemory(0L))
+                    ExUnits(memory = 33594L, steps = 10_605903)
+                else ExUnits(memory = 0L, steps = 0L)
             } else
                 //  Simple backend.  TODO: test for all backends
-                ExBudget(ExCPU(61_329752L), ExMemory(233876L))
+                ExUnits(memory = 233876L, steps = 61_329752L)
 
         val sir = compile(HelloCardano.validate)
 
@@ -56,7 +55,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
         compareBudgetWithReferenceValue(
           testName = "HelloCardanoTest.Hello Cardano",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(9375627L), ExMemory(28554L)),
+          refBudget = ExUnits(memory = 28554L, steps = 9375627L),
           isPrintComparison = false
         )
     }

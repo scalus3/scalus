@@ -6,8 +6,8 @@ import scalus.builtin.ByteString
 import scalus.builtin.ToData
 import scalus.builtin.FromData
 import scalus.builtin.Data.toData
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.DeBruijnedProgram
-import scalus.uplc.eval.{ExBudget, ExCPU, ExMemory}
 import scalus.uplc.eval.Result
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.ledger.api.v3.*
@@ -130,7 +130,7 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
         outputs: List[(ByteString, BigInt)],
         fee: BigInt,
         extraSignatories: List[ByteString],
-        expected: Either[String, Option[ExBudget]]
+        expected: Either[String, Option[ExUnits]]
     ): Unit = {
         // Create script with payees parameter
 
@@ -214,7 +214,7 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
                               s"Expected success with budget: $budget, but got: ${result.toString}, logs0: ${result.logs
                                       .mkString(", ")}"
                         )
-                        if budget != ExBudget(ExCPU(0), ExMemory(0))
+                        if budget != ExUnits.zero
                         then // Check if budget verification is requested
                             assert(
                               result.budget == budget,

@@ -1,11 +1,10 @@
 package scalus.benchmarks
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Builtins.{multiplyInteger, remainderInteger}
+import scalus.cardano.ledger.ExUnits
 import scalus.prelude.*
-import scalus.uplc.*
-import scalus.uplc.eval.*
-import org.scalatest.funsuite.AnyFunSuite
 import scalus.testing.kit.ScalusTest
 
 class KnightsTest extends AnyFunSuite, ScalusTest:
@@ -34,14 +33,14 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
-            then ExBudget(ExCPU(92468_333030L), ExMemory(325_210974L))
+            then ExUnits(memory = 325_210974L, steps = 92468_333030L)
             else if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
-            then ExBudget(ExCPU(44783_358238L), ExMemory(247_807177L))
+            then ExUnits(memory = 247_807177L, steps = 44783_358238L)
             else {
                 // actually we don't know, need recheck
-                ExBudget(ExCPU(44783_358238L), ExMemory(247_807177L))
+                ExUnits(memory = 247_807177L, steps = 44783_358238L)
             }
 
         assert(result.isSuccess)
@@ -50,7 +49,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         compareBudgetWithReferenceValue(
           testName = "KnightsTest.100_4x4",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(54958_831939L), ExMemory(160_204421L)),
+          refBudget = ExUnits(memory = 160_204421L, steps = 54958_831939L),
           isPrintComparison = printComparison
         )
     }
@@ -135,9 +134,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             summon[scalus.Compiler.Options].targetLoweringBackend match
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExBudget(ExCPU(228427_838079L), ExMemory(823_021359L))
+                    ExUnits(memory = 823_021359L, steps = 228427_838079L)
                 case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
-                    ExBudget(ExCPU(115775_218834L), ExMemory(645_799142L))
+                    ExUnits(memory = 645_799142L, steps = 115775_218834L)
                 case _ =>
                     throw new IllegalStateException("Unsupported target lowering backend")
         if !result.isSuccess then println(s"Result:  $result")
@@ -147,7 +146,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         compareBudgetWithReferenceValue(
           testName = "KnightsTest.100_6x6",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(131954_064320L), ExMemory(292_216349L)),
+          refBudget = ExUnits(memory = 292_216349L, steps = 131954_064320L),
           isPrintComparison = printComparison
         )
     }
@@ -234,11 +233,11 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget = {
             summon[scalus.Compiler.Options].targetLoweringBackend match {
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExBudget(ExCPU(453159_585705L), ExMemory(1646_886653L))
+                    ExUnits(memory = 1646_886653L, steps = 453159_585705L)
                 case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
-                    ExBudget(ExCPU(235822_700067L), ExMemory(1315_097779L))
+                    ExUnits(memory = 1315_097779L, steps = 235822_700067L)
                 case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
-                    ExBudget(ExCPU(235822_700067L), ExMemory(1315_097779L))
+                    ExUnits(memory = 1315_097779L, steps = 235822_700067L)
             }
         }
         assert(result.isSuccess)
@@ -247,7 +246,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         compareBudgetWithReferenceValue(
           testName = "KnightsTest.100_8x8",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(270266_226527L), ExMemory(540_217437L)),
+          refBudget = ExUnits(memory = 540_217437L, steps = 270266_226527L),
         )
     }
 

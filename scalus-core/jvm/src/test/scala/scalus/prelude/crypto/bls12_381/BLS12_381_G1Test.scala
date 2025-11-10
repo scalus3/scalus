@@ -1,11 +1,11 @@
 package scalus.prelude.crypto.bls12_381
 
 import org.scalatest.funsuite.AnyFunSuiteLike
-import scalus.builtin.{Builtins, ByteString}
 import scalus.builtin.Builtins.*
-import scalus.builtin.PlatformSpecific.{bls12_381_G1_compressed_generator, bls12_381_G1_compressed_zero}
-import scalus.prelude.crypto.bls12_381.G1.{*, given}
+import scalus.builtin.PlatformSpecific.bls12_381_G1_compressed_zero
+import scalus.builtin.{Builtins, ByteString}
 import scalus.prelude.*
+import scalus.prelude.crypto.bls12_381.G1.{*, given}
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{Constant, Term}
 

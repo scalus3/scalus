@@ -7,6 +7,7 @@ import scalus.builtin.Builtins.blake2b_256
 import scalus.builtin.ByteString
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.cardano.ledger.ExUnits
 import scalus.cardano.ledger.TransactionHash
 import scalus.cardano.ledger.TransactionInput
 import scalus.ledger.api.v1.Credential.PubKeyCredential
@@ -162,16 +163,16 @@ trait ScalusTest extends ArbitraryInstances {
         )
     }
 
-    final protected def failure(message: String): (String, Option[ExBudget]) =
+    final protected def failure(message: String): (String, Option[ExUnits]) =
         (message, Option.None)
-    final protected def failure(message: String, budget: ExBudget): (String, Option[ExBudget]) =
+    final protected def failure(message: String, budget: ExUnits): (String, Option[ExUnits]) =
         (message, Option.Some(budget))
-    protected val success: (Unit, Option[ExBudget]) = ((), Option.None)
-    final protected def success(budget: ExBudget): (Unit, Option[ExBudget]) =
+    protected val success: (Unit, Option[ExUnits]) = ((), Option.None)
+    final protected def success(budget: ExUnits): (Unit, Option[ExUnits]) =
         ((), Option.Some(budget))
 
     protected def checkResult(
-        expected: (String | Unit, Option[ExBudget]),
+        expected: (String | Unit, Option[ExUnits]),
         actual: Result
     ): Unit = {
         expected._1 match
@@ -199,7 +200,7 @@ trait ScalusTest extends ArbitraryInstances {
                 )
 
         expected._2 match
-            case Option.Some(budget) if budget != ExBudget(ExCPU(0), ExMemory(0)) =>
+            case Option.Some(budget) if budget != ExUnits(0, 0) =>
                 assert(
                   actual.budget == budget,
                   s"Expected budget: $budget, but got: ${actual.budget}"
@@ -209,8 +210,8 @@ trait ScalusTest extends ArbitraryInstances {
 
     def compareBudgetWithReferenceValue(
         testName: String,
-        scalusBudget: ExBudget,
-        refBudget: ExBudget,
+        scalusBudget: ExUnits,
+        refBudget: ExUnits,
         isPrintComparison: Boolean = false
     ): Unit = {
         import ScalusTest.BenchmarkConfig
@@ -225,7 +226,7 @@ trait ScalusTest extends ArbitraryInstances {
         if isPrintComparison || BenchmarkConfig.isPrintAllComparisonsOfBudgetWithReferenceValue then
             println(
               s"${BenchmarkConfig.logPrefix}[$testName]: {" +
-                  s"cpu: ${scalusBudget.cpu.comparisonAsJsonString(refBudget.cpu)}, " +
+                  s"cpu: ${scalusBudget.steps.comparisonAsJsonString(refBudget.steps)}, " +
                   s"memory: ${scalusBudget.memory.comparisonAsJsonString(refBudget.memory)}" +
                   "}"
             )

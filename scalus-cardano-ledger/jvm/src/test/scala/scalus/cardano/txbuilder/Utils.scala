@@ -15,7 +15,6 @@ import scalus.cardano.txbuilder.TestPeer.Alice
 import scalus.cardano.txbuilder.TransactionBuilder.ensureMinAda
 import scalus.ledger.api.v1.ArbitraryInstances.genByteStringOfN
 import scalus.prelude.Option as SOption
-import scalus.uplc.eval.ExBudget
 
 import scala.language.postfixOps
 

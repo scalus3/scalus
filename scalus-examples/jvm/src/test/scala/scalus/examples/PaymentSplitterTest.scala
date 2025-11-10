@@ -3,10 +3,9 @@ package scalus.examples
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
-import scalus.builtin.ByteString
-import scalus.builtin.Data
-import scalus.builtin.ToData
 import scalus.builtin.Data.toData
+import scalus.builtin.{ByteString, Data, ToData}
+import scalus.cardano.ledger.ExUnits
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
@@ -15,7 +14,6 @@ import scalus.ledger.api.v3.ScriptInfo.SpendingScript
 import scalus.prelude.{List, Option, *}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
-import scalus.uplc.eval.*
 
 import scala.util.control.NonFatal
 
@@ -45,7 +43,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
     }
 
     test("success when payments are correctly split between 3 payees") {
-        val scalusBudget = ExBudget(ExCPU(201_475488L), ExMemory(928805))
+        val scalusBudget = ExUnits(memory = 928805, steps = 201_475488L)
         TestCase(
           payees = List(A, B, C),
           amount = 30,
@@ -60,7 +58,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
           testName =
               "PaymentSplitterTest.success when payments are correctly split between 3 payees",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(290456791L), ExMemory(742305L)),
+          refBudget = ExUnits(memory = 742305L, steps = 290456791L),
           isPrintComparison = true
         )
     }
@@ -90,7 +88,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
     }
 
     test("failure when a one of the payee is not payed out") {
-        val scalusBudget = ExBudget(ExCPU(135_983994), ExMemory(597991))
+        val scalusBudget = ExUnits(memory = 597991, steps = 135_983994)
         TestCase(
           payees = List(A, B),
           amount = 30,
@@ -104,7 +102,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
         compareBudgetWithReferenceValue(
           testName = "PaymentSplitterTest.failure when a one of the payee is not payed out",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(177206757L), ExMemory(476022L)),
+          refBudget = ExUnits(memory = 476022L, steps = 177206757L),
           isPrintComparison = true
         )
     }
@@ -275,7 +273,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
         inputs: List[TxInInfo],
         outputs: List[(ByteString, BigInt)],
         fee: BigInt,
-        expected: (String | Unit, Option[ExBudget])
+        expected: (String | Unit, Option[ExUnits])
     ): Unit = assertCase(script)(payees, inputs, outputs, fee, expected)
 
     private def assertCase(script: Program)(
@@ -283,7 +281,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
         inputs: List[TxInInfo],
         outputs: List[(ByteString, BigInt)],
         fee: BigInt,
-        expected: (String | Unit, Option[ExBudget])
+        expected: (String | Unit, Option[ExUnits])
     ): Unit = {
         // Create script with payees parameter
 
@@ -387,7 +385,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
         fee: BigInt,
         inputs: List[Input],
         outputs: List[Output],
-        expected: (String | Unit, Option[ExBudget])
+        expected: (String | Unit, Option[ExUnits])
     ) {
         def runWithDebug(): Unit = {
             assertCase(

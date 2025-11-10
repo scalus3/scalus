@@ -26,7 +26,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
       debug = false
     )
     import Cons.{cons, head}
-    import scalus.uplc.eval.ExBudget
+    import scalus.cardano.ledger.ExUnits
 
     extension (self: TxOut) def token: Value = self.value.withoutLovelace
 
@@ -78,7 +78,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
     ): TxOut = txOut(None, burn, lovelace)
 
     case class TestCase(
-        budget: ExBudget,
+        budget: ExUnits,
         inputs: List[TxInInfo],
         outputs: List[TxOut] = List.Nil,
         mint: Value,
@@ -105,7 +105,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
               )
             )
         if fails != result.isSuccess then
-            if result.budget.cpu > budget.cpu || result.budget.memory > budget.memory
+            if result.budget.steps > budget.steps || result.budget.memory > budget.memory
             then
                 fail:
                     s"""Performance regression,
@@ -124,7 +124,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val nodeIn = empty(lovelace = 4_000_000)
         val nodeOut = node(head(), lovelace = nodeIn.value.getLovelace)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(315866792, 1089434),
+          budget = ExUnits(memory = 1089434, steps = 315866792),
           inputs = List.single(TxInInfo(initRef, nodeIn)),
           outputs = List.single(nodeOut),
           mint = nodeOut.token,
@@ -134,7 +134,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
     test("Verify that a linked list can be properly de-initialized (burn)"):
         val nodeIn = node(head(), burn = true, lovelace = 4_000_000)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(228692388, 777264),
+          budget = ExUnits(memory = 777264, steps = 228692388),
           inputs = List.single(TxInInfo(initRef, nodeIn)),
           mint = nodeIn.token,
           action = OrderedNodeAction.Deinit
@@ -145,7 +145,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val nodeIn = node(nonEmptyCell, user2, burn = true, lovelace = 9_000_000)
         val nodeOut = empty(burn = true)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(495962460, 1683061),
+          budget = ExUnits(memory = 1683061, steps = 495962460),
           inputs = List.single(TxInInfo(initRef, nodeIn)),
           mint = nodeOut.token,
           action = OrderedNodeAction.Deinit,
@@ -161,7 +161,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(501785103, 1703570),
+          budget = ExUnits(memory = 1703570, steps = 501785103),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -179,7 +179,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
+          budget = ExUnits(memory = 1717932, steps = 505711679),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -198,7 +198,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = newParent.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(501785103, 1703570),
+          budget = ExUnits(memory = 1703570, steps = 501785103),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -217,7 +217,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
+          budget = ExUnits(memory = 1717932, steps = 505711679),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -236,7 +236,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(505711679, 1717932),
+          budget = ExUnits(memory = 1717932, steps = 505711679),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -255,7 +255,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(429416754, 1458044),
+          budget = ExUnits(memory = 1458044, steps = 429416754),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -274,7 +274,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          budget = ExUnits(memory = 2004736, steps = 592887819),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -292,7 +292,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val updatedCell = parentCell.copy(ref = remCell.ref)
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          budget = ExUnits(memory = 2004736, steps = 592887819),
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
@@ -309,7 +309,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val updatedCell = parentCell.copy(ref = remCell.ref)
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          budget = ExUnits(memory = 2004736, steps = 592887819),
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
@@ -327,7 +327,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val updatedCell = parentCell.copy(ref = remCell.ref)
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(590553133, 1996487),
+          budget = ExUnits(memory = 1996487, steps = 590553133),
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
@@ -345,7 +345,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val updatedCell = parentCell.copy(ref = remCell.ref)
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(592887819, 2004736),
+          budget = ExUnits(memory = 2004736, steps = 592887819),
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
@@ -362,7 +362,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val updatedCell = parentCell.copy(ref = Some(user2))
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(509647608, 1730487),
+          budget = ExUnits(memory = 1730487, steps = 509647608),
           inputs = List(TxInInfo(removeRef, removeIn), TxInInfo(parentRef, parentIn)),
           outputs = List.single(parentOut),
           mint = removeIn.token,
@@ -381,7 +381,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(593743028, 2016535),
+          budget = ExUnits(memory = 2016535, steps = 593743028),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -399,7 +399,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(593973078, 2017393),
+          budget = ExUnits(memory = 2017393, steps = 593973078),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -418,7 +418,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(593743028, 2016535),
+          budget = ExUnits(memory = 2016535, steps = 593743028),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,
@@ -436,7 +436,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         val covering = parentCell.copy(ref = newCell.ref)
         TestCase(
-          budget = ExBudget.fromCpuAndMemory(593973078, 2017393),
+          budget = ExUnits(memory = 2017393, steps = 593973078),
           inputs = List.single(TxInInfo(parentRef, parentIn)),
           outputs = List(parentOut, newOutput),
           mint = newOutput.token,

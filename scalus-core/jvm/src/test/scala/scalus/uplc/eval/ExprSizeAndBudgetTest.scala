@@ -10,7 +10,7 @@ import scalus.serialization.flat.Flat
 import scalus.uplc.NamedDeBruijn
 import scalus.uplc.Term
 import scalus.uplc.Term.*
-import scalus.uplc.eval.ExBudget.given
+import scalus.cardano.ledger.ExUnits.given
 
 import scala.math.Ordering.Implicits.*
 
@@ -79,7 +79,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
             rec(1000)
         val uplc = sir.toUplc()
         val budget = uplc.evaluateDebug.budget
-        val cpu = (budget.cpu - 1000 * ifBudget1.cpu) / 1000
+        val cpu = (budget.steps - 1000 * ifBudget1.steps) / 1000
         val mem = (budget.memory - 1000 * ifBudget1.memory) / 1000
         val params = CardanoInfo.mainnet.protocolParams
         val lovelacePerRecursion = params.executionUnitPrices.priceSteps * cpu +

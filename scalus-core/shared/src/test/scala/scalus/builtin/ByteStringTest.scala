@@ -3,7 +3,6 @@ package scalus.builtin
 import scalus.builtin.ByteString.*
 import scalus.prelude.StdlibTestKit
 import scalus.uplc.eval.BuiltinException
-import scalus.uplc.eval.ExBudget
 
 class ByteStringTest extends StdlibTestKit:
 

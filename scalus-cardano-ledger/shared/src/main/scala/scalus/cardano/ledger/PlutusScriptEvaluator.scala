@@ -88,7 +88,7 @@ object PlutusScriptEvaluator {
       */
     def apply(
         slotConfig: SlotConfig,
-        initialBudget: ExBudget,
+        initialBudget: ExUnits,
         protocolMajorVersion: MajorProtocolVersion,
         costModels: CostModels,
         mode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
@@ -112,9 +112,9 @@ object PlutusScriptEvaluator {
     def apply(cardanoInfo: CardanoInfo, mode: EvaluatorMode): PlutusScriptEvaluator =
         new DefaultImpl(
           cardanoInfo.slotConfig,
-          ExBudget.fromCpuAndMemory(
-            cardanoInfo.protocolParams.maxTxExecutionUnits.steps,
-            cardanoInfo.protocolParams.maxTxExecutionUnits.memory
+          ExUnits(
+            cardanoInfo.protocolParams.maxTxExecutionUnits.memory,
+            cardanoInfo.protocolParams.maxTxExecutionUnits.steps
           ),
           cardanoInfo.majorProtocolVersion,
           cardanoInfo.protocolParams.costModels,
@@ -124,7 +124,7 @@ object PlutusScriptEvaluator {
 
     private class DefaultImpl(
         val slotConfig: SlotConfig,
-        val initialBudget: ExBudget,
+        val initialBudget: ExUnits,
         val protocolMajorVersion: MajorProtocolVersion,
         val costModels: CostModels,
         val mode: EvaluatorMode,
@@ -279,9 +279,9 @@ object PlutusScriptEvaluator {
                         )
 
                     // Update remaining budget (safe subtraction as evaluation would fail if budget exceeded)
-                    remainingBudget = ExBudget.fromCpuAndMemory(
-                      remainingBudget.cpu - evaluatedRedeemer.exUnits.steps,
-                      remainingBudget.memory - evaluatedRedeemer.exUnits.memory
+                    remainingBudget = ExUnits(
+                      remainingBudget.memory - evaluatedRedeemer.exUnits.memory,
+                      remainingBudget.steps - evaluatedRedeemer.exUnits.steps
                     )
 
                     (evaluatedRedeemer, sc, scriptHash)
@@ -338,7 +338,7 @@ object PlutusScriptEvaluator {
             log.debug(s"Evaluation result: $result")
 
             // Return redeemer with computed execution units
-            redeemer.copy(exUnits = ExUnits(memory = cost.memory, steps = cost.cpu)) -> result._2
+            redeemer.copy(exUnits = ExUnits(memory = cost.memory, steps = cost.steps)) -> result._2
         }
 
         private def extractDatumFromOutput(

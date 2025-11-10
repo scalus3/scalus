@@ -19,8 +19,8 @@ import scalus.uplc.Constant
 import scalus.uplc.DeBruijn
 import scalus.uplc.Term
 import scalus.uplc.Term.asTerm
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.eval.CountingBudgetSpender
-import scalus.uplc.eval.ExBudget
 import scalus.uplc.eval.NoBudgetSpender
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.eval.Result
@@ -53,11 +53,11 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
 
     protected final inline def assertEvalFails[E <: Throwable: ClassTag](cpu: Long, memory: Long)(
         inline code: Any
-    ): Unit = assertEvalBudgetFails(code, Some(ExBudget.fromCpuAndMemory(cpu, memory)))
+    ): Unit = assertEvalBudgetFails(code, Some(ExUnits(memory = memory, steps = cpu)))
 
     protected final inline def assertEvalBudgetFails[E <: Throwable: ClassTag](
         inline code: Any,
-        budget: scala.Option[ExBudget] = None
+        budget: scala.Option[ExUnits] = None
     ): Unit = {
         var isExceptionThrown = false
 
@@ -85,7 +85,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                                       )
                                     )
                                     if budget.exists: budget =>
-                                            result.budget.cpu > budget.cpu ||
+                                            result.budget.steps > budget.steps ||
                                                 result.budget.memory > budget.memory
                                     then
                                         fail:
@@ -166,7 +166,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
     extension [T: Eq](inline code: T)
         @targetName("assertEvalEqBudgetTo")
         protected final inline infix def evalEq(cpu: Long, memory: Long)(inline expected: T): Unit =
-            assertEvalEqBudget(code, expected, Some(ExBudget.fromCpuAndMemory(cpu, memory)))
+            assertEvalEqBudget(code, expected, Some(ExUnits(memory = memory, steps = cpu)))
 
         @targetName("assertEvalEqTo")
         protected final inline infix def evalEq(inline expected: T): Unit =
@@ -175,7 +175,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
     protected final inline def assertEvalEqBudget[T: Eq](
         inline code: T,
         inline expected: T,
-        budget: scala.Option[ExBudget] = None
+        budget: scala.Option[ExUnits] = None
     ): Unit = {
         assert(code === expected, s"Expected $expected, but got $code")
 
@@ -191,7 +191,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         )
 
         if budget.exists: budget =>
-                spender.getSpentBudget.cpu > budget.cpu ||
+                spender.getSpentBudget.steps > budget.steps ||
                     spender.getSpentBudget.memory > budget.memory
         then
             fail:

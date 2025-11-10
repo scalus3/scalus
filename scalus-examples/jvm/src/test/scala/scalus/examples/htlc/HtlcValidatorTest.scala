@@ -4,11 +4,10 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.builtin.{Builtins, ByteString, Data}
+import scalus.cardano.ledger.ExUnits
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.uplc.eval.*
-import scalus.builtin.Builtins
 import scalus.testing.kit.ScalusTest
 
 import scala.util.Try
@@ -157,7 +156,7 @@ object HtlcValidatorTest extends ScalusTest {
         signatories: List[Person] = List.empty,
         action: Action,
         preimage: ByteString,
-        expected: (String | Unit, Option[ExBudget]) = success
+        expected: (String | Unit, Option[ExUnits]) = success
     ):
         def runWithDebug(): Unit = {
             val contractDatum = ContractDatum(

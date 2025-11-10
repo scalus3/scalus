@@ -1,13 +1,13 @@
 package scalus.benchmarks
 
-import scala.language.implicitConversions
-import scala.annotation.nowarn
-import scalus.*
-import scalus.prelude.*
-import scalus.uplc.*
-import scalus.uplc.eval.*
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.cardano.ledger.ExUnits
+import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
+
+import scala.annotation.nowarn
+import scala.language.implicitConversions
 
 class ClausifyTest extends AnyFunSuite, ScalusTest:
     import ClausifyTest.*
@@ -38,14 +38,14 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
-            then ExBudget(ExCPU(22604298040L), ExMemory(75069177L))
+            then ExUnits(memory = 75069177L, steps = 22604298040L)
             else if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
-            then ExBudget(ExCPU(7879192811L), ExMemory(45835971L))
+            then ExUnits(memory = 45835971L, steps = 7879192811L)
             else {
                 // not tested
-                ExBudget(ExCPU(1000000000L), ExMemory(100000L))
+                ExUnits(memory = 100000L, steps = 1000000000L)
             }
         }
         assert(result.isSuccess)
@@ -54,7 +54,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         compareBudgetWithReferenceValue(
           testName = "ClausifyTest.F1",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(12325496028L), ExMemory(39891097L)),
+          refBudget = ExUnits(memory = 39891097L, steps = 12325496028L),
           isPrintComparison = true
         )
     }
@@ -73,12 +73,12 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val compilerOptions = summon[scalus.Compiler.Options]
         val scalusBudget = compilerOptions.targetLoweringBackend match {
             case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                ExBudget(ExCPU(28009023766L), ExMemory(93190393L))
+                ExUnits(memory = 93190393L, steps = 28009023766L)
             case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
-                ExBudget(ExCPU(9813458115L), ExMemory(57029883L))
+                ExUnits(memory = 57029883L, steps = 9813458115L)
             case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
                 // not tested
-                ExBudget(ExCPU(1000000000L), ExMemory(100000L))
+                ExUnits(memory = 100000L, steps = 1000000000L)
         }
 
         assert(result.isSuccess)
@@ -87,7 +87,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         compareBudgetWithReferenceValue(
           testName = "ClausifyTest.F2",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(15570882882L), ExMemory(50524767L)),
+          refBudget = ExUnits(memory = 50524767L, steps = 15570882882L),
           isPrintComparison = true
         )
     }
@@ -108,15 +108,15 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
-            then ExBudget(ExCPU(74929483564L), ExMemory(249151245L))
-            else ExBudget(ExCPU(26254484239L), ExMemory(152347441L))
+            then ExUnits(memory = 249151245L, steps = 74929483564L)
+            else ExUnits(memory = 152347441L, steps = 26254484239L)
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
           testName = "ClausifyTest.F3",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(41872495549L), ExMemory(136054751L)),
+          refBudget = ExUnits(memory = 136054751L, steps = 41872495549L),
           isPrintComparison = true
         )
     }
@@ -1034,15 +1034,15 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        val scalusBudget = ExBudget(ExCPU(100772014354L), ExMemory(344878471L))
-        // val scalusBudget = ExBudget(ExCPU(37733187149L), ExMemory(214968623L))
+        val scalusBudget = ExUnits(memory = 344878471L, steps = 100772014354L)
+        // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
           testName = "ClausifyTest.F4",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(56754761923L), ExMemory(181055087L)),
+          refBudget = ExUnits(memory = 181055087L, steps = 56754761923L),
           isPrintComparison = true
         )
     }
@@ -1058,15 +1058,15 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        val scalusBudget = ExBudget(ExCPU(363424061308L), ExMemory(1206307141L))
-        // val scalusBudget = ExBudget(ExCPU(127163562591L), ExMemory(736503639L))
+        val scalusBudget = ExUnits(memory = 1206307141L, steps = 363424061308L)
+        // val scalusBudget = ExUnits(memory = 736503639L, steps = 127163562591L)
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
           testName = "ClausifyTest.F5",
           scalusBudget = scalusBudget,
-          refBudget = ExBudget(ExCPU(203182153626L), ExMemory(660668247L)),
+          refBudget = ExUnits(memory = 660668247L, steps = 203182153626L),
           isPrintComparison = true
         )
     }

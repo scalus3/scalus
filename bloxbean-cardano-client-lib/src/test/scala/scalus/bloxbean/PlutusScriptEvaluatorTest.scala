@@ -9,7 +9,6 @@ import scalus.builtin.{platform, ByteString, Data}
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.examples.PubKeyValidator
-import scalus.uplc.eval.ExBudget
 
 import java.nio.file.Paths
 import scala.collection.immutable.SortedSet

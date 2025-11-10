@@ -8,9 +8,10 @@ import scalus.builtin.ByteString
 import scalus.cardano.ledger.Word64
 import scalus.uplc.{Constant, DeBruijn}
 import scalus.uplc.Term.*
-import scalus.uplc.eval.ExBudget.given
+import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.ExUnits.given
 import scalus.uplc.eval.Result.Success
-import scalus.uplc.eval.{ExBudget, PlutusVM}
+import scalus.uplc.eval.PlutusVM
 
 import scala.language.implicitConversions
 import scala.math.Ordering.Implicits.*
@@ -47,8 +48,8 @@ class CaseConstrApplyTest extends AnyFunSuite {
             case (orig: Success, opt: Success) =>
                 assert(orig.term == Const(Constant.ByteString(hex"1012")))
                 assert(opt.term == Const(Constant.ByteString(hex"1012")))
-                assert(orig.budget == ExBudget.fromCpuAndMemory(160100, 1100))
-                assert(opt.budget == ExBudget.fromCpuAndMemory(144100, 1000))
+                assert(orig.budget == ExUnits(memory = 1100, steps = 160100))
+                assert(opt.budget == ExUnits(memory = 1000, steps = 144100))
                 assert(opt.budget < orig.budget)
             case _ => fail("Evaluation failed")
     }

@@ -6,7 +6,6 @@ import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.examples.htlc.{HtlcContract, Transactions as HtlcTransactions}
-import scalus.uplc.eval.ExBudget
 
 class HtlcIntegrationTest extends AnyFunSuite {
 

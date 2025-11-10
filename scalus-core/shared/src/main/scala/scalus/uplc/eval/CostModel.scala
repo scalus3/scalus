@@ -1,5 +1,6 @@
 package scalus.uplc.eval
 
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.*
 import upickle.default.*
 
@@ -498,35 +499,35 @@ object SixArguments {
 }
 
 trait CostingFun {
-    def calculateCost(args: CekValue*): ExBudget
+    def calculateCost(args: CekValue*): ExUnits
 }
 
 case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends CostingFun
     derives ReadWriter {
-    def calculateCost(args: CekValue*): ExBudget = {
+    def calculateCost(args: CekValue*): ExUnits = {
         val argsMem = args.map(MemoryUsage.memoryUsage)
-        val cpu = ExCPU(this.cpu.calculateCost(argsMem))
-        val mem = ExMemory(this.memory.calculateCost(argsMem))
-        ExBudget(cpu, mem)
+        val cpu = this.cpu.calculateCost(argsMem)
+        val mem = this.memory.calculateCost(argsMem)
+        ExUnits(mem, cpu)
     }
 
     /** Calculate cost from pre-computed memory usage values. Useful for JIT to avoid CekValue
       * wrapper allocation.
       */
-    def calculateCostFromMemory(argsCostingInteger: Seq[CostingInteger]): ExBudget = {
-        val cpu = ExCPU(this.cpu.calculateCost(argsCostingInteger))
-        val mem = ExMemory(this.memory.calculateCost(argsCostingInteger))
-        ExBudget(cpu, mem)
+    def calculateCostFromMemory(argsCostingInteger: Seq[CostingInteger]): ExUnits = {
+        val cpu = this.cpu.calculateCost(argsCostingInteger)
+        val mem = this.memory.calculateCost(argsCostingInteger)
+        ExUnits(mem, cpu)
     }
 }
 
 case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends CostingFun {
 
-    def calculateCost(args: CekValue*): ExBudget = {
+    def calculateCost(args: CekValue*): ExUnits = {
         constantCost
     }
 
-    val constantCost: ExBudget = ExBudget(ExCPU(cpu), ExMemory(memory))
+    val constantCost: ExUnits = ExUnits(memory, cpu)
 
     inline def toDefaultFun[M <: CostModel]: DefaultCostingFun[M] = {
         inline erasedValue[M] match {
@@ -602,56 +603,56 @@ object ConstCostingFun {
   */
 case class IntegerToByteStringCostingFun(cpu: ThreeArguments, memory: ThreeArguments)
     extends CostingFun derives ReadWriter {
-    def calculateCost(args: CekValue*): ExBudget = {
+    def calculateCost(args: CekValue*): ExUnits = {
         val Seq(arg0, CekValue.VCon(Constant.Integer(size)), arg2) = args.toSeq: @unchecked
         val argsMem = Seq(
           MemoryUsage.memoryUsage(arg0),
           MemoryUsage.memoryUsageLiteralByteSize(size),
           MemoryUsage.memoryUsage(arg2)
         )
-        val cpu = ExCPU(this.cpu.calculateCost(argsMem))
-        val mem = ExMemory(this.memory.calculateCost(argsMem))
-        ExBudget(cpu, mem)
+        val cpu = this.cpu.calculateCost(argsMem)
+        val mem = this.memory.calculateCost(argsMem)
+        ExUnits(mem, cpu)
     }
 }
 
 case class ReplicateByteCostingFun(cpu: TwoArguments, memory: TwoArguments) extends CostingFun
     derives ReadWriter {
-    def calculateCost(args: CekValue*): ExBudget = {
+    def calculateCost(args: CekValue*): ExUnits = {
         val Seq(CekValue.VCon(Constant.Integer(size)), arg1) = args.toSeq: @unchecked
         val argsMem = Seq(
           MemoryUsage.memoryUsageLiteralByteSize(size),
           MemoryUsage.memoryUsage(arg1)
         )
-        val cpu = ExCPU(this.cpu.calculateCost(argsMem))
-        val mem = ExMemory(this.memory.calculateCost(argsMem))
-        ExBudget(cpu, mem)
+        val cpu = this.cpu.calculateCost(argsMem)
+        val mem = this.memory.calculateCost(argsMem)
+        ExUnits(mem, cpu)
     }
 }
 
 case class ShiftOrRotateByteStringCostingFun(cpu: TwoArguments, memory: TwoArguments)
     extends CostingFun derives ReadWriter {
-    def calculateCost(args: CekValue*): ExBudget = {
+    def calculateCost(args: CekValue*): ExUnits = {
         val Seq(arg0, CekValue.VCon(Constant.Integer(size))) = args.toSeq: @unchecked
         val argsMem = Seq(
           MemoryUsage.memoryUsage(arg0),
           MemoryUsage.memoryUsageLiteral(size)
         )
-        val cpu = ExCPU(this.cpu.calculateCost(argsMem))
-        val mem = ExMemory(this.memory.calculateCost(argsMem))
-        ExBudget(cpu, mem)
+        val cpu = this.cpu.calculateCost(argsMem)
+        val mem = this.memory.calculateCost(argsMem)
+        ExUnits(mem, cpu)
     }
 }
 
 case class WriteBitsCostingFun(cpu: ThreeArguments, memory: ThreeArguments) extends CostingFun
     derives ReadWriter {
-    def calculateCost(args: CekValue*): ExBudget = {
+    def calculateCost(args: CekValue*): ExUnits = {
         val Seq(arg0, CekValue.VCon(Constant.List(_, list)), arg2) = args.toSeq: @unchecked
         val argsMem =
             Seq(MemoryUsage.memoryUsage(arg0), list.size.toLong, MemoryUsage.memoryUsage(arg2))
-        ExBudget.fromCpuAndMemory(
-          this.cpu.calculateCost(argsMem),
-          this.memory.calculateCost(argsMem)
+        ExUnits(
+          this.memory.calculateCost(argsMem),
+          this.cpu.calculateCost(argsMem)
         )
     }
 }

@@ -1,8 +1,6 @@
 package scalus.uplc
 
-import scalus.uplc.eval.ExBudget
-import scalus.uplc.eval.ExCPU
-import scalus.uplc.eval.ExMemory
+import scalus.cardano.ledger.ExUnits
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -13,7 +11,7 @@ enum UplcEvalResult:
     /** Represents a successful evaluation of a UPLC program Contains the evaluated term and the
       * execution budget used for evaluation
       */
-    case Success(term: Term, budget: ExBudget)
+    case Success(term: Term, budget: ExUnits)
 
     /** Represents a failure in evaluating a UPLC program
       *
@@ -67,9 +65,9 @@ object UplcCli:
         if retCode == 0 then
             UplcParser().term.parse(out) match
                 case Right(budget(cpu, mem), term) =>
-                    UplcEvalResult.Success(term, ExBudget(ExCPU(cpu.toLong), ExMemory(mem.toLong)))
+                    UplcEvalResult.Success(term, ExUnits(mem.toLong, cpu.toLong))
                 case Right(left, term) =>
-                    UplcEvalResult.Success(term, ExBudget(ExCPU(-1), ExMemory(-1)))
+                    UplcEvalResult.Success(term, ExUnits(-1, -1))
                 case Left(err) => UplcEvalResult.TermParsingError(err.show)
         else UplcEvalResult.UplcFailure(retCode, out)
 

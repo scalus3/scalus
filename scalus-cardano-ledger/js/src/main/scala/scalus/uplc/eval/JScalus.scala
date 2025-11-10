@@ -13,10 +13,10 @@ import js.JSConverters.*
 @JSExportTopLevel("Scalus")
 object JScalus {
 
-    extension (self: ExBudget)
-        /** Converts ExBudget to a JavaScript BigInt representation. */
+    extension (self: ExUnits)
+        /** Converts ExUnits to a JavaScript BigInt representation. */
         def toJSExBudget: JSExBudget = new JSExBudget(
-          cpu = js.BigInt(self.cpu.toString),
+          cpu = js.BigInt(self.steps.toString),
           memory = js.BigInt(self.memory.toString)
         )
 
@@ -88,7 +88,7 @@ object JScalus {
             case exception: Exception =>
                 JSResult(
                   isSuccess = false,
-                  budget = ExBudget.zero.toJSExBudget,
+                  budget = ExUnits.zero.toJSExBudget,
                   logs = js.Array(exception.getMessage)
                 )
     }
@@ -118,7 +118,7 @@ object JScalus {
         val costModels = params.costModels
         val evaluator = PlutusScriptEvaluator(
           slotConfig = slotConfig,
-          initialBudget = ExBudget.enormous,
+          initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
           protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
           costModels = costModels,
           mode = EvaluatorMode.EvaluateAndComputeCost,
