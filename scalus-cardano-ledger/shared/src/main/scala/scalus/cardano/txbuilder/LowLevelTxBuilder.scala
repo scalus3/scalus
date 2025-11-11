@@ -92,26 +92,27 @@ object LowLevelTxBuilder {
         utxos: Utxos,
         redeemers: Seq[Redeemer]
     ) = {
-        if redeemers.isEmpty then {
-            tx
-        } else {
-            val rawRedeemers = KeepRaw(Redeemers.from(redeemers))
-            val txWithRedeemers =
+        val txWithRedeemers =
+            if redeemers.nonEmpty then
+                val rawRedeemers = KeepRaw(Redeemers.from(redeemers))
                 tx.copy(witnessSet = tx.witnessSet.copy(redeemers = Some(rawRedeemers)))
-            val scriptDataHash =
-                ScriptDataHashGenerator
-                    .computeScriptDataHash(
-                      txWithRedeemers,
-                      utxos,
-                      protocolParams,
-                    )
-                    .toTry
-                    .get
+            else tx
 
+        val scriptDataHash =
+            ScriptDataHashGenerator
+                .computeScriptDataHash(
+                  txWithRedeemers,
+                  utxos,
+                  protocolParams,
+                )
+                .toOption
+                .get
+
+        if scriptDataHash.nonEmpty then
             txWithRedeemers.copy(body =
                 KeepRaw(tx.body.value.copy(scriptDataHash = scriptDataHash))
             )
-        }
+        else txWithRedeemers
     }
 }
 
