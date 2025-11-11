@@ -8,12 +8,9 @@ import scalus.cardano.node.Provider
 
 import java.time.Instant
 
-case class Context(
-    env: Environment,
-)
-
 case class TxBuilder(
-    ctx: Context,
+    env: Environment,
+    context: TransactionBuilder.Context,
     evaluator: PlutusScriptEvaluator,
     diffHandlerOpt: Option[DiffHandler] = None,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
@@ -21,7 +18,6 @@ case class TxBuilder(
     attachedData: Seq[Data] = Seq.empty,
     changeAddressOpt: Option[Address] = None,
     providerOpt: Option[Provider] = None,
-    builtContext: Option[TransactionBuilder.Context] = None
 ) extends Builder {
 
     override def spend(utxo: Utxo): Builder =
@@ -130,12 +126,12 @@ case class TxBuilder(
     }
 
     override def validFrom(from: Instant): Builder = {
-        val slot = ctx.env.slotConfig.timeToSlot(from.toEpochMilli)
+        val slot = env.slotConfig.timeToSlot(from.toEpochMilli)
         addSteps(TransactionBuilderStep.ValidityStartSlot(slot))
     }
 
     override def validTo(to: Instant): Builder = {
-        val slot = ctx.env.slotConfig.timeToSlot(to.toEpochMilli)
+        val slot = env.slotConfig.timeToSlot(to.toEpochMilli)
         addSteps(TransactionBuilderStep.ValidityEndSlot(slot))
     }
 
@@ -149,12 +145,13 @@ case class TxBuilder(
         copy(changeAddressOpt = Some(address))
 
     override def build(): Builder = {
-        val network = ctx.env.network
-        val params = ctx.env.protocolParams
+        val network = env.network
+        val params = env.protocolParams
         val handler = this.diffHandlerOpt.getOrElse(
           throw new RuntimeException("Called `build` without setting a diff handler.")
         )
-        val buildResult = TransactionBuilder.build(network, steps)
+        // Could be a good idea to immediately `modify` on every step, maybe not tho.
+        val buildResult = TransactionBuilder.modify(context, steps)
         val finalizedContext = for {
             built <- TransactionBuilder.build(network, steps)
             withAttachments = addAttachmentsToContext(built)
@@ -168,26 +165,15 @@ case class TxBuilder(
 
         finalizedContext match {
             case Right(finalized) =>
-                copy(builtContext = Some(finalized))
+                copy(context = finalized)
             case Left(error) =>
                 throw new IllegalStateException(s"Failed to build transaction: $error")
         }
     }
 
-    override def context: TransactionBuilder.Context =
-        builtContext.getOrElse {
-            val built = build()
-            built.context
-        }
-
     override def sign(signers: TxSigner*): Builder = ???
 
-    override def transaction: Transaction =
-        builtContext
-            .map(_.transaction)
-            .getOrElse(
-              throw new IllegalStateException("Transaction not built yet. Call build() first.")
-            )
+    override def transaction: Transaction = context.transaction
 
     override def provider: Provider =
         providerOpt.getOrElse(
@@ -245,6 +231,21 @@ case class TxBuilder(
 
     private def addSteps(s: TransactionBuilderStep*) =
         copy(steps = steps ++ s)
+}
+
+object TxBuilder {
+    def apply(env: Environment): TxBuilder = {
+        val evaluator = PlutusScriptEvaluator(
+          CardanoInfo(env.protocolParams, env.network, env.slotConfig),
+          EvaluatorMode.EvaluateAndComputeCost
+        )
+        val context = TransactionBuilder.Context.empty(env.network)
+        TxBuilder(
+          env,
+          context,
+          evaluator
+        )
+    }
 }
 
 trait Builder {
