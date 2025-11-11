@@ -121,7 +121,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
           beforeSlot
         ).assertTx(provider)
 
-    private val initDatum = BetDatum(
+    private val initConfig = BettingConfig(
       player1,
       PubKeyHash(hex""),
       oracle,
@@ -134,7 +134,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
         .findUtxo(
           address = scriptAddress,
           transactionId = Some(initBetting.id),
-          datum = Some(DatumOption.Inline(initDatum.toData)),
+          datum = Some(DatumOption.Inline(initConfig.toData)),
           minAmount = Some(Coin(betAmount))
         )
 
@@ -143,9 +143,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
     // TODO: test fee constrains
     println(
       scalus.cardano.ledger.utils.ScriptFeeComparison.compareAll(
-        Betting.validate,
+        BettingValidator.validate,
         Data.unit,
-        Some(Inline(initDatum.toData)),
+        Some(Inline(initConfig.toData)),
         BuilderContext(
           env,
           TestUtil.createTestWallet(provider, oracle.address)
@@ -176,7 +176,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
             .get
         (tx, runValidator(tx, snapshot, initUtxo))
 
-    private val joinDatum = initDatum.copy(player2 = player2)
+    private val joinConfig = initConfig.copy(player2 = player2)
 
     private def joinUtxo(
         ledgerProvider: LedgerProvider
@@ -184,7 +184,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
         .findUtxo(
           address = scriptAddress,
           transactionId = Some(joinBetting._1.id),
-          datum = Some(DatumOption.Inline(joinDatum.toData)),
+          datum = Some(DatumOption.Inline(joinConfig.toData)),
           minAmount = Some(Coin(betAmount + betAmount))
         )
 

@@ -73,7 +73,7 @@ class Transactions(
         .payToScript(
           scriptAddress,
           Value.asset(script.scriptHash, token, amount, Coin(bet)),
-          BetDatum(player1, player2, oracle, expiration).toData
+          BettingConfig(player1, player2, oracle, expiration).toData
         )
         .withStep( // ???: why test is not fail without valid range step
           TransactionBuilderStep.ValidityEndSlot(context.env.slotConfig.timeToSlot(beforeSlot))
@@ -107,7 +107,7 @@ class Transactions(
             .payToScript(
               scriptAddress,
               betUtxo._2.value + lovelace,
-              BetDatum(player1, player2, oracle, expiration).toData
+              BettingConfig(player1, player2, oracle, expiration).toData
             )
             .withStep(
               TransactionBuilderStep.Spend(
