@@ -14,10 +14,11 @@ case class Context(
 
 case class TxBuilder(
     ctx: Context,
+    evaluator: PlutusScriptEvaluator,
+    diffHandlerOpt: Option[DiffHandler] = None,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedScripts: Seq[Script] = Seq.empty,
     attachedData: Seq[Data] = Seq.empty,
-    diffHandlerOpt: Option[DiffHandler] = None,
     changeAddressOpt: Option[Address] = None,
     providerOpt: Option[Provider] = None,
     builtContext: Option[TransactionBuilder.Context] = None
@@ -136,12 +137,25 @@ case class TxBuilder(
 
     override def build(): Builder = {
         val network = ctx.env.network
+        val params = ctx.env.protocolParams
+        val handler = this.diffHandlerOpt.getOrElse(
+          throw new RuntimeException("Called `build` without setting a diff handler.")
+        )
         val buildResult = TransactionBuilder.build(network, steps)
+        val finalizedContext = for {
+            built <- TransactionBuilder.build(network, steps)
+            withAttachments = addAttachmentsToContext(built)
+            finalized <- withAttachments.finalizeContext(
+              params,
+              handler,
+              evaluator,
+              Seq.empty // todo: validators
+            )
+        } yield finalized
 
-        buildResult match {
-            case Right(builtCtx) =>
-                val ctxWithAttachments = addAttachmentsToContext(builtCtx)
-                copy(builtContext = Some(ctxWithAttachments))
+        finalizedContext match {
+            case Right(finalized) =>
+                copy(builtContext = Some(finalized))
             case Left(error) =>
                 throw new IllegalStateException(s"Failed to build transaction: $error")
         }

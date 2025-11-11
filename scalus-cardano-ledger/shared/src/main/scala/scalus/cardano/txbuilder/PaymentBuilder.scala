@@ -4,7 +4,6 @@ import scalus.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
-@deprecated("use TxBuilder instead")
 case class PaymentBuilder(
     context: BuilderContext,
     payments: Seq[(Address, Value, Option[DatumOption])] = Seq.empty,
