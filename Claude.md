@@ -34,6 +34,9 @@ in to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 - **Respect the multi-platform architecture** - Place shared code in `shared/` directories
 - **Test thoroughly** - Use the existing test infrastructure and patterns
 - **Follow Scalus Scala 3 formatting guideline** described on CONTRIBUTING.md
+- **Consider context bloat** - Before invoking output-heavy commands, consider asking the user to run them for you and
+  tell you the important output bits. Alternatively, when only the output code is important, redirect the standard
+  output.
 
 ## Essential Commands
 

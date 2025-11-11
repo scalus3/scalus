@@ -87,21 +87,34 @@ case class TxBuilder(
           TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData))
         )
 
-    override def mint(mint: Mint): Builder = {
-        val mintSteps = mint.assets.toSeq.flatMap { case (scriptHash, assets) =>
-            assets.map { case (assetName, amount) =>
-                TransactionBuilderStep.Mint(
-                  scriptHash,
-                  assetName,
-                  amount,
-                  TwoArgumentPlutusScriptWitness(
-                    ScriptSource.PlutusScriptAttached,
-                    Data.I(0),
-                    Set.empty
-                  )
-                )
-            }
+    override def mint(
+        redeemer: Data,
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long]
+    ): Builder = {
+
+        val scriptOpt = attachedScripts.collectFirst {
+            case ps: PlutusScript if ps.scriptHash == policyId => ps
         }
+
+        val scriptSource = scriptOpt match {
+            case Some(script) => ScriptSource.PlutusScriptValue(script)
+            case None         => ScriptSource.PlutusScriptAttached
+        }
+
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = policyId,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = scriptSource,
+                redeemer = redeemer,
+                additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
         addSteps(mintSteps*)
     }
 
@@ -251,7 +264,7 @@ trait Builder {
     def attach(script: Script): Builder
     def attach(data: Data): Builder
     def metadata(auxiliaryData: AuxiliaryData): Builder
-    def mint(mint: Mint): Builder
+    def mint(redeemer: Data, policyId: PolicyId, assets: collection.Map[AssetName, Long]): Builder
     def minFee(minFee: Coin): Builder
     def validDuring(interval: ValidityInterval): Builder
     def validFrom(from: Instant): Builder
