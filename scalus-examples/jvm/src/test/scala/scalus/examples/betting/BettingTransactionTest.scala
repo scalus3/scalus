@@ -159,12 +159,13 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
     test("Verify that a bet can be properly initialized"):
         assert(currentInitUtxo.toOption.get._2.value.coin == Coin(betAmount))
 
-    private val joinBetting: (Transaction, Result) =
-        val snapshot = provider // .snapshot()
+    private def joinBetting(
+        ledgerProvider: MockLedgerApi
+    ): (Transaction, Result) =
         val tx = new Transactions(
           BuilderContext.withNoopEvaluator(
             env,
-            TestUtil.createTestWallet(snapshot, player2.address)
+            TestUtil.createTestWallet(ledgerProvider, player2.address)
           ),
           compiledContract
         ).join(
@@ -178,31 +179,41 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
           beforeSlot
         ).toOption
             .get
-        (tx, runValidator(tx, snapshot, initUtxo))
+        (tx, runValidator(tx, ledgerProvider, initUtxo))
+
+    test("Verify that player2 joining fail after expiration"):
+        val snapshot = provider.snapshot()
+        snapshot.setSlot(env.slotConfig.timeToSlot(expiration.toLong))
+        assertThrows(joinBetting(snapshot))
 
     private val joinConfig = initConfig.copy(player2 = player2)
+
+    private val txJoinBetting = joinBetting(provider)
 
     private def joinUtxo(
         ledgerProvider: MockLedgerApi
     ): Either[RuntimeException, Utxo] = ledgerProvider
         .findUtxo(
           address = scriptAddress,
-          transactionId = Some(joinBetting._1.id),
+          transactionId = Some(txJoinBetting._1.id),
           datum = Some(DatumOption.Inline(joinConfig.toData)),
           minAmount = Some(Coin(betAmount + betAmount))
         )
 
-    val currentJoinUtxo = joinUtxo(provider)
+    private val currentJoinUtxo = joinUtxo(provider)
 
     test("Verify that player2 can join an existing bet"):
         assert(currentJoinUtxo.toOption.get._2.value.coin == Coin(betAmount + betAmount))
 
-    private def winBetting(isJoinWin: Boolean, time: PosixTime): (Transaction, Result) =
-        val snapshot = provider // .snapshot()
+    private def winBetting(
+        isJoinWin: Boolean,
+        time: PosixTime,
+        ledgerProvider: MockLedgerApi
+    ): (Transaction, Result) =
         val tx = new Transactions(
           BuilderContext.withNoopEvaluator(
             env,
-            TestUtil.createTestWallet(snapshot, oracle.address)
+            TestUtil.createTestWallet(ledgerProvider, oracle.address)
           ),
           compiledContract
         ).win(
@@ -212,20 +223,26 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
           oracle,
           currentScriptUtxo.toOption.get,
           currentJoinUtxo.toOption.get,
-          provider.findUtxo(oracle.address).getOrElse(fail("There's no oracle test wallet funds")),
+          ledgerProvider
+              .findUtxo(oracle.address)
+              .getOrElse(fail("There's no oracle test wallet funds")),
           afterSlot
         ).toOption
             .get
-        (tx, runValidator(tx, snapshot, joinUtxo, Some(time)))
+        (tx, runValidator(tx, ledgerProvider, joinUtxo, Some(time)))
 
-    val winner = winBetting(true, submitSlot)
+    test("Verify that oracle announcing winner fails before expiration"):
+        val snapshot = provider.snapshot()
+        assertThrows(winBetting(true, beforeSlot, snapshot))
+
+    private val txWinBetting = winBetting(true, submitSlot, provider)
 
     private def winUtxo(
         ledgerProvider: MockLedgerApi
     ): Either[RuntimeException, Utxo] = ledgerProvider
         .findUtxo(
           address = player2.address,
-          transactionId = Some(winner._1.id),
+          transactionId = Some(txWinBetting._1.id),
           minAmount = Some(Coin(betAmount + betAmount))
         )
 
@@ -250,7 +267,7 @@ class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
             val body = tx.body.value
             (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
 
-        val utxos = provider.findUtxos(inputs).toOption.getOrElse(fail("Tx UTxOs already spent"))
+        val utxos = snapshot.findUtxos(inputs).toOption.getOrElse(fail("Tx outputs already spent"))
 
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxos, utxo.toOption.get._1, RedeemerTag.Spend, env)
