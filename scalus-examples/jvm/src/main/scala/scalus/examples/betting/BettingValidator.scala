@@ -189,7 +189,8 @@ object BettingValidator extends Validator:
             .filter:
                 _.address === Address.fromScriptHash(policyId)
             .match
-                case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[BettingConfig]
+                case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) =>
+                    datum.to[BettingConfig]
                 case _ =>
                     fail(
                       "There must be a single output with inline initial betting config that goes to the script"
