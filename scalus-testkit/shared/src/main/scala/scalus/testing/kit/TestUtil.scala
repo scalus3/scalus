@@ -4,11 +4,11 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{Environment, PubKeyWitness, TransactionUnspentOutput, Wallet as WalletTrait, Witness}
+import scalus.ledger.api.v1.PubKeyHash
 import scalus.ledger.api.v3
 import scalus.uplc.Program
 import scalus.uplc.eval.ExBudget
 import scalus.cardano.node.Provider
-import scalus.ledger.api.v3.PubKeyHash
 import scalus.testing.kit.ScalusTest
 
 object TestUtil extends ScalusTest {

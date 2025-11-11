@@ -117,7 +117,7 @@ object TransactionBuilderStep {
     case class ValidityEndSlot(slot: Long) extends TransactionBuilderStep
 
     /** Add a utxo as a collateral input. Utxo should contain ada only and be controlled by a key,
-      * not a script. If you need set collateral outputs ot `totalCollateral` field, please use
+      * not a script. If you need set collateral outputs at `totalCollateral` field, please use
       * optics.
       */
     case class AddCollateral(
@@ -2030,7 +2030,7 @@ object StepError {
     case class AttachedScriptNotFound(scriptHash: ScriptHash, step: TransactionBuilderStep)
         extends StepError {
         override def explain: String =
-            s"No witness or ref/spent output is found for script matching $scriptHash." +
+            s"No witness or ref/spent output is found for script matching $scriptHash. " +
                 "Note that the builder steps are not commutative: you must attach the script " +
                 "before using an AttachedScript ScriptWitness."
     }
