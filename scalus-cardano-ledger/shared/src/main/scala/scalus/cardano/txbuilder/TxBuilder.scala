@@ -1,5 +1,6 @@
 package scalus.cardano.txbuilder
 
+import scalus.builtin.Builtins.{blake2b_224, serialiseData}
 import scalus.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.TransactionWitnessSet.given
@@ -30,17 +31,18 @@ case class TxBuilder(
 
     override def spend(
         utxo: Utxo,
-        redeemerBuilder: Transaction => Data,
-        validator: PlutusScript,
-        datum: Option[Data] = None
-    ): Builder = addSteps(
-      TransactionBuilderStep.SpendWithDelayedRedeemer(
-        utxo,
-        redeemerBuilder,
-        validator,
-        datum
-      )
-    )
+        redeemer: Data,
+        validator: PlutusScript
+    ): Builder = {
+        val datum = buildDatumWitness(utxo)
+        val witness = ThreeArgumentPlutusScriptWitness(
+          scriptSource = ScriptSource.PlutusScriptValue(validator),
+          redeemer = redeemer,
+          datum = datum,
+          additionalSigners = Set.empty
+        )
+        addSteps(TransactionBuilderStep.Spend(utxo, witness))
+    }
 
     override def references(utxos: Utxo*): Builder =
         addSteps(utxos.map(TransactionBuilderStep.ReferenceOutput.apply)*)
@@ -180,6 +182,22 @@ case class TxBuilder(
           throw new IllegalStateException("Provider not set. Call provider() first.")
         )
 
+    private def buildDatumWitness(utxo: Utxo): Datum = {
+        utxo.output.datumOption match {
+            case None                        => Datum.DatumInlined
+            case Some(DatumOption.Inline(_)) => Datum.DatumInlined
+            case Some(DatumOption.Hash(datumHash)) =>
+                attachedData
+                    .find { data =>
+                        val computedHash =
+                            DataHash.fromByteString(blake2b_224(serialiseData(data)))
+                        computedHash == datumHash
+                    }
+                    .map(Datum.DatumValue.apply)
+                    .getOrElse(Datum.DatumInlined)
+        }
+    }
+
     private def addAttachmentsToContext(
         ctx: TransactionBuilder.Context
     ): TransactionBuilder.Context = {
@@ -250,12 +268,7 @@ object TxBuilder {
 
 trait Builder {
     def spend(utxo: Utxo): Builder
-    def spend(
-        utxo: Utxo,
-        redeemerBuilder: Transaction => Data,
-        validator: PlutusScript,
-        datum: Option[Data] = None
-    ): Builder
+    def spend(utxo: Utxo, redeemer: Data, validator: PlutusScript): Builder
     def references(utxos: Utxo*): Builder
     def collaterals(utxos: Utxo*): Builder
     def output(output: TransactionOutput): Builder
