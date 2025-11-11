@@ -50,7 +50,7 @@ class MockLedgerApi(
             (
               (datum, output.datumOption) match
                   case (Some(d1), Some(d2)) => d1.contentEquals(d2)
-                  case (None, None)         => true
+                  case (None, _)            => true
                   case _                    => false
             ) &&
             minAmount.forall(amount => output.value.coin >= amount)
@@ -69,9 +69,9 @@ class MockLedgerApi(
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
-        minRequiredAmount: Option[Coin] = None
+        minRequiredTotalAmount: Option[Coin] = None
     ): Either[RuntimeException, Utxos] = {
-        if minRequiredAmount.exists(_ <= Coin(0)) then return Right(Map.empty)
+        if minRequiredTotalAmount.exists(_ <= Coin(0)) then return Right(Map.empty)
 
         val (foundUtxos, totalAmount) = utxos.view
             .filter { case (input, output) =>
@@ -80,14 +80,14 @@ class MockLedgerApi(
                 (
                   (datum, output.datumOption) match
                       case (Some(d1), Some(d2)) => d1.contentEquals(d2)
-                      case (None, None)         => true
+                      case (None, _)            => true
                       case _                    => false
                 ) &&
                 minAmount.forall(amount => output.value.coin >= amount)
             }
             .foldLeft((Map.empty[TransactionInput, TransactionOutput], Coin(0))) {
                 case (acc @ (accUtxos, accAmount), (input, output)) =>
-                    if minRequiredAmount.exists(accAmount >= _) then acc
+                    if minRequiredTotalAmount.exists(accAmount >= _) then acc
                     else
                         (
                           accUtxos + (input -> output),
@@ -95,11 +95,12 @@ class MockLedgerApi(
                         )
             }
 
-        if foundUtxos.nonEmpty && minRequiredAmount.forall(totalAmount >= _) then Right(foundUtxos)
+        if foundUtxos.nonEmpty && minRequiredTotalAmount.forall(totalAmount >= _) then
+            Right(foundUtxos)
         else
             Left(
               new RuntimeException(
-                s"Utxos not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount, minRequiredAmount: $minRequiredAmount"
+                s"Utxos not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount, minRequiredTotalAmount: $minRequiredTotalAmount"
               )
             )
     }

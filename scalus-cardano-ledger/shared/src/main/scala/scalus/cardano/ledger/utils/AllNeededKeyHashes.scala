@@ -31,13 +31,12 @@ object AllNeededKeyHashes {
               transaction,
               utxo
             )
-        yield
-            allNeededInputsKeyHashes.view ++
-                allNeededCollateralInputsKeyHashes.view
+        yield allNeededInputsKeyHashes.view ++
+            allNeededCollateralInputsKeyHashes.view ++
             allNeededVotingProceduresKeyHashesView(transaction) ++
-                allNeededWithdrawalsKeyHashesView(transaction) ++
-                allNeededCertificatesKeyHashesView(transaction) ++
-                allNeededRequiredSignersKeyHashes(transaction).view
+            allNeededWithdrawalsKeyHashesView(transaction) ++
+            allNeededCertificatesKeyHashesView(transaction) ++
+            allNeededRequiredSignersKeyHashes(transaction).view
     }
 
     def allNeededInputsKeyHashes(

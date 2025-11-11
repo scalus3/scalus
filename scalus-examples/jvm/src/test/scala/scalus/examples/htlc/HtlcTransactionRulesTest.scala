@@ -2,12 +2,12 @@ package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.ByteString
+import scalus.builtin.{platform, ByteString}
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.Provider
-import scalus.cardano.txbuilder.BuilderContext
+import scalus.cardano.txbuilder.{BuilderContext, TransactionSigner}
 import scalus.examples.TestUtil
 import scalus.ledger.api.v1.PosixTime
 import scalus.testing.kit.{MockLedgerApi, ScalusTest}
@@ -16,15 +16,18 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.debugCompiledContract
 
-    private val committerAddress = TestUtil.createTestAddress("a" * 56)
-    private val receiverAddress = TestUtil.createTestAddress("b" * 56)
+    private val committerKeyPair @ (committerPrivateKey, committerPublicKey) = generateKeyPair()
+    private val receiverKeyPair @ (receiverPrivateKey, receiverPublicKey) = generateKeyPair()
 
-    private val committerPkh = ByteString.fromArray(committerAddress.payment.asHash.bytes)
-    private val receiverPkh = ByteString.fromArray(receiverAddress.payment.asHash.bytes)
+    private val committerPkh = AddrKeyHash(platform.blake2b_224(committerPublicKey))
+    private val receiverPkh = AddrKeyHash(platform.blake2b_224(receiverPublicKey))
     private val wrongCommitterPkh =
         ByteString.fromArray(TestUtil.createTestAddress("c" * 56).payment.asHash.bytes)
     private val wrongReceiverPkh =
         ByteString.fromArray(TestUtil.createTestAddress("d" * 56).payment.asHash.bytes)
+
+    private val committerAddress = TestUtil.createTestAddress(committerPkh)
+    private val receiverAddress = TestUtil.createTestAddress(receiverPkh)
 
     private val lockAmount: Long = 100_000_000L
     private val amount: Long = 50_000_000L
@@ -49,6 +52,8 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
       timeout
     ).toData
 
+    private val transactionSigner = TransactionSigner(Set(committerKeyPair, receiverKeyPair))
+
     private def createProvider(): MockLedgerApi = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
@@ -67,7 +72,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
           ),
           context = Context.testMainnet(),
           validators =
-              MockLedgerApi.defaultValidators - MissingKeyHashesValidator - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
+              MockLedgerApi.defaultValidators - ProtocolParamsViewHashesMatchValidator - MissingRequiredDatumsValidator,
           mutators = MockLedgerApi.defaultMutators - PlutusScriptsTransactionMutator
         )
     }
@@ -76,10 +81,12 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
         val context = BuilderContext.withNoopEvaluator(env, wallet)
         val value = Value.lovelace(lockAmount)
-        new Transactions(context, compiledContract)
+        val tx = new Transactions(context, compiledContract)
             .lock(value, committerPkh, receiverPkh, validImage, timeout)
             .toOption
             .get
+
+        transactionSigner.sign(tx, provider.findUtxos(committerAddress).toOption.get).toOption.get
     }
 
     private def revealHtlc(
@@ -91,8 +98,25 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, receiverAddress)
         val context = BuilderContext.withNoopEvaluator(env, wallet)
-        new Transactions(context, compiledContract)
+        val tx = new Transactions(context, compiledContract)
             .reveal(lockUtxo, preimage, receiverAddress, receiverPkh, time)
+            .toOption
+            .get
+
+        transactionSigner
+            .sign(
+              tx,
+              provider.findUtxos(receiverAddress).toOption.get ++
+                  provider
+                      .findUtxos(
+                        address = scriptAddress,
+                        transactionId = Some(lockUtxo._1.transactionId),
+                        datum = Some(DatumOption.Inline(datum)),
+                        minAmount = Some(Coin(lockAmount))
+                      )
+                      .toOption
+                      .get
+            )
             .toOption
             .get
     }
@@ -105,8 +129,25 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
         val context = BuilderContext.withNoopEvaluator(env, wallet)
-        new Transactions(context, compiledContract)
+        val tx = new Transactions(context, compiledContract)
             .timeout(lockUtxo, committerAddress, committerPkh, time)
+            .toOption
+            .get
+
+        transactionSigner
+            .sign(
+              tx,
+              provider.findUtxos(committerAddress).toOption.get ++
+                  provider
+                      .findUtxos(
+                        address = scriptAddress,
+                        transactionId = Some(lockUtxo._1.transactionId),
+                        datum = Some(DatumOption.Inline(datum)),
+                        minAmount = Some(Coin(lockAmount))
+                      )
+                      .toOption
+                      .get
+            )
             .toOption
             .get
     }

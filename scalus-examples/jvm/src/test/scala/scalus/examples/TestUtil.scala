@@ -24,6 +24,14 @@ object TestUtil extends ScalusTest {
         )
     }
 
+    def createTestAddress(addrKeyHash: AddrKeyHash): ShelleyAddress = {
+        ShelleyAddress(
+          network = CardanoInfo.mainnet.network,
+          payment = ShelleyPaymentPart.Key(addrKeyHash),
+          delegation = ShelleyDelegationPart.Null
+        )
+    }
+
     def createTestWallet(address: Address, ada: BigInt): WalletTrait = new WalletTrait {
         private val testInput = TransactionInput(
           TransactionHash.fromByteString(ByteString.fromHex("0" * 64)),
@@ -65,7 +73,8 @@ object TestUtil extends ScalusTest {
             override def selectInputs(
                 required: Value
             ): Option[Seq[(Utxo, Witness)]] = {
-                val available = provider.findUtxos(address, minRequiredAmount = Some(required.coin))
+                val available =
+                    provider.findUtxos(address, minRequiredTotalAmount = Some(required.coin))
                 available match
                     case Left(_) => None
                     case Right(utxos) =>

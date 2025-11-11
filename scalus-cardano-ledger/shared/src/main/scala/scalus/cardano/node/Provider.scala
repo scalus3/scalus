@@ -22,7 +22,7 @@ trait Provider {
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
-        minRequiredAmount: Option[Coin] = None
+        minRequiredTotalAmount: Option[Coin] = None
     ): Either[RuntimeException, Utxos]
 
 //    def setSlot(slot: SlotNo): Unit
