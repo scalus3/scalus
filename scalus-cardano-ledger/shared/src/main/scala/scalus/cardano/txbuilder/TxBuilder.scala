@@ -52,6 +52,36 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
 
+    override def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data
+    ): Builder = {
+        val scriptHash = extractScriptHash(utxo)
+        val datum = buildDatumWitness(utxo)
+
+        val validator = attachedScripts
+            .collectFirst {
+                case ps: PlutusScript if ps.scriptHash == scriptHash => ps
+            }
+            .getOrElse(
+              throw new IllegalArgumentException(
+                s"Validator not found in attachedScripts for script hash: $scriptHash"
+              )
+            )
+
+        addSteps(
+          TransactionBuilderStep.SpendWithDelayedRedeemer(
+            utxo,
+            redeemerBuilder,
+            validator,
+            datum match {
+                case Datum.DatumInlined     => None
+                case Datum.DatumValue(data) => Some(data)
+            }
+          )
+        )
+    }
+
     override def references(utxos: Utxo*): Builder =
         addSteps(utxos.map(TransactionBuilderStep.ReferenceOutput.apply)*)
 
@@ -294,6 +324,7 @@ object TxBuilder {
 trait Builder {
     def spend(utxo: Utxo): Builder
     def spend(utxo: Utxo, redeemer: Data): Builder
+    def spend(utxo: Utxo, redeemerBuilder: Transaction => Data): Builder
     def references(utxos: Utxo*): Builder
     def collaterals(utxos: Utxo*): Builder
     def output(output: TransactionOutput): Builder
