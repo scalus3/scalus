@@ -15,8 +15,8 @@ case class TxBuilder(
     evaluator: PlutusScriptEvaluator,
     diffHandlerOpt: Option[DiffHandler] = None,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
-    attachedScripts: Seq[Script] = Seq.empty,
-    attachedData: Seq[Data] = Seq.empty,
+    attachedScripts: Map[ScriptHash, Script] = Map.empty,
+    attachedData: Map[DataHash, Data] = Map.empty,
     changeAddressOpt: Option[Address] = None,
     providerOpt: Option[Provider] = None,
 ) extends Builder {
@@ -36,12 +36,10 @@ case class TxBuilder(
         val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
 
-        val scriptSource = attachedScripts
-            .collectFirst {
-                case ps: PlutusScript if ps.scriptHash == scriptHash =>
-                    ScriptSource.PlutusScriptValue(ps)
-            }
-            .getOrElse(ScriptSource.PlutusScriptAttached)
+        val scriptSource = attachedScripts.get(scriptHash) match {
+            case Some(ps: PlutusScript) => ScriptSource.PlutusScriptValue(ps)
+            case _                      => ScriptSource.PlutusScriptAttached
+        }
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = scriptSource,
@@ -59,15 +57,13 @@ case class TxBuilder(
         val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
 
-        val validator = attachedScripts
-            .collectFirst {
-                case ps: PlutusScript if ps.scriptHash == scriptHash => ps
-            }
-            .getOrElse(
-              throw new IllegalArgumentException(
-                s"Validator not found in attachedScripts for script hash: $scriptHash"
-              )
-            )
+        val validator = attachedScripts.get(scriptHash) match {
+            case Some(ps: PlutusScript) => ps
+            case _ =>
+                throw new IllegalArgumentException(
+                  s"Validator not found in attachedScripts for script hash: $scriptHash"
+                )
+        }
 
         addSteps(
           TransactionBuilderStep.SpendWithDelayedRedeemer(
@@ -113,10 +109,12 @@ case class TxBuilder(
         )
 
     override def attach(script: Script): Builder =
-        copy(attachedScripts = attachedScripts :+ script)
+        copy(attachedScripts = attachedScripts + (script.scriptHash -> script))
 
-    override def attach(data: Data): Builder =
-        copy(attachedData = attachedData :+ data)
+    override def attach(data: Data): Builder = {
+        val dataHash = DataHash.fromByteString(blake2b_224(serialiseData(data)))
+        copy(attachedData = attachedData + (dataHash -> data))
+    }
 
     override def metadata(auxiliaryData: AuxiliaryData): Builder =
         addSteps(
@@ -129,13 +127,9 @@ case class TxBuilder(
         assets: collection.Map[AssetName, Long]
     ): Builder = {
 
-        val scriptOpt = attachedScripts.collectFirst {
-            case ps: PlutusScript if ps.scriptHash == policyId => ps
-        }
-
-        val scriptSource = scriptOpt match {
-            case Some(script) => ScriptSource.PlutusScriptValue(script)
-            case None         => ScriptSource.PlutusScriptAttached
+        val scriptSource = attachedScripts.get(policyId) match {
+            case Some(ps: PlutusScript) => ScriptSource.PlutusScriptValue(ps)
+            case _                      => ScriptSource.PlutusScriptAttached
         }
 
         val mintSteps = assets.map { case (assetName, amount) =>
@@ -243,11 +237,7 @@ case class TxBuilder(
             case Some(DatumOption.Inline(_)) => Datum.DatumInlined
             case Some(DatumOption.Hash(datumHash)) =>
                 attachedData
-                    .find { data =>
-                        val computedHash =
-                            DataHash.fromByteString(blake2b_224(serialiseData(data)))
-                        computedHash == datumHash
-                    }
+                    .get(datumHash)
                     .map(Datum.DatumValue.apply)
                     .getOrElse(Datum.DatumInlined)
         }
@@ -258,7 +248,7 @@ case class TxBuilder(
     ): TransactionBuilder.Context = {
         var updatedTx = ctx.transaction
 
-        attachedScripts.foreach {
+        attachedScripts.values.foreach {
             case ns: Script.Native =>
                 val currentScripts = updatedTx.witnessSet.nativeScripts.toMap.values.toSeq
                 updatedTx = updatedTx.copy(
@@ -291,7 +281,7 @@ case class TxBuilder(
 
         if attachedData.nonEmpty then {
             val currentData = updatedTx.witnessSet.plutusData.value.toMap.values.toSeq
-            val allData = currentData ++ attachedData.map(KeepRaw(_))
+            val allData = currentData ++ attachedData.values.map(KeepRaw(_))
             updatedTx = updatedTx.copy(
               witnessSet = updatedTx.witnessSet.copy(
                 plutusData = KeepRaw(TaggedSortedMap(allData*))
