@@ -3,27 +3,717 @@ title: Modules
 sidebarTitle: Modules
 ---
 
-# Modules and reusable code
+# Modules
 
-You can define reusable code in a Scala object annotated with `@Compile`.
-Scalus will compile the code to *.sir files and include them in the jar file.
-This way you can distribute your code as a library.
+Modules in Scalus enable code organization, reusability, and distribution. By using the `@Compile` annotation, you can create reusable libraries that compile to Plutus Core and can be shared across multiple smart contracts.
 
-Use `@Ignore` to exclude a definition from the compilation.
+## What are Modules?
 
-The `compile` will link the modules together and compile them to a single script.
+A module is a Scala object annotated with `@Compile` that contains definitions (values, functions, types) that are compiled to Scalus Intermediate Representation (SIR) and can be reused across multiple contracts.
+
+### Key Benefits
+
+1. **Code Reusability** - Write once, use in multiple contracts
+2. **Library Distribution** - Package modules as JAR files for sharing
+3. **Modular Design** - Separate concerns into logical units
+4. **Type Safety** - Full Scala type checking across modules
+5. **Optimized Compilation** - Scalus optimizes and inlines module code
+
+## The @Compile Annotation
+
+The `@Compile` annotation marks an object for compilation to Plutus Core.
+
+### Basic Usage
 
 ```scala
+import scalus.Compile
 
 @Compile
-object ReusableCode {
-    val constant = BigInt(1)
-    def usefulFunction(a: BigInt): BigInt = a + 1
-    @Ignore // this function is not compiled to UPLC
-    def shouldNotBeInUplc() = ???
-}
+object MathUtils:
+  val pi = BigInt(314159)  // Approximation * 100000
 
-val modules = compile {
-    ReusableCode.usefulFunction(ReusableCode.constant)
+  def square(x: BigInt): BigInt = x * x
+
+  def abs(x: BigInt): BigInt =
+    if x < BigInt(0) then -x else x
+```
+
+### What @Compile Does
+
+When you annotate an object with `@Compile`:
+
+1. **Compilation to SIR** - Scalus compiler plugin transforms the code to Scalus Intermediate Representation
+2. ***.sir File Generation** - SIR is serialized to `.sir` files included in your JAR
+3. **Cross-Contract Reuse** - Other contracts can import and use the compiled code
+4. **Separate Compilation** - Modules compile independently of contracts that use them
+
+### Where to Use @Compile
+
+```scala
+// Good: Utility functions
+@Compile
+object ValidationUtils:
+  def isPositive(n: BigInt): Boolean = n > BigInt(0)
+  def inRange(n: BigInt, min: BigInt, max: BigInt): Boolean =
+    n >= min && n <= max
+
+// Good: Domain logic
+@Compile
+object TokenLogic:
+  def calculateFee(amount: BigInt, feeRate: BigInt): BigInt =
+    (amount * feeRate) / BigInt(1000000)
+
+// Good: Shared constants
+@Compile
+object Constants:
+  val minStake = BigInt(2000000)  // 2 ADA in Lovelace
+  val maxSupply = BigInt(1000000000)
+
+// Bad: Don't use @Compile on validators themselves
+// Validators should use compile { ... } instead
+```
+
+## The @Ignore Annotation
+
+The `@Ignore` annotation excludes definitions from Plutus compilation while keeping them available for off-chain code.
+
+### When to Use @Ignore
+
+```scala
+import scalus.{Compile, Ignore}
+
+@Compile
+object DataProcessor:
+  // Compiled to Plutus
+  def processValue(x: BigInt): BigInt = x * 2
+
+  // NOT compiled to Plutus - only available off-chain
+  @Ignore
+  def debugInfo(x: BigInt): String =
+    s"Processing value: $x"
+
+  // NOT compiled - used only in tests
+  @Ignore
+  def testHelper(): Unit =
+    println("This is for testing only")
+
+  // NOT compiled - platform-specific code
+  @Ignore
+  def logToFile(msg: String): Unit =
+    // File I/O not supported in Plutus
+    java.nio.file.Files.writeString(???, msg)
+```
+
+### Common @Ignore Use Cases
+
+1. **Debugging utilities** - Logging, tracing, debug output
+2. **Test helpers** - Setup, assertions, test data generation
+3. **Documentation** - Example code that shouldn't be in the contract
+4. **Platform-specific code** - JVM/JS-specific implementations
+5. **Expensive computations** - Operations that should only run off-chain
+
+## Imports and Module Linking
+
+### Importing Modules
+
+Simply import the module object and use its definitions:
+
+```scala
+import scalus.prelude.{*, given}
+
+@Compile
+object Validation:
+  def isPositive(n: BigInt): Boolean = n > BigInt(0)
+
+  def isNotEmpty(bs: ByteString): Boolean =
+    Builtins.lengthOfByteString(bs) > BigInt(0)
+
+// Use the module in a validator
+import Validation.*
+
+val validator = compile {
+  def validate(amount: BigInt, signature: ByteString): Boolean =
+    // Use imported functions
+    isPositive(amount) && isNotEmpty(signature)
+
+  validate(BigInt(100), ByteString.fromHex("deadbeef"))
 }
 ```
+
+### Nested Module Imports
+
+```scala
+@Compile
+object Core:
+  val maxValue = BigInt(1000000)
+
+  object Nested:
+    def isValid(n: BigInt): Boolean = n <= maxValue
+
+// Import nested object
+import Core.Nested.*
+
+val result = compile {
+  isValid(BigInt(500))  // Uses Core.Nested.isValid
+}
+```
+
+### Wildcard Imports
+
+```scala
+@Compile
+object Utils:
+  def add(a: BigInt, b: BigInt): BigInt = a + b
+  def multiply(a: BigInt, b: BigInt): BigInt = a * b
+  def divide(a: BigInt, b: BigInt): BigInt = a / b
+
+// Import all functions
+import Utils.*
+
+val calculation = compile {
+  val sum = add(BigInt(10), BigInt(20))
+  val product = multiply(sum, BigInt(2))
+  divide(product, BigInt(3))
+}
+```
+
+## Linking Modules with compile
+
+The `compile { ... }` macro links modules together and compiles them to a single Plutus script.
+
+### How Linking Works
+
+```scala
+@Compile
+object ModuleA:
+  val constant = BigInt(100)
+  def helper(x: BigInt): BigInt = x + constant
+
+@Compile
+object ModuleB:
+  def process(x: BigInt): BigInt = x * 2
+
+// compile links both modules into one script
+val linked = compile {
+  import ModuleA.*
+  import ModuleB.*
+
+  val value = BigInt(10)
+  val processed = process(value)      // From ModuleB
+  val result = helper(processed)       // From ModuleA
+  result
+}
+```
+
+### Compilation Process
+
+1. **Parse** - Scala compiler parses your code
+2. **Type Check** - Full Scala type checking
+3. **Transform to SIR** - Scalus plugin transforms to SIR
+4. **Link** - Modules are linked together
+5. **Optimize** - Dead code elimination, inlining
+6. **Lower to UPLC** - SIR is compiled to Untyped Plutus Core
+
+### Multiple Modules Example
+
+```scala
+@Compile
+object Constants:
+  val minAmount = BigInt(1000000)
+  val feeRate = BigInt(1000)  // 0.1%
+
+@Compile
+object Validation:
+  import Constants.*
+
+  def validateAmount(amount: BigInt): Boolean =
+    amount >= minAmount
+
+  def calculateFee(amount: BigInt): BigInt =
+    (amount * feeRate) / BigInt(1000000)
+
+@Compile
+object Logic:
+  import Validation.*
+
+  def processPayment(amount: BigInt): Either[String, BigInt] =
+    if validateAmount(amount) then
+      val fee = calculateFee(amount)
+      Right(amount - fee)
+    else
+      Left("Amount too small")
+
+// Link all three modules
+val validator = compile {
+  import Logic.*
+
+  processPayment(BigInt(2000000)) match
+    case Right(finalAmount) => finalAmount
+    case Left(error) => throw new Exception(error)
+}
+```
+
+## Inline Values
+
+Inline values are evaluated at compile time and substituted directly into the code, eliminating runtime overhead.
+
+### Defining Inline Values
+
+```scala
+@Compile
+object Config:
+  // Inline constant - substituted at compile time
+  inline val minStake = BigInt(2000000)
+
+  // Inline function - expanded at call site
+  inline def square(x: BigInt): BigInt = x * x
+
+  // Regular value - evaluated at runtime
+  val dynamicThreshold = BigInt(1000000)
+```
+
+### Benefits of Inline
+
+```scala
+@Compile
+object Math:
+  // Without inline
+  val two = BigInt(2)
+  def double(x: BigInt): BigInt = x * two
+
+  // With inline - no function call overhead
+  inline val twoInline = BigInt(2)
+  inline def doubleInline(x: BigInt): BigInt = x * twoInline
+
+val usage = compile {
+  import Math.*
+
+  // double(5) compiles to: function call to multiply 5 by 'two'
+  val result1 = double(BigInt(5))
+
+  // doubleInline(5) compiles to: 5 * 2 (directly)
+  val result2 = doubleInline(BigInt(5))
+
+  result2  // More efficient
+}
+```
+
+### When to Use Inline
+
+**Use inline for:**
+- Mathematical constants (π, e, conversion factors)
+- Small utility functions called frequently
+- Configuration values known at compile time
+- Performance-critical calculations
+
+**Don't use inline for:**
+- Large functions (increases code size)
+- Values that might change between compilations
+- Complex logic that benefits from being a separate function
+
+### Inline Examples
+
+```scala
+@Compile
+object Constants:
+  // Currency conversion
+  inline val lovelacePerAda = BigInt(1000000)
+
+  // Time constants
+  inline val secondsPerDay = BigInt(86400)
+  inline val slotsPerEpoch = BigInt(432000)
+
+  // Inline helper functions
+  inline def adaToLovelace(ada: BigInt): BigInt =
+    ada * lovelacePerAda
+
+  inline def lovelaceToAda(lovelace: BigInt): BigInt =
+    lovelace / lovelacePerAda
+
+val conversion = compile {
+  import Constants.*
+
+  val ada = BigInt(10)
+  // adaToLovelace(10) expands to: 10 * 1000000
+  val lovelace = adaToLovelace(ada)
+  lovelace
+}
+```
+
+## Function Overloading (Not Supported)
+
+**IMPORTANT:** Scalus does not support function overloading. Each function must have a unique name.
+
+### What Doesn't Work
+
+```scala
+@Compile
+object Overloaded:
+  // NOT SUPPORTED - Compilation error
+  def add(a: BigInt, b: BigInt): BigInt = a + b
+  def add(a: BigInt, b: BigInt, c: BigInt): BigInt = a + b + c  // Error!
+
+  // NOT SUPPORTED - Compilation error
+  def process(x: BigInt): BigInt = x * 2
+  def process(x: ByteString): ByteString = x  // Error!
+```
+
+### Workarounds
+
+#### 1. Different Function Names
+
+```scala
+@Compile
+object Math:
+  def add2(a: BigInt, b: BigInt): BigInt = a + b
+  def add3(a: BigInt, b: BigInt, c: BigInt): BigInt = a + b + c
+  def add4(a: BigInt, b: BigInt, c: BigInt, d: BigInt): BigInt =
+    a + b + c + d
+```
+
+#### 2. Use List for Variable Arguments
+
+```scala
+@Compile
+object Math:
+  def addAll(numbers: List[BigInt]): BigInt =
+    numbers.foldLeft(BigInt(0))(_ + _)
+
+val result = compile {
+  import Math.*
+
+  addAll(List(1, 2))           // 3
+  addAll(List(1, 2, 3))        // 6
+  addAll(List(1, 2, 3, 4))     // 10
+}
+```
+
+#### 3. Use Type-Specific Names
+
+```scala
+@Compile
+object Processor:
+  def processInt(x: BigInt): BigInt = x * 2
+  def processBytes(x: ByteString): ByteString =
+    Builtins.appendByteString(x, x)
+  def processList(xs: List[BigInt]): List[BigInt] =
+    xs.map(_ * 2)
+```
+
+#### 4. Use Sum Types (Enums)
+
+```scala
+enum Input:
+  case Single(value: BigInt)
+  case Double(a: BigInt, b: BigInt)
+  case Multiple(values: List[BigInt])
+
+@Compile
+object Processor:
+  def process(input: Input): BigInt = input match
+    case Input.Single(v) => v
+    case Input.Double(a, b) => a + b
+    case Input.Multiple(vs) => vs.foldLeft(BigInt(0))(_ + _)
+
+val result = compile {
+  import Processor.*
+
+  process(Input.Single(BigInt(10)))                    // 10
+  process(Input.Double(BigInt(5), BigInt(7)))          // 12
+  process(Input.Multiple(List(1, 2, 3, 4)))           // 10
+}
+```
+
+## Distributing Code as a Library
+
+Modules can be packaged and distributed as JAR files for reuse across projects.
+
+### Creating a Library Module
+
+```scala
+// In your library project: mylib/src/main/scala/mylib/Utils.scala
+package mylib
+
+import scalus.Compile
+import scalus.builtin.{Builtins, ByteString}
+
+@Compile
+object Validation:
+  inline val minAmount = BigInt(1000000)
+
+  def isValidAmount(amount: BigInt): Boolean =
+    amount >= minAmount
+
+  def isValidSignature(pubKey: ByteString, msg: ByteString, sig: ByteString): Boolean =
+    Builtins.verifyEd25519Signature(pubKey, msg, sig)
+
+@Compile
+object TokenUtils:
+  def calculateFee(amount: BigInt, basisPoints: BigInt): BigInt =
+    (amount * basisPoints) / BigInt(10000)
+
+  def applyFee(amount: BigInt, basisPoints: BigInt): BigInt =
+    amount - calculateFee(amount, basisPoints)
+```
+
+### Publishing the Library
+
+```scala
+// In your library's build.sbt
+name := "mylib"
+organization := "com.example"
+version := "1.0.0"
+
+libraryDependencies += "org.scalus" %% "scalus" % "0.8.0"
+
+// Publish to Maven Central or your repository
+```
+
+### Using the Library
+
+```scala
+// In your contract project's build.sbt
+libraryDependencies += "com.example" %% "mylib" % "1.0.0"
+
+// In your validator code
+import scalus.prelude.{*, given}
+import mylib.{Validation, TokenUtils}
+
+val validator = compile {
+  val amount = BigInt(5000000)
+  val fee = TokenUtils.calculateFee(amount, BigInt(250))  // 2.5%
+
+  if Validation.isValidAmount(amount) then
+    TokenUtils.applyFee(amount, BigInt(250))
+  else
+    throw new Exception("Invalid amount")
+}
+```
+
+## Best Practices
+
+### 1. Module Organization
+
+Organize modules by domain or functionality:
+
+```scala
+// Good: Organized by domain
+@Compile
+object Validation:
+  def validateAmount(amount: BigInt): Boolean = ???
+  def validateSignature(sig: ByteString): Boolean = ???
+
+@Compile
+object Calculation:
+  def calculateFee(amount: BigInt): BigInt = ???
+  def calculateReward(stake: BigInt): BigInt = ???
+
+@Compile
+object Constants:
+  val minStake = BigInt(2000000)
+  val maxSupply = BigInt(1000000000)
+
+// Bad: Mixing unrelated concerns
+@Compile
+object Everything:
+  val minStake = BigInt(2000000)
+  def validateAmount(amount: BigInt): Boolean = ???
+  def calculateFee(amount: BigInt): BigInt = ???
+  def processTransaction(tx: Transaction): Boolean = ???
+```
+
+### 2. Use Inline for Constants
+
+```scala
+@Compile
+object Config:
+  // Good: Inline for compile-time constants
+  inline val protocolVersion = BigInt(3)
+  inline val minUtxoValue = BigInt(1000000)
+
+  // Good: Regular val for values that might change
+  val currentEpoch = BigInt(450)
+```
+
+### 3. Keep Modules Focused
+
+```scala
+// Good: Single responsibility
+@Compile
+object TimeUtils:
+  inline val secondsPerDay = BigInt(86400)
+
+  def daysSince(timestamp: BigInt, reference: BigInt): BigInt =
+    (timestamp - reference) / secondsPerDay
+
+// Bad: Too many responsibilities
+@Compile
+object Utils:
+  // Time functions
+  def daysSince(timestamp: BigInt, reference: BigInt): BigInt = ???
+  // String functions
+  def concatenate(a: String, b: String): String = ???
+  // Crypto functions
+  def hash(data: ByteString): ByteString = ???
+```
+
+### 4. Document Public APIs
+
+```scala
+@Compile
+object TokenLogic:
+  /**
+   * Calculate transaction fee based on amount and fee rate.
+   *
+   * @param amount Transaction amount in Lovelace
+   * @param feeRate Fee rate in basis points (1 bp = 0.01%)
+   * @return Fee amount in Lovelace
+   */
+  def calculateFee(amount: BigInt, feeRate: BigInt): BigInt =
+    (amount * feeRate) / BigInt(10000)
+```
+
+### 5. Minimize Module Dependencies
+
+```scala
+// Good: Independent modules
+@Compile
+object Math:
+  def square(x: BigInt): BigInt = x * x
+
+@Compile
+object Validation:
+  // Self-contained, no dependencies on Math
+  def isPositive(n: BigInt): Boolean = n > BigInt(0)
+
+// Acceptable: Clear dependency chain
+@Compile
+object Advanced:
+  import Math.*
+
+  def sumOfSquares(a: BigInt, b: BigInt): BigInt =
+    square(a) + square(b)
+```
+
+### 6. Use @Ignore Liberally
+
+```scala
+@Compile
+object DataProcessor:
+  def processValue(x: BigInt): BigInt = x * 2
+
+  // Test helpers - not in Plutus
+  @Ignore
+  def testWithRandomValue(): BigInt =
+    processValue(scala.util.Random.nextInt(100))
+
+  // Debugging - not in Plutus
+  @Ignore
+  def debugProcess(x: BigInt): Unit =
+    println(s"Processing $x -> ${processValue(x)}")
+```
+
+## Common Patterns
+
+### Validation Module Pattern
+
+```scala
+@Compile
+object Validation:
+  import scalus.builtin.Builtins
+
+  inline val minAmount = BigInt(1000000)
+  inline val maxAmount = BigInt(1000000000)
+
+  def isValidAmount(amount: BigInt): Boolean =
+    amount >= minAmount && amount <= maxAmount
+
+  def isValidHash(hash: ByteString): Boolean =
+    Builtins.lengthOfByteString(hash) == BigInt(32)
+
+  def isValidPubKey(pubKey: ByteString): Boolean =
+    Builtins.lengthOfByteString(pubKey) == BigInt(32)
+```
+
+### Constants Module Pattern
+
+```scala
+@Compile
+object ProtocolConstants:
+  // Network parameters
+  inline val slotsPerEpoch = BigInt(432000)
+  inline val slotDuration = BigInt(1)  // 1 second
+
+  // Economic parameters
+  inline val minUtxoValue = BigInt(1000000)
+  inline val minPoolCost = BigInt(340000000)
+
+  // Conversion helpers
+  inline def epochToSlot(epoch: BigInt): BigInt =
+    epoch * slotsPerEpoch
+
+  inline def slotToEpoch(slot: BigInt): BigInt =
+    slot / slotsPerEpoch
+```
+
+### Helper Functions Pattern
+
+```scala
+@Compile
+object Helpers:
+  // List operations
+  def sumList(numbers: List[BigInt]): BigInt =
+    numbers.foldLeft(BigInt(0))(_ + _)
+
+  def maxList(numbers: List[BigInt]): Option[BigInt] =
+    numbers match
+      case Nil => None
+      case head :: tail => Some(tail.foldLeft(head)((a, b) => if a > b then a else b))
+
+  // ByteString operations
+  def concat(strings: List[ByteString]): ByteString =
+    strings.foldLeft(ByteString.empty)(Builtins.appendByteString)
+```
+
+### State Machine Module Pattern
+
+```scala
+enum State:
+  case Initial
+  case Active(value: BigInt)
+  case Locked(value: BigInt, until: BigInt)
+  case Finalized(result: BigInt)
+
+@Compile
+object StateMachine:
+  def transition(state: State, action: Action, currentTime: BigInt): State =
+    (state, action) match
+      case (State.Initial, Action.Start(value)) =>
+        State.Active(value)
+
+      case (State.Active(value), Action.Lock(until)) =>
+        State.Locked(value, until)
+
+      case (State.Locked(value, until), Action.Unlock) =>
+        if currentTime >= until then State.Active(value)
+        else state
+
+      case (State.Active(value), Action.Finalize) =>
+        State.Finalized(value)
+
+      case _ =>
+        state  // Invalid transition, keep current state
+```
+
+## Summary
+
+- **@Compile** marks objects for compilation to Plutus Core
+- **@Ignore** excludes definitions from Plutus compilation
+- **Modules** enable code reusability and library distribution
+- **Import** brings module definitions into scope
+- **compile { }** links modules into a single script
+- **inline** values are substituted at compile time for efficiency
+- **Function overloading is NOT supported** - use different names or workarounds
+- Organize modules by domain for maintainability
+- Use inline for constants and small functions
+- Document public APIs for library consumers

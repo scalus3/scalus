@@ -1,21 +1,559 @@
 ---
 title: Functions
 sidebarTitle: Functions
-#display: hidden
 ---
 
 # Functions
 
-Functions are the same as in Scala 3.
+Functions are first-class values in Scalus, enabling functional programming patterns essential for smart contract development. Scalus supports both named functions (`def`) and anonymous functions (lambdas).
 
-Scalus supports both recursive and non-recursive functions.
+## Defining Functions
 
-```scala mdoc:compile-only
+### Basic Function Definition
+
+```scala
+import scalus.prelude.{*, given}
+
 compile {
-    val nonRecursiveLambda = (a: BigInt) => a + 1
+  // Simple function
+  def add(a: BigInt, b: BigInt): BigInt =
+    a + b
 
-    def recursive(a: BigInt): BigInt =
-        if a == BigInt(0) then 0
-        else recursive(a - 1)
+  // Function with explicit return type
+  def multiply(x: BigInt, y: BigInt): BigInt =
+    x * y
+
+  // Multi-line function
+  def calculate(a: BigInt, b: BigInt): BigInt =
+    val sum = a + b
+    val doubled = sum * 2
+    doubled + 1
+
+  // Call functions
+  val result = add(BigInt(10), BigInt(20))  // 30
 }
 ```
+
+### Type Inference
+
+Return types can often be inferred, but explicit types are recommended for clarity:
+
+```scala
+compile {
+  // Type inferred
+  def double(x: BigInt) = x * 2
+
+  // Explicit return type (recommended)
+  def triple(x: BigInt): BigInt = x * 3
+}
+```
+
+## Lambda Functions (Anonymous Functions)
+
+Lambdas are functions without names, useful for passing as arguments:
+
+```scala
+compile {
+  // Lambda syntax
+  val increment = (x: BigInt) => x + 1
+
+  // Lambda with multiple parameters
+  val add = (a: BigInt, b: BigInt) => a + b
+
+  // Lambda with explicit type
+  val multiply: (BigInt, BigInt) => BigInt = (x, y) => x * y
+
+  // Multi-line lambda
+  val complexCalc = (x: BigInt) => {
+    val doubled = x * 2
+    val squared = doubled * doubled
+    squared + 1
+  }
+
+  // Using lambdas
+  val result = increment(BigInt(41))  // 42
+}
+```
+
+### Shorthand Syntax
+
+Use underscore for concise lambdas:
+
+```scala
+compile {
+  val numbers = List(1, 2, 3, 4, 5)
+
+  // Verbose
+  val doubled = numbers.map((x: BigInt) => x * 2)
+
+  // Shorthand
+  val tripled = numbers.map(_ * 3)
+
+  // Multiple underscores represent different arguments
+  val sum = numbers.foldLeft(BigInt(0))(_ + _)
+  // Equivalent to: (acc, x) => acc + x
+}
+```
+
+## Higher-Order Functions
+
+Functions that take other functions as parameters or return functions:
+
+```scala
+compile {
+  // Function taking a function as parameter
+  def apply(x: BigInt, f: BigInt => BigInt): BigInt =
+    f(x)
+
+  // Usage
+  val result = apply(BigInt(10), x => x * 2)  // 20
+
+  // Function returning a function
+  def makeMultiplier(factor: BigInt): BigInt => BigInt =
+    (x: BigInt) => x * factor
+
+  val double = makeMultiplier(BigInt(2))
+  val triple = makeMultiplier(BigInt(3))
+
+  double(BigInt(10))  // 20
+  triple(BigInt(10))  // 30
+}
+```
+
+### Common Higher-Order Functions
+
+```scala
+compile {
+  val numbers = List(1, 2, 3, 4, 5)
+
+  // map: transform each element
+  val doubled = numbers.map(_ * 2)  // [2, 4, 6, 8, 10]
+
+  // filter: select elements matching condition
+  val evens = numbers.filter(_ % 2 == 0)  // [2, 4]
+
+  // foldLeft: reduce from left
+  val sum = numbers.foldLeft(BigInt(0))(_ + _)  // 15
+
+  // foldRight: reduce from right
+  val product = numbers.foldRight(BigInt(1))(_ * _)  // 120
+
+  // find: first element matching condition
+  val firstEven = numbers.find(_ % 2 == 0)  // Some(2)
+
+  // exists: check if any element matches
+  val hasLarge = numbers.exists(_ > 10)  // false
+
+  // forall: check if all elements match
+  val allPositive = numbers.forall(_ > 0)  // true
+}
+```
+
+## Recursive Functions
+
+Recursion is the primary iteration mechanism in Scalus:
+
+```scala
+compile {
+  // Simple recursion
+  def factorial(n: BigInt): BigInt =
+    if n <= BigInt(1) then BigInt(1)
+    else n * factorial(n - 1)
+
+  // Tail recursion (more efficient)
+  def factorialTail(n: BigInt, acc: BigInt = BigInt(1)): BigInt =
+    if n <= BigInt(1) then acc
+    else factorialTail(n - 1, n * acc)
+
+  // List recursion
+  def sum(list: List[BigInt]): BigInt =
+    list match
+      case Nil => BigInt(0)
+      case head :: tail => head + sum(tail)
+
+  // Finding in list
+  def contains(list: List[BigInt], target: BigInt): Boolean =
+    list match
+      case Nil => false
+      case head :: tail =>
+        if head == target then true
+        else contains(tail, target)
+}
+```
+
+**Important:**
+- Scalus supports recursive functions
+- Consider tail recursion for efficiency
+- Be aware of recursion depth limits
+- Use higher-order functions when possible
+
+## Default Parameters
+
+**NOT SUPPORTED** - Scalus doesn't support default parameter values:
+
+```scala
+// NOT SUPPORTED
+def greet(name: String, greeting: String = "Hello"): String =
+  s"$greeting, $name"
+```
+
+**Workaround:** Use function overloading alternatives or explicit parameters:
+
+```scala
+compile {
+  // Provide all parameters explicitly
+  def greet(name: String, greeting: String): String =
+    s"$greeting, $name"
+
+  // Or use Option for optional parameters
+  def greetOpt(name: String, greeting: Option[String]): String =
+    val greetingText = greeting.getOrElse("Hello")
+    s"$greetingText, $name"
+
+  greetOpt("Alice", Some("Hi"))  // "Hi, Alice"
+  greetOpt("Bob", None)          // "Hello, Bob"
+}
+```
+
+## Named Arguments
+
+**NOT SUPPORTED** - Scalus doesn't support named arguments:
+
+```scala
+// NOT SUPPORTED
+def transfer(from: Account, to: Account, amount: BigInt): Transaction =
+  ???
+
+// This won't work:
+transfer(from = alice, to = bob, amount = BigInt(100))
+```
+
+**Workaround:** Use positional arguments or case classes:
+
+```scala
+case class TransferParams(from: Account, to: Account, amount: BigInt)
+
+compile {
+  def transfer(params: TransferParams): Transaction =
+    // Use params.from, params.to, params.amount
+    ???
+
+  // Usage with clear field names
+  transfer(TransferParams(
+    from = alice,
+    to = bob,
+    amount = BigInt(100)
+  ))
+}
+```
+
+## Variable Arguments (Varargs)
+
+**NOT SUPPORTED** - Scalus doesn't support variable argument lists:
+
+```scala
+// NOT SUPPORTED
+def sum(numbers: BigInt*): BigInt =
+  numbers.foldLeft(BigInt(0))(_ + _)
+```
+
+**Workaround:** Use Lists explicitly:
+
+```scala
+compile {
+  def sum(numbers: List[BigInt]): BigInt =
+    numbers.foldLeft(BigInt(0))(_ + _)
+
+  // Usage
+  sum(List(1, 2, 3, 4, 5))  // 15
+}
+```
+
+## Function Overloading
+
+**NOT SUPPORTED** - Scalus doesn't support function overloading (multiple functions with the same name):
+
+```scala
+// NOT SUPPORTED
+def add(a: BigInt, b: BigInt): BigInt = a + b
+def add(a: BigInt, b: BigInt, c: BigInt): BigInt = a + b + c
+```
+
+**Workaround:** Use different function names or a single function with List:
+
+```scala
+compile {
+  // Different names
+  def add2(a: BigInt, b: BigInt): BigInt = a + b
+  def add3(a: BigInt, b: BigInt, c: BigInt): BigInt = a + b + c
+
+  // Or use a List
+  def addAll(numbers: List[BigInt]): BigInt =
+    numbers.foldLeft(BigInt(0))(_ + _)
+
+  addAll(List(1, 2))        // 3
+  addAll(List(1, 2, 3))     // 6
+  addAll(List(1, 2, 3, 4))  // 10
+}
+```
+
+## Mutually Recursive Functions
+
+**NOT SUPPORTED** - Functions cannot call each other recursively:
+
+```scala
+// NOT SUPPORTED
+def isEven(n: BigInt): Boolean =
+  if n == BigInt(0) then true
+  else isOdd(n - 1)
+
+def isOdd(n: BigInt): Boolean =
+  if n == BigInt(0) then false
+  else isEven(n - 1)
+```
+
+**Workaround:** Combine into a single function or use a helper enum:
+
+```scala
+compile {
+  // Combine into one function
+  def isEven(n: BigInt): Boolean =
+    (n % BigInt(2)) == BigInt(0)
+
+  def isOdd(n: BigInt): Boolean =
+    !isEven(n)
+
+  // Or use helper data structure
+  enum Parity:
+    case Even
+    case Odd
+
+  def checkParity(n: BigInt, current: Parity): Boolean =
+    if n == BigInt(0) then
+      current match
+        case Parity.Even => true
+        case Parity.Odd => false
+    else
+      val nextParity = current match
+        case Parity.Even => Parity.Odd
+        case Parity.Odd => Parity.Even
+      checkParity(n - 1, nextParity)
+
+  checkParity(BigInt(10), Parity.Even)  // true (10 is even)
+}
+```
+
+## Closures
+
+Lambdas can capture variables from their enclosing scope:
+
+```scala
+compile {
+  val multiplier = BigInt(10)
+
+  // Lambda captures 'multiplier'
+  val multiplyBy10 = (x: BigInt) => x * multiplier
+
+  multiplyBy10(BigInt(5))  // 50
+
+  // Function returning closure
+  def makeAdder(x: BigInt): BigInt => BigInt =
+    (y: BigInt) => x + y
+
+  val add5 = makeAdder(BigInt(5))
+  add5(BigInt(10))  // 15
+}
+```
+
+## Partial Application
+
+Create new functions by fixing some arguments:
+
+```scala
+compile {
+  def add3(a: BigInt, b: BigInt, c: BigInt): BigInt =
+    a + b + c
+
+  // Create a partially applied function
+  def addWith10And20(c: BigInt): BigInt =
+    add3(BigInt(10), BigInt(20), c)
+
+  addWith10And20(BigInt(30))  // 60
+
+  // Using closures for partial application
+  def partial2(f: (BigInt, BigInt, BigInt) => BigInt, a: BigInt): (BigInt, BigInt) => BigInt =
+    (b: BigInt, c: BigInt) => f(a, b, c)
+
+  val addWith10 = partial2(add3, BigInt(10))
+  addWith10(BigInt(20), BigInt(30))  // 60
+}
+```
+
+## Function Composition
+
+Combine functions to create new ones:
+
+```scala
+compile {
+  def double(x: BigInt): BigInt = x * 2
+  def increment(x: BigInt): BigInt = x + 1
+
+  // Manual composition
+  def doubleAndIncrement(x: BigInt): BigInt =
+    increment(double(x))
+
+  doubleAndIncrement(BigInt(5))  // 11
+
+  // Composition helper
+  def compose[A, B, C](f: B => C, g: A => B): A => C =
+    (x: A) => f(g(x))
+
+  val composed = compose(increment, double)
+  composed(BigInt(5))  // 11
+}
+```
+
+## Best Practices
+
+1. **Use descriptive names** - Function names should clearly indicate purpose
+2. **Keep functions small** - Single responsibility principle
+3. **Prefer immutability** - Don't modify parameters, return new values
+4. **Use type annotations** - Explicit return types improve clarity
+5. **Leverage higher-order functions** - More concise than explicit recursion
+6. **Avoid deep recursion** - Be mindful of stack depth
+7. **Use tail recursion** - More efficient for deep recursion
+8. **Document complex functions** - Add comments for non-obvious logic
+
+## Common Patterns
+
+### Validation Function
+
+```scala
+compile {
+  def validate(amount: BigInt): Either[String, BigInt] =
+    if amount < BigInt(0) then
+      Left("Amount cannot be negative")
+    else if amount > BigInt(1000000) then
+      Left("Amount too large")
+    else
+      Right(amount)
+
+  validate(BigInt(500)) match
+    case Right(value) => value
+    case Left(error) => throw new Exception(error)
+}
+```
+
+### Transformation Pipeline
+
+```scala
+compile {
+  val numbers = List(1, 2, 3, 4, 5)
+
+  val result = numbers
+    .filter(_ % 2 == 0)        // Keep evens
+    .map(_ * 2)                 // Double each
+    .foldLeft(BigInt(0))(_ + _) // Sum all
+
+  // result: 12 (2*2 + 4*2 = 4 + 8 = 12)
+}
+```
+
+### Conditional Execution
+
+```scala
+compile {
+  def conditionalExecute(
+    condition: Boolean,
+    onTrue: () => BigInt,
+    onFalse: () => BigInt
+  ): BigInt =
+    if condition then onTrue() else onFalse()
+
+  conditionalExecute(
+    balance > BigInt(1000),
+    () => processLargeBalance(balance),
+    () => processSmallBalance(balance)
+  )
+}
+```
+
+### Memoization Pattern (Using Map)
+
+```scala
+compile {
+  // Simple memoization using a map
+  def fibonacci(n: BigInt, memo: Map[BigInt, BigInt]): (BigInt, Map[BigInt, BigInt]) =
+    if n <= BigInt(1) then
+      (n, memo)
+    else
+      memo.get(n) match
+        case Some(result) =>
+          (result, memo)
+        case None =>
+          val (fib1, memo1) = fibonacci(n - 1, memo)
+          val (fib2, memo2) = fibonacci(n - 2, memo1)
+          val result = fib1 + fib2
+          (result, memo2 + (n -> result))
+
+  val (result, _) = fibonacci(BigInt(10), Map.empty)
+}
+```
+
+### Error Handling Wrapper
+
+```scala
+compile {
+  def tryExecute[A](f: () => A, onError: () => A): A =
+    try f()
+    catch
+      case _: Exception => onError()
+
+  val result = tryExecute(
+    () => riskyOperation(),
+    () => fallbackValue
+  )
+}
+```
+
+## Performance Considerations
+
+1. **Function calls have overhead** - Consider inlining small functions
+2. **Recursion depth** - Stack depth is limited, use iteration (fold) when possible
+3. **Closure captures** - Capturing variables adds memory overhead
+4. **Tail recursion** - More efficient than general recursion
+5. **Higher-order functions** - May be more expensive than direct code
+
+## Using `inline`
+
+Mark functions as `inline` to have them expanded at compile time:
+
+```scala
+compile {
+  // Inline function - no call overhead
+  inline def square(x: BigInt): BigInt = x * x
+
+  // Usage - will be expanded to: val result = 5 * 5
+  val result = square(BigInt(5))
+}
+```
+
+**Benefits:**
+- Zero function call overhead
+- Can enable further optimizations
+- Useful for small, frequently called functions
+
+**Use inline for:**
+- Simple calculations
+- Frequently called helpers
+- Performance-critical code
+
+## Summary
+
+- Functions are first-class values
+- Lambdas provide concise function syntax
+- Higher-order functions enable functional patterns
+- Recursion replaces loops
+- No default parameters, named arguments, varargs, or overloading
+- No mutually recursive functions
+- Use `inline` for performance-critical small functions

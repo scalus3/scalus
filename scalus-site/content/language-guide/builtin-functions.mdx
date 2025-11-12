@@ -5,26 +5,332 @@ sidebarTitle: Builtin Functions
 
 # Builtin Functions
 
-Cardano Plutus provides a set of built-in functions that can be used in the scripts.
-Scalus implements them in the [Builtins](https://scalus.org/api/scalus/builtin/Builtins$.html) object.
+Cardano Plutus provides a comprehensive set of built-in functions optimized for blockchain execution. Scalus implements these functions in the [`Builtins`](https://scalus.org/api/scalus/builtin/Builtins$.html) object, making them available with familiar Scala syntax.
 
-Here are some examples of using built-in functions.
+All builtin functions are automatically recognized by the Scalus compiler and compiled to their corresponding Plutus operations.
 
-```scala mdoc:compile-only
-import scalus.builtin.*
-import scalus.builtin.ByteString.*
-import scalus.prelude.{*, given}
-compile {
-    // See scalus.builtin.Builtins for what is available
-    val data = Builtins.iData(123)
-    val eqData = data == Builtins.iData(123) || data != Builtins.iData(123)
-    val eq = Builtins.equalsByteString(hex"deadbeef", ByteString.empty)
-    val byteStringEq = hex"deadbeef" == ByteString.empty || hex"deadbeef" != ByteString.empty
-    val stringEq = "deadbeef" == "" || "deadbeef" != ""
-    val a = BigInt(1)
-    val sum = a + 1 - a * 3 / 4 // arithmetic operators
-    val intEquality = a == sum || a != sum
-    val bool = !true || (false == true) != false && true // boolean operators
-    val equals = a === sum // comparison operators
-}
+## Integer Operations
+
+Arithmetic and comparison operations on arbitrary-precision integers (`BigInt`).
+
+```scala
+import scalus.builtin.Builtins
+
+// Arithmetic
+val sum = Builtins.addInteger(BigInt(10), BigInt(20))
+val diff = Builtins.subtractInteger(BigInt(100), BigInt(30))
+val product = Builtins.multiplyInteger(BigInt(5), BigInt(7))
+val quotient = Builtins.divideInteger(BigInt(20), BigInt(4))      // floor division
+val quot = Builtins.quotientInteger(BigInt(20), BigInt(4))         // truncated division
+val remainder = Builtins.remainderInteger(BigInt(17), BigInt(5))
+val modulo = Builtins.modInteger(BigInt(17), BigInt(5))
+
+// Comparison
+val eq = Builtins.equalsInteger(BigInt(42), BigInt(42))
+val lt = Builtins.lessThanInteger(BigInt(3), BigInt(7))
+val lte = Builtins.lessThanEqualsInteger(BigInt(5), BigInt(5))
+
+// Or use operators
+val sumOp = BigInt(10) + BigInt(20)
+val eqOp = BigInt(42) == BigInt(42)
 ```
+
+## ByteString Operations
+
+Operations on immutable byte arrays, organized by category.
+
+### Constructing
+
+```scala
+import scalus.builtin.{Builtins, ByteString}
+
+// Append two ByteStrings
+val concatenated = Builtins.appendByteString(
+  ByteString.fromHex("dead"),
+  ByteString.fromHex("beef")
+)
+
+// Prepend a byte (0-255)
+val withPrefix = Builtins.consByteString(BigInt(0xFF), ByteString.fromHex("1234"))
+```
+
+### Inspecting
+
+```scala
+// Length of ByteString
+val length = Builtins.lengthOfByteString(ByteString.fromHex("deadbeef"))  // 4
+
+// Get byte at index
+val byte = Builtins.indexByteString(ByteString.fromHex("deadbeef"), BigInt(0))  // 0xDE
+
+// Slice ByteString
+val slice = Builtins.sliceByteString(BigInt(1), BigInt(2), ByteString.fromHex("deadbeef"))  // hex"adbe"
+```
+
+### Comparing
+
+```scala
+// Equality
+val eq = Builtins.equalsByteString(
+  ByteString.fromHex("deadbeef"),
+  ByteString.fromHex("deadbeef")
+)  // true
+
+// Lexicographic comparison
+val lt = Builtins.lessThanByteString(
+  ByteString.fromHex("1234"),
+  ByteString.fromHex("5678")
+)  // true
+
+val lte = Builtins.lessThanEqualsByteString(
+  ByteString.fromHex("1234"),
+  ByteString.fromHex("1234")
+)  // true
+```
+
+### Bitwise Operations
+
+Perform bitwise operations on ByteStrings. The `shouldPad` parameter controls behavior when ByteStrings have different lengths.
+
+```scala
+// Bitwise AND
+val and = Builtins.andByteString(false, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"0F"
+val andPad = Builtins.andByteString(true, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"0FFF"
+
+// Bitwise OR
+val or = Builtins.orByteString(false, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"FF"
+
+// Bitwise XOR
+val xor = Builtins.xorByteString(false, ByteString.fromHex("0FFF"), ByteString.fromHex("FF"))  // hex"F0"
+
+// Bitwise complement (NOT)
+val complement = Builtins.complementByteString(ByteString.fromHex("FF"))  // hex"00"
+```
+
+### Shifting and Rotating
+
+```scala
+// Read a bit at index
+val bit = Builtins.readBit(ByteString.fromHex("80"), BigInt(0))  // true (MSB is 1)
+
+// Write a bit at index
+val modified = Builtins.writeBits(ByteString.fromHex("00"), List((BigInt(0), true)))  // hex"80"
+
+// Replicate a byte n times
+val repeated = Builtins.replicateByte(BigInt(4), BigInt(0xFF))  // hex"FFFFFFFF"
+
+// Shift bits left/right
+val shiftLeft = Builtins.shiftByteString(ByteString.fromHex("01"), BigInt(1))  // hex"02"
+val shiftRight = Builtins.shiftByteString(ByteString.fromHex("02"), BigInt(-1))  // hex"01"
+
+// Rotate bits
+val rotateLeft = Builtins.rotateByteString(ByteString.fromHex("0102"), BigInt(8))  // hex"0201"
+```
+
+### Transforming
+
+```scala
+// Count set bits (population count)
+val popcount = Builtins.countSetBits(ByteString.fromHex("FF"))  // 8
+
+// Find first set bit index
+val firstSet = Builtins.findFirstSetBit(ByteString.fromHex("08"))  // 3
+
+// Convert to/from integer
+val toInt = Builtins.byteStringToInteger(true, ByteString.fromHex("1234"))  // 4660 (big-endian)
+val fromInt = Builtins.integerToByteString(true, BigInt(2), BigInt(4660))  // hex"1234"
+```
+
+## String Operations
+
+UTF-8 string operations.
+
+```scala
+// Concatenate strings
+val greeting = Builtins.appendString("Hello, ", "Cardano!")
+
+// Equality
+val eq = Builtins.equalsString("test", "test")
+
+// Convert to/from UTF-8 ByteString
+val encoded = Builtins.encodeUtf8("Hello")
+val decoded = Builtins.decodeUtf8(encoded)
+```
+
+## List Operations
+
+Operations on immutable linked lists.
+
+```scala
+import scalus.builtin.{Builtins, BuiltinList}
+
+// Choose based on empty/non-empty
+val result = Builtins.chooseList(List(1, 2, 3), "empty", "not empty")  // "not empty"
+
+// Construct list
+val list = Builtins.mkCons(BigInt(0), BuiltinList(1, 2, 3))
+
+// Deconstruct list
+val head = Builtins.headList(list)  // 0
+val tail = Builtins.tailList(list)  // [1, 2, 3]
+val isEmpty = Builtins.nullList(list)  // false
+```
+
+## Pair Operations
+
+Operations on pairs (2-tuples).
+
+```scala
+import scalus.builtin.{Builtins, BuiltinPair}
+
+val pair = BuiltinPair(BigInt(42), ByteString.fromHex("deadbeef"))
+
+// Extract elements
+val first = Builtins.fstPair(pair)   // 42
+val second = Builtins.sndPair(pair)  // hex"deadbeef"
+```
+
+## Data Operations
+
+Operations for Plutus's universal `Data` type, used for serialization and interoperability.
+
+### Creating Data
+
+```scala
+import scalus.builtin.{Builtins, Data}
+
+// Create Data from primitives
+val intData = Builtins.iData(BigInt(42))
+val bytesData = Builtins.bData(ByteString.fromHex("deadbeef"))
+val listData = Builtins.listData(BuiltinList(intData, bytesData))
+val mapData = Builtins.mapData(BuiltinList(Builtins.mkPairData(intData, bytesData)))
+val constrData = Builtins.constrData(BigInt(0), BuiltinList(intData, bytesData))
+```
+
+### Deconstructing Data
+
+```scala
+// Extract Data values
+val int = Builtins.unIData(intData)
+val bytes = Builtins.unBData(bytesData)
+val list = Builtins.unListData(listData)
+val map = Builtins.unMapData(mapData)
+val (tag, fields) = Builtins.unConstrData(constrData)
+```
+
+### Data Operations
+
+```scala
+// Choose based on Data variant
+val result = Builtins.chooseData(
+  someData,
+  constrCase = "constructor",
+  mapCase = "map",
+  listCase = "list",
+  iCase = "integer",
+  bCase = "bytestring"
+)
+
+// Compare Data values
+val eq = Builtins.equalsData(data1, data2)
+
+// Serialize Data to CBOR
+val serialized = Builtins.serialiseData(someData)
+```
+
+### Monomorphic Constructors
+
+```scala
+// Create pairs and lists of Data
+val pairData = Builtins.mkPairData(intData, bytesData)
+val emptyList = Builtins.mkNilData()
+val emptyPairList = Builtins.mkNilPairData()
+```
+
+## Cryptography
+
+### Hashing
+
+```scala
+// SHA-2 and SHA-3 hashing
+val sha2 = Builtins.sha2_256(ByteString.fromString("message"))
+val sha3 = Builtins.sha3_256(ByteString.fromString("message"))
+
+// BLAKE2b hashing (256-bit and 224-bit)
+val blake256 = Builtins.blake2b_256(ByteString.fromString("message"))
+val blake224 = Builtins.blake2b_224(ByteString.fromString("message"))
+
+// Keccak-256
+val keccak = Builtins.keccak_256(ByteString.fromString("message"))
+
+// RIPEMD-160
+val ripemd = Builtins.ripemd_160(ByteString.fromString("message"))
+```
+
+### Digital Signatures
+
+```scala
+// Ed25519 signature verification
+val validEd = Builtins.verifyEd25519Signature(publicKey, message, signature)
+
+// ECDSA SECP256k1 signature verification
+val validEcdsa = Builtins.verifyEcdsaSecp256k1Signature(publicKey, message, signature)
+
+// Schnorr SECP256k1 signature verification
+val validSchnorr = Builtins.verifySchnorrSecp256k1Signature(publicKey, message, signature)
+```
+
+### BLS12-381 Pairing Operations
+
+Advanced cryptographic operations for zero-knowledge proofs and pairing-based cryptography.
+
+```scala
+import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element}
+
+// Group operations
+val g1Sum = Builtins.bls12_381_G1_add(g1Point1, g1Point2)
+val g1Neg = Builtins.bls12_381_G1_neg(g1Point1)
+val g1Scaled = Builtins.bls12_381_G1_scalarMul(scalar, g1Point1)
+
+val g2Sum = Builtins.bls12_381_G2_add(g2Point1, g2Point2)
+val g2Neg = Builtins.bls12_381_G2_neg(g2Point1)
+val g2Scaled = Builtins.bls12_381_G2_scalarMul(scalar, g2Point1)
+
+// Pairing operations
+val miller = Builtins.bls12_381_millerLoop(g1Point, g2Point)
+val mulMiller = Builtins.bls12_381_mulMlResult(mlResult1, mlResult2)
+val final = Builtins.bls12_381_finalVerify(mlResult1, mlResult2)
+
+// Hash to curve
+val hashToG1 = Builtins.bls12_381_G1_hashToGroup(message, dst)
+val hashToG2 = Builtins.bls12_381_G2_hashToGroup(message, dst)
+
+// Compression and serialization
+val compressed = Builtins.bls12_381_G1_compress(g1Point)
+val uncompressed = Builtins.bls12_381_G1_uncompress(compressedBytes)
+```
+
+## Control Flow
+
+```scala
+// Conditional execution
+val result = Builtins.ifThenElse(condition, thenValue, elseValue)
+
+// Force evaluation after unit
+val forced = Builtins.chooseUnit()(computeValue)
+```
+
+## Debugging
+
+```scala
+// Trace a message (printed during evaluation)
+val result = Builtins.trace("Debug message")(computeValue)
+```
+
+## Usage Notes
+
+- All builtin functions are type-safe and validated at compile time
+- Most builtins have convenient operator syntax (e.g., `+`, `==`, `++`)
+- Builtin functions compile directly to Plutus opcodes for maximum efficiency
+- See the [Builtins API documentation](https://scalus.org/api/scalus/builtin/Builtins$.html) for complete details
+- Refer to the [Plutus specification](https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf) for formal semantics

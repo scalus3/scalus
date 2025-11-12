@@ -1,53 +1,227 @@
 ---
-title: Constants & Primitives
-sidebarTitle: Constants & Primitives
+title: Primitive Types
+sidebarTitle: Primitive Types
 ---
-# Constants and Primitives
 
-Scalus provides support for all Plutus V3 primitive types, allowing you to write smart contracts using familiar Scala syntax while targeting the Cardano blockchain.
+# Primitive Types
+
+Scalus provides full support for Plutus V3 primitive types, allowing you to write smart contracts using familiar Scala syntax while targeting the Cardano blockchain.
 
 ## Type Correspondence
 
-The following table shows how primitive types map between Plutus, Scalus, and Aiken (another Cardano smart contract language):
-
+The following table shows how primitive types map between Plutus, Scalus, and Aiken:
 
 | Plutus V3              | Scalus                 | Aiken              |
 |------------------------|------------------------|--------------------|
-| `unit`                 | `Unit`                 | `()`               |
+| `unit`                 | `Unit`                 | `Void`             |
 | `bool`                 | `Boolean`              | `Bool`             |
 | `integer`              | `BigInt`               | `Int`              |
 | `bytestring`           | `ByteString`           | `ByteArray`        |
 | `string`               | `String`               | `String`           |
 | `data`                 | `Data`                 | `Data`             |
-| `list`                 | `List`                 | `List`             |
-| `pair`                 | `Pair`                 | `Pairs`            |
+| `list`                 | `List[A]`              | `List<a>`          |
+| `pair`                 | `Pair[A, B]`           | `Pair<a, b>`       |
 | `BLS12_381_G1_Element` | `BLS12_381_G1_Element` | `G1Element`        |
-| `BLS12_381_G2_Element` | `BLS12_381_G2_Element` | `G12Element`       |
+| `BLS12_381_G2_Element` | `BLS12_381_G2_Element` | `G2Element`        |
 | `BLS12_381_MlResult`   | `BLS12_381_MlResult`   | `MillerLoopResult` |
 
-Scalus leverages Scala's native types for `Unit`, `Boolean`, `BigInt`, and `String`, providing a familiar programming experience. For other Plutus-specific types like `ByteString`, Scalus offers custom implementations with convenient constructors and utility methods.
+Scalus leverages Scala's native types for `Unit`, `Boolean`, `BigInt`, and `String`, providing a familiar programming experience. For blockchain-specific types, Scalus offers custom implementations with convenient constructors and utility methods.
 
-The code below demonstrates how to define constants and work with the various primitive types in Scalus. Note the different ways to create `ByteString` values and how Scala's type inference works with these primitives.
+## Creating Values
 
-```scala mdoc:compile-only
-import scalus.Compiler.compile
-import scalus.*
-import scalus.builtin.*
+### Unit
+
+The unit type represents the absence of a meaningful value. It's similar to `void` in other languages but is an actual value.
+
+```scala
+val unit: Unit = ()
+```
+
+### Boolean
+
+Boolean values are either `true` or `false`. Scalus supports all standard boolean operators.
+
+```scala
+val bool = true
+val and = true && false   // logical AND
+val or = true || false    // logical OR
+val not = !true           // logical NOT
+val eq = true == false    // equality
+val neq = true != false   // inequality
+```
+
+### BigInt
+
+Arbitrary precision integers are the primary numeric type in Plutus. Scalus uses Scala's `BigInt`.
+
+```scala
+val small = BigInt(123)
+val large = BigInt("123456789012345678901234567890")
+val fromInt: BigInt = 42  // automatic conversion from Int
+
+// Arithmetic operations
+val sum = BigInt(10) + BigInt(20)
+val diff = BigInt(100) - BigInt(30)
+val product = BigInt(5) * BigInt(7)
+val quotient = BigInt(20) / BigInt(4)
+val remainder = BigInt(17) % BigInt(5)
+
+// Comparison
+val greater = BigInt(10) > BigInt(5)
+val less = BigInt(3) < BigInt(7)
+val greaterOrEqual = BigInt(10) >= BigInt(10)
+val lessOrEqual = BigInt(5) <= BigInt(10)
+val equals = BigInt(42) == BigInt(42)
+```
+
+### ByteString
+
+ByteStrings are immutable byte arrays, commonly used for hashes, cryptographic keys, and binary data.
+
+```scala
+import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
 
-val constants = compile {
-    val unit = () // unit type
-    val bool = true || false // boolean type
-    val int = BigInt(123) // integer type
-    val bigint = BigInt("12345678901234567890") // large integer value
-    val implicitBigIng: BigInt = 123
-    val emptyByteString = ByteString.empty
-    val byteString = ByteString.fromHex("deadbeef")
-    val byteStringUtf8 = ByteString.fromString("hello") // from utf8 encoded string
-    val byteString2 = hex"deadbeef" // ByteString from hex string
-    val string = "Scalus Rocks!" // string type
-    val emptyList = List.empty[BigInt] // empty list
-    val list = List[BigInt](1, 2, 3) // list of integers
-    val pair = Pair(true, ()) // pair of boolean and unit
-}
+// Creating ByteStrings
+val empty = ByteString.empty
+val fromHex = ByteString.fromHex("deadbeef")
+val fromArray = ByteString.fromArray(Array[Byte](0xde.toByte, 0xad.toByte))
+val fromString = ByteString.fromString("Hello")  // UTF-8 encoded
+val hexLiteral = hex"deadbeef"  // using hex string interpolator
+
+// Operations
+val concat = ByteString.fromHex("dead") ++ ByteString.fromHex("beef")
+val length = fromHex.length
+val take = fromHex.take(2)      // first 2 bytes
+val drop = fromHex.drop(2)      // skip first 2 bytes
+val slice = fromHex.slice(1, 3) // bytes from index 1 to 3
+
+// Comparison
+val eq = fromHex == ByteString.fromHex("deadbeef")
+val compare = fromHex < ByteString.fromHex("ffffff")
 ```
+
+### String
+
+Strings are UTF-8 encoded text values.
+
+```scala
+val greeting = "Hello, Cardano!"
+val concat = "Hello" ++ " " ++ "World"
+val eq = "test" == "test"
+val byteString = ByteString.fromString("convert to bytes")
+```
+
+### Data
+
+`Data` is Plutus's universal representation type, used for serialization and interoperability. Any value can be encoded as `Data`, making it essential for on-chain communication.
+
+**What is Data?**
+
+`Data` is a tree-like structure that can represent:
+- **Integers** (`I` constructor)
+- **ByteStrings** (`B` constructor)
+- **Lists** of Data (`List` constructor)
+- **Maps** from Data to Data (`Map` constructor)
+- **Constructors** with an integer tag and list of Data fields (`Constr` constructor)
+
+Think of `Data` as a universal serialization format similar to JSON, but optimized for blockchain use.
+
+```scala
+import scalus.builtin.Data
+import scalus.builtin.Builtins
+
+// Creating Data values
+val intData = Builtins.iData(BigInt(42))
+val bytesData = Builtins.bData(ByteString.fromHex("deadbeef"))
+val listData = Builtins.listData(List(intData, bytesData))
+val mapData = Builtins.mapData(List((intData, bytesData)))
+val constrData = Builtins.constrData(0, List(intData, bytesData))
+
+// Deconstructing Data
+val extractedInt: BigInt = Builtins.unIData(intData)
+val extractedBytes: ByteString = Builtins.unBData(bytesData)
+val extractedList: List[Data] = Builtins.unListData(listData)
+val extractedMap: List[(Data, Data)] = Builtins.unMapData(mapData)
+val (tag, fields) = Builtins.unConstrData(constrData)
+
+// Comparison
+val dataEq = intData == Builtins.iData(BigInt(42))
+```
+
+**Converting to/from Data**
+
+Scalus automatically generates `ToData` and `FromData` instances for case classes and enums, enabling seamless conversion:
+
+```scala
+import scalus.builtin.ToData
+import scalus.builtin.FromData
+
+case class Account(owner: ByteString, balance: BigInt)
+
+val account = Account(ByteString.fromHex("abc123"), BigInt(1000))
+val accountData: Data = account.toData
+val recovered: Account = FromData.fromData(accountData)
+```
+
+### List
+
+Immutable linked lists are the primary collection type.
+
+```scala
+// Creating lists
+val empty = List.empty[BigInt]
+val numbers = List(1, 2, 3, 4, 5)
+val cons = 0 :: List(1, 2, 3)  // prepend element
+
+// Operations
+val head = numbers.head         // first element (1)
+val tail = numbers.tail         // rest of list
+val isEmpty = numbers.isEmpty
+val length = numbers.length
+
+// Higher-order functions
+val doubled = numbers.map(_ * 2)
+val evens = numbers.filter(_ % 2 == 0)
+val sum = numbers.foldLeft(0)(_ + _)
+```
+
+### Pair
+
+Pairs (2-tuples) hold exactly two values of potentially different types.
+
+```scala
+import scalus.builtin.Pair
+
+// Creating pairs
+val pair = Pair(BigInt(42), ByteString.fromHex("deadbeef"))
+val tuple: (Boolean, Unit) = (true, ())
+
+// Accessing elements
+val first = pair.fst
+val second = pair.snd
+val (a, b) = tuple  // destructuring
+```
+
+### BLS12-381 Types
+
+Cryptographic elliptic curve types for advanced cryptography and zero-knowledge proofs.
+
+```scala
+import scalus.builtin.*
+
+val g1Point: BLS12_381_G1_Element = ??? // from bytestring
+val g2Point: BLS12_381_G2_Element = ??? // from bytestring
+val mlResult: BLS12_381_MlResult = Builtins.bls12_381_millerLoop(g1Point, g2Point)
+```
+
+## Type Safety
+
+Scalus ensures type safety at compile time. Type mismatches are caught before deployment:
+
+```scala
+val valid: BigInt = 42
+val invalid: BigInt = "not a number"  // Compile error!
+```
+
+This prevents many common smart contract vulnerabilities by catching errors early in the development process.

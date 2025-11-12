@@ -1,42 +1,472 @@
 ---
-title: Data types
-sidebarTitle: Data types
+title: Custom Data Types
+sidebarTitle: Custom Data Types
 ---
 
-# Data types
+# Custom Data Types
 
-Scalus allows you to define custom data types using Scala case classes and enums, which are compiled to equivalent Plutus structures.
+Scalus allows you to define custom data types using Scala's case classes and enums, which are compiled to equivalent Plutus structures. These types can be automatically serialized to and from Plutus `Data`, making them ideal for smart contract development.
 
-```scala mdoc:compile-only
+## Defining Data Types
+
+### Case Classes
+
+Case classes define product types - structures with named fields.
+
+```scala
 import scalus.builtin.ByteString
+
+// Simple case class
+case class Account(owner: ByteString, balance: BigInt)
+
+// Nested case classes
+case class Token(policyId: ByteString, assetName: ByteString)
+case class TokenAmount(token: Token, amount: BigInt)
+
+// Case class with multiple fields
+case class Transaction(
+  from: Account,
+  to: Account,
+  amount: BigInt,
+  timestamp: BigInt
+)
+```
+
+### Enums (Sum Types)
+
+Enums define sum types - values that can be one of several variants.
+
+```scala
+// Simple enum
+enum Color:
+  case Red
+  case Green
+  case Blue
+
+// Enum with associated data
+enum State:
+  case Empty
+  case Active(account: Account)
+  case Locked(account: Account, until: BigInt)
+
+// Enum with multiple constructors
+enum Result:
+  case Success(value: BigInt)
+  case Failure(error: String)
+  case Pending
+```
+
+### Recursive Types
+
+You can define recursive data structures:
+
+```scala
+// Binary tree
+enum Tree:
+  case Leaf(value: BigInt)
+  case Node(left: Tree, right: Tree)
+
+// Linked list (though List is built-in)
+enum MyList:
+  case Nil
+  case Cons(head: BigInt, tail: MyList)
+```
+
+## Creating and Using Custom Types
+
+```scala
 import scalus.prelude.{*, given}
 
-case class Account(hash: ByteString, balance: BigInt)
+compile {
+  // Create instances using constructors
+  val account = Account(ByteString.fromHex("abc123"), BigInt(1000))
+
+  // Using new keyword
+  val account2 = new Account(ByteString.fromHex("def456"), BigInt(2000))
+
+  // Accessing fields
+  val owner = account.owner
+  val balance = account.balance
+
+  // Creating enum values
+  val empty: State = State.Empty
+  val active = State.Active(account)
+  val locked = State.Locked(account, BigInt(1000000))
+
+  // Tuples
+  val pair = (true, BigInt(123))
+  val (flag, number) = pair  // destructuring
+}
+```
+
+## ToData and FromData
+
+Scalus automatically generates `ToData` and `FromData` instances for your custom types, enabling seamless conversion to/from Plutus `Data`.
+
+### Automatic Derivation
+
+```scala
+import scalus.builtin.{Data, ToData, FromData}
+
+case class Account(owner: ByteString, balance: BigInt)
+
+// Automatically available
+val account = Account(ByteString.fromHex("abc123"), BigInt(1000))
+val accountData: Data = account.toData  // Convert to Data
+val recovered: Account = FromData.fromData(accountData)  // Convert from Data
+```
+
+### How It Works
+
+Case classes are encoded as Plutus constructors:
+- Constructor tag (field index in enum, 0 for single case class)
+- List of fields encoded as Data
+
+```scala
+// Account(owner, balance) becomes:
+// Constr(0, [B(owner), I(balance)])
 
 enum State:
-    case Empty
-    case Active(account: Account)
+  case Empty              // Constr(0, [])
+  case Active(account)    // Constr(1, [account.toData])
+  case Locked(acc, until) // Constr(2, [acc.toData, I(until)])
+```
 
-import State.*
+### Manual ToData/FromData
+
+For custom encoding logic:
+
+```scala
+case class CustomType(value: BigInt)
+
+given ToData[CustomType] with
+  def toData(v: CustomType): Data =
+    Builtins.iData(v.value * 2)  // Custom encoding
+
+given FromData[CustomType] with
+  def fromData(d: Data): CustomType =
+    CustomType(Builtins.unIData(d) / 2)  // Custom decoding
+```
+
+## Extension Methods
+
+Add methods to existing types without modifying them:
+
+```scala
+extension (account: Account)
+  def hasBalance(amount: BigInt): Boolean =
+    account.balance >= amount
+
+  def deposit(amount: BigInt): Account =
+    Account(account.owner, account.balance + amount)
+
+  def withdraw(amount: BigInt): Account =
+    if account.balance >= amount then
+      Account(account.owner, account.balance - amount)
+    else
+      throw new Exception("Insufficient balance")
+
+// Usage
 compile {
-    // Tuple2 literals are supported
-    val tuple = (true, BigInt(123))
-    val empty = State.Empty // simple constructor
-    // Use `new` to create an instance
-    val account = Account.createFromMnemonic(ByteString.empty, tuple._2) // access tuple fields
-    // or use a companion object apply method
-    val active: State = State.Active(account)
-    val hash = account.hash // access case class fields
-    // A simple pattern matching is supported
-    // no guards, no type ascriptions.
-    // Inner matches can be done only on single constructor case classes
-    // Wildcard patterns are supported
-    active match
-        case Empty                                 => true
-        case Active(account @ Account(_, balance)) => balance == BigInt(123)
-    // all cases must be covered or there must be a default case
-    val isEmpty = active match
-        case Empty => true
-        case _     => false
+  val account = Account(ByteString.fromHex("abc"), BigInt(1000))
+  val canAfford = account.hasBalance(BigInt(500))  // true
+  val newAccount = account.deposit(BigInt(500))    // balance: 1500
 }
+```
+
+### Extension Methods for Enums
+
+```scala
+extension (state: State)
+  def isActive: Boolean = state match
+    case State.Active(_) => true
+    case _ => false
+
+  def getAccount: Option[Account] = state match
+    case State.Active(acc) => Some(acc)
+    case State.Locked(acc, _) => Some(acc)
+    case State.Empty => None
+
+// Usage
+compile {
+  val state = State.Active(account)
+  if state.isActive then
+    state.getAccount match
+      case Some(acc) => acc.balance
+      case None => BigInt(0)
+  else BigInt(0)
+}
+```
+
+## Inline Methods
+
+Inline methods are expanded at compile time, reducing function call overhead:
+
+```scala
+case class Point(x: BigInt, y: BigInt)
+
+extension (p: Point)
+  inline def distanceSquared(other: Point): BigInt =
+    val dx = p.x - other.x
+    val dy = p.y - other.y
+    dx * dx + dy * dy
+
+// The inline method will be expanded at the call site
+compile {
+  val p1 = Point(BigInt(0), BigInt(0))
+  val p2 = Point(BigInt(3), BigInt(4))
+  val dist = p1.distanceSquared(p2)  // Expanded inline
+}
+```
+
+## Pattern Matching and Deconstructing
+
+### Basic Pattern Matching
+
+```scala
+compile {
+  val state: State = State.Active(account)
+
+  // Match on enum variants
+  state match
+    case State.Empty => BigInt(0)
+    case State.Active(account) => account.balance
+    case State.Locked(account, until) =>
+      if until < currentTime then account.balance
+      else BigInt(0)
+}
+```
+
+### Nested Pattern Matching
+
+```scala
+case class Token(policy: ByteString, name: ByteString)
+case class Balance(token: Token, amount: BigInt)
+
+enum Wallet:
+  case Empty
+  case Single(balance: Balance)
+  case Multiple(balances: List[Balance])
+
+compile {
+  val wallet: Wallet = Wallet.Single(
+    Balance(Token(hex"abc", hex"def"), BigInt(1000))
+  )
+
+  // Nested pattern matching
+  wallet match
+    case Wallet.Empty => BigInt(0)
+    case Wallet.Single(Balance(Token(policy, name), amount)) =>
+      amount  // Destructure nested structures
+    case Wallet.Multiple(balances) =>
+      balances.map(_.amount).sum
+}
+```
+
+### Pattern Matching with Bindings
+
+```scala
+compile {
+  state match
+    case State.Empty =>
+      BigInt(0)
+    case State.Active(acc @ Account(owner, balance)) =>
+      // Both `acc` and destructured `owner`, `balance` available
+      if balance > BigInt(1000) then balance else BigInt(0)
+    case _ =>
+      BigInt(0)  // Wildcard pattern
+}
+```
+
+### Deconstructing in Val Declarations
+
+```scala
+compile {
+  // Destructure tuple
+  val (x, y) = (BigInt(10), BigInt(20))
+
+  // Destructure case class
+  val Account(owner, balance) = account
+
+  // Destructure Option
+  val Some((a, b)) = optionOfTuple
+
+  // Partial destructuring
+  val State.Active(acc) = activeState  // Assumes it's Active
+}
+```
+
+### List Pattern Matching
+
+```scala
+compile {
+  val numbers = List(1, 2, 3, 4, 5)
+
+  numbers match
+    case Nil =>
+      BigInt(0)
+    case head :: Nil =>
+      head  // Single element
+    case first :: second :: rest =>
+      first + second  // At least two elements
+    case _ =>
+      BigInt(0)
+}
+```
+
+## Type Aliases and Opaque Types
+
+### Type Aliases
+
+Create alternative names for existing types:
+
+```scala
+type UserId = ByteString
+type Balance = BigInt
+type Timestamp = BigInt
+
+case class User(id: UserId, balance: Balance, created: Timestamp)
+
+// Usage
+val user = User(
+  ByteString.fromHex("abc123"),
+  BigInt(1000),
+  BigInt(1640000000)
+)
+```
+
+### Opaque Types (Non Top-Level)
+
+Opaque types provide type safety without runtime overhead:
+
+```scala
+object Types:
+  opaque type PositiveInt = BigInt
+
+  object PositiveInt:
+    def apply(n: BigInt): Option[PositiveInt] =
+      if n > 0 then Some(n) else None
+
+    extension (p: PositiveInt)
+      def value: BigInt = p
+      def add(other: PositiveInt): PositiveInt = p + other
+
+// Usage
+import Types.*
+
+compile {
+  val maybePos = PositiveInt(BigInt(10))
+  maybePos match
+    case Some(p) =>
+      val doubled = p.add(p)
+      doubled.value
+    case None =>
+      BigInt(0)
+}
+```
+
+## Best Practices
+
+1. **Keep types simple** - Complex nested structures increase execution costs
+2. **Use enums for alternatives** - More efficient than multiple case classes
+3. **Leverage pattern matching** - Safe and expressive way to handle variants
+4. **Use extension methods** - Add functionality without inheritance
+5. **Inline small methods** - Reduce function call overhead
+6. **Validate at boundaries** - Check data validity when converting from Data
+7. **Use opaque types for safety** - Prevent mixing up similar types (e.g., different IDs)
+8. **Minimize Data conversions** - Only convert when necessary for on-chain communication
+
+## Common Patterns
+
+### Smart Constructor Pattern
+
+```scala
+case class PositiveAmount private (value: BigInt)
+
+object PositiveAmount:
+  def create(value: BigInt): Either[String, PositiveAmount] =
+    if value > 0 then Right(PositiveAmount(value))
+    else Left("Amount must be positive")
+
+// Usage
+compile {
+  PositiveAmount.create(BigInt(100)) match
+    case Right(amount) => amount.value
+    case Left(error) => throw new Exception(error)
+}
+```
+
+### Builder Pattern
+
+```scala
+case class Config(
+  timeout: BigInt,
+  maxRetries: BigInt,
+  enableLogging: Boolean
+)
+
+object Config:
+  def default: Config = Config(
+    timeout = BigInt(30000),
+    maxRetries = BigInt(3),
+    enableLogging = false
+  )
+
+extension (c: Config)
+  def withTimeout(t: BigInt): Config = c.copy(timeout = t)
+  def withMaxRetries(r: BigInt): Config = c.copy(maxRetries = r)
+  def withLogging(enabled: Boolean): Config = c.copy(enableLogging = enabled)
+
+// Usage
+compile {
+  val config = Config.default
+    .withTimeout(BigInt(60000))
+    .withLogging(true)
+}
+```
+
+### State Machine Pattern
+
+```scala
+enum StateMachine:
+  case Initial
+  case Processing(data: ByteString)
+  case Completed(result: BigInt)
+  case Failed(error: String)
+
+extension (sm: StateMachine)
+  def transition(input: ByteString): StateMachine = sm match
+    case StateMachine.Initial =>
+      StateMachine.Processing(input)
+    case StateMachine.Processing(data) =>
+      // Process data
+      if isValid(data) then
+        StateMachine.Completed(computeResult(data))
+      else
+        StateMachine.Failed("Invalid data")
+    case _ =>
+      sm  // No transition
+```
+
+## Error Handling with Custom Types
+
+```scala
+enum ValidationError:
+  case InvalidAmount(got: BigInt, expected: BigInt)
+  case InsufficientBalance(required: BigInt, available: BigInt)
+  case Unauthorized(user: ByteString)
+
+type ValidationResult[A] = Either[ValidationError, A]
+
+def validateTransfer(
+  from: Account,
+  to: Account,
+  amount: BigInt
+): ValidationResult[Transaction] =
+  if amount <= 0 then
+    Left(ValidationError.InvalidAmount(amount, BigInt(0)))
+  else if from.balance < amount then
+    Left(ValidationError.InsufficientBalance(amount, from.balance))
+  else
+    Right(Transaction(from, to, amount, currentTimestamp))
 ```
