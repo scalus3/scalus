@@ -11,7 +11,7 @@ type Preimage = ByteString
 type Image = ByteString
 type PubKeyHash = ByteString
 
-// Contract Datum
+// Datum
 case class ContractDatum(
     committer: PubKeyHash,
     receiver: PubKeyHash,
@@ -32,7 +32,8 @@ enum Action derives FromData, ToData:
 object Action
 
 @Compile
-object HtlcValidator extends Validator:
+object HtlcValidator extends Validator {
+
     /** Spending script purpose validation
       */
     inline override def spend(
@@ -63,4 +64,4 @@ object HtlcValidator extends Validator:
     inline val InvalidReceiverTimePoint = "Receiver Transaction must be inclusively before timeout"
     inline val InvalidReceiverPreimage = "Invalid receiver preimage"
 
-end HtlcValidator
+}

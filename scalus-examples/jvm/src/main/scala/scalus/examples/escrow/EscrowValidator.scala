@@ -1,14 +1,15 @@
-package scalus.examples
+package scalus.examples.escrow
 
-import scalus.{show as _, *}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
-import scalus.prelude.Option.*
-import scalus.ledger.api.v2.OutputDatum
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
 import scalus.ledger.api.v1.Value.getLovelace
+import scalus.ledger.api.v2.OutputDatum
+import scalus.ledger.api.v3.*
+import scalus.prelude.*
+import scalus.prelude.Option.*
+import scalus.{show as _, *}
 
+// Datum
 case class EscrowDatum(
     seller: PubKeyHash,
     buyer: PubKeyHash,
@@ -24,80 +25,34 @@ object EscrowDatum {
             x.escrowAmount === y.escrowAmount && x.initializationAmount === y.initializationAmount
 }
 
+// Redeemer
 enum EscrowAction derives FromData, ToData:
     case Deposit
     case Pay
     case Refund
 
-case class EscrowRedeemer(action: EscrowAction) derives FromData, ToData
+@Compile
+object EscrowAction
 
 @Compile
-object EscrowRedeemer
-
-@Compile
-object EscrowUtils {
-
-    def getOutputsByVkh(outputs: List[TxOut], vkh: PubKeyHash): List[TxOut] = {
-        outputs.filter(output =>
-            output.address.credential match {
-                case Credential.PubKeyCredential(pkh) => pkh === vkh
-                case _                                => false
-            }
-        )
-    }
-
-    def getOutputsByAddress(outputs: List[TxOut], addr: Address): List[TxOut] = {
-        outputs.filter(_.address === addr)
-    }
-
-    def getInputsByAddress(inputs: List[TxInInfo], addr: Address): List[TxInInfo] = {
-        inputs.filter(_.resolved.address === addr)
-    }
-
-    def getAdaFromOutputs(outputs: List[TxOut]): Lovelace = {
-        outputs.map(_.value.getLovelace).foldLeft(BigInt(0))(_ + _)
-    }
-
-    def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace = {
-        inputs.map(_.resolved.value.getLovelace).foldLeft(BigInt(0))(_ + _)
-    }
-
-    def mustBeSignedBy(signatories: List[PubKeyHash], vkh: PubKeyHash): Boolean = {
-        signatories.contains(vkh)
-    }
-
-}
-
-@Compile
-object Escrow extends Validator:
+object EscrowValidator extends Validator {
     inline override def spend(
         datum: Option[Data],
         redeemer: Data,
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        log("Escrow script started")
         val receivedData = datum.getOrFail("Datum not found")
         val escrowDatum: EscrowDatum = receivedData.to[EscrowDatum]
-        val EscrowRedeemer(action) = redeemer.to[EscrowRedeemer]
+        val action = redeemer.to[EscrowAction]
 
         val ownInput = txInfo.inputs
             .find(input => input.outRef === txOutRef)
             .get
             .resolved
         val contractAddress = ownInput.address
-        val contractInputs = EscrowUtils.getInputsByAddress(txInfo.inputs, contractAddress)
-        val contractBalance = EscrowUtils.getAdaFromInputs(contractInputs)
-
-        log("Contract balance calculation:")
-        log("Number of contract inputs:")
-        log(contractInputs.length.show)
-        log("Contract balance from inputs:")
-        log(contractBalance.show)
-        log("Own input balance:")
-        log(ownInput.value.getLovelace.show)
-        log("Expected total (escrow + init):")
-        log((escrowDatum.escrowAmount + escrowDatum.initializationAmount).show)
+        val contractInputs = getInputsByAddress(txInfo.inputs, contractAddress)
+        val contractBalance = getAdaFromInputs(contractInputs)
 
         action match {
             case EscrowAction.Deposit =>
@@ -116,15 +71,13 @@ object Escrow extends Validator:
         contractBalance: Lovelace,
         receivedData: Data
     ): Unit = {
-        log("Handling deposit action")
-
         require(
-          EscrowUtils.mustBeSignedBy(txInfo.signatories, escrowDatum.buyer),
+          mustBeSignedBy(txInfo.signatories, escrowDatum.buyer),
           "Buyer must sign deposit transaction"
         )
 
-        val buyerOutputs = EscrowUtils.getOutputsByVkh(txInfo.outputs, escrowDatum.buyer)
-        val contractOutputs = EscrowUtils.getOutputsByAddress(txInfo.outputs, contractAddress)
+        val buyerOutputs = getOutputsByVkh(txInfo.outputs, escrowDatum.buyer)
+        val contractOutputs = getOutputsByAddress(txInfo.outputs, contractAddress)
 
         require(contractOutputs.length === BigInt(1), "Expected exactly one contract output")
         val contractOutput = contractOutputs.head
@@ -137,7 +90,7 @@ object Escrow extends Validator:
         )
 
         require(
-          EscrowUtils.getAdaFromOutputs(
+          getAdaFromOutputs(
             contractOutputs
           ) === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
           "Contract output must contain exactly escrow amount plus initialization amount"
@@ -158,15 +111,13 @@ object Escrow extends Validator:
         txInfo: TxInfo,
         contractBalance: Lovelace
     ): Unit = {
-        log("Handling pay action")
-
         require(
           contractBalance === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
           "Contract must be fully funded before payment"
         )
 
-        val buyerOutputs = EscrowUtils.getOutputsByVkh(txInfo.outputs, escrowDatum.buyer)
-        val sellerOutputs = EscrowUtils.getOutputsByVkh(txInfo.outputs, escrowDatum.seller)
+        val buyerOutputs = getOutputsByVkh(txInfo.outputs, escrowDatum.buyer)
+        val sellerOutputs = getOutputsByVkh(txInfo.outputs, escrowDatum.seller)
 
         require(
           sellerOutputs.nonEmpty,
@@ -179,12 +130,12 @@ object Escrow extends Validator:
         )
 
         require(
-          EscrowUtils.mustBeSignedBy(txInfo.signatories, escrowDatum.buyer),
+          mustBeSignedBy(txInfo.signatories, escrowDatum.buyer),
           "Only buyer can release payment"
         )
 
         require(
-          EscrowUtils.getAdaFromOutputs(
+          getAdaFromOutputs(
             sellerOutputs
           ) === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
           "Seller must receive exactly escrow amount plus initialization amount"
@@ -196,15 +147,13 @@ object Escrow extends Validator:
         txInfo: TxInfo,
         contractBalance: Lovelace
     ): Unit = {
-        log("Handling refund action")
-
         require(
           contractBalance === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
           "Contract must be fully funded before refund"
         )
 
-        val buyerOutputs = EscrowUtils.getOutputsByVkh(txInfo.outputs, escrowDatum.buyer)
-        val sellerOutputs = EscrowUtils.getOutputsByVkh(txInfo.outputs, escrowDatum.seller)
+        val buyerOutputs = getOutputsByVkh(txInfo.outputs, escrowDatum.buyer)
+        val sellerOutputs = getOutputsByVkh(txInfo.outputs, escrowDatum.seller)
 
         require(
           sellerOutputs.nonEmpty,
@@ -217,19 +166,44 @@ object Escrow extends Validator:
         )
 
         require(
-          EscrowUtils.mustBeSignedBy(txInfo.signatories, escrowDatum.seller),
+          mustBeSignedBy(txInfo.signatories, escrowDatum.seller),
           "Only seller can issue refund"
         )
 
         require(
-          EscrowUtils.getAdaFromOutputs(buyerOutputs) === escrowDatum.escrowAmount,
+          getAdaFromOutputs(buyerOutputs) === escrowDatum.escrowAmount,
           "Buyer must receive exactly the escrow amount back"
         )
     }
 
-object EscrowScript {
-    inline def compiled(using scalus.Compiler.Options) =
-        scalus.Compiler.compileWithOptions(summon[scalus.Compiler.Options], Escrow.validate)
-    inline def doubleCborHex(using scalus.Compiler.Options) =
-        compiled.toUplc(true).plutusV3.doubleCborHex
+    // Helper functions
+
+    private def getOutputsByVkh(outputs: List[TxOut], vkh: PubKeyHash): List[TxOut] = {
+        outputs.filter(output =>
+            output.address.credential match {
+                case Credential.PubKeyCredential(pkh) => pkh === vkh
+                case _                                => false
+            }
+        )
+    }
+
+    private def getOutputsByAddress(outputs: List[TxOut], addr: Address): List[TxOut] = {
+        outputs.filter(_.address === addr)
+    }
+
+    private def getInputsByAddress(inputs: List[TxInInfo], addr: Address): List[TxInInfo] = {
+        inputs.filter(_.resolved.address === addr)
+    }
+
+    private def getAdaFromOutputs(outputs: List[TxOut]): Lovelace = {
+        outputs.map(_.value.getLovelace).foldLeft(BigInt(0))(_ + _)
+    }
+
+    private def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace = {
+        inputs.map(_.resolved.value.getLovelace).foldLeft(BigInt(0))(_ + _)
+    }
+
+    private def mustBeSignedBy(signatories: List[PubKeyHash], vkh: PubKeyHash): Boolean = {
+        signatories.contains(vkh)
+    }
 }

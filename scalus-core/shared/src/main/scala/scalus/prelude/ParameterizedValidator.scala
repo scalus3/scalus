@@ -89,7 +89,7 @@ trait ParameterizedValidator[A] {
 
 /** Validator, parametrized by Data. Keep
   *
-  * Needed for compability with solutions which use existing uplc scripts and apply Data as
+  * Needed for compatibility with solutions which use existing uplc scripts and apply Data as
   * parameter on UPLC level.
   */
 @scalus.Compile

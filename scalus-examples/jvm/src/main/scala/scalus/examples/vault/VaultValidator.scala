@@ -22,6 +22,9 @@ case class State(
 ) derives FromData,
       ToData
 
+@Compile
+object State
+
 // Redeemer
 enum Action derives FromData, ToData:
     case Deposit
@@ -29,9 +32,27 @@ enum Action derives FromData, ToData:
     case FinalizeWithdrawal
     case Cancel
 
+@Compile
+object Action
+
 enum Status derives FromData, ToData:
     case Idle
     case Pending
+
+@Compile
+object Status {
+    extension (s: Status) {
+        def isPending: Boolean = s match {
+            case Status.Idle    => false
+            case Status.Pending => true
+        }
+
+        def isIdle: Boolean = s match {
+            case Status.Idle    => true
+            case Status.Pending => false
+        }
+    }
+}
 
 /** A contract for keeping funds.
   *
@@ -64,7 +85,7 @@ object VaultValidator extends Validator {
         }
     }
 
-    def deposit(tx: TxInfo, ownRef: TxOutRef, datum: State) = {
+    def deposit(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         val ownInput = tx.findOwnInput(ownRef).getOrFail(OwnInputNotFound)
 
         val out = getVaultOutput(tx, ownRef)
@@ -85,7 +106,7 @@ object VaultValidator extends Validator {
         )
     }
 
-    def initiateWithdrawal(tx: TxInfo, ownRef: TxOutRef, datum: State) = {
+    def initiateWithdrawal(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         require(
           datum.status.isIdle,
           WithdrawalAlreadyPending
@@ -112,7 +133,7 @@ object VaultValidator extends Validator {
         )
     }
 
-    def finalize(tx: TxInfo, ownRef: TxOutRef, datum: State) = {
+    def finalize(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         require(datum.status.isPending, ContractMustBePending)
         require(tx.validRange.isEntirelyAfter(datum.finalizationDeadline), DeadlineNotPassed)
         val ownInput = tx.findOwnInput(ownRef).getOrFail(OwnInputNotFound)
@@ -130,7 +151,7 @@ object VaultValidator extends Validator {
         require(totalToOwner >= datum.amount, VaultAmountChanged)
     }
 
-    def cancel(tx: TxInfo, ownRef: TxOutRef, datum: State) = {
+    def cancel(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         val out = getVaultOutput(tx, ownRef)
         requireSameOwner(out, datum)
         val vaultDatum = getVaultDatum(out)
@@ -143,16 +164,18 @@ object VaultValidator extends Validator {
         require(vaultDatum.waitTime == datum.waitTime, WaitTimeChanged)
     }
 
-    def requireEntireVaultIsSpent(datum: State, output: TxOut) = {
+    // Helpers
+
+    private def requireEntireVaultIsSpent(datum: State, output: TxOut): Unit = {
         val amountToSpend = datum.amount
         val adaSpent = output.value.getLovelace
         require(amountToSpend == adaSpent, AdaLeftover)
     }
 
-    def requireOutputToOwnAddress(ownInput: TxInInfo, out: TxOut, message: String) =
+    private def requireOutputToOwnAddress(ownInput: TxInInfo, out: TxOut, message: String): Unit =
         require(out.address.credential === ownInput.resolved.address.credential, message)
 
-    def getVaultOutput(tx: TxInfo, ownRef: TxOutRef): TxOut = {
+    private def getVaultOutput(tx: TxInfo, ownRef: TxOutRef): TxOut = {
         val ownInput = tx.findOwnInput(ownRef).getOrFail("Cannot find own input")
         val scriptOutputs = tx.outputs.filter(out =>
             out.address.credential === ownInput.resolved.address.credential
@@ -161,12 +184,12 @@ object VaultValidator extends Validator {
         scriptOutputs.head
     }
 
-    def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
+    private def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
         case ledger.api.v2.OutputDatum.OutputDatum(d) => d.to[State]
         case _                                        => fail(NoDatumProvided)
     }
 
-    def requireSameOwner(out: TxOut, datum: State) =
+    private def requireSameOwner(out: TxOut, datum: State): Unit =
         out.datum match {
             case scalus.ledger.api.v2.OutputDatum.OutputDatum(newDatum) =>
                 require(
@@ -175,6 +198,13 @@ object VaultValidator extends Validator {
                 )
             case _ => fail(NoInlineDatum)
         }
+
+    private def addressEquals(left: Credential, right: ByteString) = {
+        left match {
+            case v1.Credential.PubKeyCredential(hash) => hash.hash === right
+            case v1.Credential.ScriptCredential(hash) => hash === right
+        }
+    }
 
     // Errors
     inline val NoDatumExists = "Contract has no datum"
@@ -207,23 +237,4 @@ object VaultValidator extends Validator {
     inline val NoInlineDatum = "Vault transactions must have an inline datum"
     inline val VaultOwnerChanged = "Vault transactions cannot change the vault owner"
     inline val AdaLeftover = "Must spend entire vault"
-
-    def addressEquals(left: Credential, right: ByteString) = {
-        left match {
-            case v1.Credential.PubKeyCredential(hash) => hash.hash === right
-            case v1.Credential.ScriptCredential(hash) => hash === right
-        }
-    }
-
-    extension (s: Status) {
-        def isPending: Boolean = s match {
-            case Status.Idle    => false
-            case Status.Pending => true
-        }
-
-        def isIdle: Boolean = s match {
-            case Status.Idle    => true
-            case Status.Pending => false
-        }
-    }
 }

@@ -1,24 +1,24 @@
-package scalus.examples
+package scalus.examples.vesting
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data.toData
 import scalus.builtin.Data
-import scalus.ledger.api.v1.PubKeyHash
-import scalus.ledger.api.v1.Value.getLovelace
-import scalus.ledger.api.v1.Address
+import scalus.builtin.Data.toData
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.IntervalBoundType.*
+import scalus.ledger.api.v1.{Address, PubKeyHash}
+import scalus.ledger.api.v1.Value.getLovelace
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.uplc.eval.*
 import scalus.prelude.Option.*
+import scalus.testing.kit.{Mock, ScalusTest}
+import scalus.uplc.eval.*
+import scalus.Compiler.compileWithOptions
 
 import scala.language.implicitConversions
-import org.scalatest.funsuite.AnyFunSuite
-import scalus.testing.kit.{Mock, ScalusTest}
 
-class VestingTest extends AnyFunSuite, ScalusTest {
+class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     private val ownerPKH: PubKeyHash = Mock.mockPubKeyHash(0)
     private val beneficiaryPKH: PubKeyHash = Mock.mockPubKeyHash(1)
     private val contractHash: ValidatorHash = Mock.mockScriptHash(0)
@@ -34,6 +34,10 @@ class VestingTest extends AnyFunSuite, ScalusTest {
       optimizeUplc = false,
       debug = false
     )
+
+    private inline def compiled(using options: scalus.Compiler.Options) = {
+        compileWithOptions(options, VestingValidator.validate)
+    }
 
     case class TestCase(
         signatories: List[PubKeyHash],
@@ -95,7 +99,7 @@ class VestingTest extends AnyFunSuite, ScalusTest {
         )
 
         // debugPrint(txInfo, vestingDatum, redeemer)
-        VestingContract.compiled.runScript(scriptContext)
+        compiled.runScript(scriptContext)
     }
 
     // Success cases
@@ -308,7 +312,7 @@ class VestingTest extends AnyFunSuite, ScalusTest {
           )
         )
 
-        val result = VestingContract.compiled.runScript(scriptContext)
+        val result = compiled.runScript(scriptContext)
         assert(
           result.isSuccess,
           "Second partial withdrawal should succeed at 75% of vesting period"
@@ -514,10 +518,10 @@ class VestingTest extends AnyFunSuite, ScalusTest {
         )
         // debugPrint(txInfo, vestingDatum, redeemer)
 
-        val firstResult = VestingContract.compiled.runScript(scriptContext)
+        val firstResult = compiled.runScript(scriptContext)
         assert(firstResult.isFailure, "First withdrawal should succeed")
 
-        val secondResult = VestingContract.compiled.runScript(scriptContext2)
+        val secondResult = compiled.runScript(scriptContext2)
         assert(secondResult.isFailure, "Second withdrawal should fail")
     }
 
@@ -564,7 +568,8 @@ class VestingTest extends AnyFunSuite, ScalusTest {
     }
 
     def printContractOutput(txInfo: TxInfo): Unit = {
-        val ownInput = VestingUtils.getOwnInput(txInfo.inputs, txInfo.inputs.head.outRef).resolved
+        val ownInput =
+            VestingValidator.getOwnInput(txInfo.inputs, txInfo.inputs.head.outRef).resolved
         println("Own Input: " + ownInput)
         val contractAddress = ownInput.address
         println("Contract Address: " + contractAddress)
@@ -597,7 +602,8 @@ class VestingTest extends AnyFunSuite, ScalusTest {
             case _         => BigInt(0)
         val linearVestingTime = linearVesting(txEarliestTime)
         println("Linear Vesting Time: " + linearVestingTime)
-        val ownInput = VestingUtils.getOwnInput(txInfo.inputs, txInfo.inputs.head.outRef).resolved
+        val ownInput =
+            VestingValidator.getOwnInput(txInfo.inputs, txInfo.inputs.head.outRef).resolved
         val contractAmount = ownInput.value.getLovelace
         println("Contract Amount: " + contractAmount)
         val released = vestingDatum.initialAmount - contractAmount

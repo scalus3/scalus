@@ -1,17 +1,15 @@
-package scalus.examples
+package scalus.examples.paymentsplitter
 
 import scalus.*
 import scalus.builtin.{ByteString, Data}
-import scalus.cardano.blueprint.{Application, Blueprint}
 import scalus.ledger.api.v1
 import scalus.ledger.api.v1.Value.*
 import scalus.ledger.api.v1.{Credential, PubKeyHash}
 import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.{TxInfo, TxOutRef}
+import scalus.prelude.{AssocMap, *}
 import scalus.prelude.List.*
 import scalus.prelude.Option.*
-import scalus.prelude.*
-import scalus.prelude.AssocMap
 
 /** Split payouts equally among a list of specified payees
   *
@@ -27,7 +25,7 @@ import scalus.prelude.AssocMap
   *   [[https://meshjs.dev/smart-contracts/payment-splitter]]
   */
 @Compile
-object PaymentSplitter extends DataParameterizedValidator {
+object PaymentSplitterValidator extends DataParameterizedValidator {
 
     inline override def spend(
         payeesData: Data,
@@ -111,17 +109,4 @@ object PaymentSplitter extends DataParameterizedValidator {
                 // thus, up to 250 lovelace of reminder is possible, so we can ignore it
 
     }
-}
-object PaymentSplitterContract {
-
-    def application: Application = {
-        Application.ofSingleValidator[List[ByteString], Unit](
-          "Payment splitter",
-          "Allows to split payouts equally among a list of specified payees",
-          "1.0.0",
-          PaymentSplitter.validate
-        )
-    }
-
-    def blueprint: Blueprint = application.blueprint
 }

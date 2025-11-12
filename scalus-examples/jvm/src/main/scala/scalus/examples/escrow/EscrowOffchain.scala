@@ -1,28 +1,27 @@
-package scalus.examples
+package scalus.examples.escrow
 
 import com.bloxbean.cardano.client.account.Account
+import com.bloxbean.cardano.client.address.{AddressProvider, Credential}
 import com.bloxbean.cardano.client.api.model.{Amount, Result, Utxo}
-import com.bloxbean.cardano.client.backend.api.DefaultProtocolParamsSupplier
-import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
+import com.bloxbean.cardano.client.backend.api.{DefaultProtocolParamsSupplier, DefaultUtxoSupplier}
 import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
 import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService
-import com.bloxbean.cardano.client.function.helper.*
-import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
-import com.bloxbean.cardano.client.address.{AddressProvider, Credential}
-import com.bloxbean.cardano.client.common.model.Networks
 import com.bloxbean.cardano.client.common.CardanoConstants.LOVELACE
+import com.bloxbean.cardano.client.common.model.Networks
+import com.bloxbean.cardano.client.function.helper.*
+import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
+import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
 import scalus.*
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
-import scalus.builtin.{ByteString, Data}
-import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 import scalus.builtin.Data.*
+import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.SlotConfig
 import scalus.ledger.api.v1.PubKeyHash
 
+import java.math.BigInteger
 import java.util.Optional
 import scala.util.control.Breaks.*
-import java.math.BigInteger
 
 object EscrowOffChain:
     private val blockfrostApiKey = sys.env("BLOCKFROST_API_KEY")
@@ -42,9 +41,17 @@ object EscrowOffChain:
       backendService.getEpochService
     )
 
+    private inline def compiled(using scalus.Compiler.Options) =
+        scalus.Compiler.compileWithOptions(
+          summon[scalus.Compiler.Options],
+          EscrowValidator.validate
+        )
+    private inline def doubleCborHex(using scalus.Compiler.Options) =
+        compiled.toUplc(true).plutusV3.doubleCborHex
+
     private val script = PlutusV3Script
         .builder()
-        .cborHex(EscrowScript.doubleCborHex)
+        .cborHex(doubleCborHex)
         .build()
 
     private val scriptAddress = AddressProvider.getEntAddress(script, network)
@@ -198,10 +205,10 @@ object EscrowOffChain:
 
         val totalRequiredAmount =
             escrowDatum.escrowAmount.bigInteger.add(escrowDatum.initializationAmount.bigInteger)
-        val redeemer = EscrowRedeemer(EscrowAction.Deposit)
+        val action = EscrowAction.Deposit
 
         val scriptTx = ScriptTx()
-            .collectFrom(scriptUtxo, toPlutusData(redeemer.toData))
+            .collectFrom(scriptUtxo, toPlutusData(action.toData))
             .payToContract(
               scriptAddressBech32,
               Amount.lovelace(totalRequiredAmount),
@@ -252,10 +259,10 @@ object EscrowOffChain:
             .findFirst()
             .orElseThrow()
 
-        val redeemer = EscrowRedeemer(EscrowAction.Pay)
+        val action = EscrowAction.Pay
 
         val scriptTx = ScriptTx()
-            .collectFrom(scriptUtxo, toPlutusData(redeemer.toData))
+            .collectFrom(scriptUtxo, toPlutusData(action.toData))
             .payToAddress(
               seller.baseAddress(),
               Amount.lovelace(
@@ -312,10 +319,10 @@ object EscrowOffChain:
             .findFirst()
             .orElseThrow()
 
-        val redeemer = EscrowRedeemer(EscrowAction.Refund)
+        val action = EscrowAction.Refund
 
         val scriptTx = ScriptTx()
-            .collectFrom(scriptUtxo, toPlutusData(redeemer.toData))
+            .collectFrom(scriptUtxo, toPlutusData(action.toData))
             .payToAddress(
               buyerAddress,
               Amount.lovelace(escrowDatum.escrowAmount.bigInteger)

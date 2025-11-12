@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.simpletransfer
 
 import scalus.Compile
 import scalus.builtin.{Data, FromData, ToData}
@@ -6,6 +6,24 @@ import scalus.ledger.api.v1.{Credential, PubKeyHash}
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
+
+// Datum
+case class Parties(
+    owner: PubKeyHash,
+    recipient: PubKeyHash
+) derives ToData,
+      FromData
+
+@Compile
+object Parties
+
+// Redeemer
+enum Action derives ToData, FromData:
+    case Deposit(amount: Value)
+    case Withdraw(amount: Value)
+
+@Compile
+object Action
 
 /** https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/simple_transfer
   *
@@ -24,24 +42,7 @@ import scalus.prelude.*
   *     contract.
   */
 @Compile
-object SimpleTransfer extends Validator {
-
-    case class Parties(
-        owner: PubKeyHash,
-        recipient: PubKeyHash
-    ) derives ToData,
-          FromData
-
-    enum Action derives ToData, FromData {
-        case Deposit(amount: Value)
-        case Withdraw(amount: Value)
-    }
-
-    private inline def getInputs(tx: TxInfo, cred: Credential): List[TxInInfo] =
-        tx.inputs.filter(_.resolved.address.credential === cred)
-
-    private inline def getOutputs(tx: TxInfo, cred: Credential): List[TxOut] =
-        tx.outputs.filter(_.address.credential === cred)
+object SimpleTransferValidator extends Validator {
 
     inline override def spend(
         datum: Option[Data],
@@ -100,4 +101,12 @@ object SimpleTransfer extends Validator {
                     require(contractOutput.datum === expectedDatum, "Output datum changed")
                 else fail("Withdraw exceeds balance")
     }
+
+    // Helper functions
+
+    private inline def getInputs(tx: TxInfo, cred: Credential): List[TxInInfo] =
+        tx.inputs.filter(_.resolved.address.credential === cred)
+
+    private inline def getOutputs(tx: TxInfo, cred: Credential): List[TxOut] =
+        tx.outputs.filter(_.address.credential === cred)
 }

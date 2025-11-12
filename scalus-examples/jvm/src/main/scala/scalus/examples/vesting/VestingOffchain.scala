@@ -1,24 +1,24 @@
-package scalus.examples
+package scalus.examples.vesting
 
 import com.bloxbean.cardano.client.account.Account
+import com.bloxbean.cardano.client.address.AddressProvider
 import com.bloxbean.cardano.client.api.model.{Amount, Result, Utxo}
-import com.bloxbean.cardano.client.backend.api.DefaultProtocolParamsSupplier
-import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
+import com.bloxbean.cardano.client.backend.api.{DefaultProtocolParamsSupplier, DefaultUtxoSupplier}
 import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
 import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService
-import com.bloxbean.cardano.client.function.helper.*
-import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
-import com.bloxbean.cardano.client.address.AddressProvider
-import com.bloxbean.cardano.client.common.model.Networks
 import com.bloxbean.cardano.client.common.CardanoConstants.LOVELACE
+import com.bloxbean.cardano.client.common.model.Networks
+import com.bloxbean.cardano.client.function.helper.*
+import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
+import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
 import scalus.*
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
-import scalus.builtin.{ByteString, Data}
-import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 import scalus.builtin.Data.*
+import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.SlotConfig
 import scalus.ledger.api.v1.PubKeyHash
+import scalus.Compiler.compileWithOptions
 
 import java.util.Optional
 import scala.util.control.Breaks.*
@@ -38,11 +38,13 @@ object VestingOffChain:
       backendService.getEpochService
     )
 
+    private inline def compiled(using options: scalus.Compiler.Options) = {
+        compileWithOptions(options, VestingValidator.validate)
+    }
+
     private val script = PlutusV3Script
         .builder()
-        .cborHex(
-          VestingContract.compiled.toUplc(true).plutusV3.doubleCborHex
-        )
+        .cborHex(compiled.toUplc(true).plutusV3.doubleCborHex)
         .build()
 
     private val scriptAddress = AddressProvider.getEntAddress(script, network)

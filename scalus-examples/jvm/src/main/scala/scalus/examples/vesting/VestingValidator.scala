@@ -1,17 +1,16 @@
-package scalus.examples
+package scalus.examples.vesting
 
 import scalus.*
+import scalus.builtin.Data
+import scalus.builtin.Data.{FromData, ToData}
+import scalus.ledger.api.v1.IntervalBoundType.*
+import scalus.ledger.api.v1.Value.getLovelace
+import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.ledger.api.v1.IntervalBoundType.*
-import scalus.ledger.api.v2.OutputDatum
-import scalus.builtin.Data
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.ledger.api.v1.Value.getLovelace
-import scalus.Compiler.compileWithOptions
-import scalus.cardano.blueprint.{Application, Blueprint}
 
+// Datum
 case class VestingDatum(
     beneficiary: PubKeyHash,
     startTimestamp: PosixTime,
@@ -26,29 +25,14 @@ object VestingDatum {
         x.beneficiary === y.beneficiary && x.startTimestamp === y.startTimestamp && x.duration === y.duration && x.initialAmount === y.initialAmount
 }
 
+// Redeemer
 case class VestingRedeemer(amount: Lovelace) derives FromData, ToData
 
 @Compile
 object VestingRedeemer
 
 @Compile
-object VestingUtils {
-    def getOwnInput(inputs: List[TxInInfo], ownRef: TxOutRef): TxInInfo = {
-        inputs.find(input => input.outRef === ownRef).get
-    }
-
-    def linearVesting(vestingDatum: VestingDatum, timestamp: BigInt): BigInt = {
-        val min = vestingDatum.startTimestamp
-        val max = vestingDatum.startTimestamp + vestingDatum.duration
-        if timestamp < min then 0
-        else if timestamp >= max then vestingDatum.initialAmount
-        else
-            vestingDatum.initialAmount * (timestamp - vestingDatum.startTimestamp) / vestingDatum.duration
-    }
-}
-
-@Compile
-object Vesting extends Validator:
+object VestingValidator extends Validator {
     inline override def spend(
         datum: Option[Data],
         redeemer: Data,
@@ -60,7 +44,7 @@ object Vesting extends Validator:
 
         require(requestedAmount > 0, "Withdrawal amount must be greater than 0")
 
-        val ownInput = VestingUtils.getOwnInput(txInfo.inputs, txOutRef).resolved
+        val ownInput = getOwnInput(txInfo.inputs, txOutRef).resolved
         val contractAddress = ownInput.address
         val contractAmount = ownInput.value.getLovelace
 
@@ -72,7 +56,7 @@ object Vesting extends Validator:
 
         val released = vestingDatum.initialAmount - contractAmount
 
-        val availableAmount = VestingUtils.linearVesting(vestingDatum, txEarliestTime) - released
+        val availableAmount = linearVesting(vestingDatum, txEarliestTime) - released
 
         require(
           txInfo.signatories.contains(vestingDatum.beneficiary),
@@ -122,20 +106,18 @@ object Vesting extends Validator:
             case _ => fail("Expected inline datum")
     }
 
-object VestingContract:
+    // Helper methods
 
-    inline def compiled(using options: scalus.Compiler.Options) = {
-        compileWithOptions(options, Vesting.validate)
+    def getOwnInput(inputs: List[TxInInfo], ownRef: TxOutRef): TxInInfo = {
+        inputs.find(input => input.outRef === ownRef).get
     }
 
-    def application: Application = Application
-        .ofSingleValidator[VestingDatum, VestingRedeemer](
-          "Vesting validator",
-          "Time-locked token distribution with linear vesting schedule",
-          "1.0.0",
-          Vesting.validate
-        )
-
-    def blueprint: Blueprint = application.blueprint
-
-end VestingContract
+    def linearVesting(vestingDatum: VestingDatum, timestamp: BigInt): BigInt = {
+        val min = vestingDatum.startTimestamp
+        val max = vestingDatum.startTimestamp + vestingDatum.duration
+        if timestamp < min then 0
+        else if timestamp >= max then vestingDatum.initialAmount
+        else
+            vestingDatum.initialAmount * (timestamp - vestingDatum.startTimestamp) / vestingDatum.duration
+    }
+}

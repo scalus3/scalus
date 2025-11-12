@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.simpletransfer
 
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
@@ -11,7 +11,7 @@ import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
 
-class SimpleTransferTest extends AnyFunSuite with ScalusTest {
+class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
     val fee = 10
     given Compiler.Options = Compiler.Options(
       targetLoweringBackend = Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
@@ -20,17 +20,17 @@ class SimpleTransferTest extends AnyFunSuite with ScalusTest {
       // debug = false
     )
 
-    private val sir = compile(SimpleTransfer.validate)
+    private val sir = compile(SimpleTransferValidator.validate)
 
     private val hash: Gen[Hash] = genByteStringOfN(28)
     private val contract = hash.sample.get
     private val owner = hash.sample.get
     private val receiver = hash.sample.get
 
-    private val datum = SimpleTransfer.Parties(PubKeyHash(owner), PubKeyHash(receiver)).toData
+    private val datum = Parties(PubKeyHash(owner), PubKeyHash(receiver)).toData
     private val outputDatum = OutputDatum.OutputDatum(datum)
-    private def deposit(amount: Value) = SimpleTransfer.Action.Deposit(amount).toData
-    private def withdraw(amount: Value) = SimpleTransfer.Action.Withdraw(amount).toData
+    private def deposit(amount: Value) = Action.Deposit(amount).toData
+    private def withdraw(amount: Value) = Action.Withdraw(amount).toData
 
     test("deposit") {
         val ctx =

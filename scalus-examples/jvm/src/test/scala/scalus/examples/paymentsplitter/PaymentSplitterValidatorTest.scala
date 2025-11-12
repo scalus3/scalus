@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
@@ -17,7 +17,7 @@ import scalus.uplc.Program
 
 import scala.util.control.NonFatal
 
-class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
+class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
     import Payee.*
 
     test("success when payments are correctly split for a single payee") {
@@ -243,7 +243,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
 
     private val script = {
         try {
-            val sir = compile(PaymentSplitter.validate)
+            val sir = compile(PaymentSplitterValidator.validate)
             // println(s"sir=${sir.pretty.render(100)}")
             val lw = sir.toLoweredValue(generateErrorTraces = true)
             // println(s"lw=${lw.pretty.render(100)}")
@@ -329,7 +329,7 @@ class PaymentSplitterTest extends AnyFunSuite, ScalusTest {
         val programWithContext = applied $ context.toData
 
         if runScalaVersion then
-            try PaymentSplitter.validate(payees.toData)(context.toData)
+            try PaymentSplitterValidator.validate(payees.toData)(context.toData)
             catch
                 case NonFatal(ex) =>
                     if expected._1.isInstanceOf[Unit] then throw ex
