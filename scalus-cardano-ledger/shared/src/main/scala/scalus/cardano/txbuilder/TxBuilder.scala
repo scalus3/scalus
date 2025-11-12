@@ -2,7 +2,7 @@ package scalus.cardano.txbuilder
 
 import scalus.builtin.Builtins.{blake2b_224, serialiseData}
 import scalus.builtin.Data
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Provider
@@ -31,12 +31,20 @@ case class TxBuilder(
 
     override def spend(
         utxo: Utxo,
-        redeemer: Data,
-        validator: PlutusScript
+        redeemer: Data
     ): Builder = {
+        val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
+
+        val scriptSource = attachedScripts
+            .collectFirst {
+                case ps: PlutusScript if ps.scriptHash == scriptHash =>
+                    ScriptSource.PlutusScriptValue(ps)
+            }
+            .getOrElse(ScriptSource.PlutusScriptAttached)
+
         val witness = ThreeArgumentPlutusScriptWitness(
-          scriptSource = ScriptSource.PlutusScriptValue(validator),
+          scriptSource = scriptSource,
           redeemer = redeemer,
           datum = datum,
           additionalSigners = Set.empty
@@ -182,6 +190,23 @@ case class TxBuilder(
           throw new IllegalStateException("Provider not set. Call provider() first.")
         )
 
+    private def extractScriptHash(utxo: Utxo): ScriptHash = {
+        utxo.output.address match {
+            case sa: ShelleyAddress =>
+                sa.payment match {
+                    case s: ShelleyPaymentPart.Script => s.hash
+                    case _ =>
+                        throw new IllegalArgumentException(
+                          s"Cannot spend from non-script address: ${utxo.output.address}"
+                        )
+                }
+            case _ =>
+                throw new IllegalArgumentException(
+                  s"Cannot spend from non-Shelley address: ${utxo.output.address}"
+                )
+        }
+    }
+
     private def buildDatumWitness(utxo: Utxo): Datum = {
         utxo.output.datumOption match {
             case None                        => Datum.DatumInlined
@@ -268,7 +293,7 @@ object TxBuilder {
 
 trait Builder {
     def spend(utxo: Utxo): Builder
-    def spend(utxo: Utxo, redeemer: Data, validator: PlutusScript): Builder
+    def spend(utxo: Utxo, redeemer: Data): Builder
     def references(utxos: Utxo*): Builder
     def collaterals(utxos: Utxo*): Builder
     def output(output: TransactionOutput): Builder
