@@ -68,7 +68,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val validImage: ByteString = sha3_256(validPreimage)
 
     private val scriptAddress = compiledContract.address(env.network)
-    private val datum = ContractDatum(
+    private val datum = Config(
       committerPkh,
       receiverPkh,
       validImage,
@@ -241,7 +241,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     }
 
     test("has smaller fees on v3 backend") {
-        val testDatum = ContractDatum(
+        val testDatum = Config(
           committer = committerPkh,
           receiver = receiverPkh,
           image = validImage,

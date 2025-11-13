@@ -5,7 +5,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
 import scalus.ledger.api
 import scalus.ledger.api.v1.Credential.ScriptCredential
-import scalus.ledger.api.v1.{Credential, Interval, IntervalBoundType, PosixTime, Value}
+import scalus.ledger.api.v1.{Credential, Interval, PosixTime, Value}
 import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.{TxInInfo, TxInfo, TxOutRef}
 import scalus.ledger.api.v1
@@ -86,7 +86,7 @@ object VaultValidator extends Validator {
     }
 
     def deposit(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
-        val ownInput = tx.findOwnInput(ownRef).getOrFail(OwnInputNotFound)
+        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
 
         val out = getVaultOutput(tx, ownRef)
         requireSameOwner(out, datum)
@@ -111,7 +111,7 @@ object VaultValidator extends Validator {
           datum.status.isIdle,
           WithdrawalAlreadyPending
         )
-        val ownInput = tx.findOwnInput(ownRef).getOrFail(OwnInputNotFound)
+        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
         val out = getVaultOutput(tx, ownRef)
         requireSameOwner(out, datum)
         requireOutputToOwnAddress(
@@ -120,10 +120,7 @@ object VaultValidator extends Validator {
           NotExactlyOneVaultOutput
         )
 
-        val requestTime = tx.validRange.from.boundType match {
-            case IntervalBoundType.Finite(time) => time
-            case _                              => BigInt(0)
-        }
+        val requestTime = tx.getValidityStartTime
         val finalizationDeadline = requestTime + datum.waitTime
         val newDatum = getVaultDatum(out)
         require(newDatum.status.isPending, MustBePending)
@@ -136,15 +133,13 @@ object VaultValidator extends Validator {
     def finalize(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         require(datum.status.isPending, ContractMustBePending)
         require(tx.validRange.isEntirelyAfter(datum.finalizationDeadline), DeadlineNotPassed)
-        val ownInput = tx.findOwnInput(ownRef).getOrFail(OwnInputNotFound)
+        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
         requireEntireVaultIsSpent(datum, ownInput.resolved)
 
-        val scriptOutputs = tx.outputs.filter(out =>
-            out.address.credential === ownInput.resolved.address.credential
-        )
+        val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
         require(scriptOutputs.size == BigInt(0), WithdrawalsMustNotSendBackToVault)
         val ownerOutputs =
-            tx.outputs.filter(out => addressEquals(out.address.credential, datum.owner))
+            tx.findOwnOutputs(out => addressEquals(out.address.credential, datum.owner))
         require(ownerOutputs.size > BigInt(0), WrongAddressWithdrawal)
         val totalToOwner =
             ownerOutputs.foldLeft(BigInt(0))((acc, out) => acc + out.value.getLovelace)
@@ -164,7 +159,7 @@ object VaultValidator extends Validator {
         require(vaultDatum.waitTime == datum.waitTime, WaitTimeChanged)
     }
 
-    // Helpers
+    // Helper functions
 
     private def requireEntireVaultIsSpent(datum: State, output: TxOut): Unit = {
         val amountToSpend = datum.amount
@@ -176,10 +171,8 @@ object VaultValidator extends Validator {
         require(out.address.credential === ownInput.resolved.address.credential, message)
 
     private def getVaultOutput(tx: TxInfo, ownRef: TxOutRef): TxOut = {
-        val ownInput = tx.findOwnInput(ownRef).getOrFail("Cannot find own input")
-        val scriptOutputs = tx.outputs.filter(out =>
-            out.address.credential === ownInput.resolved.address.credential
-        )
+        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
+        val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
         require(scriptOutputs.size == BigInt(1), NotExactlyOneVaultOutput)
         scriptOutputs.head
     }

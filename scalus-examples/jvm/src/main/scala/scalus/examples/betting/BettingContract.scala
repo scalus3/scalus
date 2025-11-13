@@ -3,7 +3,7 @@ package scalus.examples.betting
 import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
 import scalus.cardano.ledger.Language
 
-lazy val BettingContract = Contract.PlutusV3Contract[BetDatum, Action](
+lazy val BettingContract = Contract.PlutusV3Contract[Config, Action](
   Preamble(
     title = "Betting validator",
     description = Some(
@@ -14,5 +14,5 @@ lazy val BettingContract = Contract.PlutusV3Contract[BetDatum, Action](
     plutusVersion = Some(Language.PlutusV3),
     license = None
   ),
-  Betting.validate
+  BettingValidator.validate
 )

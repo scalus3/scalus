@@ -51,10 +51,10 @@ object SimpleTransferValidator extends Validator {
         ownRef: TxOutRef
     ): Unit = {
         val Parties(owner, recipient) = datum.get.to[Parties]
-        val contract = tx.findOwnInput(ownRef).get.resolved
+        val contract = tx.findOwnInputOrFail(ownRef).resolved
         val contractAddress = contract.address.credential
-        val contractInputs = getInputs(tx, contractAddress)
-        val contractOutputs = getOutputs(tx, contractAddress)
+        val contractInputs = tx.findOwnInputsByCredential(contractAddress)
+        val contractOutputs = tx.findOwnOutputsByCredential(contractAddress)
         val balance = contract.value
 
         // eliminate double satisfaction by ensuring exactly one contract own input and at most one own output
@@ -66,7 +66,7 @@ object SimpleTransferValidator extends Validator {
 
         redeemer.to[Action] match
             case Action.Deposit(amount) =>
-                require(tx.signatories.contains(owner), "Deposit must be signed by owner")
+                require(tx.isSignedBy(owner), "Deposit must be signed by owner")
                 require(amount.isPositive, "Negative amount")
                 // eliminate double satisfaction by ensuring exactly one contract own input and one own output
                 require(
@@ -81,7 +81,7 @@ object SimpleTransferValidator extends Validator {
                 val expectedDatum = OutputDatum.OutputDatum(datum.get)
                 require(contractOutput.datum === expectedDatum, "Output datum changed")
             case Action.Withdraw(withdraw) =>
-                require(tx.signatories.contains(recipient), "Withdraw must be signed by recipient")
+                require(tx.isSignedBy(recipient), "Withdraw must be signed by recipient")
                 require(withdraw.isPositive, "Negative amount")
                 if withdraw === balance then
                     // if withdrawing all, there should be no contract output
@@ -101,12 +101,4 @@ object SimpleTransferValidator extends Validator {
                     require(contractOutput.datum === expectedDatum, "Output datum changed")
                 else fail("Withdraw exceeds balance")
     }
-
-    // Helper functions
-
-    private inline def getInputs(tx: TxInfo, cred: Credential): List[TxInInfo] =
-        tx.inputs.filter(_.resolved.address.credential === cred)
-
-    private inline def getOutputs(tx: TxInfo, cred: Credential): List[TxOut] =
-        tx.outputs.filter(_.address.credential === cred)
 }

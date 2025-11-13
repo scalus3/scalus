@@ -42,8 +42,8 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     case class TestCase(
         signatories: List[PubKeyHash],
         interval: Interval,
-        vestingDatum: VestingDatum,
-        redeemer: VestingRedeemer,
+        vestingDatum: Config,
+        redeemer: Action,
         beneficiaryInputAmount: Lovelace = BigInt(0),
         fee: Lovelace = defaultFee
     )
@@ -105,7 +105,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     // Success cases
 
     test("Successful full withdrawal at/after vesting period ends") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -113,7 +113,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(beneficiaryPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration)
-        val redeemer = VestingRedeemer(vestingDatum.initialAmount)
+        val redeemer = Action(vestingDatum.initialAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -130,7 +130,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Successful partial 50% withdrawal") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -138,7 +138,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(beneficiaryPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 2)
-        val redeemer = VestingRedeemer(vestingDatum.initialAmount / 2)
+        val redeemer = Action(vestingDatum.initialAmount / 2)
 
         val result = checkTestCase(
           TestCase(
@@ -155,7 +155,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Successful Partial withdrawal at 25% of vesting period") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -165,7 +165,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         // 25% of vesting period
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 4)
         val withdrawalAmount = vestingDatum.initialAmount / 4
-        val redeemer = VestingRedeemer(withdrawalAmount)
+        val redeemer = Action(withdrawalAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -181,7 +181,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Successful Withdrawal right after vesting starts (should get minimal amount)") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -191,7 +191,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         // 1 second after
         val interval = Interval.after(vestingDatum.startTimestamp + 1000)
         val withdrawalAmount = vestingDatum.initialAmount * 1000 / vestingDatum.duration
-        val redeemer = VestingRedeemer(withdrawalAmount)
+        val redeemer = Action(withdrawalAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -208,7 +208,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Successful Withdrawal with very large vesting duration") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = BigInt(315360000000000L), // 10 000 years
@@ -219,7 +219,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         val interval = Interval.after(vestingDatum.startTimestamp + BigInt(31536000000L))
         val expectedAmount =
             (vestingDatum.initialAmount * BigInt(31536000000L)) / vestingDatum.duration
-        val redeemer = VestingRedeemer(expectedAmount)
+        val redeemer = Action(expectedAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -238,7 +238,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Successful Withdrawal with very small vesting amount") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -246,7 +246,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(beneficiaryPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration)
-        val redeemer = VestingRedeemer(BigInt(1000))
+        val redeemer = Action(BigInt(1000))
 
         val result = checkTestCase(
           TestCase(
@@ -262,7 +262,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Successful Multiple partial withdrawals.") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -278,7 +278,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         val alreadyWithdrawn = vestingDatum.initialAmount / 4
         val availableForWithdrawal = alreadyVested - alreadyWithdrawn
 
-        val redeemer = VestingRedeemer(availableForWithdrawal)
+        val redeemer = Action(availableForWithdrawal)
 
         val contractInput = makeScriptHashInput(contractHash, remainingInContract)
         val beneficiaryInput = makePubKeyHashInput(beneficiaryPKH.hash, defaultFee)
@@ -322,7 +322,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     // Fail cases
 
     test("Fail Full withdrawal before vesting period ends") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -330,7 +330,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(beneficiaryPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 2)
-        val redeemer = VestingRedeemer(vestingDatum.initialAmount)
+        val redeemer = Action(vestingDatum.initialAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -347,7 +347,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Fail 50% Withdrawal which exceeds available 25%") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -357,7 +357,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         // 25% of vesting period
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 4)
         val excessiveAmount = vestingDatum.initialAmount / 2
-        val redeemer = VestingRedeemer(excessiveAmount)
+        val redeemer = Action(excessiveAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -376,7 +376,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Fail Withdrawal with no beneficiary signature") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -384,7 +384,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(ownerPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration)
-        val redeemer = VestingRedeemer(vestingDatum.initialAmount)
+        val redeemer = Action(vestingDatum.initialAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -401,7 +401,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Fail Withdrawal because no fee is paid") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -409,7 +409,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(beneficiaryPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration)
-        val redeemer = VestingRedeemer(vestingDatum.initialAmount)
+        val redeemer = Action(vestingDatum.initialAmount)
 
         val result = checkTestCase(
           TestCase(
@@ -426,7 +426,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("Fail: Withdrawal amount is zero") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -434,7 +434,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         )
         val signatories = List(beneficiaryPKH)
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration)
-        val redeemer = VestingRedeemer(BigInt(0))
+        val redeemer = Action(BigInt(0))
 
         val result = checkTestCase(
           TestCase(
@@ -450,7 +450,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("2 ScriptContexts") {
-        val vestingDatum = VestingDatum(
+        val vestingDatum = Config(
           beneficiary = beneficiaryPKH,
           startTimestamp = defaultStartTime,
           duration = defaultDuration,
@@ -461,7 +461,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         // 25% of vesting period
         val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 4)
         val withdrawalAmount = vestingDatum.initialAmount / 4
-        val redeemer = VestingRedeemer(withdrawalAmount)
+        val redeemer = Action(withdrawalAmount)
 
         val inputs = List(
           makeScriptHashInput(
@@ -527,8 +527,8 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
 
     private def debugPrint(
         txInfo: TxInfo,
-        vestingDatum: VestingDatum,
-        redeemer: VestingRedeemer
+        vestingDatum: Config,
+        redeemer: Action
     ): Unit = {
         printAdaInInputs(txInfo, vestingDatum, redeemer)
         printContractOutput(txInfo)
@@ -537,8 +537,8 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
 
     private def printAdaInInputs(
         txInfo: TxInfo,
-        vestingDatum: VestingDatum,
-        redeemer: VestingRedeemer
+        vestingDatum: Config,
+        redeemer: Action
     ): Unit = {
         println("All outputs: " + txInfo.outputs)
         val beneficiaryOutputs = txInfo.outputs.filter(txOut =>
@@ -568,8 +568,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     def printContractOutput(txInfo: TxInfo): Unit = {
-        val ownInput =
-            VestingValidator.getOwnInput(txInfo.inputs, txInfo.inputs.head.outRef).resolved
+        val ownInput = txInfo.findOwnInputOrFail(txInfo.inputs.head.outRef).resolved
         println("Own Input: " + ownInput)
         val contractAddress = ownInput.address
         println("Contract Address: " + contractAddress)
@@ -583,7 +582,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
         println("Contract Output Datum: " + contractOutput.datum)
     }
 
-    def printAvailableAmout(txInfo: TxInfo, vestingDatum: VestingDatum): Unit = {
+    def printAvailableAmout(txInfo: TxInfo, vestingDatum: Config): Unit = {
         def linearVesting(timestamp: BigInt): BigInt = {
             val min = vestingDatum.startTimestamp
             val max = vestingDatum.startTimestamp + vestingDatum.duration
@@ -602,8 +601,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
             case _         => BigInt(0)
         val linearVestingTime = linearVesting(txEarliestTime)
         println("Linear Vesting Time: " + linearVestingTime)
-        val ownInput =
-            VestingValidator.getOwnInput(txInfo.inputs, txInfo.inputs.head.outRef).resolved
+        val ownInput = txInfo.findOwnInputOrFail(txInfo.inputs.head.outRef).resolved
         val contractAmount = ownInput.value.getLovelace
         println("Contract Amount: " + contractAmount)
         val released = vestingDatum.initialAmount - contractAmount

@@ -930,6 +930,31 @@ object TxInfo {
             Utils.findInput(self.inputs, outRef)
         }
 
+        /** Finds a transaction input in this transaction's inputs by its output reference. Fails
+          * with the provided message if the input is not found.
+          *
+          * @param outRef
+          *   the transaction output reference to search for
+          * @param message
+          *   the error message to use if the input is not found
+          * @return
+          *   TxInInfo if the input is found
+          * @example
+          *   {{{
+          * val txInfo = TxInfo(...)
+          * val outRef = TxOutRef(txId, 0)
+          * val input = txInfo.findOwnInputOrFail(outRef, "Input not found")
+          * // Returns TxInInfo if the outRef exists in txInfo.inputs
+          * // Fails with "Input not found" if the outRef is not found
+          *   }}}
+          */
+        inline def findOwnInputOrFail(
+            outRef: TxOutRef,
+            inline message: String = "Tx input not found"
+        ): TxInInfo = {
+            self.findOwnInput(outRef).getOrFail(message)
+        }
+
         /** Finds a datum in this transaction's outputs or datum lookup map by its hash.
           *
           * @param datumHash
@@ -969,12 +994,105 @@ object TxInfo {
             Utils.findScriptOutputs(self.outputs, scriptHash)
         }
 
+        /** Finds all transaction inputs in this transaction that are locked by a specific
+          * credential.
+          *
+          * @param cred
+          *   the credential to search for in input addresses
+          * @return
+          *   List of transaction inputs whose resolved addresses match the given credential
+          * @example
+          *   {{{
+          * val txInfo = TxInfo(...)
+          * val credential = Credential.PubKey(pubKeyHash)
+          * val inputs = txInfo.getOwnInputsByCredential(credential)
+          * // Returns List[TxInInfo] containing all inputs locked by the credential
+          * // Returns empty List if no matching inputs are found
+          *   }}}
+          */
+        def findOwnInputsByCredential(cred: Credential): List[TxInInfo] =
+            self.inputs.filter(_.resolved.address.credential === cred)
+
+        /** Finds all transaction outputs in this transaction that are locked by a specific
+          * credential.
+          *
+          * @param cred
+          *   the credential to search for in output addresses
+          * @return
+          *   List of transaction outputs whose addresses match the given credential
+          * @example
+          *   {{{
+          * val txInfo = TxInfo(...)
+          * val credential = Credential.PubKey(pubKeyHash)
+          * val outputs = txInfo.getOwnOutputsByCredential(credential)
+          * // Returns List[TxOut] containing all outputs locked by the credential
+          * // Returns empty List if no matching outputs are found
+          *   }}}
+          */
+        def findOwnOutputsByCredential(cred: Credential): List[v2.TxOut] =
+            self.outputs.filter(_.address.credential === cred)
+
+        /** Finds all transaction inputs in this transaction that match a given predicate.
+          *
+          * @param pred
+          *   the predicate function to test each input
+          * @return
+          *   List of transaction inputs that satisfy the predicate
+          * @example
+          *   {{{
+          * val txInfo = TxInfo(...)
+          * val inputs = txInfo.findOwnInputs(in => in.resolved.value.lovelace > 1000000)
+          * // Returns List[TxInInfo] containing all inputs with more than 1 ADA
+          * // Returns empty List if no inputs match the predicate
+          *   }}}
+          */
+        def findOwnInputs(pred: TxInInfo => Boolean): List[TxInInfo] =
+            self.inputs.filter(pred)
+
+        /** Finds all transaction outputs in this transaction that match a given predicate.
+          *
+          * @param pred
+          *   the predicate function to test each output
+          * @return
+          *   List of transaction outputs that satisfy the predicate
+          * @example
+          *   {{{
+          * val txInfo = TxInfo(...)
+          * val outputs = txInfo.findOwnOutputs(out => out.value.lovelace > 1000000)
+          * // Returns List[TxOut] containing all outputs with more than 1 ADA
+          * // Returns empty List if no outputs match the predicate
+          *   }}}
+          */
+        def findOwnOutputs(pred: v2.TxOut => Boolean): List[v2.TxOut] =
+            self.outputs.filter(pred)
+
         /** @return
           *   `true` if the transaction signatories list includes the given keyHash, `false`
           *   otherwise
           */
-        def isSignedBy(pubKeyHash: Hash): Boolean =
-            self.signatories.exists { _.hash === pubKeyHash }
+        def isSignedBy(pubKeyHash: PubKeyHash): Boolean =
+            self.signatories.contains(pubKeyHash)
+
+        /** Extracts the start time from the transaction's validity interval.
+          *
+          * Returns the earliest valid time (lower bound) of the transaction's validity range. If
+          * the validity range has no finite lower bound (e.g., unbounded or negative infinity),
+          * returns 0.
+          *
+          * @return
+          *   the start time as PosixTime if the validity range has a finite lower bound, otherwise
+          *   0
+          * @example
+          *   {{{
+          * val txInfo = TxInfo(...)
+          * val startTime = txInfo.getValidityStartTime
+          * // Returns the PosixTime of the validity range's lower bound
+          * // Returns BigInt(0) if the lower bound is infinite or unbounded
+          *   }}}
+          */
+        def getValidityStartTime: BigInt = self.validRange.from.boundType match
+            case IntervalBoundType.Finite(t) => t
+            case _                           => BigInt(0)
     }
 }
 
@@ -1016,4 +1134,40 @@ object Utils {
     }
 
     export scalus.ledger.api.v2.Utils.{findDatum, findScriptOutputs}
+
+    /** Calculates the total amount of ADA (Lovelace) from a list of transaction outputs.
+      *
+      * @param outputs
+      *   the list of transaction outputs to sum
+      * @return
+      *   the total Lovelace amount from all outputs
+      * @example
+      *   {{{
+      * val outputs = List(TxOut(...), TxOut(...))
+      * val totalAda = Utils.getAdaFromOutputs(outputs)
+      * // Returns the sum of Lovelace from all outputs
+      * // Returns BigInt(0) if the list is empty
+      *   }}}
+      */
+    def getAdaFromOutputs(outputs: List[v2.TxOut]): Lovelace = {
+        outputs.map(_.value.getLovelace).foldLeft(BigInt(0))(_ + _)
+    }
+
+    /** Calculates the total amount of ADA (Lovelace) from a list of transaction inputs.
+      *
+      * @param inputs
+      *   the list of transaction inputs to sum
+      * @return
+      *   the total Lovelace amount from all resolved inputs
+      * @example
+      *   {{{
+      * val inputs = List(TxInInfo(...), TxInInfo(...))
+      * val totalAda = Utils.getAdaFromInputs(inputs)
+      * // Returns the sum of Lovelace from all resolved input outputs
+      * // Returns BigInt(0) if the list is empty
+      *   }}}
+      */
+    def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace = {
+        inputs.map(_.resolved.value.getLovelace).foldLeft(BigInt(0))(_ + _)
+    }
 }

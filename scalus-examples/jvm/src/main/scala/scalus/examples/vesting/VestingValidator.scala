@@ -3,7 +3,6 @@ package scalus.examples.vesting
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
-import scalus.ledger.api.v1.IntervalBoundType.*
 import scalus.ledger.api.v1.Value.getLovelace
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
@@ -11,7 +10,7 @@ import scalus.prelude.*
 import scalus.prelude.Option.*
 
 // Datum
-case class VestingDatum(
+case class Config(
     beneficiary: PubKeyHash,
     startTimestamp: PosixTime,
     duration: PosixTime,
@@ -20,16 +19,16 @@ case class VestingDatum(
       ToData
 
 @Compile
-object VestingDatum {
-    given Eq[VestingDatum] = (x, y) =>
+object Config {
+    given Eq[Config] = (x, y) =>
         x.beneficiary === y.beneficiary && x.startTimestamp === y.startTimestamp && x.duration === y.duration && x.initialAmount === y.initialAmount
 }
 
 // Redeemer
-case class VestingRedeemer(amount: Lovelace) derives FromData, ToData
+case class Action(amount: Lovelace) derives FromData, ToData
 
 @Compile
-object VestingRedeemer
+object Action
 
 @Compile
 object VestingValidator extends Validator {
@@ -39,27 +38,25 @@ object VestingValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        val vestingDatum = datum.getOrFail("Datum not found").to[VestingDatum]
-        val VestingRedeemer(requestedAmount) = redeemer.to[VestingRedeemer]
+        val vestingDatum = datum.getOrFail("Datum not found").to[Config]
+        val Action(requestedAmount) = redeemer.to[Action]
 
         require(requestedAmount > 0, "Withdrawal amount must be greater than 0")
 
-        val ownInput = getOwnInput(txInfo.inputs, txOutRef).resolved
+        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
         val contractAddress = ownInput.address
         val contractAmount = ownInput.value.getLovelace
 
-        val contractOutputs = txInfo.outputs.filter(txOut => txOut.address === contractAddress)
+        val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
 
-        val txEarliestTime = txInfo.validRange.from.boundType match
-            case Finite(t) => t
-            case _         => BigInt(0)
+        val txEarliestTime = txInfo.getValidityStartTime
 
         val released = vestingDatum.initialAmount - contractAmount
 
         val availableAmount = linearVesting(vestingDatum, txEarliestTime) - released
 
         require(
-          txInfo.signatories.contains(vestingDatum.beneficiary),
+          txInfo.isSignedBy(vestingDatum.beneficiary),
           "No signature from beneficiary"
         )
         require(
@@ -67,23 +64,13 @@ object VestingValidator extends Validator {
           "Declared amount does not match calculated amount"
         )
 
-        val beneficiaryInputs = txInfo.inputs.filter(txInInfo =>
-            txInInfo.resolved.address.credential match
-                case Credential.PubKeyCredential(pkh) => pkh === vestingDatum.beneficiary
-                case _                                => false
-        )
-        val beneficiaryOutputs = txInfo.outputs.filter(txOut =>
-            txOut.address.credential match
-                case Credential.PubKeyCredential(pkh) => pkh === vestingDatum.beneficiary
-                case _                                => false
-        )
+        val beneficiaryCred = Credential.PubKeyCredential(vestingDatum.beneficiary)
 
-        val adaInInputs = beneficiaryInputs
-            .map(txInInfo => txInInfo.resolved.value.getLovelace)
-            .foldLeft(BigInt(0))(_ + _)
-        val adaInOutputs = beneficiaryOutputs
-            .map(txOut => txOut.value.getLovelace)
-            .foldLeft(BigInt(0))(_ + _)
+        val beneficiaryInputs = txInfo.findOwnInputsByCredential(beneficiaryCred)
+        val beneficiaryOutputs = txInfo.findOwnOutputsByCredential(beneficiaryCred)
+
+        val adaInInputs = Utils.getAdaFromInputs(beneficiaryInputs)
+        val adaInOutputs = Utils.getAdaFromOutputs(beneficiaryOutputs)
 
         val expectedOutput =
             requestedAmount + adaInInputs - txInfo.fee
@@ -106,13 +93,7 @@ object VestingValidator extends Validator {
             case _ => fail("Expected inline datum")
     }
 
-    // Helper methods
-
-    def getOwnInput(inputs: List[TxInInfo], ownRef: TxOutRef): TxInInfo = {
-        inputs.find(input => input.outRef === ownRef).get
-    }
-
-    def linearVesting(vestingDatum: VestingDatum, timestamp: BigInt): BigInt = {
+    def linearVesting(vestingDatum: Config, timestamp: BigInt): BigInt = {
         val min = vestingDatum.startTimestamp
         val max = vestingDatum.startTimestamp + vestingDatum.duration
         if timestamp < min then 0

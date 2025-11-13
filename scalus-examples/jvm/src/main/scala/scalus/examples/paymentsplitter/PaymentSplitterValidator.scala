@@ -40,7 +40,7 @@ object PaymentSplitterValidator extends DataParameterizedValidator {
             .map(payee => Credential.PubKeyCredential(PubKeyHash(payee)))
 
         val myTxInputCredential =
-            tx.inputs.find(_.outRef === ownRef).get.resolved.address.credential
+            tx.findOwnInputOrFail(ownRef).resolved.address.credential
 
         // Find the first and single payee that triggers the payout and pays the fee
         //  and calculate the sum of contract inputs

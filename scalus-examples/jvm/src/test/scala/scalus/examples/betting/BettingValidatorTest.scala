@@ -16,7 +16,7 @@ import scalus.testing.kit.{Mock, ScalusTest}
 
 import scala.language.implicitConversions
 
-class BettingTest extends AnyFunSuite, ScalusTest:
+class BettingValidatorTest extends AnyFunSuite, ScalusTest:
     private lazy val program = BettingContract.debugCompiledContract.program
 
     /*
@@ -45,7 +45,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
     test("Verify that a bet can be properly initialized"):
         val player1 = Mock.mockPubKeyHash(1)
         // Create test datum for a new bet
-        val initialBetDatum = BetDatum(
+        val initialBetDatum = Config(
           player1,
           // No second player yet
           player2 = pkh"",
@@ -88,7 +88,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
         val player2 = Mock.mockPubKeyHash(2)
         val oracle = Mock.mockPubKeyHash(3)
         // Initial state: bet created by player1
-        val initialBetDatum = BetDatum(
+        val initialBetDatum = Config(
           player1,
           // No second player yet
           player2 = PubKeyHash(ByteString.empty),
@@ -97,7 +97,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
           expiration = 1753939940,
         )
         // Updated state: player2 has joined
-        val updatedBetDatum = BetDatum(
+        val updatedBetDatum = Config(
           player1,
           player2,
           oracle,
@@ -160,7 +160,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
         val player2 = Mock.mockPubKeyHash(2)
         val oracle = Mock.mockPubKeyHash(3)
         // Final bet state with both players
-        val finalBetDatum = BetDatum(
+        val finalBetDatum = Config(
           player1,
           player2,
           oracle,

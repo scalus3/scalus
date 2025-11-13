@@ -108,7 +108,7 @@ object VestingOffChain:
         )
     }
 
-    def unlock(datum: Data, redeemer: VestingRedeemer, beneficiaryPubKeyHash: ByteString): Unit = {
+    def unlock(datum: Data, redeemer: Action, beneficiaryPubKeyHash: ByteString): Unit = {
         val scriptUtxo = waitForUtxo(datum)
 
         val claimAmount = scriptUtxo.getAmount
@@ -180,9 +180,9 @@ object VestingOffChain:
         val startTime = currentTime - (3600L * 1000) // Vesting started 1 hour ago
         val duration = 5L * 60 * 1000 // Vesting lasted 5 minutes
 
-        val datum = VestingDatum(beneficiaryPKH, startTime, duration, lockAmoutLovelace)
+        val datum = Config(beneficiaryPKH, startTime, duration, lockAmoutLovelace)
 
-        val redeemer = VestingRedeemer(unlockAmountLovelace)
+        val redeemer = Action(unlockAmountLovelace)
 
         println(
           s"Datum:\n  Start: ${datum.startTimestamp}\n  Duration: ${datum.duration}\n  Amount: ${datum.initialAmount}"

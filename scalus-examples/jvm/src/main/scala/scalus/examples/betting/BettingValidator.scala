@@ -11,6 +11,7 @@ import scalus.prelude.*
 import scalus.prelude.Option.*
 import scalus.{show as _, *}
 
+// Datum
 /** Represents the state of a two-player betting game The bet starts with player1 creating it, then
   * player2 can join The oracle decides the winner and triggers the payout.
   *
@@ -23,7 +24,7 @@ import scalus.{show as _, *}
   * @param expiration
   *   The expiration time of the bet (in seconds since the epoch)
   */
-case class BetDatum(
+case class Config(
     player1: PubKeyHash,
     player2: PubKeyHash,
     oracle: PubKeyHash,
@@ -32,8 +33,9 @@ case class BetDatum(
       ToData
 
 @Compile
-object BetDatum
+object Config
 
+// Redeemer
 /** Actions that can be performed on the betting contract */
 enum Action derives FromData, ToData:
     /** Action for player2 to join an existing bet */
@@ -50,7 +52,8 @@ object Action
   *   [[https://github.com/cardano-foundation/cardano-template-and-ecosystem-monitoring/blob/main/bet/onchain/aiken/validators/bet.ak Bet]]
   */
 @Compile
-object Betting extends Validator:
+object BettingValidator extends Validator {
+
     /** Spending validator: Controls how the bet UTXO can be spent Handles both
       * [[scalus.examples.Action.Join]] and [[scalus.examples.Action.AnnounceWinner]] actions
       */
@@ -60,14 +63,13 @@ object Betting extends Validator:
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit =
-        val (address, value, BetDatum(player1, player2, oracle, expiration)) =
-            txInfo.findOwnInput(txOutRef) match
-                case Some(TxInInfo(_, TxOut(address, value, OutputDatum(currentDatum), _))) =>
-                    (address, value, currentDatum.to[BetDatum])
+        val (address, value, Config(player1, player2, oracle, expiration)) =
+            txInfo.findOwnInputOrFail(txOutRef, "Initial bet spent input must be present") match
+                case TxInInfo(_, TxOut(address, value, OutputDatum(currentDatum), _)) =>
+                    (address, value, currentDatum.to[Config])
                 case _ =>
                     fail:
-                        "Initial bet spent input must be present,\n" +
-                            "current bet datum must be inline"
+                        "Current bet datum must be inline"
 
         // ???: player2 can spend extra token to create a malformed bet, e.g. oracle === player1
         // TODO: minted token should be single
@@ -76,8 +78,8 @@ object Betting extends Validator:
                 val outputLovelace = txInfo.outputs.filter(_.address === address) match
                     case List.Cons(TxOut(_, value, _, _), List.Nil) => value.getLovelace
                     case _ => fail("There must be a single continuing output")
-                val BetDatum(newPlayer1, joiningPlayer, newOracle, newExpiration) =
-                    datum.getOrFail("new datum must be present").to[BetDatum]
+                val Config(newPlayer1, joiningPlayer, newOracle, newExpiration) =
+                    datum.getOrFail("new datum must be present").to[Config]
                 require(
                   player2.hash.length === BigInt(
                     0
@@ -89,9 +91,7 @@ object Betting extends Validator:
                   "Input must contain the bet token"
                 )
                 require(
-                  txInfo.signatories.contains(
-                    joiningPlayer
-                  ),
+                  txInfo.isSignedBy(joiningPlayer),
                   "Player2 must sign the transaction"
                 )
                 require(
@@ -154,9 +154,7 @@ object Betting extends Validator:
                   "Payout goes to the winner's address"
                 )
                 require(
-                  txInfo.signatories.contains(
-                    oracle
-                  ),
+                  txInfo.isSignedBy(oracle),
                   "Oracle must sign the transaction"
                 )
                 require(
@@ -175,18 +173,18 @@ object Betting extends Validator:
         policyId: PolicyId,
         tx: TxInfo
     ): Unit =
-        val BetDatum(player1, player2, oracle, expiration) = tx.outputs
+        val Config(player1, player2, oracle, expiration) = tx.outputs
             .filter:
                 _.address === Address.fromScriptHash(policyId)
             .match
-                case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[BetDatum]
+                case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[Config]
                 case _ =>
                     fail(
                       "There's must be a single output that goes to the script (the bet UTXO),\n" +
                           "Bet datum must be inline"
                     )
         require(
-          tx.signatories.contains(player1),
+          tx.isSignedBy(player1),
           "Player1 must sign the transaction (they're creating the bet)"
         )
         require(
@@ -201,3 +199,4 @@ object Betting extends Validator:
           tx.validRange.isEntirelyBefore(expiration),
           "The bet must have a valid expiration time (after the current time)"
         )
+}

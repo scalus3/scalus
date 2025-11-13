@@ -159,7 +159,7 @@ object HtlcValidatorTest extends ScalusTest {
         expected: (String | Unit, Option[ExUnits]) = success
     ):
         def runWithDebug(): Unit = {
-            val contractDatum = ContractDatum(
+            val contractDatum = Config(
               committer = Committer.pkh,
               receiver = Receiver.pkh,
               image = sha3_256(preimage),
@@ -198,7 +198,7 @@ object HtlcValidatorTest extends ScalusTest {
         validRange: Interval,
         signatories: List[ByteString],
         action: Action,
-        contractDatum: ContractDatum
+        contractDatum: Config
     ): ScriptContext = {
         ScriptContext(
           txInfo = TxInfo(

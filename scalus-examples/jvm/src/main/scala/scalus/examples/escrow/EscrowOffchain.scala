@@ -77,7 +77,7 @@ object EscrowOffChain:
         val initializationAmountLovelace = initialDepositAda * 1_000_000L
 
         val datum =
-            EscrowDatum(sellerPKH, buyerPKH, paymentAmountLovelace, initializationAmountLovelace)
+            Config(sellerPKH, buyerPKH, paymentAmountLovelace, initializationAmountLovelace)
 
         val tx = Tx()
             .from(seller.getBaseAddress.getAddress)
@@ -192,7 +192,7 @@ object EscrowOffChain:
         )
     }
 
-    def deposit(buyerAccount: Account, datum: Data, escrowDatum: EscrowDatum): Unit = {
+    def deposit(buyerAccount: Account, datum: Data, escrowDatum: Config): Unit = {
         // Look for UTXO with only initialization amount (not yet deposited to)
         val scriptUtxo = waitForUtxoWithAmount(datum, escrowDatum.initializationAmount.bigInteger)
         println("scriptUtxo: " + scriptUtxo)
@@ -205,7 +205,7 @@ object EscrowOffChain:
 
         val totalRequiredAmount =
             escrowDatum.escrowAmount.bigInteger.add(escrowDatum.initializationAmount.bigInteger)
-        val action = EscrowAction.Deposit
+        val action = Action.Deposit
 
         val scriptTx = ScriptTx()
             .collectFrom(scriptUtxo, toPlutusData(action.toData))
@@ -247,7 +247,7 @@ object EscrowOffChain:
         println(s"Result is: ${result}")
     }
 
-    def pay(buyerAccount: Account, datum: Data, escrowDatum: EscrowDatum): Unit = {
+    def pay(buyerAccount: Account, datum: Data, escrowDatum: Config): Unit = {
         // Look for UTXO with full amount (escrow + initialization)
         val fullAmount = (escrowDatum.escrowAmount + escrowDatum.initializationAmount).bigInteger
         val scriptUtxo = waitForUtxoWithAmount(datum, fullAmount)
@@ -259,7 +259,7 @@ object EscrowOffChain:
             .findFirst()
             .orElseThrow()
 
-        val action = EscrowAction.Pay
+        val action = Action.Pay
 
         val scriptTx = ScriptTx()
             .collectFrom(scriptUtxo, toPlutusData(action.toData))
@@ -307,7 +307,7 @@ object EscrowOffChain:
         println(s"Result is: ${result}")
     }
 
-    def refund(datum: Data, escrowDatum: EscrowDatum, buyerAddress: String): Unit = {
+    def refund(datum: Data, escrowDatum: Config, buyerAddress: String): Unit = {
         // Look for UTXO with full amount (escrow + initialization)
         val fullAmount = (escrowDatum.escrowAmount + escrowDatum.initializationAmount).bigInteger
         val scriptUtxo = waitForUtxoWithAmount(datum, fullAmount)
@@ -319,7 +319,7 @@ object EscrowOffChain:
             .findFirst()
             .orElseThrow()
 
-        val action = EscrowAction.Refund
+        val action = Action.Refund
 
         val scriptTx = ScriptTx()
             .collectFrom(scriptUtxo, toPlutusData(action.toData))
@@ -373,7 +373,7 @@ object EscrowOffChain:
         val initializationAmountLovelace = initialDepositAda * 1_000_000L
 
         val datum =
-            EscrowDatum(sellerPKH, buyerPKH, paymentAmountLovelace, initializationAmountLovelace)
+            Config(sellerPKH, buyerPKH, paymentAmountLovelace, initializationAmountLovelace)
 
         println(s"Escrow Datum:")
         println(s"  Buyer: ${buyerPKH}")

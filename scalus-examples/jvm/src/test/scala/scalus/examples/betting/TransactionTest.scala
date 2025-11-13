@@ -13,7 +13,7 @@ import scalus.testing.kit.{Mock, MockLedgerApi, ScalusTest}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 
-class BettingTransactionTest extends AnyFunSuite, ScalusTest:
+class BettingValidatorTransactionTest extends AnyFunSuite, ScalusTest:
 
     private val env = TestUtil.testEnvironment
 
@@ -72,7 +72,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest:
         assert(provider.submit(tx).isRight)
         tx
 
-    private val initDatum = BetDatum(
+    private val initDatum = Config(
       player1,
       PubKeyHash(hex""),
       oracle,

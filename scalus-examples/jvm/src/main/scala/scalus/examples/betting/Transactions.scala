@@ -44,7 +44,7 @@ class Transactions(
         .payToScript(
           scriptAddress,
           Value.asset(script.scriptHash, token, amount, Coin(bet)),
-          BetDatum(player1, player2, oracle, expiration).toData
+          Config(player1, player2, oracle, expiration).toData
         )
         .collateral
         .tupled(wallet.collateralInputs.head)
@@ -79,7 +79,7 @@ class Transactions(
             .payToScript(
               scriptAddress,
               betUtxo._2.value + lovelace,
-              BetDatum(player1, player2, oracle, expiration).toData
+              Config(player1, player2, oracle, expiration).toData
             )
             .collateral
             .tupled(wallet.collateralInputs.head)

@@ -45,7 +45,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
 
     private val scriptAddress = compiledContract.address(env.network)
 
-    private val datum = ContractDatum(
+    private val datum = Config(
       committerPkh,
       receiverPkh,
       validImage,

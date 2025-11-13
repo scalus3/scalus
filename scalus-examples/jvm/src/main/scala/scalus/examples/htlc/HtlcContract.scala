@@ -3,7 +3,7 @@ package scalus.examples.htlc
 import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
 import scalus.cardano.ledger.Language
 
-lazy val HtlcContract = Contract.PlutusV3Contract[ContractDatum, Action](
+lazy val HtlcContract = Contract.PlutusV3Contract[Config, Action](
   Preamble(
     title = "Hashed timelocked contract",
     description = Some(

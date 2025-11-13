@@ -12,7 +12,7 @@ type Image = ByteString
 type PubKeyHash = ByteString
 
 // Datum
-case class ContractDatum(
+case class Config(
     committer: PubKeyHash,
     receiver: PubKeyHash,
     image: Image,
@@ -21,7 +21,7 @@ case class ContractDatum(
       ToData
 
 @Compile
-object ContractDatum
+object Config
 
 // Redeemer
 enum Action derives FromData, ToData:
@@ -31,6 +31,11 @@ enum Action derives FromData, ToData:
 @Compile
 object Action
 
+/** A Hash Time-Locked Contract (HTLC) validator.
+  *
+  * The HTLC allows a receiver to claim funds by revealing a preimage of a hash before a timeout, or
+  * allows the committer to reclaim the funds after the timeout.
+  */
 @Compile
 object HtlcValidator extends Validator {
 
@@ -42,22 +47,22 @@ object HtlcValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ContractDatum(committer, receiver, image, timeout) =
-            datum.map(_.to[ContractDatum]).getOrFail(InvalidDatum)
+        val Config(committer, receiver, image, timeout) =
+            datum.map(_.to[Config]).getOrFail(InvalidDatum)
 
         redeemer.to[Action] match
             case Action.Timeout =>
-                require(tx.isSignedBy(committer), UnsignedCommitterTransaction)
+                require(tx.isSignedBy(PubKeyHash(committer)), UnsignedCommitterTransaction)
                 require(tx.validRange.isEntirelyAfter(timeout), InvalidCommitterTimePoint)
 
             case Action.Reveal(preimage) =>
-                require(tx.isSignedBy(receiver), UnsignedReceiverTransaction)
+                require(tx.isSignedBy(PubKeyHash(receiver)), UnsignedReceiverTransaction)
                 require(!tx.validRange.isEntirelyAfter(timeout), InvalidReceiverTimePoint)
                 require(sha3_256(preimage) === image, InvalidReceiverPreimage)
     }
 
     // Error messages
-    inline val InvalidDatum = "Datum must be a ContractDatum(committer, receiver, image, timeout)"
+    inline val InvalidDatum = "Datum must be a Config(committer, receiver, image, timeout)"
     inline val UnsignedCommitterTransaction = "Transaction must be signed by a committer"
     inline val UnsignedReceiverTransaction = "Transaction must be signed by a receiver"
     inline val InvalidCommitterTimePoint = "Committer Transaction must be exclusively after timeout"

@@ -3,7 +3,7 @@ package scalus.examples.vesting
 import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
 import scalus.cardano.ledger.Language
 
-lazy val VestingContract = Contract.PlutusV3Contract[VestingDatum, VestingRedeemer](
+lazy val VestingContract = Contract.PlutusV3Contract[Config, Action](
   Preamble(
     title = "Vesting validator",
     description = Some(

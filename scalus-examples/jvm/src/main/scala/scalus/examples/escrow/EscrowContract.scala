@@ -3,7 +3,7 @@ package scalus.examples.escrow
 import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
 import scalus.cardano.ledger.Language
 
-lazy val EscrowContract = Contract.PlutusV3Contract[EscrowDatum, EscrowAction](
+lazy val EscrowContract = Contract.PlutusV3Contract[Config, Action](
   Preamble(
     title = "Three-party escrow smart contract",
     description = Some(

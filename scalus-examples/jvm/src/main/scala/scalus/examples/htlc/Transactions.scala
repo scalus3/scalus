@@ -28,7 +28,7 @@ class Transactions(
             case (builder, (utxo, witness)) =>
                 builder.spendOutputs(utxo, witness)
         }
-        val datum = ContractDatum(committer, receiver, image, timeout).toData
+        val datum = Config(committer, receiver, image, timeout).toData
         builder.payToScript(scriptAddress, value, datum).build()
     }
 
