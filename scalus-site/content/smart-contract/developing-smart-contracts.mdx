@@ -1,0 +1,336 @@
+---
+title: Developing Smart Contracts
+sidebarTitle: Developing Smart Contracts
+---
+
+# Developing Smart Contracts in Scalus
+
+This guide covers the fundamentals of developing smart contracts in Scalus.
+
+## Terminology
+
+### The `@Compile` Annotation
+
+- Marks code for compilation to Plutus Core
+- Can be applied to objects, methods, traits, and classes
+- Signals to the Scalus compiler plugin to transform Scala code to SIR
+
+**Example:**
+
+```scala
+@Compile
+object MyValidator extends Validator {
+  // validator code
+}
+```
+
+### The `Validator` Trait
+
+The `Validator` trait is the foundation for all smart contracts in Scalus. It provides methods for all six Plutus V3 script purposes:
+
+```scala
+@Compile
+trait Validator {
+  // Main entry point - automatically routes to the appropriate method
+  inline def validate(scData: Data): Unit
+  inline def validateScriptContext(sc: ScriptContext): Unit = {
+         sc.scriptInfo match
+             case ScriptInfo.MintingScript(policyId) =>
+                 mint(sc.redeemer, policyId, sc.txInfo)
+             case ScriptInfo.SpendingScript(txOutRef, datum) =>
+                 spend(datum, sc.redeemer, sc.txInfo, txOutRef)
+             case ScriptInfo.RewardingScript(credential) =>
+                 reward(sc.redeemer, credential, sc.txInfo)
+             case ScriptInfo.CertifyingScript(index, cert) =>
+                 certify(sc.redeemer, cert, sc.txInfo)
+             case ScriptInfo.VotingScript(voter) =>
+                 vote(sc.redeemer, voter, sc.txInfo)
+             case ScriptInfo.ProposingScript(index, procedure) =>
+                 propose(procedure, sc.txInfo)
+     }
+
+  // Override the relevant method(s) for your use case:
+  inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit
+  inline def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit
+  inline def reward(redeemer: Data, stakingKey: Credential, tx: TxInfo): Unit
+  inline def certify(redeemer: Data, cert: TxCert, tx: TxInfo): Unit
+  inline def vote(redeemer: Data, voter: Voter, tx: TxInfo): Unit
+  inline def propose(proposalProcedure: ProposalProcedure, tx: TxInfo): Unit
+}
+```
+
+### The `Data` Type
+
+The `Data` type represents serialized on-chain data in Plutus Core. Scalus provides type-safe conversions:
+
+**Deserializing from Data:**
+
+```scala
+// Using .to[T] method
+val myDatum = datumData.to[MyDatumType]
+
+// Using fromData function
+import scalus.builtin.Data.fromData
+val myDatum = fromData[MyDatumType](datumData)
+```
+
+**Automatic serialization with `derives`:**
+
+```scala
+case class MyDatum(
+    owner: PubKeyHash,
+    amount: BigInt,
+    deadline: PosixTime
+) derives FromData, ToData
+
+// IMPORTANT: Companion object must also have @Compile
+@Compile
+object MyDatum
+```
+
+---
+
+## Validator Types and Script Purposes (Plutus V3)
+
+Scalus supports all six Plutus V3 script purposes through the `Validator` trait. You override the methods you need for your validator.
+
+### Script Purposes
+
+**Spending Script:**
+```scala
+inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit
+```
+
+**Minting Policy:**
+```scala
+inline def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit
+```
+
+**Rewarding Script:**
+```scala
+inline def reward(redeemer: Data, stakingKey: Credential, tx: TxInfo): Unit
+```
+
+**Certifying Script:**
+```scala
+inline def certify(redeemer: Data, cert: TxCert, tx: TxInfo): Unit
+```
+
+**Voting Script:**
+```scala
+inline def vote(redeemer: Data, voter: Voter, tx: TxInfo): Unit
+```
+
+**Proposing Script:**
+```scala
+inline def propose(proposalProcedure: ProposalProcedure, tx: TxInfo): Unit
+```
+
+### Example: Spending Validator
+
+```scala
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    val myDatum = datum.getOrFail("Datum required").to[MyDatum]
+    val myRedeemer = redeemer.to[MyRedeemer]
+
+    require(tx.isSignedBy(myDatum.owner), "Must be signed by owner")
+    // ... validation logic
+  }
+```
+
+---
+
+## Starting from Template (Giter8)
+
+The easiest way to start a new Scalus project is using the Giter8 template:
+
+```bash copy
+sbt new scalus3/validator.g8
+```
+
+This will scaffold a new SBT project with all the required setup, which allows you to immediately get some code to
+play around with.
+
+### Generated Project Structure
+
+```
+htlc-validator/
+  ├── HtlcValidator.scala        # Your validator implementation
+  ├── HtlcValidator.test.scala   # Test suite
+  ├── project.scala              # Scala CLI project configuration
+  └── README.md                  # Getting started guide
+```
+
+**What's included:**
+
+- Basic validator structure extending `Validator` trait
+- Example test cases using `ScalusTest`
+- Scala CLI configuration with Scalus dependencies
+- Example datum and redeemer types
+
+---
+
+## Testing Your Validator
+
+Scalus leverages [ScalaCheck](https://www.scalacheck.org/) for property-based testing of validators.
+
+Property-based tests allow you to test your validator robustly, ensuring that every invariant is held for a specified
+range of inputs.
+
+### The `ScalusTest` Trait
+
+The `ScalusTest` trait provides testing utilities:
+
+```scala
+trait ScalusTest {
+
+      // Useful test-related methods
+      extension (self: Program) {...}
+
+      protected def random[A: Arbitrary]: A = {
+          Arbitrary.arbitrary[A].sample.get
+      }
+
+      // and more!
+}
+```
+
+`extend` your test suite from `ScalusTest` to get access to many useful testing utilities.
+
+
+
+### Setting Up Tests
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.testkit.ScalusTest
+import org.scalacheck.Arbitrary
+
+class MyValidatorTest extends AnyFunSuite with ScalusTest {
+  test("validator accepts valid transaction") {
+    // Generate random valid data
+    val txInfo = random[TxInfo]
+    val datum = MyDatum(...)
+    ...
+  }
+}
+```
+
+### Generating Random Test Data
+
+Scalus provides `Arbitrary` instances for all Cardano types:
+
+```scala
+test("example with random data") {
+  val txId = random[TxId]
+  val txInfo = random[TxInfo]
+  val address = random[Address]
+  val value = random[Value]
+
+  // Your test logic
+  assert(txId.hash.toHex.length == 64)
+}
+```
+
+**Available Arbitrary instances:**
+- Plutus V1/V2/V3 types: `TxInfo`, `TxOut`, `TxInInfo`, `ScriptContext`, etc.
+- Primitive types: `PubKeyHash`, `TxId`, `Address`, `Value`, `POSIXTime`, etc.
+- Custom types with `derives FromData, ToData`
+
+### Property-Based Testing
+
+Use ScalaCheck's `forAll` for property-based tests:
+
+```scala
+import org.scalacheck.Prop.forAll
+
+test("property-based validator test") {
+  forAll { (txIn: TxInInfo, txOut: TxOut) =>
+    // Test property that should hold for all inputs
+    assert(txIn.resolved.value >= Value.zero)
+  }
+}
+```
+
+## Debugging and Troubleshooting
+
+### Scala-Level Debugging
+
+Before compiling to UPLC, you can debug your validator as regular Scala code:
+- Use your IDE's debugger
+- Set breakpoints in validator methods
+- Step through execution
+- Inspect variables and data structures
+
+**This is the fastest way to debug logic errors.**
+
+### Using `log` for Script Logging
+
+You can add log messages to your validator using the `log` function:
+
+```scala
+import scalus.prelude.log
+
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    log("Starting validation")
+    val myDatum = datum.getOrFail("Datum required").to[MyDatum]
+    log(s"Validating for owner: ${myDatum.owner}")
+
+    val isValid = tx.isSignedBy(myDatum.owner)
+    log(s"Signature check: $isValid")
+
+    require(isValid, "Must be signed by owner")
+  }
+```
+
+### Where Do Logs Appear?
+
+When scripts are evaluated (on-chain or via `PlutusScriptEvaluator`), logs are collected and included in:
+- The `Result.Success` object (when evaluation succeeds)
+- The `PlutusScriptEvaluationException` (when evaluation fails)
+
+Off-chain, you can access logs through the evaluation result to understand what happened during script execution. This is particularly useful when debugging why a transaction failed validation.
+
+### Evaluating with Error Traces
+
+```scala
+import scalus.uplc.eval.PlutusVM
+
+given PlutusVM = PlutusVM.makePlutusV3VM()
+
+val compiled = compile {
+  log("Validator starting")
+  // your validator code
+  log("Validator completed")
+}
+
+// Evaluate with error traces enabled
+val result = compiled.toUplc(generateErrorTraces = true).evaluateDebug
+```
+
+**The `generateErrorTraces` flag:**
+- `true`: Adds error location information (useful for debugging, but increases script size)
+- `false`: Minimal script size (for production deployment)
+---
+
+## Next Steps
+
+- [In-Depth Validator Walkthrough](/docs/smart-contract/in-depth-validator-look) - Complete HTLC validator with detailed explanations
+- [Working with Applications](/docs/smart-contract/working-with-applications) - Compiling scripts, blueprints, and parameterized validators
+- [Extracting from Data](/docs/smart-contract/from-data) - Detailed guide on Data serialization
+- [Language Guide](/docs/language-guide) - Learn what Scala features are supported in validators
+- [Examples Repository](https://github.com/nau/scalus/tree/master/scalus-examples) - Real-world validator examples

@@ -1,0 +1,456 @@
+---
+title: Working with Applications
+sidebarTitle: Working with Applications
+---
+
+# Working with Applications
+
+In this guide we cover how to compile your Scalus validators and integrate them with off-chain applications.
+
+## Compiling Validators
+
+### Basic Compilation
+
+Use the `compile` function to transform your Scala validator into a Plutus script:
+
+```scala
+import scalus.Compiler.compile
+import scalus.ledger.api.PlutusLedgerLanguage
+
+// Compile your validator
+val compiled = compile {
+  def myValidator(datum: Data, redeemer: Data, ctx: Data): Unit = {
+    val context = ctx.to[ScriptContext]
+    require(context.txInfo.signatories.nonEmpty, "No signatories")
+  }
+  myValidator
+}
+
+// Convert to UPLC and encode for Cardano
+val program = compiled.toUplc(generateErrorTraces = true).plutusV3.deBruijnedProgram
+val scriptHex = program.doubleCborHex
+```
+
+The compilation flow: `compile` → `toUplc()` → select version → encode.
+
+### Choosing a Plutus Version
+
+Select the appropriate version for your use case:
+
+```scala
+// Plutus V3 (recommended for new validators)
+val programV3 = compiled.toUplc().plutusV3.deBruijnedProgram
+
+// Plutus V2 (for reference inputs, inline datums)
+val programV2 = compiled.toUplc().plutusV2.deBruijnedProgram
+
+// Plutus V1 (legacy)
+val programV1 = compiled.toUplc().plutusV1.deBruijnedProgram
+```
+
+### Error Traces
+
+The `generateErrorTraces` flag controls debugging information:
+
+```scala
+// Development: Include error traces for debugging
+compiled.toUplc(generateErrorTraces = true)
+
+// Production: Minimal script size
+compiled.toUplc(generateErrorTraces = false)
+```
+
+- `true`: Adds error location information (easier debugging, larger script)
+- `false`: Minimal script size (for production)
+
+### Complete Example
+
+```scala
+import scalus.*
+import scalus.builtin.ByteString.*
+import scalus.ledger.api.PlutusLedgerLanguage
+import scalus.ledger.api.v3.*
+
+// Define and compile validator
+val compiled = compile {
+    def validator(datum: Data, redeemer: Data, ctxData: Data) = {
+        val ctx = ctxData.to[ScriptContext]
+        ctx.txInfo.signatories.find { _.hash == hex"deadbeef" }
+    }
+    validator
+}
+
+// Convert to Plutus V2 script
+val program = compiled.toUplc(generateErrorTraces = true).plutusV2.deBruijnedProgram
+
+// Get hex for use in transactions
+val scriptHex = program.doubleCborHex
+```
+
+### Encoding Options
+
+UPLC programs can be encoded in several formats:
+
+```scala
+// Flat encoding (binary format)
+val flatEncoded = program.flatEncoded
+
+// CBOR encoding (wraps Flat)
+val cborEncoded = program.cborEncoded
+
+// Double CBOR encoding (standard for Cardano transactions)
+val doubleCborEncoded = program.doubleCborEncoded
+
+// Hex string of double CBOR (most commonly used in APIs)
+val hexString = program.doubleCborHex
+```
+
+## Using Validators in Transactions
+
+Once compiled and encoded, use the script hex in your transactions:
+
+```scala
+val compiled = compile(MyValidator)
+val program = compiled.toUplc().plutusV3.deBruijnedProgram
+val scriptHex = program.doubleCborHex
+
+// Use scriptHex when building transactions
+// with your transaction builder of choice
+```
+
+---
+
+## Contract Objects
+
+### What is a Contract?
+
+A `Contract` is a wrapper around your validator that provides:
+- **Multiple compilation variants** (debug, default, release)
+- **Type-safe datum and redeemer schemas**
+- **Automatic blueprint generation** (CIP-57)
+- **Metadata and documentation**
+- **Easy access to script and address**
+
+### Creating a Contract
+
+Let's walk through creating a contract for a Hash Time-Locked Contract (HTLC).
+
+#### Step 1: Define Your Types
+
+```scala
+import scalus.*
+import scalus.builtin.{ByteString, Data}
+import scalus.builtin.Data.{FromData, ToData}
+import scalus.ledger.api.v3.*
+import scalus.prelude.*
+
+// Define the contract state (datum)
+case class ContractDatum(
+    committer: ByteString,
+    receiver: ByteString,
+    image: ByteString,
+    timeout: PosixTime
+) derives FromData, ToData
+
+@Compile
+object ContractDatum
+
+// Define the actions (redeemer)
+enum Action derives FromData, ToData:
+    case Timeout
+    case Reveal(preimage: ByteString)
+
+@Compile
+object Action
+```
+
+#### Step 2: Implement the Validator
+
+```scala
+import scalus.builtin.Builtins.sha3_256
+
+@Compile
+object HtlcValidator extends Validator:
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ContractDatum(committer, receiver, image, timeout) =
+            datum.map(_.to[ContractDatum]).getOrFail("Missing datum")
+
+        redeemer.to[Action] match
+            case Action.Timeout =>
+                require(tx.isSignedBy(committer), "Must be signed by committer")
+                require(
+                  tx.validRange.isEntirelyAfter(timeout),
+                  "Can only timeout after deadline"
+                )
+
+            case Action.Reveal(preimage) =>
+                require(tx.isSignedBy(receiver), "Must be signed by receiver")
+                require(
+                  !tx.validRange.isEntirelyAfter(timeout),
+                  "Must reveal before deadline"
+                )
+                require(sha3_256(preimage) === image, "Invalid preimage")
+    }
+end HtlcValidator
+```
+
+#### Step 3: Wrap in a Contract
+
+```scala
+import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
+import scalus.cardano.ledger.Language
+
+lazy val HtlcContract = Contract.PlutusV3Contract[ContractDatum, Action](
+  Preamble(
+    title = "Hashed Time-Locked Contract",
+    description = Some(
+      "Releases funds when recipient reveals hash preimage before deadline, " +
+      "otherwise refunds to sender."
+    ),
+    version = Some("1.0.0"),
+    compiler = Some(CompilerInfo.currentScalus),
+    plutusVersion = Some(Language.PlutusV3),
+    license = None
+  ),
+  HtlcValidator.validate  // Reference to the validator's validate method
+)
+```
+
+**Preamble fields:**
+- `title`: Short descriptive name
+- `description`: Detailed explanation of functionality
+- `version`: Semantic version string
+- `compiler`: Compiler information (use `CompilerInfo.currentScalus`)
+- `plutusVersion`: Target Plutus version (PlutusV1, PlutusV2, or PlutusV3)
+- `license`: Optional license identifier
+
+### Three Compilation Variants
+
+Each contract provides three pre-compiled variants:
+
+```scala
+// Debug: Includes error traces and debugging information
+val debugContract = HtlcContract.debugCompiledContract
+
+// Default: Balanced compilation with standard optimizations
+val defaultContract = HtlcContract.defaultCompiledContract
+
+// Release: Optimized for production, minimal script size
+val releaseContract = HtlcContract.releaseCompiledContract
+```
+
+### Using Contracts in Transactions
+
+Access the compiled script and use it in your transaction builder:
+
+```scala
+import scalus.cardano.address.Address
+import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.*
+
+// Get the compiled contract (choose variant based on environment)
+val compiledContract = HtlcContract.defaultCompiledContract
+
+// Access the script and script address
+val script = compiledContract.script
+val scriptAddress = Address(network, Credential.ScriptHash(script.scriptHash))
+```
+
+**Locking funds at the script:**
+
+```scala
+def lock(
+    env: Environment,
+    inputUtxo: Utxo,
+    changeAddress: Address,
+    value: Value,
+    datum: ContractDatum
+): Transaction = {
+  TxBuilder(env)
+    .spend(inputUtxo)
+    .payTo(scriptAddress, value, datum.toData)
+    .changeTo(changeAddress)
+    .build()
+}
+```
+
+**Unlocking funds with a redeemer:**
+
+```scala
+def unlock(
+    env: Environment,
+    lockedUtxo: Utxo,
+    collateralUtxo: Utxo,
+    redeemer: Action.Reveal,
+    recipientAddress: Address
+): Transaction = {
+  TxBuilder(env)
+    .attach(script)
+    .spend(lockedUtxo, redeemer.toData)
+    .payTo(recipientAddress, lockedUtxo.output.value)
+    .collaterals(collateralUtxo)
+    .changeTo(recipientAddress)
+    .build()
+}
+```
+
+### Accessing Contract Components
+
+A `CompiledContract` provides access to all compilation artifacts:
+
+```scala
+val compiled = HtlcContract.defaultCompiledContract
+
+// The compiled Plutus script
+val script: Script.PlutusV3 = compiled.script
+
+// The UPLC program
+val program: Program = compiled.program
+val scriptHex: String = program.doubleCborHex
+
+// The CIP-57 blueprint (JSON)
+val blueprint: Blueprint = compiled.blueprint
+val blueprintJson: String = blueprint.show
+
+// Script address for a network
+val mainnetAddress: Address = compiled.address(Network.Mainnet)
+val preprodAddress: Address = compiled.address(Network.Preprod)
+```
+
+---
+
+## Blueprints (CIP-57)
+
+### What are Blueprints?
+
+Contracts provide a way to automatically generate the CIP-57 Blueprints.
+
+**What's included:**
+- Contract metadata (title, description, version)
+- Datum and redeemer type schemas
+- Compiled script code and hash
+- Parameter definitions
+
+### Blueprint Structure
+
+A blueprint JSON contains:
+
+```json
+{
+  "preamble": {
+    "title": "Hashed Time-Locked Contract",
+    "description": "Releases funds when...",
+    "version": "1.0.0",
+    "plutusVersion": "v3"
+  },
+  "validators": [
+    {
+      "title": "HtlcValidator",
+      "datum": {
+        "title": "ContractDatum",
+        "schema": {
+          "dataType": "constructor",
+          "fields": [
+            {"title": "committer", "dataType": "bytes"},
+            {"title": "receiver", "dataType": "bytes"},
+            {"title": "image", "dataType": "bytes"},
+            {"title": "timeout", "dataType": "integer"}
+          ]
+        }
+      },
+      "redeemer": {
+        "title": "Action",
+        "schema": {
+          "anyOf": [
+            {"title": "Timeout", "index": 0, "fields": []},
+            {"title": "Reveal", "index": 1, "fields": [
+              {"title": "preimage", "dataType": "bytes"}
+            ]}
+          ]
+        }
+      },
+      "compiledCode": "590b2a590b27010000...",
+      "hash": "a3b5c8d9..."
+    }
+  ]
+}
+```
+
+**Schemas are automatically derived** from your Scala types using compile-time reflection.
+
+### Exporting Blueprints
+
+Save the blueprint to a JSON file:
+
+```scala
+import java.io.File
+
+val blueprintFile = File("htlc-contract-blueprint.json")
+HtlcContract.defaultCompiledContract.blueprint.writeToFile(blueprintFile)
+```
+
+Use cases:
+- Documentation for contract users
+- Input for code generation tools
+- Contract verification and auditing
+- Automated testing tools
+
+---
+
+## Parameterized Validators
+
+Parameterized validators allow you to "bake in" configuration values at compile time, creating specialized versions of a general validator.
+
+### How Parameterization Works
+
+When you write a function that returns a `Validator` and call it with specific values during compilation, those values are permanently embedded into the resulting UPLC bytecode as constants. The compiled script doesn't receive these values at runtime - they're hardcoded into the script itself during compilation.
+
+For example, if you compile a validator with a specific `PubKeyHash`, that exact hash becomes part of the script's bytecode. Each different set of parameters produces a completely different script with a different script hash and script address.
+
+### What It's Useful For
+
+This pattern is useful when you want to deploy the same validator logic multiple times with different configurations:
+
+- **Multi-signature validators**: You can write one multisig validator logic, then deploy it multiple times with different sets of allowed signers. Each deployment is a different script address with its own configuration baked in.
+
+- **Time-locked contracts**: Write the time-lock logic once, then create multiple instances with different deadlines. Each contract gets its own unique script address based on its deadline.
+
+- **NFT validators**: Create a general NFT validation logic, then deploy separate instances for different policy IDs. Each policy becomes a distinct script.
+
+- **Protocol configurations**: Deploy the same protocol logic to different script addresses with different configuration values (fees, limits, authorized keys) embedded in each instance.
+
+The key advantage is you write the logic once and reuse it with different parameters, where each parameter combination creates a unique on-chain script.
+
+
+
+### Using `@Ignore` for Configuration
+
+The `@Ignore` annotation tells the Scalus compiler to skip compiling a value or method into the UPLC script. These annotated members are still available during compilation in your Scala code, but they won't be part of the final on-chain script.
+
+An alternative pattern for configuration that doesn't require parameterization:
+
+```scala
+@Compile
+object ConfigurableValidator extends Validator {
+  @Ignore
+  val config = MyConfig(
+    owner = PubKeyHash(...),
+    deadline = PosixTime(...)
+  )
+
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    // Use config values
+    require(tx.isSignedBy(config.owner), "Not signed by owner")
+  }
+}
+```
