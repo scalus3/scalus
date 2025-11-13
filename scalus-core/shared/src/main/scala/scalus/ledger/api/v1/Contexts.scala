@@ -484,6 +484,16 @@ object Credential {
     given FromData[Credential] = FromData.derived
 
     given ToData[Credential] = ToData.derived
+
+    extension (self: Credential) {
+        def pubKeyOption: Option[PubKeyHash] = self match
+            case Credential.PubKeyCredential(hash) => Option.Some(hash)
+            case _                                 => Option.None
+
+        def scriptOption: Option[ValidatorHash] = self match
+            case Credential.ScriptCredential(hash) => Option.Some(hash)
+            case _                                 => Option.None
+    }
 }
 
 enum StakingCredential:

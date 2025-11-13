@@ -35,6 +35,9 @@ object Action
   *
   * The HTLC allows a receiver to claim funds by revealing a preimage of a hash before a timeout, or
   * allows the committer to reclaim the funds after the timeout.
+  *
+  * @see
+  *   https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/htlc
   */
 @Compile
 object HtlcValidator extends Validator {

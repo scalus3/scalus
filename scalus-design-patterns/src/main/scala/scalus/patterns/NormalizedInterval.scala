@@ -5,9 +5,11 @@ import scalus.prelude.*
 import scalus.ledger.api.v1.*
 import scalus.builtin.{Builtins, FromData, ToData}
 
-/** https://github.com/Anastasia-Labs/design-patterns/blob/main/validity-range-normalization/VALIDITY-RANGE-NORMALIZATION.md
-  * Datatype for eliminating meaningless ranges, without the redundant inclusiveness flag (instead
+/** Datatype for eliminating meaningless ranges, without the redundant inclusiveness flag (instead
   * all range values are inclusive). Interval.never is represented as an improper interval.
+  *
+  * @see
+  *   [[https://github.com/Anastasia-Labs/design-patterns/blob/main/validity-range-normalization/VALIDITY-RANGE-NORMALIZATION.md]]
   */
 enum NormalizedInterval derives ToData, FromData:
     case ClosedRange(lower: PosixTime, upper: PosixTime)
@@ -15,7 +17,8 @@ enum NormalizedInterval derives ToData, FromData:
     case ToPosInf(lower: PosixTime)
     case Always
 
-extension (self: Interval)
+extension (self: Interval) {
+
     /** Try to normalize an `Interval` into a `NormalizedInterval`.
       *
       * @example
@@ -108,6 +111,7 @@ extension (self: Interval)
       *   NormalizedInterval
       */
     inline def normalize: NormalizedInterval = NormalizedInterval.normalizedInterval(self)
+}
 
 @Compile
 object NormalizedInterval {

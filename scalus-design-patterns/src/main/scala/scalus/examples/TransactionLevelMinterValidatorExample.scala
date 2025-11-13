@@ -18,8 +18,9 @@ object TransactionLevelMinterValidatorExample extends Validator {
     given FromData[SampleSpendRedeemer] = FromData.derived
     given FromData[SampleMintRedeemer] = FromData.derived
 
-    // Sample spend logic on how to use the provided interface. Here we are
-    // passing script's own hash as the expected minting policy.
+    /** Sample spend logic on how to use the provided interface. Here we are passing script's own
+      * hash as the expected minting policy.
+      */
     inline override def spend(
         datum: Option[Data],
         redeemer: Redeemer,
@@ -29,19 +30,18 @@ object TransactionLevelMinterValidatorExample extends Validator {
         val sampleSpendRedeemer = redeemer.to[SampleSpendRedeemer]
         // Grabbing spending UTxO based on the provided index.
         val input = tx.inputs.get(sampleSpendRedeemer.ownIndex).getOrFail("Undefined ownIndex")
-        val ownAddress = input.resolved.address
+        val ownCredential = input.resolved.address.credential
         val outRef = input.outRef
 
         // Validating that the found UTxO is in fact the spending UTxO.
         require(ownRef === outRef)
 
         // Getting the validator's script hash.
-        val ownHash = ownAddress.credential match
-            case Credential.ScriptCredential(validatorHash) => validatorHash
-            case _ => fail("Own address must be ScriptCredential")
+        val ownHash = ownCredential.scriptOption.getOrFail("Own address must be Script")
 
-        // Utilizing the design pattern, where the underlying logic expects a single
-        // "BEACON" token to be either burnt or minted.
+        /** Utilizing the design pattern, where the underlying logic expects a single "BEACON" token
+          * to be either burnt or minted.
+          */
         TransactionLevelMinterValidator.spend(
           minterScriptHash = ownHash,
           minterRedeemerValidator = _.to[SampleMintRedeemer].maxUtxosToSpend > 0,
@@ -55,8 +55,9 @@ object TransactionLevelMinterValidatorExample extends Validator {
         )
     }
 
-    // Sample mint logic that benefits from this design pattern. This example
-    // expects a specific number of inputs to be spent in each transaction.
+    /** Sample mint logic that benefits from this design pattern. This example expects a specific
+      * number of inputs to be spent in each transaction.
+      */
     inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
         val sampleMintRedeemer = redeemer.to[SampleMintRedeemer]
         val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>

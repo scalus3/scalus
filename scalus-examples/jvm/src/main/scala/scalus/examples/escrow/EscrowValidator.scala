@@ -33,6 +33,16 @@ enum Action derives FromData, ToData:
 @Compile
 object Action
 
+/** Secure exchange of assets between two parties
+  *
+  * The escrow smart contract allows two parties to exchange assets securely. The contract holds the
+  * assets until both parties agree and sign off on the transaction.
+  *
+  * @see
+  *   [[https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/escrow]]
+  *   [[https://meshjs.dev/smart-contracts/escrow]]
+  *   [[https://github.com/cardano-foundation/cardano-template-and-ecosystem-monitoring/tree/main/escrow]]
+  */
 @Compile
 object EscrowValidator extends Validator {
     inline override def spend(

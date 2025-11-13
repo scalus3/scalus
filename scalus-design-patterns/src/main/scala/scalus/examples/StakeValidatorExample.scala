@@ -6,9 +6,9 @@ import scalus.ledger.api.v3.*
 import scalus.patterns.StakeValidator
 import scalus.prelude.*
 
-// Example for a validator that requires a withdrawal from its script for each
-// spend. Note that depending on an external script is typically more
-// performant.
+/** Example for a validator that requires a withdrawal from its script for each spend. Note that
+  * depending on an external script is typically more performant.
+  */
 @Compile
 object StakeValidatorExample extends Validator {
     inline override def spend(
@@ -17,10 +17,8 @@ object StakeValidatorExample extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownAddress = tx.inputs.find(_.outRef === ownRef).get.resolved.address
-        val ownWithdrawal = ownAddress.credential match
-            case Credential.ScriptCredential(validatorHash) => validatorHash
-            case _ => fail("Own address must be ScriptCredential")
+        val ownCredential = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+        val ownWithdrawal = ownCredential.scriptOption.getOrFail("Own address must be Script")
 
         StakeValidator.spend(
           withdrawalScriptHash = ownWithdrawal,

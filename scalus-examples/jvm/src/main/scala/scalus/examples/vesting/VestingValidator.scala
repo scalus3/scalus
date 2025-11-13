@@ -30,6 +30,20 @@ case class Action(amount: Lovelace) derives FromData, ToData
 @Compile
 object Action
 
+/** Locks up funds and allows the beneficiary to withdraw the funds after the lockup period
+  *
+  * When a new employee joins an organization, they typically receive a promise of compensation to
+  * be disbursed after a specified duration of employment. This arrangement often involves the
+  * organization depositing the funds into a vesting contract, with the employee gaining access to
+  * the funds upon the completion of a predetermined lockup period. Through the utilization of
+  * vesting contracts, organizations establish a mechanism to encourage employee retention by
+  * linking financial rewards to tenure.
+  *
+  * @see
+  *   [[https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/vesting]]
+  *   [[https://meshjs.dev/smart-contracts/vesting]]
+  *   [[https://github.com/cardano-foundation/cardano-template-and-ecosystem-monitoring/tree/main/vesting]]
+  */
 @Compile
 object VestingValidator extends Validator {
     inline override def spend(
