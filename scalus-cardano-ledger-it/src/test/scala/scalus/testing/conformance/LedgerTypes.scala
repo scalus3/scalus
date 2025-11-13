@@ -1,7 +1,7 @@
-package scalus.testing.conformance.ledger
+package scalus.testing.conformance
 
 import scalus.builtin.ByteString
-import scalus.testing.conformance.ledger.LedgerTypes.DRep.{KeyHash, ScriptHash}
+import LedgerTypes.DRep.{KeyHash, ScriptHash}
 
 import scala.collection.immutable.SortedMap
 

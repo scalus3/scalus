@@ -3,7 +3,6 @@ package scalus.testing.conformance
 import scalus.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.Bech32
-import scalus.testing.conformance.ledger.*
 import LedgerTypes.*
 
 import scala.math.Ordering.Implicits.seqOrdering

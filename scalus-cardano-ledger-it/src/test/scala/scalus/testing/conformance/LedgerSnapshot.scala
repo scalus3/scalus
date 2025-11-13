@@ -1,7 +1,4 @@
-package scalus.testing.conformance.ledger
-
-import scalus.builtin.ByteString
-import scala.collection.immutable.SortedMap
+package scalus.testing.conformance
 
 /** Trait for accessing ledger state data at a specific point in time
   *
