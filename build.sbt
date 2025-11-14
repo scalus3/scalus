@@ -638,9 +638,6 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.bitcoin-s" % "bitcoin-s-crypto_2.13" % "1.9.11" % "test",
       libraryDependencies += "org.bitcoin-s" % "bitcoin-s-secp256k1jni" % "1.9.11",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.4" % "test",
-      libraryDependencies += "io.circe" %% "circe-core" % "0.14.15",
-      libraryDependencies += "io.circe" %% "circe-generic" % "0.14.15",
-      libraryDependencies += "io.circe" %% "circe-parser" % "0.14.15",
       inConfig(Test)(PluginDependency)
     )
 

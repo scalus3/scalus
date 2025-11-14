@@ -71,13 +71,14 @@ class ConformanceDataTest extends ConformanceTestBase:
     }
 
     test("create and compare snapshot") {
-        import io.circe.Json
-        val testData = Json.obj(
-          "epoch" -> Json.fromInt(168),
-          "test" -> Json.fromString("snapshot test"),
-          "value" -> Json.fromInt(12345)
-        )
-        val snapshot = testData.spaces2
+        import com.github.plokhotnyuk.jsoniter_scala.core.*
+        import com.github.plokhotnyuk.jsoniter_scala.macros.*
+
+        case class TestData(epoch: Int, test: String, value: Int)
+        given JsonValueCodec[TestData] = JsonCodecMaker.make
+
+        val testData = TestData(168, "snapshot test", 12345)
+        val snapshot = writeToString(testData, WriterConfig.withIndentionStep(2))
 
         // This will create a snapshot file if it doesn't exist
         // or compare with existing snapshot

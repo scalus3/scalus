@@ -1,9 +1,10 @@
 package scalus.testing.conformance
 
-import io.circe.Decoder
-import io.circe.generic.semiauto.*
+import com.github.plokhotnyuk.jsoniter_scala.core.*
+import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import scalus.builtin.ByteString
 import scalus.utils.Hex.*
+import scala.annotation.targetName
 
 /** Models for parsing Amaru test data JSON files
   *
@@ -114,27 +115,32 @@ object TestDataModels:
                            reserves: Ada
     )
 
-    // Circe decoders
-    given Decoder[Lovelace] = deriveDecoder[Lovelace]
-    given Decoder[Ada] = deriveDecoder[Ada]
+    // jsoniter-scala codecs
+    given JsonValueCodec[Lovelace] = JsonCodecMaker.make
+    given JsonValueCodec[Ada] = JsonCodecMaker.make
 
-    given Decoder[Config] = deriveDecoder[Config]
-    given Decoder[Point] = deriveDecoder[Point]
+    given JsonValueCodec[Config] = JsonCodecMaker.make
+    given JsonValueCodec[Point] = JsonCodecMaker.make
 
-    given Decoder[PoolData] = deriveDecoder[PoolData]
-    given Decoder[Relay] = deriveDecoder[Relay]
-    given Decoder[PoolMetadata] = deriveDecoder[PoolMetadata]
+    given JsonValueCodec[PoolData] = JsonCodecMaker.make
+    given JsonValueCodec[Relay] = JsonCodecMaker.make
+    given JsonValueCodec[PoolMetadata] = JsonCodecMaker.make
 
-    given Decoder[Delegator] = deriveDecoder[Delegator]
-    given Decoder[StakePoolRewards] = deriveDecoder[StakePoolRewards]
-    given Decoder[RewardsProvenance] = deriveDecoder[RewardsProvenance]
+    given JsonValueCodec[Delegator] = JsonCodecMaker.make
+    given JsonValueCodec[StakePoolRewards] = JsonCodecMaker.make
+    given JsonValueCodec[RewardsProvenance] = JsonCodecMaker.make
 
-    given Decoder[Mandate] = deriveDecoder[Mandate]
-    given Decoder[DRepDelegator] = deriveDecoder[DRepDelegator]
-    given Decoder[DRepData] = deriveDecoder[DRepData]
-    given Decoder[Anchor] = deriveDecoder[Anchor]
+    given JsonValueCodec[Mandate] = JsonCodecMaker.make
+    given JsonValueCodec[DRepDelegator] = JsonCodecMaker.make
+    given JsonValueCodec[DRepData] = JsonCodecMaker.make
+    given JsonValueCodec[Anchor] = JsonCodecMaker.make
 
-    given Decoder[PotsData] = deriveDecoder[PotsData]
+    given JsonValueCodec[PotsData] = JsonCodecMaker.make
+
+    // Collection codecs
+    given JsonValueCodec[Map[String, PoolData]] = JsonCodecMaker.make
+    @targetName("drepDataListCodec")
+    given JsonValueCodec[List[DRepData]] = JsonCodecMaker.make
 
     /** Helper to parse rational from string "num/denom" */
     def parseRational(s: String): (BigInt, BigInt) =
@@ -157,22 +163,45 @@ object TestDataModels:
         index: Int
     )
 
+    /** Script reference - can be PlutusV1, PlutusV2, PlutusV3, or NativeScript */
+    enum ScriptType:
+        case PlutusV1(hex: String)
+        case PlutusV2(hex: String)
+        case PlutusV3(hex: String)
+        case NativeScript(hex: String)
+
+    /** Datum reference - can be inline Data or hash */
+    enum DatumType:
+        case Data(hex: String)
+        case Hash(hex: String)
+
     /** Transaction output */
     case class TransactionOutput(
         address: String,
         value: Long,
-        datum: Option[String],
-        script: Option[String]
+        datum: Option[DatumType],
+        script: Option[ScriptType]
     )
 
     /** UTXO entry - a pair of input and output */
     type UtxoEntry = (TransactionInput, TransactionOutput)
 
+    /** Required script information */
+    case class RequiredScript(
+        hash: String,
+        index: Int,
+        purpose: String,
+        datum: Option[DatumType]
+    )
+
     /** Test context containing UTXO set and required witnesses */
     case class TestContext(
         utxo: List[UtxoEntry],
         required_signers: Option[List[String]] = None,
-        required_scripts: Option[List[String]] = None,
+        required_scripts: Option[List[RequiredScript]] = None,
+        known_scripts: Option[Map[String, TransactionInput]] = None,
+        known_datums: Option[Map[String, TransactionInput]] = None,
+        required_supplemental_datums: Option[List[String]] = None,
         required_bootstrap_roots: Option[List[String]] = None
     )
 
@@ -191,12 +220,77 @@ object TestDataModels:
         expectedTraces: List[TraceEvent]
     )
 
-    // Circe decoders for transaction/block test data
-    given Decoder[TransactionInput] = deriveDecoder[TransactionInput]
-    given Decoder[TransactionOutput] = deriveDecoder[TransactionOutput]
-    given Decoder[UtxoEntry] = Decoder.decodeTuple2[TransactionInput, TransactionOutput]
-    given Decoder[TestContext] = deriveDecoder[TestContext]
-    given Decoder[TraceEvent] = deriveDecoder[TraceEvent]
+    // jsoniter-scala codecs for transaction/block test data
+    // Custom codec for ScriptType to match Amaru format: {"PlutusV2": "hex"}
+    given JsonValueCodec[ScriptType] = new JsonValueCodec[ScriptType]:
+        def decodeValue(in: JsonReader, default: ScriptType): ScriptType =
+            if in.isNextToken('{') then
+                val key = in.readKeyAsString()
+                val hex = in.readString(null)
+                if in.isCurrentToken(',') then in.skip()
+                if !in.isCurrentToken('}') then in.nextToken()
+                key match
+                    case "PlutusV1" => ScriptType.PlutusV1(hex)
+                    case "PlutusV2" => ScriptType.PlutusV2(hex)
+                    case "PlutusV3" => ScriptType.PlutusV3(hex)
+                    case "NativeScript" => ScriptType.NativeScript(hex)
+                    case _ => in.decodeError(s"Unknown script type: $key")
+            else in.decodeError("Expected object")
+
+        def encodeValue(x: ScriptType, out: JsonWriter): Unit =
+            out.writeObjectStart()
+            x match
+                case ScriptType.PlutusV1(hex) =>
+                    out.writeKey("PlutusV1")
+                    out.writeVal(hex)
+                case ScriptType.PlutusV2(hex) =>
+                    out.writeKey("PlutusV2")
+                    out.writeVal(hex)
+                case ScriptType.PlutusV3(hex) =>
+                    out.writeKey("PlutusV3")
+                    out.writeVal(hex)
+                case ScriptType.NativeScript(hex) =>
+                    out.writeKey("NativeScript")
+                    out.writeVal(hex)
+            out.writeObjectEnd()
+
+        def nullValue: ScriptType = null.asInstanceOf[ScriptType]
+
+    // Custom codec for DatumType to match Amaru format: {"Data": "hex"}
+    given JsonValueCodec[DatumType] = new JsonValueCodec[DatumType]:
+        def decodeValue(in: JsonReader, default: DatumType): DatumType =
+            if in.isNextToken('{') then
+                val key = in.readKeyAsString()
+                val hex = in.readString(null)
+                if in.isCurrentToken(',') then in.skip()
+                if !in.isCurrentToken('}') then in.nextToken()
+                key match
+                    case "Data" => DatumType.Data(hex)
+                    case "Hash" => DatumType.Hash(hex)
+                    case _ => in.decodeError(s"Unknown datum type: $key")
+            else in.decodeError("Expected object")
+
+        def encodeValue(x: DatumType, out: JsonWriter): Unit =
+            out.writeObjectStart()
+            x match
+                case DatumType.Data(hex) =>
+                    out.writeKey("Data")
+                    out.writeVal(hex)
+                case DatumType.Hash(hex) =>
+                    out.writeKey("Hash")
+                    out.writeVal(hex)
+            out.writeObjectEnd()
+
+        def nullValue: DatumType = null.asInstanceOf[DatumType]
+
+    given JsonValueCodec[TransactionInput] = JsonCodecMaker.make
+    given JsonValueCodec[TransactionOutput] = JsonCodecMaker.make
+    given JsonValueCodec[UtxoEntry] = JsonCodecMaker.make
+    given JsonValueCodec[RequiredScript] = JsonCodecMaker.make
+    given JsonValueCodec[TestContext] = JsonCodecMaker.make
+    given JsonValueCodec[TraceEvent] = JsonCodecMaker.make
+    @targetName("traceEventListCodec")
+    given JsonValueCodec[List[TraceEvent]] = JsonCodecMaker.make
 
     /** Helper to convert hex string to ByteString */
     def hexToByteString(hexStr: String): ByteString =

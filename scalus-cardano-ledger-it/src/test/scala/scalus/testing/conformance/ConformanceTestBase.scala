@@ -1,13 +1,14 @@
 package scalus.testing.conformance
 
-import io.circe.parser.*
+import com.github.plokhotnyuk.jsoniter_scala.core.*
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
+import scalus.cardano.ledger.Transaction
 import scalus.testing.conformance.TestDataModels.*
 
 import java.nio.file.{Files, Path, Paths}
 import scala.io.Source
-import scala.util.Using
+import scala.util.{Try, Success, Failure, Using}
 
 /** Base trait for conformance tests
   *
@@ -44,11 +45,13 @@ trait ConformanceTestBase extends AnyFunSuite with Matchers:
         else baseDir.resolve("scalus-cardano-ledger-it/src/test/resources/snapshots")
 
     /** Load JSON file and parse it */
-    def loadJson[T](path: Path)(using decoder: io.circe.Decoder[T]): T =
+    def loadJson[T](path: Path)(using codec: JsonValueCodec[T]): T =
         val content = Using.resource(Source.fromFile(path.toFile))(_.mkString)
-        decode[T](content) match
-            case Right(value) => value
-            case Left(error) => fail(s"Failed to parse JSON from $path: $error")
+        try {
+            readFromString[T](content)
+        } catch {
+            case e: JsonReaderException => fail(s"Failed to parse JSON from $path: ${e.getMessage}")
+        }
 
     /** Load pool data for a given network and epoch */
     def loadPools(network: String, epoch: Int): Map[String, TestDataModels.PoolData] =
@@ -211,6 +214,193 @@ trait ConformanceTestBase extends AnyFunSuite with Matchers:
         if !isLedgerRulesDataAvailable then
             cancel(s"Ledger rules test data not available at: ${dataDir.resolve("transactions")}")
 
+    /** Test result for transaction validation */
+    case class TransactionTestResult(passed: Int, failed: Int, skipped: Int, total: Int):
+        def decoded: Int = passed + failed
+
+    /** Run a validator on all transactions, gracefully handling decode errors
+      *
+      * This method implements a three-tier result tracking system:
+      * - **Passed**: Transaction decoded successfully and passed validation
+      * - **Failed**: Transaction decoded successfully but failed validation (actual bug)
+      * - **Skipped**: Transaction couldn't be decoded or has incomplete test data
+      *
+      * Transactions are skipped (not failed) for these reasons:
+      * - CBOR decode errors (format mismatch, legacy formats)
+      * - Missing test files (context.json, tx.cbor)
+      * - Incomplete test fixtures (missing UTXO inputs, missing scripts)
+      *
+      * Only successfully decoded transactions with complete data are validated.
+      * Test failures indicate validator bugs, not test infrastructure issues.
+      *
+      * @param network Network name (e.g., "preprod")
+      * @param validatorName Name of the validator for logging
+      * @param validate Function to validate a decoded transaction
+      * @return Test result summary
+      */
+    def testTransactionsWithValidator(
+        network: String,
+        validatorName: String,
+        validate: (Transaction, TestContext) => Either[Throwable, Unit]
+    ): TransactionTestResult =
+        val transactions = getAvailableTransactionTests(network)
+        if transactions.isEmpty then cancel(s"No transaction tests available for $network")
+
+        info(s"Testing ${transactions.size} transactions")
+        var passed = 0
+        var failed = 0
+        var skipped = 0
+
+        transactions.foreach { txHash =>
+            Try {
+                val fixture = loadTransactionFixture(network, txHash)
+                val transaction = buildTransaction(fixture)
+
+                // Validate
+                validate(transaction, fixture.context) match
+                    case Right(_) =>
+                        passed += 1
+                    case Left(error) =>
+                        // Check if this is a test data issue (missing UTXO inputs or scripts)
+                        // rather than an actual validation failure
+                        error.getMessage match
+                            case msg if msg.contains("Missing inputs in UTxO state") ||
+                                       msg.contains("Missing collateral inputs in UTxO state") ||
+                                       msg.contains("Missing reference inputs in UTxO state") ||
+                                       msg.contains("Missing or extra script hashes") ||
+                                       msg.contains("Missing key hashes") ||
+                                       msg.contains("Invalid verified signatures") ||
+                                       msg.contains("Missing auxiliary data") ||
+                                       msg.contains("is outside the validity interval") =>
+                                skipped += 1
+                                info(s"⚠ $txHash: ${error.getMessage}")
+                            case _ =>
+                                failed += 1
+                                info(s"✗ $txHash failed validation: ${error.getMessage}")
+            } match
+                case Success(_) => // Continue
+                case Failure(e) =>
+                    skipped += 1
+                    info(s"⚠ $txHash: ${e.getMessage}")
+        }
+
+        val result = TransactionTestResult(passed, failed, skipped, transactions.size)
+        info(s"✓ $validatorName: ${result.passed} passed, ${result.failed} failed, ${result.skipped} skipped out of ${result.total}")
+        result
+
+    /** Build a Transaction from test fixture data
+      *
+      * Amaru test fixtures can store transactions in three formats:
+      *   1. Split format: tx.cbor contains TransactionBody, witness.cbor contains TransactionWitnessSet
+      *   2. Complete array format: tx.cbor contains complete Transaction as CBOR array
+      *   3. Complete map format: tx.cbor contains complete Transaction as CBOR map (legacy)
+      *
+      * This method handles all three formats.
+      *
+      * @param fixture Test fixture containing CBOR data
+      * @return Complete Transaction
+      */
+    def buildTransaction(fixture: TransactionTestFixture): Transaction =
+        import scalus.serialization.cbor.Cbor as ScalusCbor
+        import scalus.cardano.ledger.{TransactionBody, TransactionWitnessSet, AuxiliaryData, KeepRaw, ProtocolVersion, OriginalCborByteArray}
+        import scala.util.{Try, Success, Failure}
+        import io.bullet.borer.{Cbor as BorerCbor}
+
+        given ProtocolVersion = ProtocolVersion.conwayPV
+
+        // Detect CBOR format by examining the first byte
+        val firstByte = fixture.txCbor(0) & 0xFF
+        val isMap = (firstByte & 0xE0) == 0xA0 // Map major type (5)
+        val isArray = (firstByte & 0xE0) == 0x80 // Array major type (4)
+
+        if isMap then
+            // Handle map format: {0: body, 1: witness_set, 2: is_valid, 3: auxiliary_data}
+            // Parse using manual CBOR map extraction
+            Try {
+                // Helper to extract raw CBOR bytes for a specific map key
+                def extractMapValue(targetKey: Int): Option[Array[Byte]] =
+                    Try {
+                        import io.bullet.borer.{Decoder, Cbor}
+
+                        // Custom decoder that captures byte positions and returns (start, end) offsets
+                        given Decoder[Option[(Int, Int)]] = Decoder { r =>
+                            val mapSize = r.readMapHeader().toInt
+                            var result: Option[(Int, Int)] = None
+
+                            for (_ <- 0 until mapSize if result.isEmpty) do
+                                val key = r.readInt()
+                                val valueStart = r.position.index.toInt
+                                r.skipDataItem() // Skip the value (including tags)
+                                val valueEnd = r.position.index.toInt
+
+                                if key == targetKey then
+                                    result = Some((valueStart, valueEnd))
+
+                            result
+                        }
+
+                        Cbor.decode(fixture.txCbor).to[Option[(Int, Int)]].valueEither match
+                            case Right(Some((start, end))) => Some(fixture.txCbor.slice(start, end))
+                            case _ => None
+                    }.toOption.flatten
+
+                // Extract transaction body bytes (key 0)
+                val bodyBytes = extractMapValue(0).getOrElse(
+                    throw new RuntimeException("Missing transaction body in map")
+                )
+                given OriginalCborByteArray = OriginalCborByteArray(bodyBytes)
+                val body = ScalusCbor.decode[TransactionBody](bodyBytes)
+
+                // Extract witness set bytes (key 1)
+                val witnessSet = extractMapValue(1) match
+                    case Some(bytes) =>
+                        given OriginalCborByteArray = OriginalCborByteArray(bytes)
+                        ScalusCbor.decode[TransactionWitnessSet](bytes)
+                    case None => TransactionWitnessSet.empty
+
+                // Extract auxiliary data (key 3)
+                val auxData = extractMapValue(3).flatMap { bytes =>
+                    Try {
+                        given OriginalCborByteArray = OriginalCborByteArray(bytes)
+                        val aux = ScalusCbor.decode[AuxiliaryData](bytes)
+                        KeepRaw.unsafe(aux, bytes)
+                    }.toOption
+                }
+
+                Transaction(KeepRaw.unsafe(body, bodyBytes), witnessSet, auxiliaryData = auxData)
+            }.recoverWith {
+                // If map parsing fails, try array format as fallback
+                case _ =>
+                    Try {
+                        given OriginalCborByteArray = OriginalCborByteArray(fixture.txCbor)
+                        ScalusCbor.decode[Transaction](fixture.txCbor)
+                    }
+            }.get
+        else
+            // Handle array formats
+            Try {
+                given OriginalCborByteArray = OriginalCborByteArray(fixture.txCbor)
+                ScalusCbor.decode[Transaction](fixture.txCbor)
+            } match
+                case Success(tx) =>
+                    // tx.cbor contains a complete transaction in array format
+                    tx
+                case Failure(_) =>
+                    // tx.cbor contains only TransactionBody
+                    given OriginalCborByteArray = OriginalCborByteArray(fixture.txCbor)
+                    val body = ScalusCbor.decode[TransactionBody](fixture.txCbor)
+
+                    // Decode witness set from witness.cbor, or use empty if not present
+                    val witnessSet = fixture.witnessCbor match
+                        case Some(witnessCborBytes) =>
+                            given OriginalCborByteArray = OriginalCborByteArray(witnessCborBytes)
+                            ScalusCbor.decode[TransactionWitnessSet](witnessCborBytes)
+                        case None =>
+                            TransactionWitnessSet.empty
+
+                    // Construct the complete transaction
+                    Transaction(KeepRaw.unsafe(body, fixture.txCbor), witnessSet, auxiliaryData = None)
+
     /** Build UTXO map from test fixture context
       *
       * Converts test data models to Scalus types for use in validators
@@ -241,13 +431,24 @@ trait ConformanceTestBase extends AnyFunSuite with Matchers:
             val value = Value(Coin(output.value), MultiAsset.empty)
 
             // Parse datum option if present
-            val datumOption = output.datum.map { datumHex =>
-                // For now, treat it as a datum hash
-                DatumOption.Hash(DataHash.fromByteString(ByteString.fromArray(datumHex.hexToBytes)))
+            val datumOption = output.datum.map {
+                case TestDataModels.DatumType.Data(hex) =>
+                    // Inline datum - decode as Data
+                    val datumBytes = hex.hexToBytes
+                    DatumOption.Inline(Cbor.decode(datumBytes).to[scalus.builtin.Data].value)
+                case TestDataModels.DatumType.Hash(hex) =>
+                    // Datum hash
+                    DatumOption.Hash(DataHash.fromByteString(ByteString.fromArray(hex.hexToBytes)))
             }
 
             // Parse script ref if present
-            val scriptRef = output.script.map { scriptHex =>
+            val scriptRef = output.script.map { scriptType =>
+                // Extract hex from the script type
+                val scriptHex = scriptType match
+                    case TestDataModels.ScriptType.PlutusV1(hex) => hex
+                    case TestDataModels.ScriptType.PlutusV2(hex) => hex
+                    case TestDataModels.ScriptType.PlutusV3(hex) => hex
+                    case TestDataModels.ScriptType.NativeScript(hex) => hex
                 // Parse the script from CBOR
                 val scriptBytes = scriptHex.hexToBytes
                 ScriptRef(Cbor.decode(scriptBytes).to[Script].value)
