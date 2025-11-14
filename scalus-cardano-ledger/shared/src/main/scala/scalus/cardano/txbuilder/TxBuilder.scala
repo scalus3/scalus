@@ -78,6 +78,22 @@ case class TxBuilder(
         )
     }
 
+    override def spend(
+        utxo: Utxo,
+        redeemer: Data,
+        script: PlutusScript
+    ): Builder = {
+        val datum = buildDatumWitness(utxo)
+
+        val witness = ThreeArgumentPlutusScriptWitness(
+          scriptSource = ScriptSource.PlutusScriptValue(script),
+          redeemer = redeemer,
+          datum = datum,
+          additionalSigners = Set.empty
+        )
+        addSteps(TransactionBuilderStep.Spend(utxo, witness))
+    }
+
     override def references(utxos: Utxo*): Builder =
         addSteps(utxos.map(TransactionBuilderStep.ReferenceOutput.apply)*)
 
@@ -148,6 +164,28 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
+    override def mint(
+        redeemer: Data,
+        assets: collection.Map[AssetName, Long],
+        script: PlutusScript
+    ): Builder = {
+
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = script.scriptHash,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = ScriptSource.PlutusScriptValue(script),
+                redeemer = redeemer,
+                additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
     override def minFee(minFee: Coin): Builder =
         addSteps(TransactionBuilderStep.Fee(minFee))
 
@@ -172,11 +210,11 @@ case class TxBuilder(
     override def diffHandler(handler: DiffHandler): Builder =
         copy(diffHandlerOpt = Some(handler))
 
-    override def feePayer(address: Address): Builder =
-        copy(changeAddressOpt = Some(address))
-
-    override def changeTo(address: Address): Builder =
-        copy(changeAddressOpt = Some(address))
+    override def changeTo(address: Address): Builder = {
+        val handler: DiffHandler = (diff, tx) =>
+            Change.handleChange(diff, tx, address, env.protocolParams)
+        copy(changeAddressOpt = Some(address), diffHandlerOpt = Some(handler))
+    }
 
     override def build(): Builder = {
         val network = env.network
@@ -200,8 +238,7 @@ case class TxBuilder(
         finalizedContext match {
             case Right(finalized) =>
                 copy(context = finalized)
-            case Left(error) =>
-                throw new IllegalStateException(s"Failed to build transaction: $error")
+            case Left(error) => throw new RuntimeException(error.reason)
         }
     }
 
@@ -292,8 +329,7 @@ case class TxBuilder(
         ctx.copy(transaction = updatedTx)
     }
 
-    private def addSteps(s: TransactionBuilderStep*) =
-        copy(steps = steps ++ s)
+    private def addSteps(s: TransactionBuilderStep*) = copy(steps = steps ++ s)
 }
 
 object TxBuilder {
@@ -314,6 +350,7 @@ object TxBuilder {
 trait Builder {
     def spend(utxo: Utxo): Builder
     def spend(utxo: Utxo, redeemer: Data): Builder
+    def spend(utxo: Utxo, redeemer: Data, script: PlutusScript): Builder
     def spend(utxo: Utxo, redeemerBuilder: Transaction => Data): Builder
     def references(utxos: Utxo*): Builder
     def collaterals(utxos: Utxo*): Builder
@@ -325,12 +362,12 @@ trait Builder {
     def attach(data: Data): Builder
     def metadata(auxiliaryData: AuxiliaryData): Builder
     def mint(redeemer: Data, policyId: PolicyId, assets: collection.Map[AssetName, Long]): Builder
+    def mint(redeemer: Data, assets: collection.Map[AssetName, Long], script: PlutusScript): Builder
     def minFee(minFee: Coin): Builder
     def validDuring(interval: ValidityInterval): Builder
     def validFrom(from: Instant): Builder
     def validTo(to: Instant): Builder
     def diffHandler(diffHandler: DiffHandler): Builder
-    def feePayer(address: Address): Builder
     def changeTo(address: Address): Builder
     def build(): Builder
     def context: TransactionBuilder.Context

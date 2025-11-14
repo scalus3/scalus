@@ -2116,6 +2116,33 @@ enum SomeBuildError:
     case BalancingError(e: TxBalancingError, context: Context)
     case ValidationError(e: TransactionException, context: Context)
 
+    def reason: Throwable =
+        this match {
+            case SomeBuildError.SomeStepError(e, context) =>
+                new RuntimeException(
+                  s"Step error: ${e.explain}"
+                )
+
+            case SomeBuildError.SomeRedeemerIndexingError(e, context) =>
+                new RuntimeException(
+                  s"Redeemer indexing error: ${e}"
+                )
+            case SomeBuildError.BalancingError(e, context) =>
+                e match {
+                    case TxBalancingError.EvaluationFailed(cause) => cause
+                    case TxBalancingError.Failed(cause)           => cause
+                    case TxBalancingError.CantBalance(lastDiff) =>
+                        new RuntimeException(
+                          s"Balancing failure. Last seen diff (sum(outputs) - sum(inputs)) = $lastDiff"
+                        )
+                    case TxBalancingError.InsufficientFunds(diff, minRequired) =>
+                        new RuntimeException(
+                          s"Balancing failure: insufficient funds: diff=$diff, minRequired=$minRequired"
+                        )
+                }
+            case SomeBuildError.ValidationError(e, context) => e
+        }
+
     override def toString: String = this match {
         case SomeStepError(e, _) =>
             s"Step processing error: ${e.getClass.getSimpleName} - ${e.explain}"

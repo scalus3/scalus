@@ -54,18 +54,19 @@ def genScriptAddr(
       delegation = delegation
     )
 
-/** Generate a positive Ada value */
-val genAdaOnlyValue: Gen[Value] =
+/** Generate a positive Ada value greater than or equal to `min`. */
+def genAdaOnlyValue(min: Long): Gen[Value] =
     for {
-        coin <- Gen.posNum[Long]
+        coin <- Gen.chooseNum(min, Long.MaxValue)
     } yield Value(Coin(coin))
 
-/** Ada-only pub key utxo from the given peer, at least minAda, random tx id, random index, no
+/** Ada-only pub key utxo from the given peer, at least `min` Ada, random tx id, random index, no
   * datum, no script ref
   */
 def genAdaOnlyPubKeyUtxo(
     peer: TestPeer,
-    params: ProtocolParams = blockfrost544Params
+    params: ProtocolParams = blockfrost544Params,
+    min: Long = 0L
 ): Gen[(TransactionInput, Babbage)] =
     for {
         txId <- genTransactionInput
@@ -81,7 +82,7 @@ def genAdaOnlyPubKeyUtxo(
         ),
         params
       ).asInstanceOf[Babbage]
-    ).focus(_._2.value).modify(_ + value)
+    ).focus(_._2.value).modify(_ + Value.lovelace(min))
 
 // Get the minAda for an Ada only pubkey utxo
 def minPubkeyAda(params: ProtocolParams = blockfrost544Params) = {
