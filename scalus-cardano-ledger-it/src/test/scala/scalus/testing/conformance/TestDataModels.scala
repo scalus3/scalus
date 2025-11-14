@@ -2,8 +2,14 @@ package scalus.testing.conformance
 
 import io.circe.Decoder
 import io.circe.generic.semiauto.*
+import scalus.builtin.ByteString
+import scalus.utils.Hex.*
 
-/** Models for parsing Amaru test data JSON files */
+/** Models for parsing Amaru test data JSON files
+  *
+  * This includes both epoch-level data (pools, rewards, governance)
+  * and transaction/block-level data for ledger rules conformance testing.
+  */
 object TestDataModels:
 
     /** Helper type for nested lovelace amounts: {"ada": {"lovelace": amount}} */
@@ -140,3 +146,62 @@ object TestDataModels:
 
     /** Helper to extract lovelace amount */
     def extractLovelace(wrapper: Ada): BigInt = wrapper.ada.lovelace
+
+    // ========================================================================
+    // Transaction and Block Level Test Data Models
+    // ========================================================================
+
+    /** Transaction input reference */
+    case class TransactionInput(
+        transaction_id: String,
+        index: Int
+    )
+
+    /** Transaction output */
+    case class TransactionOutput(
+        address: String,
+        value: Long,
+        datum: Option[String],
+        script: Option[String]
+    )
+
+    /** UTXO entry - a pair of input and output */
+    type UtxoEntry = (TransactionInput, TransactionOutput)
+
+    /** Test context containing UTXO set and required witnesses */
+    case class TestContext(
+        utxo: List[UtxoEntry],
+        required_signers: Option[List[String]] = None,
+        required_scripts: Option[List[String]] = None,
+        required_bootstrap_roots: Option[List[String]] = None
+    )
+
+    /** Expected trace event for transaction/block validation */
+    case class TraceEvent(
+        name: String,
+        hash: Option[String] = None,
+        position: Option[Int] = None
+    )
+
+    /** Test fixture containing all test data for a transaction */
+    case class TransactionTestFixture(
+        context: TestContext,
+        txCbor: Array[Byte],
+        witnessCbor: Option[Array[Byte]],
+        expectedTraces: List[TraceEvent]
+    )
+
+    // Circe decoders for transaction/block test data
+    given Decoder[TransactionInput] = deriveDecoder[TransactionInput]
+    given Decoder[TransactionOutput] = deriveDecoder[TransactionOutput]
+    given Decoder[UtxoEntry] = Decoder.decodeTuple2[TransactionInput, TransactionOutput]
+    given Decoder[TestContext] = deriveDecoder[TestContext]
+    given Decoder[TraceEvent] = deriveDecoder[TraceEvent]
+
+    /** Helper to convert hex string to ByteString */
+    def hexToByteString(hexStr: String): ByteString =
+        ByteString.fromHex(hexStr)
+
+    /** Helper to parse address bytes from hex string */
+    def parseAddressHex(hexStr: String): Array[Byte] =
+        hexStr.hexToBytes
