@@ -71,7 +71,6 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
                 )
           ),
           context = Context.testMainnet(),
-          validators = MockLedgerApi.defaultValidators - MissingRequiredDatumsValidator,
           mutators = MockLedgerApi.defaultMutators - PlutusScriptsTransactionMutator
         )
     }

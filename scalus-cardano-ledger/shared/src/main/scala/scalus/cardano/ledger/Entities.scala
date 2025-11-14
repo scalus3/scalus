@@ -291,6 +291,16 @@ object TransactionException {
           s"Exact set of redeemers validation failed for transactionId $transactionId, extra redeemers: $extraRedeemers, missing redeemers: $missingRedeemers"
         )
 
+    // It's Alonzo UnspendableUTxONoDatumHash && MissingRequiredDatums && NotAllowedSupplementalDatums in cardano-ledger
+    final case class DatumsException(
+        transactionId: TransactionHash,
+        inputsWithMissingDatums: Set[TransactionInput],
+        unmatchedDatumHashes: Set[DataHash],
+        notAllowedSupplementalDatumHashes: Set[DataHash]
+    ) extends TransactionException(
+          s"Datums validation failed for transactionId $transactionId, inputs with missing datums: $inputsWithMissingDatums, unmatched datum hashes: $unmatchedDatumHashes, not allowed supplemental datum hashes: $notAllowedSupplementalDatumHashes"
+        )
+
     // TODO: placeholder for general exception, remove after finishing development
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 }
