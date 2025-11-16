@@ -4,7 +4,7 @@ import scalus.Compiler
 import scalus.builtin.Builtins
 import scalus.builtin.Data
 import scalus.compiler.sir.SIR
-import scalus.uplc.{BuiltinRuntime, BuiltinsMeaning, DefaultFun, Expr as Exp, Term as Trm}
+import scalus.uplc.{BuiltinRuntime, BuiltinsMeaning, DefaultFun, Expr as Exp, NamedDeBruijn, Term as Trm}
 import scalus.uplc.ExprBuilder.*
 
 import java.io.File
@@ -53,6 +53,37 @@ object Macros {
             case x => report.errorAndAbort(x.toString)
         '{
             Exp(Trm.LamAbs($name, $f(vr($name)).term))
+        }
+
+    /** Converts a lambda value of type [[Term]] => [[Term]] into a UPLC [[LamAbs]] term expression.
+      *
+      * This macro extracts the parameter name from the provided lambda and creates a
+      * [[Term.LamAbs]] term wrapping the body. It expects a simple lambda value (e.g. lam(x => x)).
+      *
+      * @param f
+      *   quoted lambda expression
+      */
+    @nowarn
+    def lamTermMacro(f: Expr[Trm => Trm])(using Quotes): Expr[Trm] =
+        import quotes.reflect.*
+        val name = f.asTerm match
+            // lam(x => body)
+            case Inlined(
+                  _,
+                  _,
+                  Block(List(DefDef(_, List(List(ValDef(name, _, _))), _, body)), _)
+                ) =>
+                Expr(name)
+            // lam { x => body }
+            case Inlined(
+                  _,
+                  _,
+                  Block(List(), Block(List(DefDef(_, List(List(ValDef(name, _, _))), _, body)), _))
+                ) =>
+                Expr(name)
+            case x => report.errorAndAbort(x.toString)
+        '{
+            Trm.LamAbs($name, $f(Trm.Var(NamedDeBruijn($name))))
         }
 
     /** Create a quoted getter function of type Exp[Data] => Exp[Data] from a field selection lambda

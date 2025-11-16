@@ -5,6 +5,7 @@ import scalus.cardano.ledger.Word64
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.uplc.Constant.flatConstant
+import scalus.utils.Macros
 
 import scala.annotation.targetName
 import scala.collection.immutable
@@ -123,9 +124,20 @@ object Term {
     extension [A: Constant.LiftValue](a: A)
         def asTerm: Term = Term.Const(summon[Constant.LiftValue[A]].lift(a))
 
-    def λ(names: String*)(term: Term): Term = lam(names*)(term)
+    def λ(name: String, names: String*)(term: Term): Term = lam(name, names*)(term)
+    @deprecated("Use lam or λ methods instead", "0.13.0")
     def λλ(name: String)(f: Term => Term): Term = lam(name)(f(vr(name)))
-    def lam(names: String*)(term: Term): Term = names.foldRight(term)(Term.LamAbs(_, _))
+    def lam(name: String, names: String*)(term: Term): Term =
+        names.view.prepended(name).foldRight(term)(Term.LamAbs(_, _))
+
+    /** Converts a lambda value of type [[Term]] => [[Term]] into a UPLC [[LamAbs]] term expression.
+      *
+      * A lambda argument `x` becomes a `Term.Var(NamedDeBruijn("x"))`` variable in the UPLC term.
+      *
+      * @example
+      *   {{{λ(x => x $ x)}}}
+      */
+    inline def λ(inline f: Term => Term): Term = ${ Macros.lamTermMacro('f) }
     def vr(name: String): Term = Term.Var(NamedDeBruijn(name))
 
     /** Parse UPLC term from string using the default version (1, 1, 0) */

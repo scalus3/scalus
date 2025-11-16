@@ -56,14 +56,14 @@ class PlutusVMTest extends AnyFunSuiteLike {
     }
 
     test("evaluateDeBruijnedTerm fails on non-debruijned term") {
-        val term = λ("x")(vr"x")
+        val term = λ(x => x)
         assertThrows[Exception] {
             v2vm.evaluateDeBruijnedTerm(term, NoBudgetSpender, NoLogger)
         }
     }
 
     test("evaluateDeBruijnedTerm evaluates debruijned term") {
-        val term = λ("x")(vr"x") $ Const(Constant.Bool(true))
+        val term = λ(x => x) $ Const(Constant.Bool(true))
         assert(
           v2vm.evaluateDeBruijnedTerm(
             DeBruijn.deBruijnTerm(term),

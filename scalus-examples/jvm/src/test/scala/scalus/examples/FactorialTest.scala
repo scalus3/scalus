@@ -5,7 +5,7 @@ import scalus.*
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.{IfThenElse, LessThanEqualsInteger, MultiplyInteger, SubtractInteger}
-import scalus.uplc.Term.{asTerm, λλ}
+import scalus.uplc.Term.{asTerm, λ}
 import scalus.uplc.eval.*
 import scalus.uplc.transform.CaseConstrApply
 
@@ -23,11 +23,11 @@ class FactorialTest extends AnyFunSuite with ScalusTest {
         def versionedFactorialTerm: Term = {
             import scalus.uplc.TermDSL.given
             // pfix' implementation
-            def pfix(f: Term => Term) = λλ("r") { r => r $ r } $ λλ("r") { r => f(r $ r) }
+            def pfix(f: Term => Term) = λ { r => r $ r } $ λ { r => f(r $ r) }
 
             // pfactorial using pfix'
             val factorial = pfix: r =>
-                λλ("x"): x =>
+                λ: x =>
                     !(!IfThenElse $ (LessThanEqualsInteger $ x $ 0) $
                         ~1.asTerm $
                         ~(MultiplyInteger $ x $ (r $ (SubtractInteger $ x $ 1))))

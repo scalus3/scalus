@@ -58,7 +58,7 @@ class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, A
           SIR.Const(Constant.Unit, Unit, ae),
           Unit,
           ae
-        ) lowersTo (lam("x")(vr"x") $ Constant.Unit)
+        ) lowersTo (λ(x => x) $ ().asTerm)
 
     }
 
@@ -93,7 +93,7 @@ class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, A
           ),
           SIR.LetFlags.None,
           ae
-        ) lowersTo (lam("x")(lam("y")(AddInteger $ vr"x" $ vr"y") $ 2) $ 1)
+        ) lowersTo (λ(x => λ(y => AddInteger $ x $ y) $ 2) $ 1)
     }
 
     test("lower Constr") {
@@ -143,7 +143,7 @@ class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, A
         // With LetFloating optimization, the scrutinee lazy let is floated into the case
         // This becomes (lam scrutinee scrutinee) $ (constr 0) in the case scrutinee position
         val expected = Term.Case(
-          lam("scrutinee")(vr"scrutinee") $ Term.Constr(Word64.Zero, List.empty),
+          λ(scrutinee => scrutinee) $ Term.Constr(Word64.Zero, List.empty),
           List(BigInt(1), λ("h", "tl")(BigInt(2)))
         )
         val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
@@ -174,7 +174,7 @@ class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, A
 
         // With LetFloating optimization, the scrutinee lazy let is floated
         // The newtype unwrapping creates: (lam id BODY) ((lam scrutinee scrutinee) VALUE)
-        val expected = lam("id")(BigInt(1)) $ (lam("scrutinee")(vr"scrutinee") $ hex"DEADBEEF")
+        val expected = λ(id => BigInt(1)) $ (λ(scrutinee => scrutinee) $ hex"DEADBEEF")
         val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
