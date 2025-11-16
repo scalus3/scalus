@@ -60,6 +60,7 @@ object BlocksTestUtils {
     )
 
     val utxoResolver = CclUtxoResolver(utxoSupplier, scriptSupplier)
+    val scalusUtxoResolver = ScalusUtxoResolver(utxoSupplier, scriptSupplier)
 
     def newEvaluator(epoch: Int = epochMagic) = ScalusTransactionEvaluator(
       SlotConfig.Mainnet,
@@ -153,6 +154,18 @@ object BlocksTestUtils {
                 .toIndexedSeq
                 .sorted
         }.get
+    }
+
+    /** Load a block from file path and return both BlockFile and the raw bytes
+      *
+      * @param path
+      *   Path to the block CBOR file
+      * @return
+      *   Tuple of (BlockFile, raw CBOR bytes)
+      */
+    def loadBlock(path: Path): (scalus.cardano.ledger.BlockFile, Array[Byte]) = {
+        val bytes = Files.readAllBytes(path)
+        (scalus.cardano.ledger.BlockFile.fromCborArray(bytes), bytes)
     }
 
 }
