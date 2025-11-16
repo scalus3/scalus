@@ -1,9 +1,9 @@
 package scalus.uplc.transform
 
 import scalus.*
-import scalus.uplc.{NamedDeBruijn, Term}
 import scalus.uplc.Term.*
-import TermAnalysis.isPure
+import scalus.uplc.transform.TermAnalysis.isPure
+import scalus.uplc.{NamedDeBruijn, Term}
 
 /** Performs eta-reduction on a term.
   *
@@ -15,7 +15,8 @@ object EtaReduce:
       * @see
       *   [[etaReduce]]
       */
-    def apply(term: Term): Term = etaReduce(term)
+    def apply(term: Term): Term = etaReduce(term, _ => ())
+    def apply(term: Term, logger: String => Unit): Term = etaReduce(term, logger)
 
     /** Performs eta-reduction on a term.
       *
@@ -34,16 +35,18 @@ object EtaReduce:
       * @see
       *   [[TermAnalysis.isPure]] for purity semantics
       */
-    def etaReduce(term: Term): Term = term match
+    def etaReduce(term: Term): Term = etaReduce(term, _ => ())
+    def etaReduce(term: Term, logger: String => Unit): Term = term match
         case LamAbs(name1, Term.Apply(f, Term.Var(name2)))
             if name1 == name2.name && !freeNames(f).contains(name1) && f.isPure =>
-            etaReduce(f)
+            logger(s"Eta-reducing term: ${f.show}")
+            etaReduce(f, logger)
         case LamAbs(name, body) =>
-            val body1 = etaReduce(body)
-            if body != body1 then etaReduce(LamAbs(name, body1)) else term
-        case Apply(f, arg) => Apply(etaReduce(f), etaReduce(arg))
-        case Force(term)   => Force(etaReduce(term))
-        case Delay(term)   => Delay(etaReduce(term))
+            val body1 = etaReduce(body, logger)
+            if body != body1 then etaReduce(LamAbs(name, body1), logger) else term
+        case Apply(f, arg) => Apply(etaReduce(f, logger), etaReduce(arg, logger))
+        case Force(term)   => Force(etaReduce(term, logger))
+        case Delay(term)   => Delay(etaReduce(term, logger))
         case _             => term
 
     /** Returns the set of free names in a term */
