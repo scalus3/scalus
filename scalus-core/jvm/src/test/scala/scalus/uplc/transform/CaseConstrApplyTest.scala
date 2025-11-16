@@ -2,16 +2,15 @@ package scalus.uplc.transform
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
-import scalus.builtin.ByteString.*
+import scalus.Compiler.{compile, Options, TargetLoweringBackend}
 import scalus.builtin.ByteString
-import scalus.cardano.ledger.Word64
-import scalus.uplc.{Constant, DeBruijn}
-import scalus.uplc.Term.*
-import scalus.cardano.ledger.ExUnits
+import scalus.builtin.ByteString.*
 import scalus.cardano.ledger.ExUnits.given
-import scalus.uplc.eval.Result.Success
+import scalus.cardano.ledger.{ExUnits, Word64}
+import scalus.uplc.Term.*
 import scalus.uplc.eval.PlutusVM
+import scalus.uplc.eval.Result.Success
+import scalus.uplc.{Constant, DeBruijn}
 
 import scala.language.implicitConversions
 import scala.math.Ordering.Implicits.*
@@ -19,8 +18,8 @@ import scala.math.Ordering.Implicits.*
 class CaseConstrApplyTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering
     )
 
     test("replace (apply (apply (apply f a) b) c) with (case (constr 0 [a, b, c]) f)") {
