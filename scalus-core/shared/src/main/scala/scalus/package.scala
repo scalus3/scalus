@@ -59,7 +59,11 @@ package object scalus {
                     ).lower()
             val retval =
                 if optimizeUplc then
-                    uplc |> EtaReduce.apply |> Inliner.apply |> CaseConstrApply.apply |> ForcedBuiltinsExtractor.apply
+                    uplc
+                        |> EtaReduce.apply
+                        |> Inliner.apply
+                        |> ForcedBuiltinsExtractor.apply // CaseConstrApply will optimize further after this
+                        |> CaseConstrApply.apply
                 else uplc
             retval
         }
@@ -110,7 +114,7 @@ package object scalus {
                     ).lower()
             val retval =
                 if options.optimizeUplc then
-                    uplc |> EtaReduce.apply |> Inliner.apply |> CaseConstrApply.apply |> ForcedBuiltinsExtractor.apply
+                    uplc |> EtaReduce.apply |> Inliner.apply |> ForcedBuiltinsExtractor.apply |> CaseConstrApply.apply
                 else uplc
             retval
         }

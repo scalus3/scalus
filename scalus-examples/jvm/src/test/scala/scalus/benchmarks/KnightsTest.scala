@@ -33,7 +33,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
-            then ExUnits(memory = 325_210974L, steps = 92468_333030L)
+            then ExUnits(memory = 325_210474L, steps = 92468_253030L)
             else if summon[
                   scalus.Compiler.Options
                 ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
@@ -134,7 +134,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             summon[scalus.Compiler.Options].targetLoweringBackend match
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExUnits(memory = 823_021359L, steps = 228427_838079L)
+                    ExUnits(memory = 823_020859L, steps = 228427_758079L)
                 case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
                     ExUnits(memory = 645_799142L, steps = 115775_218834L)
                 case _ =>
@@ -233,7 +233,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget = {
             summon[scalus.Compiler.Options].targetLoweringBackend match {
                 case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExUnits(memory = 1646_886653L, steps = 453159_585705L)
+                    ExUnits(memory = 1646_886153L, steps = 453159_505705L)
                 case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
                     ExUnits(memory = 1315_097779L, steps = 235822_700067L)
                 case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
