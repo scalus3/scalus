@@ -31,7 +31,7 @@ jobs:
         if: always()
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          title: "CI-JVM ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
+          title: "[${{ github.event.repository.name }}] CI-JVM ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
           description: "[${{ github.event.head_commit.message }}](${{ github.event.head_commit.url }})"
           url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           username: "GitHub Actions"
