@@ -4,7 +4,7 @@ import scalus.builtin.Data.*
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.PosixTime
+import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 
 class Transactions(
@@ -18,8 +18,8 @@ class Transactions(
 
     def lock(
         value: Value,
-        committer: PubKeyHash,
-        receiver: PubKeyHash,
+        committer: AddrKeyHash,
+        receiver: AddrKeyHash,
         image: Image,
         timeout: PosixTime
     ): Either[String, Transaction] = {
@@ -28,7 +28,7 @@ class Transactions(
             case (builder, (utxo, witness)) =>
                 builder.spendOutputs(utxo, witness)
         }
-        val datum = Config(committer, receiver, image, timeout).toData
+        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout).toData
         builder.payToScript(scriptAddress, value, datum).build()
     }
 
@@ -36,7 +36,7 @@ class Transactions(
         lockedUtxo: Utxo,
         preimage: Preimage,
         recipientAddress: Address,
-        receiverPkh: PubKeyHash,
+        receiverPkh: AddrKeyHash,
         time: PosixTime
     ): Either[String, Transaction] = {
         val Utxo(input, output) = lockedUtxo
@@ -46,7 +46,7 @@ class Transactions(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer,
           datum = Datum.DatumInlined,
-          additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(receiverPkh)))
+          additionalSigners = Set(ExpectedSigner(receiverPkh))
         )
         val validityStartSlot = context.env.slotConfig.timeToSlot(time.toLong)
 
@@ -61,7 +61,7 @@ class Transactions(
     def timeout(
         lockedUtxo: Utxo,
         committerAddress: Address,
-        committerPkh: PubKeyHash,
+        committerPkh: AddrKeyHash,
         time: PosixTime
     ): Either[String, Transaction] = {
         val Utxo(input, output) = lockedUtxo
@@ -71,7 +71,7 @@ class Transactions(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer,
           datum = Datum.DatumInlined,
-          additionalSigners = Set(ExpectedSigner(AddrKeyHash.fromByteString(committerPkh)))
+          additionalSigners = Set(ExpectedSigner(committerPkh))
         )
         val validityStartSlot = context.env.slotConfig.timeToSlot(time.toLong)
 

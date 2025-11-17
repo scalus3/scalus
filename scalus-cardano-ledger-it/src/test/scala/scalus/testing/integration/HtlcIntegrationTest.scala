@@ -112,7 +112,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
         val senderAddress = getEnvOrSkip("SENDER_ADDRESS", testEnv)
         val senderAddr = Address.fromBech32(senderAddress)
-        val senderPkh = getPaymentPkh(senderAddr)
+        val senderPkh = AddrKeyHash.fromByteString(getPaymentPkh(senderAddr))
 
         val senderUtxos = ctx.client.findUtxos(senderAddr).toOption.get
         assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
@@ -163,7 +163,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
         val senderAddress = getEnvOrSkip("SENDER_ADDRESS", testEnv)
         val senderAddr = Address.fromBech32(senderAddress)
-        val senderPkh = getPaymentPkh(senderAddr)
+        val senderPkh = AddrKeyHash.fromByteString(getPaymentPkh(senderAddr))
 
         // HTLC parameters - must match the locked UTXO
         val preimage = ByteString.fromString("secret_preimage_54321")

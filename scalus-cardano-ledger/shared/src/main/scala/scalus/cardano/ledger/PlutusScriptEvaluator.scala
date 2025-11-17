@@ -54,12 +54,12 @@ trait PlutusScriptEvaluator {
       */
     def evalPlutusScripts(
         tx: Transaction,
-        utxos: Map[TransactionInput, TransactionOutput],
+        utxos: Utxos,
     ): Seq[Redeemer] = evalPlutusScriptsWithContexts(tx, utxos).map(_._1)
 
     def evalPlutusScriptsWithContexts(
         tx: Transaction,
-        utxos: Map[TransactionInput, TransactionOutput],
+        utxos: Utxos,
     ): Seq[(Redeemer, ScriptContext, ScriptHash)]
 }
 
@@ -73,8 +73,83 @@ object PlutusScriptEvaluator {
     @threadUnsafe lazy val noop: PlutusScriptEvaluator = new PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
-            utxos: Map[TransactionInput, TransactionOutput]
+            utxos: Utxos
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = Seq.empty
+    }
+
+    /** Factory method to create a PlutusScriptEvaluator instance that always returns a constant
+      * budget.
+      *
+      * This is useful for testing scenarios where you want to simulate script evaluations without
+      * executing actual logic.
+      *
+      * @param budget
+      *   The constant execution units to return for any script evaluation
+      * @return
+      *   PlutusScriptEvaluator instance that always returns the specified budget
+      */
+    def const(budget: ExUnits): PlutusScriptEvaluator = apply((_, _, _, _, _) => budget)
+
+    /** Factory method to create a PlutusScriptEvaluator instance that uses the maximum budget
+      * defined in Cardano protocol parameters.
+      *
+      * This is useful for testing scenarios where you want to simulate script evaluations with the
+      * maximum allowed resources.
+      *
+      * @param cardanoInfo
+      *   The CardanoInfo containing protocol parameters
+      * @return
+      *   PlutusScriptEvaluator instance that always returns the maximum budget
+      */
+    def constMaxBudget(cardanoInfo: CardanoInfo): PlutusScriptEvaluator = const(
+      ExUnits(
+        cardanoInfo.protocolParams.maxTxExecutionUnits.memory,
+        cardanoInfo.protocolParams.maxTxExecutionUnits.steps
+      )
+    )
+
+    /** Factory method to create a PlutusScriptEvaluator instance with custom evaluation logic.
+      *
+      * This allows injecting custom evaluation behavior for testing or specialized scenarios.
+      *
+      * @param evalBudget
+      *   Function that computes execution units for a given redeemer and script
+      * @return
+      *   PlutusScriptEvaluator instance using the provided evaluation function
+      */
+    def apply(
+        evalBudget: (Redeemer, String, PlutusVM, ByteString, Seq[Data]) => ExUnits
+    ): PlutusScriptEvaluator = new DefaultImpl(
+      CardanoInfo.mainnet.slotConfig,
+      ExUnits(
+        CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits.memory,
+        CardanoInfo.mainnet.protocolParams.maxTxExecutionUnits.steps
+      ),
+      CardanoInfo.mainnet.majorProtocolVersion,
+      CardanoInfo.mainnet.protocolParams.costModels,
+      EvaluatorMode.EvaluateAndComputeCost,
+      debugDumpFilesForTesting = false
+    ) {
+        override protected def evalScript(
+            redeemer: Redeemer,
+            txhash: String,
+            vm: PlutusVM,
+            script: ByteString,
+            args: Data*
+        ): Result = {
+            Result.Success(
+              Term.Error,
+              evalBudget(
+                redeemer,
+                txhash,
+                vm,
+                script,
+                Seq.from(args)
+              ),
+              Map.empty,
+              Seq.empty
+            )
+        }
     }
 
     /** Factory method to create a PlutusScriptEvaluator instance.
@@ -109,8 +184,11 @@ object PlutusScriptEvaluator {
       * @param mode
       *   The evaluator mode
       */
-    def apply(cardanoInfo: CardanoInfo, mode: EvaluatorMode): PlutusScriptEvaluator =
-        new DefaultImpl(
+    def apply(
+        cardanoInfo: CardanoInfo,
+        mode: EvaluatorMode
+    ): PlutusScriptEvaluator =
+        apply(
           cardanoInfo.slotConfig,
           ExUnits(
             cardanoInfo.protocolParams.maxTxExecutionUnits.memory,
@@ -118,8 +196,7 @@ object PlutusScriptEvaluator {
           ),
           cardanoInfo.majorProtocolVersion,
           cardanoInfo.protocolParams.costModels,
-          EvaluatorMode.EvaluateAndComputeCost,
-          debugDumpFilesForTesting = false
+          mode
         )
 
     private class DefaultImpl(
@@ -165,7 +242,7 @@ object PlutusScriptEvaluator {
 
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
-            utxos: Map[TransactionInput, TransactionOutput],
+            utxos: Utxos,
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = {
             log.debug(s"Starting Phase 2 evaluation for transaction: ${tx.id}")
 
@@ -338,7 +415,7 @@ object PlutusScriptEvaluator {
             log.debug(s"Evaluation result: $result")
 
             // Return redeemer with computed execution units
-            redeemer.copy(exUnits = ExUnits(memory = cost.memory, steps = cost.steps)) -> result._2
+            redeemer.copy(exUnits = cost) -> result._2
         }
 
         private def extractDatumFromOutput(
@@ -482,7 +559,7 @@ object PlutusScriptEvaluator {
           *   4. Tracks execution budget and handles budget exhaustion
           *   5. Optionally dumps script data for debugging
           */
-        private def evalScript(
+        protected def evalScript(
             redeemer: Redeemer,
             txhash: String,
             vm: PlutusVM,
@@ -542,7 +619,7 @@ object PlutusScriptEvaluator {
           */
         private def allResolvedScripts(
             tx: Transaction,
-            utxos: Map[TransactionInput, TransactionOutput]
+            utxos: Utxos
         ): Map[ScriptHash, Script] =
             AllResolvedScripts.allResolvedScriptsMap(tx, utxos) match
                 case Right(allResolvedScriptsMap) => allResolvedScriptsMap

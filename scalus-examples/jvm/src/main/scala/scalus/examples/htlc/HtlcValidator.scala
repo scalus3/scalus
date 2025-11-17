@@ -9,7 +9,6 @@ import scalus.prelude.*
 
 type Preimage = ByteString
 type Image = ByteString
-type PubKeyHash = ByteString
 
 // Datum
 case class Config(
@@ -55,11 +54,11 @@ object HtlcValidator extends Validator {
 
         redeemer.to[Action] match
             case Action.Timeout =>
-                require(tx.isSignedBy(PubKeyHash(committer)), UnsignedCommitterTransaction)
+                require(tx.isSignedBy(committer), UnsignedCommitterTransaction)
                 require(tx.validRange.isEntirelyAfter(timeout), InvalidCommitterTimePoint)
 
             case Action.Reveal(preimage) =>
-                require(tx.isSignedBy(PubKeyHash(receiver)), UnsignedReceiverTransaction)
+                require(tx.isSignedBy(receiver), UnsignedReceiverTransaction)
                 require(!tx.validRange.isEntirelyAfter(timeout), InvalidReceiverTimePoint)
                 require(sha3_256(preimage) === image, InvalidReceiverPreimage)
     }

@@ -86,7 +86,7 @@ object MissingRequiredDatumsValidator extends STS.Validator {
           for
               output <- allOutputs
               datumOption <- output.datumOption
-              dataHash <- datumOption.datHashOption
+              dataHash <- datumOption.dataHashOption
           yield dataHash
         ).toSet
     }

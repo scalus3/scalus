@@ -52,4 +52,24 @@ object BuilderContext {
         )
         BuilderContext(env, wallet, evaluator)
     }
+
+    /** Create a BuilderContext with a constant max budget evaluator.
+      *
+      * This evaluator uses the maximum transaction execution units defined in the protocol
+      * parameters as a constant budget for each script evaluations.
+      *
+      * @param env
+      *   The environment containing protocol parameters and configuration
+      * @param wallet
+      *   The wallet to use for transaction building
+      * @return
+      *   BuilderContext with a constant max budget evaluator
+      */
+    def withConstMaxBudgetEvaluator(
+        env: Environment,
+        wallet: Wallet
+    ): BuilderContext = {
+        val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
+        BuilderContext(env, wallet, evaluator)
+    }
 }

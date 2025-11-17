@@ -14,7 +14,7 @@ import scalus.cardano.txbuilder.{BuilderContext, ExpectedSigner}
 import scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering
 import scalus.examples.TestUtil
 import scalus.examples.htlc.Action.Reveal
-import scalus.ledger.api.v1.PosixTime
+import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.{MockLedgerApi, ScalusTest}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
@@ -46,12 +46,18 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
       mutators = MockLedgerApi.defaultMutators - PlutusScriptsTransactionMutator
     )
 
-    private val committerPkh = ByteString.fromArray(committerAddress.payment.asHash.bytes)
-    private val receiverPkh = ByteString.fromArray(receiverAddress.payment.asHash.bytes)
+    private val committerPkh =
+        AddrKeyHash.fromByteString(ByteString.fromArray(committerAddress.payment.asHash.bytes))
+    private val receiverPkh =
+        AddrKeyHash.fromByteString(ByteString.fromArray(receiverAddress.payment.asHash.bytes))
     private val wrongCommitterPkh =
-        ByteString.fromArray(TestUtil.createTestAddress("c" * 56).payment.asHash.bytes)
+        AddrKeyHash.fromByteString(
+          ByteString.fromArray(TestUtil.createTestAddress("c" * 56).payment.asHash.bytes)
+        )
     private val wrongReceiverPkh =
-        ByteString.fromArray(TestUtil.createTestAddress("d" * 56).payment.asHash.bytes)
+        AddrKeyHash.fromByteString(
+          ByteString.fromArray(TestUtil.createTestAddress("d" * 56).payment.asHash.bytes)
+        )
 
     private val lockAmount: Long = 100_000_000L
     private val amount: Long = 50_000_000L
@@ -63,14 +69,14 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     private val beforeTimeout: PosixTime = env.slotConfig.slotToTime(beforeSlot)
     private val afterTimeout: PosixTime = env.slotConfig.slotToTime(afterSlot)
 
-    private val validPreimage: ByteString = genByteStringOfN(32).sample.get
-    private val wrongPreimage = genByteStringOfN(12).sample.get
-    private val validImage: ByteString = sha3_256(validPreimage)
+    private val validPreimage: Preimage = genByteStringOfN(32).sample.get
+    private val wrongPreimage: Preimage = genByteStringOfN(12).sample.get
+    private val validImage: Image = sha3_256(validPreimage)
 
     private val scriptAddress = compiledContract.address(env.network)
     private val datum = Config(
-      committerPkh,
-      receiverPkh,
+      PubKeyHash(committerPkh),
+      PubKeyHash(receiverPkh),
       validImage,
       timeout
     ).toData
@@ -102,8 +108,8 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     assert(htlcUtxo._2.value.coin == Coin(lockAmount))
 
     private def revealHtlc(
-        preimage: ByteString,
-        receiverPkh: ByteString,
+        preimage: Preimage,
+        receiverPkh: AddrKeyHash,
         time: PosixTime
     ): (Transaction, Result) = {
         val snapshot = provider.snapshot()
@@ -119,7 +125,7 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
     }
 
     private def timeoutHtlc(
-        committerPkh: ByteString,
+        committerPkh: AddrKeyHash,
         time: PosixTime
     ): (Transaction, Result) = {
         val snapshot = provider.snapshot()
@@ -242,8 +248,8 @@ class HtlcTransactionTest extends AnyFunSuite, ScalusTest {
 
     test("has smaller fees on v3 backend") {
         val testDatum = Config(
-          committer = committerPkh,
-          receiver = receiverPkh,
+          committer = PubKeyHash(committerPkh),
+          receiver = PubKeyHash(receiverPkh),
           image = validImage,
           timeout = timeout
         ).toData

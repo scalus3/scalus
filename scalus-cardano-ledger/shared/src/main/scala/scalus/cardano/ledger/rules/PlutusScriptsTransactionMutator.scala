@@ -59,7 +59,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                     // TODO: refine exception handling
                     failure(
                       TransactionException.IllegalArgumentException(
-                        s"Transaction with invalid flag passed script validation, transactionId: ${event.id}, flag: ${event.isValid}"
+                        s"Transaction with invalid flag passed script validation, transactionId: ${event.id}, flag: ${event.isValid}, errorMsg: ${e.getMessage} , logs: ${e.logs.mkString(", ")}"
                       )
                     )
                 else

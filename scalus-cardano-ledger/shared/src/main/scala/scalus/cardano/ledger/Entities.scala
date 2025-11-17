@@ -146,7 +146,7 @@ object TransactionException {
         transactionFee: Coin,
         minTransactionFee: Coin
     ) extends TransactionException(
-          s"Transaction fee $transactionFee is too small, minimum required fee is $minTransactionFee for transactionId $transactionId"
+          s"Transaction fee is too small for transactionId $transactionId, transaction fee: $transactionFee, minimum transaction fee: $minTransactionFee"
         )
 
     // It's Alonzo.ScriptsNotPaidUTxO in cardano-ledger

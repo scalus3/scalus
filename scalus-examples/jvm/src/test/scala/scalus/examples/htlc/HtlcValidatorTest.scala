@@ -160,8 +160,8 @@ object HtlcValidatorTest extends ScalusTest {
     ):
         def runWithDebug(): Unit = {
             val contractDatum = Config(
-              committer = Committer.pkh,
-              receiver = Receiver.pkh,
+              committer = PubKeyHash(Committer.pkh),
+              receiver = PubKeyHash(Receiver.pkh),
               image = sha3_256(preimage),
               timeout = timeout
             )

@@ -23,7 +23,7 @@ enum DatumOption:
         case Hash(h)   => h
         case Inline(d) => DataHash.fromByteString(d.dataHash)
 
-    def datHashOption: Option[DataHash] = this match
+    def dataHashOption: Option[DataHash] = this match
         case Hash(h)   => Some(h)
         case Inline(_) => None
 

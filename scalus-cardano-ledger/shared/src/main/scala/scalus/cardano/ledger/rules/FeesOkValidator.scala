@@ -136,7 +136,6 @@ object FeesOkValidator extends STS.Validator {
         yield ()
     }
 
-    //
     private def feePaidIsGreeterOrEqualThanMinimumFee(
         context: Context,
         state: State,
