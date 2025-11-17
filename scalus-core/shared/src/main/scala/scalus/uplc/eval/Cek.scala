@@ -444,6 +444,13 @@ enum Result:
         case _: Failure => true
         case _          => false
 
+    /** Returns the `Success` result if this is a `Success`, otherwise throws
+      * `NoSuchElementException`.
+      */
+    def success: Success = this match
+        case s: Success => s
+        case _          => throw new NoSuchElementException("Not a Success result")
+
     override def toString: String =
         import scalus.*
 
