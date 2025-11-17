@@ -1,6 +1,6 @@
 package scalus.cardano.txbuilder
 
-import scalus.builtin.Builtins.{blake2b_224, serialiseData}
+import scalus.builtin.Builtins.{blake2b_224, blake2b_256, serialiseData}
 import scalus.builtin.Data
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.TransactionWitnessSet.given
@@ -21,6 +21,16 @@ case class TxBuilder(
     providerOpt: Option[Provider] = None,
 ) extends Builder {
 
+    /** Adds the specified **pubkey** utxo to the list of inputs, thus spending it.
+      *
+      * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
+      * according to [[changeTo]] or [[diffHandler]].
+      * @param utxo
+      *   utxo to spend
+      * @note
+      *   use [[spend]] with utxo **and redeemer** to spend script protected utxos. Otherwise,
+      *   [[build]] throws.
+      */
     override def spend(utxo: Utxo): Builder =
         addSteps(
           TransactionBuilderStep.Spend(
@@ -29,6 +39,19 @@ case class TxBuilder(
           )
         )
 
+    /** Adds the specified **script protected** utxo to the list of inputs and the specified
+      * redeemer to the witness set.
+      *
+      * Make sure to also call [[attach]] with the script that locks these utxos. If the script that
+      * protects the `utxo` fails with the specified `redeemer`, [[build]] is going to throw.
+      *
+      * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
+      * according to [[changeTo]] or [[diffHandler]].
+      * @param utxo
+      *   utxo to spend
+      * @param redeemer
+      *   redeemer to pass to the script to unlock the inputs
+      */
     override def spend(
         utxo: Utxo,
         redeemer: Data
@@ -78,6 +101,21 @@ case class TxBuilder(
         )
     }
 
+    /** Adds the specified **script protected** utxo to the list of inputs and the specified
+      * redeemer to the witness set.
+      *
+      * If the specified `script` fails with the specified redeemer`, [[build]] is going to throw.
+      *
+      * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
+      * according to [[changeTo]] or [[diffHandler]].
+      *
+      * @param utxo
+      *   utxo to spend
+      * @param redeemer
+      *   redeemer to pass to the script to unlock the inputs
+      * @param script
+      *   script that protects the `utxo`
+      */
     override def spend(
         utxo: Utxo,
         redeemer: Data,
@@ -94,15 +132,45 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
 
+    /** Adds the specified utxos to the list of reference inputs.
+      *
+      * Reference inputs allow scripts to read UTXOs without consuming them.
+      *
+      * @param utxos
+      *   utxos to add as reference inputs
+      */
     override def references(utxos: Utxo*): Builder =
         addSteps(utxos.map(TransactionBuilderStep.ReferenceOutput.apply)*)
 
+    /** Adds the specified utxos to the list of collateral inputs.
+      *
+      * Collateral inputs are used to cover transaction fees if script execution fails. They are
+      * only consumed if a script fails validation.
+      *
+      * @param utxos
+      *   utxos to add as collateral inputs
+      */
     override def collaterals(utxos: Utxo*): Builder =
         addSteps(utxos.map(TransactionBuilderStep.AddCollateral.apply)*)
 
+    /** Adds the specified output to the list of transaction outputs.
+      *
+      * Use this method for fine-grained control over output construction. For simpler cases, use
+      * [[payTo]].
+      *
+      * @param output
+      *   the transaction output to add
+      */
     override def output(output: TransactionOutput): Builder =
         addSteps(TransactionBuilderStep.Send(output))
 
+    /** Sends the specified value to the given address without a datum.
+      *
+      * @param address
+      *   recipient address
+      * @param value
+      *   amount to send
+      */
     override def payTo(address: Address, value: Value): Builder =
         addSteps(
           TransactionBuilderStep.Send(
@@ -110,6 +178,15 @@ case class TxBuilder(
           )
         )
 
+    /** Sends the specified value to the given address with an inline datum.
+      *
+      * @param address
+      *   recipient address
+      * @param value
+      *   amount to send
+      * @param datum
+      *   inline datum to attach to the output
+      */
     override def payTo(address: Address, value: Value, datum: Data): Builder =
         addSteps(
           TransactionBuilderStep.Send(
@@ -117,6 +194,17 @@ case class TxBuilder(
           )
         )
 
+    /** Sends the specified value to the given address with a datum hash.
+      *
+      * Make sure to call [[attach]] with the corresponding datum data before calling [[build]].
+      *
+      * @param address
+      *   recipient address
+      * @param value
+      *   amount to send
+      * @param datumHash
+      *   hash of the datum (the actual datum must be attached via [[attach]])
+      */
     override def payTo(address: Address, value: Value, datumHash: DataHash): Builder =
         addSteps(
           TransactionBuilderStep.Send(
@@ -124,14 +212,40 @@ case class TxBuilder(
           )
         )
 
+    /** Attaches a script to the transaction witness set.
+      *
+      * Use this method to make scripts available for spending script-locked UTXOs or minting
+      * tokens. The script will be included in the transaction's witness set.
+      *
+      * @param script
+      *   the script to attach
+      */
     override def attach(script: Script): Builder =
         copy(attachedScripts = attachedScripts + (script.scriptHash -> script))
 
+    /** Attaches datum data to the transaction witness set.
+      *
+      * Use this method when sending to an address with a datum hash (via
+      * [[payTo(address:scalus\.cardano\.address\.Address,value:scalus\.cardano\.ledger\.Value,datumHash:scalus\.cardano\.ledger\.DataHash)* payTo]]).
+      * The datum will be included in the transaction's witness set and can be referenced by its
+      * hash.
+      *
+      * @param data
+      *   the datum to attach
+      */
     override def attach(data: Data): Builder = {
-        val dataHash = DataHash.fromByteString(blake2b_224(serialiseData(data)))
+        val dataHash = DataHash.fromByteString(blake2b_256(serialiseData(data)))
         copy(attachedData = attachedData + (dataHash -> data))
     }
 
+    /** Adds transaction metadata (auxiliary data).
+      *
+      * Metadata is optional data attached to a transaction that does not affect validation but can
+      * be used for off-chain purposes.
+      *
+      * @param auxiliaryData
+      *   the auxiliary data to attach
+      */
     override def metadata(auxiliaryData: AuxiliaryData): Builder =
         addSteps(
           TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData))
