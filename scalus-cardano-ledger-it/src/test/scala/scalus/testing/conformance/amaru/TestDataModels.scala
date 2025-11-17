@@ -1,4 +1,4 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*

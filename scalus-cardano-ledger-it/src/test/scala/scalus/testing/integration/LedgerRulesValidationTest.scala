@@ -236,6 +236,7 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
 
     val blockPaths = getAllBlocksPaths()
     var processedBlocks = 0
+    var stoppedValidators = List.empty[String]
 
     // Run each validator separately
     for validator <- validators do
@@ -270,9 +271,10 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
               // Skip transactions with missing UTxOs
               consecutiveMissingUtxos += 1
               if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
-                println(
-                  s"⚠ Stopping validation for ${validator.name}: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
-                )
+                stoppedValidators = validator.name :: stoppedValidators
+
+    if stoppedValidators.nonEmpty then
+      println(s"⚠ Stopped ${stoppedValidators.size} validator(s) due to consecutive missing UTxO errors")
 
     ValidationSummary(
       processedBlocks,
@@ -408,6 +410,7 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
 
     val blockPaths = getAllBlocksPaths()
     var processedBlocks = 0
+    var stoppedMutators = List.empty[String]
 
     // Run each mutator separately
     for mutator <- mutators do
@@ -443,9 +446,10 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
               // Skip transactions with missing UTxOs
               consecutiveMissingUtxos += 1
               if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
-                println(
-                  s"⚠ Stopping validation for ${mutator.name}: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
-                )
+                stoppedMutators = mutator.name :: stoppedMutators
+
+    if stoppedMutators.nonEmpty then
+      println(s"⚠ Stopped ${stoppedMutators.size} mutator(s) due to consecutive missing UTxO errors")
 
     ValidationSummary(
       processedBlocks,

@@ -1,6 +1,6 @@
-package scalus.testing.conformance.rules
+package scalus.testing.conformance.amaru.rules
 
-import scalus.testing.conformance.ConformanceTestBase
+import scalus.testing.conformance.amaru.ConformanceTestBase
 import java.nio.file.Files
 
 /** Conformance tests for block validation rules

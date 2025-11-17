@@ -1,10 +1,10 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers
 import scalus.cardano.ledger.Transaction
-import scalus.testing.conformance.TestDataModels.*
+import scalus.testing.conformance.amaru.TestDataModels.*
 
 import java.nio.file.{Files, Path, Paths}
 import scala.io.Source
@@ -304,7 +304,6 @@ trait ConformanceTestBase extends AnyFunSuite with Matchers:
         import scalus.serialization.cbor.Cbor as ScalusCbor
         import scalus.cardano.ledger.{TransactionBody, TransactionWitnessSet, AuxiliaryData, KeepRaw, ProtocolVersion, OriginalCborByteArray}
         import scala.util.{Try, Success, Failure}
-        import io.bullet.borer.{Cbor as BorerCbor}
 
         given ProtocolVersion = ProtocolVersion.conwayPV
 

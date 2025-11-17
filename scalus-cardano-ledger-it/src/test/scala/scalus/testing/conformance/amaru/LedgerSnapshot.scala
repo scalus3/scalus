@@ -1,4 +1,4 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 /** Trait for accessing ledger state data at a specific point in time
   *

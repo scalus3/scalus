@@ -1,4 +1,4 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 import scalus.builtin.ByteString
 import LedgerTypes.DRep.{KeyHash, ScriptHash}

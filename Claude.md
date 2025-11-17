@@ -220,3 +220,13 @@ Run `sbtn precommit` before considering work complete.
 - Never add yourself to the commit messages, no "Co-authored by Claude Code" or similar
 - Suggest a commit message when you complete a task.
 - Commit messages should be short: 1 or 2 paragraphs
+
+### Libraries
+- For JSON parsing use json-iter;
+
+### Reference projects
+- Cardano Ledger https://github.com/IntersectMBO/cardano-ledger
+- Plutus https://github.com/IntersectMBO/plutus
+- Amaru https://github.com/pragma-org/amaru
+
+These projects are references of data model. They could be obtained in sibling directories (using ../) or directly on GitHub.

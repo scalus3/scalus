@@ -1,4 +1,4 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 import scalus.cardano.ledger.ProtocolParams
 

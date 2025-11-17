@@ -1,4 +1,4 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 /** Test to verify conformance test data can be loaded correctly
   *

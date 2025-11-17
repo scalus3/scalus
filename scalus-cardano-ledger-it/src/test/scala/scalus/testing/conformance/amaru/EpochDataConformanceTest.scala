@@ -1,4 +1,4 @@
-package scalus.testing.conformance
+package scalus.testing.conformance.amaru
 
 /** Comprehensive conformance tests for epoch data using Amaru test data
   *
