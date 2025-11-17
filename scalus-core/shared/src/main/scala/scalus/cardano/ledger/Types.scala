@@ -377,6 +377,13 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
         s"{ mem: $memoryFormatted, cpu: $cpuFormatted }"
     def +(other: ExUnits): ExUnits =
         ExUnits(memory + other.memory, steps + other.steps)
+
+    /** Calculate fee for the execution units given the prices */
+    def fee(prices: ExUnitPrices): Coin = {
+        Coin(
+          (prices.priceMemory * memory + prices.priceSteps * steps).ceil
+        )
+    }
 }
 
 object ExUnits {

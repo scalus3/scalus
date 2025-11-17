@@ -109,13 +109,7 @@ object MinTransactionFee {
         val totalExUnits = calculateTotalExUnits(transaction)
 
         if totalExUnits == ExUnits.zero then Coin.zero
-        else
-            Coin(
-              (
-                executionUnitPrices.priceMemory * totalExUnits.memory +
-                    executionUnitPrices.priceSteps * totalExUnits.steps
-              ).ceil
-            )
+        else totalExUnits.fee(executionUnitPrices)
     }
 
     private def calculateTotalExUnits(transaction: Transaction): ExUnits = {
