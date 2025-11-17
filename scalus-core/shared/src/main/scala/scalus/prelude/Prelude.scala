@@ -59,32 +59,33 @@ object Prelude {
     }
 
     def showBigInt(input: BigInt): String = {
+        import ByteString.fromString
         // Convert BigInt to String representation using only built-in methods and prelude types
         val isNegative = input < 0
         val absValue = if isNegative then -input else input
 
-        def digitToString(digit: BigInt): String = {
-            if digit == BigInt(0) then "0"
-            else if digit == BigInt(1) then "1"
-            else if digit == BigInt(2) then "2"
-            else if digit == BigInt(3) then "3"
-            else if digit == BigInt(4) then "4"
-            else if digit == BigInt(5) then "5"
-            else if digit == BigInt(6) then "6"
-            else if digit == BigInt(7) then "7"
-            else if digit == BigInt(8) then "8"
-            else if digit == BigInt(9) then "9"
+        inline def digitToString(digit: BigInt): ByteString = {
+            if digit == BigInt(0) then fromString("0")
+            else if digit == BigInt(1) then fromString("1")
+            else if digit == BigInt(2) then fromString("2")
+            else if digit == BigInt(3) then fromString("3")
+            else if digit == BigInt(4) then fromString("4")
+            else if digit == BigInt(5) then fromString("5")
+            else if digit == BigInt(6) then fromString("6")
+            else if digit == BigInt(7) then fromString("7")
+            else if digit == BigInt(8) then fromString("8")
+            else if digit == BigInt(9) then fromString("9")
             else fail("Not a valid digit")
         }
 
-        def go(value: BigInt): String = {
+        def go(value: BigInt): ByteString = {
             val nextValue = value / 10
             val digit = digitToString(value % 10)
             if nextValue == BigInt(0) then digit
-            else appendString(go(nextValue), digit)
+            else appendByteString(go(nextValue), digit)
         }
         val result = go(absValue)
-        if isNegative then appendString("-", result) else result
+        decodeUtf8(if isNegative then appendByteString(fromString("-"), result) else result)
     }
 }
 
