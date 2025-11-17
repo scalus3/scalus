@@ -40,7 +40,7 @@ inline def identity[A](inline value: A): A = value
 
 @Compile
 object Prelude {
-    def encodeHex(input: ByteString): String = {
+    def encodeHexByteString(input: ByteString): ByteString = {
         import ByteString.*
         val len = lengthOfByteString(input)
 
@@ -55,10 +55,14 @@ object Prelude {
                 val char2 = byteToChar(byte % 16)
                 char1 +: char2 +: go(i + 1)
         }
-        decodeUtf8(go(0))
+        go(0)
     }
 
-    def showBigInt(input: BigInt): String = {
+    def encodeHex(input: ByteString): String = {
+        decodeUtf8(encodeHexByteString(input))
+    }
+
+    def showByteStringBigInt(input: BigInt): ByteString = {
         import ByteString.fromString
         // Convert BigInt to String representation using only built-in methods and prelude types
         val isNegative = input < 0
@@ -85,7 +89,11 @@ object Prelude {
             else appendByteString(go(nextValue), digit)
         }
         val result = go(absValue)
-        decodeUtf8(if isNegative then appendByteString(fromString("-"), result) else result)
+        if isNegative then appendByteString(fromString("-"), result) else result
+    }
+
+    def showBigInt(input: BigInt): String = {
+        decodeUtf8(showByteStringBigInt(input))
     }
 }
 

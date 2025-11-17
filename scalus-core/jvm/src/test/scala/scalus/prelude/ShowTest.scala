@@ -1,12 +1,13 @@
 package scalus.prelude
 
-import scalus.{Compiler, evaluateDebug, showHighlighted, toUplc}
 import scalus.Compiler.Options
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.sir.TargetLoweringBackend
+import scalus.uplc.Term.asTerm
+import scalus.{evaluateDebug, toUplc, Compiler}
 
 class ShowTest extends StdlibTestKit {
 
@@ -41,19 +42,16 @@ class ShowTest extends StdlibTestKit {
           List(BigInt(0).toData, hex"0011".toData).toData.show,
           "[0, \"0011\"]"
         )
-        given options: Compiler.Options  = Compiler.Options.default
+        given options: Compiler.Options = Compiler.Options.default
             .copy(targetLoweringBackend = TargetLoweringBackend.SumOfProductsLowering)
         val sir = Compiler.compileWithOptions(
           options,
-          AssocMap(List((BigInt(0).toData, hex"0011".toData))).toData.show)
+          AssocMap(List((BigInt(0).toData, hex"0011".toData))).toData.show
+        )
         val uplc = sir.toUplc(optimizeUplc = true)
         val result = uplc.evaluateDebug
-        println(result.success.term)
-//          "{0: \"0011\"}",
-
-        println(uplc.showHighlighted)
-        assert(result.budget == ExUnits(70523, 18325121))
-
+        assert(result.success.term == "{0: \"0011\"}".asTerm)
+        assert(result.budget == ExUnits(70865, 15662246))
         assertEvalEq(
           Rational(1, 2).toData.show,
           "<0, [1, 2]>" // Rational is represented as a pair of BigInts
