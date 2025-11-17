@@ -454,31 +454,31 @@ enum Result:
     override def toString: String =
         import scalus.*
 
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+
         def sumBudget(budgets: collection.Seq[ExUnits]): ExUnits =
             budgets.foldLeft(ExUnits.zero)(_ |+| _)
 
-        def showCosts = costs.toArray
-            .sortWith:
-                case (
-                      (ExBudgetCategory.BuiltinApp(bn1), _),
-                      (ExBudgetCategory.BuiltinApp(bn2), _)
-                    ) =>
-                    bn1.ordinal < bn2.ordinal
-                case ((k1, _), (k2, _)) => k1.ordinal < k2.ordinal
-            .map:
-                case (ExBudgetCategory.Startup, v) =>
-                    s"Startup: ${v.length} ${sumBudget(v).showJson}"
-                case (ExBudgetCategory.Step(kind), v) =>
-                    s"$kind: ${v.length} ${sumBudget(v).showJson}"
-                case (ExBudgetCategory.BuiltinApp(bn), v) =>
-                    s"$bn: ${v.length} ${sumBudget(v).showJson}"
-            .mkString("\n")
+        def showCosts =
+            "kind, count, mem, cpu, fee\r\n" +
+                costs.toArray.view
+                    .map((k, v) => (k, v.length, sumBudget(v)))
+                    .sortBy(_._3)(using Ordering[ExUnits].reverse)
+                    .map:
+                        case (ExBudgetCategory.Startup, length, v) =>
+                            s"Startup, ${length}, ${v.memory}, ${v.steps}, ${v.fee(prices).value}"
+                        case (ExBudgetCategory.Step(kind), length, v) =>
+                            s"$kind, ${length}, ${v.memory}, ${v.steps}, ${v.fee(prices).value}"
+                        case (ExBudgetCategory.BuiltinApp(bn), length, v) =>
+                            s"$bn, ${length}, ${v.memory}, ${v.steps}, ${v.fee(prices).value}"
+                    .mkString("\r\n")
 
         this match
             case Success(term, budget, costs, logs) =>
                 s"""Success executing script:
               | term: ${term.show}
               | budget: ${budget.showJson}
+              | fee: ${budget.fee(prices).value} lovelace
               | costs:\n${showCosts}
               | logs: ${logs.mkString("\n")}""".stripMargin
             case Failure(exception, budget, costs, logs) =>
