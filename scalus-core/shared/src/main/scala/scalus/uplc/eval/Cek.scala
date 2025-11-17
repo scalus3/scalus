@@ -462,15 +462,17 @@ enum Result:
         def showCosts =
             "kind, count, mem, cpu, fee\r\n" +
                 costs.toArray.view
-                    .map((k, v) => (k, v.length, sumBudget(v)))
-                    .sortBy(_._3)(using Ordering[ExUnits].reverse)
+                    .map: (k, v) =>
+                        val budgetSum = sumBudget(v)
+                        (k, v.length, budgetSum, budgetSum.fee(prices))
+                    .sortBy(_._4.value)(using Ordering[Long].reverse)
                     .map:
-                        case (ExBudgetCategory.Startup, length, v) =>
-                            s"Startup, ${length}, ${v.memory}, ${v.steps}, ${v.fee(prices).value}"
-                        case (ExBudgetCategory.Step(kind), length, v) =>
-                            s"$kind, ${length}, ${v.memory}, ${v.steps}, ${v.fee(prices).value}"
-                        case (ExBudgetCategory.BuiltinApp(bn), length, v) =>
-                            s"$bn, ${length}, ${v.memory}, ${v.steps}, ${v.fee(prices).value}"
+                        case (ExBudgetCategory.Startup, length, v, fee) =>
+                            s"Startup, ${length}, ${v.memory}, ${v.steps}, ${fee.value}"
+                        case (ExBudgetCategory.Step(kind), length, v, fee) =>
+                            s"$kind, ${length}, ${v.memory}, ${v.steps}, ${fee.value}"
+                        case (ExBudgetCategory.BuiltinApp(bn), length, v, fee) =>
+                            s"$bn, ${length}, ${v.memory}, ${v.steps}, ${fee.value}"
                     .mkString("\r\n")
 
         this match
