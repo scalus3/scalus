@@ -4,13 +4,15 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
-import scalus.builtin.Data
+import scalus.builtin.ByteString.hex
+import scalus.builtin.Data.toData
+import scalus.builtin.{platform, BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
-import scalus.serialization.flat.Flat
-import scalus.uplc.NamedDeBruijn
-import scalus.uplc.Term
-import scalus.uplc.Term.*
 import scalus.cardano.ledger.ExUnits.given
+import scalus.serialization.flat.Flat
+import scalus.uplc.{NamedDeBruijn, Term}
+import scalus.uplc.Term.*
+import scalus.uplc.transform.Inliner
 
 import scala.math.Ordering.Implicits.*
 
@@ -104,6 +106,99 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         // than to convert the integer to data and compare with equalsData
         // this is a prerequisite for the optimizations to be valid
         assert(eqInteger.budget < eqData.budget)
+    }
+
+    test("List vs ByteString") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+        val bs1 = hex"01"
+        val bs2 = hex"02"
+        val bs3 = hex"03"
+        val bs4 = hex"04"
+        val bs5 = hex"05"
+        val i1 = BigInt(0)
+        val i2 = BigInt(1)
+        val data = listData(BuiltinList(bs1.toData, bs2.toData, bs3.toData, bs4.toData, bs5.toData))
+        val intData = listData(BuiltinList(i1.toData, i2.toData))
+        val packed = (bs1 ++ bs2 ++ bs3 ++ bs4 ++ bs5).toData
+        val packedInts =
+            (ByteString.fromBigIntBigEndian(i1, 8) ++ ByteString.fromBigIntBigEndian(i2, 8)).toData
+
+        {
+            val sir = compile { (d: Data) =>
+                unBData(headList(tailList(unListData(d))))
+            }
+            val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
+            println(s"2nd bytestring in a list")
+            println(uplc.showHighlighted)
+            val result = uplc.evaluateDebug
+            println(result.asInstanceOf[Result.Success].term.showHighlighted)
+            println(result.budget.showJson)
+            println(result.budget.fee(prices))
+        }
+        {
+            println(s"2nd bytestring in a packed bytestring")
+            val sir = compile { (d: Data) =>
+                sliceByteString(1, 1, unBData(d))
+            }
+            val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
+            println(uplc.showHighlighted)
+            val result = uplc.evaluateDebug
+            println(result.asInstanceOf[Result.Success].term.showHighlighted)
+            println(result.budget.showJson)
+            println(result.budget.fee(prices))
+        }
+
+        {
+            val sir = compile { (d: Data) =>
+                unBData(headList(tailList(tailList(tailList(tailList(unListData(d)))))))
+            }
+            val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
+            println(s"5th bytestring in a list")
+            println(uplc.showHighlighted)
+            val result = uplc.evaluateDebug
+            println(result.asInstanceOf[Result.Success].term.showHighlighted)
+            println(result.budget.showJson)
+            println(s"Fee: ${result.budget.fee(prices).value} lovelace")
+        }
+        {
+            println(s"5th bytestring in a packed bytestring")
+            val sir = compile { (d: Data) =>
+                sliceByteString(4, 1, unBData(d))
+            }
+            val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
+            println(uplc.showHighlighted)
+            val result = uplc.evaluateDebug
+            println(result.asInstanceOf[Result.Success].term.showHighlighted)
+            println(result.budget.showJson)
+            println(s"Fee: ${result.budget.fee(prices).value} lovelace")
+        }
+
+        {
+            println(s"2nd int in a list of ints")
+            val sir = compile { (d: Data) =>
+                unIData(headList(tailList(unListData(d))))
+            }
+            val uplc = (sir.toUplc() $ intData.asTerm) |> Inliner.apply
+            println(uplc.showHighlighted)
+            val result = uplc.evaluateDebug
+            println(result.asInstanceOf[Result.Success].term.showHighlighted)
+            println(result.budget.showJson)
+            println(result.budget.fee(prices))
+        }
+        {
+            println(s"2nd int in a bytestring of 64bit packed ints")
+            val sir = compile { (d: Data) =>
+                byteStringToInteger(true, sliceByteString(8, 8, unBData(d)))
+            }
+            val uplc = (sir.toUplc() $ packedInts.asTerm) |> Inliner.apply
+            println(uplc.showHighlighted)
+            val result = uplc.evaluateDebug
+            println(result.asInstanceOf[Result.Success].term.showHighlighted)
+            println(result.budget.showJson)
+            println(result.budget.fee(prices))
+        }
+
     }
 
 }
