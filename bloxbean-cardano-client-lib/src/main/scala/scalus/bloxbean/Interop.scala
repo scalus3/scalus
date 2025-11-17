@@ -116,7 +116,9 @@ object Interop {
         Cbor.decode(scriptRefBytes).to[Script].value
     }
 
-    /** Converts Cardano Client Lib's [[PlutusData]] to Scalus' [[Data]] */
+    /** Converts Cardano Client Lib's [[com.bloxbean.cardano.client.plutus.spec.PlutusData]] to
+      * Scalus' [[scalus.builtin.Data]]
+      */
     extension (datum: PlutusData)
         def toScalusData: Data = {
             datum match
@@ -137,7 +139,9 @@ object Interop {
                     Data.B(ByteString.fromArray(b.getValue))
         }
 
-    /** Converts Scalus' [[Data]] to Cardano Client Lib's [[PlutusData]] */
+    /** Converts Scalus' [[scalus.builtin.Data]] to Cardano Client Lib's
+      * [[com.bloxbean.cardano.client.plutus.spec.PlutusData]]
+      */
     def toPlutusData(data: Data): PlutusData = {
         data match
             case Data.Constr(tag, args) =>
@@ -173,7 +177,9 @@ object Interop {
                 BytesPlutusData.of(b.bytes)
     }
 
-    /** Converts Bloxbean's [[CostMdls]] to Scalus [[CostModels]] */
+    /** Converts Bloxbean's [[com.bloxbean.cardano.client.plutus.spec.CostMdls]] to Scalus
+      * [[scalus.cardano.ledger.CostModels]]
+      */
     def getCostModels(costMdls: CostMdls): CostModels = {
         val models = Map.newBuilder[Int, IndexedSeq[Long]]
 
@@ -193,7 +199,10 @@ object Interop {
         CostModels(models.result())
     }
 
-    /** Creates [[MachineParams]] from a [[CostMdls]] and a [[Language]] */
+    /** Creates [[scalus.uplc.eval.MachineParams]] from a
+      * [[com.bloxbean.cardano.client.plutus.spec.CostMdls]] and a
+      * [[scalus.cardano.ledger.Language]]
+      */
     def translateMachineParamsFromCostMdls(
         costMdls: CostMdls,
         plutus: Language,

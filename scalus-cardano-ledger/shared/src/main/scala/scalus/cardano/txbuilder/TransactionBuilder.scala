@@ -94,8 +94,8 @@ object TransactionBuilderStep {
         witness: NativeScriptWitness | TwoArgumentPlutusScriptWitness
     ) extends TransactionBuilderStep
 
-    /** Add a [[Utxo]] as a CIP-31 reference input. Consuming the same UTxO twice (reference or
-      * spend) is an error
+    /** Add a [[scalus.cardano.ledger.Utxo]] as a CIP-31 reference input. Consuming the same UTxO
+      * twice (reference or spend) is an error
       *
       * The reason that action is represented as a step is that reference utxos should be added to
       * the context and also may be required to create a [[WitnessForSpend]].
@@ -247,7 +247,8 @@ object Datum {
 // ExpectedSigner
 // -----------------------------------------------------------------------------
 
-/** An [[AddrKeyHash]] that is expected to sign some [[Transaction]].
+/** An [[scalus.cardano.address.AddrKeyHash]] that is expected to sign some
+  * [[scalus.cardano.ledger.Transaction]].
   *
   * The purpose for signing is not presently tracked. For a sketch, see commit
   * https://github.com/cardano-hydrozoa/hydrozoa/commit/1a8c9c73fbfb33e79456a0a8b9f08688ef39b749
@@ -462,7 +463,7 @@ object TransactionBuilder:
             )
         }
 
-        /** Conversion help to Scalus [[Utxos]] */
+        /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */
         def getUtxos: Utxos = this.resolvedUtxos.utxos
 
         /** Validate a context according so a set of ledger rules */

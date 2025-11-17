@@ -82,7 +82,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
 
     /** Returns the byte at the specified index in the ByteString
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the index is out of bounds (offchain)
       */
     def indexByteString(bs: ByteString, i: BigInt): BigInt =
@@ -231,7 +231,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @param input
       *   Unsigned integer to convert. Negative integers are rejected.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the requested length is negative, exceeds the maximum, or the integer cannot be
       *   represented in the requested number of bytes.
       *
@@ -419,7 +419,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   The `ByteString` that contains the bit to be read.
       * @param index
       *   The index of the bit to be read.
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the index is out of bounds.
       * @return
       *   The value of the bit at the specified index.
@@ -449,7 +449,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   The indexes of the bits to be written.
       * @param bit
       *   The value of the bit to be written.
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the indexes are out of bounds.
       * @return
       *   The result of the bitwise logical WriteBits operation.
@@ -485,7 +485,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   The number of times to replicate the byte.
       * @param byte
       *   The value of the byte to be replicated.
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the length is negative or the byte value is out of bounds.
       * @return
       *   The result of the bitwise logical ReplicateByte operation.

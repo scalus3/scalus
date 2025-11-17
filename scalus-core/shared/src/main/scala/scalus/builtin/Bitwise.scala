@@ -32,7 +32,7 @@ object IntegerToByteString:
       * @param input
       *   Unsigned integer to convert. Negative integers are rejected.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the requested length is negative, exceeds the maximum, or the integer cannot be
       *   represented in the requested number of bytes.
       *
@@ -343,7 +343,7 @@ object BitwiseLogicalOperations:
       * @param index
       *   Bit index in the range `[0, byteString.length * 8)`.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the byte string is empty, or if the index is out of bounds.
       *
       * @example
@@ -400,7 +400,7 @@ object BitwiseLogicalOperations:
       * @param bit
       *   The new bit value (`true` - set to 1, `false` - set to 0).
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the byte string is empty or any index lies outside the valid bit range.
       *
       * @example
@@ -454,7 +454,7 @@ object BitwiseLogicalOperations:
       * @param byte
       *   Byte value in the range `[0, 255]`.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the requested length or byte value is outside the permitted range.
       *
       * @example
@@ -504,7 +504,7 @@ object BitwiseLogicalOperations:
       * @param shift
       *   Number of bits to shift. Must fit in a 32-bit signed integer.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the shift value does not fit into a 32-bit signed integer.
       *
       * @example
@@ -556,7 +556,7 @@ object BitwiseLogicalOperations:
       * @param rotation
       *   Number of bits to rotate. Positive - rotate left, negative - rotate right.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   If the rotation remainder does not fit in a 32-bit signed integer.
       *
       * @example

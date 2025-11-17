@@ -193,7 +193,7 @@ object ByteString extends ByteStringOffchainApi, ByteStringFlatInstance {
 
         /** Returns the byte at the specified index in the ByteString
           *
-          * @throws BuiltinException
+          * @throws scalus.uplc.eval.BuiltinException
           *   if the index is out of bounds (offchain)
           */
         inline def at(index: BigInt): BigInt = Builtins.indexByteString(self, index)

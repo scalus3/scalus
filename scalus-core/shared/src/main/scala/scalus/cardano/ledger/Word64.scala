@@ -120,7 +120,7 @@ case class Word64(value: Long) {
       *   the divisor
       * @return
       *   the quotient as Word64
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   if other is zero
       */
     def divideUnsigned(other: Word64): Word64 =
@@ -132,7 +132,7 @@ case class Word64(value: Long) {
       *   the divisor
       * @return
       *   the remainder as Word64
-      * @throws ArithmeticException
+      * @throws java.lang.ArithmeticException
       *   if other is zero
       */
     def remainderUnsigned(other: Word64): Word64 =

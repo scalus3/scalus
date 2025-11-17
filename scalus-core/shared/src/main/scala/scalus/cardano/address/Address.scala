@@ -512,13 +512,13 @@ object Address {
 
     // Address parsing and construction functions
 
-    /** Parse address from [[ByteString]]
+    /** Parse address from [[scalus.builtin.ByteString]]
       *
       * @param bs
       *   Raw address bytes
       * @return
       *   Parsed address
-      * @throws IllegalArgumentException
+      * @throws java.lang.IllegalArgumentException
       *   If the byte string is empty or does not match any known address format
       */
     def fromByteString(bs: ByteString): Address = fromBytes(bs.bytes)

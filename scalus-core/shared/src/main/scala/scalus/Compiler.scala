@@ -55,12 +55,13 @@ object Compiler:
         Macros.fieldAsDataMacro('expr)
     }
 
-    /** Compiles the given expression to a [[SIR]] at compile time using the Scalus compiler plugin.
+    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
+      * Scalus compiler plugin.
       *
       * @param e
       *   The expression to compile.
       * @return
-      *   The compiled [[SIR]].
+      *   The compiled [[scalus.compiler.sir.SIR]].
       *
       * @example
       *   {{{
@@ -70,48 +71,48 @@ object Compiler:
       */
     def compile(e: Any): SIR = throwCompilerPluginMissingException()
 
-    /** Compiles the given expression to a [[SIR]] at compile time using the Scalus compiler plugin,
-      * with explicit compiler options.
+    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
+      * Scalus compiler plugin, with explicit compiler options.
       *
       * @param options
       *   The compiler options to use.
       * @param e
       *   The expression to compile.
       * @return
-      *   The compiled [[SIR]].
+      *   The compiled [[scalus.compiler.sir.SIR]].
       */
     def compileWithOptions(options: Options, e: Any): SIR = throwCompilerPluginMissingException()
 
-    /** Compiles the given expression to a [[SIR]] at compile time using the Scalus compiler plugin,
-      * producing debug output during the compilation.
+    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
+      * Scalus compiler plugin, producing debug output during the compilation.
       *
       * @param e
       *   The expression to compile.
       * @return
-      *   The compiled [[SIR]].
+      *   The compiled [[scalus.compiler.sir.SIR]].
       */
     def compileDebug(e: Any): SIR = throwCompilerPluginMissingException()
 
-    /** Compiles the given expression to a [[SIR]] at compile time using the Scalus compiler plugin,
-      * with explicit compiler options and debug output.
+    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
+      * Scalus compiler plugin, with explicit compiler options and debug output.
       *
       * @param options
       *   The compiler options to use.
       * @param e
       *   The expression to compile.
       * @return
-      *   The compiled [[SIR]].
+      *   The compiled [[scalus.compiler.sir.SIR]].
       */
     def compileDebugWithOptions(options: Options, e: Any): SIR =
         throwCompilerPluginMissingException()
 
-    /** Compiles the given expression to a [[SIRType]] at compile time using the Scalus compiler
-      * plugin.
+    /** Compiles the given expression to a [[scalus.compiler.sir.SIRType]] at compile time using the
+      * Scalus compiler plugin.
       *
       * @tparam T
       *   The type to compile.
       * @return
-      *   The compiled [[SIRType]].
+      *   The compiled [[scalus.compiler.sir.SIRType]].
       *
       * @example
       *   {{{

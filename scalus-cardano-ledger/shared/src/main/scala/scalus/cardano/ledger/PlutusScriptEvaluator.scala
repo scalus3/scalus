@@ -49,7 +49,7 @@ trait PlutusScriptEvaluator {
       *   The UTxO set used for script resolution
       * @return
       *   Seq of evaluated redeemers with updated execution units
-      * @throws IllegalStateException
+      * @throws java.lang.IllegalStateException
       *   if the transaction does not contain redeemers or if any script resolution fails
       */
     def evalPlutusScripts(
