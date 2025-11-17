@@ -6,11 +6,11 @@ import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data.toData
-import scalus.builtin.{platform, BuiltinList, ByteString, Data}
+import scalus.builtin.{BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.ledger.ExUnits.given
 import scalus.serialization.flat.Flat
-import scalus.uplc.{NamedDeBruijn, Term}
+import scalus.uplc.{Constant, NamedDeBruijn, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.transform.Inliner
 
@@ -108,7 +108,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(eqInteger.budget < eqData.budget)
     }
 
-    test("List vs ByteString") {
+    test("2nd bytestring in a list fee = 105") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
@@ -116,89 +116,123 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val bs3 = hex"03"
         val bs4 = hex"04"
         val bs5 = hex"05"
+        val data = listData(BuiltinList(bs1.toData, bs2.toData, bs3.toData, bs4.toData, bs5.toData))
+
+        val sir = compile { (d: Data) =>
+            unBData(headList(tailList(unListData(d))))
+        }
+        val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
+        val result = uplc.evaluateDebug
+
+        assert(result.success.term == bs2.asTerm)
+        assert(result.budget.memory == 1328)
+        assert(result.budget.steps == 386988)
+        assert(result.budget.fee(prices).value == 105)
+    }
+
+    test("2nd bytestring in a packed bytestring fee = 74") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+        val bs1 = hex"01"
+        val bs2 = hex"02"
+        val bs3 = hex"03"
+        val bs4 = hex"04"
+        val bs5 = hex"05"
+        val packed = (bs1 ++ bs2 ++ bs3 ++ bs4 ++ bs5).toData
+
+        val sir = compile { (d: Data) =>
+            sliceByteString(1, 1, unBData(d))
+        }
+        val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
+        val result = uplc.evaluateDebug
+
+        assert(result.success.term == bs2.asTerm)
+        assert(result.budget.memory == 1036)
+        assert(result.budget.steps == 184710)
+        assert(result.budget.fee(prices).value == 74)
+    }
+
+    test("5th bytestring in a list fee = 190") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+        val bs1 = hex"01"
+        val bs2 = hex"02"
+        val bs3 = hex"03"
+        val bs4 = hex"04"
+        val bs5 = hex"05"
+        val data = listData(BuiltinList(bs1.toData, bs2.toData, bs3.toData, bs4.toData, bs5.toData))
+
+        val sir = compile { (d: Data) =>
+            unBData(headList(tailList(tailList(tailList(tailList(unListData(d)))))))
+        }
+        val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
+        val result = uplc.evaluateDebug
+
+        assert(result.success.term == bs5.asTerm)
+        assert(result.budget.memory == 2324)
+        assert(result.budget.steps == 775977)
+        assert(result.budget.fee(prices).value == 190)
+    }
+
+    test("5th bytestring in a packed bytestring fee = 74") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+        val bs1 = hex"01"
+        val bs2 = hex"02"
+        val bs3 = hex"03"
+        val bs4 = hex"04"
+        val bs5 = hex"05"
+        val packed = (bs1 ++ bs2 ++ bs3 ++ bs4 ++ bs5).toData
+
+        val sir = compile { (d: Data) =>
+            sliceByteString(4, 1, unBData(d))
+        }
+        val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
+        val result = uplc.evaluateDebug
+
+        assert(result.success.term == bs5.asTerm)
+        assert(result.budget.memory == 1036)
+        assert(result.budget.steps == 184710)
+        assert(result.budget.fee(prices).value == 74)
+    }
+
+    test("2nd int in a list of ints fee = 105") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val i1 = BigInt(0)
         val i2 = BigInt(1)
-        val data = listData(BuiltinList(bs1.toData, bs2.toData, bs3.toData, bs4.toData, bs5.toData))
         val intData = listData(BuiltinList(i1.toData, i2.toData))
-        val packed = (bs1 ++ bs2 ++ bs3 ++ bs4 ++ bs5).toData
+
+        val sir = compile { (d: Data) =>
+            unIData(headList(tailList(unListData(d))))
+        }
+        val uplc = (sir.toUplc() $ intData.asTerm) |> Inliner.apply
+        val result = uplc.evaluateDebug
+
+        assert(result.success.term == i2.asTerm)
+        assert(result.budget.memory == 1328)
+        assert(result.budget.steps == 387590)
+        assert(result.budget.fee(prices).value == 105)
+    }
+
+    test("2nd int in a bytestring of 64bit packed ints fee = 177") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+        val i1 = BigInt(0)
+        val i2 = BigInt(1)
         val packedInts =
             (ByteString.fromBigIntBigEndian(i1, 8) ++ ByteString.fromBigIntBigEndian(i2, 8)).toData
 
-        {
-            val sir = compile { (d: Data) =>
-                unBData(headList(tailList(unListData(d))))
-            }
-            val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
-            println(s"2nd bytestring in a list")
-            println(uplc.showHighlighted)
-            val result = uplc.evaluateDebug
-            println(result.asInstanceOf[Result.Success].term.showHighlighted)
-            println(result.budget.showJson)
-            println(result.budget.fee(prices))
+        val sir = compile { (d: Data) =>
+            byteStringToInteger(true, sliceByteString(8, 8, unBData(d)))
         }
-        {
-            println(s"2nd bytestring in a packed bytestring")
-            val sir = compile { (d: Data) =>
-                sliceByteString(1, 1, unBData(d))
-            }
-            val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
-            println(uplc.showHighlighted)
-            val result = uplc.evaluateDebug
-            println(result.asInstanceOf[Result.Success].term.showHighlighted)
-            println(result.budget.showJson)
-            println(result.budget.fee(prices))
-        }
+        val uplc = (sir.toUplc() $ packedInts.asTerm) |> Inliner.apply
+        val result = uplc.evaluateDebug
 
-        {
-            val sir = compile { (d: Data) =>
-                unBData(headList(tailList(tailList(tailList(tailList(unListData(d)))))))
-            }
-            val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
-            println(s"5th bytestring in a list")
-            println(uplc.showHighlighted)
-            val result = uplc.evaluateDebug
-            println(result.asInstanceOf[Result.Success].term.showHighlighted)
-            println(result.budget.showJson)
-            println(s"Fee: ${result.budget.fee(prices).value} lovelace")
-        }
-        {
-            println(s"5th bytestring in a packed bytestring")
-            val sir = compile { (d: Data) =>
-                sliceByteString(4, 1, unBData(d))
-            }
-            val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
-            println(uplc.showHighlighted)
-            val result = uplc.evaluateDebug
-            println(result.asInstanceOf[Result.Success].term.showHighlighted)
-            println(result.budget.showJson)
-            println(s"Fee: ${result.budget.fee(prices).value} lovelace")
-        }
-
-        {
-            println(s"2nd int in a list of ints")
-            val sir = compile { (d: Data) =>
-                unIData(headList(tailList(unListData(d))))
-            }
-            val uplc = (sir.toUplc() $ intData.asTerm) |> Inliner.apply
-            println(uplc.showHighlighted)
-            val result = uplc.evaluateDebug
-            println(result.asInstanceOf[Result.Success].term.showHighlighted)
-            println(result.budget.showJson)
-            println(result.budget.fee(prices))
-        }
-        {
-            println(s"2nd int in a bytestring of 64bit packed ints")
-            val sir = compile { (d: Data) =>
-                byteStringToInteger(true, sliceByteString(8, 8, unBData(d)))
-            }
-            val uplc = (sir.toUplc() $ packedInts.asTerm) |> Inliner.apply
-            println(uplc.showHighlighted)
-            val result = uplc.evaluateDebug
-            println(result.asInstanceOf[Result.Success].term.showHighlighted)
-            println(result.budget.showJson)
-            println(result.budget.fee(prices))
-        }
-
+        assert(result.success.term == i2.asTerm)
+        assert(result.budget.memory == 1437)
+        assert(result.budget.steps == 1298626)
+        assert(result.budget.fee(prices).value == 177)
     }
 
 }
