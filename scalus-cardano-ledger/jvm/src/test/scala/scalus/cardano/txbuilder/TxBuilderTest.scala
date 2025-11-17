@@ -95,8 +95,8 @@ class TxBuilderTest extends AnyFunSuite {
             .spend(Utxo(paymentUtxo))
             .collaterals(Utxo(collateralUtxo))
             .spend(scriptUtxo, redeemer, script1)
-            .payTo(Alice.address, Value(Coin(1_000_000L)))
-            .payTo(Bob.address, Value(Coin(2_000_000L)), inlineDatum)
+            .payTo(Alice.address, Value.ada(1))
+            .payTo(Bob.address, Value.ada(2), inlineDatum)
             .validFrom(validFrom)
             .validTo(validTo)
             .changeTo(Alice.address)
@@ -148,7 +148,7 @@ class TxBuilderTest extends AnyFunSuite {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
 
         val paymentValue = Value(
-          coin = Coin(2_000_000L),
+          coin = Coin.ada(2),
           assets = MultiAsset(
             SortedMap(
               mintingPolicy.scriptHash -> SortedMap(
@@ -221,7 +221,7 @@ class TxBuilderTest extends AnyFunSuite {
 
         val customOutput = TransactionOutput(
           address = Bob.address,
-          value = Value(Coin(3_000_000L)),
+          value = Value.ada(3),
           datumOption = Some(Inline(Data.B(ByteString.fromHex("deadbeef")))),
           scriptRef = None
         )
@@ -256,7 +256,7 @@ class TxBuilderTest extends AnyFunSuite {
         val builtTx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .attach(datum)
-            .payTo(Bob.address, Value(Coin(2_000_000L)), datumHash)
+            .payTo(Bob.address, Value.ada(2), datumHash)
             .changeTo(Alice.address)
             .build()
             .transaction
@@ -295,7 +295,7 @@ class TxBuilderTest extends AnyFunSuite {
             .attach(datum1)
             .attach(datum2)
             .attach(datum3)
-            .payTo(Bob.address, Value(Coin(1_000_000L)))
+            .payTo(Bob.address, Value.ada(1))
             .changeTo(Alice.address)
             .build()
             .transaction
@@ -318,7 +318,7 @@ class TxBuilderTest extends AnyFunSuite {
 
         val builder = TxBuilder(testEnv)
             .spend(scriptUtxo)
-            .payTo(Bob.address, Value(Coin(1_000_000L)))
+            .payTo(Bob.address, Value.ada(20))
             .changeTo(Alice.address)
 
         val exception = intercept[RuntimeException] {
