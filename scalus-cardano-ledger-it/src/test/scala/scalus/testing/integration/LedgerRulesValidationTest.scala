@@ -153,9 +153,9 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
           case e: IllegalStateException if e.getMessage.contains("UTXO not found") =>
             // Skip transactions with missing UTxOs
             consecutiveMissingUtxos += 1
-            if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
+            if consecutiveMissingUtxos == maxConsecutiveMissingUtxos then
               println(
-                s"⚠ Stopping validation: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
+                s"⚠ Stopping validation for ${composedValidator.name}: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
               )
 
     ValidationSummary(
@@ -210,9 +210,9 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
           case e: IllegalStateException if e.getMessage.contains("UTXO not found") =>
             // Skip transactions with missing UTxOs
             consecutiveMissingUtxos += 1
-            if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
+            if consecutiveMissingUtxos == maxConsecutiveMissingUtxos then
               println(
-                s"⚠ Stopping validation: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
+                s"⚠ Stopping validation (single pass): ${consecutiveMissingUtxos} consecutive missing UTxO errors"
               )
 
     ValidationSummary(
@@ -326,9 +326,9 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
           case e: IllegalStateException if e.getMessage.contains("UTXO not found") =>
             // Skip transactions with missing UTxOs
             consecutiveMissingUtxos += 1
-            if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
+            if consecutiveMissingUtxos == maxConsecutiveMissingUtxos then
               println(
-                s"⚠ Stopping validation: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
+                s"⚠ Stopping validation for ${composedMutator.name}: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
               )
 
     ValidationSummary(
@@ -385,9 +385,9 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
           case e: IllegalStateException if e.getMessage.contains("UTXO not found") =>
             // Skip transactions with missing UTxOs
             consecutiveMissingUtxos += 1
-            if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
+            if consecutiveMissingUtxos == maxConsecutiveMissingUtxos then
               println(
-                s"⚠ Stopping validation: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
+                s"⚠ Stopping validation (mutators single pass): ${consecutiveMissingUtxos} consecutive missing UTxO errors"
               )
 
     ValidationSummary(
@@ -564,9 +564,9 @@ class LedgerRulesAllValidatorsTest extends LedgerRulesValidationTestBase {
           case e: IllegalStateException if e.getMessage.contains("UTXO not found") =>
             // Skip transactions with missing UTxOs
             consecutiveMissingUtxos += 1
-            if consecutiveMissingUtxos >= maxConsecutiveMissingUtxos then
+            if consecutiveMissingUtxos == maxConsecutiveMissingUtxos then
               println(
-                s"⚠ Stopping validation: ${consecutiveMissingUtxos} consecutive missing UTxO errors"
+                s"⚠ Stopping validation (all validators): ${consecutiveMissingUtxos} consecutive missing UTxO errors"
               )
 
     val summary = ValidationSummary(
