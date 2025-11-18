@@ -103,15 +103,20 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     vectors.take(10).foreach { case (path, vector) =>
       try {
-        import scalus.utils.Hex.*
-        val txBytes = vector.cbor.hexToBytes
-        // TODO: Add proper CBOR parsing once available
+        import scalus.testing.conformance.CborParser
+
+        // Parse the transaction CBOR using CborParser
+        val transaction = CborParser.parseTransaction(vector.cbor).get
+
         successCount += 1
-        println(s"✓ Valid CBOR hex for ${path.getFileName}")
+        println(s"✓ Successfully parsed transaction for ${path.getFileName}")
+        println(s"  Inputs: ${transaction.body.value.inputs.toSeq.size}")
+        println(s"  Outputs: ${transaction.body.value.outputs.size}")
+        println(s"  Fee: ${transaction.body.value.fee}")
       } catch {
         case e: Exception =>
           failureCount += 1
-          println(s"✗ Invalid CBOR hex for ${path.getFileName}: ${e.getMessage}")
+          println(s"✗ Failed to parse CBOR for ${path.getFileName}: ${e.getMessage}")
       }
     }
 
