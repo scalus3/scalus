@@ -103,6 +103,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
 }
 
 object BlockfrostClient {
+    val MainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
     val PreviewUrl = "https://cardano-preview.blockfrost.io/api/v0"
     val PreprodUrl = "https://cardano-preprod.blockfrost.io/api/v0"
     val LocalUrl = "http://localhost:8080/api/v1"
