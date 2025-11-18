@@ -1,7 +1,8 @@
 package scalus.cardano.txbuilder
 
 import scalus.builtin.Builtins.{blake2b_224, blake2b_256, serialiseData}
-import scalus.builtin.Data
+import scalus.builtin.{Data, ToData}
+import scalus.builtin.Data.toData
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.*
@@ -19,7 +20,7 @@ case class TxBuilder(
     attachedData: Map[DataHash, Data] = Map.empty,
     changeAddressOpt: Option[Address] = None,
     providerOpt: Option[Provider] = None,
-) extends Builder {
+) {
 
     /** Adds the specified **pubkey** utxo to the list of inputs, thus spending it.
       *
@@ -31,7 +32,7 @@ case class TxBuilder(
       *   use [[spend]] with utxo **and redeemer** to spend script protected utxos. Otherwise,
       *   [[build]] throws.
       */
-    override def spend(utxo: Utxo): Builder =
+    def spend(utxo: Utxo): TxBuilder =
         addSteps(
           TransactionBuilderStep.Spend(
             utxo,
@@ -52,10 +53,10 @@ case class TxBuilder(
       * @param redeemer
       *   redeemer to pass to the script to unlock the inputs
       */
-    override def spend(
+    def spend[T: ToData](
         utxo: Utxo,
-        redeemer: Data
-    ): Builder = {
+        redeemer: T
+    ): TxBuilder = {
         val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
 
@@ -66,17 +67,17 @@ case class TxBuilder(
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = scriptSource,
-          redeemer = redeemer,
+          redeemer = redeemer.toData,
           datum = datum,
           additionalSigners = Set.empty
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
 
-    override def spend(
+    def spend(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data
-    ): Builder = {
+    ): TxBuilder = {
         val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
 
@@ -116,16 +117,16 @@ case class TxBuilder(
       * @param script
       *   script that protects the `utxo`
       */
-    override def spend(
+    def spend[T: ToData](
         utxo: Utxo,
-        redeemer: Data,
+        redeemer: T,
         script: PlutusScript
-    ): Builder = {
+    ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(script),
-          redeemer = redeemer,
+          redeemer = redeemer.toData,
           datum = datum,
           additionalSigners = Set.empty
         )
@@ -135,23 +136,17 @@ case class TxBuilder(
     /** Adds the specified utxos to the list of reference inputs.
       *
       * Reference inputs allow scripts to read UTXOs without consuming them.
-      *
-      * @param utxos
-      *   utxos to add as reference inputs
       */
-    override def references(utxos: Utxo*): Builder =
-        addSteps(utxos.map(TransactionBuilderStep.ReferenceOutput.apply)*)
+    def references(utxo: Utxo, rest: Utxo*): TxBuilder =
+        addSteps((utxo :: rest.toList).map(TransactionBuilderStep.ReferenceOutput.apply)*)
 
     /** Adds the specified utxos to the list of collateral inputs.
       *
       * Collateral inputs are used to cover transaction fees if script execution fails. They are
       * only consumed if a script fails validation.
-      *
-      * @param utxos
-      *   utxos to add as collateral inputs
       */
-    override def collaterals(utxos: Utxo*): Builder =
-        addSteps(utxos.map(TransactionBuilderStep.AddCollateral.apply)*)
+    def collaterals(utxo: Utxo, rest: Utxo*): TxBuilder =
+        addSteps((utxo :: rest.toList).map(TransactionBuilderStep.AddCollateral.apply)*)
 
     /** Adds the specified output to the list of transaction outputs.
       *
@@ -161,7 +156,7 @@ case class TxBuilder(
       * @param output
       *   the transaction output to add
       */
-    override def output(output: TransactionOutput): Builder =
+    def output(output: TransactionOutput): TxBuilder =
         addSteps(TransactionBuilderStep.Send(output))
 
     /** Sends the specified value to the given address without a datum.
@@ -171,7 +166,7 @@ case class TxBuilder(
       * @param value
       *   amount to send
       */
-    override def payTo(address: Address, value: Value): Builder =
+    def payTo(address: Address, value: Value): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
             TransactionOutput(address, value, None, None)
@@ -187,10 +182,10 @@ case class TxBuilder(
       * @param datum
       *   inline datum to attach to the output
       */
-    override def payTo(address: Address, value: Value, datum: Data): Builder =
+    def payTo[T: ToData](address: Address, value: Value, datum: T): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
-            TransactionOutput(address, value, Some(DatumOption.Inline(datum)), None)
+            TransactionOutput(address, value, Some(DatumOption.Inline(datum.toData)), None)
           )
         )
 
@@ -205,7 +200,7 @@ case class TxBuilder(
       * @param datumHash
       *   hash of the datum (the actual datum must be attached via [[attach]])
       */
-    override def payTo(address: Address, value: Value, datumHash: DataHash): Builder =
+    def payTo(address: Address, value: Value, datumHash: DataHash): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
             TransactionOutput(address, value, Some(DatumOption.Hash(datumHash)), None)
@@ -220,7 +215,7 @@ case class TxBuilder(
       * @param script
       *   the script to attach
       */
-    override def attach(script: Script): Builder =
+    def attach(script: Script): TxBuilder =
         copy(attachedScripts = attachedScripts + (script.scriptHash -> script))
 
     /** Attaches datum data to the transaction witness set.
@@ -233,7 +228,7 @@ case class TxBuilder(
       * @param data
       *   the datum to attach
       */
-    override def attach(data: Data): Builder = {
+    def attach(data: Data): TxBuilder = {
         val dataHash = DataHash.fromByteString(blake2b_256(serialiseData(data)))
         copy(attachedData = attachedData + (dataHash -> data))
     }
@@ -246,16 +241,16 @@ case class TxBuilder(
       * @param auxiliaryData
       *   the auxiliary data to attach
       */
-    override def metadata(auxiliaryData: AuxiliaryData): Builder =
+    def metadata(auxiliaryData: AuxiliaryData): TxBuilder =
         addSteps(
           TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData))
         )
 
-    override def mint(
-        redeemer: Data,
+    def mint[T: ToData](
+        redeemer: T,
         policyId: PolicyId,
         assets: collection.Map[AssetName, Long]
-    ): Builder = {
+    ): TxBuilder = {
 
         val scriptSource = attachedScripts.get(policyId) match {
             case Some(ps: PlutusScript) => ScriptSource.PlutusScriptValue(ps)
@@ -269,7 +264,7 @@ case class TxBuilder(
               amount = amount,
               witness = TwoArgumentPlutusScriptWitness(
                 scriptSource = scriptSource,
-                redeemer = redeemer,
+                redeemer = redeemer.toData,
                 additionalSigners = Set.empty
               )
             )
@@ -278,11 +273,11 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
-    override def mint(
-        redeemer: Data,
+    def mint[T: ToData](
+        redeemer: T,
         assets: collection.Map[AssetName, Long],
         script: PlutusScript
-    ): Builder = {
+    ): TxBuilder = {
 
         val mintSteps = assets.map { case (assetName, amount) =>
             TransactionBuilderStep.Mint(
@@ -291,7 +286,7 @@ case class TxBuilder(
               amount = amount,
               witness = TwoArgumentPlutusScriptWitness(
                 scriptSource = ScriptSource.PlutusScriptValue(script),
-                redeemer = redeemer,
+                redeemer = redeemer.toData,
                 additionalSigners = Set.empty
               )
             )
@@ -300,10 +295,10 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
-    override def minFee(minFee: Coin): Builder =
+    def minFee(minFee: Coin): TxBuilder =
         addSteps(TransactionBuilderStep.Fee(minFee))
 
-    override def validDuring(interval: ValidityInterval): Builder = {
+    def validDuring(interval: ValidityInterval): TxBuilder = {
         val steps = Seq(
           interval.invalidBefore.map(TransactionBuilderStep.ValidityStartSlot.apply),
           interval.invalidHereafter.map(TransactionBuilderStep.ValidityEndSlot.apply)
@@ -311,26 +306,26 @@ case class TxBuilder(
         addSteps(steps*)
     }
 
-    override def validFrom(from: Instant): Builder = {
+    def validFrom(from: Instant): TxBuilder = {
         val slot = env.slotConfig.timeToSlot(from.toEpochMilli)
         addSteps(TransactionBuilderStep.ValidityStartSlot(slot))
     }
 
-    override def validTo(to: Instant): Builder = {
+    def validTo(to: Instant): TxBuilder = {
         val slot = env.slotConfig.timeToSlot(to.toEpochMilli)
         addSteps(TransactionBuilderStep.ValidityEndSlot(slot))
     }
 
-    override def diffHandler(handler: DiffHandler): Builder =
+    def diffHandler(handler: DiffHandler): TxBuilder =
         copy(diffHandlerOpt = Some(handler))
 
-    override def changeTo(address: Address): Builder = {
+    def changeTo(address: Address): TxBuilder = {
         val handler: DiffHandler = (diff, tx) =>
             Change.handleChange(diff, tx, address, env.protocolParams)
         copy(changeAddressOpt = Some(address), diffHandlerOpt = Some(handler))
     }
 
-    override def build(): Builder = {
+    def build(): TxBuilder = {
         val network = env.network
         val params = env.protocolParams
         val handler = this.diffHandlerOpt.getOrElse(
@@ -356,11 +351,11 @@ case class TxBuilder(
         }
     }
 
-    override def sign(signers: TxSigner*): Builder = ???
+    def sign(signers: TxSigner*): TxBuilder = ???
 
-    override def transaction: Transaction = context.transaction
+    def transaction: Transaction = context.transaction
 
-    override def provider: Provider =
+    def provider: Provider =
         providerOpt.getOrElse(
           throw new IllegalStateException("Provider not set. Call provider() first.")
         )
@@ -459,35 +454,6 @@ object TxBuilder {
           evaluator
         )
     }
-}
-
-trait Builder {
-    def spend(utxo: Utxo): Builder
-    def spend(utxo: Utxo, redeemer: Data): Builder
-    def spend(utxo: Utxo, redeemer: Data, script: PlutusScript): Builder
-    def spend(utxo: Utxo, redeemerBuilder: Transaction => Data): Builder
-    def references(utxos: Utxo*): Builder
-    def collaterals(utxos: Utxo*): Builder
-    def output(output: TransactionOutput): Builder
-    def payTo(address: Address, value: Value): Builder
-    def payTo(address: Address, value: Value, datum: Data): Builder
-    def payTo(address: Address, value: Value, datumHash: DataHash): Builder
-    def attach(script: Script): Builder
-    def attach(data: Data): Builder
-    def metadata(auxiliaryData: AuxiliaryData): Builder
-    def mint(redeemer: Data, policyId: PolicyId, assets: collection.Map[AssetName, Long]): Builder
-    def mint(redeemer: Data, assets: collection.Map[AssetName, Long], script: PlutusScript): Builder
-    def minFee(minFee: Coin): Builder
-    def validDuring(interval: ValidityInterval): Builder
-    def validFrom(from: Instant): Builder
-    def validTo(to: Instant): Builder
-    def diffHandler(diffHandler: DiffHandler): Builder
-    def changeTo(address: Address): Builder
-    def build(): Builder
-    def context: TransactionBuilder.Context
-    def sign(signers: TxSigner*): Builder
-    def transaction: Transaction
-    def provider: Provider
 }
 
 trait TxSigner
