@@ -20,7 +20,7 @@ import scalus.ledger.api.{v1, v2, v3, ScriptContext}
 import scalus.uplc.Term.Const
 import scalus.uplc.eval.*
 import scalus.uplc.{eval, Constant, DeBruijnedProgram, Term}
-import scalus.utils.Hex.hexToBytes
+import scalus.utils.Hex.{hexToBytes, toHex}
 import upickle.default.*
 
 import java.math.BigInteger
@@ -473,7 +473,6 @@ class TxEvaluator(
             datumHash -> data
         val lookupTable = getScriptAndDatumLookupTable(tx, datumsMapping, utxos)
         log.debug(s"Lookup table: $lookupTable")
-
         if runPhaseOne then
             // Subset of phase 1 check on redeemers and scripts
             evalPhaseOne(tx, utxos, lookupTable)

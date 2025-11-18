@@ -500,6 +500,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.0" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
+      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0" % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.4" % "test",
       Test / fork := true, // needed for BlocksValidation to run in sbt
       inConfig(Test)(PluginDependency)
