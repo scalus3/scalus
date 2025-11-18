@@ -52,9 +52,8 @@ object Change {
         val changeOutputIdx = body.outputs.indexWhere(_.value.address == changeAddress)
 
         if diff == 0 then {
-            if changeOutputIdx >= 0 && body.outputs(changeOutputIdx).value.value.coin.value == 0
+            if changeOutputIdx >= 0 && body.outputs(changeOutputIdx).value.value.isZero
             then {
-                // TODO: by doing this, we are killing the assets
                 Right(
                   modifyBody(
                     tx,
