@@ -351,7 +351,19 @@ case class TxBuilder(
         }
     }
 
-    def sign(signers: TxSigner*): TxBuilder = ???
+    def sign(signers: TransactionSigner*): Either[Throwable, TxBuilder] = {
+        val utxos = context.getUtxos
+        val tx = context.transaction
+        val signedByAll = signers.foldLeft[Either[Throwable, Transaction]](Right(tx)) {
+            case (Right(transaction), signer) =>
+                signer.sign(transaction, utxos)
+            case (left @ Left(_), _) => left
+        }
+        signedByAll.map { signedTx =>
+            val newContext = context.copy(transaction = signedTx)
+            copy(context = newContext)
+        }
+    }
 
     def transaction: Transaction = context.transaction
 
@@ -455,5 +467,3 @@ object TxBuilder {
         )
     }
 }
-
-trait TxSigner
