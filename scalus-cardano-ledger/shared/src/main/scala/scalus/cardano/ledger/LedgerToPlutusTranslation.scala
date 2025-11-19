@@ -126,6 +126,14 @@ object LedgerToPlutusTranslation {
                 )
     }
 
+    /** Create TxOutRef for Plutus V3 from transaction input.
+      *
+      * TxOutRef identifies a specific output in a transaction by its ID and index.
+      */
+    def getTxOutRefV3(input: TransactionInput): v3.TxOutRef = {
+        v3.TxOutRef(v3.TxId(input.transactionId), input.index)
+    }
+
     /** Create TxInInfo for Plutus V1 from transaction input and UTxO set.
       *
       * TxInInfo combines the transaction input reference with the resolved output being spent,
@@ -756,12 +764,7 @@ object LedgerToPlutusTranslation {
                 val inputs = body.inputs.toSeq
                 if inputs.isDefinedAt(index) then
                     val input = inputs(index)
-                    v3.ScriptPurpose.Spending(
-                      v3.TxOutRef(
-                        v3.TxId(input.transactionId),
-                        input.index
-                      )
-                    )
+                    v3.ScriptPurpose.Spending(getTxOutRefV3(input))
                 else throw new IllegalStateException(s"Input not found: $index")
 
             case RedeemerTag.Mint =>
