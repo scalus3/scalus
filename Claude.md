@@ -221,8 +221,10 @@ Run `sbtn precommit` before considering work complete.
 - Suggest a commit message when you complete a task.
 - Commit messages should be short: 1 or 2 paragraphs
 
-### Libraries
+### Libraries (in tests)
+- Always use Scalus data types if it is appropriate and has meaning;
 - For JSON parsing use json-iter;
+- Always use com.lihaoyi.pprint to show result of complex data type
 
 ### Reference projects
 - Cardano Ledger https://github.com/IntersectMBO/cardano-ledger

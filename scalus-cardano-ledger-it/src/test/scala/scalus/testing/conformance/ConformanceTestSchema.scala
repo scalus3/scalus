@@ -56,21 +56,27 @@ object ConformanceTestSchema {
       blockVersionData: Option[String] = None  // JSON string for now
   )
 
-  /** Initial ledger state */
+  /** Initial ledger state
+    *
+    * The cardano-ledger LedgerState CBOR structure is: [CertState, UTxOState]
+    *
+    * UTxOState = [utxosUtxo, utxosDeposited, utxosFees, utxosGovState, utxosInstantStake, utxosDonation]
+    * CertState = [VState, PState, DState]
+    */
   case class InitialLedgerState(
-      /** Slot number for the initial state */
-      slot: Long,
-      /** Block number for the initial state */
-      blockNo: Long,
-      /** Block hash */
-      blockHash: String,
-      /** Initial UTXO set */
+      /** Initial UTXO set (extracted from UTxOState[0]) */
       utxos: List[UtxoEntry],
-      /** Stake pools state */
+      /** Deposited coins (UTxOState[1]) */
+      deposited: Option[String] = None, // Lovelace as string
+      /** Accumulated fees (UTxOState[2]) */
+      fees: Option[String] = None, // Lovelace as string
+      /** Donation to treasury (UTxOState[5]) */
+      donation: Option[String] = None, // Lovelace as string
+      /** Stake pools state (from CertState.PState) */
       stakePools: Option[List[StakePoolState]] = None,
-      /** DReps state */
+      /** DReps state (from CertState.VState) */
       dreps: Option[List[DRepState]] = None,
-      /** Accounts (stake addresses) */
+      /** Accounts (stake addresses, from CertState.DState) */
       accounts: Option[List[AccountState]] = None,
       /** Treasury balance */
       treasury: Option[String] = None, // Lovelace as string
@@ -175,12 +181,6 @@ object ConformanceTestSchema {
 
   /** Expected ledger state after applying a transaction or block */
   case class ExpectedLedgerState(
-      /** Expected slot number */
-      slot: Long,
-      /** Expected block number */
-      blockNo: Long,
-      /** Expected block hash */
-      blockHash: Option[String] = None,
       /** Expected UTXO set (None means don't validate) */
       utxos: Option[List[UtxoEntry]] = None,
       /** Expected UTXO set changes (additions/deletions) */

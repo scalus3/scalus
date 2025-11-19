@@ -85,17 +85,11 @@ object CardanoLedgerVectorImporter {
     // Create minimal initial state
     // In a full implementation, this would parse oldLedgerState CBOR
     val initialState = InitialLedgerState(
-      slot = 0,
-      blockNo = 0,
-      blockHash = "0" * 64,
       utxos = List.empty // Would be parsed from oldLedgerState
     )
 
     // Create expected state
     val expectedState = ExpectedLedgerState(
-      slot = 0,
-      blockNo = 0,
-      blockHash = None,
       utxos = None, // Would be parsed from newLedgerState if present
       utxoChanges = None,
       expectedErrors = if (!vector.success) {
