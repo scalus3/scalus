@@ -38,7 +38,7 @@ const navbar = (
         <span style={{ opacity: '60%' }}>DApps Development Platform for Cardano</span> */}
       </div>
     }
-    projectLink="https://github.com/nau/scalus"
+    projectLink="https://github.com/scalus3/scalus"
     // Lantr discord server / Scalus channel
     chatLink="https://discord.gg/B6tXmBzhTn"
   />
@@ -66,7 +66,7 @@ export default async function RootLayout({ children }) {
           banner={banner}
           navbar={navbar}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/nau/scalus"
+          docsRepositoryBase="https://github.com/scalus3/scalus"
           footer={footer}
           // editLink="Edit this page on GitHub"
           sidebar={{ defaultMenuCollapseLevel: 2 }}

@@ -3,6 +3,7 @@ export default {
   support: '',
   'constants-primitives': '',
   'builtin-functions': '',
+  'collections': '',
   'data-types': '',
   'control-flow': '',
   'functions': '',

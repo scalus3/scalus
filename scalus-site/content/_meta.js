@@ -14,7 +14,7 @@ export default {
   }, 
   ledger: {
     title: "Ledger Framework",
-    display: 'hidden',
+    //display: 'hidden',
   }, 
   advanced: 'Advanced Optimisations',
   catalyst: 'Catalyst',

@@ -4,7 +4,21 @@ title: Ledger rules
 sidebarTitle: Ledger rules
 ---
 
-## EraRule UTXOW - validating and updating UTxO state
+import { Callout } from 'nextra/components'
+
+# Ledger rules
+
+<Callout type="warning">
+  Note: Ledger Rules Framework is currently in active development and may be subject to changes.
+</Callout>
+
+## Implemented Ledger Rules
+
+Scalus implements a comprehensive set of Cardano ledger validation and state transition rules. 
+These rules are organized into **Validators** (which check transaction validity) and **Mutators** (which update ledger state). 
+All rules are located in `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/`.
+
+## Validating and updating UTxO state (EraRule UTXOW)
 
 This EraRule is responsible for validating and updating the UTxO state.
 
@@ -38,14 +52,14 @@ EUC[EraRule UTXOW Conway]
                                                     Scalus:ScriptsWellFormedValidator"]:::done
         babbageUtxowTransition --> ppViewHashesMatch["ppViewHashesMatch
                                                     Scalus:ProtocolParamsViewHashesMatchValidator"]:::done
-        babbageUtxowTransition --> EUTXOC[EraRule UTXO Conway]
+        babbageUtxowTransition --> EUTXOC[EraRule UTXO Conway]:::done
             EUTXOC --> utxoTransition:::done
                 utxoTransition --> disjointRefInputs["disjointRefInputs
                                                     Scalus:InputsAndReferenceInputsDisjointValidator"]:::done
                 utxoTransition --> validateOutsideValidityIntervalUtxo["Allegra.validateOutsideValidityIntervalUtxo
                                                                         Scalus:OutsideValidityIntervalValidator"]:::done
                 utxoTransition --> validateOutsideForecast["Alonzo.validateOutsideForecast
-                                                            Scalus:OutsideForecastValidator"]:::question
+                                                            Scalus:OutsideForecastValidator"]:::done
                 utxoTransition --> validateInputSetEmptyUTxO["Shelley.validateInputSetEmptyUTxO 
                                                             Scalus:EmptyInputsValidator"]:::done
                 utxoTransition --> feesOk["feesOk
@@ -73,14 +87,14 @@ EUC[EraRule UTXOW Conway]
                 utxoTransition --> validateTooManyCollateralInputs["Alonzo.validateTooManyCollateralInputs
                                                                 Scalus:TooManyCollateralInputsValidator"]:::done
                 utxoTransition --> EUTXOSC[EraRule UTXOS Conway]:::done
-                    EUTXOSC --> utxosTransition
-                utxosTransition --> isValidTxL{isValidTxL}
+                    EUTXOSC --> utxosTransition:::done
+                utxosTransition --> isValidTxL{isValidTxL}:::done
                     isValidTxL --> |True| conwayEvalScriptsTxValid:::done
-                        conwayEvalScriptsTxValid --> expectScriptsToPass(expactScriptsToPass)
-                        conwayEvalScriptsTxValid --> conwayEvalScriptsTxValidUtxosPrime[(utxos')]
+                        conwayEvalScriptsTxValid --> expectScriptsToPass(expactScriptsToPass):::done
+                        conwayEvalScriptsTxValid --> conwayEvalScriptsTxValidUtxosPrime[(utxos')]:::done
                     isValidTxL --> |False| babbageEvalScriptsTxInvalid:::done
-                        babbageEvalScriptsTxInvalid --> evalPlutusScripts(evalPlutusScripts FAIL)
-                        babbageEvalScriptsTxInvalid --> babbageEvalScriptsTxInvalidUtxosPrime([utxos'])
+                        babbageEvalScriptsTxInvalid --> evalPlutusScripts(evalPlutusScripts FAIL):::done
+                        babbageEvalScriptsTxInvalid --> babbageEvalScriptsTxInvalidUtxosPrime([utxos']):::done
     EUC --> LedgerState[(LedgerState utxoState'' certStateAfterCERTS)]
 
     classDef todo  fill:#FFCDD2
@@ -89,4 +103,61 @@ EUC[EraRule UTXOW Conway]
     classDef done  fill:#C8E6C9
 ```
 
+### Validators
+
+#### Input Validation
+- **AllInputsMustBeInUtxoValidator** - Ensures all transaction inputs (spending, collateral, and reference inputs) exist in the UTxO set
+- **EmptyInputsValidator** - Verifies that the transaction has at least one input
+- **InputsAndReferenceInputsDisjointValidator** - Ensures regular inputs and reference inputs don't overlap
+
+#### Value and Balance Validation
+- **ValueNotConservedUTxOValidator** - Validates that the total value consumed equals the total value produced (conservation of value)
+- **OutputsHaveNotEnoughCoinsValidator** - Checks that all outputs meet the minimum ADA requirement
+- **OutputsHaveTooBigValueStorageSizeValidator** - Validates that output values don't exceed maximum storage size limits
+- **OutputBootAddrAttrsSizeValidator** - Ensures bootstrap address attributes don't exceed size limits
+
+#### Fee and Collateral Validation
+- **FeesOkValidator** - Comprehensive fee validation including minimum fee check, collateral requirements, and collateral input validation
+- **ExUnitsTooBigValidator** - Validates that execution units (memory and CPU steps) don't exceed protocol limits
+- **TooManyCollateralInputsValidator** - Ensures the number of collateral inputs doesn't exceed the maximum allowed
+
+#### Script Validation
+- **NativeScriptsValidator** - Validates native scripts in the transaction
+- **ScriptsWellFormedValidator** - Ensures all scripts are properly formed and valid
+- **MissingOrExtraScriptHashesValidator** - Verifies that all required script hashes are present and no extra ones exist
+- **MissingRequiredDatumsValidator** - Checks that all required datums are provided in the transaction
+- **ExactSetOfRedeemersValidator** - Validates that the set of redeemers matches exactly what's needed
+
+#### Witness Validation
+- **VerifiedSignaturesInWitnessesValidator** - Verifies that all required cryptographic signatures are present and valid
+- **MissingKeyHashesValidator** - Ensures all required key hashes for signing are provided
+
+#### Network and Metadata Validation
+- **WrongNetworkValidator** - Validates that transaction addresses match the expected network
+- **WrongNetworkWithdrawalValidator** - Checks withdrawal addresses match the network
+- **WrongNetworkInTxBodyValidator** - Validates network consistency in transaction body
+- **MetadataValidator** - Validates transaction metadata format and size
+
+#### Protocol and Transaction Validation
+- **ProtocolParamsViewHashesMatchValidator** - Ensures protocol parameter view hashes match expected values
+- **TransactionSizeValidator** - Validates that transaction size doesn't exceed maximum limits
+- **OutsideValidityIntervalValidator** - Checks that the transaction is within its validity interval (time-to-live)
+- **OutsideForecastValidator** - Validates forecast-related constraints for transaction validity
+
+### Mutators
+
+#### UTxO State Updates
+- **AddOutputsToUtxoMutator** - Adds transaction outputs to the UTxO set
+- **RemoveInputsFromUtxoMutator** - Removes consumed inputs from the UTxO set
+
+#### Fee Processing
+- **FeeMutator** - Updates ledger state with transaction fees
+
+#### Script Execution
+- **PlutusScriptsTransactionMutator** - Handles Plutus script execution and updates state accordingly
+
+#### Composition
+- **CardanoMutator** - The main composition mutator that orchestrates all validators and mutators in the correct order, automatically discovering all rule implementations in the package
+
+All rules follow the State Transition System (STS) pattern, providing a type-safe, composable framework for implementing Cardano ledger semantics in Scala 3.
 
