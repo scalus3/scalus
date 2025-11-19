@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
-import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.ledger.api.v1.Address
 import scalus.ledger.api.v1.PubKeyHash
@@ -45,8 +44,8 @@ class BettingTest extends AnyFunSuite, ScalusTest:
 
     test("Verify that a bet can be properly initialized"):
         val player1 = Mock.mockPubKeyHash(1)
-        // Create test datum for a new bet
-        val initialBetDatum = BetDatum(
+        // Create test betting config for a new bet
+        val initialBettingConfig = BettingConfig(
           player1,
           // No second player yet
           player2 = pkh"",
@@ -66,7 +65,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
                 tn = utf8"lucky_number_slevin",
                 v = 1
               ),
-              datum = OutputDatum.OutputDatum(initialBetDatum.toData)
+              datum = OutputDatum.OutputDatum(initialBettingConfig.toData)
             )
           ),
           signatories = List(player1),
@@ -89,7 +88,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
         val player2 = Mock.mockPubKeyHash(2)
         val oracle = Mock.mockPubKeyHash(3)
         // Initial state: bet created by player1
-        val initialBetDatum = BetDatum(
+        val initialBettingConfig = BettingConfig(
           player1,
           // No second player yet
           player2 = PubKeyHash(ByteString.empty),
@@ -98,7 +97,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
           expiration = 1753939940,
         )
         // Updated state: player2 has joined
-        val updatedBetDatum = BetDatum(
+        val updatedBettingConfig = BettingConfig(
           player1,
           player2,
           oracle,
@@ -120,7 +119,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
                   tn = utf8"lucky_number_slevin",
                   v = 1
                 ),
-                datum = OutputDatum.OutputDatum(initialBetDatum.toData)
+                datum = OutputDatum.OutputDatum(initialBettingConfig.toData)
               )
             )
           ),
@@ -133,7 +132,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
                 tn = utf8"lucky_number_slevin",
                 v = 1
               ),
-              datum = OutputDatum.OutputDatum(updatedBetDatum.toData)
+              datum = OutputDatum.OutputDatum(updatedBettingConfig.toData)
             )
           ),
           signatories = List(player2),
@@ -147,7 +146,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
             redeemer = joinAction.toData,
             scriptInfo = ScriptInfo.SpendingScript(
               txOutRef = tx,
-              datum = Some(updatedBetDatum.toData)
+              datum = Some(updatedBettingConfig.toData)
             )
           )
         )
@@ -161,7 +160,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
         val player2 = Mock.mockPubKeyHash(2)
         val oracle = Mock.mockPubKeyHash(3)
         // Final bet state with both players
-        val finalBetDatum = BetDatum(
+        val finalBettingConfig = BettingConfig(
           player1,
           player2,
           oracle,
@@ -183,7 +182,7 @@ class BettingTest extends AnyFunSuite, ScalusTest:
                   tn = utf8"lucky_number_slevin",
                   v = 1
                 ),
-                datum = OutputDatum.OutputDatum(finalBetDatum.toData)
+                datum = OutputDatum.OutputDatum(finalBettingConfig.toData)
               )
             )
           ),
