@@ -4,7 +4,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.PosixTime
+import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 
 import scala.collection.Map
 
@@ -55,7 +55,7 @@ class Transactions2(
         time: PosixTime
     ): Either[Throwable, Transaction] = {
         val redeemer = Action.Reveal(preimage)
-        val receiverKeyHash = AddrKeyHash.fromByteString(receiverPkh)
+        val receiverKeyHash = AddrKeyHash.fromByteString(receiverPkh.hash)
 
         for {
             receiverSigner <- signers

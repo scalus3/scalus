@@ -9,6 +9,7 @@ import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.examples.htlc.{HtlcContract, Transactions2}
+import scalus.ledger.api.v1.PubKeyHash
 
 class HtlcIntegrationTest extends AnyFunSuite {
 
@@ -150,7 +151,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
         val senderAddress = getEnvOrSkip("SENDER_ADDRESS", testEnv)
         val senderAddr = Address.fromBech32(senderAddress)
-        val senderPkh = AddrKeyHash.fromByteString(getPaymentPkh(senderAddr))
+        val senderPkh = PubKeyHash(getPaymentPkh(senderAddr))
 
         val senderUtxos = ctx.client.findUtxos(senderAddr).toOption.get
         assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
@@ -204,7 +205,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
         val senderAddress = getEnvOrSkip("SENDER_ADDRESS", testEnv)
         val senderAddr = Address.fromBech32(senderAddress)
-        val senderPkh = AddrKeyHash.fromByteString(getPaymentPkh(senderAddr))
+        val senderPkh = PubKeyHash(getPaymentPkh(senderAddr))
 
         val signer = makeTransactionSigner("m/1852'/1815'/0'/0/0", mnemonic)
         val signers = Map(senderAddr -> signer)

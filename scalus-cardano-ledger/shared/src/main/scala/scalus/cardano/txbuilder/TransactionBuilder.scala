@@ -2131,8 +2131,11 @@ enum SomeBuildError:
             case SomeBuildError.BalancingError(e, context) =>
                 e match {
                     case TxBalancingError.EvaluationFailed(cause) =>
-                        new RuntimeException(s"Plutus script evaluation failed. Logs: ${cause.logs.mkString(System.lineSeparator)}", cause)
-                    case TxBalancingError.Failed(cause)           => cause
+                        new RuntimeException(
+                          s"Plutus script evaluation failed. Logs: ${cause.logs.mkString(System.lineSeparator)}",
+                          cause
+                        )
+                    case TxBalancingError.Failed(cause) => cause
                     case TxBalancingError.CantBalance(lastDiff) =>
                         new RuntimeException(
                           s"Balancing failure. Last seen diff (sum(outputs) - sum(inputs)) = $lastDiff"
