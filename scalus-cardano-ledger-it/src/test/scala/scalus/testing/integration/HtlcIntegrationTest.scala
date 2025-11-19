@@ -1,11 +1,14 @@
 package scalus.testing.integration
 
+import com.bloxbean.cardano.client.account.Account
+import com.bloxbean.cardano.client.common.model.Networks
+import com.bloxbean.cardano.client.crypto.cip1852.{DerivationPath, Segment}
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.examples.htlc.{HtlcContract, Transactions as HtlcTransactions}
+import scalus.examples.htlc.{HtlcContract, Transactions2}
 
 class HtlcIntegrationTest extends AnyFunSuite {
 
@@ -20,6 +23,41 @@ class HtlcIntegrationTest extends AnyFunSuite {
         evaluator: PlutusScriptEvaluator
     )
 
+    private def makeTransactionSigner(derivation: String, mnemonic: String): TransactionSigner = {
+        val derivationPieces = derivation.split("/").drop(1).map(_.stripSuffix("'")).map(_.toInt)
+        val derivationPath = DerivationPath
+            .builder()
+            .purpose(new Segment(derivationPieces(0), true))
+            .coinType(new Segment(derivationPieces(1), true))
+            .account(new Segment(derivationPieces(2), true))
+            .role(new Segment(derivationPieces(3), false))
+            .index(new Segment(derivationPieces(4), false))
+            .build()
+        val account = Account.createFromMnemonic(Networks.testnet(), mnemonic, derivationPath)
+        val publicKeyBytes = account.publicKeyBytes()
+        val privateKeyBytes = account.privateKeyBytes()
+
+        val publicKey = ByteString.fromArray(publicKeyBytes)
+        val pkh = AddrKeyHash(scalus.builtin.platform.blake2b_224(publicKey))
+
+        new TransactionSigner {
+            override val publicKeyHashes: Set[AddrKeyHash] = Set(pkh)
+
+            // override the default signer to just use the hardcoded keypair
+            override protected def signEd25519(
+                addrKeyHash: AddrKeyHash,
+                transactionId: TransactionHash
+            ): VKeyWitness = {
+                val signature = scalus.testing.integration.signEd25519(
+                  privateKeyBytes,
+                  publicKeyBytes,
+                  transactionId.bytes
+                )
+                VKeyWitness(publicKey, ByteString.fromArray(signature))
+            }
+        }
+    }
+    
     private def getEnvOrSkip(name: String, testEnv: TestEnv): String = {
         val postfix = testEnv match {
             case TestEnv.Local   => "LOCAL"
@@ -117,8 +155,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val senderUtxos = ctx.client.findUtxos(senderAddr).toOption.get
         assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
-        val wallet = buildWalletWithCollateral(senderAddr, senderUtxos)
-        val context = BuilderContext(ctx.env, wallet, ctx.evaluator)
+        val signer = makeTransactionSigner("m/1852'/1815'/0'/0/0", mnemonic)
+        val signers = Map(senderAddr -> signer)
 
         val preimage = ByteString.fromString("secret_preimage_54321")
         val image = scalus.builtin.Builtins.sha3_256(preimage)
@@ -135,8 +173,13 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val lockAmount = 8_000_000L
 
         val compiledContract = HtlcContract.defaultCompiledContract
+        
+        val utxoToSpend = Utxo(
+          senderUtxos.find(_._2.value.coin.value >= lockAmount).get
+        )
 
-        val lockTxResult = new HtlcTransactions(context, compiledContract).lock(
+        val lockTxResult = new Transactions2(ctx.env, signers, compiledContract).lock(
+          utxoToSpend,
           Value.lovelace(lockAmount),
           senderPkh,
           senderPkh,
@@ -144,10 +187,8 @@ class HtlcIntegrationTest extends AnyFunSuite {
           timeout
         )
 
-        val lockTx =
+        val signedLockTx =
             lockTxResult.toOption.getOrElse(fail(s"Failed to build lock tx: $lockTxResult"))
-        val signer = makeSignerFrom("m/1852'/1815'/0'/0/0", mnemonic)
-        val signedLockTx = signer.signTx(lockTx)
 
         ctx.client.submit(signedLockTx) match {
             case Right(_) =>
@@ -165,6 +206,9 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val senderAddr = Address.fromBech32(senderAddress)
         val senderPkh = AddrKeyHash.fromByteString(getPaymentPkh(senderAddr))
 
+        val signer = makeTransactionSigner("m/1852'/1815'/0'/0/0", mnemonic)
+        val signers = Map(senderAddr -> signer)
+
         // HTLC parameters - must match the locked UTXO
         val preimage = ByteString.fromString("secret_preimage_54321")
         val compiledContract = HtlcContract.defaultCompiledContract
@@ -176,12 +220,17 @@ class HtlcIntegrationTest extends AnyFunSuite {
         assert(scriptUtxos.nonEmpty, s"No UTXOs found at script address")
         val lockedUtxo = Utxo(scriptUtxos.find(_._2.value.coin.value > 7_000_000L).get)
 
-        // Fetch sender UTXOs for fees and collateral
+        // Fetch sender UTXOs for collateral
         val senderUtxos = ctx.client.findUtxos(senderAddr).toOption.get
         assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
-        val wallet = buildWalletWithCollateral(senderAddr, senderUtxos)
-        val context = BuilderContext(ctx.env, wallet, ctx.evaluator)
+        val collateralUtxo = Utxo(
+          senderUtxos
+              .find { case (_, output) =>
+                  output.value.coin.value >= 5_000_000 && output.value.assets.isEmpty
+              }
+              .getOrElse(fail("No suitable collateral UTXO found"))
+        )
 
         val revealTime = testEnv match {
             case TestEnv.Local =>
@@ -193,18 +242,17 @@ class HtlcIntegrationTest extends AnyFunSuite {
                 ctx.cardanoInfo.slotConfig.slotToTime(revealSlot)
         }
 
-        val revealTxResult = new HtlcTransactions(context, compiledContract).reveal(
+        val revealTxResult = new Transactions2(ctx.env, signers, compiledContract).reveal(
           lockedUtxo,
+          collateralUtxo,
           preimage,
           senderAddr,
           senderPkh,
           revealTime
         )
 
-        val revealTx =
+        val signedRevealTx =
             revealTxResult.toOption.getOrElse(fail(s"Failed to build reveal tx: $revealTxResult"))
-        val signer = makeSignerFrom("m/1852'/1815'/0'/0/0", mnemonic)
-        val signedRevealTx = signer.signTx(revealTx)
 
         ctx.client.submit(signedRevealTx) match {
             case Right(_) =>

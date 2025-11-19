@@ -1,11 +1,11 @@
 package scalus.cardano.txbuilder
 
-import scalus.builtin.Builtins.{blake2b_224, blake2b_256, serialiseData}
-import scalus.builtin.{Data, ToData}
+import scalus.builtin.Builtins.{blake2b_256, serialiseData}
 import scalus.builtin.Data.toData
+import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
-import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.node.Provider
 
 import java.time.Instant
@@ -129,6 +129,44 @@ case class TxBuilder(
           redeemer = redeemer.toData,
           datum = datum,
           additionalSigners = Set.empty
+        )
+        addSteps(TransactionBuilderStep.Spend(utxo, witness))
+    }
+
+    /** Adds the specified **script protected** utxo to the list of inputs and the specified
+      * redeemer to the witness set, with additional required signers.
+      *
+      * Use this method when the validator script requires specific signatures beyond the spender.
+      * The public key hashes in `additionalSigners` will be added to the transaction's required
+      * signers field.
+      *
+      * If the specified `script` fails with the specified redeemer, [[build]] is going to throw.
+      *
+      * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
+      * according to [[changeTo]] or [[diffHandler]].
+      *
+      * @param utxo
+      *   utxo to spend
+      * @param redeemer
+      *   redeemer to pass to the script to unlock the inputs
+      * @param script
+      *   script that protects the `utxo`
+      * @param additionalSigners
+      *   set of public key hashes that must sign the transaction
+      */
+    def spend[T: ToData](
+        utxo: Utxo,
+        redeemer: T,
+        script: PlutusScript,
+        additionalSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
+        val datum = buildDatumWitness(utxo)
+
+        val witness = ThreeArgumentPlutusScriptWitness(
+          scriptSource = ScriptSource.PlutusScriptValue(script),
+          redeemer = redeemer.toData,
+          datum = datum,
+          additionalSigners = additionalSigners.map(ExpectedSigner.apply)
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
@@ -351,14 +389,15 @@ case class TxBuilder(
         }
     }
 
-    def sign(signers: TransactionSigner*): Either[Throwable, TxBuilder] = {
+    def sign(signer: TransactionSigner, rest: TransactionSigner*): Either[Throwable, TxBuilder] = {
         val utxos = context.getUtxos
         val tx = context.transaction
-        val signedByAll = signers.foldLeft[Either[Throwable, Transaction]](Right(tx)) {
-            case (Right(transaction), signer) =>
-                signer.sign(transaction, utxos)
-            case (left @ Left(_), _) => left
-        }
+        val signedByAll =
+            (signer +: rest).foldLeft[Either[Throwable, Transaction]](Right(tx)) {
+                case (Right(transaction), signer) =>
+                    signer.sign(transaction, utxos)
+                case (left @ Left(_), _) => left
+            }
         signedByAll.map { signedTx =>
             val newContext = context.copy(transaction = signedTx)
             copy(context = newContext)
