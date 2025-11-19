@@ -7,7 +7,6 @@ import scalus.builtin.{ByteString, Data}
 class InteropMapOrderingTest extends AnyFunSuite:
 
     test("MapPlutusData deserialization preserves CBOR key ordering") {
-        pending
         // Create a map with specific byte string keys in sorted order
         val key1 =
             ByteString.fromHex("0292cad364cf66a04f9ade0238e96a8978e8bc01c65301000000000000000000")
@@ -65,7 +64,6 @@ class InteropMapOrderingTest extends AnyFunSuite:
     }
 
     test("MapPlutusData with multiple entries maintains consistent ordering") {
-        pending
         // Create a map with 10 random-ish keys to stress test ordering
         val keys = List(
           "0292cad364cf66a04f9ade0238e96a8978e8bc01c65301000000000000000000",

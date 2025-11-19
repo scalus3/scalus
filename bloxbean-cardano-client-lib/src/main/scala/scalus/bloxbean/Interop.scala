@@ -126,8 +126,9 @@ object Interop {
                     val args = c.getData.getPlutusDataList.asScala.map(_.toScalusData).toList
                     Data.Constr(c.getAlternative, args)
                 case m: MapPlutusData =>
-                    val values = m.getMap.asScala.map { case (k, v) =>
-                        (k.toScalusData, v.toScalusData)
+                    val entries = m.getMap.entrySet().iterator().asScala
+                    val values = entries.map { e =>
+                        (e.getKey.toScalusData, e.getValue.toScalusData)
                     }.toList
                     Data.Map(values)
                 case l: ListPlutusData =>
