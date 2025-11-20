@@ -1211,4 +1211,98 @@ class ValueTest extends StdlibTestKit with ArbitraryInstances {
         )
     }
 
+    test("toLedgerValue") {
+        import scalus.cardano.ledger.Coin
+
+        // Create valid 28-byte PolicyIds (ScriptHash) for testing
+        val policyId1 = ByteString.fromHex("a" * 56) // 28 bytes
+        val policyId2 = ByteString.fromHex("b" * 56) // 28 bytes
+        val policyId3 = ByteString.fromHex("1" * 56) // 28 bytes
+        val policyId4 = ByteString.fromHex("f" * 56) // 28 bytes
+
+        // Test zero value conversion
+        val ledgerZero = Value.zero.toLedgerValue
+        assert(ledgerZero.coin == Coin(0))
+        assert(ledgerZero.assets.assets.isEmpty)
+
+        // Test lovelace-only value conversion
+        val lovelaceValue = Value.lovelace(BigInt(1000000))
+        val ledgerLovelace = lovelaceValue.toLedgerValue
+        assert(ledgerLovelace.coin == Coin(1000000))
+        assert(ledgerLovelace.assets.assets.isEmpty)
+
+        // Test value with single native asset
+        val singleAssetValue = Value(
+          policyId1,
+          ByteString.fromString("assetName1"),
+          BigInt(100)
+        )
+        val ledgerSingleAsset = singleAssetValue.toLedgerValue
+        assert(ledgerSingleAsset.coin == Coin(0))
+        assert(ledgerSingleAsset.assets.assets.size == 1)
+
+        // Test value with lovelace and native assets
+        val mixedValue = Value.lovelace(BigInt(2000000)) +
+            Value(
+              policyId1,
+              ByteString.fromString("assetName1"),
+              BigInt(100)
+            ) +
+            Value(
+              policyId2,
+              ByteString.fromString("assetName2"),
+              BigInt(200)
+            )
+        val ledgerMixed = mixedValue.toLedgerValue
+        assert(ledgerMixed.coin == Coin(2000000))
+        assert(ledgerMixed.assets.assets.size == 2)
+
+        // Test value with multiple assets under same policy
+        val multiAssetSamePolicy = Value.fromList(
+          List(
+            (
+              policyId1,
+              List(
+                (ByteString.fromString("asset1"), BigInt(100)),
+                (ByteString.fromString("asset2"), BigInt(200))
+              )
+            )
+          )
+        )
+        val ledgerMultiSame = multiAssetSamePolicy.toLedgerValue
+        assert(ledgerMultiSame.coin == Coin(0))
+        assert(ledgerMultiSame.assets.assets.size == 1)
+        assert(ledgerMultiSame.assets.assets.values.head.size == 2)
+
+        // Test round-trip conversion: api.Value -> ledger.Value -> api.Value
+        val originalValue = Value.lovelace(BigInt(5000000)) +
+            Value(
+              policyId3,
+              ByteString.fromString("token1"),
+              BigInt(150)
+            )
+        val ledgerVal = originalValue.toLedgerValue
+        val backToApiValue =
+            scalus.cardano.ledger.LedgerToPlutusTranslation.getValue(ledgerVal)
+
+        assert(originalValue === backToApiValue)
+
+        // Test that toLedgerValue preserves token ordering
+        val orderedValue = Value.fromList(
+          List(
+            (
+              policyId3,
+              List((ByteString.fromString("token1"), BigInt(10)))
+            ),
+            (
+              policyId4,
+              List((ByteString.fromString("token2"), BigInt(20)))
+            )
+          )
+        )
+        val ledgerOrdered = orderedValue.toLedgerValue
+        val policyIds = ledgerOrdered.assets.assets.keys.toSeq
+        assert(policyIds.size == 2)
+    }
+
 }

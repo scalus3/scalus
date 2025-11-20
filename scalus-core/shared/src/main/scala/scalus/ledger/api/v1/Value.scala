@@ -5,6 +5,8 @@ import scalus.builtin.ByteString
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.{fromData, toData}
 import scalus.builtin.{Data, FromData, ToData}
+import scalus.cardano.ledger
+import scalus.cardano.ledger.{AssetName, Coin, Hash, MultiAsset}
 import scalus.prelude
 import scalus.prelude.{List, Option, SortedMap}
 import scalus.prelude.{Eq, Ord, Order}
@@ -15,7 +17,7 @@ import scala.annotation.tailrec
 case class Value private (toSortedMap: SortedMap[PolicyId, SortedMap[TokenName, BigInt]])
 
 @Compile
-object Value {
+object Value extends ValueOffchainOps {
 
     /** A value representing zero units of any policy id or token.
       *
@@ -975,5 +977,45 @@ object Value {
         }
 
         Value.unsafeFromList(go(a.toSortedMap.toList, b.toSortedMap.toList))
+    }
+}
+
+private trait ValueOffchainOps { self: Value.type =>
+    extension (v: Value) {
+
+        /** Converts this `Value` to a [[scalus.cardano.ledger.Value]]
+          *
+          * @throws IllegalArgumentException
+          *   if lovelace amount exceeds Long range
+          * @throws IllegalArgumentException
+          *   if any asset amount exceeds Long range
+          * @throws IllegalArgumentException
+          *   if PolicyId is not exactly 28 bytes (thrown by Hash.scriptHash)
+          * @throws IllegalArgumentException
+          *   if AssetName exceeds 32 bytes (thrown by AssetName constructor)
+          */
+        def toLedgerValue: ledger.Value = {
+            import scala.collection.immutable
+
+            val lovelace = v.getLovelace
+            require(lovelace.isValidLong, s"Lovelace amount $lovelace exceeds Long range")
+            val coins = Coin(lovelace.toLong)
+
+            val assets = v.toSortedMap.toList.asScala.collect {
+                case (cs, tokens) if cs != adaPolicyId => // Skip ADA policy id
+                    val tokenMap = tokens.toList.asScala.map { (tn, amount) =>
+                        require(
+                          amount.isValidLong,
+                          s"Asset amount $amount for token ${tn.toHex} in policy ${cs.toHex} exceeds Long range"
+                        )
+                        (AssetName(tn), amount.toLong)
+                    }
+                    // Hash.scriptHash validates PolicyId is exactly 28 bytes
+                    Hash.scriptHash(cs) -> immutable.SortedMap.from(tokenMap)
+            }
+
+            val ma = MultiAsset(immutable.SortedMap.from(assets))
+            ledger.Value(coin = coins, assets = ma)
+        }
     }
 }
