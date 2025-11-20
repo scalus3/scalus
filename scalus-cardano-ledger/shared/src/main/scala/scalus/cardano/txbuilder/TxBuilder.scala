@@ -40,6 +40,20 @@ case class TxBuilder(
           )
         )
 
+    /** Adds the specified **pubkey** utxos to the list of inputs, thus spending them.
+      *
+      * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
+      * according to [[changeTo]] or [[diffHandler]].
+      * @param utxos
+      *   utxos to spend
+      * @note
+      *   use [[spend]] with utxo **and redeemer** to spend script protected utxos. Otherwise,
+      *   [[build]] throws.
+      */
+    def spend(utxos: Utxos): TxBuilder = {
+        utxos.foldLeft(this) { case (builder, utxo) => builder.spend(Utxo(utxo)) }
+    }
+
     /** Adds the specified **script protected** utxo to the list of inputs and the specified
       * redeemer to the witness set.
       *
@@ -185,6 +199,14 @@ case class TxBuilder(
       */
     def collaterals(utxo: Utxo, rest: Utxo*): TxBuilder =
         addSteps((utxo :: rest.toList).map(TransactionBuilderStep.AddCollateral.apply)*)
+
+    /** Adds the specified utxos to the list of collateral inputs.
+      *
+      * Collateral inputs are used to cover transaction fees if script execution fails. They are
+      * only consumed if a script fails validation.
+      */
+    def collaterals(utxos: Utxos): TxBuilder =
+        addSteps(utxos.toList.map(utxo => TransactionBuilderStep.AddCollateral.apply(Utxo(utxo)))*)
 
     /** Adds the specified output to the list of transaction outputs.
       *
@@ -498,11 +520,19 @@ object TxBuilder {
           CardanoInfo(env.protocolParams, env.network, env.slotConfig),
           EvaluatorMode.EvaluateAndComputeCost
         )
+        withCustomEvaluator(env, evaluator)
+    }
+
+    def withConstMaxBudgetEvaluator(env: Environment): TxBuilder = {
+        val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
+        withCustomEvaluator(env, evaluator)
+    }
+
+    def withCustomEvaluator(
+        env: Environment,
+        evaluator: PlutusScriptEvaluator
+    ): TxBuilder = {
         val context = TransactionBuilder.Context.empty(env.network)
-        TxBuilder(
-          env,
-          context,
-          evaluator
-        )
+        TxBuilder(env, context, evaluator)
     }
 }

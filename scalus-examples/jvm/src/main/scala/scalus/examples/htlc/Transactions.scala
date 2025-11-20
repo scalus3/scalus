@@ -14,7 +14,7 @@ class Transactions(
 
     val wallet = context.wallet
     val script = compiledContract.script
-    val scriptAddress = Address(context.env.network, Credential.ScriptHash(script.scriptHash))
+    val scriptAddress = compiledContract.address(context.env.network)
 
     def lock(
         value: Value,
