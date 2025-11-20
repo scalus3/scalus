@@ -1,10 +1,9 @@
 package scalus.ledger.api.v1
 
-import scalus.prelude.{List, Option, SortedMap}
-import scalus.builtin.{ByteString, FromData, ToData}
-import scalus.builtin.Data
 import scalus.builtin.Data.{fromData, toData}
-import scalus.prelude.{Eq, Ord, StdlibTestKit}
+import scalus.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.ledger.LedgerToPlutusTranslation
+import scalus.prelude.*
 
 class ValueTest extends StdlibTestKit with ArbitraryInstances {
     given [T: Arbitrary]: Arbitrary[List[T]] = Arbitrary {
@@ -1303,6 +1302,31 @@ class ValueTest extends StdlibTestKit with ArbitraryInstances {
         val ledgerOrdered = orderedValue.toLedgerValue
         val policyIds = ledgerOrdered.assets.assets.keys.toSeq
         assert(policyIds.size == 2)
+    }
+
+    test("toLedgerValue roundtrip property") {
+        // Helper to check if all amounts in a Value are within Long range
+        def isValidForLedger(v: Value): Boolean = {
+            val lovelaceValid = v.getLovelace.isValidLong
+            val assetsValid = v.flatten.forall { case (_, _, amount) =>
+                amount.isValidLong
+            }
+            lovelaceValid && assetsValid
+        }
+
+        // Use ScalaCheck directly (not checkEval) since toLedgerValue is offchain-only
+        forAll { (value: Value) =>
+            // Only test values that can be converted to ledger.Value
+            // (i.e., all amounts must be within Long range)
+            if isValidForLedger(value) then
+                val ledgerValue = value.toLedgerValue
+                val roundtripped = LedgerToPlutusTranslation.getValue(ledgerValue)
+                roundtripped == value
+            else
+                // For values outside Long range, just verify the property passes
+                // (we can't test roundtrip for invalid values)
+                true
+        }
     }
 
 }
