@@ -20,7 +20,7 @@ import scalus.ledger.api.{v1, v2, v3, ScriptContext}
 import scalus.uplc.Term.Const
 import scalus.uplc.eval.*
 import scalus.uplc.{eval, Constant, DeBruijnedProgram, Term}
-import scalus.utils.Hex.{hexToBytes, toHex}
+import scalus.utils.Hex.hexToBytes
 import upickle.default.*
 
 import java.math.BigInteger

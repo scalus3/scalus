@@ -1446,4 +1446,66 @@ class SortedMapTest extends StdlibTestKit {
         )
     }
 
+    test("from") {
+        import scalus.builtin.ByteString
+        import scalus.builtin.ByteString.{hex, given}
+
+        // Test with empty collection
+        val emptyMap = SortedMap.from(scala.List.empty[(ByteString, BigInt)])
+        assert(emptyMap.toList === List.empty)
+
+        // Test with single element
+        val singleMap = SortedMap.from(scala.List((hex"aa", BigInt(10))))
+        assert(singleMap.toList === List((hex"aa", BigInt(10))))
+
+        // Test with multiple elements in unsorted order
+        val unsortedMap = SortedMap.from(
+          scala.List((hex"cc", BigInt(30)), (hex"aa", BigInt(10)), (hex"bb", BigInt(20)))
+        )
+        assert(
+          unsortedMap.toList === List(
+            (hex"aa", BigInt(10)),
+            (hex"bb", BigInt(20)),
+            (hex"cc", BigInt(30))
+          )
+        )
+
+        // Test with duplicate keys - last inserted value should win
+        val duplicateMap = SortedMap.from(
+          scala.List((hex"aa", BigInt(10)), (hex"bb", BigInt(20)), (hex"aa", BigInt(100)))
+        )
+        assert(duplicateMap.toList === List((hex"aa", BigInt(100)), (hex"bb", BigInt(20))))
+
+        // Test with Vector
+        val vectorMap =
+            SortedMap.from(Vector((hex"bb", BigInt(2)), (hex"aa", BigInt(1)), (hex"cc", BigInt(3))))
+        assert(
+          vectorMap.toList === List(
+            (hex"aa", BigInt(1)),
+            (hex"bb", BigInt(2)),
+            (hex"cc", BigInt(3))
+          )
+        )
+
+        // Test that result is properly sorted
+        val largeMap = SortedMap.from(
+          scala.List(
+            (hex"ee", BigInt(5)),
+            (hex"bb", BigInt(2)),
+            (hex"ff", BigInt(8)),
+            (hex"aa", BigInt(1)),
+            (hex"dd", BigInt(9))
+          )
+        )
+        assert(
+          largeMap.toList === List(
+            (hex"aa", BigInt(1)),
+            (hex"bb", BigInt(2)),
+            (hex"dd", BigInt(9)),
+            (hex"ee", BigInt(5)),
+            (hex"ff", BigInt(8))
+          )
+        )
+    }
+
 }

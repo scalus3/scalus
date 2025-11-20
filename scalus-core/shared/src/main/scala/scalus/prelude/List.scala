@@ -1388,7 +1388,4 @@ object List {
             for e <- self do buf.addOne(e)
             buf.toList
     }
-
-    def pairNil[A, B]: List[(A, B)] = ???
-
 }

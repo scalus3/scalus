@@ -3,8 +3,8 @@ package scalus.cardano.txbuilder
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
-import scalus.cardano.ledger.{AssetName, CardanoInfo, Coin, MultiAsset, ScriptHash, Sized, TaggedSortedSet, Transaction, TransactionBody, TransactionInput, TransactionOutput, TransactionWitnessSet, Utxo, Value}
 import scalus.cardano.ledger.ArbitraryInstances.given_Arbitrary_Hash
+import scalus.cardano.ledger.*
 
 class ChangeTest extends AnyFunSuite {
 

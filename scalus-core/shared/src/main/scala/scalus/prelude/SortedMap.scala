@@ -1,6 +1,6 @@
 package scalus.prelude
 
-import scalus.Compile
+import scalus.{Compile, Ignore}
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.fromData
 import scalus.builtin.{Data, FromData, ToData}
@@ -132,6 +132,23 @@ object SortedMap {
         require(checkStrictlyAscendingOrder(lst), "List is not strictly ascending")
         SortedMap(lst)
     }
+
+    /** Constructs a `SortedMap` from an `IterableOnce` of key-value pairs, inserting them in order.
+      *
+      * @param it
+      *   the iterable collection of key-value pairs
+      * @return
+      *   a `SortedMap` containing the key-value pairs from the iterable
+      * @example
+      *   {{{
+      *   SortedMap.from(List(("b", 2), ("a", 1))).toList === List.Cons(("a", 1), List.Cons(("b", 2), List.Nil))
+      *   }}}
+      */
+    @Ignore
+    def from[A: Ord, B](it: IterableOnce[(A, B)]): SortedMap[A, B] =
+        it.iterator.foldLeft(empty[A, B]) { (a, b) =>
+            a.insert(b._1, b._2)
+        }
 
     /** Merges two `SortedMap`s into a new `SortedMap` containing keys from both maps. if a key is
       * only present in left map, it is wrapped in `These.This`, if only in right map, it is wrapped
