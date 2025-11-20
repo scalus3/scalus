@@ -25,11 +25,12 @@ normalize_author() {
 
     added[author]+=$2
     deleted[author]+=$3
+    commits[author]+=$4
   }
   END {
     for (author in added) {
       total = added[author] + deleted[author]
-      printf "%d|%s|%d|%d\n", total, author, added[author], deleted[author]
+      printf "%d|%s|%d|%d|%d\n", total, author, added[author], deleted[author], commits[author]
     }
   }'
 }
@@ -42,6 +43,7 @@ get_git_stats() {
   git log --all --numstat --since="$since" --until="$until" --pretty=format:'AUTHOR:%aN' | awk '
     /^AUTHOR:/ {
       author=substr($0, 8)
+      commits++
     }
     /^[0-9]/ && NF==3 {
       plus+=$1
@@ -49,9 +51,10 @@ get_git_stats() {
     }
     /^$/ {
       if (author) {
-        print author "|" plus "|" minus
+        print author "|" plus "|" minus "|" commits
         plus=0
         minus=0
+        commits=0
       }
     }
   ' | normalize_author | sort -rn
@@ -64,8 +67,8 @@ display_author_stats() {
 
   echo "$stats" | awk -F'|' -v green="$GREEN" -v white="$WHITE" -v cyan="$CYAN" -v magenta="$MAGENTA" -v yellow="$YELLOW" -v reset="$RESET" -v bold="$BOLD" -v threshold="$threshold" '
   BEGIN {
-    printf "%s%-30s %15s %15s %15s%s\n", bold white, "Author", "Lines Added", "Lines Deleted", "Total Changes", reset
-    printf "%s%-30s %15s %15s %15s%s\n", cyan, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━━", "━━━━━━━━━━━━━", "━━━━━━━━━━━━━", reset
+    printf "%s%-30s %10s %15s %15s %15s%s\n", bold white, "Author", "Commits", "Lines Added", "Lines Deleted", "Total Changes", reset
+    printf "%s%-30s %10s %15s %15s %15s%s\n", cyan, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━", "━━━━━━━━━━━", "━━━━━━━━━━━━━", "━━━━━━━━━━━━━", reset
   }
   {
     if ($1 > threshold) {
@@ -75,8 +78,9 @@ display_author_stats() {
       else if ($1 > 5000) color = bold yellow
       else if ($1 > 1000) color = yellow
 
-      printf "%s%-30s%s %s%15d%s %s%15d%s %s%15d%s\n",
+      printf "%s%-30s%s %s%10d%s %s%15d%s %s%15d%s %s%15d%s\n",
         white, $2, reset,
+        white, $5, reset,
         green, $3, reset,
         cyan, $4, reset,
         color, $1, reset
@@ -119,6 +123,7 @@ echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━
 git log --all --numstat --pretty=format:'AUTHOR:%aN' | awk '
   /^AUTHOR:/ {
     author=substr($0, 8)
+    commits++
   }
   /^[0-9]/ && NF==3 {
     plus+=$1
@@ -126,9 +131,10 @@ git log --all --numstat --pretty=format:'AUTHOR:%aN' | awk '
   }
   /^$/ {
     if (author) {
-      print author "|" plus "|" minus
+      print author "|" plus "|" minus "|" commits
       plus=0
       minus=0
+      commits=0
     }
   }
 ' | awk -F'|' '
@@ -143,16 +149,17 @@ git log --all --numstat --pretty=format:'AUTHOR:%aN' | awk '
 
   added[author]+=$2
   deleted[author]+=$3
+  commits[author]+=$4
 }
 END {
   for (author in added) {
     total = added[author] + deleted[author]
-    printf "%d|%s|%d|%d\n", total, author, added[author], deleted[author]
+    printf "%d|%s|%d|%d|%d\n", total, author, added[author], deleted[author], commits[author]
   }
 }' | sort -rn | awk -F'|' -v green="$GREEN" -v white="$WHITE" -v cyan="$CYAN" -v magenta="$MAGENTA" -v yellow="$YELLOW" -v reset="$RESET" -v bold="$BOLD" '
 BEGIN {
-  printf "%s%-30s %15s %15s %15s%s\n", bold white, "Author", "Lines Added", "Lines Deleted", "Total Changes", reset
-  printf "%s%-30s %15s %15s %15s%s\n", cyan, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━━", "━━━━━━━━━━━━━", "━━━━━━━━━━━━━", reset
+  printf "%s%-30s %10s %15s %15s %15s%s\n", bold white, "Author", "Commits", "Lines Added", "Lines Deleted", "Total Changes", reset
+  printf "%s%-30s %10s %15s %15s %15s%s\n", cyan, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "━━━━━━━━━━", "━━━━━━━━━━━", "━━━━━━━━━━━━━", "━━━━━━━━━━━━━", reset
 }
 {
   # Color code based on contribution size
@@ -161,8 +168,9 @@ BEGIN {
   else if ($1 > 50000) color = bold yellow
   else if ($1 > 20000) color = yellow
 
-  printf "%s%-30s%s %s%15d%s %s%15d%s %s%15d%s\n",
+  printf "%s%-30s%s %s%10d%s %s%15d%s %s%15d%s %s%15d%s\n",
     white, $2, reset,
+    white, $5, reset,
     green, $3, reset,
     cyan, $4, reset,
     color, $1, reset
@@ -214,8 +222,8 @@ echo -e "${BOLD}${YELLOW}📊 Monthly Activity (Last 12 Months)${RESET}"
 echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
 echo ""
 
-printf "${BOLD}${WHITE}%-15s %15s %15s %15s${RESET}\n" "Month" "Lines Added" "Lines Deleted" "Total Changes"
-printf "${CYAN}%-15s %15s %15s %15s${RESET}\n" "━━━━━━━━━━━━━━━━━━━" "━━━━━━━━━━━" "━━━━━━━━━━━━━" "━━━━━━━━━━━━━"
+printf "${BOLD}${WHITE}%-15s %10s %15s %15s %15s${RESET}\n" "Month" "Commits" "Lines Added" "Lines Deleted" "Total Changes"
+printf "${CYAN}%-15s %10s %15s %15s %15s${RESET}\n" "━━━━━━━━━━━━━━━━━━━" "━━━━━━━━━━" "━━━━━━━━━━━" "━━━━━━━━━━━━━" "━━━━━━━━━━━━━"
 
 for i in {11..0}; do
   # Calculate month start and end dates
@@ -234,6 +242,7 @@ for i in {11..0}; do
   month_stats=$(get_git_stats "$month_start" "$month_end")
 
   if [ -n "$month_stats" ]; then
+    total_commits=$(echo "$month_stats" | awk -F'|' '{sum+=$5} END {print sum}')
     total_added=$(echo "$month_stats" | awk -F'|' '{sum+=$3} END {print sum}')
     total_deleted=$(echo "$month_stats" | awk -F'|' '{sum+=$4} END {print sum}')
     total_changes=$((total_added + total_deleted))
@@ -249,11 +258,11 @@ for i in {11..0}; do
       color="${GREEN}"
     fi
 
-    printf "${WHITE}%-15s${RESET} ${GREEN}%15d${RESET} ${CYAN}%15d${RESET} ${color}%15d${RESET}\n" \
-      "$month_name" "$total_added" "$total_deleted" "$total_changes"
+    printf "${WHITE}%-15s${RESET} ${WHITE}%10d${RESET} ${GREEN}%15d${RESET} ${CYAN}%15d${RESET} ${color}%15d${RESET}\n" \
+      "$month_name" "$total_commits" "$total_added" "$total_deleted" "$total_changes"
   else
-    printf "${WHITE}%-15s${RESET} ${GREEN}%15d${RESET} ${CYAN}%15d${RESET} ${GREEN}%15d${RESET}\n" \
-      "$month_name" 0 0 0
+    printf "${WHITE}%-15s${RESET} ${WHITE}%10d${RESET} ${GREEN}%15d${RESET} ${CYAN}%15d${RESET} ${GREEN}%15d${RESET}\n" \
+      "$month_name" 0 0 0 0
   fi
 done
 
