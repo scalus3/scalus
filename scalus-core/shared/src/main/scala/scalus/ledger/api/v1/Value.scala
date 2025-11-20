@@ -109,6 +109,37 @@ object Value {
       )
     )
 
+    /** Creates a `Value` from a sorted map of policy ids to their token amounts, without
+      * validation.
+      *
+      * This method directly constructs a `Value` from the input sorted map without checking for
+      * zero amounts or empty token lists. Use with caution as it may create invalid states.
+      *
+      * @param sm
+      *   A sorted map of policy ids to their associated token amounts
+      * @return
+      *   A `Value` constructed directly from the input sorted map
+      * @example
+      *   {{{
+      *   val tokens = SortedMap.fromList(
+      *     List.Cons(
+      *       (Value.adaPolicyId, SortedMap.fromList(List.Cons((Value.adaTokenName, BigInt(1000000)), List.Nil))),
+      *       Cons(
+      *         (ByteString.fromString("ff"), SortedMap.fromList(List.Cons((ByteString.fromString("TOKEN"), BigInt(100)), List.Nil))),
+      *         List.Nil
+      *       )
+      *     )
+      *   )
+      *
+      *   Value.unsafeFromSortedMap(tokens)
+      *   }}}
+      * @see
+      *   [[fromList]] or [[fromStrictlyAscendingListWithNonZeroAmounts]] for safe versions
+      */
+    def unsafeFromSortedMap(
+        sm: SortedMap[PolicyId, SortedMap[TokenName, BigInt]]
+    ): Value = Value(sm)
+
     /** Creates a `Value` from a list of policy ids paired with their token amounts, filtering out
       * zero amounts.
       *
