@@ -1,0 +1,44 @@
+---
+title: Validity Range Normalization
+sidebarTitle: Validity Range Normalization
+---
+
+import { Callout } from 'nextra/components'
+
+# Validity Range Normalization
+
+Datatype for eliminating meaningless ranges, without the redundant inclusiveness flag (instead all range values are inclusive). `Interval.never` is represented as an improper interval.
+
+## The Problem
+
+Plutus validity ranges can be represented in multiple equivalent ways:
+
+- Open ranges like `(a, b)` equal closed ranges like `[a+1, b-1]`
+- Infinite bounds are sometimes marked as closed despite representing unbounded time
+- The "always" range is inconsistently denoted as `[-∞, +∞]`
+
+This forces validators to handle numerous case variations or risk incorrect behavior. The situation worsens for long-lived contracts since the standard method of communicating the range may change with any hard fork.
+
+## The Solution
+
+Normalize all validity ranges into standardized forms:
+
+- **`ClosedRange(lower, upper)`** - Closed ranges with finite endpoints `[a, b]`
+- **`FromNegInf(upper)`** - Half-open range extending from negative infinity `(-∞, x]`
+- **`ToPosInf(lower)`** - Half-open range extending to positive infinity `[x, +∞)`
+- **`Always`** - Open range representing "always" `(-∞, +∞)`
+
+This enables cleaner validator code with four straightforward cases instead of exhaustively matching numerous equivalent representations.
+
+## Implementation
+
+The `scalus-design-patterns` package provides the `NormalizedInterval` type, helper functions and examples of use (Scaladoc format).
+
+<Callout type="info">
+**Note:** Improper intervals (where lower bound > upper bound) return `None` from `tryNormalize` or throw an error from `normalize`.
+</Callout>
+
+## Additional Resources
+
+- [Anastasia Labs: Validity Range Normalization](https://github.com/Anastasia-Labs/design-patterns/blob/main/validity-range-normalization/VALIDITY-RANGE-NORMALIZATION.md) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests

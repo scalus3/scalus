@@ -1,0 +1,42 @@
+---
+title: Transaction Level Minter Pattern
+sidebarTitle: Transaction Level Minter
+---
+
+import { Callout } from 'nextra/components'
+
+# Transaction Level Minter Pattern
+
+This design pattern couples the spend and minting endpoints of a validator, in order to have minimal spend costs, in exchange for a single execution of the minting endpoint.
+
+## The Pattern
+
+Spend logic only ensures the minting endpoint executes. It does so by looking at the mint field and making sure **only** a non-zero amount of its asset (i.e. with a policy identical to the validator's hash) are getting minted/burnt.
+
+The arbitrary logic is passed to the minting policy so that it can be executed a single time for a given transaction.
+
+## When It Helps
+
+**Useful for:**
+- Validators that need transaction-level validation through minting
+- Protocols using beacon tokens to signal state changes
+- Batch operations where minting/burning confirms execution
+- Reducing spend validator complexity
+
+**Not suitable for:**
+- Protocols that don't use minting/burning mechanisms
+- Cases where spend validation must be independent
+- When minting logic should not control spending
+
+## Implementation
+
+The `scalus-design-patterns` package provides helper functions and examples of use.
+
+<Callout type="info">
+**Similar to Stake Validator:** This pattern applies the delegation mechanism to the minting/spending relationship instead of using a staking script. Choose based on whether your protocol naturally uses minting or staking.
+</Callout>
+
+## Additional Resources
+
+- [Anastasia Labs: Transaction Level Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/transaction-level-validator-minting-policy) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests

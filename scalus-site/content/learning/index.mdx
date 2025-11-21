@@ -1,0 +1,35 @@
+---
+asIndexPage: true
+title: Learning Resources
+sidebarTitle: Learning
+---
+
+import { Callout } from 'nextra/components'
+
+# Learning Resources
+
+<Callout type="warning">
+**Note:** This section is being updated frequently with new patterns and best practices.
+</Callout>
+
+## Security
+
+Essential security knowledge for smart contract development:
+
+- **[Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities)** - Common vulnerabilities and how to avoid them
+
+## Design Patterns
+
+Proven patterns for building efficient and secure Cardano smart contracts:
+
+- **[Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern)** - Delegate computation to staking scripts for multi-input optimization
+- **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Couple spend and mint endpoints for minimal spend costs
+- **[UTxO Indexer](/docs/learning/design-patterns/utxo-indexer-pattern)** - Match inputs to outputs using off-chain computed indices
+- **[Validity Range Normalization](/docs/learning/design-patterns/normalized-interval-pattern)** - Simplify time range validation with normalized intervals
+
+
+## Additional Resources
+
+- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Complete implementation and tests
+- [Anastasia Labs Design Patterns](https://github.com/Anastasia-Labs/design-patterns) - Original pattern documentation
+- [Plutonomicon](https://github.com/Plutonomicon/plutonomicon/blob/main/README.md) - Developer-driven guide to the Plutus smart contract language in practice

@@ -11,9 +11,7 @@ export default {
     title: "Transaction Builder",
     display: 'hidden',
   }, 
-  ledger: {
-    title: "Ledger Framework",
-    //display: 'hidden',
-  }, 
+  ledger: "Ledger Framework",
+  learning: "",
   catalyst: 'Catalyst',
 }

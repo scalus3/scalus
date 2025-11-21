@@ -69,7 +69,7 @@ export default async function RootLayout({ children }) {
           docsRepositoryBase="https://github.com/scalus3/scalus"
           footer={footer}
           // editLink="Edit this page on GitHub"
-          sidebar={{ defaultMenuCollapseLevel: 2 }}
+          sidebar={{ defaultMenuCollapseLevel: 1 }}
           pageMap={pageMap}
           // ... Your additional layout options
           darkMode={false}

@@ -1,0 +1,56 @@
+---
+title: UTxO Indexer Pattern
+sidebarTitle: UTxO Indexer
+---
+
+import { Callout } from 'nextra/components'
+
+# UTxO Indexer Pattern
+
+Indexer pattern for matching inputs to outputs by index. Indices are computed off-chain using SpendWithDelayedRedeemer after the transaction is built.
+
+## The Problem
+
+When smart contracts handle multiple inputs and outputs in a single transaction, validation challenges arise:
+
+- **Multiple satisfaction** - A single output (or input) can be paired with multiple inputs, which individually satisfies the validator, but in a whole can lead to value being lost
+- **Unaccounted outputs** - Additional unforeseen outputs can be added without validator checks
+- **Pairing complexity** - Determining how multiple inputs and outputs correspond becomes expensive on-chain
+
+## The Solution
+
+Instead of searching on-chain, the validator receives UTxO indices via the redeemer. The transaction builder calculates indices before construction and embeds them in the redeemer, reducing on-chain validation to verification only.
+
+This leverages Cardano's deterministic script evaluation property, which guarantees that script interpreter arguments are fixed and that outcomes depend solely on transaction contents.
+
+<Callout type="info">
+**Implementation Status:** Currently, only the one-to-one indexer variation is implemented in Scalus. This validates a single input-output pair at specified indices. Additional variations (one-to-many, many-to-one, etc.) may be added in the future.
+</Callout>
+
+## When It Helps
+
+**Useful for:**
+- Validators handling multiple inputs and outputs
+- Protocols requiring explicit input-to-output mapping
+- Preventing double satisfaction attacks
+- Reducing on-chain search costs
+
+**Not suitable for:**
+- Simple single input/output scenarios
+- Cases where input-output pairing is implicit
+- Validators with minimal state transitions
+
+## Implementation
+
+The `scalus-design-patterns` package provides the one-to-one indexer and examples of use.
+
+The validator receives `inputIdx` and `outputIdx` via the redeemer, then verifies the input at `inputIdx` matches the expected UTxO and validates the relationship with the output at `outputIdx`.
+
+<Callout type="warning">
+**Input Ordering:** Inputs are reordered deterministically (first by transaction hash, then by output index). Transaction builders must account for this before generating redeemers.
+</Callout>
+
+## Additional Resources
+
+- [Anastasia Labs: UTxO Indexers](https://github.com/Anastasia-Labs/design-patterns/tree/main/utxo-indexers) - Original pattern documentation with all variations
+- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests

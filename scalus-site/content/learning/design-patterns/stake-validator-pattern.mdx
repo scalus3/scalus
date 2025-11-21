@@ -1,0 +1,45 @@
+---
+title: Stake Validator Pattern
+sidebarTitle: Stake Validator Pattern
+---
+
+import { Callout } from 'nextra/components'
+
+# Stake Validator Pattern
+
+This pattern allows for delegating some computations to a given staking script. The primary application for this is the so-called "withdraw zero trick," which is most effective for validators that need to go over multiple inputs.
+
+## The Pattern
+
+With a minimal spending logic (which is executed for each UTxO), and an arbitrary withdrawal logic (which is executed only once), a much more optimized script can be implemented.
+
+The spending validator essentially says: As long as there is a reward withdrawal of the given script in transaction, this UTxO can be spent.
+
+## When It Helps
+
+**Useful for:**
+- Validators that need to go over multiple inputs
+- Batch operations where per-input logic can be minimal
+- Reducing execution costs for multi-input transactions
+
+**Not suitable for:**
+- Single input transactions
+- Cases where each input needs unique validation
+- When per-input state transitions are complex
+
+## Implementation
+
+The `scalus-design-patterns` package provides helper functions and examples of use.
+
+<Callout type="warning">
+**Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. This is configured when deploying scripts.
+</Callout>
+
+<Callout type="warning">
+**Double Satisfaction:** When using this pattern with multiple inputs, ensure proper input-to-output mapping to prevent double satisfaction vulnerabilities. See [Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities#3-double-satisfaction).
+</Callout>
+
+## Additional Resources
+
+- [Anastasia Labs: Stake Validator Pattern](https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests
