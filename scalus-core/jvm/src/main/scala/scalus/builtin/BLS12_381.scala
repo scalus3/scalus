@@ -39,6 +39,3 @@ class BLS12_381_MlResult(private[builtin] val value: PT):
     override def equals(that: Any): Boolean = that.asMatchable match
         case that: BLS12_381_MlResult => value.is_equal(that.value)
         case _                        => false
-
-enum ByteOrder extends Enum[ByteOrder]:
-    case BigEndian, LittleEndian

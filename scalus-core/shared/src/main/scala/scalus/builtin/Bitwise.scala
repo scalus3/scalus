@@ -4,6 +4,9 @@ import scalus.uplc.eval.BuiltinException
 
 import scala.collection.mutable.ArrayBuffer
 
+private enum ByteOrder:
+    case LittleEndian, BigEndian
+
 object IntegerToByteString:
     val maximumOutputLength: Int = 8192
 
@@ -136,9 +139,6 @@ object IntegerToByteString:
         builder
 
 object ByteStringToInteger:
-    enum ByteOrder:
-        case LittleEndian, BigEndian
-
     /** Convert a [[ByteString]] into a non-negative [[BigInt]].
       *
       * Leading zero bytes are ignored. The interpretation is unsigned.

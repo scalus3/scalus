@@ -153,9 +153,6 @@ object BLS12_381_MlResult:
     def apply(elemG1: BLS12_381_G1_Element, elemG2: BLS12_381_G2_Element): BLS12_381_MlResult =
         new BLS12_381_MlResult(BLS.pairing(elemG1.point, elemG2.point))
 
-enum ByteOrder extends Enum[ByteOrder]:
-    case BigEndian, LittleEndian
-
 private[builtin] object BLS:
     // import { bls12_381 as bls } from '@noble/curves/bls12-381
     @JSImport("@noble/curves/bls12-381", "bls12_381")
