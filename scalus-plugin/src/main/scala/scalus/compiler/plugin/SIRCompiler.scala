@@ -381,10 +381,11 @@ final class SIRCompiler(
 
         val time = System.currentTimeMillis() - start
         if bindings.isEmpty then {
-            report.echo(
-              s"skipping empty Scalus module ${td.name} in ${time}ms"
-            )
-        } else
+            if options.debugLevel > 0 then
+                report.echo(
+                  s"skipping empty Scalus module ${td.name} in ${time}ms"
+                )
+        } else {
             val moduleName = td.symbol.fullName.toString
             val module =
                 Module(
@@ -420,6 +421,7 @@ final class SIRCompiler(
                 report.echo(
                   s"compiled Scalus module ${td.name} [${td.symbol.fullName.toString}] definitions: ${bindings.map(_.name)} in ${time}ms"
                 )
+        }
     }
 
     private def writeModule(module: Module, className: String): Unit = {

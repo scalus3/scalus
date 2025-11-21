@@ -1,6 +1,5 @@
 package scalus.uplc.transform
 
-import scalus.show
 import scalus.uplc.DefaultFun.IfThenElse
 import scalus.uplc.Term
 import scalus.uplc.Term.{Apply, Builtin, Case, Const, Constr, Delay, Error, Force, LamAbs, Var}
