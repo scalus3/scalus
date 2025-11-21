@@ -69,8 +69,8 @@ This guide will help you set up your development environment and get your first 
     ```
     All is good if you see the following output:
     ```sh
-    validator.HelloCardanoSpec:
-        + Hello Cardano 0.385s
+    HelloCardanoTest:
+    - Hello Cardano message is signed by the owner
     ```
 
     ## Configure IDE
@@ -110,26 +110,23 @@ This guide will help you set up your development environment and get your first 
     import scalus.builtin.Data
     import scalus.ledger.api.v3.{PubKeyHash, TxInfo, TxOutRef}
     import scalus.prelude.*
-    import scalus.prelude.Option.Some
-    import scalus.prelude.Prelude.*
 
     /** This validator demonstrates two key validation checks:
-    * 1. It verifies that the transaction is signed by the owner's public key hash (stored in the datum)
-    * 2. It confirms that the redeemer contains the exact string "Hello, Cardano!"
-    * 
-    * Both conditions must be met for the validator to approve spending the UTxO.
-      */
+        * 1. It verifies that the transaction is signed by the owner's public key hash (stored in the datum)
+        * 2. It confirms that the redeemer contains the exact string "Hello, Cardano!"
+        * 
+        * Both conditions must be met for the validator to approve spending the UTxO.
+          */
 
     @Compile
     object HelloCardano extends Validator:
-        override def spend(
+        inline override def spend(
             datum: Option[Data],
             redeemer: Data,
             tx: TxInfo,
-            sourceTxOutRef: TxOutRef
-        ): Unit = 
-            val Some(ownerData) = datum: @unchecked
-            val owner = ownerData.to[PubKeyHash]
+            outRef: TxOutRef
+        ): Unit =
+            val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
             val signed = tx.signatories.contains(owner)
             require(signed, "Must be signed")
             val saysHello = redeemer.to[String] == "Hello, Cardano!"

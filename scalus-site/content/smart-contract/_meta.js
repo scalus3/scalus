@@ -1,5 +1,6 @@
 export default {
     index: '',
+    validators: '',
     'developing-smart-contracts': 'Developing Smart Contracts',
     'in-depth-validator-look': 'In Depth Validator Walkthrough',
     'from-data': 'Extracting from Data',
