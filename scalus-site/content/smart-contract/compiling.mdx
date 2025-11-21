@@ -5,7 +5,7 @@ sidebarTitle: Compiling
 
 # Compiling Smart Contract
 
-### Basic Compilation
+## Basic Compilation
 
 Use the `compile` function to transform your Scala validator into a Plutus script:
 
@@ -29,7 +29,7 @@ val scriptHex = program.doubleCborHex
 
 The compilation flow: `compile` → `toUplc()` → select version → encode.
 
-### Choosing a Plutus Version
+## Choosing a Plutus Version
 
 Select the appropriate version for your use case:
 
@@ -44,7 +44,7 @@ val programV2 = compiled.toUplc().plutusV2.deBruijnedProgram
 val programV1 = compiled.toUplc().plutusV1.deBruijnedProgram
 ```
 
-### Error Traces
+## Error Traces
 
 The `generateErrorTraces` flag controls debugging information:
 
@@ -59,7 +59,7 @@ compiled.toUplc(generateErrorTraces = false)
 - `true`: Adds error location information (easier debugging, larger script)
 - `false`: Minimal script size (for production)
 
-### Complete Example
+## Complete Example
 
 ```scala
 import scalus.*
@@ -83,7 +83,7 @@ val program = compiled.toUplc(generateErrorTraces = true).plutusV2.deBruijnedPro
 val scriptHex = program.doubleCborHex
 ```
 
-### Encoding Options
+## Encoding Options
 
 UPLC programs can be encoded in several formats:
 

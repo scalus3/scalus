@@ -29,9 +29,9 @@ You'll learn:
 
 ---
 
-## Your Journey in 3 Phases
+## Your Journey in 4 Steps
 
-### Phase 1: Quick Start (30 minutes)
+### Step 1: Quick Start (30 minutes)
 
 **Goal:** Get your first validator running and debugged in your IDE
 
@@ -56,7 +56,7 @@ You'll learn:
 </Steps>
 ---
 
-### Phase 2: Cardano Fundamentals (1-2 hours)
+### Step 2: Cardano Fundamentals (1-2 hours)
 
 **Goal:** Understand how Cardano's eUTxO model and validators work
 
@@ -72,37 +72,6 @@ You'll learn:
 - [ ] **[The EUTxO-Model - Plutus Pioneer Program](https://www.youtube.com/watch?v=ulYDNaEKf4g)** - Learning details (25 min)
 - [ ] **[Validators in Depth](/docs/smart-contract/validators)** - Spending, minting, rewarding, certifying validators (20 min)
 
-**Key Concepts to Grasp:**
-
-1. **UTxO (Unspent Transaction Output)** - Like a "check" holding value
-   ```scala
-   // Think of it as:
-   case class UTxO(
-     address: Address,      // Who can spend it
-     value: Value,          // How much ADA/tokens
-     datum: Option[Data]    // Custom data attached
-   )
-   ```
-
-2. **Validator** - A function that says "yes/no" to spending
-   ```scala
-   @Compile
-   object MyValidator extends Validator:
-     def spend(datum: Data, redeemer: Data, ctx: ScriptContext): Unit =
-       // If this completes without throwing, spending is allowed
-       // If it throws, transaction is rejected
-       require(someCondition, "Nope!")
-   ```
-
-3. **Script Context** - Transaction info passed to your validator
-   ```scala
-   case class ScriptContext(
-     txInfo: TxInfo,        // Transaction details
-     redeemer: Redeemer,    // Data provided by spender
-     scriptInfo: ScriptInfo // What's being validated
-   )
-   ```
-
 #### Scalus-Specific Concepts
 
 - [ ] **[Supported Scala Features](/docs/language-guide/support)** - **CRITICAL:** Not all Scala works on-chain!
@@ -113,7 +82,6 @@ You'll learn:
 
 <Callout type="warning">
 **Important Constraint:**
-
 Not all Scala features compile to Plutus Core (UPLC):
 
 ✅ **Supported:** vals, defs, case classes, enums, pattern matching, lambdas, recursion, `inline`
@@ -124,9 +92,9 @@ Always check [Supported Features](/docs/language-guide/support)!
 </Steps>
 ---
 
-### Phase 3: Production Development (2-3 hours)
+### Step 3: Development lifecycle (2-3 hours)
 
-**Goal:** Build tested, optimized validators ready for mainnet
+**Goal:** Build tested, optimized validators ready for testnet/mainnet
 
 <Steps>
 #### Testing & Quality
@@ -161,7 +129,7 @@ class MyValidatorTest extends AnyFunSuite with ScalusTest:
 </Steps>
 ---
 
-### Phase 4: Advanced Patterns (Ongoing)
+### Step 4: Advanced Patterns (Ongoing)
 
 **Goal:** Master optimizations and advanced validator patterns
 <Steps>
@@ -326,25 +294,6 @@ object MyValidator extends Validator
 
 ---
 
-## Recommended Learning Path
-
-### For Experienced Scala Devs (Total: ~2-3 hours)
-
-1. **[Check Hello Cardano Smart contract](/docs/get-started#get-your-first-scalus-validator)** → 5 min
-2. **[First Smart Contract](/docs/smart-contract/developing-smart-contracts)** → 30 min
-3. **[eUTxO Model Explainer](https://docs.cardano.org/about-cardano/learn/eutxo-explainer)** → 15 min
-4. **[The EUTxO-Model - Plutus Pioneer Program](https://www.youtube.com/watch?v=ulYDNaEKf4g)** - 25 min
-5. **[Validators in Depth](/docs/smart-contract/validators)** → 20 min
-6. **[Supported Features](/docs/language-guide/support)** → 10 min
-7. **[Testing Smart Contracts](/docs/smart-contract/testing)** → 20 min
-8. **Build your own validator** → 45 min
-
-### For Scala Beginners (Total: ~1 day)
-
-Complete all Phase 1-3 checklists + study the [Examples Repository](https://github.com/nau/scalus/tree/master/scalus-examples) to see patterns in action.
-
----
-
 ## Essential Cardano Resources
 
 ### Blockchain Fundamentals
@@ -359,81 +308,9 @@ Complete all Phase 1-3 checklists + study the [Examples Repository](https://gith
 
 ---
 
-## What Makes Scalus Different?
-
-### vs. Writing Plutus in Haskell
-
-**Haskell Plutus:**
-```haskell
-{-# INLINABLE validator #-}
-validator :: Datum -> Redeemer -> ScriptContext -> Bool
-validator d r ctx = traceIfFalse "error" $ checkCondition d r ctx
-```
-
-**Scalus:**
-```scala
-@Compile
-object Validator extends Validator:
-  def spend(datum: Data, redeemer: Data, ctx: ScriptContext): Unit =
-    require(checkCondition(datum, redeemer, ctx), "error")
-```
-
-**Advantages:**
-- Familiar Scala syntax
-- Better IDE support (IntelliJ IDEA, Metals)
-- Integrated testing with ScalaTest
-- Share code between on-chain and off-chain
-
-### vs. Aiken
-
-**Aiken:**
-```aiken
-validator {
-  fn spend(datum: Datum, redeemer: Redeemer, ctx: ScriptContext) -> Bool {
-    expect Some(pkh) = datum.owner
-    ctx.transaction.extra_signatories |> list.has(pkh)
-  }
-}
-```
-
-**Scalus:**
-```scala
-@Compile
-object Validator extends Validator:
-  def spend(datum: Data, redeemer: Data, ctx: ScriptContext): Unit =
-    val pkh = datum.to[PubKeyHash]
-    require(ctx.txInfo.signatories.contains(pkh))
-```
-
-**Advantages:**
-- Type-safe serialization with `FromData` derivation
-- Full Scala ecosystem for off-chain code
-- Property-based testing with ScalaCheck
-- Professional debugging with breakpoints
-
----
-
-## Next Steps
-
-### ✅ Completed Phase 1?
-Great! You've seen Scalus in action. Move to Phase 2 to understand Cardano's eUTxO model.
-
-### ✅ Completed Phase 2?
-You now understand blockchain fundamentals! Move to Phase 3 and build production validators.
-
-### ✅ Completed Phase 3?
-You're production-ready! Explore:
-- **[Advanced Optimizations](/docs/smart-contract/optimisations)** - Reduce execution costs
-- **Transaction Builder(In progress)** - Build Cardano transactions
-- **[Examples Repository](https://github.com/nau/scalus/tree/master/scalus-examples)** - Advanced patterns
-
----
-
 ## Get Help
-
 - **Join Discord:** [Ask questions](https://discord.gg/B6tXmBzhTn)
 - **Join Scalus Club:** [Check new features & discuss](https://luma.com/scalus)
 - **Examples:** [Real-world validator code](https://github.com/nau/scalus/tree/master/scalus-examples)
-- **GitHub Issues:** [Report bugs](https://github.com/nau/scalus/issues)
 
 Happy building! 🚀

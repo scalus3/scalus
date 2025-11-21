@@ -28,9 +28,9 @@ You'll learn:
 
 ---
 
-## Your Journey in 3 Phases
+## Your Journey in 4 Steps
 
-### Phase 1: Quick Start (30-45 minutes)
+### Step 1: Quick Start (30-45 minutes)
 
 **Goal:** Get your first Scalus validator running and see it work in your IDE
 
@@ -55,7 +55,7 @@ You'll learn:
 </Steps>
 ---
 
-### Phase 2: Learn Scala Essentials (2-3 hours)
+### Step 2: Learn Scala Essentials (2-3 hours)
 
 **Goal:** Understand enough Scala to write and read validators confidently
 
@@ -90,21 +90,10 @@ You'll learn:
 
 **🎯 Quick Win:** Write a simple token minting policy using pattern matching and Scala collections. 
 
-<Callout type="info">
-**Scala vs Aiken/Plutarch:**
-```scala
-// Aiken-style thinking
-check_signature(ctx.signatories, owner_pkh)
-
-// Scalus (Scala) style - same concept, different syntax
-tx.signatories.contains(ownerPkh)
-```
-The concepts are identical, just expressed in Scala syntax!
-</Callout>
 </Steps>
 ---
 
-### Phase 3: Cardano-Specific Development (2-3 hours)
+### Step 3: Cardano-Specific Development (2-3 hours)
 
 **Goal:** Build production-ready validators using Cardano-specific features
 <Steps>
@@ -122,13 +111,13 @@ The concepts are identical, just expressed in Scala syntax!
 #### Build & Deploy
 
 - [ ] **[Compiling Validators](/docs/smart-contract/compiling)** - Generate UPLC, create blueprints, attach to transactions
-- [ ] **Evaluating Scripts (In progress) ** - Run validators locally, check execution costs
+- [ ] **Evaluating Scripts (In progress)** - Run validators locally, check execution costs
 
 **🎯 Quick Win:** Build a tested, optimized validator and deploy it to testnet with a full test suite.
 </Steps>
 ---
 
-### Phase 4: Production Ready (Ongoing)
+### Step 4: Production Ready (Ongoing)
 
 **Goal:** Master advanced patterns and optimizations
 
@@ -235,23 +224,6 @@ object MyValidator extends Validator
 
 ---
 
-## Recommended Learning Path
-
-### For Fast Learners (Total: ~4 hours)
-
-1. **[Install Scalus](/docs/getting-started)** → 15 min
-2. **[First Smart Contract](/docs/smart-contract/developing-smart-contracts)** → 30 min
-3. **[Scala 3 Video Course](https://www.youtube.com/watch?v=-8V6bMjThNo)** → 2 hours (watch at 1.5x speed)
-4. **[Supported Features](/docs/language-guide/support)** → 10 min
-5. **[Validators in Depth](/docs/smart-contract/validators)** → 30 min
-6. **Build your own validator** → 45 min
-
-### For Thorough Learners (Total: ~8 hours)
-
-Complete all Phase 1-3 checklists above + read through the [Examples Repository](https://github.com/nau/scalus/tree/master/scalus-examples).
-
----
-
 ## Essential Scala Resources
 
 ### Quick References
@@ -276,6 +248,5 @@ Complete all Phase 1-3 checklists above + read through the [Examples Repository]
 - **Join Discord:** [Ask questions](https://discord.gg/B6tXmBzhTn)
 - **Join Scalus Club:** [Check new features & discuss](https://luma.com/scalus)
 - **Examples:** [Real-world validator code](https://github.com/nau/scalus/tree/master/scalus-examples)
-- **GitHub Issues:** [Report bugs](https://github.com/nau/scalus/issues)
 
 Happy building! 🚀
