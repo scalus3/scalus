@@ -5,12 +5,11 @@ import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, JVMPlatformSpecific}
 import scalus.cardano.ledger.{CardanoInfo, Language}
-import scalus.ledger.api.v1.*
 import scalus.compiler.sir.*
-import scalus.compiler.sir.SIR.*
+import scalus.ledger.api.v1.*
 import scalus.uplc.*
-import scalus.uplc.Term.asTerm
 import scalus.uplc.Constant.given
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{MachineParams, PlutusVM, Result}
 
@@ -20,14 +19,14 @@ class CompilerPluginEvalTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV2VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
+    given Compiler.Options = Compiler.Options(
       targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
     )
 
-    val deadbeef = Constant.ByteString(hex"deadbeef")
+    private val deadbeef = hex"deadbeef"
 
     test("compile Tuple2 construction/matching") {
         val compiled = compile {
@@ -36,7 +35,6 @@ class CompilerPluginEvalTest extends AnyFunSuite {
             t match
                 case (a, _) => a && t._2
         }
-        // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
         assert(evaled == false.asTerm)
     }
@@ -47,13 +45,11 @@ class CompilerPluginEvalTest extends AnyFunSuite {
             pkh match
                 case PubKeyHash(hash) => hash
         }
-        // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
-        assert(evaled == hex"deadbeef".asTerm)
+        assert(evaled == deadbeef.asTerm)
     }
 
     test("compile match on ADT") {
-
         import scalus.prelude.List
         import scalus.prelude.List.*
         val compiled = compile {
@@ -62,31 +58,9 @@ class CompilerPluginEvalTest extends AnyFunSuite {
                 case Cons(h, _) => h
                 case Nil        => BigInt(0)
         }
-        // println(compiled.show)
         val compiledToUplc = compiled.toUplc()
-        // println(s"uplc:${compiledToUplc.show} ")
-        try
-            val evaled = compiledToUplc.evaluate
-            // println(evaled.show)
-            assert(evaled == BigInt(1).asTerm)
-        catch
-            case e: Throwable =>
-                println(s"compile match on ADT: error in evaled: ${e.getMessage}")
-                println(s"compile match on ADT: SIR=${compiled.pretty.render(100)}")
-                println(s"compile match on ADT: UPLC=${compiledToUplc.pretty.render(100)}")
-                compiled match
-                    case SIR.Decl(data, term) =>
-                        println(
-                          s"compile match on ADT:dataDecl, ${data.name}, constrNames=${data.constructors
-                                  .map(_.name)}"
-                        )
-                    case SIR.Let(bindings, body, flags, _) =>
-                        println(
-                          s"compile match on ADT: bindings=${bindings.mkString("\n")}"
-                        )
-                    case _ =>
-                        println(s"compile match on ADT: not a Let, but $compiled")
-                throw e
+        val evaled = compiledToUplc.evaluate
+        assert(evaled == 1.asTerm)
     }
 
     test("compile wildcard match on ADT") {
@@ -99,7 +73,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         }
         val uplc = compiled.toUplc()
         val evaled = uplc.evaluate
-        assert(evaled == BigInt(1).asTerm)
+        assert(evaled == 1.asTerm)
     }
 
     test("compile inner matches") {
@@ -112,10 +86,8 @@ class CompilerPluginEvalTest extends AnyFunSuite {
                 case Cons(h @ (a, TxOutRef(TxId(_), idx)), _) => a + idx
                 case Nil                                      => BigInt(0)
         }
-        // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
-        // println(evaled.show)
-        assert(evaled == BigInt(3).asTerm)
+        assert(evaled == 3.asTerm)
     }
 
     test("compile multiple inner matches") {
@@ -123,9 +95,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
             ((true, "test"), (false, "test")) match
                 case ((a, _), (b, _)) => a == b
         }
-        // println(compiled.show)
         val evaled = compiled.toUplc().evaluate
-        // println(evaled.show)
         assert(evaled == false.asTerm)
     }
 
@@ -139,14 +109,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         script.evaluateDebug match
             case Result.Success(evaled, _, _, logs) =>
                 assert(evaled == false.asTerm)
-                val logExpr = "oneEqualsTwo \\? False.*".r
-                logs.head match {
-                    case `logExpr`() =>
-                    // log is as expected
-                    case _ =>
-                        fail(s"Unexpected logs: $logs")
-                }
-                // assert(logs == List("oneEqualsTwo ? False: { mem: 0.002334, cpu: 0.539980 }"))
+                assert(logs.head.matches("oneEqualsTwo \\? False.*"))
             case Result.Failure(exception, _, _, _) => fail(exception)
     }
 
@@ -174,15 +137,14 @@ class CompilerPluginEvalTest extends AnyFunSuite {
 
         // this generates a script with 99 calls to appendString
         // appendString(appendString(..., "asdf..."), ..., "asdf...")
-        val compiled = compile {
-            generate(99)
-        }
+        val compiled = compile { generate(99) }
+        // Expected encoded size for 99 nested appendString calls with long string constants
         assert(compiled.toUplc().plutusV3.flatEncoded.length == 93652)
     }
 
     test("compile and eval custom Builtins") {
         val platform = new JVMPlatformSpecific {
-            override def sha2_256(bs: ByteString): ByteString = hex"deadbeef"
+            override def sha2_256(bs: ByteString): ByteString = deadbeef
         }
         object CustomBuiltins extends Builtins(using platform)
 
@@ -202,14 +164,12 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         val sir = compile(CustomBuiltins.sha2_256(hex"12"))
         // check that SIRCompiler compiles the custom builtin
         // check that the custom builtin is correctly evaluated on the JVM
-        assert(CustomBuiltins.sha2_256(hex"12") == hex"deadbeef")
+        assert(CustomBuiltins.sha2_256(hex"12") == deadbeef)
         // check that PlutusVM uses the custom builtin
-        assert(sir.toUplc().evaluate == hex"deadbeef".asTerm)
+        assert(sir.toUplc().evaluate == deadbeef.asTerm)
     }
 
-    test("compile valargs") {
-        // pending
-
+    test("compile varargs") {
         import scalus.prelude.*
         val compiled = compile {
             def sum(x: BigInt*): BigInt = {
@@ -220,17 +180,9 @@ class CompilerPluginEvalTest extends AnyFunSuite {
             result
         }
 
-        // println(s"sir=${compiled.pretty.render(100)}")
         val uplc = compiled.toUplc(generateErrorTraces = true)
         val evaluated = uplc.evaluate
-        assert(evaluated == BigInt(15).asTerm)
-
-        def mySum(x: BigInt*) = {
-            x.list.foldLeft(BigInt(0))(_ + _)
-        }
-        val jvmResult = mySum(1, 2, 3, 4, 5)
-        assert(jvmResult == 15)
-
+        assert(evaluated == 15.asTerm)
     }
 
     test("compile inner matches on enum") {
@@ -253,11 +205,10 @@ class CompilerPluginEvalTest extends AnyFunSuite {
             List.Nil: List[Option[BigInt]]
         }.toUplc()
         val r1 = (uplc $ arg1).evaluate
-        assert(r1 == BigInt(42).asTerm)
+        assert(r1 == 42.asTerm)
         val r2 = (uplc $ arg2).evaluate
-        assert(r2 == BigInt(0).asTerm)
+        assert(r2 == 0.asTerm)
         val r3 = (uplc $ arg3).evaluate
-        assert(r3 == BigInt(-1).asTerm)
+        assert(r3 == (-1).asTerm)
     }
-
 }
