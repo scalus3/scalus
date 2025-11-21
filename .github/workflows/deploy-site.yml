@@ -1,0 +1,43 @@
+name: Deploy Site
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for gh-pages
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: scalus-site/yarn.lock
+
+      - name: Install dependencies
+        working-directory: scalus-site
+        run: yarn install --frozen-lockfile
+
+      - name: Build site
+        working-directory: scalus-site
+        run: yarn build
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy to gh-pages
+        working-directory: scalus-site
+        run: npx gh-pages -d out -b gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
