@@ -1,11 +1,11 @@
 import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.Language
-import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
-import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.*
 import scalus.compiler.sir.PrettyPrinter.Style
+import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
+import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
 import scalus.uplc.eval.*
-import scalus.uplc.transform.{CaseConstrApply, EtaReduce, ForcedBuiltinsExtractor, Inliner}
+import scalus.uplc.transform.*
 import scalus.uplc.{Program, *}
 import scalus.utils.Utils
 
@@ -62,6 +62,7 @@ package object scalus {
                     uplc
                         |> EtaReduce.apply
                         |> Inliner.apply
+                        |> (t => StrictIf(t))
                         |> ForcedBuiltinsExtractor.apply // CaseConstrApply will optimize further after this
                         |> CaseConstrApply.apply
                 else uplc

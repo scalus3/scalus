@@ -24,16 +24,10 @@ object CaseConstrApply {
     /** Main inlining function */
     def extractPass(term: Term): (Term, collection.Seq[String]) =
         val logs = ArrayBuffer.empty[String]
-        def applyToList(app: Term): (Term, List[Term]) =
-            app match
-                case Apply(f, arg) =>
-                    val (f1, args) = applyToList(f)
-                    (f1, args :+ arg)
-                case f => (f, Nil)
 
         def go(term: Term): Term = term match
             case _: Apply =>
-                applyToList(term) match
+                term.applyToList match
                     case (f, args) if args.sizeCompare(2) > 0 =>
                         logs += s"Replacing ${args.size} Apply with Case/Constr"
                         Case(Constr(Word64.Zero, args.map(go)), go(f) :: Nil)
