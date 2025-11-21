@@ -1,13 +1,12 @@
 export default {
   index: '',
   'get-started': '',
+  'onboarding': '',
   'language-guide': 'Language Guide',
   'smart-contract': 'Smart Contracts',
   // 'transaction-builder': 'Building Transactions',
-  //dapp: {
-  //  title: 'Developing DApp',
-  //  display: 'hidden',
-  //},
+  'offchain-applications': 'Offchain Applications',
+  ledger: 'Ledger Framework',
   'transaction-builder': {
     title: "Transaction Builder",
     display: 'hidden',
@@ -16,6 +15,5 @@ export default {
     title: "Ledger Framework",
     //display: 'hidden',
   }, 
-  advanced: 'Advanced Optimisations',
   catalyst: 'Catalyst',
 }

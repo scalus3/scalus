@@ -1,0 +1,305 @@
+---
+title: Understanding Cardano Validators
+sidebarTitle: Validators in Depth
+---
+
+import { Callout } from 'nextra/components'
+
+# Understanding Cardano Validators
+
+## What is a Validator?
+
+A validator is a boolean function that determines whether a transaction is valid. In Scalus, validators are written in Scala and compiled to Plutus Core bytecode that runs on the Cardano blockchain.
+
+Every validator either:
+- **Succeeds** by returning `Unit` (allows the transaction)
+- **Fails** by throwing an exception (rejects the transaction)
+
+To create a validator in Scalus, you write an object that extends the `Validator` trait and annotate it with `@Compile`:
+
+```scala copy
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    // validation logic here
+  }
+```
+
+The `@Compile` annotation tells Scalus to compile your Scala code into Plutus Core bytecode.
+
+Let's explore the simple spending validator example from the template (run in console):
+```sh copy
+sbt new scalus3/hello.g8
+```
+
+## Example: HelloCardano
+
+HelloCardano validator demonstrates two key validation checks:
+1. It verifies that the transaction is signed by the owner's public key hash (stored in the datum)
+2. It confirms that the redeemer contains the exact string "Hello, Cardano!"
+
+Both conditions must be met for the validator to approve spending the UTxO.
+
+```scala copy
+@Compile
+object HelloCardano extends Validator:
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        outRef: TxOutRef
+    ): Unit =
+        val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+        val signed = tx.signatories.contains(owner)
+        require(signed, "Must be signed")
+        val saysHello = redeemer.to[String] == "Hello, Cardano!"
+        require(saysHello, "Invalid redeemer")
+```
+
+## Working with `Data`
+
+On-chain, data is stored in a universal format called `Data`. Scalus provides type-safe conversions to deserialize `Data` into your Scala types:
+
+```scala copy
+// Using .to[T] method
+val myDatum = datumData.to[MyDatumType]
+
+// Using fromData function
+import scalus.builtin.Data.fromData
+val myDatum = fromData[MyDatumType](datumData)
+```
+
+In the HelloCardano example, we use `.to[T]` to convert the datum:
+
+```scala copy
+val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+```
+
+Learn more about Scalus [Data serialization](/docs/smart-contract/from-data).
+
+## Understanding Validation Process
+
+Validators are boolean functions that either succeed or fail. Understanding how validation works is key to writing secure smart contracts.
+
+### Validators as Boolean Functions
+
+At their core, validators check a series of conditions. If all conditions are true, the transaction is approved. If any condition is false, the transaction is rejected:
+
+```scala copy
+inline override def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef): Unit =
+    // Step 1: Extract and deserialize the owner from datum
+    val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+ 
+    // Step 2: Check if transaction is signed by owner
+    val signed = tx.signatories.contains(owner)
+    require(signed, "Must be signed")  // ← Fails here if not signed
+ 
+    // Step 3: Check if redeemer matches expected string
+    val saysHello = redeemer.to[String] == "Hello, Cardano!"
+    require(saysHello, "Invalid redeemer")  // ← Fails here if wrong string
+ 
+    // Step 4: If we reach here, validation succeeds!
+```
+
+### The `require` Function
+
+The `require` function enforces validation conditions:
+
+```scala copy
+require(condition: Boolean, errorMessage: String): Unit
+```
+
+**Behavior:**
+- If `condition` is `true` → execution continues to the next line
+- If `condition` is `false` → validator fails with `errorMessage` and rejects the transaction
+
+**Example from HelloCardano:**
+
+```scala copy
+val signed = tx.signatories.contains(owner)
+require(signed, "Must be signed")
+```
+
+This checks that the owner's signature is present in the transaction. If `signed` is false, the validator throws an error with the message "Must be signed" and stops execution.
+
+<Callout type="warning">
+  Use clear, descriptive error messages. They help with debugging and make your contract easier to audit.
+</Callout>
+
+### The `getOrFail` Pattern
+
+When working with `Option` types, use `getOrFail` to safely extract values or fail with a meaningful error:
+
+```scala copy
+val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+```
+
+
+## The `Validator` Trait
+
+The `Validator` trait is the foundation for all smart contracts. It provides methods for all six Plutus V3 script purposes:
+
+```scala copy
+@Compile
+trait Validator {
+  inline def validate(scData: Data): Unit
+  inline def validateScriptContext(sc: ScriptContext): Unit = {
+    sc.scriptInfo match
+      case ScriptInfo.MintingScript(policyId) =>
+        mint(sc.redeemer, policyId, sc.txInfo)
+      case ScriptInfo.SpendingScript(txOutRef, datum) =>
+        spend(datum, sc.redeemer, sc.txInfo, txOutRef)
+      case ScriptInfo.RewardingScript(credential) =>
+        reward(sc.redeemer, credential, sc.txInfo)
+      case ScriptInfo.CertifyingScript(index, cert) =>
+        certify(sc.redeemer, cert, sc.txInfo)
+      case ScriptInfo.VotingScript(voter) =>
+        vote(sc.redeemer, voter, sc.txInfo)
+      case ScriptInfo.ProposingScript(index, procedure) =>
+        propose(procedure, sc.txInfo)
+  }
+
+  // Override the methods you need
+  inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit = ???
+  inline def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = ???
+  inline def reward(redeemer: Data, stakingKey: Credential, tx: TxInfo): Unit = ???
+  inline def certify(redeemer: Data, cert: TxCert, tx: TxInfo): Unit = ???
+  inline def vote(redeemer: Data, voter: Voter, tx: TxInfo): Unit = ???
+  inline def propose(proposalProcedure: ProposalProcedure, tx: TxInfo): Unit = ???
+}
+```
+
+The `validate` method is the entry point called by Cardano. It deserializes the script context and routes to the appropriate handler method.
+
+## Script Purposes (Plutus V3)
+
+Cardano supports six script purposes in Plutus V3. Each has a specific use case:
+
+| Purpose	    | Method | Used for                                                                  |
+|---            | ---    | ---                                                                       |
+| `spend`       | `spend(...)` | Spending UTxOs locked at the script address |
+| `mint`	    | `mint(...)` | Minting/burning native tokens |
+| `reward`      | `reward(...)` | Withdrawing staking rewards |
+| `certify`	    | `certify(...)` | Publishing delegation certificates |
+| `vote`	    | `vote(...)` | Voting on governance proposals |
+| `propose`	    | `propose(...)` | Constitution guardrails for governance proposals |
+
+### Spending Scripts
+
+**Most common validator type.** Controls whether a UTxO can be spent.
+
+```scala copy
+inline override def spend(
+    datum: Option[Data],      // Data attached to the UTxO
+    redeemer: Data,           // Data provided by the spender
+    tx: TxInfo,               // Transaction script execution context
+    ownRef: TxOutRef          // Reference to the UTxO being spent
+): Unit
+```
+
+**Use cases:** Escrow, vesting, multi-signature wallets, DEX order books, NFT marketplaces
+
+### Minting Policies
+
+Governs creation and destruction of native tokens.
+
+```scala copy
+inline override def mint(
+    redeemer: Data,           // Data provided by the minter
+    policyId: PolicyId,       // The policy ID of tokens being minted/burned
+    tx: TxInfo                // Transaction script execution context
+): Unit
+```
+
+**Use cases:** NFT collections, fungible tokens, access tokens, time-locked minting
+
+### Rewarding Scripts
+
+Validates withdrawal of staking rewards.
+
+```scala copy
+inline override def reward(
+    redeemer: Data,          // Data provided by the withdrawer
+    stakingKey: Credential,  // The stake credential
+    tx: TxInfo               // Transaction script execution context
+): Unit
+```
+
+**Use cases:** DAO treasury withdrawals, controlled reward distribution
+
+### Certifying Scripts
+
+Controls publication of delegation certificates.
+
+```scala copy
+inline override def certify(
+    redeemer: Data,  // Data provided by the certificate publisher
+    cert: TxCert,    // The certificate being published
+    tx: TxInfo       // Transaction script execution context
+): Unit
+```
+
+**Use cases:** Controlled stake delegation, DAO-managed stake pools
+
+### Voting Scripts
+
+Validates governance votes (CIP-1694).
+
+```scala copy
+inline override def vote(
+    redeemer: Data,  // Data provided by the voter
+    voter: Voter,    // The voter identity
+    tx: TxInfo       // Transaction script execution context
+): Unit
+```
+
+**Use cases:** DAO voting, delegated voting rights, quadratic voting
+
+### Proposing Scripts
+
+Constitution guardrails for governance proposals.
+
+```scala copy
+inline override def propose(
+    proposalProcedure: ProposalProcedure,  // The proposal being submitted
+    tx: TxInfo                             // Transaction script execution context
+): Unit
+```
+
+**Use cases:** Treasury spending limits, parameter change constraints, protocol upgrade requirements
+
+## Parameterized Validators
+
+Parameterized validators allow you to "bake in" configuration values at compile time, creating specialized versions of a general validator.
+
+### How Parameterization Works
+
+When you write a function that returns a `Validator` and call it with specific values during compilation, those values are permanently embedded into the resulting UPLC bytecode as constants. The compiled script doesn't receive these values at runtime - they're hardcoded into the script itself during compilation.
+
+For example, if you compile a validator with a specific `PubKeyHash`, that exact hash becomes part of the script's bytecode. Each different set of parameters produces a completely different script with a different script hash and script address.
+
+### What It's Useful For
+
+This pattern is useful when you want to deploy the same validator logic multiple times with different configurations:
+
+- **Multi-signature validators**: You can write one multisig validator logic, then deploy it multiple times with different sets of allowed signers. Each deployment is a different script address with its own configuration baked in.
+
+- **Time-locked contracts**: Write the time-lock logic once, then create multiple instances with different deadlines. Each contract gets its own unique script address based on its deadline.
+
+- **NFT validators**: Create a general NFT validation logic, then deploy separate instances for different policy IDs. Each policy becomes a distinct script.
+
+- **Protocol configurations**: Deploy the same protocol logic to different script addresses with different configuration values (fees, limits, authorized keys) embedded in each instance.
+
+The key advantage is you write the logic once and reuse it with different parameters, where each parameter combination creates a unique on-chain script.
+
+## Next Steps
+
+- **HTLC Contract Tutorial** - Complete walkthrough of building a Hash Time Locked Contract
+- **Testing Validators** - How to test your validators thoroughly
+- **Transaction Building** - Building transactions that interact with validators
+- **Debugging** - Common errors and debugging techniques

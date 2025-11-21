@@ -1,0 +1,86 @@
+---
+title: Testing Cardano Smart Contracts
+sidebarTitle: Testing
+---
+
+# Testing Smart Contracts
+
+Scalus leverages [ScalaCheck](https://www.scalacheck.org/) for property-based testing of validators.
+
+Property-based tests allow you to test your validator robustly, ensuring that every invariant is held for a specified
+range of inputs.
+
+## The `ScalusTest` Trait
+
+The `ScalusTest` trait provides testing utilities:
+
+```scala
+trait ScalusTest {
+
+      // Useful test-related methods
+      extension (self: Program) {...}
+
+      protected def random[A: Arbitrary]: A = {
+          Arbitrary.arbitrary[A].sample.get
+      }
+
+      // and more!
+}
+```
+
+`extend` your test suite from `ScalusTest` to get access to many useful testing utilities.
+
+
+
+## Setting Up Tests
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.testkit.ScalusTest
+import org.scalacheck.Arbitrary
+
+class MyValidatorTest extends AnyFunSuite with ScalusTest {
+  test("validator accepts valid transaction") {
+    // Generate random valid data
+    val txInfo = random[TxInfo]
+    val datum = MyDatum(...)
+    ...
+  }
+}
+```
+
+## Generating Random Test Data
+
+Scalus provides `Arbitrary` instances for all Cardano types:
+
+```scala
+test("example with random data") {
+  val txId = random[TxId]
+  val txInfo = random[TxInfo]
+  val address = random[Address]
+  val value = random[Value]
+
+  // Your test logic
+  assert(txId.hash.toHex.length == 64)
+}
+```
+
+**Available Arbitrary instances:**
+- Plutus V1/V2/V3 types: `TxInfo`, `TxOut`, `TxInInfo`, `ScriptContext`, etc.
+- Primitive types: `PubKeyHash`, `TxId`, `Address`, `Value`, `POSIXTime`, etc.
+- Custom types with `derives FromData, ToData`
+
+## Property-Based Testing
+
+Use ScalaCheck's `forAll` for property-based tests:
+
+```scala
+import org.scalacheck.Prop.forAll
+
+test("property-based validator test") {
+  forAll { (txIn: TxInInfo, txOut: TxOut) =>
+    // Test property that should hold for all inputs
+    assert(txIn.resolved.value >= Value.zero)
+  }
+}
+```

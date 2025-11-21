@@ -1,0 +1,70 @@
+---
+title: Debugging Cardano Smart Contracts
+sidebarTitle: Debugging
+---
+
+# Debugging Smart Contracts
+## Scala-Level Debugging
+
+Before compiling to UPLC, you can debug your validator as regular Scala code:
+- Use your IDE's debugger
+- Set breakpoints in validator methods
+- Step through execution
+- Inspect variables and data structures
+
+**This is the fastest way to debug logic errors.**
+
+## Using `log` for Script Logging
+
+You can add log messages to your validator using the `log` function:
+
+```scala
+import scalus.prelude.log
+
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    log("Starting validation")
+    val myDatum = datum.getOrFail("Datum required").to[MyDatum]
+    log(s"Validating for owner: ${myDatum.owner}")
+
+    val isValid = tx.isSignedBy(myDatum.owner)
+    log(s"Signature check: $isValid")
+
+    require(isValid, "Must be signed by owner")
+  }
+```
+
+## Where Do Logs Appear?
+
+When scripts are evaluated (on-chain or via `PlutusScriptEvaluator`), logs are collected and included in:
+- The `Result.Success` object (when evaluation succeeds)
+- The `PlutusScriptEvaluationException` (when evaluation fails)
+
+Off-chain, you can access logs through the evaluation result to understand what happened during script execution. This is particularly useful when debugging why a transaction failed validation.
+
+## Evaluating with Error Traces
+
+```scala
+import scalus.uplc.eval.PlutusVM
+
+given PlutusVM = PlutusVM.makePlutusV3VM()
+
+val compiled = compile {
+  log("Validator starting")
+  // your validator code
+  log("Validator completed")
+}
+
+// Evaluate with error traces enabled
+val result = compiled.toUplc(generateErrorTraces = true).evaluateDebug
+```
+
+**The `generateErrorTraces` flag:**
+- `true`: Adds error location information (useful for debugging, but increases script size)
+- `false`: Minimal script size (for production deployment)

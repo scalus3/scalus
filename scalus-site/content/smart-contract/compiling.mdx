@@ -1,0 +1,115 @@
+---
+title: Compiling Cardano Smart Contract
+sidebarTitle: Compiling
+---
+
+# Compiling Smart Contract
+
+### Basic Compilation
+
+Use the `compile` function to transform your Scala validator into a Plutus script:
+
+```scala
+import scalus.Compiler.compile
+import scalus.ledger.api.PlutusLedgerLanguage
+
+// Compile your validator
+val compiled = compile {
+  def myValidator(datum: Data, redeemer: Data, ctx: Data): Unit = {
+    val context = ctx.to[ScriptContext]
+    require(context.txInfo.signatories.nonEmpty, "No signatories")
+  }
+  myValidator
+}
+
+// Convert to UPLC and encode for Cardano
+val program = compiled.toUplc(generateErrorTraces = true).plutusV3.deBruijnedProgram
+val scriptHex = program.doubleCborHex
+```
+
+The compilation flow: `compile` → `toUplc()` → select version → encode.
+
+### Choosing a Plutus Version
+
+Select the appropriate version for your use case:
+
+```scala
+// Plutus V3 (recommended for new validators)
+val programV3 = compiled.toUplc().plutusV3.deBruijnedProgram
+
+// Plutus V2 (for reference inputs, inline datums)
+val programV2 = compiled.toUplc().plutusV2.deBruijnedProgram
+
+// Plutus V1 (legacy)
+val programV1 = compiled.toUplc().plutusV1.deBruijnedProgram
+```
+
+### Error Traces
+
+The `generateErrorTraces` flag controls debugging information:
+
+```scala
+// Development: Include error traces for debugging
+compiled.toUplc(generateErrorTraces = true)
+
+// Production: Minimal script size
+compiled.toUplc(generateErrorTraces = false)
+```
+
+- `true`: Adds error location information (easier debugging, larger script)
+- `false`: Minimal script size (for production)
+
+### Complete Example
+
+```scala
+import scalus.*
+import scalus.builtin.ByteString.*
+import scalus.ledger.api.PlutusLedgerLanguage
+import scalus.ledger.api.v3.*
+
+// Define and compile validator
+val compiled = compile {
+    def validator(datum: Data, redeemer: Data, ctxData: Data) = {
+        val ctx = ctxData.to[ScriptContext]
+        ctx.txInfo.signatories.find { _.hash == hex"deadbeef" }
+    }
+    validator
+}
+
+// Convert to Plutus V2 script
+val program = compiled.toUplc(generateErrorTraces = true).plutusV2.deBruijnedProgram
+
+// Get hex for use in transactions
+val scriptHex = program.doubleCborHex
+```
+
+### Encoding Options
+
+UPLC programs can be encoded in several formats:
+
+```scala
+// Flat encoding (binary format)
+val flatEncoded = program.flatEncoded
+
+// CBOR encoding (wraps Flat)
+val cborEncoded = program.cborEncoded
+
+// Double CBOR encoding (standard for Cardano transactions)
+val doubleCborEncoded = program.doubleCborEncoded
+
+// Hex string of double CBOR (most commonly used in APIs)
+val hexString = program.doubleCborHex
+```
+
+## Using Validators in Transactions
+
+Once compiled and encoded, use the script hex in your transactions:
+
+```scala
+val compiled = compile(MyValidator)
+val program = compiled.toUplc().plutusV3.deBruijnedProgram
+val scriptHex = program.doubleCborHex
+
+// Use scriptHex when building transactions
+// with your transaction builder of choice
+```

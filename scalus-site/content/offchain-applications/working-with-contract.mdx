@@ -1,128 +1,13 @@
 ---
-title: Working with Applications
-sidebarTitle: Working with Applications
+title: Working with Contract
+sidebarTitle: Working with Contract
 ---
 
-# Working with Applications
+# Working with Contract
 
 In this guide we cover how to compile your Scalus validators and integrate them with off-chain applications.
 
-## Compiling Validators
-
-### Basic Compilation
-
-Use the `compile` function to transform your Scala validator into a Plutus script:
-
-```scala
-import scalus.Compiler.compile
-import scalus.ledger.api.PlutusLedgerLanguage
-
-// Compile your validator
-val compiled = compile {
-  def myValidator(datum: Data, redeemer: Data, ctx: Data): Unit = {
-    val context = ctx.to[ScriptContext]
-    require(context.txInfo.signatories.nonEmpty, "No signatories")
-  }
-  myValidator
-}
-
-// Convert to UPLC and encode for Cardano
-val program = compiled.toUplc(generateErrorTraces = true).plutusV3.deBruijnedProgram
-val scriptHex = program.doubleCborHex
-```
-
-The compilation flow: `compile` → `toUplc()` → select version → encode.
-
-### Choosing a Plutus Version
-
-Select the appropriate version for your use case:
-
-```scala
-// Plutus V3 (recommended for new validators)
-val programV3 = compiled.toUplc().plutusV3.deBruijnedProgram
-
-// Plutus V2 (for reference inputs, inline datums)
-val programV2 = compiled.toUplc().plutusV2.deBruijnedProgram
-
-// Plutus V1 (legacy)
-val programV1 = compiled.toUplc().plutusV1.deBruijnedProgram
-```
-
-### Error Traces
-
-The `generateErrorTraces` flag controls debugging information:
-
-```scala
-// Development: Include error traces for debugging
-compiled.toUplc(generateErrorTraces = true)
-
-// Production: Minimal script size
-compiled.toUplc(generateErrorTraces = false)
-```
-
-- `true`: Adds error location information (easier debugging, larger script)
-- `false`: Minimal script size (for production)
-
-### Complete Example
-
-```scala
-import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.ledger.api.PlutusLedgerLanguage
-import scalus.ledger.api.v3.*
-
-// Define and compile validator
-val compiled = compile {
-    def validator(datum: Data, redeemer: Data, ctxData: Data) = {
-        val ctx = ctxData.to[ScriptContext]
-        ctx.txInfo.signatories.find { _.hash == hex"deadbeef" }
-    }
-    validator
-}
-
-// Convert to Plutus V2 script
-val program = compiled.toUplc(generateErrorTraces = true).plutusV2.deBruijnedProgram
-
-// Get hex for use in transactions
-val scriptHex = program.doubleCborHex
-```
-
-### Encoding Options
-
-UPLC programs can be encoded in several formats:
-
-```scala
-// Flat encoding (binary format)
-val flatEncoded = program.flatEncoded
-
-// CBOR encoding (wraps Flat)
-val cborEncoded = program.cborEncoded
-
-// Double CBOR encoding (standard for Cardano transactions)
-val doubleCborEncoded = program.doubleCborEncoded
-
-// Hex string of double CBOR (most commonly used in APIs)
-val hexString = program.doubleCborHex
-```
-
-## Using Validators in Transactions
-
-Once compiled and encoded, use the script hex in your transactions:
-
-```scala
-val compiled = compile(MyValidator)
-val program = compiled.toUplc().plutusV3.deBruijnedProgram
-val scriptHex = program.doubleCborHex
-
-// Use scriptHex when building transactions
-// with your transaction builder of choice
-```
-
----
-
-## Contract Objects
-
-### What is a Contract?
+## What is a Contract?
 
 A `Contract` is a wrapper around your validator that provides:
 - **Multiple compilation variants** (debug, default, release)
@@ -131,11 +16,11 @@ A `Contract` is a wrapper around your validator that provides:
 - **Metadata and documentation**
 - **Easy access to script and address**
 
-### Creating a Contract
+## Creating a Contract
 
 Let's walk through creating a contract for a Hash Time-Locked Contract (HTLC).
 
-#### Step 1: Define Your Types
+### Step 1: Define Your Types
 
 ```scala
 import scalus.*
@@ -164,7 +49,7 @@ enum Action derives FromData, ToData:
 object Action
 ```
 
-#### Step 2: Implement the Validator
+### Step 2: Implement the Validator
 
 ```scala
 import scalus.builtin.Builtins.sha3_256
@@ -199,7 +84,7 @@ object HtlcValidator extends Validator:
 end HtlcValidator
 ```
 
-#### Step 3: Wrap in a Contract
+### Step 3: Wrap in a Contract
 
 ```scala
 import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
@@ -229,7 +114,7 @@ lazy val HtlcContract = Contract.PlutusV3Contract[ContractDatum, Action](
 - `plutusVersion`: Target Plutus version (PlutusV1, PlutusV2, or PlutusV3)
 - `license`: Optional license identifier
 
-### Three Compilation Variants
+## Three Compilation Variants
 
 Each contract provides three pre-compiled variants:
 
@@ -244,7 +129,7 @@ val defaultContract = HtlcContract.defaultCompiledContract
 val releaseContract = HtlcContract.releaseCompiledContract
 ```
 
-### Using Contracts in Transactions
+## Using Contracts in Transactions
 
 Access the compiled script and use it in your transaction builder:
 
@@ -299,7 +184,7 @@ def unlock(
 }
 ```
 
-### Accessing Contract Components
+## Accessing Contract Components
 
 A `CompiledContract` provides access to all compilation artifacts:
 
@@ -399,58 +284,3 @@ Use cases:
 - Input for code generation tools
 - Contract verification and auditing
 - Automated testing tools
-
----
-
-## Parameterized Validators
-
-Parameterized validators allow you to "bake in" configuration values at compile time, creating specialized versions of a general validator.
-
-### How Parameterization Works
-
-When you write a function that returns a `Validator` and call it with specific values during compilation, those values are permanently embedded into the resulting UPLC bytecode as constants. The compiled script doesn't receive these values at runtime - they're hardcoded into the script itself during compilation.
-
-For example, if you compile a validator with a specific `PubKeyHash`, that exact hash becomes part of the script's bytecode. Each different set of parameters produces a completely different script with a different script hash and script address.
-
-### What It's Useful For
-
-This pattern is useful when you want to deploy the same validator logic multiple times with different configurations:
-
-- **Multi-signature validators**: You can write one multisig validator logic, then deploy it multiple times with different sets of allowed signers. Each deployment is a different script address with its own configuration baked in.
-
-- **Time-locked contracts**: Write the time-lock logic once, then create multiple instances with different deadlines. Each contract gets its own unique script address based on its deadline.
-
-- **NFT validators**: Create a general NFT validation logic, then deploy separate instances for different policy IDs. Each policy becomes a distinct script.
-
-- **Protocol configurations**: Deploy the same protocol logic to different script addresses with different configuration values (fees, limits, authorized keys) embedded in each instance.
-
-The key advantage is you write the logic once and reuse it with different parameters, where each parameter combination creates a unique on-chain script.
-
-
-
-### Using `@Ignore` for Configuration
-
-The `@Ignore` annotation tells the Scalus compiler to skip compiling a value or method into the UPLC script. These annotated members are still available during compilation in your Scala code, but they won't be part of the final on-chain script.
-
-An alternative pattern for configuration that doesn't require parameterization:
-
-```scala
-@Compile
-object ConfigurableValidator extends Validator {
-  @Ignore
-  val config = MyConfig(
-    owner = PubKeyHash(...),
-    deadline = PosixTime(...)
-  )
-
-  inline override def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef
-  ): Unit = {
-    // Use config values
-    require(tx.isSignedBy(config.owner), "Not signed by owner")
-  }
-}
-```

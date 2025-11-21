@@ -1,0 +1,49 @@
+---
+asIndexPage: true
+title: Scalus Language Guide
+sidebarTitle: Language Guide
+---
+
+# Scalus Language Guide
+
+Learn how to write smart contracts for Cardano using Scala 3. This guide covers the Scalus language features, syntax, and programming patterns for building efficient, type-safe validators.
+
+## Introduction
+
+- **[Why Scala 3?](/docs/language-guide/scala3)** - Discover why Scala 3 is ideal for blockchain development. Learn about its multi-platform versatility, industry-proven reliability, and how it's used by major financial institutions and tech companies.
+- **[Supported Scala Features](/docs/language-guide/support)** - Understand which Scala features are supported when compiling to Plutus Core, including lambdas, pattern matching, higher-order functions, and more.
+
+## Fundamental Types
+
+- **[Primitive Types](/docs/language-guide/constants-primitives)** - Work with Plutus primitive types using familiar Scala syntax: `Unit`, `Boolean`, `BigInt`, `ByteString`, `String`, and `Data`.
+- **[Custom Data Types](/docs/language-guide/data-types)** - Define smart contract data structures using case classes and enums that automatically serialize to Plutus `Data`.
+- **[Collections](/docs/language-guide/collections)** - Use immutable `List`, `AssocMap` (key-value pairs), and efficient collection operations for on-chain data manipulation.
+
+## Programming Constructs
+
+- **[Functions](/docs/language-guide/functions)** - Write named functions, lambdas, recursive functions, and higher-order functions. Learn about function composition and currying for functional programming patterns.
+- **[Control Flow](/docs/language-guide/control-flow)** - Control program execution with `if-then-else`, pattern matching on case classes and enums, and handling conditional logic efficiently.
+- **[Builtin Functions](/docs/language-guide/builtin-functions)** - Access Plutus builtin functions for cryptographic operations, byte string manipulation, list operations, and blockchain-specific utilities.
+
+## Advanced Topics
+
+- **[Modules](/docs/language-guide/modules)** - Organize code into reusable modules with `@Compile`, create shareable libraries, and build modular smart contract architectures.
+
+## Language Constraints
+
+Scalus compiles to Untyped Plutus Core (UPLC), a minimalist lambda calculus optimized for blockchain execution. This means only a **subset of Scala features** is supported - those that can be efficiently translated to UPLC while maintaining security and determinism.
+
+**Supported**: Functions, pattern matching, case classes, enums, higher-order functions, recursion, `given`/`using`, inline macros
+
+**Not Supported**: Try-catch (except `throw`), mutable variables (`var`), complex pattern matching, JVM-specific features, effects, arbitrary type class instances
+
+See [Supported Scala Features](/docs/language-guide/support) for the complete list.
+
+## Getting Started
+
+New to Scalus? Start with:
+1. [Why Scala 3?](/docs/language-guide/scala3) - Understand the language choice
+2. [Primitive Types](/docs/language-guide/constants-primitives) - Learn the basic building blocks
+3. [Your First Smart Contract](/docs/smart-contract/developing-smart-contracts) - Write your first validator
+
+Already familiar with Scala? Jump to [Supported Features](/docs/language-guide/support) to understand the constraints, then explore [Builtin Functions](/docs/language-guide/builtin-functions) for blockchain-specific operations.

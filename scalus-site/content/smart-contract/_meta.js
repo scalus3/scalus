@@ -1,9 +1,11 @@
 export default {
-    index: '',
-    validators: '',
-    'developing-smart-contracts': 'Developing Smart Contracts',
+  'developing-smart-contracts': '',
+  'validators': '',
+  'from-data': '',
+  testing: '',
+  debugging: '',
+  compiling: '',
+  'evaluating-script': '',
+  optimisations: '',  
     'in-depth-validator-look': 'In Depth Validator Walkthrough',
-    'from-data': 'Extracting from Data',
-    'working-with-applications': 'Working with Applications',
-    'evaluating-script': 'Evaluating Scripts',
   }

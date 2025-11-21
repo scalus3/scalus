@@ -1,103 +1,28 @@
 ---
 asIndexPage: true
-#display: hidden
+title: Cardano Smart Contracts
+sidebarTitle: Cardano Smart Contracts
 ---
-import { Steps, Tabs } from 'nextra/components'
 
-# First Smart Contract
+# Cardano Smart Contracts
 
-<Steps>
-## Creating a new validator from the template
-Let's seed a new Scalus validator:
+Build type-safe, debuggable smart contracts for Cardano using Scala. This section guides you through writing, testing, and deploying validators with Scalus.
 
-```sh copy
-sbt new scalus3/validator.g8
-```
-This ran the template scalus/validator.g8 using [Giter8](https://www.foundweekends.org/giter8/).
-When prompted, name the application `htlc validator`. This command scaffolds a simple Scalus validator project.
-```console
-sbt new scalus3/validator.g8
+## Getting Started
 
-name [MyValidator]: htlc validator
+- **[Developing Smart Contracts](/docs/smart-contract/developing-smart-contracts)** - Write your first Cardano validator step-by-step. Learn about spending validators, datums, redeemers, and how to test your contracts.
 
-Template applied in ./htlc-validator
-```
-## Project structure
-Let’s take a look at what just got generated:
+## Core Concepts
 
-```ansi
- htlc-validator/
-    ├── HtlcValidator.scala        # Simple validator
-    ├── HtlcValidator.test.scala   # Simple tests
-    ├── project.scala              # Project configuration
-    └── README.md
-```
+- **[Validators in Depth](/docs/smart-contract/validators)** - Understand different validator types (spending, minting, rewarding, certifying) and how they work on Cardano.
+- **[FromData Derivation](/docs/smart-contract/from-data)** - Automatic conversion between Scala types and Plutus Data for type-safe datum and redeemer handling.
 
-## HTLC Contract
-Let's create a simple "Hello Cardano" validator script that verifies a specific message:
+## Development Workflow
 
-Create or open the file src/main/scala/com/example/contracts/HelloCardano.scala:
-```scala copy
-package scalus.examples
+- **[Testing](/docs/smart-contract/testing)** - Property-based testing with ScalaCheck, using the `ScalusTest` trait, and creating robust test scenarios.
+- **[Debugging](/docs/smart-contract/debugging)** - Debug validators as regular Scala code using your IDE's debugger, breakpoints, and logging.
+- **[Compiling](/docs/smart-contract/compiling)** - Transform Scala validators into Plutus scripts, generate contract blueprints, and handle parameterized validators.
 
-import scalus.*
-import scalus.builtin.Data
-import scalus.ledger.api.v3.{PubKeyHash, TxInfo, TxOutRef}
-import scalus.prelude.*
-import scalus.prelude.Prelude.*
+## Advanced Topics
 
-/** A simple validator that checks if the redeemer is "Hello, World!" and if the transaction is
-  * signed by the owner.
-  */
-@Compile
-object HelloCardano extends Validator {
-    inline override def spend(
-        datum: Option[Data],
-        redeemer: Data,
-        tx: TxInfo,
-        ownRef: TxOutRef
-    ): Unit = {
-        val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
-        val signed = tx.signatories.contains(owner)
-        require(signed, "Must be signed")
-        val saysHello = redeemer.to[String] == "Hello, World!"
-        require(saysHello, "Invalid redeemer")
-    }
-}
-
-```
-
-This simple validator script demonstrates several key concepts:
-- The @Compile annotation marks the object for on-chain compilation
-- The `spend` method defines the spending validator logic
-- Contract params, Datum, Redeemer are first-class Scala types
-- The invariants are enforced using a `require` method
-
-## Let's test our Smart Contract
-
-todo: prettify hello-cardano test before finishing this section
-
-## Debugging Smart Contract
-
-Breakpoint
-
-## Building Plutus script
-
-```sh copy
-sbt compile
-```
-
-Build?
-Blueprint
-
-## Evaluating Script
-Now let's create a simple client to interact with our smart contract:
-
-Create or open the file src/main/scala/com/example/offchain/Client.scala
-```scala copy
-...
-```
-
-</Steps>
-
-Plutus contract blueprint
+- **[Advanced Optimisations](/docs/smart-contract/optimisations)** - Macros, direct Script Context access, SIR debugging, and UPLC optimisations to reduce script size and execution costs.
