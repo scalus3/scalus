@@ -10,6 +10,7 @@ import scalus.uplc.Constant
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultUni
 import scalus.uplc.Term
+import scalus.uplc.TermSanitizer
 import scalus.utils.Utils
 
 /** Pretty printers.
@@ -300,12 +301,14 @@ object PrettyPrinter:
         color
 
     def pretty(term: Term, style: Style): Doc =
+        // Sanitize variable names to ensure they conform to UPLC text format
+        val sanitizedTerm = TermSanitizer.sanitizeNames(term)
 
         import Term.*
         extension (d: Doc)
             def styled(s: paiges.Style): Doc = if style == Style.XTerm then d.style(s) else d
         def kw(s: String): Doc = text(s).styled(Fg.colorCode(172))
-        term match
+        sanitizedTerm match
             case Var(name) => text(name.name)
             case LamAbs(name, term) =>
                 val color = nextBracketColor()

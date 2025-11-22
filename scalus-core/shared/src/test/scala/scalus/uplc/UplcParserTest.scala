@@ -263,3 +263,46 @@ class UplcParserTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbi
             assert(parsed == Right(t))
         }
     }
+
+    // Tests verifying that invalid variable names are sanitized and can be round-tripped
+    test("Variable names with dots are sanitized and can be parsed") {
+        val term = λ("foo.bar")(vr"foo.bar")
+        val pretty = term.show
+        val parsed = parser.term.parse(pretty).map(_._2)
+        // The sanitizer should convert "foo.bar" to "foo_bar"
+        assert(parsed == Right(λ("foo_bar")(vr"foo_bar")))
+    }
+
+    test("Variable names with dollar signs are sanitized and can be parsed") {
+        val term = λ("anonfun$1")(vr("anonfun$1"))
+        val pretty = term.show
+        val parsed = parser.term.parse(pretty).map(_._2)
+        // The sanitizer should convert "anonfun$1" to "anonfun_1"
+        assert(parsed == Right(λ("anonfun_1")(vr"anonfun_1")))
+    }
+
+    test("Variable names with colons are sanitized and can be parsed") {
+        val term = λ("foo:bar")(vr"foo:bar")
+        val pretty = term.show
+        val parsed = parser.term.parse(pretty).map(_._2)
+        // The sanitizer should convert "foo:bar" to "foo_bar"
+        assert(parsed == Right(λ("foo_bar")(vr"foo_bar")))
+    }
+
+    test("Variable names starting with digits are sanitized and can be parsed") {
+        val term = λ("1foo")(vr"1foo")
+        val pretty = term.show
+        val parsed = parser.term.parse(pretty).map(_._2)
+        // The sanitizer should convert "1foo" to "_1foo"
+        assert(parsed == Right(λ("_1foo")(vr"_1foo")))
+    }
+
+    test("Complex nested term with invalid variable names is sanitized and can be parsed") {
+        val term = λ("com.example.Class")(vr"com.example.Class") $ λ("foo$bar")(vr("foo$bar"))
+        val pretty = term.show
+        val parsed = parser.term.parse(pretty).map(_._2)
+        // The sanitizer should convert the names appropriately
+        assert(
+          parsed == Right(λ("com_example_Class")(vr"com_example_Class") $ λ("foo_bar")(vr"foo_bar"))
+        )
+    }
