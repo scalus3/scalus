@@ -527,7 +527,7 @@ lazy val docs = project // documentation project
         `scalus-bloxbean-cardano-client-lib`,
         scalusTestkit.jvm
       ),
-      ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "website" / "static" / "api",
+      ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "scalus-site" / "public" / "api",
       cleanFiles += (ScalaUnidoc / unidoc / target).value,
       docusaurusCreateSite := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
       docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value,
