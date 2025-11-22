@@ -17,9 +17,9 @@ import scalus.ledger
 import scalus.ledger.api
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.{v1, v2, v3, ScriptContext}
-import scalus.uplc.Term.Const
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.*
-import scalus.uplc.{eval, Constant, DeBruijnedProgram, Term}
+import scalus.uplc.{eval, Constant, DeBruijnedProgram}
 import scalus.utils.Hex.hexToBytes
 import upickle.default.*
 
@@ -423,7 +423,7 @@ class TxEvaluator(
         )
         val program = DeBruijnedProgram.fromCbor(script.bytes)
         val applied = args.foldLeft(program) { (acc, arg) =>
-            acc $ Const(scalus.uplc.DefaultUni.asConstant(arg))
+            acc $ arg.asTerm
         }
         if debugDumpFilesForTesting then
             Files.write(
