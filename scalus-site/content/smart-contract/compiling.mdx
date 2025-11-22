@@ -11,11 +11,10 @@ Use the `compile` function to transform your Scala validator into a Plutus scrip
 
 ```scala
 import scalus.Compiler.compile
-import scalus.ledger.api.PlutusLedgerLanguage
 
 // Compile your validator
 val compiled = compile {
-  def myValidator(datum: Data, redeemer: Data, ctx: Data): Unit = {
+  def myValidator(ctx: Data): Unit = {
     val context = ctx.to[ScriptContext]
     require(context.txInfo.signatories.nonEmpty, "No signatories")
   }
@@ -23,8 +22,8 @@ val compiled = compile {
 }
 
 // Convert to UPLC and encode for Cardano
-val program = compiled.toUplc(generateErrorTraces = true).plutusV3.deBruijnedProgram
-val scriptHex = program.doubleCborHex
+val program = compiled.toUplc(generateErrorTraces = true).plutusV3
+val script = program.doubleCborHex
 ```
 
 The compilation flow: `compile` → `toUplc()` → select version → encode.
@@ -35,13 +34,13 @@ Select the appropriate version for your use case:
 
 ```scala
 // Plutus V3 (recommended for new validators)
-val programV3 = compiled.toUplc().plutusV3.deBruijnedProgram
+val programV3 = compiled.toUplc().plutusV3
 
 // Plutus V2 (for reference inputs, inline datums)
-val programV2 = compiled.toUplc().plutusV2.deBruijnedProgram
+val programV2 = compiled.toUplc().plutusV2
 
 // Plutus V1 (legacy)
-val programV1 = compiled.toUplc().plutusV1.deBruijnedProgram
+val programV1 = compiled.toUplc().plutusV1
 ```
 
 ## Error Traces
@@ -77,7 +76,7 @@ val compiled = compile {
 }
 
 // Convert to Plutus V2 script
-val program = compiled.toUplc(generateErrorTraces = true).plutusV2.deBruijnedProgram
+val program = compiled.toUplc(generateErrorTraces = true).plutusV2
 
 // Get hex for use in transactions
 val scriptHex = program.doubleCborHex
@@ -107,7 +106,7 @@ Once compiled and encoded, use the script hex in your transactions:
 
 ```scala
 val compiled = compile(MyValidator)
-val program = compiled.toUplc().plutusV3.deBruijnedProgram
+val program = compiled.toUplc().plutusV3
 val scriptHex = program.doubleCborHex
 
 // Use scriptHex when building transactions

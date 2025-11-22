@@ -203,7 +203,7 @@ val compiled = compile {
 }
 
 // Convert to UPLC and encode for Cardano
-val program = compiled.toUplc(generateErrorTraces = true).plutusV3.deBruijnedProgram
+val program = compiled.toUplc(generateErrorTraces = true).plutusV3
 val scriptHex = program.doubleCborHex
 ```
 
@@ -213,7 +213,7 @@ Once compiled and encoded, use the script hex in your transactions:
 
 ```scala
 val compiled = compile(MyValidator)
-val program = compiled.toUplc().plutusV3.deBruijnedProgram
+val program = compiled.toUplc().plutusV3
 val scriptHex = program.doubleCborHex
 
 // Use scriptHex when building transactions

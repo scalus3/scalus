@@ -189,85 +189,36 @@ compile {
 
 ## Default Parameters
 
-**NOT SUPPORTED** - Scalus doesn't support default parameter values:
+Scalus supports default parameter values:
 
 ```scala
-// NOT SUPPORTED
 def greet(name: String, greeting: String = "Hello"): String =
-  s"$greeting, $name"
-```
-
-**Workaround:** Use function overloading alternatives or explicit parameters:
-
-```scala
-compile {
-  // Provide all parameters explicitly
-  def greet(name: String, greeting: String): String =
-    s"$greeting, $name"
-
-  // Or use Option for optional parameters
-  def greetOpt(name: String, greeting: Option[String]): String =
-    val greetingText = greeting.getOrElse("Hello")
-    s"$greetingText, $name"
-
-  greetOpt("Alice", Some("Hi"))  // "Hi, Alice"
-  greetOpt("Bob", None)          // "Hello, Bob"
-}
+  appendString(name, greeting)
 ```
 
 ## Named Arguments
 
-**NOT SUPPORTED** - Scalus doesn't support named arguments:
+Scalus supports named arguments:
 
 ```scala
-// NOT SUPPORTED
 def transfer(from: Account, to: Account, amount: BigInt): Transaction =
   ???
 
-// This won't work:
+// This works as expected:
 transfer(from = alice, to = bob, amount = BigInt(100))
-```
-
-**Workaround:** Use positional arguments or case classes:
-
-```scala
-case class TransferParams(from: Account, to: Account, amount: BigInt)
-
-compile {
-  def transfer(params: TransferParams): Transaction =
-    // Use params.from, params.to, params.amount
-    ???
-
-  // Usage with clear field names
-  transfer(TransferParams(
-    from = alice,
-    to = bob,
-    amount = BigInt(100)
-  ))
-}
 ```
 
 ## Variable Arguments (Varargs)
 
-**NOT SUPPORTED** - Scalus doesn't support variable argument lists:
+Scalus supports variable argument lists (vargs) with a little caveat:
 
 ```scala
-// NOT SUPPORTED
 def sum(numbers: BigInt*): BigInt =
-  numbers.foldLeft(BigInt(0))(_ + _)
+  numbers.list.foldLeft(BigInt(0))(_ + _)
 ```
 
-**Workaround:** Use Lists explicitly:
-
-```scala
-compile {
-  def sum(numbers: List[BigInt]): BigInt =
-    numbers.foldLeft(BigInt(0))(_ + _)
-
-  // Usage
-  sum(List(1, 2, 3, 4, 5))  // 15
-}
-```
+You must convert a sequence to a `List` using `scalus.prelude.list` extension method
+before performing list operations.
 
 ## Function Overloading
 
@@ -376,16 +327,16 @@ compile {
 
   // Create a partially applied function
   def addWith10And20(c: BigInt): BigInt =
-    add3(BigInt(10), BigInt(20), c)
+    add3(10, 20, c)
 
-  addWith10And20(BigInt(30))  // 60
+  addWith10And20(30)  // 60
 
   // Using closures for partial application
   def partial2(f: (BigInt, BigInt, BigInt) => BigInt, a: BigInt): (BigInt, BigInt) => BigInt =
     (b: BigInt, c: BigInt) => f(a, b, c)
 
   val addWith10 = partial2(add3, BigInt(10))
-  addWith10(BigInt(20), BigInt(30))  // 60
+  addWith10(20, 30)  // 60
 }
 ```
 
@@ -402,14 +353,14 @@ compile {
   def doubleAndIncrement(x: BigInt): BigInt =
     increment(double(x))
 
-  doubleAndIncrement(BigInt(5))  // 11
+  doubleAndIncrement(5)  // 11
 
   // Composition helper
   def compose[A, B, C](f: B => C, g: A => B): A => C =
     (x: A) => f(g(x))
 
   val composed = compose(increment, double)
-  composed(BigInt(5))  // 11
+  composed(5)  // 11
 }
 ```
 

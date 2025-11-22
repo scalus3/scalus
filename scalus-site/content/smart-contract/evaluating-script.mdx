@@ -49,7 +49,7 @@ def evaluation() = {
     val v3vm: PlutusVM = PlutusVM.makePlutusV3VM(machineParams)
     // evaluate a Plutus V3 script considering CIP-117
     // calculate the execution budget, all builtins costs, and collect logs
-    val script = term.plutusV3.deBruijnedProgram
+    val script = term.plutusV3
     script.evaluateDebug(using v3vm) match
         case r @ Result.Success(evaled, budget, costs, logs) =>
             println(r)
