@@ -5,8 +5,8 @@ import monocle.Focus.refocus
 import org.scalacheck.{Gen, Shrink}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.{platform, ByteString}
 import scalus.builtin.ByteString.utf8
+import scalus.builtin.platform
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage

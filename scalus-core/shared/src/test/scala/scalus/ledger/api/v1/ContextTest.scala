@@ -43,7 +43,6 @@ class ContextTest
     }
 
     test("Interval Eq") {
-        import scalus.compiler.sir.SirDSL.*
         import scalus.compiler.sir.*
         val sir = compile { (d: Data) =>
             val i = fromData[Interval](d)

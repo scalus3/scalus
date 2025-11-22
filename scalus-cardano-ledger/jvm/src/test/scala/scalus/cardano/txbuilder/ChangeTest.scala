@@ -2,10 +2,9 @@ package scalus.cardano.txbuilder
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
-import scalus.cardano.ledger.ArbitraryInstances.given_Arbitrary_Hash
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.ArbitraryInstances.given_Arbitrary_Hash
 
 class ChangeTest extends AnyFunSuite {
 
