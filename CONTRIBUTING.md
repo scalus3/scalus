@@ -22,7 +22,7 @@ nix develop
 Before committing changes, make sure that the code is formatted, compiles and the tests pass:
 
 ```bash
-sbt precommit
+sbtn precommit
 ```
 
 ## Scalus Plugin Development
@@ -52,7 +52,7 @@ version := "0.6.2-SNAPSHOT"
 * Run sbt with the following command:
 
 ```bash
-sbt -J-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 compile
+sbtn -J-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005 compile
 ```
 
 This makes the compiler wait for a debugger to attach on port 5005.
@@ -61,29 +61,36 @@ This makes the compiler wait for a debugger to attach on port 5005.
 * In IntelliJ, create a Remote Debug configuration (host: localhost, port: 5005) and start it.
 * Once attached, resume execution to hit your breakpoints.
 
-## Docusaurus
+## Scalus Website
 
-Run locally
+    cd scalus-site
 
-```bash
-cd website
-yarn install
-yarn run serve
-```
+### Install
 
-## Deploy to GitHub Pages
+    yarn install
 
-```bash
-cd website
-USE_SSH=true yarn deploy
-```
+### Development
+
+    yarn dev
+
+### Generate static html
+
+    yarn build
+
+## Serve static htmlgit
+
+    npx serve -s out
+
+### Deploy to GitHub Pages
+
+Run GitHub Actions "Deploy site" workflow.
 
 ## Run benchmarks
 
 Measurement of throughput:
 
 ```bash
-sbt 'bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*'
+sbtn 'bench/jmh:run -i 1 -wi 1 -f 1 -t 1 .*'
 ```
 
 Where `.*` is a regexp for benchmark names.
@@ -95,7 +102,7 @@ to some directory,
 like `/opt/async-profiler` for Linux in the command bellow:
 
 ```bash
-sbt 'bench/jmh:run -prof "async:event=cycles;=dir=target/async-reports;interval=1000000;output=flamegraph;libPath=/opt/async-profiler/lib/libasyncProfiler.so" -jvmArgsAppend "-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints" -f 1 -wi 1 -i 1 -t 1 .*'
+sbtn 'bench/jmh:run -prof "async:event=cycles;=dir=target/async-reports;interval=1000000;output=flamegraph;libPath=/opt/async-profiler/lib/libasyncProfiler.so" -jvmArgsAppend "-XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints" -f 1 -wi 1 -i 1 -t 1 .*'
 ```
 
 On MacOS use this command in sbt shell:

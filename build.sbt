@@ -507,12 +507,10 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
     )
 
 // Documentation
-// We use Docusaurus for documentation
-// and Mdoc for Scala code examples
 lazy val docs = project // documentation project
     .in(file("scalus-docs")) // important: it must not be docs/
     .dependsOn(scalus.jvm)
-    .enablePlugins(MdocPlugin, DocusaurusPlugin, ScalaUnidocPlugin)
+    .enablePlugins(MdocPlugin, ScalaUnidocPlugin)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       publish / skip := true,
@@ -529,8 +527,6 @@ lazy val docs = project // documentation project
       ),
       ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "scalus-site" / "public" / "api",
       cleanFiles += (ScalaUnidoc / unidoc / target).value,
-      docusaurusCreateSite := docusaurusCreateSite.dependsOn(Compile / unidoc).value,
-      docusaurusPublishGhpages := docusaurusPublishGhpages.dependsOn(Compile / unidoc).value,
       PluginDependency
     )
 
@@ -734,5 +730,4 @@ usefulTasks := Seq(
   UsefulTask("ci", "Clean compile, check formatting and test everything, build docs, run MiMa"),
   UsefulTask("benchmark", "Run benchmarks"),
   UsefulTask("mima", "Check binary compatibility with the previous version using MiMa"),
-  UsefulTask("docs/docusaurusCreateSite", "Generate Scalus documentation website")
 )
