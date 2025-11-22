@@ -5,7 +5,6 @@ import scalus.compiler.sir.PrettyPrinter.Style
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
 import scalus.uplc.eval.*
-import scalus.uplc.transform.*
 import scalus.uplc.{Program, *}
 import scalus.utils.Utils
 
@@ -59,12 +58,8 @@ package object scalus {
                     ).lower()
             val retval =
                 if optimizeUplc then
-                    uplc
-                        |> EtaReduce.apply
-                        |> Inliner.apply
-                        |> (t => StrictIf(t))
-                        |> ForcedBuiltinsExtractor.apply // CaseConstrApply will optimize further after this
-                        |> CaseConstrApply.apply
+                    val optimizer = V3Optimizer()
+                    optimizer(uplc)
                 else uplc
             retval
         }
@@ -115,7 +110,8 @@ package object scalus {
                     ).lower()
             val retval =
                 if options.optimizeUplc then
-                    uplc |> EtaReduce.apply |> Inliner.apply |> ForcedBuiltinsExtractor.apply |> CaseConstrApply.apply
+                    val optimizer = V3Optimizer()
+                    optimizer(uplc)
                 else uplc
             retval
         }

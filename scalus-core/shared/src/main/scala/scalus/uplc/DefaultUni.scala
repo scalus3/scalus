@@ -4,7 +4,6 @@ import scalus.builtin
 import scalus.builtin.{ByteString, Data}
 import scalus.serialization.flat.{listFlat, Flat, given}
 
-import scala.annotation.nowarn
 import scala.collection.immutable.List
 
 sealed abstract class DefaultUni:
@@ -12,25 +11,18 @@ sealed abstract class DefaultUni:
 
 object DefaultUni:
 
-    @deprecated("Not used and will be removed", "0.13.0")
     trait Lift[A]:
         def defaultUni: DefaultUni
 
-    @deprecated("Not used and will be removed", "0.13.0")
     sealed abstract class LiftedUni[A] extends DefaultUni with Lift[A]:
         @deprecated("Not used and will be removed", "0.13.0")
         type Unlifted = A
         def defaultUni: DefaultUni = this
 
-    @nowarn("cat=deprecation")
     case object Integer extends LiftedUni[BigInt]
-    @nowarn("cat=deprecation")
     case object ByteString extends LiftedUni[ByteString]
-    @nowarn("cat=deprecation")
     case object String extends LiftedUni[String]
-    @nowarn("cat=deprecation")
     case object Unit extends LiftedUni[Unit]
-    @nowarn("cat=deprecation")
     case object Bool extends LiftedUni[Boolean]
     case object BLS12_381_G1_Element extends DefaultUni
     case object BLS12_381_G2_Element extends DefaultUni
@@ -47,32 +39,23 @@ object DefaultUni:
     case class Apply(f: DefaultUni, arg: DefaultUni) extends DefaultUni:
         type Unlifted = f.Unlifted => arg.Unlifted
 
-    @deprecated("Not used and will be removed", "0.13.0")
     def defaultUniFromValue[A: Lift](value: A): DefaultUni = summon[Lift[A]].defaultUni
 
     @deprecated("Use Constant.asConstant instead", "0.13.0")
     def asConstant[A: Constant.LiftValue](value: A): Constant =
         summon[Constant.LiftValue[A]].lift(value)
 
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[Int] with
         def defaultUni: DefaultUni = DefaultUni.Integer
 
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[Long] with
         def defaultUni: DefaultUni = DefaultUni.Integer
 
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[BigInt] = Integer
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[ByteString] = ByteString
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[String] = String
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[Unit] = Unit
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[Boolean] = Bool
-    @deprecated("Not used and will be removed", "0.13.0")
     given Lift[scalus.builtin.Data] with
         def defaultUni: DefaultUni = DefaultUni.Data
 
