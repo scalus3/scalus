@@ -96,6 +96,49 @@ object Constant {
     case class BLS12_381_MlResult(value: builtin.BLS12_381_MlResult) extends Constant:
         def tpe = DefaultUni.BLS12_381_MlResult
 
+    extension [A: LiftValue](c: A) {
+
+        /** Extension method to convert a Scala value to a UPLC [[Constant]].
+          *
+          * Provides a convenient syntax for lifting Scala values into the Plutus constant
+          * representation. The conversion is type-safe and requires an implicit [[LiftValue]]
+          * instance for the value type.
+          *
+          * Supported types include:
+          *   - Numeric types: [[BigInt]], [[Int]], [[Long]]
+          *   - [[builtin.ByteString]]
+          *   - [[java.lang.String]]
+          *   - [[Boolean]]
+          *   - [[Unit]]
+          *   - [[scalus.builtin.Data]] and its subtypes
+          *   - Collections: [[Seq]] (requires element type to have LiftValue)
+          *   - Tuples: pairs of values with LiftValue instances
+          *
+          * @example
+          *   {{{
+          *   import scalus.uplc.Constant.*
+          *
+          *   val intConst = 42.asConstant
+          *   // Integer(42)
+          *
+          *   val strConst = "hello".asConstant
+          *   // String("hello")
+          *
+          *   val listConst = Seq(1, 2, 3).asConstant
+          *   // List(Integer, List(Integer(1), Integer(2), Integer(3)))
+          *   }}}
+          *
+          * @tparam A
+          *   the type of the value to convert, must have an implicit [[LiftValue]] instance
+          * @return
+          *   a [[Constant]] representing the lifted value
+          * @see
+          *   [[LiftValue]] for defining custom value conversions
+          */
+
+        def asConstant: Constant = summon[LiftValue[A]].lift(c)
+    }
+
     def fromValue(tpe: DefaultUni, a: Any): Constant = tpe match {
         case DefaultUni.Integer    => Integer(a.asInstanceOf[BigInt])
         case DefaultUni.ByteString => ByteString(a.asInstanceOf[builtin.ByteString])
