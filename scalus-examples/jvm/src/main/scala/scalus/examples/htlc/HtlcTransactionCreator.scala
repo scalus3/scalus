@@ -23,18 +23,17 @@ case class HtlcTransactionCreator(
         receiver: AddrKeyHash,
         image: Image,
         timeout: Long
-    ): Either[Throwable, Transaction] = {
+    ): Transaction = {
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 
-        for {
-            signedBuilder <- TxBuilder
-                .withCustomEvaluator(env, evaluator)
-                .spend(utxos)
-                .payTo(scriptAddress, value, datum)
-                .changeTo(changeAddress)
-                .build()
-                .sign(signer)
-        } yield signedBuilder.transaction
+        TxBuilder
+            .withCustomEvaluator(env, evaluator)
+            .spend(utxos)
+            .payTo(scriptAddress, value, datum)
+            .changeTo(changeAddress)
+            .build()
+            .sign(signer)
+            .transaction
     }
 
     def reveal(
@@ -46,21 +45,20 @@ case class HtlcTransactionCreator(
         preimage: Preimage,
         receiverPkh: AddrKeyHash,
         time: Long
-    ): Either[Throwable, Transaction] = {
+    ): Transaction = {
         val redeemer = Action.Reveal(preimage)
 
-        for {
-            signedBuilder <- TxBuilder
-                .withCustomEvaluator(env, evaluator)
-                .spend(utxos)
-                .collaterals(collateralUtxos)
-                .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
-                .payTo(payeeAddress, lockedUtxo.output.value)
-                .validFrom(java.time.Instant.ofEpochMilli(time))
-                .changeTo(changeAddress)
-                .build()
-                .sign(signer)
-        } yield signedBuilder.transaction
+        TxBuilder
+            .withCustomEvaluator(env, evaluator)
+            .spend(utxos)
+            .collaterals(collateralUtxos)
+            .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
+            .payTo(payeeAddress, lockedUtxo.output.value)
+            .validFrom(java.time.Instant.ofEpochMilli(time))
+            .changeTo(changeAddress)
+            .build()
+            .sign(signer)
+            .transaction
     }
 
     def timeout(
@@ -71,20 +69,19 @@ case class HtlcTransactionCreator(
         changeAddress: Address,
         committerPkh: AddrKeyHash,
         time: Long
-    ): Either[Throwable, Transaction] = {
+    ): Transaction = {
         val redeemer = Action.Timeout
 
-        for {
-            signedBuilder <- TxBuilder
-                .withCustomEvaluator(env, evaluator)
-                .spend(utxos)
-                .collaterals(collateralUtxos)
-                .spend(lockedUtxo, redeemer, script, Set(committerPkh))
-                .payTo(payeeAddress, lockedUtxo.output.value)
-                .validFrom(java.time.Instant.ofEpochMilli(time))
-                .changeTo(changeAddress)
-                .build()
-                .sign(signer)
-        } yield signedBuilder.transaction
+        TxBuilder
+            .withCustomEvaluator(env, evaluator)
+            .spend(utxos)
+            .collaterals(collateralUtxos)
+            .spend(lockedUtxo, redeemer, script, Set(committerPkh))
+            .payTo(payeeAddress, lockedUtxo.output.value)
+            .validFrom(java.time.Instant.ofEpochMilli(time))
+            .changeTo(changeAddress)
+            .build()
+            .sign(signer)
+            .transaction
     }
 }

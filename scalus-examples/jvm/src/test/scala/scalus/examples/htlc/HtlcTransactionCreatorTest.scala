@@ -108,8 +108,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -146,8 +144,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   receiverPkh = receiverPkh,
                   time = beforeTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
@@ -188,8 +184,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -226,8 +220,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   receiverPkh = receiverPkh,
                   time = beforeTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
@@ -259,8 +251,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -297,8 +287,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   receiverPkh = wrongReceiverPkh,
                   time = beforeTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
@@ -331,8 +319,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -369,8 +355,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   receiverPkh = receiverPkh,
                   time = afterTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
@@ -403,8 +387,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -440,8 +422,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   committerPkh = committerPkh,
                   time = afterTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
@@ -482,8 +462,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -519,8 +497,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   committerPkh = wrongCommitterPkh,
                   time = afterTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
@@ -553,8 +529,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   image = image,
                   timeout = timeout
                 )
-                .toOption
-                .get
         }
 
         assert(provider.submit(lockTx).isRight)
@@ -590,8 +564,6 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   committerPkh = committerPkh,
                   time = beforeTimeout
                 )
-                .toOption
-                .get
         }
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))

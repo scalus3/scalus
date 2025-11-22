@@ -28,22 +28,20 @@ class Transactions2(
         val datum = Config(committer, receiver, image, timeout)
         val senderAddress = utxo.output.address
 
-        for {
-            signer <- signers
+        for signer <- signers
                 .get(senderAddress)
                 .toRight(
                   new RuntimeException(
                     s"Could not sign the lock transaction. Utxo address: ${senderAddress.toHex}"
                   )
                 )
-
-            signedBuilder <- TxBuilder(env)
-                .spend(utxo)
-                .payTo(scriptAddress, value, datum)
-                .changeTo(senderAddress)
-                .build()
-                .sign(signer)
-        } yield signedBuilder.transaction
+        yield TxBuilder(env)
+            .spend(utxo)
+            .payTo(scriptAddress, value, datum)
+            .changeTo(senderAddress)
+            .build()
+            .sign(signer)
+            .transaction
     }
 
     def reveal(
@@ -57,23 +55,21 @@ class Transactions2(
         val redeemer = Action.Reveal(preimage)
         val receiverKeyHash = AddrKeyHash.fromByteString(receiverPkh.hash)
 
-        for {
-            receiverSigner <- signers
+        for receiverSigner <- signers
                 .get(recipientAddress)
                 .toRight(
                   new RuntimeException(
                     s"Could not sign the reveal transaction. Receiver address: ${recipientAddress.toHex}"
                   )
                 )
-
-            signedBuilder <- TxBuilder(env)
-                .collaterals(collateralUtxo)
-                .spend(lockedUtxo, redeemer, script, Set(receiverKeyHash))
-                .payTo(recipientAddress, lockedUtxo.output.value)
-                .validFrom(java.time.Instant.ofEpochMilli(time.toLong))
-                .changeTo(recipientAddress)
-                .build()
-                .sign(receiverSigner)
-        } yield signedBuilder.transaction
+        yield TxBuilder(env)
+            .collaterals(collateralUtxo)
+            .spend(lockedUtxo, redeemer, script, Set(receiverKeyHash))
+            .payTo(recipientAddress, lockedUtxo.output.value)
+            .validFrom(java.time.Instant.ofEpochMilli(time.toLong))
+            .changeTo(recipientAddress)
+            .build()
+            .sign(receiverSigner)
+            .transaction
     }
 }

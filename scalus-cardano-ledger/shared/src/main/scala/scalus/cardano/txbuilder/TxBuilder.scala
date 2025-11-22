@@ -411,13 +411,10 @@ case class TxBuilder(
         }
     }
 
-    def sign(signer: TransactionSigner, rest: TransactionSigner*): Either[Throwable, TxBuilder] = {
+    def sign(signer: TransactionSigner): TxBuilder = {
         val tx = context.transaction
-        val signedTx = (signer +: rest).foldLeft(tx) { (transaction, signer) =>
-            signer.sign(transaction)
-        }
-        val newContext = context.copy(transaction = signedTx)
-        Right(copy(context = newContext))
+        val signedTx = signer.sign(transaction)
+        copy(context = context.copy(transaction = signedTx))
     }
 
     def transaction: Transaction = context.transaction
