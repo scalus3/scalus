@@ -5,14 +5,15 @@ import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.{SIR, TargetLoweringBackend}
+import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType, TargetLoweringBackend}
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.eval.Log
 import scalus.uplc.transform.{CaseConstrApply, EtaReduce, ForcedBuiltinsExtractor, Inliner}
 
 import scala.annotation.threadUnsafe
 
 trait Compiled[A] {
-    def code: () => A
+    def code: A
     def language: Language
     def sir: SIR
     def options: Compiler.Options
@@ -24,9 +25,27 @@ trait Compiled[A] {
     )
 }
 
+extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
+    def apply(arg: A): PlutusV3[B] = {
+        val const = arg.asConstant
+        PlutusV3[B](
+          () => self.code(arg),
+          self.sir $ SIR
+              .Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
+          self.options,
+          self.optimizer
+        )
+    }
+}
+
 trait Optimizer {
     def apply(term: Term): Term
     def logs: Seq[String]
+}
+
+object NoopOptimizer extends Optimizer {
+    def apply(term: Term): Term = term
+    def logs: Seq[String] = Seq.empty
 }
 
 class V1V2Optimizer extends Optimizer {
@@ -57,8 +76,13 @@ class V3Optimizer extends Optimizer {
     def logs: Seq[String] = logger.getLogs.toVector
 }
 
-case class PlutusV3[A](code: () => A, sir: SIR, options: Compiler.Options, optimizer: Optimizer)
-    extends Compiled[A] {
+case class PlutusV3[A](
+    lazyCode: () => A,
+    sir: SIR,
+    options: Compiler.Options,
+    optimizer: Optimizer
+) extends Compiled[A] {
+    def code: A = lazyCode()
     def language: Language = Language.PlutusV3
     @threadUnsafe
     lazy val program: Program = Program.plutusV3(toUplc)
