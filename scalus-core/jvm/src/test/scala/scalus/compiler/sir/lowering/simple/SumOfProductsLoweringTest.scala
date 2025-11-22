@@ -9,7 +9,7 @@ import scalus.cardano.ledger.Word64
 import scalus.ledger.api.v3.TxId
 import scalus.compiler.sir.*
 import scalus.uplc.DefaultFun.*
-import scalus.uplc.DefaultUni.asConstant
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.test.ArbitraryInstances

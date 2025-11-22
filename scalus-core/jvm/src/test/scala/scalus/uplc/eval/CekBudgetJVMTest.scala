@@ -5,7 +5,7 @@ import cats.syntax.all.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.ExUnits
-import scalus.uplc.DefaultUni.asConstant
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.eval.CekMachineCosts.defaultMachineCosts.*
 

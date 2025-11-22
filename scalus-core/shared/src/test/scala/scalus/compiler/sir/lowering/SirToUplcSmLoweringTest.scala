@@ -11,7 +11,7 @@ import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeVar}
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.*
-import scalus.uplc.DefaultUni.asConstant
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.{PlutusVM, Result}

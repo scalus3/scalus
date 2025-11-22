@@ -12,7 +12,7 @@ import scalus.builtin.{platform, BLS12_381_G1_Element, BLS12_381_G2_Element, Byt
 import scalus.cardano.ledger.Word64
 import scalus.uplc.DefaultUni.ProtoList
 import scalus.uplc.DefaultUni.ProtoPair
-import scalus.uplc.DefaultUni.asConstant
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.utils.Utils
 

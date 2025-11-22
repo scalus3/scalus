@@ -8,7 +8,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.builtin.ByteString.*
 import scalus.uplc.Constant.Pair
 import scalus.uplc.DefaultFun.*
-import scalus.uplc.DefaultUni.asConstant
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.*

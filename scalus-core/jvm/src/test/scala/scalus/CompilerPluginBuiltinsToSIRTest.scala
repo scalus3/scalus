@@ -10,7 +10,7 @@ import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.Fun
 import scalus.compiler.sir.SirDSL.{*, given}
 import scalus.compiler.sir.*
-import scalus.uplc.DefaultUni.asConstant
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.DefaultFun.*
