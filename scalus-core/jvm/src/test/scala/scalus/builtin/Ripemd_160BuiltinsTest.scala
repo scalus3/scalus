@@ -14,11 +14,11 @@ class Ripemd_160BuiltinsTest extends AnyFunSuite {
 
     test("well known phrases as input") {
         assertResult(hex"37f332f68db77bd9d7edd4969571ad671cf9dd3b")(
-          ripemd_160(fromString("The quick brown fox jumps over the lazy dog"))
+          ripemd_160(utf8"The quick brown fox jumps over the lazy dog")
         )
 
         assertResult(hex"132072df690933835eb8b6ad0b77e7b6f14acad7")(
-          ripemd_160(fromString("The quick brown fox jumps over the lazy cog"))
+          ripemd_160(utf8"The quick brown fox jumps over the lazy cog")
         )
     }
 }

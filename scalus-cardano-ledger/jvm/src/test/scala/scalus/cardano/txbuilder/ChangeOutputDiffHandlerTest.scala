@@ -6,6 +6,7 @@ import org.scalacheck.{Gen, Shrink}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.{platform, ByteString}
+import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage
@@ -235,7 +236,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         )
 
     private def mkTx(in: Coin, output: Coin, fee: Coin) = {
-        val input = TransactionInput(Hash(platform.blake2b_256(ByteString.fromString("asdf"))), 0)
+        val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val utxo = Map(
           input -> TransactionOutput(
             address = addr,

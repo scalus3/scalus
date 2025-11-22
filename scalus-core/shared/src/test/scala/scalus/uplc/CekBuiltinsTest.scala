@@ -328,28 +328,28 @@ open class CekBuiltinsTest
         val verify = sir.toUplc()
         val valid = verify $
             hex"9518c18103cbdab9c6e60b58ecc3e2eb439fef6519bb22570f391327381900a8" $
-            ByteString.fromString("hello") $
+            utf8"hello" $
             hex"f13fa9acffb108114ec060561b58005fb2d69184de0a2d7400b2ea1f111c0794831cc832c92daf4807820dd9458324935e90bec855e8bf076bbbc4e42b727b07"
 
         assertEvalEq(valid, true)
 
         val wrongMessage = verify $
             hex"9518c18103cbdab9c6e60b58ecc3e2eb439fef6519bb22570f391327381900a8" $
-            ByteString.fromString("NOT hello") $
+            utf8"NOT hello" $
             hex"f13fa9acffb108114ec060561b58005fb2d69184de0a2d7400b2ea1f111c0794831cc832c92daf4807820dd9458324935e90bec855e8bf076bbbc4e42b727b07"
 
         assertEvalEq(wrongMessage, false)
 
         val wrongPubKey = verify $
             hex"AA18c18103cbdab9c6e60b58ecc3e2eb439fef6519bb22570f391327381900a8" $
-            ByteString.fromString("hello") $
+            utf8"hello" $
             hex"f13fa9acffb108114ec060561b58005fb2d69184de0a2d7400b2ea1f111c0794831cc832c92daf4807820dd9458324935e90bec855e8bf076bbbc4e42b727b07"
 
         assertEvalEq(wrongPubKey, false)
 
         val wrongSignature = verify $
             hex"9518c18103cbdab9c6e60b58ecc3e2eb439fef6519bb22570f391327381900a8" $
-            ByteString.fromString("NOT hello") $
+            utf8"NOT hello" $
             hex"FF3fa9acffb108114ec060561b58005fb2d69184de0a2d7400b2ea1f111c0794831cc832c92daf4807820dd9458324935e90bec855e8bf076bbbc4e42b727b07"
 
         assertEvalEq(wrongSignature, false)

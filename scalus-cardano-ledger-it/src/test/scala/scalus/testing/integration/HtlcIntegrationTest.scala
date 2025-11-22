@@ -5,6 +5,7 @@ import com.bloxbean.cardano.client.common.model.Networks
 import com.bloxbean.cardano.client.crypto.cip1852.{DerivationPath, Segment}
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
+import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
@@ -159,7 +160,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val signer = makeTransactionSigner("m/1852'/1815'/0'/0/0", mnemonic)
         val signers = Map(senderAddr -> signer)
 
-        val preimage = ByteString.fromString("secret_preimage_54321")
+        val preimage = utf8"secret_preimage_54321"
         val image = scalus.builtin.Builtins.sha3_256(preimage)
         val timeout = testEnv match {
             case TestEnv.Local =>
@@ -211,7 +212,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val signers = Map(senderAddr -> signer)
 
         // HTLC parameters - must match the locked UTXO
-        val preimage = ByteString.fromString("secret_preimage_54321")
+        val preimage = utf8"secret_preimage_54321"
         val compiledContract = HtlcContract.defaultCompiledContract
         val scriptAddress =
             Address(ctx.env.network, Credential.ScriptHash(compiledContract.script.scriptHash))

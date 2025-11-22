@@ -5,6 +5,7 @@ import scalus.Compiler.compile
 import scalus.*
 import scalus.prelude.*
 import scalus.builtin.{ByteString, Data}
+import scalus.builtin.ByteString.utf8
 import scalus.builtin.Data.toData
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.{Credential, PubKeyHash, Value}
@@ -26,7 +27,7 @@ class InvalidMkConsReprTest extends AnyFunSuite {
 
     val pkhA = PubKeyHash(ByteString.fromString("A" * 32))
     val pkhB = PubKeyHash(ByteString.fromString("B" * 32))
-    val scriptHash = ByteString.fromString("scriptHash")
+    val scriptHash = utf8"scriptHash"
 
     test("readingbytes string should compile and run") {
         // pending
@@ -66,9 +67,9 @@ class InvalidMkConsReprTest extends AnyFunSuite {
 
         }
 
-        val inTxId = TxId(ByteString.fromString("inTxId"))
-        val lockTxId = TxId(ByteString.fromString("lockTxId"))
-        val currentTxId = TxId(ByteString.fromString("currentTxId"))
+        val inTxId = TxId(utf8"inTxId")
+        val lockTxId = TxId(utf8"lockTxId")
+        val currentTxId = TxId(utf8"currentTxId")
 
         // val txCert = TxCert.RegStaking(Credential.PubKeyCredential(pkhA), Option.None)
         val txOutRef = TxOutRef(lockTxId, 0)
@@ -114,9 +115,9 @@ class InvalidMkConsReprTest extends AnyFunSuite {
 
         }
 
-        val inTxId = TxId(ByteString.fromString("inTxId"))
-        val lockTxId = TxId(ByteString.fromString("lockTxId"))
-        val currentTxId = TxId(ByteString.fromString("currentTxId"))
+        val inTxId = TxId(utf8"inTxId")
+        val lockTxId = TxId(utf8"lockTxId")
+        val currentTxId = TxId(utf8"currentTxId")
 
         val txCert = TxCert.RegStaking(Credential.PubKeyCredential(pkhA), Option.None)
         val txOutRef = TxOutRef(lockTxId, 0)
@@ -223,9 +224,9 @@ class InvalidMkConsReprTest extends AnyFunSuite {
 
         }
 
-        val inTxId = TxId(ByteString.fromString("inTxId"))
-        val lockTxId = TxId(ByteString.fromString("lockTxId"))
-        val currentTxId = TxId(ByteString.fromString("currentTxId"))
+        val inTxId = TxId(utf8"inTxId")
+        val lockTxId = TxId(utf8"lockTxId")
+        val currentTxId = TxId(utf8"currentTxId")
 
         val txCert = TxCert.RegStaking(Credential.PubKeyCredential(pkhA), Option.None)
         val txOutRef = TxOutRef(lockTxId, 0)

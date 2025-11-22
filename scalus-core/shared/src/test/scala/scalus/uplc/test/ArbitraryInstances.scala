@@ -5,6 +5,7 @@ import org.scalacheck.{Arbitrary, Gen, Shrink}
 import scalus.*
 import scalus.builtin.Builtins
 import scalus.builtin.ByteString
+import scalus.builtin.ByteString.utf8
 import scalus.builtin.Data
 import scalus.builtin.Data.{B, Constr, I, List, Map}
 import scalus.cardano.ledger.Word64
@@ -40,12 +41,12 @@ trait ArbitraryInstances:
 
     given Arbitrary[builtin.BLS12_381_G1_Element] = Arbitrary(
       for bs <- Arbitrary.arbitrary[ByteString]
-      yield Builtins.bls12_381_G1_hashToGroup(bs, dst = ByteString.fromString("Test"))
+      yield Builtins.bls12_381_G1_hashToGroup(bs, dst = utf8"Test")
     )
 
     given Arbitrary[builtin.BLS12_381_G2_Element] = Arbitrary(
       for bs <- Arbitrary.arbitrary[ByteString]
-      yield Builtins.bls12_381_G2_hashToGroup(bs, dst = ByteString.fromString("Test"))
+      yield Builtins.bls12_381_G2_hashToGroup(bs, dst = utf8"Test")
     )
 
     // from: https://stackoverflow.com/questions/24834074/how-to-create-a-bigint-by-rounding-from-a-double-in-scala
