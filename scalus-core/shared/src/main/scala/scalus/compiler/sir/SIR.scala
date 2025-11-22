@@ -221,7 +221,7 @@ sealed trait SIR {
       * val result: SIR = f $ arg // Apply(f, arg, B, anns)
       *   }}}
       */
-    def $(arg: AnnotatedSIR): SIR = {
+    infix def $(arg: AnnotatedSIR): SIR = {
         // Helper to strip Decls and collect them
         @scala.annotation.tailrec
         def stripDecls(sir: SIR, decls: List[DataDecl] = Nil): (AnnotatedSIR, List[DataDecl]) =
