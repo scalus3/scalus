@@ -196,6 +196,64 @@ sealed trait SIR {
             case SIRUnify.UnificationFailure(_, _, _) => false
         }
 
+    /** Applies this SIR term to an argument, creating an Apply node.
+      *
+      * This method handles function application by:
+      *   - Stripping any Decl wrappers from the function term
+      *   - Extracting the result type from the function's type signature
+      *   - Creating an Apply node with the unwrapped function and argument
+      *   - Re-wrapping the result with the original Decl nodes
+      *
+      * The method supports both simple function types (`SIRType.Fun`) and polymorphic functions
+      * wrapped in type lambdas (`SIRType.TypeLambda`).
+      *
+      * @param arg
+      *   the argument to apply to this function term
+      * @return
+      *   a SIR expression representing the function application, potentially wrapped in Decl nodes
+      * @throws RuntimeException
+      *   if the term's type is not a function type
+      *
+      * @example
+      *   {{{
+      * val f: SIR = ... // a function of type A -> B
+      * val arg: AnnotatedSIR = ... // an argument of type A
+      * val result: SIR = f $ arg // Apply(f, arg, B, anns)
+      *   }}}
+      */
+    def $(arg: AnnotatedSIR): SIR = {
+        // Helper to strip Decls and collect them
+        @scala.annotation.tailrec
+        def stripDecls(sir: SIR, decls: List[DataDecl] = Nil): (AnnotatedSIR, List[DataDecl]) =
+            sir match
+                case SIR.Decl(data, term)    => stripDecls(term, data :: decls)
+                case annotated: AnnotatedSIR => (annotated, decls)
+
+        val (term, decls) = stripDecls(this)
+
+        // Compute result type from function type
+        // Handle both direct Fun types and TypeLambda-wrapped Fun types
+        val resultType = term.tp match
+            case SIRType.Fun(_, out) => out
+            case SIRType.TypeLambda(_, body) =>
+                body match
+                    case SIRType.Fun(_, out) => out
+                    case _ =>
+                        throw new RuntimeException(
+                          s"Cannot apply non-function type ${term.tp.show} at ${term.anns.pos.show}"
+                        )
+            case _ =>
+                throw new RuntimeException(
+                  s"Cannot apply non-function type ${term.tp.show} at ${term.anns.pos.show}"
+                )
+
+        // Create Apply node
+        val applyNode = SIR.Apply(term, arg, resultType, term.anns)
+
+        // Re-wrap with Decls (in reverse order)
+        decls.foldLeft(applyNode: SIR)((acc, data) => SIR.Decl(data, acc))
+    }
+
 }
 
 sealed trait AnnotatedSIR extends SIR {
