@@ -2,6 +2,7 @@ package scalus.examples
 
 import scalus.*
 import scalus.builtin.{ByteString, Data, FromData}
+import scalus.builtin.ByteString.utf8
 import scalus.ledger.api.v3.*
 import scalus.patterns.TransactionLevelMinterValidator
 import scalus.prelude.*
@@ -47,7 +48,7 @@ object TransactionLevelMinterValidatorExample extends Validator {
           minterRedeemerValidator = _.to[SampleMintRedeemer].maxUtxosToSpend > 0,
           minterTokensValidator = tnQtyDict => {
               val (tokenName, mintQuantity) = tnQtyDict.toList.head
-              require(tokenName === ByteString.fromString("BEACON"))
+              require(tokenName === utf8"BEACON")
               if sampleSpendRedeemer.burn then mintQuantity === BigInt(-1)
               else mintQuantity === BigInt(1)
           },

@@ -2,8 +2,8 @@ package scalus.patterns
 
 import scalus.builtin.Builtins
 import scalus.builtin.ByteString
-import scalus.builtin.ByteString.fromString
 import scalus.builtin.ByteString.hex
+import scalus.builtin.ByteString.utf8
 import scalus.builtin.Data
 import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
@@ -155,7 +155,7 @@ object OrderedLinkedList:
       *   Optional node key argument for the non-head nodes.
       */
     def nodeToken(key: TokenName = hex""): TokenName =
-        fromString("LAN") ++ key // FIXME: utf8"LAN" syntax
+        utf8"LAN" ++ key
 
         /** Node token validation.
           *
@@ -433,7 +433,7 @@ object UnorderedLinkedList:
       *   Optional node key argument for the non-head nodes.
       */
     def nodeToken(key: TokenName = hex""): TokenName =
-        fromString("LAN") ++ key // FIXME: utf8"LAN" syntax
+        utf8"LAN" ++ key
 
         /** Node token validation.
           *

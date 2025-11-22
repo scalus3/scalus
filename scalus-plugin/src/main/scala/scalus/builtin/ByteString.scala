@@ -37,4 +37,23 @@ object ByteString extends ByteStringFlatInstance {
         def hex(args: Any*): ByteString =
             val hexString = sc.s(args*).replace(" ", "")
             fromHex(hexString)
+
+        /** UTF-8 string interpolator
+          *
+          * Works on and offchain. Converts a UTF-8 string to a ByteString.
+          *
+          * @example
+          *   {{{
+          * val utf8String = utf8"hello"
+          * val withUnicode = utf8"Hello, 世界"
+          *   }}}
+          * @note
+          *   This method is specially treated by the Scalus compiler plugin, thus it's not required
+          *   to be in the @Compile module.
+          *
+          * It supports string interpolation only offchain, so you can do `utf8"hello"` onchain and
+          * offchain, but `val x = "world"; utf8"hello $x"` only offchain.
+          */
+        def utf8(args: Any*): ByteString =
+            fromString(sc.s(args*))
 }

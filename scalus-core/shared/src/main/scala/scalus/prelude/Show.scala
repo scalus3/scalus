@@ -1,7 +1,7 @@
 package scalus.prelude
 
 import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.fromString
+import scalus.builtin.ByteString.{fromString, utf8}
 import scalus.builtin.{BuiltinPair, ByteString, Data}
 import scalus.{Compile, CompileDerivations}
 
@@ -31,7 +31,7 @@ extension [A: ShowByteString](self: A)
 object ShowByteString {
     inline def apply[A: ShowByteString]: ShowByteString[A] = summon[ShowByteString[A]]
 
-    given ShowByteString[Unit] = (x: Unit) => fromString("()")
+    given ShowByteString[Unit] = (x: Unit) => utf8"()"
     given ShowByteString[BigInt] = (x: BigInt) => Prelude.showByteStringBigInt(x)
     given ShowByteString[ByteString] = (x: ByteString) =>
         appendByteString(
@@ -39,33 +39,32 @@ object ShowByteString {
           fromString("\"")
         )
     given ShowByteString[String] = (x: String) => encodeUtf8(x)
-    given ShowByteString[Boolean] = (x: Boolean) =>
-        if x then fromString("True") else fromString("False")
+    given ShowByteString[Boolean] = (x: Boolean) => if x then utf8"True" else utf8"False"
     given ShowByteString[Data] = (x: Data) => {
         import scalus.builtin
         def showBuiltinList(xs: builtin.BuiltinList[Data]): ByteString = {
-            if xs.isEmpty then fromString("")
+            if xs.isEmpty then utf8""
             else
                 val head = xs.head.showByteString
                 if xs.tail.isEmpty then head
                 else
                     appendByteString(
                       head,
-                      appendByteString(fromString(", "), showBuiltinList(xs.tail))
+                      appendByteString(utf8", ", showBuiltinList(xs.tail))
                     )
         }
         val showConstr = () => {
             val p = unConstrData(x)
             val lst =
                 appendByteString(
-                  fromString("["),
-                  appendByteString(showBuiltinList(p.snd), fromString("]"))
+                  utf8"[",
+                  appendByteString(showBuiltinList(p.snd), utf8"]")
                 )
             appendByteString(
-              fromString("<"),
+              utf8"<",
               appendByteString(
                 p.fst.showByteString,
-                appendByteString(fromString(", "), appendByteString(lst, fromString(">")))
+                appendByteString(utf8", ", appendByteString(lst, utf8">"))
               )
             )
         }
@@ -76,22 +75,22 @@ object ShowByteString {
             def showDataPair(x: BuiltinPair[Data, Data]): ByteString = {
                 val fstShow = x.fst.showByteString
                 val sndShow = x.snd.showByteString
-                appendByteString(appendByteString(fstShow, fromString(": ")), sndShow)
+                appendByteString(appendByteString(fstShow, utf8": "), sndShow)
             }
             def go(xs: builtin.BuiltinList[BuiltinPair[Data, Data]]): ByteString = {
-                if xs.isEmpty then fromString("")
+                if xs.isEmpty then utf8""
                 else
                     val head = showDataPair(xs.head)
                     if xs.tail.isEmpty then head
-                    else appendByteString(head, appendByteString(fromString(", "), go(xs.tail)))
+                    else appendByteString(head, appendByteString(utf8", ", go(xs.tail)))
             }
-            appendByteString(fromString("{"), appendByteString(go(lst), fromString("}")))
+            appendByteString(utf8"{", appendByteString(go(lst), utf8"}"))
         }
         val showList = () => {
             val lst = unListData(x)
             appendByteString(
-              fromString("["),
-              appendByteString(showBuiltinList(lst), fromString("]"))
+              utf8"[",
+              appendByteString(showBuiltinList(lst), utf8"]")
             )
         }
         val showI = () => unIData(x).showByteString

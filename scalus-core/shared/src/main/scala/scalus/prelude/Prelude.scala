@@ -63,22 +63,22 @@ object Prelude {
     }
 
     def showByteStringBigInt(input: BigInt): ByteString = {
-        import ByteString.fromString
+        import ByteString.utf8
         // Convert BigInt to String representation using only built-in methods and prelude types
         val isNegative = input < 0
         val absValue = if isNegative then -input else input
 
         inline def digitToString(digit: BigInt): ByteString = {
-            if digit == BigInt(0) then fromString("0")
-            else if digit == BigInt(1) then fromString("1")
-            else if digit == BigInt(2) then fromString("2")
-            else if digit == BigInt(3) then fromString("3")
-            else if digit == BigInt(4) then fromString("4")
-            else if digit == BigInt(5) then fromString("5")
-            else if digit == BigInt(6) then fromString("6")
-            else if digit == BigInt(7) then fromString("7")
-            else if digit == BigInt(8) then fromString("8")
-            else if digit == BigInt(9) then fromString("9")
+            if digit == BigInt(0) then utf8"0"
+            else if digit == BigInt(1) then utf8"1"
+            else if digit == BigInt(2) then utf8"2"
+            else if digit == BigInt(3) then utf8"3"
+            else if digit == BigInt(4) then utf8"4"
+            else if digit == BigInt(5) then utf8"5"
+            else if digit == BigInt(6) then utf8"6"
+            else if digit == BigInt(7) then utf8"7"
+            else if digit == BigInt(8) then utf8"8"
+            else if digit == BigInt(9) then utf8"9"
             else fail("Not a valid digit")
         }
 
@@ -89,7 +89,7 @@ object Prelude {
             else appendByteString(go(nextValue), digit)
         }
         val result = go(absValue)
-        if isNegative then appendByteString(fromString("-"), result) else result
+        if isNegative then appendByteString(utf8"-", result) else result
     }
 
     def showBigInt(input: BigInt): String = {

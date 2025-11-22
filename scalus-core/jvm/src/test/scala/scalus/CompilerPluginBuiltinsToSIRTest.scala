@@ -959,6 +959,46 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         )
     }
 
+    test("compile utf8 string interpolator") {
+        import builtin.ByteString.utf8
+
+        // Test simple ASCII string
+        assert(
+          compile(utf8"hello") ~=~ Const(
+            Constant.ByteString(builtin.ByteString.fromString("hello")),
+            SIRType.ByteString,
+            AnE
+          )
+        )
+
+        // Test with special characters
+        assert(
+          compile(utf8"Hello, World!") ~=~ Const(
+            Constant.ByteString(builtin.ByteString.fromString("Hello, World!")),
+            SIRType.ByteString,
+            AnE
+          )
+        )
+
+        // Test with Unicode
+        assert(
+          compile(utf8"Hello, 世界") ~=~ Const(
+            Constant.ByteString(builtin.ByteString.fromString("Hello, 世界")),
+            SIRType.ByteString,
+            AnE
+          )
+        )
+
+        // Test empty string
+        assert(
+          compile(utf8"") ~=~ Const(
+            Constant.ByteString(builtin.ByteString.fromString("")),
+            SIRType.ByteString,
+            AnE
+          )
+        )
+    }
+
     test("compile String builtins") {
         assert(compile(Builtins.appendString("dead", "beef")) ~=~ (AppendString $ "dead" $ "beef"))
         assert(compile(Builtins.equalsString("dead", "beef")) ~=~ (EqualsString $ "dead" $ "beef"))

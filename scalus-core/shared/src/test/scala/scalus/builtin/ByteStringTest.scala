@@ -25,3 +25,24 @@ class ByteStringTest extends StdlibTestKit:
             hex"0000000000000000"
         assertEvalFails[BuiltinException](1530707, 1401):
             fromBigIntLittleEndian(1_000_000, 1)
+
+    test("utf8 string interpolator"):
+        // Test simple ASCII string
+        utf8"hello".evalEq(1530707, 1401):
+            fromString("hello")
+
+        // Test with special characters
+        utf8"Hello, World!".evalEq(1530707, 1401):
+            fromString("Hello, World!")
+
+        // Test with Unicode
+        utf8"Hello, 世界".evalEq(1530707, 1401):
+            fromString("Hello, 世界")
+
+        // Test empty string
+        utf8"".evalEq(1530707, 1401):
+            fromString("")
+
+        // Test numbers and symbols
+        utf8"123!@#$$%^&*()".evalEq(1530707, 1401):
+            fromString("123!@#$%^&*()")

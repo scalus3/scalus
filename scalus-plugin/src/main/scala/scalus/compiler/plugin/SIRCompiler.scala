@@ -115,6 +115,7 @@ final class SIRCompiler(
     private val NullSymbol = defn.NullClass
     private val ByteStringModuleSymbol = requiredModule("scalus.builtin.ByteString")
     private val ByteStringSymbolHex = ByteStringModuleSymbol.requiredMethod("hex")
+    private val ByteStringSymbolUtf8 = ByteStringModuleSymbol.requiredMethod("utf8")
     private val FromDataSymbol = requiredClass("scalus.builtin.FromData")
     private val ToDataSymbol = requiredClass("scalus.builtin.ToData")
     private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
@@ -1560,6 +1561,28 @@ final class SIRCompiler(
                       GenericError(
                         s"""Hex string `${c.stringValue}` is not a valid hex string.
                            |Make sure it contains only hexadecimal characters (0-9, a-f, A-F)
+                           |Error: ${e.getMessage}
+                           |""".stripMargin,
+                        expr.srcPos
+                      ),
+                      scalus.uplc.Constant.Unit
+                    )
+        // utf8"hello" as ByteString using Scala 3 StringContext extension
+        case expr @ Apply(
+              Apply(
+                byteStringUtf8,
+                List(Apply(stringContextApply, List(SeqLiteral(List(Literal(c)), _))))
+              ),
+              List(SeqLiteral(List(), _))
+            )
+            if byteStringUtf8.symbol == ByteStringSymbolUtf8
+                && stringContextApply.symbol == StringContextApplySymbol =>
+            try scalus.uplc.Constant.ByteString(scalus.builtin.ByteString.fromString(c.stringValue))
+            catch
+                case NonFatal(e) =>
+                    error(
+                      GenericError(
+                        s"""UTF-8 string `${c.stringValue}` could not be converted to ByteString.
                            |Error: ${e.getMessage}
                            |""".stripMargin,
                         expr.srcPos
