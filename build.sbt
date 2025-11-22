@@ -526,7 +526,6 @@ lazy val docs = project // documentation project
         scalusTestkit.jvm
       ),
       ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "scalus-site" / "public" / "api",
-      cleanFiles += (ScalaUnidoc / unidoc / target).value,
       PluginDependency
     )
 
