@@ -2,7 +2,7 @@ package scalus.cardano.wallet
 
 import com.bloxbean.cardano.client.account as bloxbean
 import com.bloxbean.cardano.client.crypto.bip32.HdKeyPair
-import com.bloxbean.cardano.client.transaction.TransactionSigner
+import com.bloxbean.cardano.client.crypto.config.CryptoConfiguration
 
 class BloxbeanKeyPair(override val underlying: HdKeyPair) extends KeyPair {
     type Underlying = HdKeyPair
@@ -11,7 +11,11 @@ class BloxbeanKeyPair(override val underlying: HdKeyPair) extends KeyPair {
     override def privateKeyBytes: Array[Byte] = underlying.getPrivateKey.getBytes
 
     override def sign(message: Array[Byte]): Array[Byte] = {
-        TransactionSigner.INSTANCE.sign(message, underlying)
+        val signingProvider = CryptoConfiguration.INSTANCE.getSigningProvider
+        if privateKeyBytes.length == 64 then // extended pvt key (most prob for regular account)
+            // check for public key
+            signingProvider.signExtended(message, privateKeyBytes)
+        else signingProvider.sign(message, privateKeyBytes)
     }
 }
 

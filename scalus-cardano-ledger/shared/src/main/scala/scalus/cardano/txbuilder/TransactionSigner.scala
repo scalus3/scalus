@@ -4,6 +4,7 @@ import scalus.builtin.ByteString
 import scalus.cardano.ledger.{TaggedSortedSet, Transaction, TransactionHash, VKeyWitness}
 import scalus.cardano.wallet.KeyPair
 class TransactionSigner(keys: Set[KeyPair]) {
+
     def sign(unsignedTransaction: Transaction): Transaction = {
         val ws = keys.map(signEd25519(_, unsignedTransaction.id))
         val vkeyWitnesses = TaggedSortedSet.from(ws)
