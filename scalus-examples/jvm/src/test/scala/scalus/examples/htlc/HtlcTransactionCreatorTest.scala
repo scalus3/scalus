@@ -23,12 +23,15 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
     private val wrongReceiverKeyPair @ (wrongReceiverPrivateKey, wrongReceiverPublicKey) =
         generateKeyPair()
 
-    private val transactionCreator = HtlcTransactionCreator(
+    private val committerSigner = TransactionSigner(Set(committerKeyPair))
+    private val receiverSigner = TransactionSigner(Set(receiverKeyPair))
+    private val wrongCommitterSigner = TransactionSigner(Set(wrongCommitterKeyPair))
+    private val wrongReceiverSigner = TransactionSigner(Set(wrongReceiverKeyPair))
+
+    private def transactionCreatorFor(signer: TransactionSigner) = HtlcTransactionCreator(
       env = env,
       evaluator = PlutusScriptEvaluator.constMaxBudget(env),
-      signer = TransactionSigner(
-        Set(committerKeyPair, receiverKeyPair, wrongCommitterKeyPair, wrongReceiverKeyPair)
-      ),
+      signer = signer,
       compiledContract = compiledContract
     )
 
@@ -95,7 +98,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -132,7 +135,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(receiverSigner)
                 .reveal(
                   utxos = utxos,
                   collateralUtxos = utxos,
@@ -175,7 +178,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -212,7 +215,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(receiverSigner)
                 .reveal(
                   utxos = utxos,
                   collateralUtxos = utxos,
@@ -246,7 +249,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -283,7 +286,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(TransactionSigner(Set(receiverKeyPair, wrongReceiverKeyPair)))
                 .reveal(
                   utxos = utxos,
                   collateralUtxos = utxos,
@@ -318,7 +321,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -355,7 +358,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(receiverSigner)
                 .reveal(
                   utxos = utxos,
                   collateralUtxos = utxos,
@@ -390,7 +393,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -427,7 +430,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .timeout(
                   utxos = utxos,
                   collateralUtxos = utxos,
@@ -469,7 +472,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -506,7 +509,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(TransactionSigner(Set(committerKeyPair, wrongCommitterKeyPair)))
                 .timeout(
                   utxos = utxos,
                   collateralUtxos = utxos,
@@ -540,7 +543,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .lock(
                   utxos = utxos,
                   value = Value(lockAmount),
@@ -577,7 +580,7 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreator
+            transactionCreatorFor(committerSigner)
                 .timeout(
                   utxos = utxos,
                   collateralUtxos = utxos,

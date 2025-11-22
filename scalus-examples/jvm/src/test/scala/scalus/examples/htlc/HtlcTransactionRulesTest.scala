@@ -54,9 +54,10 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
       timeout
     ).toData
 
-    private val transactionSigner = TransactionSigner(
-      Set(committerKeyPair, receiverKeyPair, wrongCommitterKeyPair, wrongReceiverKeyPair)
-    )
+    private val committerSigner = TransactionSigner(Set(committerKeyPair))
+    private val receiverSigner = TransactionSigner(Set(receiverKeyPair))
+    private val wrongCommitterSigner = TransactionSigner(Set(wrongCommitterKeyPair))
+    private val wrongReceiverSigner = TransactionSigner(Set(wrongReceiverKeyPair))
 
     private def createProvider(): MockLedgerApi = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
@@ -88,7 +89,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        transactionSigner.sign(tx, provider.findUtxos(committerAddress).toOption.get).toOption.get
+        committerSigner.sign(tx)
     }
 
     private def revealHtlc(
@@ -96,7 +97,8 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
         lockUtxo: Utxo,
         preimage: Preimage,
         receiverPkh: AddrKeyHash,
-        time: PosixTime
+        time: PosixTime,
+        signer: TransactionSigner = receiverSigner
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, receiverAddress)
         val context = BuilderContext.withConstMaxBudgetEvaluator(env, wallet)
@@ -105,29 +107,15 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        transactionSigner
-            .sign(
-              tx,
-              provider.findUtxos(receiverAddress).toOption.get ++
-                  provider
-                      .findUtxos(
-                        address = scriptAddress,
-                        transactionId = Some(lockUtxo._1.transactionId),
-                        datum = Some(DatumOption.Inline(datum)),
-                        minAmount = Some(Coin(lockAmount))
-                      )
-                      .toOption
-                      .get
-            )
-            .toOption
-            .get
+        signer.sign(tx)
     }
 
     private def timeoutHtlc(
         provider: Provider,
         lockUtxo: Utxo,
         committerPkh: AddrKeyHash,
-        time: PosixTime
+        time: PosixTime,
+        signer: TransactionSigner = committerSigner
     ): Transaction = {
         val wallet = TestUtil.createTestWallet(provider, committerAddress)
         val context = BuilderContext.withConstMaxBudgetEvaluator(env, wallet)
@@ -136,22 +124,7 @@ class HtlcTransactionRulesTest extends AnyFunSuite, ScalusTest {
             .toOption
             .get
 
-        transactionSigner
-            .sign(
-              tx,
-              provider.findUtxos(committerAddress).toOption.get ++
-                  provider
-                      .findUtxos(
-                        address = scriptAddress,
-                        transactionId = Some(lockUtxo._1.transactionId),
-                        datum = Some(DatumOption.Inline(datum)),
-                        minAmount = Some(Coin(lockAmount))
-                      )
-                      .toOption
-                      .get
-            )
-            .toOption
-            .get
+        signer.sign(tx)
     }
 
     test("receiver reveals preimage before timeout") {

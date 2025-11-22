@@ -9,6 +9,7 @@ import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
+import scalus.cardano.wallet.BloxbeanKeyPair
 import scalus.examples.htlc.{HtlcContract, Transactions2}
 import scalus.ledger.api.v1.PubKeyHash
 
@@ -36,28 +37,9 @@ class HtlcIntegrationTest extends AnyFunSuite {
             .index(new Segment(derivationPieces(4), false))
             .build()
         val account = Account.createFromMnemonic(Networks.testnet(), mnemonic, derivationPath)
-        val publicKeyBytes = account.publicKeyBytes()
-        val privateKeyBytes = account.privateKeyBytes()
+        val keyPair = BloxbeanKeyPair(account.hdKeyPair())
 
-        val publicKey = ByteString.fromArray(publicKeyBytes)
-        val pkh = AddrKeyHash(scalus.builtin.platform.blake2b_224(publicKey))
-
-        new TransactionSigner {
-            override val publicKeyHashes: Set[AddrKeyHash] = Set(pkh)
-
-            // override the default signer to just use the hardcoded keypair
-            override protected def signEd25519(
-                addrKeyHash: AddrKeyHash,
-                transactionId: TransactionHash
-            ): VKeyWitness = {
-                val signature = scalus.testing.integration.signEd25519(
-                  privateKeyBytes,
-                  publicKeyBytes,
-                  transactionId.bytes
-                )
-                VKeyWitness(publicKey, ByteString.fromArray(signature))
-            }
-        }
+        new TransactionSigner(Set(keyPair))
     }
     
     private def getEnvOrSkip(name: String, testEnv: TestEnv): String = {

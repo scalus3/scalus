@@ -1,65 +1,36 @@
 package scalus.cardano.txbuilder
 
-import scalus.builtin.{platform, ByteString, given}
-import scalus.cardano.ledger.{AddrKeyHash, TaggedSortedSet, Transaction, TransactionException, TransactionHash, Utxos, VKeyWitness}
-import scalus.cardano.ledger.utils.{AllNeededKeyHashes, MissingKeyHashes}
-
-trait TransactionSigner {
-    def publicKeyHashes: Set[AddrKeyHash]
-
-    final def sign(unsignedTransaction: Transaction, utxos: Utxos): Either[
-      TransactionException.BadInputsUTxOException |
-          TransactionException.BadCollateralInputsUTxOException |
-          TransactionException.MissingKeyHashesException,
-      Transaction
-    ] = {
-        for
-            _ <- MissingKeyHashes.validateAllMissingKeyHashes(
-              unsignedTransaction,
-              publicKeyHashes,
-              utxos
-            )
-            allNeededKeyHashesView <- AllNeededKeyHashes.allNeededKeyHashesView(
-              unsignedTransaction,
-              utxos
-            )
-        yield
-            val vkeyWitnesses = TaggedSortedSet.from(
-              allNeededKeyHashesView.map { hash =>
-                  signEd25519(hash.asInstanceOf[AddrKeyHash], unsignedTransaction.id)
-              }
-            )
-
-            unsignedTransaction.copy(
-              witnessSet = unsignedTransaction.witnessSet.copy(vkeyWitnesses = vkeyWitnesses)
-            )
+import scalus.builtin.ByteString
+import scalus.cardano.ledger.{TaggedSortedSet, Transaction, TransactionHash, VKeyWitness}
+import scalus.cardano.wallet.KeyPair
+class TransactionSigner(keys: Set[KeyPair]) {
+    def sign(unsignedTransaction: Transaction): Transaction = {
+        val ws = keys.map(signEd25519(_, unsignedTransaction.id))
+        val vkeyWitnesses = TaggedSortedSet.from(ws)
+        unsignedTransaction.copy(
+          witnessSet = unsignedTransaction.witnessSet.copy(vkeyWitnesses = vkeyWitnesses)
+        )
     }
 
     protected def signEd25519(
-        addrKeyHash: AddrKeyHash,
+        keyPair: KeyPair,
         transactionId: TransactionHash
-    ): VKeyWitness
+    ): VKeyWitness = {
+        val signature = keyPair.sign(transactionId.bytes)
+        VKeyWitness(ByteString.fromArray(keyPair.publicKeyBytes), ByteString.fromArray(signature))
+    }
 }
 
 object TransactionSigner {
     def apply(keyPairs: Set[(ByteString, ByteString)]): TransactionSigner =
-        new Impl(keyPairs)
-
-    private final class Impl(keyPairs: Set[(ByteString, ByteString)]) extends TransactionSigner {
-        private val keys: Map[AddrKeyHash, (ByteString, ByteString)] = keyPairs.view.map {
-            case keyPair @ (_, publicKey) =>
-                AddrKeyHash(platform.blake2b_224(publicKey)) -> keyPair
-        }.toMap
-
-        override val publicKeyHashes: Set[AddrKeyHash] = keys.keySet
-
-        override protected def signEd25519(
-            addrKeyHash: AddrKeyHash,
-            transactionId: TransactionHash
-        ): VKeyWitness = {
-            val (privateKey, publicKey) = keys(addrKeyHash)
-            val signature = platform.signEd25519(privateKey, transactionId)
-            VKeyWitness(publicKey, signature)
-        }
-    }
+        new TransactionSigner(
+          keyPairs.map { case (priv, pub) =>
+              new KeyPair {
+                  override type Underlying = (ByteString, ByteString)
+                  override def underlying: (ByteString, ByteString) = (priv, pub)
+                  override def publicKeyBytes: Array[Byte] = pub.bytes
+                  override def privateKeyBytes: Array[Byte] = priv.bytes
+              }
+          }
+        )
 }
