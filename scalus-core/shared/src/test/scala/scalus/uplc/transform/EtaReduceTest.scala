@@ -9,11 +9,11 @@ import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
-import scalus.uplc.transform.EtaReduce.etaReduce
-
 import scala.language.implicitConversions
 
 class EtaReduceTest extends AnyFunSuite:
+    def etaReduce(term: Term): Term = EtaReduce(term)
+
     test("(lam x [f x]) reduces to f"):
         assert(etaReduce(λ("x")(vr"f" $ vr"x")) == vr"f")
 

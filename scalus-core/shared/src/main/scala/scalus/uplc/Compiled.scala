@@ -1,6 +1,5 @@
 package scalus.uplc
 
-import scalus.{|>, Compiler}
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler.sir.lowering.SirToUplcV3Lowering
@@ -8,7 +7,8 @@ import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProducts
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType, TargetLoweringBackend}
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.eval.Log
-import scalus.uplc.transform.{CaseConstrApply, EtaReduce, ForcedBuiltinsExtractor, Inliner, StrictIf}
+import scalus.uplc.transform.*
+import scalus.{|>, Compiler}
 
 import scala.annotation.threadUnsafe
 
@@ -36,54 +36,6 @@ extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
           self.optimizer
         )
     }
-}
-
-trait Optimizer {
-    def apply(term: Term): Term
-    def logs: Seq[String]
-}
-
-object NoopOptimizer extends Optimizer {
-    def apply(term: Term): Term = term
-    def logs: Seq[String] = Seq.empty
-}
-
-class V1V2Optimizer extends Optimizer {
-    private val logger = Log()
-    def apply(term: Term): Term = {
-        logger.clear()
-
-        val builtinsExtractor: Term => Term = ForcedBuiltinsExtractor(_, logger = logger.log)
-        val inliner: Term => Term = Inliner(_)
-        val etaReduce: Term => Term = EtaReduce(_, logger = logger.log)
-        val strictIf: Term => Term = StrictIf(_, logger = logger.log)
-
-        term |> etaReduce // first eta reduce to expose more inlining opportunities
-            |> inliner // inline functions and eliminate dead code
-            |> strictIf // convert eligible ifs to strict ifs
-            |> builtinsExtractor // extract forced builtins
-    }
-    def logs: Seq[String] = logger.getLogs.toVector
-}
-
-class V3Optimizer extends Optimizer {
-    private val logger = Log()
-    def apply(term: Term): Term = {
-        logger.clear()
-
-        val caseConstr: Term => Term = CaseConstrApply(_)
-        val builtinsExtractor: Term => Term = ForcedBuiltinsExtractor(_, logger = logger.log)
-        val inliner: Term => Term = Inliner(_)
-        val etaReduce: Term => Term = EtaReduce(_, logger = logger.log)
-        val strictIf: Term => Term = StrictIf(_, logger = logger.log)
-
-        term |> etaReduce // first eta reduce to expose more inlining opportunities
-            |> inliner // inline functions and eliminate dead code
-            |> strictIf // convert eligible ifs to strict ifs
-            |> builtinsExtractor // extract forced builtins
-            |> caseConstr // optimize multiple applys to more optimal case/constr nodes
-    }
-    def logs: Seq[String] = logger.getLogs.toVector
 }
 
 case class PlutusV3[A](

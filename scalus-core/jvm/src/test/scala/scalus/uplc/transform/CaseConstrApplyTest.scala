@@ -25,7 +25,9 @@ class CaseConstrApplyTest extends AnyFunSuite {
     test("replace (apply (apply (apply f a) b) c) with (case (constr 0 [a, b, c]) f)") {
         val sir = compile(((a: BigInt) => (b: BigInt) => (c: ByteString) => c)(0)(1)(hex"1012"))
         val uplc = sir.toUplc()
-        val (optimized, logs) = CaseConstrApply.extractPass(uplc)
+        val optimizer = new CaseConstrApply()
+        val optimized = optimizer.apply(uplc)
+        val logs = optimizer.logs
         val expected = Case(
           Constr(
             Word64.Zero,

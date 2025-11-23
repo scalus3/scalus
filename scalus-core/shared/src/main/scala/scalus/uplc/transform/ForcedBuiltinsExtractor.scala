@@ -3,6 +3,7 @@ package scalus.uplc.transform
 import scalus.*
 import scalus.uplc.Term.*
 import scalus.uplc.{DefaultFun, Meaning, Term}
+import scalus.uplc.eval.{Log, Logger}
 
 import scala.collection.mutable
 
@@ -16,15 +17,13 @@ import scala.collection.mutable
   * builtin_FstPair (builtin_FstPair (pair true false)) (! (! __builtin_FstPair))) costs 200 memory
   * and 32000 cpu, while `(force (force (builtin fstPair)))` costs 300 memory and 48000 cpu.
   */
-object ForcedBuiltinsExtractor {
-    def apply(term: Term): Term =
-        apply(term = term, logger = _ => (), exceptBuiltins = Set())
+class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[DefaultFun] = Set())
+    extends Optimizer {
+    def apply(term: Term): Term = extract(term)
 
-    def apply(
-        term: Term,
-        exceptBuiltins: Set[DefaultFun] = Set(),
-        logger: String => Unit = s => (),
-    ): Term = {
+    def logs: Seq[String] = logger.getLogs.toSeq
+
+    private def extract(term: Term): Term = {
         var counter = 0
 
         def freshName(base: String, env: Map[String, Term]): String =
@@ -43,13 +42,13 @@ object ForcedBuiltinsExtractor {
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
                     && !exceptBuiltins.contains(bn) =>
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
-                logger(s"Replacing Forced builtin with Var: $name")
+                logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(Builtin(bn))
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1
                     && !exceptBuiltins.contains(bn) =>
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
-                logger(s"Replacing Forced builtin with Var: $name")
+                logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(t)          => Force(go(t, env))
             case Delay(t)          => Delay(go(t, env))
@@ -74,3 +73,18 @@ object ForcedBuiltinsExtractor {
         withVars
     }
 }
+
+object ForcedBuiltinsExtractor:
+    def apply(term: Term): Term = new ForcedBuiltinsExtractor().apply(term)
+    def apply(term: Term, logger: String => Unit): Term = {
+        val log = new Log()
+        val result = new ForcedBuiltinsExtractor(log).apply(term)
+        log.getLogs.foreach(logger)
+        result
+    }
+    def apply(term: Term, exceptBuiltins: Set[DefaultFun], logger: String => Unit): Term = {
+        val log = new Log()
+        val result = new ForcedBuiltinsExtractor(log, exceptBuiltins).apply(term)
+        log.getLogs.foreach(logger)
+        result
+    }

@@ -6,6 +6,7 @@ import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProducts
 import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
 import scalus.uplc.eval.*
 import scalus.uplc.{Program, *}
+import scalus.uplc.transform.V3Optimizer
 import scalus.utils.Utils
 
 package object scalus {
