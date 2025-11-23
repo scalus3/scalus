@@ -12,7 +12,9 @@ class SimpleMintingPolicyTest extends AnyFunSuite {
         import scalus.uplc.DeBruijn
 
         // Create a simple UTxO reference to use as parameter
-        val txId = TxId(ByteString.fromHex("ba387607dfdc714bc27d84daf7b41463ad8a77a5219bf8877960c1527fcc5465"))
+        val txId = TxId(
+          ByteString.fromHex("ba387607dfdc714bc27d84daf7b41463ad8a77a5219bf8877960c1527fcc5465")
+        )
         val utxoRef = TxOutRef(txId, BigInt(1))
 
         // Compile and apply the minting policy with the UTxO reference
@@ -24,7 +26,9 @@ class SimpleMintingPolicyTest extends AnyFunSuite {
         // The error happens when trying to convert FROM DeBruijn indices back to named variables
         // This is what the script evaluator does
         // This should trigger IndexOutOfBoundsException: 41 at DeBruijn.scala:57
-        val namedTerm = DeBruijn.fromDeBruijnTerm(compiledProgram.term)
+
+        val deBruijnProgram = DeBruijn.deBruijnProgram(compiledProgram)
+        val namedTerm = DeBruijn.fromDeBruijnProgram(deBruijnProgram)
 
         println(s"DeBruijn fromDeBruijnTerm conversion successful!")
 
@@ -45,7 +49,9 @@ class SimpleMintingPolicyTest extends AnyFunSuite {
     }
 
     test("Show UPLC after apply for debugging") {
-        val txId = TxId(ByteString.fromHex("ba387607dfdc714bc27d84daf7b41463ad8a77a5219bf8877960c1527fcc5465"))
+        val txId = TxId(
+          ByteString.fromHex("ba387607dfdc714bc27d84daf7b41463ad8a77a5219bf8877960c1527fcc5465")
+        )
         val utxoRef = TxOutRef(txId, BigInt(1))
         val program = SimpleMintingPolicy.compiledValidator.toUplcOptimized().plutusV3
         val utxoData = utxoRef.toData
