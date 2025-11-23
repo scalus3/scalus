@@ -156,12 +156,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .complete(provider, Alice.address)
             .build()
 
-        // Sign the transaction
-        val signedBuilderResult = unsignedBuilder.sign(aliceSigner)
-
-        assert(signedBuilderResult.isRight, "Should successfully sign the transaction")
-
-        val signedTx = signedBuilderResult.toOption.get.transaction
+        val signedTx = unsignedBuilder.sign(aliceSigner).transaction
 
         // Should have vkey witnesses for the inputs added by complete()
         assert(
@@ -426,12 +421,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .complete(provider, Alice.address)
             .build()
 
-        // Sign with Alice's wallet
-        val signedResult = builtTx.sign(aliceSigner)
-
-        assert(signedResult.isRight, s"Signing should succeed: ${signedResult.left.getOrElse("")}")
-
-        val signedTx = signedResult.toOption.get.transaction
+        val signedTx = builtTx.sign(aliceSigner).transaction
 
         // Verify signatures exist
         assert(signedTx.witnessSet.vkeyWitnesses.toSeq.nonEmpty, "Should have vkey witnesses")
