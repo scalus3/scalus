@@ -29,48 +29,35 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // Helpers to cut down on type signature noise
     private def pure0[A](value: A): Result[A] = Right(value)
 
-    private def liftF0[A](
-        either: Either[StepError | RedeemerIndexingInternalError, A]
-    ): Result[A] = either
-
     private def ctx: Context = _ctx
 
     private def modify0(f: Context => Context): Result[Unit] =
         _ctx = f(ctx)
         pure0(())
 
-    private def get0: Result[Context] =
-        pure0(ctx)
-
     def applySteps(steps: Seq[TransactionBuilderStep]): (Context, Result[Unit]) = {
         val result = for {
             _ <- processSteps(steps)
-            ctx0 <- get0
-            res <- liftF0(
-              TransactionConversion
-                  .fromEditableTransactionSafe(
-                    EditableTransaction(
-                      transaction = ctx0.transaction,
-                      redeemers = ctx0.redeemers.toVector
-                    )
+            res <- TransactionConversion
+                .fromEditableTransactionSafe(
+                  EditableTransaction(
+                    transaction = ctx.transaction,
+                    redeemers = ctx.redeemers.toVector
                   )
-                  .left
-                  .map(detachedRedeemer => RedeemerIndexingInternalError(detachedRedeemer, steps))
-            )
+                )
+                .left
+                .map(detachedRedeemer => RedeemerIndexingInternalError(detachedRedeemer, steps))
             // Replace the transaction in the context, keeping the rest
             _ <- modify0(Focus[Context](_.transaction).replace(res))
 
             // Replace delayed redeemers if any exist
             _ <-
-                if ctx0.delayedRedeemerSpecs.nonEmpty then {
+                if ctx.delayedRedeemerSpecs.nonEmpty then {
                     for {
-                        ctx1 <- get0
-                        updatedRedeemers <- liftF0(
-                          replaceDelayedRedeemers(
-                            ctx1.redeemers,
-                            ctx1.delayedRedeemerSpecs,
-                            ctx1.transaction
-                          )
+                        updatedRedeemers <- replaceDelayedRedeemers(
+                          ctx.redeemers,
+                          ctx.delayedRedeemerSpecs,
+                          ctx.transaction
                         )
                         _ <- modify0(_.replaceRedeemers(updatedRedeemers))
                     } yield ()
@@ -89,25 +76,21 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def addResolvedUtxo(
         utxo: Utxo,
         step: TransactionBuilderStep
-    ): Result[Unit] =
-        for {
-            ctx <- get0
-            mbNewUtxos = ctx.resolvedUtxos.addUtxo(utxo)
-            _ <- mbNewUtxos match {
-                case None =>
-                    liftF0(
-                      Left(
-                        ResolvedUtxosIncoherence(
-                          input = utxo.input,
-                          existingOutput = ctx.resolvedUtxos.utxos(utxo.input),
-                          incoherentOutput = utxo.output,
-                          step = step
-                        )
-                      )
-                    )
-                case Some(utxos) => modify0(Focus[Context](_.resolvedUtxos).replace(utxos))
-            }
-        } yield ()
+    ): Result[Unit] = {
+        val mbNewUtxos = ctx.resolvedUtxos.addUtxo(utxo)
+        mbNewUtxos match {
+            case None =>
+                Left(
+                  ResolvedUtxosIncoherence(
+                    input = utxo.input,
+                    existingOutput = ctx.resolvedUtxos.utxos(utxo.input),
+                    incoherentOutput = utxo.output,
+                    step = step
+                  )
+                )
+            case Some(utxos) => modify0(Focus[Context](_.resolvedUtxos).replace(utxos))
+        }
+    }
 
     private def processStep(step: TransactionBuilderStep): Result[Unit] = step match {
 
@@ -171,7 +154,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         // Extract the key hash, erroring if not a Shelley PKH address
         def getPaymentVerificationKeyHash(address: Address): Result[AddrKeyHash] =
-            liftF0(address match {
+            address match {
                 case sa: ShelleyAddress =>
                     sa.payment match {
                         case kh: ShelleyPaymentPart.Key => Right(kh.hash)
@@ -181,10 +164,10 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                             )
                     }
                 case _ => Left(WrongOutputType(WitnessKind.KeyBased, utxo, spend))
-            })
+            }
 
         def getPaymentScriptHash(address: Address): Result[ScriptHash] =
-            liftF0(address match {
+            address match {
                 case sa: ShelleyAddress =>
                     sa.payment match {
                         case s: ShelleyPaymentPart.Script => Right(s.hash)
@@ -196,7 +179,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     }
                 case _ =>
                     Left(WrongOutputType(WitnessKind.ScriptBased, utxo, spend))
-            })
+            }
 
         for {
             _ <- assertNetworkId(utxo.output.address, spend)
@@ -269,21 +252,17 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         for {
             _ <- utxo.output.datumOption match {
                 case None =>
-                    liftF0(
-                      Left(DatumIsMissing(utxo, step))
-                    )
+                    Left(DatumIsMissing(utxo, step))
                 case Some(DatumOption.Inline(_)) =>
                     datum match {
                         case Datum.DatumInlined => pure0(())
                         case Datum.DatumValue(_) =>
-                            liftF0(
-                              Left(DatumValueForUtxoWithInlineDatum(utxo, datum, step))
-                            )
+                            Left(DatumValueForUtxoWithInlineDatum(utxo, datum, step))
                     }
                 case Some(DatumOption.Hash(datumHash)) =>
                     datum match {
                         case Datum.DatumInlined =>
-                            liftF0(Left(DatumWitnessNotProvided(utxo, step)))
+                            Left(DatumWitnessNotProvided(utxo, step))
                         case Datum.DatumValue(providedDatum) =>
                             // TODO: is that correct? Upstream Data.dataHash extension?
                             val computedHash: DataHash =
@@ -307,10 +286,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                       )
                                 )
                             } else {
-                                liftF0(
-                                  Left(
-                                    IncorrectDatumHash(utxo, providedDatum, datumHash, step)
-                                  )
+                                Left(
+                                  IncorrectDatumHash(utxo, providedDatum, datumHash, step)
                                 )
                             }
                     }
@@ -348,7 +325,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             // Not allowed to mint 0
             _ <-
                 if amount == 0
-                then liftF0(Left(CannotMintZero(scriptHash, assetName, mint)))
+                then Left(CannotMintZero(scriptHash, assetName, mint))
                 else pure0(())
 
             // Since we allow monoidal mints, only the final redeemer is kept. We have to remove the old redeemer
@@ -397,7 +374,6 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             //
             // When case (3a) is true, the redeemer corresponding to the policyId must also be removed from the
             // detached redeemers set in the context.
-            ctx <- get0
             currentMint = ctx |> unsafeCtxBodyL.refocus(_.mint).get
             thisMint = MultiAsset.asset(scriptHash, assetName, amount)
             replaceMint = (newMint: Option[Mint]) =>
@@ -558,19 +534,18 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // Fee step
     // -------------------------------------------------------------------------
 
-    private def useFee(step: TransactionBuilderStep.Fee): Result[Unit] = for {
-        ctx <- get0
-        currentFee = ctx.transaction.body.value.fee.value
-        _ <- currentFee match {
+    private def useFee(step: TransactionBuilderStep.Fee): Result[Unit] = {
+        val currentFee = ctx.transaction.body.value.fee.value
+        currentFee match {
             case 0 =>
                 modify0(
                   unsafeCtxBodyL
                       .refocus(_.fee)
                       .replace(step.fee)
                 )
-            case nonZero => liftF0(Left(FeeAlreadySet(nonZero, step)))
+            case nonZero => Left(FeeAlreadySet(nonZero, step))
         }
-    } yield ()
+    }
 
     // -------------------------------------------------------------------------
     // ValidityStartSlot step
@@ -578,21 +553,19 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useValidityStartSlot(
         step: TransactionBuilderStep.ValidityStartSlot
-    ): Result[Unit] =
-        for {
-            ctx <- get0
-            currentValidityStartSlot = ctx.transaction.body.value.validityStartSlot
-            _ <- currentValidityStartSlot match {
-                case Some(existingSlot) =>
-                    liftF0(Left(ValidityStartSlotAlreadySet(existingSlot, step)))
-                case None =>
-                    modify0(
-                      unsafeCtxBodyL
-                          .refocus(_.validityStartSlot)
-                          .replace(Some(step.slot))
-                    )
-            }
-        } yield ()
+    ): Result[Unit] = {
+        val currentValidityStartSlot = ctx.transaction.body.value.validityStartSlot
+        currentValidityStartSlot match {
+            case Some(existingSlot) =>
+                Left(ValidityStartSlotAlreadySet(existingSlot, step))
+            case None =>
+                modify0(
+                  unsafeCtxBodyL
+                      .refocus(_.validityStartSlot)
+                      .replace(Some(step.slot))
+                )
+        }
+    }
 
     // -------------------------------------------------------------------------
     // ValidityEndSlot step
@@ -600,21 +573,19 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useValidityEndSlot(
         step: TransactionBuilderStep.ValidityEndSlot
-    ): Result[Unit] =
-        for {
-            ctx <- get0
-            currentValidityEndSlot = ctx.transaction.body.value.ttl
-            _ <- currentValidityEndSlot match {
-                case Some(existingSlot) =>
-                    liftF0(Left(ValidityEndSlotAlreadySet(existingSlot, step)))
-                case None =>
-                    modify0(
-                      unsafeCtxBodyL
-                          .refocus(_.ttl)
-                          .replace(Some(step.slot))
-                    )
-            }
-        } yield ()
+    ): Result[Unit] = {
+        val currentValidityEndSlot = ctx.transaction.body.value.ttl
+        currentValidityEndSlot match {
+            case Some(existingSlot) =>
+                Left(ValidityEndSlotAlreadySet(existingSlot, step))
+            case None =>
+                modify0(
+                  unsafeCtxBodyL
+                      .refocus(_.ttl)
+                      .replace(Some(step.slot))
+                )
+        }
+    }
 
     // -------------------------------------------------------------------------
     // AddCollateral step
@@ -647,19 +618,16 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         for {
             _ <-
                 if !utxo.output.value.assets.isEmpty
-                then
-                    liftF0(
-                      Left(CollateralWithTokens(utxo, step))
-                    )
+                then Left(CollateralWithTokens(utxo, step))
                 else pure0(())
             addr: ShelleyAddress <- utxo.output.address match {
                 case sa: ShelleyAddress  => pure0(sa)
-                case by: ByronAddress    => liftF0(Left(ByronAddressesNotSupported(by, step)))
-                case stake: StakeAddress => liftF0(Left(CollateralNotPubKey(utxo, step)))
+                case by: ByronAddress    => Left(ByronAddressesNotSupported(by, step))
+                case stake: StakeAddress => Left(CollateralNotPubKey(utxo, step))
             }
             _ <- addr.payment match {
                 case ShelleyPaymentPart.Key(_: AddrKeyHash) => pure0(())
-                case _ => liftF0(Left(CollateralNotPubKey(utxo, step)))
+                case _                                      => Left(CollateralNotPubKey(utxo, step))
             }
         } yield ()
 
@@ -670,11 +638,10 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useModifyAuxiliaryData(
         modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData
     ): Result[Unit] = {
-        for {
-            ctx <- get0
-            oldData = ctx.transaction.auxiliaryData
+        val oldData = ctx.transaction.auxiliaryData
 
-            newData = modifyAuxiliaryData.f(oldData.map(_.value)).map(KeepRaw(_))
+        val newData = modifyAuxiliaryData.f(oldData.map(_.value)).map(KeepRaw(_))
+        for {
             _ <- modify0(
               Focus[Context](_.transaction)
                   .refocus(_.auxiliaryData)
@@ -725,35 +692,29 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     // Credential.KeyHash
                     case (Credential.KeyHash(_), PubKeyWitness) => pure0(())
                     case (Credential.KeyHash(_), witness: TwoArgumentPlutusScriptWitness) =>
-                        liftF0(
-                          Left(
-                            UnneededDeregisterWitness(
-                              StakeCredential(credential),
-                              witness,
-                              step
-                            )
+                        Left(
+                          UnneededDeregisterWitness(
+                            StakeCredential(credential),
+                            witness,
+                            step
                           )
                         )
                     case (Credential.KeyHash(_), witness: NativeScriptWitness) =>
-                        liftF0(
-                          Left(
-                            UnneededDeregisterWitness(
-                              StakeCredential(credential),
-                              witness,
-                              step
-                            )
+                        Left(
+                          UnneededDeregisterWitness(
+                            StakeCredential(credential),
+                            witness,
+                            step
                           )
                         )
                     // Credential.ScriptHash
                     case (Credential.ScriptHash(_), PubKeyWitness) =>
-                        liftF0(
-                          Left(
-                            WrongCredentialType(
-                              Operation.CertificateOperation(cert),
-                              WitnessKind.KeyBased,
-                              credential,
-                              step
-                            )
+                        Left(
+                          WrongCredentialType(
+                            Operation.CertificateOperation(cert),
+                            WitnessKind.KeyBased,
+                            credential,
+                            step
                           )
                         )
                     case (
@@ -851,23 +812,21 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useWithdrawRewards(
         withdrawRewards: TransactionBuilderStep.WithdrawRewards
-    ): Result[Unit] =
+    ): Result[Unit] = {
+        val rewardAccount = withdrawRewards.stakeCredential.credential match {
+            case Credential.KeyHash(keyHash) =>
+                // Convert AddrKeyHash to StakeKeyHash - they're likely the same underlying type?
+                val stakeKeyHash = keyHash.asInstanceOf[StakeKeyHash]
+                val stakeAddress =
+                    StakeAddress(ctx.network, StakePayload.Stake(stakeKeyHash))
+                RewardAccount(stakeAddress)
+            case Credential.ScriptHash(scriptHash) =>
+                val stakeAddress =
+                    StakeAddress(ctx.network, StakePayload.Script(scriptHash))
+                RewardAccount(stakeAddress)
+        }
+
         for {
-            ctx <- get0
-
-            rewardAccount = withdrawRewards.stakeCredential.credential match {
-                case Credential.KeyHash(keyHash) =>
-                    // Convert AddrKeyHash to StakeKeyHash - they're likely the same underlying type?
-                    val stakeKeyHash = keyHash.asInstanceOf[StakeKeyHash]
-                    val stakeAddress =
-                        StakeAddress(ctx.network, StakePayload.Stake(stakeKeyHash))
-                    RewardAccount(stakeAddress)
-                case Credential.ScriptHash(scriptHash) =>
-                    val stakeAddress =
-                        StakeAddress(ctx.network, StakePayload.Script(scriptHash))
-                    RewardAccount(stakeAddress)
-            }
-
             _ <- modify0(
               unsafeCtxBodyL
                   .refocus(_.withdrawals)
@@ -892,6 +851,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               withdrawRewards
             )
         } yield ()
+    }
 
     // -------------------------------------------------------------------------
     // SubmitProposal step
@@ -963,23 +923,19 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         submitVotingProcedure.witness match {
                             case _: PubKeyWitness.type => pure0(credential)
                             case witness: TwoArgumentPlutusScriptWitness =>
-                                liftF0(
-                                  Left(
-                                    UnneededSpoVoteWitness(
-                                      credential,
-                                      witness,
-                                      submitVotingProcedure
-                                    )
+                                Left(
+                                  UnneededSpoVoteWitness(
+                                    credential,
+                                    witness,
+                                    submitVotingProcedure
                                   )
                                 )
                             case witness: NativeScriptWitness =>
-                                liftF0(
-                                  Left(
-                                    UnneededSpoVoteWitness(
-                                      credential,
-                                      witness,
-                                      submitVotingProcedure
-                                    )
+                                Left(
+                                  UnneededSpoVoteWitness(
+                                    credential,
+                                    witness,
+                                    submitVotingProcedure
                                   )
                                 )
                         }
@@ -1035,14 +991,12 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                             case Credential.KeyHash(keyHash) =>
                                 usePubKeyWitness(ExpectedSigner(keyHash))
                             case _ =>
-                                liftF0(
-                                  Left(
-                                    WrongCredentialType(
-                                      credAction,
-                                      WitnessKind.KeyBased,
-                                      cred,
-                                      step
-                                    )
+                                Left(
+                                  WrongCredentialType(
+                                    credAction,
+                                    WitnessKind.KeyBased,
+                                    cred,
+                                    step
                                   )
                                 )
                         }
@@ -1110,14 +1064,14 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             case PubKeyWitness =>
                 cred.keyHashOption match {
                     case Some(_) => pure0(())
-                    case None    => liftF0(Left(wrongCredErr))
+                    case None    => Left(wrongCredErr)
                 }
 
             case witness: NativeScriptWitness =>
                 for {
                     scriptHash <- cred.scriptHashOption match {
                         case Some(hash) => pure0(hash)
-                        case None       => liftF0(Left(wrongCredErr))
+                        case None       => Left(wrongCredErr)
                     }
                     _ <- assertScriptHashMatchesSource(scriptHash, witness.scriptSource, step)
                 } yield ()
@@ -1126,7 +1080,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 for {
                     scriptHash <- cred.scriptHashOption match {
                         case Some(hash) => pure0(hash)
-                        case None       => liftF0(Left(wrongCredErr))
+                        case None       => Left(wrongCredErr)
                     }
                     _ <- assertScriptHashMatchesSource(scriptHash, witness.scriptSource, step)
                 } yield ()
@@ -1170,9 +1124,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         step: TransactionBuilderStep
     ): Result[Unit] = {
         if scriptHash != script.scriptHash then {
-            liftF0(
-              Left(IncorrectScriptHash(script, scriptHash, step))
-            )
+            Left(IncorrectScriptHash(script, scriptHash, step))
         } else {
             pure0(())
         }
@@ -1186,24 +1138,19 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         step: TransactionBuilderStep
     ): Result[Unit] =
         for {
-            ctx <- get0
-            resolvedScripts <- liftF0(
-              AllResolvedScripts
-                  .allResolvedScripts(
-                    ctx.transaction,
-                    ctx.resolvedUtxos.utxos
-                  )
-                  .left
-                  .map(_ => ScriptResolutionError(step))
-            )
+            resolvedScripts <- AllResolvedScripts
+                .allResolvedScripts(
+                  ctx.transaction,
+                  ctx.resolvedUtxos.utxos
+                )
+                .left
+                .map(_ => ScriptResolutionError(step))
             _ <-
                 if resolvedScripts.map(_.scriptHash).contains(scriptHash)
                 then pure0(())
                 else
-                    liftF0(
-                      Left(
-                        AttachedScriptNotFound(scriptHash, step)
-                      )
+                    Left(
+                      AttachedScriptNotFound(scriptHash, step)
                     )
         } yield ()
 
@@ -1245,14 +1192,10 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         input: TransactionInput,
         step: TransactionBuilderStep,
     ): Result[Unit] =
-        for {
-            state <- get0
-            _ <-
-                if (state.transaction.body.value.inputs.toSet ++ state.transaction.body.value.referenceInputs.toSet)
-                        .contains(input)
-                then liftF0(Left(InputAlreadyExists(input, step)))
-                else pure0(())
-        } yield ()
+        if (ctx.transaction.body.value.inputs.toSet ++ ctx.transaction.body.value.referenceInputs.toSet)
+                .contains(input)
+        then Left(InputAlreadyExists(input, step))
+        else pure0(())
 
     private def usePlutusScript(
         plutusScript: ScriptSource[PlutusScript],
@@ -1323,19 +1266,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
       */
     private def assertNetworkId(addr: Address, step: TransactionBuilderStep): Result[Unit] =
         for {
-            context: Context <- get0
             addrNetwork <- addr.getNetwork match
                 case Some(network) => pure0(network)
                 case None =>
-                    liftF0(
-                      Left(ByronAddressesNotSupported(addr, step))
-                    )
+                    Left(ByronAddressesNotSupported(addr, step))
             _ <-
-                if context.network != addrNetwork
-                then
-                    liftF0(
-                      Left(WrongNetworkId(addr, step))
-                    )
+                if ctx.network != addrNetwork
+                then Left(WrongNetworkId(addr, step))
                 else pure0(())
         } yield ()
 }
