@@ -6,9 +6,12 @@ import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
+import scalus.cardano.ledger.utils.TxBalance
 import scalus.cardano.node.Provider
 
 import java.time.Instant
+import scala.collection.immutable.SortedMap
+import scala.collection.mutable
 
 case class TxBuilder(
     env: Environment,
@@ -423,6 +426,276 @@ case class TxBuilder(
         providerOpt.getOrElse(
           throw new IllegalStateException("Provider not set. Call provider() first.")
         )
+
+    def complete(provider: Provider, sponsor: Address): TxBuilder = {
+        // Extract transaction fields from current steps
+        val (inputs, outputs, mint, certificates) = extractFieldsFromSteps(steps)
+
+        // Build a draft transaction to get an initial fee estimate
+        val draftSteps = steps :+ TransactionBuilderStep.Fee(Coin(0)) // keep the fee zero at first
+        val draftContext = TransactionBuilder
+            .build(env.network, draftSteps)
+            .getOrElse(
+              throw new RuntimeException("Failed to build draft transaction for fee calculation")
+            )
+
+        val feeEstimate = estimateFee(draftContext.transaction)
+
+        val consumed = TxBalance
+            .consumedFromFields(
+              inputs.keySet,
+              mint,
+              None,
+              certificates,
+              inputs,
+              CertState.empty,
+              env.protocolParams
+            )
+            .getOrElse(Value.zero)
+
+        val produced = TxBalance.producedFromFields(
+          outputs,
+          mint,
+          feeEstimate,
+          certificates,
+          None
+        )
+
+        val gap = produced - consumed
+
+        val additionalSteps = if gap.coin.value > 0 || gap.assets.assets.nonEmpty then {
+            selectAdditionalUtxos(provider, sponsor, gap)
+        } else Seq.empty
+
+        val additionalInputs = additionalSteps.collect {
+            case TransactionBuilderStep.Spend(utxo, _) =>
+                utxo
+        }
+
+        val tokensFromAdditionalInputs = additionalInputs
+            .map(_.output.value.assets)
+            .foldLeft(MultiAsset.empty)(_ + _)
+
+        val tokenSurplus = tokensFromAdditionalInputs - gap.assets
+
+        val tokenChangeStep = if tokenSurplus.assets.nonEmpty then {
+            Seq(
+              TransactionBuilderStep.Send(
+                TransactionOutput(sponsor, Value(Coin.zero, tokenSurplus))
+              )
+            )
+        } else Seq.empty
+
+        val collateralSteps = if needsCollateral(steps) && !hasCollateral(steps) then {
+            val draftWithInputs = steps ++ additionalSteps
+            val contextWithInputs = TransactionBuilder
+                .build(env.network, draftWithInputs)
+                .getOrElse(
+                  throw new RuntimeException(
+                    "Failed to build draft transaction for collateral calculation"
+                  )
+                )
+
+            val requiredCollateral = estimateRequiredCollateral(
+              contextWithInputs.transaction,
+              feeEstimate
+            )
+            selectCollateral(provider, sponsor, requiredCollateral)
+        } else Seq.empty
+
+        copy(
+          steps = steps ++ additionalSteps ++ tokenChangeStep ++ collateralSteps
+        ).changeTo(sponsor)
+    }
+
+    private def estimateFee(tx: Transaction): Coin = {
+        val txSize = tx.toCbor.length
+        val minFeeA = env.protocolParams.txFeePerByte
+        val minFeeB = env.protocolParams.txFeeFixed
+        Coin(minFeeA * txSize + minFeeB)
+    }
+
+    private def estimateRequiredCollateral(tx: Transaction, fee: Coin): Coin = {
+        val collateralPercentage = env.protocolParams.collateralPercentage
+        val requiredCollateral = (fee.value * collateralPercentage) / 100
+        Coin(requiredCollateral)
+    }
+
+    private def extractFieldsFromSteps(
+        steps: Seq[TransactionBuilderStep]
+    ): (Utxos, Seq[TransactionOutput], Option[MultiAsset], Seq[Certificate]) = {
+        val inputs = steps
+            .collect {
+                case TransactionBuilderStep.Spend(utxo, _)                          => utxo
+                case TransactionBuilderStep.SpendWithDelayedRedeemer(utxo, _, _, _) => utxo
+            }
+            .map(_.toTuple)
+            .toMap
+
+        val outputs = steps.collect { case TransactionBuilderStep.Send(out) =>
+            out
+        }
+
+        // Aggregate mints/burns
+        val mintMap = steps
+            .collect { case TransactionBuilderStep.Mint(policyId, assetName, amount, _) =>
+                (policyId, assetName, amount)
+            }
+            .groupBy(_._1) // Group by policy ID
+            .map { case (policyId, mints) =>
+                val assetMap = mints.map { case (_, assetName, amount) =>
+                    assetName -> amount
+                }.toMap
+                policyId -> SortedMap.from(assetMap)
+            }
+
+        val mint =
+            if mintMap.nonEmpty then Some(MultiAsset(SortedMap.from(mintMap)))
+            else None
+
+        val certificates = steps.collect { case TransactionBuilderStep.IssueCertificate(cert, _) =>
+            cert
+        }
+
+        (inputs, outputs, mint, certificates)
+    }
+
+    /** Selects additional UTXOs from provider to cover the value gap. */
+    private def selectAdditionalUtxos(
+        provider: Provider,
+        address: Address,
+        gap: Value
+    ): Seq[TransactionBuilderStep] = {
+        val selectedUtxos = mutable.Map.empty[TransactionInput, TransactionOutput]
+
+        // Cover the token gap first
+        if gap.assets.assets.nonEmpty then {
+            val tokenUtxos =
+                selectUtxosWithTokens(provider, address, gap.assets, selectedUtxos.toMap.keySet)
+            selectedUtxos.addAll(tokenUtxos)
+        }
+
+        // Cover the coin gap that's left after covering the token gap
+        if gap.coin.value > 0 then {
+            val alreadySelectedAda = selectedUtxos.values.map(_.value.coin.value).sum
+            val remainingAdaNeeded = gap.coin.value - alreadySelectedAda
+
+            if remainingAdaNeeded > 0 then {
+                val adaUtxos = provider
+                    .findUtxos(
+                      address = address,
+                      minRequiredTotalAmount = Some(Coin(remainingAdaNeeded))
+                    )
+                    .getOrElse(
+                      throw new RuntimeException(
+                        s"Insufficient ADA: need $remainingAdaNeeded more lovelace (${gap.coin.value} total, $alreadySelectedAda from token UTXOs), but provider couldn't find enough UTXOs at address $address"
+                      )
+                    )
+                    .filterNot { case (input, _) => selectedUtxos.contains(input) }
+                selectedUtxos.addAll(adaUtxos)
+            }
+        }
+
+        selectedUtxos.map { case (input, output) =>
+            TransactionBuilderStep.Spend(Utxo(input, output), PubKeyWitness)
+        }.toSeq
+    }
+
+    /** Selects UTXOs that contain the required native tokens */
+    private def selectUtxosWithTokens(
+        provider: Provider,
+        address: Address,
+        requiredAssets: MultiAsset,
+        excludeInputs: Set[TransactionInput]
+    ): Map[TransactionInput, TransactionOutput] = {
+        // Query all UTXOs: might be expensive, think about a better query
+        val allUtxos = provider
+            .findUtxos(address = address)
+            .getOrElse(Map.empty)
+            .filterNot { case (input, _) => excludeInputs.contains(input) }
+
+        var selectedUtxos = Map.empty[TransactionInput, TransactionOutput]
+
+        // For each required token, find UTXOs that contain it
+        requiredAssets.assets.foreach { case (policyId, assets) =>
+            assets.foreach { case (assetName, requiredAmount) =>
+                if requiredAmount > 0 then {
+                    var collected = 0L
+
+                    allUtxos.foreach { case (input, output) =>
+                        if collected < requiredAmount && !selectedUtxos.contains(input) then {
+                            output.value.assets.assets
+                                .get(policyId)
+                                .flatMap(_.get(assetName))
+                                .foreach { amount =>
+                                    selectedUtxos = selectedUtxos + (input -> output)
+                                    collected += amount
+                                }
+                        }
+                    }
+
+                    if collected < requiredAmount then {
+                        throw new RuntimeException(
+                          s"Insufficient tokens: need $requiredAmount of ${policyId.toHex}.${assetName.toString}, found only $collected"
+                        )
+                    }
+                }
+            }
+        }
+
+        selectedUtxos
+    }
+
+    /** Selects a pure ADA UTXO for collateral */
+    private def selectCollateral(
+        provider: Provider,
+        address: Address,
+        requiredAmount: Coin
+    ): Seq[TransactionBuilderStep] = {
+        val collateralUtxo = provider
+            .findUtxo(
+              address = address,
+              minAmount = Some(requiredAmount)
+            )
+            .getOrElse(
+              throw new RuntimeException(
+                s"Could not find suitable collateral UTXO (need at least ${requiredAmount.value} lovelace) at address $address"
+              )
+            )
+
+        if collateralUtxo.output.value.assets.assets.nonEmpty then {
+            throw new RuntimeException(
+              "Collateral UTXO must contain only ADA, no assets"
+            )
+        }
+
+        Seq(TransactionBuilderStep.AddCollateral(collateralUtxo))
+    }
+
+    /** Checks if any step requires collateral (script spending or minting) */
+    private def needsCollateral(steps: Seq[TransactionBuilderStep]): Boolean = {
+        steps.exists {
+            case TransactionBuilderStep.Spend(_, witness) =>
+                witness match {
+                    case _: ThreeArgumentPlutusScriptWitness => true
+                    case _                                   => false
+                }
+            case TransactionBuilderStep.SpendWithDelayedRedeemer(_, _, _, _) => true
+            case TransactionBuilderStep.Mint(_, _, _, witness) =>
+                witness match {
+                    case _: TwoArgumentPlutusScriptWitness => true
+                    case _                                 => false
+                }
+            case _ => false
+        }
+    }
+
+    private def hasCollateral(steps: Seq[TransactionBuilderStep]): Boolean = {
+        steps.exists {
+            case TransactionBuilderStep.AddCollateral(_) => true
+            case _                                       => false
+        }
+    }
 
     private def extractScriptHash(utxo: Utxo): ScriptHash = {
         utxo.output.address match {

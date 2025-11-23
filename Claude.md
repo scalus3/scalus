@@ -99,6 +99,8 @@ sbtn docs/mdoc
 - **`scalus-testkit/`** - Testing utilities and property-based testing support
 
 - **`scalus-cardano-ledger/`** - Cardano ledger rules and transaction builder
+    - Low-level transaction building capabilities split between `TransactionBuilder` -- a step-based deterministic library that assembles valid transaction, and `LowLeveTxBuiler` -- a couple of functions that handle leftover ADA (change)
+    - High level transaction building API in `TxBuilder`, which heavily utilizes the `TransactionBuilder` and aims to provide an easy-to-use API, while maintaining validity and correctness
 
 - **`bloxbean-cardano-client-lib/`** - Integration with Bloxbean Cardano Client Library
 
