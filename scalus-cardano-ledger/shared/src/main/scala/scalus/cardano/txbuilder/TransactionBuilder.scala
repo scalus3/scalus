@@ -554,8 +554,7 @@ object TransactionBuilder:
 
         val stepsProcessor = new TransactionStepsProcessor(ctx)
         // context at either the time of computation termination -- either success or first error
-        val result = stepsProcessor.applySteps(steps)
-        val finalContext = stepsProcessor.ctx
+        val (finalContext, result) = stepsProcessor.applySteps(steps)
         result match {
             case Left(error) =>
                 val buildError = error match {

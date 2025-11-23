@@ -33,7 +33,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         either: Either[StepError | RedeemerIndexingInternalError, A]
     ): Result[A] = either
 
-    def ctx: Context = _ctx
+    private def ctx: Context = _ctx
 
     private def modify0(f: Context => Context): Result[Unit] =
         _ctx = f(ctx)
@@ -42,8 +42,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def get0: Result[Context] =
         pure0(ctx)
 
-    def applySteps(steps: Seq[TransactionBuilderStep]): Result[Unit] = {
-        for {
+    def applySteps(steps: Seq[TransactionBuilderStep]): (Context, Result[Unit]) = {
+        val result = for {
             _ <- processSteps(steps)
             ctx0 <- get0
             res <- liftF0(
@@ -78,6 +78,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     pure0(())
                 }
         } yield ()
+        _ctx -> result
     }
 
     private def processSteps(steps: Seq[TransactionBuilderStep]): Result[Unit] =
