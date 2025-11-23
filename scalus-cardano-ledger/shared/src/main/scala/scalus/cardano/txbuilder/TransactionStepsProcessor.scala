@@ -31,9 +31,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def ctx: Context = _ctx
 
-    private def modify0(f: Context => Context): Result[Unit] =
+    private def modify0(f: Context => Context): Unit =
         _ctx = f(ctx)
-        pure0(())
 
     def applySteps(steps: Seq[TransactionBuilderStep]): (Context, Result[Unit]) = {
         val result = for {
@@ -48,19 +47,22 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 .left
                 .map(detachedRedeemer => RedeemerIndexingInternalError(detachedRedeemer, steps))
             // Replace the transaction in the context, keeping the rest
-            _ <- modify0(Focus[Context](_.transaction).replace(res))
+            _ = modify0(Focus[Context](_.transaction).replace(res))
 
             // Replace delayed redeemers if any exist
             _ <-
                 if ctx.delayedRedeemerSpecs.nonEmpty then {
-                    for {
-                        updatedRedeemers <- replaceDelayedRedeemers(
-                          ctx.redeemers,
-                          ctx.delayedRedeemerSpecs,
-                          ctx.transaction
-                        )
-                        _ <- modify0(_.replaceRedeemers(updatedRedeemers))
-                    } yield ()
+                    val updatedRedeemersResult = replaceDelayedRedeemers(
+                      ctx.redeemers,
+                      ctx.delayedRedeemerSpecs,
+                      ctx.transaction
+                    )
+                    updatedRedeemersResult match {
+                        case Right(updatedRedeemers) =>
+                            modify0(_.replaceRedeemers(updatedRedeemers))
+                            pure0(())
+                        case Left(err) => Left(err)
+                    }
                 } else {
                     pure0(())
                 }
@@ -88,7 +90,9 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     step = step
                   )
                 )
-            case Some(utxos) => modify0(Focus[Context](_.resolvedUtxos).replace(utxos))
+            case Some(utxos) =>
+                modify0(Focus[Context](_.resolvedUtxos).replace(utxos))
+                pure0(())
         }
     }
 
@@ -186,7 +190,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             _ <- assertInputDoesNotAlreadyExist(utxo.input, spend)
 
             // Add input
-            _ <- modify0(
+            _ = modify0(
               unsafeCtxBodyL
                   .refocus(_.inputs)
                   .modify(inputs => TaggedSortedSet.from(appendDistinct(utxo.input, inputs.toSeq)))
@@ -233,7 +237,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           plutus.redeemer,
                           RedeemerPurpose.ForSpend(utxo.input)
                         )
-                        _ <- modify0(ctx =>
+                        _ = modify0(ctx =>
                             ctx.focus(_.redeemers)
                                 .modify(r => appendDistinct(detachedRedeemer, r))
                         )
@@ -285,6 +289,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                           )
                                       )
                                 )
+                                pure0(())
                             } else {
                                 Left(
                                   IncorrectDatumHash(utxo, providedDatum, datumHash, step)
@@ -301,7 +306,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useSend(send: TransactionBuilderStep.Send): Result[Unit] =
         for {
             _ <- assertNetworkId(send.output.address, send)
-            _ <- modify0(
+            _ = modify0(
               unsafeCtxBodyL
                   .refocus(_.outputs)
                   // Intentionally not using pushUnique: we can create multiple outputs of the same shape
@@ -331,19 +336,16 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             // Since we allow monoidal mints, only the final redeemer is kept. We have to remove the old redeemer
             // before adding the new one, as well as if the monoidal sum of the amounts of this mint
             // and the existing mint cause the policyId entry to be removed from the mint map.
-            removeRedeemer: Result[Unit] =
-                modify0(
-                  Focus[Context](_.redeemers).modify(
-                    _.filter(detachedRedeemer =>
-                        detachedRedeemer.purpose match {
-                            case RedeemerPurpose.ForMint(hash) => hash != scriptHash
-                            case _                             => true
-                        }
-                    )
-                  )
+            _ = modify0(
+              Focus[Context](_.redeemers).modify(
+                _.filter(detachedRedeemer =>
+                    detachedRedeemer.purpose match {
+                        case RedeemerPurpose.ForMint(hash) => hash != scriptHash
+                        case _                             => true
+                    }
                 )
-
-            _ <- removeRedeemer
+              )
+            )
 
             // Common witness handling
             _ <- useNonSpendingWitness(
@@ -385,6 +387,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     // Above, we check that the amount != 0. Thus:
                     // Case (1, a) -- create an entirely new, non-empty map
                     replaceMint(Some(Mint(thisMint)))
+                    pure0(())
 
                 // If this is "Some", we know we have a non-empty mint map -- at least one policyId with at least 1
                 // asset.
@@ -404,6 +407,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                 )
                               )
                             )
+                            pure0(())
 
                         // There is a current entry for the script hash; thus, we need to look at the inner
                         // map to decide what to do.
@@ -418,6 +422,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                     val newOuterMap =
                                         existing.assets.updated(scriptHash, newInnerMap)
                                     replaceMint(Some(Mint(MultiAsset(newOuterMap))))
+                                    pure0(())
                                 }
                                 case Some(currentAmount) =>
                                     val newAmount: Long = currentAmount + amount
@@ -431,7 +436,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                     // from the outer map, and the corresponding redeemer from the Context
                                     then {
                                         val newOuterMap = existing.assets.removed(scriptHash)
-                                        val removeRedeemer = modify0(
+                                        val removeRedeemer: Unit = modify0(
                                           Focus[Context](_.redeemers).modify(
                                             _.filter(detachedRedeemer =>
                                                 detachedRedeemer.purpose match {
@@ -447,20 +452,16 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                         then {
                                             // The new outerMap is empty. Thus, we have to set the TxBody Mint field to None
                                             // and remove the redeemer from the context
-                                            for {
-                                                _ <- replaceMint(None)
-                                                _ <- removeRedeemer
-
-                                            } yield ()
-                                        } else
-                                            for {
-                                                // The new outer map is NOT empty. Thus we must only replace the current
-                                                // outer map with OUR outer map, and remove our redeemer
-                                                _ <- replaceMint(
-                                                  Some(Mint(MultiAsset(newOuterMap)))
-                                                )
-                                                _ <- removeRedeemer
-                                            } yield ()
+                                            replaceMint(None)
+                                            pure0(())
+                                        } else {
+                                            // The new outer map is NOT empty. Thus we must only replace the current
+                                            // outer map with OUR outer map, and remove our redeemer
+                                            replaceMint(
+                                              Some(Mint(MultiAsset(newOuterMap)))
+                                            )
+                                            pure0(())
+                                        }
                                     }
                                     // In this case, the new inner map is NOT empty. Thus, we only must replace
                                     // the outer map with the updated inner map.
@@ -468,6 +469,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                         val newOuterMap =
                                             existing.assets.updated(scriptHash, newInnerMap)
                                         replaceMint(Some(Mint(MultiAsset(newOuterMap))))
+                                        pure0(())
                                     }
                             }
                     }
@@ -501,7 +503,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         for {
             _ <- useSpend(TransactionBuilderStep.Spend(utxo, witness))
-            _ <- modify0(_.addDelayedRedeemer(spec))
+            _ = modify0(_.addDelayedRedeemer(spec))
         } yield ()
     }
 
@@ -516,7 +518,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             _ <- assertNetworkId(referenceOutput.utxo.output.address, referenceOutput)
             _ <- assertInputDoesNotAlreadyExist(referenceOutput.utxo.input, referenceOutput)
 
-            _ <- modify0(
+            _ = modify0(
               // Add the referenced utxo id to the tx body
               unsafeCtxBodyL
                   .refocus(_.referenceInputs)
@@ -543,6 +545,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                       .refocus(_.fee)
                       .replace(step.fee)
                 )
+                pure0(())
             case nonZero => Left(FeeAlreadySet(nonZero, step))
         }
     }
@@ -564,6 +567,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                       .refocus(_.validityStartSlot)
                       .replace(Some(step.slot))
                 )
+                pure0(())
         }
     }
 
@@ -584,6 +588,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                       .refocus(_.ttl)
                       .replace(Some(step.slot))
                 )
+                pure0(())
         }
     }
 
@@ -594,21 +599,20 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useAddCollateral(
         addCollateral: TransactionBuilderStep.AddCollateral
     ): Result[Unit] =
-        for {
+        for
             _ <- assertNetworkId(addCollateral.utxo.output.address, addCollateral)
             _ <- assertAdaOnlyPubkeyUtxo(addCollateral.utxo, addCollateral)
             _ <- addResolvedUtxo(addCollateral.utxo, addCollateral)
-            _ <- modify0(
-              // Add the collateral utxo to the tx body
-              unsafeCtxBodyL
-                  .refocus(_.collateralInputs)
-                  .modify(inputs =>
-                      TaggedSortedSet.from(
-                        appendDistinct(addCollateral.utxo.input, inputs.toSeq)
-                      )
+        yield modify0(
+          // Add the collateral utxo to the tx body
+          unsafeCtxBodyL
+              .refocus(_.collateralInputs)
+              .modify(inputs =>
+                  TaggedSortedSet.from(
+                    appendDistinct(addCollateral.utxo.input, inputs.toSeq)
                   )
-            )
-        } yield ()
+              )
+        )
 
     /** Ensure that the output is a pubkey output containing only ada. */
     private def assertAdaOnlyPubkeyUtxo(
@@ -639,21 +643,21 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData
     ): Result[Unit] = {
         val oldData = ctx.transaction.auxiliaryData
-
         val newData = modifyAuxiliaryData.f(oldData.map(_.value)).map(KeepRaw(_))
-        for {
-            _ <- modify0(
-              Focus[Context](_.transaction)
-                  .refocus(_.auxiliaryData)
-                  // Fixed for Scalus 0.12.1+ - auxiliaryData is now wrapped in KeepRaw
-                  .replace(newData)
-            )
 
-            newHash = newData
-                .map(someData => platform.blake2b_256(ByteString.unsafeFromArray(someData.raw)))
-                .map(AuxiliaryDataHash.fromByteString)
-            _ <- modify0(unsafeCtxBodyL.refocus(_.auxiliaryDataHash).replace(newHash))
-        } yield ()
+        modify0(
+          Focus[Context](_.transaction)
+              .refocus(_.auxiliaryData)
+              // Fixed for Scalus 0.12.1+ - auxiliaryData is now wrapped in KeepRaw
+              .replace(newData)
+        )
+
+        val newHash = newData
+            .map(someData => platform.blake2b_256(ByteString.unsafeFromArray(someData.raw)))
+            .map(AuxiliaryDataHash.fromByteString)
+
+        modify0(unsafeCtxBodyL.refocus(_.auxiliaryDataHash).replace(newHash))
+        pure0(())
     }
 
     // -------------------------------------------------------------------------
@@ -663,22 +667,20 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useIssueCertificate(
         issueCertificate: TransactionBuilderStep.IssueCertificate
     ): Result[Unit] =
-        for {
-            _ <- modify0(
-              unsafeCtxBodyL
-                  .refocus(_.certificates)
-                  .modify(certificates =>
-                      TaggedOrderedStrictSet.from(
-                        appendDistinct(issueCertificate.cert, certificates.toSeq)
-                      )
+        modify0(
+          unsafeCtxBodyL
+              .refocus(_.certificates)
+              .modify(certificates =>
+                  TaggedOrderedStrictSet.from(
+                    appendDistinct(issueCertificate.cert, certificates.toSeq)
                   )
-            )
-            _ <- useCertificateWitness(
-              issueCertificate.cert,
-              issueCertificate.witness,
-              issueCertificate
-            )
-        } yield ()
+              )
+        )
+        useCertificateWitness(
+          issueCertificate.cert,
+          issueCertificate.witness,
+          issueCertificate
+        )
 
     def useCertificateWitness(
         cert: Certificate,
@@ -826,31 +828,29 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 RewardAccount(stakeAddress)
         }
 
-        for {
-            _ <- modify0(
-              unsafeCtxBodyL
-                  .refocus(_.withdrawals)
-                  .modify(withdrawals => {
-                      val currentWithdrawals =
-                          withdrawals.map(_.withdrawals).getOrElse(Map.empty)
-                      Some(
-                        Withdrawals(
-                          SortedMap
-                              .from(
-                                currentWithdrawals + (rewardAccount -> withdrawRewards.amount)
-                              )
-                        )
-                      )
-                  })
-            )
+        modify0(
+          unsafeCtxBodyL
+              .refocus(_.withdrawals)
+              .modify(withdrawals => {
+                  val currentWithdrawals =
+                      withdrawals.map(_.withdrawals).getOrElse(Map.empty)
+                  Some(
+                    Withdrawals(
+                      SortedMap
+                          .from(
+                            currentWithdrawals + (rewardAccount -> withdrawRewards.amount)
+                          )
+                    )
+                  )
+              })
+        )
 
-            _ <- useNonSpendingWitness(
-              Operation.Withdraw(rewardAccount.address),
-              withdrawRewards.stakeCredential.credential,
-              withdrawRewards.witness,
-              withdrawRewards
-            )
-        } yield ()
+        useNonSpendingWitness(
+          Operation.Withdraw(rewardAccount.address),
+          withdrawRewards.stakeCredential.credential,
+          withdrawRewards.witness,
+          withdrawRewards
+        )
     }
 
     // -------------------------------------------------------------------------
@@ -860,36 +860,33 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useSubmitProposal(
         submitProposal: TransactionBuilderStep.SubmitProposal
     ): Result[Unit] =
-        for {
-            _ <- modify0(
-              unsafeCtxBodyL
-                  .refocus(_.proposalProcedures)
-                  .modify(proposals =>
-                      TaggedOrderedSet.from(
-                        appendDistinct(submitProposal.proposal, proposals.toSeq)
-                      )
+        modify0(
+          unsafeCtxBodyL
+              .refocus(_.proposalProcedures)
+              .modify(proposals =>
+                  TaggedOrderedSet.from(
+                    appendDistinct(submitProposal.proposal, proposals.toSeq)
                   )
-            )
-            _ <- {
-                def getPolicyHash(govAction: GovAction): Option[ScriptHash] = govAction match {
-                    case GovAction.ParameterChange(_, _, policyHash)  => policyHash
-                    case GovAction.TreasuryWithdrawals(_, policyHash) => policyHash
-                    case _                                            => None
-                }
+              )
+        )
 
-                getPolicyHash(submitProposal.proposal.govAction) match {
-                    case None =>
-                        pure0(())
-                    case Some(policyHash) =>
-                        useNonSpendingWitness(
-                          Operation.Proposing(submitProposal.proposal),
-                          Credential.ScriptHash(policyHash),
-                          submitProposal.witness,
-                          submitProposal
-                        )
-                }
-            }
-        } yield ()
+        def getPolicyHash(govAction: GovAction): Option[ScriptHash] = govAction match {
+            case GovAction.ParameterChange(_, _, policyHash)  => policyHash
+            case GovAction.TreasuryWithdrawals(_, policyHash) => policyHash
+            case _                                            => None
+        }
+
+        getPolicyHash(submitProposal.proposal.govAction) match {
+            case None =>
+                pure0(())
+            case Some(policyHash) =>
+                useNonSpendingWitness(
+                  Operation.Proposing(submitProposal.proposal),
+                  Credential.ScriptHash(policyHash),
+                  submitProposal.witness,
+                  submitProposal
+                )
+        }
 
     // -------------------------------------------------------------------------
     // SubmitVotingProcedure step
@@ -898,71 +895,70 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useSubmitVotingProcedure(
         submitVotingProcedure: TransactionBuilderStep.SubmitVotingProcedure
     ): Result[Unit] =
-        for {
-            _ <- modify0(
-              unsafeCtxBodyL
-                  .refocus(_.votingProcedures)
-                  .modify(procedures => {
-                      val currentProcedures = procedures
-                          .map(_.procedures)
-                          .getOrElse(
-                            SortedMap.empty[Voter, SortedMap[GovActionId, VotingProcedure]]
-                          )
-                      Some(
-                        VotingProcedures(
-                          currentProcedures + (submitVotingProcedure.voter -> SortedMap
-                              .from(submitVotingProcedure.votes))
-                        )
+        modify0(
+          unsafeCtxBodyL
+              .refocus(_.votingProcedures)
+              .modify(procedures => {
+                  val currentProcedures = procedures
+                      .map(_.procedures)
+                      .getOrElse(
+                        SortedMap.empty[Voter, SortedMap[GovActionId, VotingProcedure]]
                       )
-                  })
+                  Some(
+                    VotingProcedures(
+                      currentProcedures + (submitVotingProcedure.voter -> SortedMap
+                          .from(submitVotingProcedure.votes))
+                    )
+                  )
+              })
+        )
+
+        for {
+            cred <- submitVotingProcedure.voter match {
+                case Voter.StakingPoolKey(poolKeyHash) =>
+                    val credential = Credential.KeyHash(poolKeyHash)
+                    submitVotingProcedure.witness match {
+                        case _: PubKeyWitness.type => pure0(credential)
+                        case witness: TwoArgumentPlutusScriptWitness =>
+                            Left(
+                              UnneededSpoVoteWitness(
+                                credential,
+                                witness,
+                                submitVotingProcedure
+                              )
+                            )
+                        case witness: NativeScriptWitness =>
+                            Left(
+                              UnneededSpoVoteWitness(
+                                credential,
+                                witness,
+                                submitVotingProcedure
+                              )
+                            )
+                    }
+                case Voter.ConstitutionalCommitteeHotKey(credential) =>
+                    pure0(
+                      Credential.KeyHash(credential)
+                    )
+                case Voter.ConstitutionalCommitteeHotScript(scriptHash) =>
+                    pure0(
+                      Credential.ScriptHash(scriptHash)
+                    )
+                case Voter.DRepKey(credential) =>
+                    pure0(
+                      Credential.KeyHash(credential)
+                    )
+                case Voter.DRepScript(scriptHash) =>
+                    pure0(
+                      Credential.ScriptHash(scriptHash)
+                    )
+            }
+            _ <- useNonSpendingWitness(
+              Operation.Voting(submitVotingProcedure.voter),
+              cred,
+              submitVotingProcedure.witness,
+              submitVotingProcedure
             )
-            _ <- for {
-                cred <- submitVotingProcedure.voter match {
-                    case Voter.StakingPoolKey(poolKeyHash) =>
-                        val credential = Credential.KeyHash(poolKeyHash)
-                        submitVotingProcedure.witness match {
-                            case _: PubKeyWitness.type => pure0(credential)
-                            case witness: TwoArgumentPlutusScriptWitness =>
-                                Left(
-                                  UnneededSpoVoteWitness(
-                                    credential,
-                                    witness,
-                                    submitVotingProcedure
-                                  )
-                                )
-                            case witness: NativeScriptWitness =>
-                                Left(
-                                  UnneededSpoVoteWitness(
-                                    credential,
-                                    witness,
-                                    submitVotingProcedure
-                                  )
-                                )
-                        }
-                    case Voter.ConstitutionalCommitteeHotKey(credential) =>
-                        pure0(
-                          Credential.KeyHash(credential)
-                        )
-                    case Voter.ConstitutionalCommitteeHotScript(scriptHash) =>
-                        pure0(
-                          Credential.ScriptHash(scriptHash)
-                        )
-                    case Voter.DRepKey(credential) =>
-                        pure0(
-                          Credential.KeyHash(credential)
-                        )
-                    case Voter.DRepScript(scriptHash) =>
-                        pure0(
-                          Credential.ScriptHash(scriptHash)
-                        )
-                }
-                _ <- useNonSpendingWitness(
-                  Operation.Voting(submitVotingProcedure.voter),
-                  cred,
-                  submitVotingProcedure.witness,
-                  submitVotingProcedure
-                )
-            } yield ()
         } yield ()
 
     // -------------------------------------------------------------------------
@@ -1020,32 +1016,27 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           step
                         )
                         _ <- usePlutusScript(witness.scriptSource, witness.additionalSigners)
-                        _ <- {
-                            val detachedRedeemer = DetachedRedeemer(
-                              datum = witness.redeemer,
-                              purpose = credAction match {
-                                  case Operation.Withdraw(stakeAddress) =>
-                                      RedeemerPurpose.ForReward(
-                                        RewardAccount(stakeAddress)
-                                      )
-                                  case Operation.CertificateOperation(cert) =>
-                                      RedeemerPurpose.ForCert(cert)
-                                  case Operation.Minting(scriptHash) =>
-                                      RedeemerPurpose.ForMint(scriptHash)
-                                  case Operation.Voting(voter) =>
-                                      RedeemerPurpose.ForVote(voter)
-                                  case Operation.Proposing(proposal) =>
-                                      RedeemerPurpose.ForPropose(proposal)
-                              }
-                            )
-                            modify0(ctx =>
-                                ctx.focus(_.redeemers)
-                                    .modify(redeemers =>
-                                        appendDistinct(detachedRedeemer, redeemers)
-                                    )
-                            )
-                        }
-                    } yield ()
+                    } yield {
+                        val detachedRedeemer = DetachedRedeemer(
+                          datum = witness.redeemer,
+                          purpose = credAction match {
+                              case Operation.Withdraw(stakeAddress) =>
+                                  RedeemerPurpose.ForReward(RewardAccount(stakeAddress))
+                              case Operation.CertificateOperation(cert) =>
+                                  RedeemerPurpose.ForCert(cert)
+                              case Operation.Minting(scriptHash) =>
+                                  RedeemerPurpose.ForMint(scriptHash)
+                              case Operation.Voting(voter) =>
+                                  RedeemerPurpose.ForVote(voter)
+                              case Operation.Proposing(proposal) =>
+                                  RedeemerPurpose.ForPropose(proposal)
+                          }
+                        )
+                        modify0(ctx =>
+                            ctx.focus(_.redeemers)
+                                .modify(redeemers => appendDistinct(detachedRedeemer, redeemers))
+                        )
+                    }
             }
         } yield ()
 
@@ -1158,33 +1149,32 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ScriptSource
     // -------------------------------------------------------------------------
 
-    private def usePubKeyWitness(expectedSigner: ExpectedSigner): Result[Unit] =
+    private def usePubKeyWitness(expectedSigner: ExpectedSigner): Result[Unit] = {
         modify0(Focus[Context](_.expectedSigners).modify(_ + expectedSigner))
+        pure0(())
+    }
 
     private def useNativeScript(
         nativeScript: ScriptSource[Script.Native],
         additionalSigners: Set[ExpectedSigner]
     ): Result[Unit] = {
-        for {
-            // Regardless of how the witness is passed, add the additional signers
-            _ <- modify0(
-              Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
-            )
+        // Regardless of how the witness is passed, add the additional signers
+        modify0(
+          Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
+        )
 
-            _ <- nativeScript match {
-                case ScriptSource.NativeScriptValue(ns) =>
-                    modify0(
-                      // Add the native script to the witness set
-                      unsafeCtxWitnessL
-                          .refocus(_.nativeScripts)
-                          .modify(s =>
-                              TaggedSortedMap.from(appendDistinct(ns, s.toMap.values.toSeq))
-                          )
-                    )
-                // Script should already be attached, see [[assertAttachedScriptExists]]
-                case ScriptSource.NativeScriptAttached => pure0(())
-            }
-        } yield ()
+        nativeScript match {
+            case ScriptSource.NativeScriptValue(ns) =>
+                modify0(
+                  // Add the native script to the witness set
+                  unsafeCtxWitnessL
+                      .refocus(_.nativeScripts)
+                      .modify(s => TaggedSortedMap.from(appendDistinct(ns, s.toMap.values.toSeq)))
+                )
+            // Script should already be attached, see [[assertAttachedScriptExists]]
+            case ScriptSource.NativeScriptAttached => ()
+        }
+        pure0(())
     }
 
     /** Returns Left if the input already exists in txBody.inputs or txBody.refInputs */
@@ -1200,63 +1190,63 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def usePlutusScript(
         plutusScript: ScriptSource[PlutusScript],
         additionalSigners: Set[ExpectedSigner]
-    ): Result[Unit] =
-        for {
-            // Add script's additional signers to txBody.requiredSigners
-            _ <- modify0(
-              (Focus[Context](_.transaction) >>> txBodyL)
-                  .refocus(_.requiredSigners)
-                  .modify((s: TaggedSortedSet[AddrKeyHash]) =>
-                      TaggedSortedSet.from(
-                        s.toSet ++ additionalSigners.map(_.hash)
-                      )
+    ): Result[Unit] = {
+        // Add script's additional signers to txBody.requiredSigners
+        modify0(
+          (Focus[Context](_.transaction) >>> txBodyL)
+              .refocus(_.requiredSigners)
+              .modify((s: TaggedSortedSet[AddrKeyHash]) =>
+                  TaggedSortedSet.from(
+                    s.toSet ++ additionalSigners.map(_.hash)
                   )
-            )
+              )
+        )
 
-            // Add to expected signers
-            _ <- modify0(
-              Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
-            )
+        // Add to expected signers
+        modify0(
+          Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
+        )
 
-            _ <- plutusScript match {
-                case ScriptSource.PlutusScriptValue(ps: PlutusScript) =>
-                    // Add the script value to the appropriate field
-                    ps match {
-                        case v1: Script.PlutusV1 =>
-                            modify0(
-                              unsafeCtxWitnessL
-                                  .refocus(_.plutusV1Scripts)
-                                  .modify(s =>
-                                      TaggedSortedStrictMap.from(
-                                        appendDistinct(v1, s.toMap.values.toSeq)
-                                      )
+        plutusScript match {
+            case ScriptSource.PlutusScriptValue(ps: PlutusScript) =>
+                // Add the script value to the appropriate field
+                ps match {
+                    case v1: Script.PlutusV1 =>
+                        modify0(
+                          unsafeCtxWitnessL
+                              .refocus(_.plutusV1Scripts)
+                              .modify(s =>
+                                  TaggedSortedStrictMap.from(
+                                    appendDistinct(v1, s.toMap.values.toSeq)
                                   )
-                            )
-                        case v2: Script.PlutusV2 =>
-                            modify0(
-                              unsafeCtxWitnessL
-                                  .refocus(_.plutusV2Scripts)
-                                  .modify(s =>
-                                      TaggedSortedStrictMap.from(
-                                        appendDistinct(v2, s.toMap.values.toSeq)
-                                      )
+                              )
+                        )
+                    case v2: Script.PlutusV2 =>
+                        modify0(
+                          unsafeCtxWitnessL
+                              .refocus(_.plutusV2Scripts)
+                              .modify(s =>
+                                  TaggedSortedStrictMap.from(
+                                    appendDistinct(v2, s.toMap.values.toSeq)
                                   )
-                            )
-                        case v3: Script.PlutusV3 =>
-                            modify0(
-                              unsafeCtxWitnessL
-                                  .refocus(_.plutusV3Scripts)
-                                  .modify(s =>
-                                      TaggedSortedStrictMap.from(
-                                        appendDistinct(v3, s.toMap.values.toSeq)
-                                      )
+                              )
+                        )
+                    case v3: Script.PlutusV3 =>
+                        modify0(
+                          unsafeCtxWitnessL
+                              .refocus(_.plutusV3Scripts)
+                              .modify(s =>
+                                  TaggedSortedStrictMap.from(
+                                    appendDistinct(v3, s.toMap.values.toSeq)
                                   )
-                            )
-                    }
-                // Script should already be attached, see [[assertAttachedScriptExists]]
-                case ScriptSource.PlutusScriptAttached => pure0(())
-            }
-        } yield ()
+                              )
+                        )
+                }
+            // Script should already be attached, see [[assertAttachedScriptExists]]
+            case ScriptSource.PlutusScriptAttached => ()
+        }
+        pure0(())
+    }
 
     // -------------------------------------------------------------------------
     // Common assertions
