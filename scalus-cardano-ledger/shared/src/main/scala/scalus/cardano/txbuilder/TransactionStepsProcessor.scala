@@ -126,7 +126,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             useAddCollateral(addCollateral)
 
         case modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData =>
-            useModifyAuxiliaryData(modifyAuxiliaryData)
+            pure0(useModifyAuxiliaryData(modifyAuxiliaryData))
 
         case issueCertificate: TransactionBuilderStep.IssueCertificate =>
             useIssueCertificate(issueCertificate)
@@ -204,8 +204,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     for {
                         // Extract the key hash, erroring if not a Shelley PKH address
                         keyHash <- getPaymentVerificationKeyHash(utxo.output.address)
-                        _ <- usePubKeyWitness(ExpectedSigner(keyHash))
-                    } yield ()
+                    } yield usePubKeyWitness(ExpectedSigner(keyHash))
                 // Case 2: Native script-locked input
                 // Ensure the hash matches the witness, handle the output components,
                 // defer to witness handling
@@ -217,8 +216,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           native.scriptSource,
                           spend
                         )
-                        _ <- useNativeScript(native.scriptSource, native.additionalSigners)
-                    } yield ()
+                    } yield useNativeScript(native.scriptSource, native.additionalSigners)
 
                 // Case 3: Plutus script-locked input
                 // Ensure the hash matches the witness, handle the output components,
@@ -231,7 +229,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           plutus.scriptSource,
                           spend
                         )
-                        _ <- usePlutusScript(plutus.scriptSource, plutus.additionalSigners)
+                        _ = usePlutusScript(plutus.scriptSource, plutus.additionalSigners)
 
                         detachedRedeemer = DetachedRedeemer(
                           plutus.redeemer,
@@ -641,7 +639,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useModifyAuxiliaryData(
         modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData
-    ): Result[Unit] = {
+    ): Unit = {
         val oldData = ctx.transaction.auxiliaryData
         val newData = modifyAuxiliaryData.f(oldData.map(_.value)).map(KeepRaw(_))
 
@@ -657,7 +655,6 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             .map(AuxiliaryDataHash.fromByteString)
 
         modify0(unsafeCtxBodyL.refocus(_.auxiliaryDataHash).replace(newHash))
-        pure0(())
     }
 
     // -------------------------------------------------------------------------
@@ -985,7 +982,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         // Add key hash to expected signers
                         _ <- cred match {
                             case Credential.KeyHash(keyHash) =>
-                                usePubKeyWitness(ExpectedSigner(keyHash))
+                                pure0(usePubKeyWitness(ExpectedSigner(keyHash)))
                             case _ =>
                                 Left(
                                   WrongCredentialType(
@@ -1005,8 +1002,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           cred,
                           step
                         )
-                        _ <- useNativeScript(witness.scriptSource, witness.additionalSigners)
-                    } yield ()
+                    } yield useNativeScript(witness.scriptSource, witness.additionalSigners)
                 case witness: TwoArgumentPlutusScriptWitness =>
                     for {
                         _ <- assertCredentialMatchesWitness(
@@ -1015,8 +1011,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           cred,
                           step
                         )
-                        _ <- usePlutusScript(witness.scriptSource, witness.additionalSigners)
                     } yield {
+                        usePlutusScript(witness.scriptSource, witness.additionalSigners)
                         val detachedRedeemer = DetachedRedeemer(
                           datum = witness.redeemer,
                           purpose = credAction match {
@@ -1149,15 +1145,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ScriptSource
     // -------------------------------------------------------------------------
 
-    private def usePubKeyWitness(expectedSigner: ExpectedSigner): Result[Unit] = {
+    private def usePubKeyWitness(expectedSigner: ExpectedSigner): Unit =
         modify0(Focus[Context](_.expectedSigners).modify(_ + expectedSigner))
-        pure0(())
-    }
 
     private def useNativeScript(
         nativeScript: ScriptSource[Script.Native],
         additionalSigners: Set[ExpectedSigner]
-    ): Result[Unit] = {
+    ): Unit = {
         // Regardless of how the witness is passed, add the additional signers
         modify0(
           Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
@@ -1174,7 +1168,6 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             // Script should already be attached, see [[assertAttachedScriptExists]]
             case ScriptSource.NativeScriptAttached => ()
         }
-        pure0(())
     }
 
     /** Returns Left if the input already exists in txBody.inputs or txBody.refInputs */
@@ -1190,7 +1183,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def usePlutusScript(
         plutusScript: ScriptSource[PlutusScript],
         additionalSigners: Set[ExpectedSigner]
-    ): Result[Unit] = {
+    ): Unit = {
         // Add script's additional signers to txBody.requiredSigners
         modify0(
           (Focus[Context](_.transaction) >>> txBodyL)
@@ -1245,7 +1238,6 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             // Script should already be attached, see [[assertAttachedScriptExists]]
             case ScriptSource.PlutusScriptAttached => ()
         }
-        pure0(())
     }
 
     // -------------------------------------------------------------------------
