@@ -5,7 +5,7 @@ import cats.implicits.*
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
 import scalus.builtin.Builtins.{blake2b_224, serialiseData}
-import scalus.builtin.{ByteString, Data, platform}
+import scalus.builtin.{platform, ByteString, Data}
 import scalus.cardano.address
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
@@ -20,16 +20,29 @@ import scalus.|>
 import scala.collection.immutable.SortedMap
 
 private class TransactionStepsProcessor(private var _ctx: Context) {
+
+    /** Transaction builder monad. Retains context at point of failure, if there's any.
+      */
+    type Result[A] =
+        Either[StepError | RedeemerIndexingInternalError, A]
+
+    // Helpers to cut down on type signature noise
+    private def pure0[A](value: A): Result[A] = Right(value)
+
+    private def liftF0[A](
+        either: Either[StepError | RedeemerIndexingInternalError, A]
+    ): Result[A] = either
+
     def ctx: Context = _ctx
 
-    def modify0(f: Context => Context): BuilderM[Unit] =
+    private def modify0(f: Context => Context): Result[Unit] =
         _ctx = f(ctx)
         pure0(())
 
-    def get0: BuilderM[Context] =
+    private def get0: Result[Context] =
         pure0(ctx)
 
-    def applySteps(steps: Seq[TransactionBuilderStep]): BuilderM[Unit] = {
+    def applySteps(steps: Seq[TransactionBuilderStep]): Result[Unit] = {
         for {
             _ <- processSteps(steps)
             ctx0 <- get0
@@ -67,7 +80,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         } yield ()
     }
 
-    def processSteps(steps: Seq[TransactionBuilderStep]): BuilderM[Unit] =
+    private def processSteps(steps: Seq[TransactionBuilderStep]): Result[Unit] =
         steps.traverse_(processStep)
 
     // Tries to add the output to the resolved utxo set, throwing an error if
@@ -75,7 +88,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def addResolvedUtxo(
         utxo: Utxo,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             ctx <- get0
             mbNewUtxos = ctx.resolvedUtxos.addUtxo(utxo)
@@ -95,7 +108,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             }
         } yield ()
 
-    private def processStep(step: TransactionBuilderStep): BuilderM[Unit] = step match {
+    private def processStep(step: TransactionBuilderStep): Result[Unit] = step match {
 
         case spend: TransactionBuilderStep.Spend =>
             useSpend(spend)
@@ -150,13 +163,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
       */
     private def useSpend(
         spend: TransactionBuilderStep.Spend
-    ): BuilderM[Unit] = {
+    ): Result[Unit] = {
 
         val utxo = spend.utxo
         val witness = spend.witness
 
         // Extract the key hash, erroring if not a Shelley PKH address
-        def getPaymentVerificationKeyHash(address: Address): BuilderM[AddrKeyHash] =
+        def getPaymentVerificationKeyHash(address: Address): Result[AddrKeyHash] =
             liftF0(address match {
                 case sa: ShelleyAddress =>
                     sa.payment match {
@@ -169,7 +182,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 case _ => Left(WrongOutputType(WitnessKind.KeyBased, utxo, spend))
             })
 
-        def getPaymentScriptHash(address: Address): BuilderM[ScriptHash] =
+        def getPaymentScriptHash(address: Address): Result[ScriptHash] =
             liftF0(address match {
                 case sa: ShelleyAddress =>
                     sa.payment match {
@@ -251,7 +264,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         utxo: Utxo,
         datum: Datum,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- utxo.output.datumOption match {
                 case None =>
@@ -307,7 +320,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // Send step
     // -------------------------------------------------------------------------
 
-    private def useSend(send: TransactionBuilderStep.Send): BuilderM[Unit] =
+    private def useSend(send: TransactionBuilderStep.Send): Result[Unit] =
         for {
             _ <- assertNetworkId(send.output.address, send)
             _ <- modify0(
@@ -324,7 +337,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useMint(
         mint: TransactionBuilderStep.Mint
-    ): BuilderM[Unit] = {
+    ): Result[Unit] = {
         val scriptHash = mint.scriptHash
         val assetName = mint.assetName
         val amount = mint.amount
@@ -340,7 +353,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             // Since we allow monoidal mints, only the final redeemer is kept. We have to remove the old redeemer
             // before adding the new one, as well as if the monoidal sum of the amounts of this mint
             // and the existing mint cause the policyId entry to be removed from the mint map.
-            removeRedeemer: BuilderM[Unit] =
+            removeRedeemer: Result[Unit] =
                 modify0(
                   Focus[Context](_.redeemers).modify(
                     _.filter(detachedRedeemer =>
@@ -487,7 +500,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useSpendWithDelayedRedeemer(
         delayedSpend: TransactionBuilderStep.SpendWithDelayedRedeemer
-    ): BuilderM[Unit] = {
+    ): Result[Unit] = {
         val utxo = delayedSpend.utxo
         val validator = delayedSpend.validator
         val datum = delayedSpend.datum
@@ -521,7 +534,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useReferenceOutput(
         referenceOutput: TransactionBuilderStep.ReferenceOutput
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- assertNetworkId(referenceOutput.utxo.output.address, referenceOutput)
             _ <- assertInputDoesNotAlreadyExist(referenceOutput.utxo.input, referenceOutput)
@@ -544,7 +557,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // Fee step
     // -------------------------------------------------------------------------
 
-    private def useFee(step: TransactionBuilderStep.Fee): BuilderM[Unit] = for {
+    private def useFee(step: TransactionBuilderStep.Fee): Result[Unit] = for {
         ctx <- get0
         currentFee = ctx.transaction.body.value.fee.value
         _ <- currentFee match {
@@ -564,7 +577,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useValidityStartSlot(
         step: TransactionBuilderStep.ValidityStartSlot
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             ctx <- get0
             currentValidityStartSlot = ctx.transaction.body.value.validityStartSlot
@@ -586,7 +599,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useValidityEndSlot(
         step: TransactionBuilderStep.ValidityEndSlot
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             ctx <- get0
             currentValidityEndSlot = ctx.transaction.body.value.ttl
@@ -608,7 +621,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useAddCollateral(
         addCollateral: TransactionBuilderStep.AddCollateral
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- assertNetworkId(addCollateral.utxo.output.address, addCollateral)
             _ <- assertAdaOnlyPubkeyUtxo(addCollateral.utxo, addCollateral)
@@ -629,7 +642,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def assertAdaOnlyPubkeyUtxo(
         utxo: Utxo,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <-
                 if !utxo.output.value.assets.isEmpty
@@ -655,7 +668,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useModifyAuxiliaryData(
         modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData
-    ): BuilderM[Unit] = {
+    ): Result[Unit] = {
         for {
             ctx <- get0
             oldData = ctx.transaction.auxiliaryData
@@ -681,7 +694,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useIssueCertificate(
         issueCertificate: TransactionBuilderStep.IssueCertificate
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- modify0(
               unsafeCtxBodyL
@@ -703,7 +716,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         cert: Certificate,
         witness: PubKeyWitness.type | TwoArgumentPlutusScriptWitness | NativeScriptWitness,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] = cert match {
+    ): Result[Unit] = cert match {
         // FIXME: verify
         case Certificate.UnregCert(credential, _) =>
             for {
@@ -837,7 +850,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useWithdrawRewards(
         withdrawRewards: TransactionBuilderStep.WithdrawRewards
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             ctx <- get0
 
@@ -885,7 +898,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useSubmitProposal(
         submitProposal: TransactionBuilderStep.SubmitProposal
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- modify0(
               unsafeCtxBodyL
@@ -923,7 +936,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     private def useSubmitVotingProcedure(
         submitVotingProcedure: TransactionBuilderStep.SubmitVotingProcedure
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- modify0(
               unsafeCtxBodyL
@@ -1004,7 +1017,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         cred: Credential,
         witness: PubKeyWitness.type | TwoArgumentPlutusScriptWitness | NativeScriptWitness,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             _ <- witness match {
                 // Pubkey credential witness: add to expected signers
@@ -1088,11 +1101,11 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         witness: A,
         cred: Credential,
         step: TransactionBuilderStep
-    )(using hwk: HasWitnessKind[A]): BuilderM[Unit] = {
+    )(using hwk: HasWitnessKind[A]): Result[Unit] = {
 
         val wrongCredErr = WrongCredentialType(action, hwk.witnessKind, cred, step)
 
-        val result: BuilderM[Unit] = witness match {
+        val result: Result[Unit] = witness match {
             case PubKeyWitness =>
                 cred.keyHashOption match {
                     case Some(_) => pure0(())
@@ -1138,7 +1151,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         neededScriptHash: ScriptHash,
         scriptSource: ScriptSource[Script],
         step: TransactionBuilderStep
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         scriptSource match {
             case ScriptSource.NativeScriptValue(script) =>
                 assertScriptHashMatchesScript(neededScriptHash, script, step)
@@ -1154,7 +1167,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         scriptHash: ScriptHash,
         script: Script,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] = {
+    ): Result[Unit] = {
         if scriptHash != script.scriptHash then {
             liftF0(
               Left(IncorrectScriptHash(script, scriptHash, step))
@@ -1170,7 +1183,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def assertAttachedScriptExists(
         scriptHash: ScriptHash,
         step: TransactionBuilderStep
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             ctx <- get0
             resolvedScripts <- liftF0(
@@ -1197,13 +1210,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ScriptSource
     // -------------------------------------------------------------------------
 
-    private def usePubKeyWitness(expectedSigner: ExpectedSigner): BuilderM[Unit] =
+    private def usePubKeyWitness(expectedSigner: ExpectedSigner): Result[Unit] =
         modify0(Focus[Context](_.expectedSigners).modify(_ + expectedSigner))
 
     private def useNativeScript(
         nativeScript: ScriptSource[Script.Native],
         additionalSigners: Set[ExpectedSigner]
-    ): BuilderM[Unit] = {
+    ): Result[Unit] = {
         for {
             // Regardless of how the witness is passed, add the additional signers
             _ <- modify0(
@@ -1230,7 +1243,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def assertInputDoesNotAlreadyExist(
         input: TransactionInput,
         step: TransactionBuilderStep,
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             state <- get0
             _ <-
@@ -1243,7 +1256,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def usePlutusScript(
         plutusScript: ScriptSource[PlutusScript],
         additionalSigners: Set[ExpectedSigner]
-    ): BuilderM[Unit] =
+    ): Result[Unit] =
         for {
             // Add script's additional signers to txBody.requiredSigners
             _ <- modify0(
@@ -1307,7 +1320,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     /** Ensure that the network id of the address matches the network id of the builder context.
       */
-    private def assertNetworkId(addr: Address, step: TransactionBuilderStep): BuilderM[Unit] =
+    private def assertNetworkId(addr: Address, step: TransactionBuilderStep): Result[Unit] =
         for {
             context: Context <- get0
             addrNetwork <- addr.getNetwork match

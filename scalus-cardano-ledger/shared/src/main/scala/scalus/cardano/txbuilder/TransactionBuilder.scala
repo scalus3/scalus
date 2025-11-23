@@ -261,18 +261,6 @@ case class ExpectedSigner(hash: AddrKeyHash)
 
 object TransactionBuilder:
 
-    /** Transaction builder monad. Retains context at point of failure, if tehre's any.
-      */
-    type BuilderM[A] =
-        Either[StepError | RedeemerIndexingInternalError, A]
-
-    // Helpers to cut down on type signature noise
-    def pure0[A](value: A): BuilderM[A] = Right(value)
-
-    def liftF0[A](
-        either: Either[StepError | RedeemerIndexingInternalError, A]
-    ): BuilderM[A] = either
-
     /** Represents different types of authorized operations (except the spending, which goes
       * separately).
       */
