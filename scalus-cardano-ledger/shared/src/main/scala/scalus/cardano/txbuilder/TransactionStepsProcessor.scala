@@ -1163,7 +1163,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                   // Add the native script to the witness set
                   unsafeCtxWitnessL
                       .refocus(_.nativeScripts)
-                      .modify(s => TaggedSortedMap.from(appendDistinct(ns, s.toMap.values.toSeq)))
+                      .modify(s => TaggedSortedMap.from(ns +: s.toMap.values.toSeq))
                 )
             // Script should already be attached, see [[assertAttachedScriptExists]]
             case ScriptSource.NativeScriptAttached => ()
@@ -1189,9 +1189,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
           (Focus[Context](_.transaction) >>> txBodyL)
               .refocus(_.requiredSigners)
               .modify((s: TaggedSortedSet[AddrKeyHash]) =>
-                  TaggedSortedSet.from(
-                    s.toSet ++ additionalSigners.map(_.hash)
-                  )
+                  TaggedSortedSet.from(s.toSet ++ additionalSigners.map(_.hash))
               )
         )
 
@@ -1203,38 +1201,21 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         plutusScript match {
             case ScriptSource.PlutusScriptValue(ps: PlutusScript) =>
                 // Add the script value to the appropriate field
-                ps match {
+                val f = ps match {
                     case v1: Script.PlutusV1 =>
-                        modify0(
-                          unsafeCtxWitnessL
-                              .refocus(_.plutusV1Scripts)
-                              .modify(s =>
-                                  TaggedSortedStrictMap.from(
-                                    appendDistinct(v1, s.toMap.values.toSeq)
-                                  )
-                              )
-                        )
+                        unsafeCtxWitnessL
+                            .refocus(_.plutusV1Scripts)
+                            .modify(s => TaggedSortedStrictMap.from(s.toMap.values.toSet + v1))
                     case v2: Script.PlutusV2 =>
-                        modify0(
-                          unsafeCtxWitnessL
-                              .refocus(_.plutusV2Scripts)
-                              .modify(s =>
-                                  TaggedSortedStrictMap.from(
-                                    appendDistinct(v2, s.toMap.values.toSeq)
-                                  )
-                              )
-                        )
+                        unsafeCtxWitnessL
+                            .refocus(_.plutusV2Scripts)
+                            .modify(s => TaggedSortedStrictMap.from(s.toMap.values.toSet + v2))
                     case v3: Script.PlutusV3 =>
-                        modify0(
-                          unsafeCtxWitnessL
-                              .refocus(_.plutusV3Scripts)
-                              .modify(s =>
-                                  TaggedSortedStrictMap.from(
-                                    appendDistinct(v3, s.toMap.values.toSeq)
-                                  )
-                              )
-                        )
+                        unsafeCtxWitnessL
+                            .refocus(_.plutusV3Scripts)
+                            .modify(s => TaggedSortedStrictMap.from(s.toMap.values.toSet + v3))
                 }
+                modify0(f)
             // Script should already be attached, see [[assertAttachedScriptExists]]
             case ScriptSource.PlutusScriptAttached => ()
         }
