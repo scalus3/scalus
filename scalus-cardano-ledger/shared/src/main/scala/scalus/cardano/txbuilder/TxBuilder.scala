@@ -21,8 +21,6 @@ case class TxBuilder(
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedScripts: Map[ScriptHash, Script] = Map.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
-    changeAddressOpt: Option[Address] = None,
-    providerOpt: Option[Provider] = None,
 ) {
 
     /** Adds the specified **pubkey** utxo to the list of inputs, thus spending it.
@@ -385,7 +383,7 @@ case class TxBuilder(
     def changeTo(address: Address): TxBuilder = {
         val handler: DiffHandler = (diff, tx) =>
             Change.handleChange(diff, tx, address, env.protocolParams)
-        copy(changeAddressOpt = Some(address), diffHandlerOpt = Some(handler))
+        copy(diffHandlerOpt = Some(handler))
     }
 
     def build(): TxBuilder = {
@@ -421,11 +419,6 @@ case class TxBuilder(
     }
 
     def transaction: Transaction = context.transaction
-
-    def provider: Provider =
-        providerOpt.getOrElse(
-          throw new IllegalStateException("Provider not set. Call provider() first.")
-        )
 
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
         // Extract transaction fields from current steps
@@ -463,7 +456,7 @@ case class TxBuilder(
 
         val gap = produced - consumed
 
-        val additionalSteps = if gap.coin.value > 0 || gap.assets.assets.nonEmpty then {
+        val additionalSteps = if !gap.isZero then {
             selectAdditionalUtxos(provider, sponsor, gap)
         } else Seq.empty
 

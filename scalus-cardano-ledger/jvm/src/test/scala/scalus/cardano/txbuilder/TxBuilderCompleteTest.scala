@@ -1,6 +1,7 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.builtin.ByteString.utf8
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
@@ -117,26 +118,26 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
 
+        val paymentValue = Value.ada(10)
         val builder = TxBuilder(testEnv)
-            .payTo(Bob.address, Value.ada(10))
+            .payTo(Bob.address, paymentValue)
             .complete(provider, Alice.address)
             .build()
 
         val tx = builder.transaction
 
-        // Should have at least one input
-        assert(tx.body.value.inputs.toSeq.nonEmpty, "Transaction should have inputs")
+        assert(tx.body.value.inputs.toSeq.size == 1, "Transaction must have exactly 1 input")
 
         // Should have payment to Bob
-        val bobOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == Bob.address)
-        assert(bobOutputs.nonEmpty, "Should have output to Bob")
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 1, "Should have output to Bob")
         assert(
-          bobOutputs.head.value.value.coin.value >= 10_000_000L,
+          bobOutputs.head.value.value.coin >= paymentValue.coin,
           "Bob should receive at least 10 ADA"
         )
 
         // Should have change output to Alice
-        val aliceOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == Alice.address)
+        val aliceOutputs = outputsOf(Alice, tx)
         assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
     }
 
@@ -173,7 +174,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("complete() should handle multi-asset transactions") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-        val assetName = AssetName(ByteString.fromString("co2"))
+        val assetName = AssetName(utf8"co2")
         val policyId = alwaysOkScript.scriptHash
 
         val tokenValue = Value(
@@ -216,8 +217,8 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = builder.transaction
 
         // Bob should receive the tokens
-        val bobOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == Bob.address)
-        assert(bobOutputs.nonEmpty, "Should have output to Bob")
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 1, "Should have output to Bob")
 
         val bobTokens = bobOutputs.head.value.value.assets.assets
             .get(policyId)
@@ -225,7 +226,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(bobTokens.contains(100L), "Bob should receive 100 tokens")
 
         // Change output should have remaining 100 tokens
-        val aliceOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == Alice.address)
+        val aliceOutputs = outputsOf(Alice, tx)
         assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
 
         val aliceTokens = aliceOutputs.flatMap(
@@ -285,7 +286,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         // Should have payment to Bob
-        val bobOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == Bob.address)
+        val bobOutputs = outputsOf(Bob, tx)
         assert(bobOutputs.nonEmpty, "Should have output to Bob")
     }
 
@@ -364,7 +365,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("complete() with explicit spend should only add necessary additional inputs") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 3_000_000).sample.get
 
         val provider = SimpleMockProvider(
           initialUtxos = Map(
@@ -380,25 +381,32 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // complete() should recognize the explicit input and only add more if needed for fees
         val builder = TxBuilder(testEnv)
             .spend(Utxo(explicitUtxo))
-            .payTo(Bob.address, Value.ada(3))
+            .payTo(Bob.address, explicitUtxo._2.value)
             .complete(provider, Alice.address)
             .build()
 
         val tx = builder.transaction
 
-        // Should have at least the explicit input
+        // Should have the explicit input
         assert(
           tx.body.value.inputs.toSeq.contains(explicitUtxo._1),
           "Should include explicitly spent UTXO"
         )
 
+        assert(tx.body.value.inputs.toSeq.size == 2)
+
         // Bob should receive payment
-        val bobOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == Bob.address)
+        val bobOutputs = outputsOf(Bob, tx)
         assert(bobOutputs.nonEmpty, "Should have output to Bob")
         assert(
           bobOutputs.head.value.value.coin.value >= 3_000_000L,
           "Bob should receive at least 3 ADA"
         )
+
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.size == 1, "Should have change back to Alice")
+        val aliceAda = aliceOutputs.head.value.value.coin
+        assert(aliceAda < Coin.ada(100) && aliceAda > Coin.ada(99))
     }
 
     test("complete() followed by sign() should produce a valid transaction") {
@@ -436,4 +444,58 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           "Should have inputs from Alice that were added by complete()"
         )
     }
+
+    test("complete() should send tokens acquired from additional input querying back as change") {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val assetName = AssetName(utf8"co2")
+        val policyId = alwaysOkScript.scriptHash
+
+        val provider = SimpleMockProvider(
+          initialUtxos = Map(
+            TransactionInput(genesisHash, 0) -> Babbage(
+              address = Alice.address,
+              value = Value(
+                Coin.ada(100),
+                MultiAsset(
+                  SortedMap(
+                    policyId -> SortedMap(assetName -> 200L)
+                  )
+                )
+              )
+            ),
+            explicitUtxo._1 -> explicitUtxo._2
+          )
+        )
+
+        val builder = TxBuilder(testEnv)
+            .spend(Utxo(explicitUtxo))
+            .payTo(Bob.address, explicitUtxo._2.value)
+            .complete(provider, Alice.address)
+            .build()
+
+        val tx = builder.transaction
+
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 1, "Should have an output to Bob")
+        val bobOutValue = bobOutputs.head.value
+        assert(bobOutValue.value.coin >= Coin.ada(5), "Bob must receive 5 ADA")
+        assert(bobOutValue.value.assets.isEmpty, "Bob must not receive any tokens")
+
+        val aliceChangeOuts = outputsOf(Alice, tx)
+        assert(aliceChangeOuts.size == 1, "Alice must receive one output back")
+        val aliceChangeValue = aliceChangeOuts.head.value.value
+        assert(aliceChangeValue.coin > Coin.ada(99) && aliceChangeValue.coin < Coin.ada(100))
+
+        val aliceChangeTokens = aliceChangeValue.assets.assets.head._2
+        assert(
+          aliceChangeTokens(AssetName(utf8"co2")) == 200L,
+          "Alice must receive all co2 back as change"
+        )
+    }
+
+    private def outputsOf(peer: TestPeer, tx: Transaction) =
+        tx.body.value.outputs.toSeq.filter(_.value.address == peer.address)
+
 }

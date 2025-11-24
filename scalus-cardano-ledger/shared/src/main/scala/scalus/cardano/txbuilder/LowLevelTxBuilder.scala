@@ -86,11 +86,10 @@ object LowLevelTxBuilder {
     )(tx: Transaction): Either[TxBalancingError, Transaction] = Try {
         val redeemers = evaluator.evalPlutusScripts(tx, utxos)
         setupRedeemers(protocolParams, tx, utxos, redeemers)
-    }.toEither.left.map(t =>
-        t match
-            case psee: PlutusScriptEvaluationException => TxBalancingError.EvaluationFailed(psee)
-            case other                                 => TxBalancingError.Failed(other)
-    )
+    }.toEither.left.map {
+        case psee: PlutusScriptEvaluationException => TxBalancingError.EvaluationFailed(psee)
+        case other                                 => TxBalancingError.Failed(other)
+    }
 
     private def setupRedeemers(
         protocolParams: ProtocolParams,
