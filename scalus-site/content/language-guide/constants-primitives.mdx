@@ -87,29 +87,29 @@ val empty = ByteString.empty
 val fromHex = ByteString.fromHex("deadbeef")
 val fromArray = ByteString.fromArray(Array[Byte](0xde.toByte, 0xad.toByte))
 val fromString = ByteString.fromString("Hello")  // UTF-8 encoded
+val utf8Literal = utf8"Привіт світ"  // using utf8 string interpolator
 val hexLiteral = hex"deadbeef"  // using hex string interpolator
 
 // Operations
-val concat = ByteString.fromHex("dead") ++ ByteString.fromHex("beef")
+val concat = hex"dead" ++ hex"beef"
 val length = fromHex.length
 val take = fromHex.take(2)      // first 2 bytes
 val drop = fromHex.drop(2)      // skip first 2 bytes
 val slice = fromHex.slice(1, 3) // bytes from index 1 to 3
 
 // Comparison
-val eq = fromHex == ByteString.fromHex("deadbeef")
-val compare = fromHex < ByteString.fromHex("ffffff")
+val eq = fromHex == hex"deadbeef"
+val compare = fromHex < hex"ffffff"
 ```
 
 ### String
 
-Strings are UTF-8 encoded text values.
+Strings are Unicode text values.
 
 ```scala
 val greeting = "Hello, Cardano!"
 val concat = "Hello" ++ " " ++ "World"
 val eq = "test" == "test"
-val byteString = ByteString.fromString("convert to bytes")
 ```
 
 ### Data
@@ -132,8 +132,8 @@ import scalus.builtin.Data
 import scalus.builtin.Builtins
 
 // Creating Data values
-val intData = Builtins.iData(BigInt(42))
-val bytesData = Builtins.bData(ByteString.fromHex("deadbeef"))
+val intData = Builtins.iData(42)
+val bytesData = Builtins.bData(hex"deadbeef")
 val listData = Builtins.listData(List(intData, bytesData))
 val mapData = Builtins.mapData(List((intData, bytesData)))
 val constrData = Builtins.constrData(0, List(intData, bytesData))
@@ -146,7 +146,7 @@ val extractedMap: List[(Data, Data)] = Builtins.unMapData(mapData)
 val (tag, fields) = Builtins.unConstrData(constrData)
 
 // Comparison
-val dataEq = intData == Builtins.iData(BigInt(42))
+val dataEq = intData == Builtins.iData(42)
 ```
 
 **Converting to/from Data**
@@ -154,14 +154,14 @@ val dataEq = intData == Builtins.iData(BigInt(42))
 Scalus automatically generates `ToData` and `FromData` instances for case classes and enums, enabling seamless conversion:
 
 ```scala
-import scalus.builtin.ToData
-import scalus.builtin.FromData
+import scalus.builtin.Data.*
 
 case class Account(owner: ByteString, balance: BigInt)
 
-val account = Account(ByteString.fromHex("abc123"), BigInt(1000))
+val account = Account(hex"abc123", 1000)
 val accountData: Data = account.toData
 val recovered: Account = FromData.fromData(accountData)
+val recovered2: Account = accountData.to[Account]
 ```
 
 ### List
