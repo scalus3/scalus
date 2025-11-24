@@ -6,32 +6,21 @@ package scalus.cardano.txbuilder
   *   - The definition of steps: [[TransactionBuilderStep]]
   */
 
-import cats.*
-import cats.data.*
-import cats.implicits.*
 import io.bullet.borer.{Cbor, Encoder}
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
-import scalus.builtin.Builtins.{blake2b_224, serialiseData}
-import scalus.builtin.{platform, ByteString, Data}
-import scalus.cardano.address
+import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.GovAction.*
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.rules.{Context as SContext, State as SState, UtxoEnv}
-import scalus.cardano.ledger.utils.{AllResolvedScripts, MinCoinSizedTransactionOutput}
+import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
 import scalus.cardano.txbuilder.Datum.DatumValue
-import scalus.cardano.txbuilder.TransactionBuilder.Context
 import scalus.cardano.txbuilder.SomeBuildError.{BalancingError, SomeRedeemerIndexingError, SomeStepError, ValidationError}
 import scalus.cardano.txbuilder.StepError.*
-import scalus.cardano.txbuilder.TransactionBuilder.{Operation, WitnessKind}
+import scalus.cardano.txbuilder.TransactionBuilder.{Context, Operation, WitnessKind}
 import scalus.cardano.txbuilder.modifyWs
-import TransactionWitnessSet.given
-
 import scalus.|>
-
-import scala.collection.immutable.SortedMap
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]

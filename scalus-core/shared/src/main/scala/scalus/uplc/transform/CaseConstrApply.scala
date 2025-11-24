@@ -5,8 +5,6 @@ import scalus.uplc.Term
 import scalus.uplc.Term.{Apply, Builtin, Case, Const, Constr, Delay, Error, Force, LamAbs, Var}
 import scalus.uplc.eval.{Log, Logger}
 
-import scala.collection.mutable.ArrayBuffer
-
 /** Replace nested Apply with Case/Constr
   *
   * For example, replace `(apply (apply (apply f a) b) c)` with `(case (constr 0 [a, b, c]) f)`.

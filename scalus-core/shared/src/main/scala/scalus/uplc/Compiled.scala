@@ -1,14 +1,13 @@
 package scalus.uplc
 
+import scalus.Compiler
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType, TargetLoweringBackend}
 import scalus.uplc.Constant.asConstant
-import scalus.uplc.eval.Log
 import scalus.uplc.transform.*
-import scalus.{|>, Compiler}
 
 import scala.annotation.threadUnsafe
 
