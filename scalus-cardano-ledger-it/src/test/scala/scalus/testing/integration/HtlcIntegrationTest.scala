@@ -10,7 +10,7 @@ import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.cardano.wallet.BloxbeanKeyPair
-import scalus.examples.htlc.{HtlcContract, Transactions2}
+import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
 import scalus.ledger.api.v1.PubKeyHash
 
 class HtlcIntegrationTest extends AnyFunSuite {
@@ -157,22 +157,27 @@ class HtlcIntegrationTest extends AnyFunSuite {
         val lockAmount = 8_000_000L
 
         val compiledContract = HtlcContract.defaultCompiledContract
-        
+
         val utxoToSpend = Utxo(
           senderUtxos.find(_._2.value.coin.value >= lockAmount).get
         )
 
-        val lockTxResult = new Transactions2(ctx.env, signers, compiledContract).lock(
-          utxoToSpend,
-          Value.lovelace(lockAmount),
-          senderPkh,
-          senderPkh,
-          image,
-          timeout
+        val txCreator = HtlcTransactionCreator(
+          ctx.env,
+          ctx.evaluator,
+          signer,
+          compiledContract
         )
 
-        val signedLockTx =
-            lockTxResult.toOption.getOrElse(fail(s"Failed to build lock tx: $lockTxResult"))
+        val signedLockTx = txCreator.lock(
+          Map(utxoToSpend.input -> utxoToSpend.output),
+          Value.lovelace(lockAmount),
+          senderAddr,
+          AddrKeyHash(senderPkh.hash),
+          AddrKeyHash(senderPkh.hash),
+          image,
+          timeout.toLong
+        )
 
         ctx.client.submit(signedLockTx) match {
             case Right(_) =>
@@ -226,17 +231,23 @@ class HtlcIntegrationTest extends AnyFunSuite {
                 ctx.cardanoInfo.slotConfig.slotToTime(revealSlot)
         }
 
-        val revealTxResult = new Transactions2(ctx.env, signers, compiledContract).reveal(
-          lockedUtxo,
-          collateralUtxo,
-          preimage,
-          senderAddr,
-          senderPkh,
-          revealTime
+        val txCreator = HtlcTransactionCreator(
+          ctx.env,
+          ctx.evaluator,
+          signer,
+          compiledContract
         )
 
-        val signedRevealTx =
-            revealTxResult.toOption.getOrElse(fail(s"Failed to build reveal tx: $revealTxResult"))
+        val signedRevealTx = txCreator.reveal(
+          Map.empty,
+          Map(collateralUtxo.input -> collateralUtxo.output),
+          lockedUtxo,
+          senderAddr,
+          senderAddr,
+          preimage,
+          AddrKeyHash(senderPkh.hash),
+          revealTime
+        )
 
         ctx.client.submit(signedRevealTx) match {
             case Right(_) =>
