@@ -51,21 +51,15 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
             // Replace delayed redeemers if any exist
             _ <-
-                if ctx.delayedRedeemerSpecs.nonEmpty then {
-                    val updatedRedeemersResult = replaceDelayedRedeemers(
+                if ctx.delayedRedeemerSpecs.nonEmpty then
+                    replaceDelayedRedeemers(
                       ctx.redeemers,
                       ctx.delayedRedeemerSpecs,
                       ctx.transaction
-                    )
-                    updatedRedeemersResult match {
-                        case Right(updatedRedeemers) =>
-                            modify0(_.replaceRedeemers(updatedRedeemers))
-                            pure0(())
-                        case Left(err) => Left(err)
+                    ).map { updatedRedeemers =>
+                        modify0(_.replaceRedeemers(updatedRedeemers))
                     }
-                } else {
-                    pure0(())
-                }
+                else pure0(())
         } yield ()
         _ctx -> result
     }
@@ -1047,32 +1041,22 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         val wrongCredErr = WrongCredentialType(action, hwk.witnessKind, cred, step)
 
-        val result: Result[Unit] = witness match {
+        witness match {
             case PubKeyWitness =>
-                cred.keyHashOption match {
-                    case Some(_) => pure0(())
-                    case None    => Left(wrongCredErr)
-                }
+                cred.keyHashOption.toRight(wrongCredErr).void
 
             case witness: NativeScriptWitness =>
                 for {
-                    scriptHash <- cred.scriptHashOption match {
-                        case Some(hash) => pure0(hash)
-                        case None       => Left(wrongCredErr)
-                    }
+                    scriptHash <- cred.scriptHashOption.toRight(wrongCredErr)
                     _ <- assertScriptHashMatchesSource(scriptHash, witness.scriptSource, step)
                 } yield ()
 
             case witness: TwoArgumentPlutusScriptWitness =>
                 for {
-                    scriptHash <- cred.scriptHashOption match {
-                        case Some(hash) => pure0(hash)
-                        case None       => Left(wrongCredErr)
-                    }
+                    scriptHash <- cred.scriptHashOption.toRight(wrongCredErr)
                     _ <- assertScriptHashMatchesSource(scriptHash, witness.scriptSource, step)
                 } yield ()
         }
-        result
     }
 
     // -------------------------------------------------------------------------
@@ -1229,10 +1213,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
       */
     private def assertNetworkId(addr: Address, step: TransactionBuilderStep): Result[Unit] =
         for {
-            addrNetwork <- addr.getNetwork match
-                case Some(network) => pure0(network)
-                case None =>
-                    Left(ByronAddressesNotSupported(addr, step))
+            addrNetwork <- addr.getNetwork.toRight(ByronAddressesNotSupported(addr, step))
             _ <-
                 if ctx.network != addrNetwork
                 then Left(WrongNetworkId(addr, step))
