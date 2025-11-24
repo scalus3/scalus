@@ -3,12 +3,16 @@ package scalus.cardano.txbuilder
 import monocle.Lens
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.{MinTransactionFee, TxBalance}
+import scalus.cardano.txbuilder
 import scalus.cardano.txbuilder.TxBalancingError.Failed
 
 import scala.annotation.tailrec
 import scala.util.Try
 
 object LowLevelTxBuilder {
+    @deprecated("Use scalus.cardano.txbuilder.ChangeOutputDiffHandler instead", "scalus 0.13.0")
+    class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int)
+        extends txbuilder.ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
 
     /** Balances the transaction using a diff handler to adjust the transaction.
       *
@@ -25,7 +29,9 @@ object LowLevelTxBuilder {
     ): Either[TxBalancingError, Transaction] = {
         balanceFeeAndChange(
           initial,
-          ChangeOutputDiffHandler(protocolParams, changeOutputIdx).changeOutputDiffHandler,
+          txbuilder
+              .ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
+              .changeOutputDiffHandler,
           protocolParams,
           resolvedUtxo,
           evaluator
