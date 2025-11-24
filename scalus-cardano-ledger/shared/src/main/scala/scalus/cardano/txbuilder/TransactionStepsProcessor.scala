@@ -27,7 +27,6 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         Either[StepError | RedeemerIndexingInternalError, A]
 
     // Helpers to cut down on type signature noise
-    private def pure0[A](value: A): Result[A] = Right(value)
     private val unit: Result[Unit] = Right(())
 
     private def ctx: Context = _ctx
@@ -121,7 +120,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             useAddCollateral(addCollateral)
 
         case modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData =>
-            pure0(useModifyAuxiliaryData(modifyAuxiliaryData))
+            Right(useModifyAuxiliaryData(modifyAuxiliaryData))
 
         case issueCertificate: TransactionBuilderStep.IssueCertificate =>
             useIssueCertificate(issueCertificate)
@@ -618,7 +617,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 then Left(CollateralWithTokens(utxo, step))
                 else unit
             addr: ShelleyAddress <- utxo.output.address match {
-                case sa: ShelleyAddress  => pure0(sa)
+                case sa: ShelleyAddress  => Right(sa)
                 case by: ByronAddress    => Left(ByronAddressesNotSupported(by, step))
                 case stake: StakeAddress => Left(CollateralNotPubKey(utxo, step))
             }
@@ -906,7 +905,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 case Voter.StakingPoolKey(poolKeyHash) =>
                     val credential = Credential.KeyHash(poolKeyHash)
                     submitVotingProcedure.witness match {
-                        case _: PubKeyWitness.type => pure0(credential)
+                        case _: PubKeyWitness.type => Right(credential)
                         case witness: TwoArgumentPlutusScriptWitness =>
                             Left(
                               UnneededSpoVoteWitness(
@@ -925,19 +924,19 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                             )
                     }
                 case Voter.ConstitutionalCommitteeHotKey(credential) =>
-                    pure0(
+                    Right(
                       Credential.KeyHash(credential)
                     )
                 case Voter.ConstitutionalCommitteeHotScript(scriptHash) =>
-                    pure0(
+                    Right(
                       Credential.ScriptHash(scriptHash)
                     )
                 case Voter.DRepKey(credential) =>
-                    pure0(
+                    Right(
                       Credential.KeyHash(credential)
                     )
                 case Voter.DRepScript(scriptHash) =>
-                    pure0(
+                    Right(
                       Credential.ScriptHash(scriptHash)
                     )
             }
@@ -973,7 +972,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         // Add key hash to expected signers
                         _ <- cred match {
                             case Credential.KeyHash(keyHash) =>
-                                pure0(usePubKeyWitness(ExpectedSigner(keyHash)))
+                                Right(usePubKeyWitness(ExpectedSigner(keyHash)))
                             case _ =>
                                 Left(
                                   WrongCredentialType(
