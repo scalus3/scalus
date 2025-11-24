@@ -421,84 +421,92 @@ case class TxBuilder(
     def transaction: Transaction = context.transaction
 
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
-        // Extract transaction fields from current steps
-        val (inputs, outputs, mint, certificates) = extractFieldsFromSteps(steps)
+        // TODO: suspiciously similar to the rest of balancing logic that we have, good refactoring candidate
+        def doBalance(
+            currentSteps: Seq[TransactionBuilderStep],
+            iteration: Int
+        ): Seq[TransactionBuilderStep] = {
+            if iteration >= 10 then
+                throw new RuntimeException("Could not balance transaction after 10 iterations")
 
-        // Build a draft transaction to get an initial fee estimate
-        val draftSteps = steps :+ TransactionBuilderStep.Fee(Coin(0)) // keep the fee zero at first
-        val draftContext = TransactionBuilder
-            .build(env.network, draftSteps)
-            .getOrElse(
-              throw new RuntimeException("Failed to build draft transaction for fee calculation")
-            )
+            val (inputs, outputs, mint, certificates) = extractFieldsFromSteps(currentSteps)
 
-        val feeEstimate = estimateFee(draftContext.transaction)
+            // draft up a tx without running the scripts to get the fee estimate
+            val draftContext = TransactionBuilder
+                .build(env.network, currentSteps :+ TransactionBuilderStep.Fee(Coin(0)))
+                .getOrElse(throw new RuntimeException("Failed to build draft transaction"))
 
-        val consumed = TxBalance
-            .consumedFromFields(
-              inputs.keySet,
+            val feeEstimate = estimateFee(draftContext.transaction)
+
+            // Calculate consumed and produced values
+            val consumed = TxBalance
+                .consumedFromFields(
+                  inputs.keySet,
+                  mint,
+                  None,
+                  certificates,
+                  inputs,
+                  CertState.empty,
+                  env.protocolParams
+                )
+                .getOrElse(Value.zero)
+
+            // ensure min ADA
+            val adjustedOutputs =
+                outputs.map(TransactionBuilder.ensureMinAda(_, env.protocolParams))
+
+            val produced = TxBalance.producedFromFields(
+              adjustedOutputs,
               mint,
-              None,
+              feeEstimate,
               certificates,
-              inputs,
-              CertState.empty,
-              env.protocolParams
+              None
             )
-            .getOrElse(Value.zero)
 
-        val produced = TxBalance.producedFromFields(
-          outputs,
-          mint,
-          feeEstimate,
-          certificates,
-          None
-        )
+            val gap = produced - consumed
 
-        val gap = produced - consumed
+            if gap.coin.value <= 0 && gap.assets.isEmpty then return currentSteps
 
-        val additionalSteps = if !gap.isZero then {
-            selectAdditionalUtxos(provider, sponsor, gap)
-        } else Seq.empty
+            // Find more utxos, but exclude the ones we've already selected
+            val newInputSteps =
+                selectAdditionalUtxos(provider, sponsor, gap, excludeInputs = inputs.keySet)
+            if newInputSteps.isEmpty then
+                throw new RuntimeException(s"No UTXOs found to cover gap: $gap")
 
-        val additionalInputs = additionalSteps.collect {
-            case TransactionBuilderStep.Spend(utxo, _) =>
+            val newInputs = newInputSteps.collect { case TransactionBuilderStep.Spend(utxo, _) =>
                 utxo
+            }
+            val tokensFromNewInputs = newInputs
+                .map(_.output.value.assets)
+                .foldLeft(MultiAsset.empty)(_ + _)
+            val tokenSurplus = tokensFromNewInputs - gap.assets
+
+            val tokenChangeSteps = if tokenSurplus.assets.nonEmpty then {
+                val changeOutput = TransactionOutput.Babbage(
+                  sponsor,
+                  Value(Coin.zero, tokenSurplus),
+                  None,
+                  None
+                )
+                val withMinAda = TransactionBuilder.ensureMinAda(changeOutput, env.protocolParams)
+                Seq(TransactionBuilderStep.Send(withMinAda))
+            } else Seq.empty
+
+            doBalance(currentSteps ++ newInputSteps ++ tokenChangeSteps, iteration + 1)
         }
 
-        val tokensFromAdditionalInputs = additionalInputs
-            .map(_.output.value.assets)
-            .foldLeft(MultiAsset.empty)(_ + _)
-
-        val tokenSurplus = tokensFromAdditionalInputs - gap.assets
-
-        val tokenChangeStep = if tokenSurplus.assets.nonEmpty then {
-            Seq(
-              TransactionBuilderStep.Send(
-                TransactionOutput(sponsor, Value(Coin.zero, tokenSurplus))
-              )
-            )
-        } else Seq.empty
+        val balancedSteps = doBalance(steps, 0)
 
         val collateralSteps = if needsCollateral(steps) && !hasCollateral(steps) then {
-            val draftWithInputs = steps ++ additionalSteps
-            val contextWithInputs = TransactionBuilder
-                .build(env.network, draftWithInputs)
-                .getOrElse(
-                  throw new RuntimeException(
-                    "Failed to build draft transaction for collateral calculation"
-                  )
-                )
-
-            val requiredCollateral = estimateRequiredCollateral(
-              contextWithInputs.transaction,
-              feeEstimate
-            )
+            val context = TransactionBuilder
+                .build(env.network, balancedSteps)
+                .getOrElse(throw new RuntimeException("Failed to build draft for collateral"))
+            val feeEstimate = estimateFee(context.transaction)
+            val requiredCollateral = estimateRequiredCollateral(context.transaction, feeEstimate)
             selectCollateral(provider, sponsor, requiredCollateral)
         } else Seq.empty
 
-        copy(
-          steps = steps ++ additionalSteps ++ tokenChangeStep ++ collateralSteps
-        ).changeTo(sponsor)
+        copy(steps = balancedSteps ++ collateralSteps).changeTo(sponsor)
     }
 
     private def estimateFee(tx: Transaction): Coin = {
@@ -553,38 +561,54 @@ case class TxBuilder(
         (inputs, outputs, mint, certificates)
     }
 
-    /** Selects additional UTXOs from provider to cover the value gap. */
     private def selectAdditionalUtxos(
         provider: Provider,
         address: Address,
-        gap: Value
+        gap: Value,
+        excludeInputs: Set[TransactionInput]
     ): Seq[TransactionBuilderStep] = {
         val selectedUtxos = mutable.Map.empty[TransactionInput, TransactionOutput]
 
-        // Cover the token gap first
+        // Fulfill the token requirement first
         if gap.assets.assets.nonEmpty then {
             val tokenUtxos =
-                selectUtxosWithTokens(provider, address, gap.assets, selectedUtxos.toMap.keySet)
+                selectUtxosWithTokens(
+                  provider,
+                  address,
+                  gap.assets,
+                  excludeInputs ++ selectedUtxos.keySet
+                )
             selectedUtxos.addAll(tokenUtxos)
         }
 
-        // Cover the coin gap that's left after covering the token gap
+        // Then cover the insufficient ADA, which is now less than it initially was because the token utxos
+        // have ADA too.
         if gap.coin.value > 0 then {
             val alreadySelectedAda = selectedUtxos.values.map(_.value.coin.value).sum
             val remainingAdaNeeded = gap.coin.value - alreadySelectedAda
 
             if remainingAdaNeeded > 0 then {
-                val adaUtxos = provider
-                    .findUtxos(
-                      address = address,
-                      minRequiredTotalAmount = Some(Coin(remainingAdaNeeded))
+                // Here, we get all of them, which is bad.
+                // Ideally the provider would allow us to exclude utxos.
+                val allUtxos = provider
+                    .findUtxos(address = address)
+                    .getOrElse(Map.empty)
+                    .filterNot { case (input, _) =>
+                        excludeInputs.contains(input) || selectedUtxos.contains(input)
+                    }
+
+                var accumulatedAda = 0L
+                val adaUtxos = allUtxos.takeWhile { case (_, output) =>
+                    val shouldTake = accumulatedAda < remainingAdaNeeded
+                    if shouldTake then accumulatedAda += output.value.coin.value
+                    shouldTake
+                }
+
+                if accumulatedAda < remainingAdaNeeded then
+                    throw new RuntimeException(
+                      s"Insufficient ADA: need $remainingAdaNeeded more lovelace, found only $accumulatedAda"
                     )
-                    .getOrElse(
-                      throw new RuntimeException(
-                        s"Insufficient ADA: need $remainingAdaNeeded more lovelace (${gap.coin.value} total, $alreadySelectedAda from token UTXOs), but provider couldn't find enough UTXOs at address $address"
-                      )
-                    )
-                    .filterNot { case (input, _) => selectedUtxos.contains(input) }
+
                 selectedUtxos.addAll(adaUtxos)
             }
         }
@@ -615,15 +639,26 @@ case class TxBuilder(
                 if requiredAmount > 0 then {
                     var collected = 0L
 
-                    allUtxos.foreach { case (input, output) =>
-                        if collected < requiredAmount && !selectedUtxos.contains(input) then {
-                            output.value.assets.assets
-                                .get(policyId)
-                                .flatMap(_.get(assetName))
-                                .foreach { amount =>
-                                    selectedUtxos = selectedUtxos + (input -> output)
-                                    collected += amount
-                                }
+                    // First, count tokens from already-selected UTXOs
+                    selectedUtxos.foreach { case (_, output) =>
+                        output.value.assets.assets
+                            .get(policyId)
+                            .flatMap(_.get(assetName))
+                            .foreach { amount => collected += amount }
+                    }
+
+                    // Then select additional UTXOs if needed
+                    if collected < requiredAmount then {
+                        allUtxos.foreach { case (input, output) =>
+                            if collected < requiredAmount && !selectedUtxos.contains(input) then {
+                                output.value.assets.assets
+                                    .get(policyId)
+                                    .flatMap(_.get(assetName))
+                                    .foreach { amount =>
+                                        selectedUtxos = selectedUtxos + (input -> output)
+                                        collected += amount
+                                    }
+                            }
                         }
                     }
 

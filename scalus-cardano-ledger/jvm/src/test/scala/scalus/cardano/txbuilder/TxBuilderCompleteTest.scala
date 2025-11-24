@@ -495,6 +495,252 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
     }
 
+    test("complete() should handle multiple different tokens from separate UTXOs") {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
+        val policyId1 = alwaysOkScript.scriptHash
+        val policyId2 = ScriptHash.fromByteString(ByteString.fromHex("1" * 56))
+        val token1 = AssetName(utf8"co2")
+        val token2 = AssetName(utf8"h2so4")
+
+        val provider = SimpleMockProvider(
+          initialUtxos = Map(
+            TransactionInput(genesisHash, 0) -> Babbage(
+              address = Alice.address,
+              value = Value(
+                Coin.ada(50),
+                MultiAsset(
+                  SortedMap(
+                    policyId1 -> SortedMap(token1 -> 100L)
+                  )
+                )
+              )
+            ),
+            TransactionInput(genesisHash, 1) -> Babbage(
+              address = Alice.address,
+              value = Value(
+                Coin.ada(50),
+                MultiAsset(
+                  SortedMap(
+                    policyId2 -> SortedMap(token2 -> 200L)
+                  )
+                )
+              )
+            ),
+            TransactionInput(genesisHash, 2) -> Babbage(
+              address = Alice.address,
+              value = Value.ada(10)
+            )
+          )
+        )
+
+        // Send both tokens to Bob
+        val paymentValue = Value(
+          coin = Coin.ada(5),
+          assets = MultiAsset(
+            SortedMap(
+              policyId1 -> SortedMap(token1 -> 30L),
+              policyId2 -> SortedMap(token2 -> 50L)
+            )
+          )
+        )
+
+        val builder = TxBuilder(testEnv)
+            .payTo(Bob.address, paymentValue)
+            .complete(provider, Alice.address)
+            .build()
+
+        val tx = builder.transaction
+
+        // Should have 2 inputs, because the tokens are spread between multiple utxos
+        assert(
+          tx.body.value.inputs.toSeq.size >= 2,
+          "Should select at least 2 inputs for different tokens"
+        )
+
+        // Bob should receive both token types
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 1, "Should have output to Bob")
+        val bobValue = bobOutputs.head.value.value
+
+        val bobToken1 = bobValue.assets.assets.get(policyId1).flatMap(_.get(token1))
+        assert(bobToken1.contains(30L), "Bob should receive 30 of token1")
+
+        val bobToken2 = bobValue.assets.assets.get(policyId2).flatMap(_.get(token2))
+        assert(bobToken2.contains(50L), "Bob should receive 50 of token2")
+
+        // Alice should receive change with both types of tokens
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
+
+        val aliceTokens = aliceOutputs.flatMap(_.value.value.assets.assets.toSeq).toMap
+        val aliceToken1 = aliceTokens.get(policyId1).flatMap(_.get(token1))
+        val aliceToken2 = aliceTokens.get(policyId2).flatMap(_.get(token2))
+
+        assert(aliceToken1.contains(70L), "Alice should receive 70 of co2 as change")
+        assert(aliceToken2.contains(150L), "Alice should receive 150 of h2so4 as change")
+    }
+
+    test(
+      "complete() should add ADA-only UTXO when token UTXO has insufficient ADA for fees"
+    ) {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val policyId = alwaysOkScript.scriptHash
+        val assetName = AssetName(utf8"co2")
+
+        val provider = SimpleMockProvider(
+          initialUtxos = Map(
+            // Almost no ADA, a lot of tokens
+            TransactionInput(genesisHash, 0) -> Babbage(
+              address = Alice.address,
+              value = Value(
+                Coin.ada(2),
+                MultiAsset(
+                  SortedMap(
+                    policyId -> SortedMap(assetName -> 100L)
+                  )
+                )
+              )
+            ),
+            // ADA-only, enough for payment, no tokens
+            TransactionInput(genesisHash, 1) -> Babbage(
+              address = Alice.address,
+              value = Value.ada(50)
+            )
+          )
+        )
+
+        // Has only tokens, but will have to get bumped to min ADA
+        val paymentValue = Value(
+          coin = Coin.zero,
+          assets = MultiAsset(
+            SortedMap(
+              policyId -> SortedMap(assetName -> 50L)
+            )
+          )
+        )
+
+        val builder = TxBuilder(testEnv)
+            .payTo(Bob.address, paymentValue)
+            .complete(provider, Alice.address)
+            .build()
+
+        val tx = builder.transaction
+
+        // Should end up with both inputs
+        assert(
+          tx.body.value.inputs.toSeq.size == 2,
+          "Should select both token UTXO and ADA-only UTXO"
+        )
+
+        // Bob should receive the tokens
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 1, "Should have output to Bob")
+
+        val bobTokens = bobOutputs.head.value.value.assets.assets
+            .get(policyId)
+            .flatMap(_.get(assetName))
+        assert(bobTokens.contains(50L), "Bob should receive 50 co2")
+        val bobAda = bobOutputs.head.value.value.coin
+        assert(!bobAda.isZero, "Bob must get at least min ADA coins")
+
+        // Alice should receive change with remaining tokens
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
+
+        val aliceTokens = aliceOutputs.flatMap(
+          _.value.value.assets.assets
+              .get(policyId)
+              .flatMap(_.get(assetName))
+        )
+        assert(aliceTokens.sum == 50L, "Alice should receive 50 tokens as change")
+    }
+
+    test("complete() should handle multiple token types in single UTXO efficiently") {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val policyId = alwaysOkScript.scriptHash
+        val tokenA = AssetName(utf8"co2")
+        val tokenB = AssetName(utf8"h2so4")
+        val tokenC = AssetName(utf8"c11h15no2")
+
+        val provider = SimpleMockProvider(
+          initialUtxos = Map(
+            TransactionInput(genesisHash, 0) -> Babbage(
+              address = Alice.address,
+              value = Value(
+                Coin.ada(100),
+                MultiAsset(
+                  SortedMap(
+                    policyId -> SortedMap(
+                      tokenA -> 100L,
+                      tokenB -> 200L,
+                      tokenC -> 50L
+                    )
+                  )
+                )
+              )
+            ),
+            TransactionInput(genesisHash, 1) -> Babbage(
+              address = Alice.address,
+              value = Value.ada(10)
+            )
+          )
+        )
+
+        // partial amounts of co2 and h2so4 to Bob
+        val paymentValue = Value(
+          coin = Coin.ada(5),
+          assets = MultiAsset(
+            SortedMap(
+              policyId -> SortedMap(
+                tokenA -> 30L,
+                tokenB -> 100L
+              )
+            )
+          )
+        )
+
+        val builder = TxBuilder(testEnv)
+            .payTo(Bob.address, paymentValue)
+            .complete(provider, Alice.address)
+            .build()
+
+        val tx = builder.transaction
+
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 1, "Should have output to Bob")
+
+        val bobAssets = bobOutputs.head.value.value.assets.assets.head._2
+
+        assert(bobAssets.get(tokenA).contains(30L), "Bob should receive 30 of co2")
+        assert(bobAssets.get(tokenB).contains(100L), "Bob should receive 100 of h2so4")
+        assert(!bobAssets.contains(tokenC), "Bob should not receive c11h15no2")
+
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
+
+        val aliceAssets = aliceOutputs
+            .flatMap(_.value.value.assets.assets.get(policyId))
+            .foldLeft(SortedMap.empty[AssetName, Long]) { case (acc, assets) =>
+                assets.foldLeft(acc) { case (a, (name, amount)) =>
+                    a + (name -> (a.getOrElse(name, 0L) + amount))
+                }
+            }
+
+        assert(
+          aliceAssets.get(tokenA).contains(70L),
+          "Alice should receive 70 of co2 as change"
+        )
+        assert(
+          aliceAssets.get(tokenB).contains(100L),
+          "Alice should receive 100 of h2so4 as change"
+        )
+        assert(
+          aliceAssets.get(tokenC).contains(50L),
+          "Alice should receive all 50 of c11h15no2 as change"
+        )
+    }
+
     private def outputsOf(peer: TestPeer, tx: Transaction) =
         tx.body.value.outputs.toSeq.filter(_.value.address == peer.address)
 

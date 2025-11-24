@@ -38,6 +38,8 @@ final case class Coin(value: Long) derives Codec {
     @targetName("negate")
     def unary_- : Coin = Coin(-value)
 
+    def isZero: Boolean = value == 0L
+
     infix def >(other: Coin): Boolean = value > other.value
     infix def >=(other: Coin): Boolean = value >= other.value
     infix def <(other: Coin): Boolean = value < other.value
