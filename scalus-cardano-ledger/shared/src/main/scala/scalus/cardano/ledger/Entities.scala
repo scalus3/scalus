@@ -1,5 +1,6 @@
 package scalus.cardano.ledger
 
+import io.bullet.borer.Dom.Element
 import scalus.cardano.address.{Address, Network}
 
 // TODO: maybe replace on enum
@@ -307,7 +308,10 @@ object TransactionException {
 
 @deprecated("Use Utxos instead", "0.12.1")
 type UTxO = Map[TransactionInput, TransactionOutput]
+
 type Utxos = Map[TransactionInput, TransactionOutput]
+object Utxos:
+    def empty: Utxos = Map.empty
 
 /** Unspent Transaction Output
   *
@@ -324,8 +328,12 @@ object Utxo {
         Utxo(utxo._1, utxo._2)
 }
 
-type GovState = Unit
+type GovState = Array[Element]
+object GovState:
+    def empty: GovState = Array.empty
 type StakeMap = Map[Credential, Coin]
+object StakeMap:
+    def empty: StakeMap = Map.empty
 case class UTxOState(
     utxo: Utxos, // UtxO entries
     deposited: Coin, // Lazy field used only for assertions
