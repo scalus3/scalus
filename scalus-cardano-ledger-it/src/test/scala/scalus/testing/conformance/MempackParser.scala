@@ -1,5 +1,7 @@
 package scalus.testing.conformance
 
+import io.bullet.borer.Cbor
+import scalus.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
@@ -27,11 +29,13 @@ object MempackParser {
 
     /** Parse a mempack-encoded TransactionOutput
       *
-      * Supports both Shelley and Alonzo TxOut formats based on the tag:
+      * Supports Shelley, Alonzo, and Babbage TxOut formats based on the tag:
       *   - Tag 0: ShelleyTxOut (CompactAddr + CompactCoin)
       *   - Tag 1: AlonzoTxOut with DataHash (CompactAddr + CompactCoin + DataHash)
       *   - Tag 2: AlonzoTxOut AddrHash28 ADA-only (optimized)
       *   - Tag 3: AlonzoTxOut AddrHash28 ADA-only with DataHash32
+      *   - Tag 4: BabbageTxOut with inline datum (CompactAddr + CompactValue + BinaryData)
+      *   - Tag 5: BabbageTxOut with ref script (CompactAddr + CompactValue + Datum + Script)
       *
       * Based on Haskell cardano-ledger implementation.
       */
@@ -47,6 +51,8 @@ object MempackParser {
             case 1 => parseAlonzoTxOutWithDataHash(bytes, offset)
             case 2 => parseAlonzoAddrHash28AdaOnly(bytes, offset)
             case 3 => parseAlonzoAddrHash28AdaOnlyWithDataHash32(bytes, offset)
+            case 4 => parseBabbageTxOutWithInlineDatum(bytes, offset)
+            case 5 => parseBabbageTxOutWithRefScript(bytes, offset)
             case _ => throw new IllegalArgumentException(s"Unsupported TxOut tag: $tag")
         }
     }
@@ -300,6 +306,149 @@ object MempackParser {
         }
 
         (network, paymentCred)
+    }
+
+    /** Parse Babbage TxOut with inline datum (tag 4)
+      *
+      * Format: CompactAddr + CompactValue + BinaryData
+      *   - CompactAddr = length byte + address bytes
+      *   - CompactValue = CompactCoin (tag 0 + VarLen Word64) - ADA only for now
+      *   - BinaryData = ShortByteString (length prefix + inline datum bytes)
+      *
+      * Based on: packTagM 4 >> packM cAddr >> packM cValue >> packM datum
+      */
+    private def parseBabbageTxOutWithInlineDatum(
+        bytes: Array[Byte],
+        startOffset: Int
+    ): TransactionOutput = {
+        var offset = startOffset
+
+        // Parse CompactAddr (ShortByteString with length prefix)
+        val addrLen = bytes(offset) & 0xff
+        offset += 1
+
+        // Read address bytes
+        val addrBytes = bytes.slice(offset, offset + addrLen)
+        offset += addrLen
+
+        // Parse address
+        val address = Address.fromBytes(addrBytes)
+
+        // Parse CompactCoin: Tag(0) + VarLen Word64
+        val coinTag = bytes(offset) & 0xff
+        offset += 1
+        require(coinTag == 0, s"Expected coin tag 0, got $coinTag")
+
+        // VarLen Word64 parsing
+        val coinBytes = bytes.slice(offset, bytes.length)
+        val coin = parseVarLenWord64(coinBytes)
+
+        // Update offset to skip the VarLen-encoded coin
+        offset += varLenEncodedLength(coinBytes)
+
+        // Parse BinaryData (ShortByteString with length prefix)
+        val datumLen = bytes(offset) & 0xff
+        offset += 1
+
+        val datumBytes = bytes.slice(offset, offset + datumLen)
+        val data = Cbor.decode(datumBytes).to[Data].value
+
+        val value = Value(Coin(coin), MultiAsset.empty)
+        TransactionOutput.Babbage(
+          address,
+          value,
+          Some(DatumOption.Inline(data)),
+          None
+        )
+    }
+
+    /** Parse Babbage TxOut with reference script (tag 5)
+      *
+      * Format: CompactAddr + CompactValue + Datum + Script
+      *   - CompactAddr = length byte + address bytes
+      *   - CompactValue = CompactCoin (tag 0 + VarLen Word64) - ADA only for now
+      *   - Datum = Tag(0/1/2) + optional data (NoDatum/DatumHash/BinaryData)
+      *   - Script = Tag(0/1) + script bytes (NativeScript/PlutusScript)
+      *
+      * Based on: packTagM 5 >> packM cAddr >> packM cValue >> packM datum >> packM script
+      */
+    private def parseBabbageTxOutWithRefScript(
+        bytes: Array[Byte],
+        startOffset: Int
+    ): TransactionOutput = {
+        var offset = startOffset
+
+        // Parse CompactAddr (ShortByteString with length prefix)
+        val addrLen = bytes(offset) & 0xff
+        offset += 1
+
+        // Read address bytes
+        val addrBytes = bytes.slice(offset, offset + addrLen)
+        offset += addrLen
+
+        // Parse address
+        val address = Address.fromBytes(addrBytes)
+
+        // Parse CompactCoin: Tag(0) + VarLen Word64
+        val coinTag = bytes(offset) & 0xff
+        offset += 1
+        require(coinTag == 0, s"Expected coin tag 0, got $coinTag")
+
+        // VarLen Word64 parsing
+        val coinBytes = bytes.slice(offset, bytes.length)
+        val coin = parseVarLenWord64(coinBytes)
+
+        // Update offset to skip the VarLen-encoded coin
+        offset += varLenEncodedLength(coinBytes)
+
+        // Parse Datum (tag + optional data)
+        val datumTag = bytes(offset) & 0xff
+        offset += 1
+
+        val datumOption: Option[DatumOption] = datumTag match {
+            case 0 => None // NoDatum
+            case 1 =>
+                // DatumHash
+                val dataHashBytes = bytes.slice(offset, offset + 32)
+                offset += 32
+                Some(DatumOption.Hash(DataHash.fromArray(dataHashBytes)))
+            case 2 =>
+                // Inline BinaryData
+                val datumLen = bytes(offset) & 0xff
+                offset += 1
+                val datumBytes = bytes.slice(offset, offset + datumLen)
+                offset += datumLen
+                val data = Cbor.decode(datumBytes).to[Data].value
+                Some(DatumOption.Inline(data))
+            case _ => throw new IllegalArgumentException(s"Unsupported Datum tag: $datumTag")
+        }
+
+        // Parse Script (tag + script bytes)
+        val scriptTag = bytes(offset) & 0xff
+        offset += 1
+
+        val scriptRef: Option[ScriptRef] = scriptTag match {
+            case 0 =>
+                // NativeScript - ShortByteString with length prefix
+                val scriptLen = bytes(offset) & 0xff
+                offset += 1
+                val scriptBytes = bytes.slice(offset, offset + scriptLen)
+                // TODO: Parse actual native script (Timelock)
+                // For now, skip the script ref parsing
+                None
+            case 1 =>
+                // PlutusScript - ShortByteString with length prefix
+                val scriptLen = bytes(offset) & 0xff
+                offset += 1
+                val scriptBytes = bytes.slice(offset, offset + scriptLen)
+                // Assume PlutusV3 as default (latest version)
+                val script = Script.PlutusV3(scalus.builtin.ByteString.fromArray(scriptBytes))
+                Some(ScriptRef(script))
+            case _ => throw new IllegalArgumentException(s"Unsupported Script tag: $scriptTag")
+        }
+
+        val value = Value(Coin(coin), MultiAsset.empty)
+        TransactionOutput.Babbage(address, value, datumOption, scriptRef)
     }
 
     /** Parse variable-length Word64 encoding used by mempack

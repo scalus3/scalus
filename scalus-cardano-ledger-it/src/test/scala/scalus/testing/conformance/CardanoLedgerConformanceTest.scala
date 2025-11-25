@@ -84,7 +84,7 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
         val results = for
             vector <- vectorNames()
-            context = Context.testMainnet()
+            context = Context()
         yield vector -> Try(for case (_, vector) <- loadAllVectors(vector) yield {
             val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
             val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
