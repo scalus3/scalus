@@ -25,7 +25,7 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(transaction.body.value.inputs.toSet.nonEmpty)
     }
 
-    test("EmptyInputsValidator rule failure") {
+    test("EmptyInputsValidator rule failure on empty inputs") {
         val context = Context()
         val state = State()
         val transaction = {
