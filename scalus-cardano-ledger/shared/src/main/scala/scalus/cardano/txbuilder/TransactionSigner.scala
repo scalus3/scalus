@@ -6,7 +6,7 @@ import scalus.cardano.wallet.KeyPair
 class TransactionSigner(keys: Set[KeyPair]) {
 
     def sign(unsignedTransaction: Transaction): Transaction = {
-        val ws = keys.map(signEd25519(_, unsignedTransaction.id))
+        val ws = keys.view.map(signEd25519(_, unsignedTransaction.id))
         val vkeyWitnesses = TaggedSortedSet.from(ws)
         unsignedTransaction.copy(
           witnessSet = unsignedTransaction.witnessSet.copy(vkeyWitnesses = vkeyWitnesses)

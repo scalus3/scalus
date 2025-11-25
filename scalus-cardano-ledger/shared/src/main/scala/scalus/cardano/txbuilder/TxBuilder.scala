@@ -207,7 +207,9 @@ case class TxBuilder(
       * only consumed if a script fails validation.
       */
     def collaterals(utxos: Utxos): TxBuilder =
-        addSteps(utxos.toList.map(utxo => TransactionBuilderStep.AddCollateral.apply(Utxo(utxo)))*)
+        addSteps(
+          utxos.view.map(utxo => TransactionBuilderStep.AddCollateral.apply(Utxo(utxo))).toSeq*
+        )
 
     /** Adds the specified output to the list of transaction outputs.
       *
@@ -408,7 +410,8 @@ case class TxBuilder(
         finalizedContext match {
             case Right(finalized) =>
                 copy(context = finalized)
-            case Left(error) => throw new RuntimeException(error.reason)
+            case Left(error) =>
+                throw new RuntimeException(error.reason)
         }
     }
 
