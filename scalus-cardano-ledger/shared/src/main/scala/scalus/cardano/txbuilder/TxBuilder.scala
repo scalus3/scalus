@@ -67,10 +67,13 @@ case class TxBuilder(
       *   utxo to spend
       * @param redeemer
       *   redeemer to pass to the script to unlock the inputs
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
       */
     def spend[T: ToData](
         utxo: Utxo,
-        redeemer: T
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
         val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
@@ -84,7 +87,7 @@ case class TxBuilder(
           scriptSource = scriptSource,
           redeemer = redeemer.toData,
           datum = datum,
-          additionalSigners = Set.empty
+          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
