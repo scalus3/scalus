@@ -18,7 +18,10 @@ class TransactionSigner(keys: Set[KeyPair]) {
         transactionId: TransactionHash
     ): VKeyWitness = {
         val signature = keyPair.sign(transactionId.bytes)
-        VKeyWitness(ByteString.fromArray(keyPair.publicKeyBytes), ByteString.fromArray(signature))
+        VKeyWitness(
+          ByteString.fromArray(keyPair.publicKeyBytes.take(32)),
+          ByteString.fromArray(signature)
+        )
     }
 }
 
