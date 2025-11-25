@@ -50,7 +50,7 @@ object CardanoLedgerVectors {
                 }
             }
 
-            tempDir.resolve("eras")
+            tempDir.resolve("eras/conway/impl/dump")
         }
     }
 
@@ -90,8 +90,17 @@ object CardanoLedgerVectors {
         readFromString[RawTestVector](json)
     }
 
+    def vectorNames(): List[String] =
+        Files
+            .list(conformanceVectorsPath)
+            .map(_.getFileName.toFile.getName)
+            .iterator()
+            .asScala
+            .toList.sorted
+
     /** Load all test vectors from a directory tree */
-    def loadAllVectors(rootPath: Path): List[(Path, RawTestVector)] = {
+    def loadAllVectors(name: String): List[(Path, RawTestVector)] = {
+        val rootPath = conformanceVectorsPath.resolve(name)
         if !Files.exists(rootPath) then {
             println(s"Warning: Test vector directory not found: $rootPath")
             return List.empty
