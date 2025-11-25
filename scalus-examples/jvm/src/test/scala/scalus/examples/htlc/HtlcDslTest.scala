@@ -12,8 +12,8 @@ import scalus.testing.kit.ScalusTest
 
 import scala.util.Try
 
-class HtlcValidatorTest extends AnyFunSuite with ScalusTest {
-    import HtlcValidatorTest.*
+class HtlcDslTest extends AnyFunSuite with ScalusTest {
+    import HtlcDslTest.*
 
     test("committer successfully unlocks HTLC after timeout") {
         TestCase(
@@ -126,7 +126,7 @@ class HtlcValidatorTest extends AnyFunSuite with ScalusTest {
     }
 }
 
-object HtlcValidatorTest extends ScalusTest {
+object HtlcDslTest extends ScalusTest {
     export HtlcValidator.*
     export Person.*
 

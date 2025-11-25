@@ -6,12 +6,15 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
+import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.examples.TestUtil
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.testing.kit.{MockLedgerApi, ScalusTest}
+import scalus.uplc.Program
+import scalus.uplc.eval.Result
 
-class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
+class HtlcTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.debugCompiledContract
     private val scriptAddress = compiledContract.address(env.network)
@@ -94,6 +97,30 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
         )
     }
 
+    private def runValidator(
+        provider: MockLedgerApi,
+        tx: Transaction,
+        lockedInput: TransactionInput
+    ): Result = {
+        val utxos = {
+            val body = tx.body.value
+            val allInputs =
+                (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
+            provider.findUtxos(allInputs).toOption.get
+        }
+
+        val scriptContext =
+            TestUtil.getScriptContextV3(tx, utxos, lockedInput, RedeemerTag.Spend, env)
+
+        val allResolvedPlutusScriptsMap =
+            AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
+        val plutusScript =
+            scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
+        val program = Program.fromCborByteString(plutusScript.script)
+
+        program.runWithDebug(scriptContext)
+    }
+
     test("receiver reveals preimage before timeout") {
         val provider = createProvider()
 
@@ -153,6 +180,9 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   time = beforeTimeout
                 )
         }
+
+        val result = runValidator(provider, revealTx, lockedUtxo._1)
+        assert(result.isSuccess)
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
@@ -230,6 +260,10 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
+        val result = runValidator(provider, revealTx, lockedUtxo._1)
+        assert(result.isFailure)
+        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverPreimage))
+
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(revealTx) match
@@ -299,6 +333,10 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
+        val result = runValidator(provider, revealTx, lockedUtxo._1)
+        assert(result.isFailure)
+        assert(result.logs.last.contains(HtlcValidator.UnsignedReceiverTransaction))
+
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(revealTx) match
@@ -367,6 +405,10 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
+        val result = runValidator(provider, revealTx, lockedUtxo._1)
+        assert(result.isFailure)
+        assert(result.logs.last.contains(HtlcValidator.InvalidReceiverTimePoint))
+
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
         provider.submit(revealTx) match
@@ -433,6 +475,9 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   time = afterTimeout
                 )
         }
+
+        val result = runValidator(provider, timeoutTx, lockedUtxo._1)
+        assert(result.isSuccess)
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
@@ -511,6 +556,10 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
+        val result = runValidator(provider, timeoutTx, lockedUtxo._1)
+        assert(result.isFailure)
+        assert(result.logs.last.contains(HtlcValidator.UnsignedCommitterTransaction))
+
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
         provider.submit(timeoutTx) match
@@ -577,6 +626,10 @@ class HtlcTransactionCreatorTest extends AnyFunSuite, ScalusTest {
                   time = beforeTimeout
                 )
         }
+
+        val result = runValidator(provider, timeoutTx, lockedUtxo._1)
+        assert(result.isFailure)
+        assert(result.logs.last.contains(HtlcValidator.InvalidCommitterTimePoint))
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
