@@ -51,37 +51,37 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
         }
     }
 
-    test("Conformance ledger rules test") {
-        val validators = STS.Validator(
-          List(
-            AllInputsMustBeInUtxoValidator,
-            EmptyInputsValidator,
-            ExactSetOfRedeemersValidator,
-            ExUnitsTooBigValidator,
-            FeesOkValidator,
-            InputsAndReferenceInputsDisjointValidator,
-            MetadataValidator,
-            MissingKeyHashesValidator,
-            MissingOrExtraScriptHashesValidator,
-            MissingRequiredDatumsValidator,
-            NativeScriptsValidator,
-            OutsideForecastValidator,
-            OutsideValidityIntervalValidator,
-            OutputBootAddrAttrsSizeValidator,
-            OutputsHaveNotEnoughCoinsValidator,
-            OutputsHaveTooBigValueStorageSizeValidator,
-            ProtocolParamsViewHashesMatchValidator,
-            ScriptsWellFormedValidator,
-            TooManyCollateralInputsValidator,
-            TransactionSizeValidator,
-            ValueNotConservedUTxOValidator,
-            VerifiedSignaturesInWitnessesValidator,
-            WrongNetworkInTxBodyValidator,
-            WrongNetworkValidator,
-            WrongNetworkWithdrawalValidator
-          )
-        )
+    val validators = STS.Validator(
+      List(
+        AllInputsMustBeInUtxoValidator,
+        EmptyInputsValidator,
+        ExactSetOfRedeemersValidator,
+        ExUnitsTooBigValidator,
+        FeesOkValidator,
+        InputsAndReferenceInputsDisjointValidator,
+        MetadataValidator,
+        MissingKeyHashesValidator,
+        MissingOrExtraScriptHashesValidator,
+        MissingRequiredDatumsValidator,
+        NativeScriptsValidator,
+        OutsideForecastValidator,
+        OutsideValidityIntervalValidator,
+        OutputBootAddrAttrsSizeValidator,
+        OutputsHaveNotEnoughCoinsValidator,
+        OutputsHaveTooBigValueStorageSizeValidator,
+        ProtocolParamsViewHashesMatchValidator,
+        ScriptsWellFormedValidator,
+        TooManyCollateralInputsValidator,
+        TransactionSizeValidator,
+        ValueNotConservedUTxOValidator,
+        VerifiedSignaturesInWitnessesValidator,
+        WrongNetworkInTxBodyValidator,
+        WrongNetworkValidator,
+        WrongNetworkWithdrawalValidator
+      )
+    )
 
+    test("Conformance ledger rules test") {
         val results =
             for vector <- vectorNames()
             yield vector -> Try(for case (_, vector) <- loadAllVectors(vector) yield {
@@ -95,7 +95,16 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
             println(pprint(b))
             println()
         }
+    }
 
+    test("Conway.Imp.AlonzoImpSpec.UTXO.PlutusV1.Insufficient collateral") {
+        val vectorName = "Conway.Imp.AlonzoImpSpec.UTXO.PlutusV1.Insufficient collateral"
+        val result = for case (_, vector) <- loadAllVectors(vectorName) yield {
+            val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
+            val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
+            vector.success -> validators.validate(Context(), state, transaction)
+        }
+        println(pprint(result))
     }
 
 }

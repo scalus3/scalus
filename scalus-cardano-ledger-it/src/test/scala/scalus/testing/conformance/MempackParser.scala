@@ -24,7 +24,7 @@ object MempackParser {
     def parseTransactionInput(bytes: Array[Byte]): TransactionInput =
         TransactionInput(
           TransactionHash.fromArray(bytes.slice(0, 32)),
-          (bytes(32) << 8) | bytes(33)
+          bytes(32) | (bytes(33) << 8)
         )
 
     /** Parse a mempack-encoded TransactionOutput
