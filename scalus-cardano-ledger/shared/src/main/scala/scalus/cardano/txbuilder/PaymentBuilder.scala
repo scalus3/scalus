@@ -145,7 +145,7 @@ case class PaymentBuilder(
                 .left
                 .map(_.toString)
 
-            diffHandler = (diff: Long, tx: Transaction) =>
+            diffHandler = (diff: Value, tx: Transaction) =>
                 Change.handleChange(
                   diff,
                   tx,

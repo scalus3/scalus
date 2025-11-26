@@ -6,7 +6,7 @@ import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.cardano.ledger.utils.TxBalance
+import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, TxBalance}
 import scalus.cardano.node.Provider
 
 import java.time.Instant
@@ -471,34 +471,52 @@ case class TxBuilder(
 
             val gap = produced - consumed
 
-            if gap.coin.value <= 0 && gap.assets.isEmpty then return currentSteps
+            // excess produced tokens
+            val hasTokensInChange = gap.assets.assets.exists { case (_, assetMap) =>
+                assetMap.exists { case (_, amount) => amount < 0 }
+            }
+
+            // no excess production
+            if gap.coin.value <= 0 && !hasTokensInChange then return currentSteps
+
+            // If we do have excess tokens -- we need to make a change output.
+            // Ensure this change output has the tokens and min ADA
+            val gapToUse =
+                if gap.coin.value <= 0 && hasTokensInChange then {
+                    val excess = -gap.coin.value
+                    val changeTokens = MultiAsset(
+                      gap.assets.assets.map { case (policyId, assetMap) =>
+                          policyId -> assetMap.filter(_._2 < 0).map { case (name, amt) =>
+                              name -> (-amt)
+                          }
+                      }
+                    )
+                    // Calculate actual min ADA for change output with these tokens
+                    val estimatedChangeOutput = TransactionOutput(
+                      address = sponsor,
+                      value = Value(Coin(1_000_000), changeTokens) // mock 1 ada to pad the size
+                    )
+                    val minAdaRequired =
+                        MinCoinSizedTransactionOutput(
+                          Sized(estimatedChangeOutput),
+                          env.protocolParams
+                        )
+
+                    // If we have can cover those, we're done
+                    if excess >= minAdaRequired.value then return currentSteps
+
+                    // Otherwise, request exactly the shortfall
+                    val shortfall = minAdaRequired.value - excess
+                    Value(Coin(shortfall))
+                } else gap
 
             // Find more utxos, but exclude the ones we've already selected
             val newInputSteps =
-                selectAdditionalUtxos(provider, sponsor, gap, excludeInputs = inputs.keySet)
+                selectAdditionalUtxos(provider, sponsor, gapToUse, excludeInputs = inputs.keySet)
             if newInputSteps.isEmpty then
-                throw new RuntimeException(s"No UTXOs found to cover gap: $gap")
+                throw new RuntimeException(s"No UTXOs found to cover gap: $gapToUse")
 
-            val newInputs = newInputSteps.collect { case TransactionBuilderStep.Spend(utxo, _) =>
-                utxo
-            }
-            val tokensFromNewInputs = newInputs
-                .map(_.output.value.assets)
-                .foldLeft(MultiAsset.empty)(_ + _)
-            val tokenSurplus = tokensFromNewInputs - gap.assets
-
-            val tokenChangeSteps = if tokenSurplus.assets.nonEmpty then {
-                val changeOutput = TransactionOutput.Babbage(
-                  sponsor,
-                  Value(Coin.zero, tokenSurplus),
-                  None,
-                  None
-                )
-                val withMinAda = TransactionBuilder.ensureMinAda(changeOutput, env.protocolParams)
-                Seq(TransactionBuilderStep.Send(withMinAda))
-            } else Seq.empty
-
-            doBalance(currentSteps ++ newInputSteps ++ tokenChangeSteps, iteration + 1)
+            doBalance(currentSteps ++ newInputSteps, iteration + 1)
         }
 
         val balancedSteps = doBalance(steps, 0)

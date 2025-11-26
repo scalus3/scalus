@@ -594,7 +594,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             TransactionInput(genesisHash, 0) -> Babbage(
               address = Alice.address,
               value = Value(
-                Coin.ada(2),
+                Coin.ada(1),
                 MultiAsset(
                   SortedMap(
                     policyId -> SortedMap(assetName -> 100L)

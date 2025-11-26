@@ -3,10 +3,11 @@ package scalus.cardano.txbuilder
 import monocle.Focus
 import monocle.Focus.refocus
 import org.scalacheck.{Gen, Shrink}
+import org.scalatest.compatible.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString.utf8
-import scalus.builtin.platform
+import scalus.builtin.{platform, ByteString}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage
@@ -28,8 +29,13 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     )
 
     enum Expected {
-        case Success(outputLovelace: Long, fee: Long)
+        case Success(output: Value, fee: Long)
         case Failure(error: TxBalancingError)
+    }
+
+    object Expected {
+        def success(outputLovelace: Long, fee: Long) =
+            Expected.Success(Value.lovelace(outputLovelace), fee)
     }
 
     test("should fail when insufficient funds would require change output below minimum ADA") {
@@ -46,7 +52,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_500_000,
           output = 1_000_000,
           fee = 200_000,
-          expected = Expected.Success(outputLovelace = 1_300_000, fee = 200_000)
+          expected = Expected.success(outputLovelace = 1_300_000, fee = 200_000)
         )
     }
 
@@ -55,7 +61,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 2_000_000,
           output = 1_800_000,
           fee = 200_000,
-          expected = Expected.Success(outputLovelace = 1_800_000, fee = 200_000)
+          expected = Expected.success(outputLovelace = 1_800_000, fee = 200_000)
         )
     }
 
@@ -64,7 +70,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 5_000_000,
           output = 5_000_000,
           fee = 200_000,
-          expected = Expected.Success(outputLovelace = 4_800_000, fee = 200_000)
+          expected = Expected.success(outputLovelace = 4_800_000, fee = 200_000)
         )
     }
 
@@ -125,7 +131,67 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_000_000 + insufficientFunds.minRequired,
           output = 1_000_000,
           fee = 0,
-          expected = Expected.Success(outputLovelace = 978_370, fee = -insufficientFunds.diff)
+          expected = Expected.success(outputLovelace = 978_370, fee = -insufficientFunds.diff)
+        )
+    }
+
+    test("should handle single multi asset change") {
+        val initialAda = Coin.ada(2)
+        val expectedFee = Coin(162377L)
+        check(
+          in = Value.asset(policyId, co2, 5, initialAda),
+          output = Value.zero,
+          fee = 0L,
+          expected = Expected.Success(
+            output = Value.asset(policyId, co2, 5, initialAda - expectedFee),
+            fee = expectedFee.value
+          )
+        )
+    }
+
+    test("should handle multiple token types in change") {
+        val initialAda = Coin.ada(3)
+        val assets = MultiAsset.asset(policyId, co2, 100) + MultiAsset.asset(policyId, h2so4, 50)
+        val expectedFee = Coin(162773L)
+
+        check(
+          in = Value(initialAda, assets),
+          output = Value.zero,
+          fee = 0L,
+          expected = Expected.Success(
+            output = Value(initialAda - expectedFee, assets),
+            fee = expectedFee.value
+          )
+        )
+    }
+
+    test("should handle tokens with initial output value") {
+        val initialAda = Coin.ada(5)
+        val inputTokens = MultiAsset.asset(policyId, co2, 1000)
+        val outputAda = Coin.ada(2)
+        val expectedFee = Coin(162465L)
+
+        check(
+          in = Value(initialAda, inputTokens),
+          output = Value(outputAda),
+          fee = 0L,
+          expected = Expected.Success(
+            output = Value(initialAda - expectedFee, inputTokens),
+            fee = expectedFee.value
+          )
+        )
+    }
+
+    test("should silently remove when input doesn't have them") {
+        val expectedFee = Coin(160705L)
+        check(
+          in = Value.ada(3),
+          output = Value.asset(policyId, co2, 100, Coin.ada(1)),
+          fee = 0L,
+          expected = Expected.Success(
+            output = Value(Coin.ada(3) - expectedFee), // just ADA, no tokens
+            fee = expectedFee.value
+          )
         )
     }
 
@@ -134,7 +200,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 3_000_000,
           output = 2_000_000,
           fee = 0,
-          expected = Expected.Success(
+          expected = Expected.success(
             outputLovelace = 2_839295,
             fee = 160705
           )
@@ -147,7 +213,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = maxPossible,
           output = maxPossible - 1_000_000,
           fee = 500_000,
-          expected = Expected.Success(outputLovelace = 44_999_500_000L, fee = 500_000)
+          expected = Expected.success(outputLovelace = 44_999_500_000L, fee = 500_000)
         )
     }
 
@@ -235,12 +301,17 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           "addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
         )
 
-    private def mkTx(in: Coin, output: Coin, fee: Coin) = {
+    private lazy val policyId: PolicyId = Hash(ByteString.fromString("a".repeat(28)))
+
+    private lazy val co2 = AssetName.fromString("co2")
+    private lazy val h2so4 = AssetName.fromString("h2so4")
+
+    private def mkTx(in: Value, output: Value, fee: Coin): (Utxos, Transaction) = {
         val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val utxo = Map(
           input -> TransactionOutput(
             address = addr,
-            value = Value(in),
+            value = in,
             None
           )
         )
@@ -251,7 +322,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
               Sized(
                 TransactionOutput(
                   address = addr,
-                  value = Value(output),
+                  value = output,
                   None
                 )
               )
@@ -263,13 +334,23 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         (utxo, tx)
     }
 
+    private def mkTx(in: Coin, output: Coin, fee: Coin): (Utxos, Transaction) =
+        mkTx(Value(in), Value(output), fee)
+
     private def check(
         in: Long,
         output: Long,
         fee: Long,
         expected: Expected
-    ) = {
-        val (utxo, tx) = mkTx(Coin(in), Coin(output), Coin(fee))
+    ): Assertion = check(Value.lovelace(in), Value.lovelace(output), fee, expected)
+
+    private def check(
+        in: Value,
+        output: Value,
+        fee: Long,
+        expected: Expected
+    ): Assertion = {
+        val (utxo, tx) = mkTx(in, output, Coin(fee))
 
         val handler = ChangeOutputDiffHandler(params, 0)
         val r = LowLevelTxBuilder.balanceFeeAndChange(
@@ -287,7 +368,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
                 val body = value.body.value
                 assert(body.fee.value == expectedFee, "unexpected fee")
                 assert(
-                  body.outputs(0).value.value.coin.value == expectedValue,
+                  body.outputs(0).value.value == expectedValue,
                   "unexpected output value"
                 )
             case (Left(err), Expected.Failure(expectedError)) =>
@@ -297,8 +378,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     }
 
-    private def checkFeeOk(inAda: Long, outAda: Long, feeAda: Long): Unit = {
-        val (utxo, tx) = mkTx(Coin(inAda), Coin(outAda), Coin(feeAda))
+    private def checkFeeOk(in: Value, out: Value, feeAda: Long): Unit = {
+        val (utxo, tx) = mkTx(in, out, Coin(feeAda))
         val handler = ChangeOutputDiffHandler(params, 0)
         val result = LowLevelTxBuilder.balanceFeeAndChange(
           tx,
@@ -323,4 +404,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
             case Left(err) =>
                 fail(s"balanceFeeAndChange failed with: $err")
     }
+
+    private def checkFeeOk(inAda: Long, outAda: Long, feeAda: Long): Unit =
+        checkFeeOk(Value.lovelace(inAda), Value.lovelace(outAda), feeAda)
 }

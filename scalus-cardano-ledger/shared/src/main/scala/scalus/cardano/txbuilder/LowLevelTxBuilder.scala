@@ -17,7 +17,7 @@ object LowLevelTxBuilder {
     /** Balances the transaction using a diff handler to adjust the transaction.
       *
       * Invariants:
-      *   - only ADA is adjusted, native tokens must be balanced beforehand
+      *   - both ADA and native tokens are adjusted by the diff handler
       *   - fees never go below the initial fee
       */
     def balanceFeeAndChange(
@@ -41,12 +41,12 @@ object LowLevelTxBuilder {
     /** Balances the transaction using a diff handler to adjust the transaction.
       *
       * Invariants:
-      *   - only ADA is adjusted, native tokens must be balanced beforehand
+      *   - both ADA and native tokens are adjusted by the diff handler
       *   - fees never go below the initial fee
       */
     def balanceFeeAndChange(
         initial: Transaction,
-        diffHandler: (Long, Transaction) => Either[TxBalancingError, Transaction],
+        diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
@@ -66,7 +66,7 @@ object LowLevelTxBuilder {
                 // Don't go below initial fee
                 fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
                 txWithFees = setFee(fee)(txWithExUnits)
-                diff = calculateChangeLovelace(txWithFees, resolvedUtxo, protocolParams)
+                diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
                 // try to balance it
                 balanced <- diffHandler(diff, txWithFees)
             } yield balanced
@@ -155,6 +155,7 @@ def modifyWs(tx: Transaction, f: TransactionWitnessSet => TransactionWitnessSet)
 
 def setFee(amount: Coin)(tx: Transaction) = modifyBody(tx, _.copy(fee = amount))
 
+@deprecated("Use calculateChangeValue() instead to handle both ADA and tokens", "scalus 0.13.0")
 def calculateChangeLovelace(tx: Transaction, utxo: Utxos, params: ProtocolParams): Long = {
     val produced = TxBalance.produced(tx)
     val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get

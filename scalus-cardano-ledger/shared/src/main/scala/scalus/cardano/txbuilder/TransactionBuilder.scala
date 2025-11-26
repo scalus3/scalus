@@ -23,7 +23,7 @@ import scalus.cardano.txbuilder.modifyWs
 import scalus.|>
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
-type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]
+type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
 
 // ===================================
 // Tx Builder steps

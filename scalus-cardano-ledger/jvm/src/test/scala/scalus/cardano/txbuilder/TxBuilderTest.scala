@@ -91,7 +91,7 @@ class TxBuilderTest extends AnyFunSuite {
         val validTo = validFrom.plusSeconds(3600)
         val inlineDatum = Data.I(123)
 
-        val builtTx = TxBuilder(testEnv)
+        val tx = TxBuilder(testEnv)
             .spend(Utxo(paymentUtxo))
             .collaterals(Utxo(collateralUtxo))
             .spend(scriptUtxo, redeemer, script1)
@@ -103,22 +103,22 @@ class TxBuilderTest extends AnyFunSuite {
             .build()
             .transaction
 
-        val plutusV3Scripts = builtTx.witnessSet.plutusV3Scripts.toMap.values
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
         assert(plutusV3Scripts.exists(_.scriptHash == script1.scriptHash))
 
-        assert(builtTx.body.value.inputs.toSeq.contains(scriptUtxo.input))
+        assert(tx.body.value.inputs.toSeq.contains(scriptUtxo.input))
 
-        assert(builtTx.witnessSet.redeemers.isDefined)
-        val redeemers = builtTx.witnessSet.redeemers.get.value.toSeq
+        assert(tx.witnessSet.redeemers.isDefined)
+        val redeemers = tx.witnessSet.redeemers.get.value.toSeq
         assert(redeemers.toSeq.size == 1)
         assert(redeemers.head.tag == RedeemerTag.Spend)
         assert(
-          redeemers.head.index == builtTx.body.value.inputs.toSeq.indexWhere(_ == scriptUtxo.input)
+          redeemers.head.index == tx.body.value.inputs.toSeq.indexWhere(_ == scriptUtxo.input)
         )
 
-        assert(builtTx.body.value.collateralInputs.toSeq.contains(collateralUtxo._1))
+        assert(tx.body.value.collateralInputs.toSeq.contains(collateralUtxo._1))
 
-        val bobOutput = builtTx.body.value.outputs.find(_.value.address == Bob.address)
+        val bobOutput = tx.body.value.outputs.find(_.value.address == Bob.address)
         assert(bobOutput.isDefined)
         assert(bobOutput.get.value.datumOption.isDefined)
         bobOutput.get.value.datumOption.get match {
@@ -126,15 +126,15 @@ class TxBuilderTest extends AnyFunSuite {
             case _            => fail("Expected inline datum")
         }
 
-        assert(builtTx.body.value.validityStartSlot.isDefined)
+        assert(tx.body.value.validityStartSlot.isDefined)
         assert(
-          builtTx.body.value.validityStartSlot.get == testEnv.slotConfig.timeToSlot(
+          tx.body.value.validityStartSlot.get == testEnv.slotConfig.timeToSlot(
             validFrom.toEpochMilli
           )
         )
 
-        assert(builtTx.body.value.ttl.isDefined)
-        assert(builtTx.body.value.ttl.get == testEnv.slotConfig.timeToSlot(validTo.toEpochMilli))
+        assert(tx.body.value.ttl.isDefined)
+        assert(tx.body.value.ttl.get == testEnv.slotConfig.timeToSlot(validTo.toEpochMilli))
     }
 
     test("TxBuilder mint with script and payTo sends minted tokens to specified output") {
@@ -166,7 +166,7 @@ class TxBuilderTest extends AnyFunSuite {
           )
         )
 
-        val builtTx = TxBuilder(testEnv)
+        val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .mint(redeemer, assets, mintingPolicy)
             .payTo(Bob.address, paymentValue)
@@ -176,26 +176,26 @@ class TxBuilderTest extends AnyFunSuite {
             .transaction
 
         // Check that mintingPolicy is in the plutus V3 scripts witness set
-        val plutusV3Scripts = builtTx.witnessSet.plutusV3Scripts.toMap.values
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
         assert(plutusV3Scripts.exists(_.scriptHash == mintingPolicy.scriptHash))
 
         // Check that mint field is present
-        assert(builtTx.body.value.mint.isDefined)
-        val mint = builtTx.body.value.mint.get
+        assert(tx.body.value.mint.isDefined)
+        val mint = tx.body.value.mint.get
         assert(mint.assets.contains(mintingPolicy.scriptHash))
         val mintedAssets = mint.assets(mintingPolicy.scriptHash)
         assert(mintedAssets.get(assetName1).contains(100L))
         assert(mintedAssets.get(assetName2).contains(50L))
 
         // Check that redeemers are present for minting
-        assert(builtTx.witnessSet.redeemers.isDefined)
-        val redeemers = builtTx.witnessSet.redeemers.get.value.toSeq
+        assert(tx.witnessSet.redeemers.isDefined)
+        val redeemers = tx.witnessSet.redeemers.get.value.toSeq
         assert(redeemers.toSeq.size == 1)
         assert(redeemers.head.tag == RedeemerTag.Mint)
         assert(redeemers.head.index == 0)
 
         // Check that tokens appear in Bob's output
-        val bobOutputs = builtTx.body.value.outputs.filter(_.value.address == Bob.address)
+        val bobOutputs = tx.body.value.outputs.filter(_.value.address == Bob.address)
         assert(bobOutputs.nonEmpty, "Should have at least one output to Bob")
 
         val bobOutputWithTokens = bobOutputs.find { output =>
@@ -207,8 +207,8 @@ class TxBuilderTest extends AnyFunSuite {
 
         assert(bobOutputWithTokens.get.value.value.coin.value >= 2_000_000L)
 
-        assert(builtTx.auxiliaryData.isDefined)
-        val auxData = builtTx.auxiliaryData.get.value
+        assert(tx.auxiliaryData.isDefined)
+        val auxData = tx.auxiliaryData.get.value
         val md = auxData.getMetadata
         assert(md.contains(Word64(674L)))
         assert(md(Word64(674L)) == Metadatum.Text("Test metadata"))
@@ -226,14 +226,14 @@ class TxBuilderTest extends AnyFunSuite {
           scriptRef = None
         )
 
-        val builtTx = TxBuilder(testEnv)
+        val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .output(customOutput)
             .changeTo(Alice.address)
             .build()
             .transaction
 
-        val bobOutputs = builtTx.body.value.outputs.filter(_.value.address == Bob.address)
+        val bobOutputs = tx.body.value.outputs.filter(_.value.address == Bob.address)
         assert(bobOutputs.size == 1)
 
         val bobOutput = bobOutputs.head
@@ -253,7 +253,7 @@ class TxBuilderTest extends AnyFunSuite {
           scalus.builtin.Builtins.blake2b_256(scalus.builtin.Builtins.serialiseData(datum))
         )
 
-        val builtTx = TxBuilder(testEnv)
+        val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .attach(datum)
             .payTo(Bob.address, Value.ada(2), datumHash)
@@ -261,7 +261,7 @@ class TxBuilderTest extends AnyFunSuite {
             .build()
             .transaction
 
-        val bobOutput = builtTx.body.value.outputs.find(_.value.address == Bob.address)
+        val bobOutput = tx.body.value.outputs.find(_.value.address == Bob.address)
         assert(bobOutput.isDefined)
         assert(bobOutput.get.value.datumOption.isDefined)
         bobOutput.get.value.datumOption.get match {
@@ -269,7 +269,7 @@ class TxBuilderTest extends AnyFunSuite {
             case _                      => fail("Expected datum hash")
         }
 
-        val plutusData = builtTx.witnessSet.plutusData.value.toMap.values.map(_.value)
+        val plutusData = tx.witnessSet.plutusData.value.toMap.values.map(_.value)
         assert(plutusData.exists(_ == datum))
     }
 
@@ -287,7 +287,7 @@ class TxBuilderTest extends AnyFunSuite {
         val datum2 = Data.B(ByteString.fromHex("aabbcc"))
         val datum3 = Data.Constr(1, List(Data.I(222)))
 
-        val builtTx = TxBuilder(testEnv)
+        val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .attach(script1)
             .attach(script2)
@@ -300,14 +300,14 @@ class TxBuilderTest extends AnyFunSuite {
             .build()
             .transaction
 
-        val v3Scripts = builtTx.witnessSet.plutusV3Scripts.toMap.values.toSeq
+        val v3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values.toSeq
         assert(v3Scripts.exists(_.scriptHash == script1.scriptHash))
         assert(v3Scripts.exists(_.scriptHash == script2.scriptHash))
 
-        val v2Scripts = builtTx.witnessSet.plutusV2Scripts.toMap.values.toSeq
+        val v2Scripts = tx.witnessSet.plutusV2Scripts.toMap.values.toSeq
         assert(v2Scripts.exists(_.scriptHash == script3.scriptHash))
 
-        val plutusData = builtTx.witnessSet.plutusData.value.toMap.values.map(_.value).toSeq
+        val plutusData = tx.witnessSet.plutusData.value.toMap.values.map(_.value).toSeq
         assert(plutusData.contains(datum1))
         assert(plutusData.contains(datum2))
         assert(plutusData.contains(datum3))
@@ -326,4 +326,123 @@ class TxBuilderTest extends AnyFunSuite {
         }
         succeed
     }
+
+    test("TxBuilder should return tokens to change when spending token UTXO") {
+        val co2 = AssetName(ByteString.fromString("co2"))
+        val policyId = mintingPolicy.scriptHash
+        val tokenAmount = 1000L
+
+        // has tokens
+        val inputValue = Value.asset(policyId, co2, tokenAmount, Coin.ada(10))
+        val tokenUtxo =
+            (genTransactionInput.sample.get, TransactionOutput(Alice.address, inputValue))
+
+        // Only send ADA, no tokens
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(tokenUtxo))
+            .payTo(Bob.address, Value.ada(5))
+            .changeTo(Alice.address)
+            .build()
+            .transaction
+
+        // Bob should receive only ADA
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.nonEmpty, "Should have output to Bob")
+        assert(bobOutputs.head.value.value.assets.isEmpty, "Bob should not receive tokens")
+
+        // Alice should receive all tokens back as change
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
+
+        val aliceTokens = aliceOutputs.head.value.value.assets.assets(policyId)(co2)
+
+        assert(
+          aliceTokens == tokenAmount,
+          s"Alice should receive all $tokenAmount tokens as change"
+        )
+
+    }
+
+    test("TxBuilder should handle partial token sends with correct change") {
+        val co2 = AssetName(ByteString.fromString("co2"))
+        val policyId = mintingPolicy.scriptHash
+
+        val tokenAmount = 1000L
+        val sendAmount = 300L
+
+        val inputValue = Value.asset(policyId, co2, tokenAmount, Coin.ada(10))
+        val tokenUtxo =
+            (genTransactionInput.sample.get, TransactionOutput(Alice.address, inputValue))
+
+        val paymentValue = Value.asset(policyId, co2, sendAmount, Coin.ada(3))
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(tokenUtxo))
+            .payTo(Bob.address, paymentValue)
+            .changeTo(Alice.address)
+            .build()
+            .transaction
+
+        // Bob should receive 300 tokens
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.nonEmpty, "Should have output to Bob")
+        val bobTokens = bobOutputs.head.value.value.assets.assets(policyId)(co2)
+        assert(bobTokens == sendAmount, s"Bob should receive $sendAmount tokens")
+
+        // Alice should receive remaining 700 tokens as change
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
+        val aliceTokens = aliceOutputs.head.value.value.assets.assets(policyId)(co2)
+        val expectedChange = tokenAmount - sendAmount
+        assert(
+          aliceTokens == expectedChange,
+          s"Alice should receive $expectedChange tokens as change"
+        )
+    }
+
+    test("TxBuilder should handle multiple token types in change") {
+        val co2 = AssetName(ByteString.fromString("co2"))
+        val h2so4 = AssetName(ByteString.fromString("h2so4"))
+        val policyId = mintingPolicy.scriptHash
+
+        val inputValue = Value(
+          Coin.ada(10),
+          MultiAsset(
+            SortedMap(
+              policyId -> SortedMap(
+                co2 -> 500L,
+                h2so4 -> 300L
+              )
+            )
+          )
+        )
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+        val tokenUtxo =
+            (genTransactionInput.sample.get, TransactionOutput(Alice.address, inputValue))
+
+        // Send only co2, no h2so4
+        val paymentValue = Value.asset(policyId, co2, 200, Coin.ada(3))
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(tokenUtxo))
+            .payTo(Bob.address, paymentValue)
+            .changeTo(Alice.address)
+            .build()
+            .transaction
+
+        // Bob should receive 200 co2
+        val bobOutputs = outputsOf(Bob, tx)
+        val bobAssets = bobOutputs.head.value.value.assets.assets(policyId)
+        assert(bobAssets(co2) == 200, "Bob should receive 200 co2")
+        assert(!bobAssets.contains(h2so4), "Bob should not receive h2so4")
+
+        // Alice should receive remaining co2 + all h2so4 as change
+        val aliceOutputs = outputsOf(Alice, tx)
+        val aliceAssets = aliceOutputs.head.value.value.assets.assets(policyId)
+        assert(aliceAssets(co2) == 300L, "Alice should receive 300 co2 as change")
+        assert(aliceAssets(h2so4) == 300L, "Alice should receive all 300 h2so4 as change")
+    }
+
+    private def outputsOf(peer: TestPeer, tx: Transaction) =
+        tx.body.value.outputs.toSeq.filter(_.value.address == peer.address)
 }
