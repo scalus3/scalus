@@ -1,15 +1,12 @@
 package scalus.testing.integration
 
-import com.bloxbean.cardano.client.common.model.Networks
-import com.bloxbean.cardano.client.crypto.cip1852.{DerivationPath, Segment}
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
-import scalus.cardano.wallet.BloxbeanAccount
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.cardano.wallet.BloxbeanKeyPair
+import scalus.cardano.wallet.BloxbeanAccount
 import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
 import scalus.ledger.api.v1.PubKeyHash
 
@@ -87,35 +84,6 @@ class HtlcIntegrationTest extends AnyFunSuite {
             )
             val env = Environment(cardanoInfo)
             TestContext(client, cardanoInfo, env, evaluator)
-    }
-
-    private def buildWalletWithCollateral(address: Address, utxos: Utxos): Wallet = new Wallet {
-        override def selectInputs(
-            required: Value
-        ): Option[Seq[(Utxo, Witness)]] = {
-            utxos.toSeq
-                .filter { case (_, output) => output.value.coin.value >= required.coin.value }
-                .map { case (input, output) =>
-                    (Utxo(input, output), PubKeyWitness)
-                }
-                .headOption
-                .map(Seq(_))
-        }
-
-        override def utxo: Utxos = utxos
-
-        override def collateralInputs: Seq[(Utxo, Witness)] = {
-            utxos.toSeq
-                .filter { case (_, output) =>
-                    output.value.coin.value >= 5_000_000 && output.value.assets.isEmpty
-                }
-                .map { case (input, output) =>
-                    (Utxo(input, output), PubKeyWitness)
-                }
-                .take(1)
-        }
-
-        override def owner: Address = address
     }
 
     private def runLockTest(testEnv: TestEnv): Unit = {
