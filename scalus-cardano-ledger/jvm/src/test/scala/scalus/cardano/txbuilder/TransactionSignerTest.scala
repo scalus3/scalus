@@ -144,4 +144,26 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         assert(witness.vkey == expectedVkey, "VKey should be first 32 bytes of public key")
         assert(witness.signature.length == 64, "Ed25519 signature should be 64 bytes")
     }
+
+    test("signing preserves existing witnesses and adds new ones") {
+        val keyPair1 = generateKeyPair()
+        val keyPair2 = generateKeyPair()
+
+        val signer1 = new TransactionSigner(Set(keyPair1))
+        val signer2 = new TransactionSigner(Set(keyPair2))
+
+        val unsignedTx = createUnsignedTransaction
+        val signedOnce = signer1.sign(unsignedTx)
+        val signedTwice = signer2.sign(signedOnce)
+
+        val witnesses = signedTwice.witnessSet.vkeyWitnesses.toSeq
+        assert(witnesses.size == 2, "Should have two witnesses after signing twice")
+
+        val witnessVkeys = witnesses.map(_.vkey).toSet
+        val expectedVkey1 = ByteString.fromArray(keyPair1.publicKeyBytes.take(32))
+        val expectedVkey2 = ByteString.fromArray(keyPair2.publicKeyBytes.take(32))
+
+        assert(witnessVkeys.contains(expectedVkey1), "First signer's witness should be preserved")
+        assert(witnessVkeys.contains(expectedVkey2), "Second signer's witness should be present")
+    }
 }
