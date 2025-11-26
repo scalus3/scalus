@@ -5,152 +5,121 @@ import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 
 class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("AllInputsMustBeInUtxoValidator rule success") {
+    test("AllInputsMustBeInUtxoValidator success on inputs") {
         val context = Context()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  collateralInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  referenceInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  )
-                )
-              )
-            )
-        }
+        val input = Arbitrary.arbitrary[TransactionInput].sample.get
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
+        )
         val state = State(
-          utxos = (
-            transaction.body.value.inputs.toSet.view ++
-                transaction.body.value.collateralInputs.toSet.view ++
-                transaction.body.value.referenceInputs.toSet.view
-          )
+          utxos = transaction.body.value.inputs.toSet.view
               .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
               .toMap
         )
 
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
         assert(result.isRight)
-        assert(transaction.body.value.inputs.toSet.forall(state.utxos.contains))
-        assert(transaction.body.value.collateralInputs.toSet.forall(state.utxos.contains))
-        assert(transaction.body.value.referenceInputs.toSet.forall(state.utxos.contains))
     }
 
-    test("AllInputsMustBeInUtxoValidator rule failure on inputs") {
+    test("AllInputsMustBeInUtxoValidator failure on inputs") {
         val context = Context()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  collateralInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  referenceInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  )
-                )
-              )
-            )
-        }
+        val input = Arbitrary.arbitrary[TransactionInput].sample.get
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
+        )
+        val state = State()
+
+        val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
+        assert(result.isLeft)
+    }
+
+    test("AllInputsMustBeInUtxoValidator success on collateral inputs") {
+        val context = Context()
+        val collateralInput = Arbitrary.arbitrary[TransactionInput].sample.get
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            collateralInputs = TaggedSortedSet.from(Set(collateralInput)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
+        )
         val state = State(
-          utxos = (
-            // missing inputs
-            transaction.body.value.collateralInputs.toSet.view ++
-                transaction.body.value.referenceInputs.toSet.view
-          )
+          utxos = transaction.body.value.collateralInputs.toSet.view
               .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
               .toMap
         )
 
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(transaction.body.value.inputs.toSet.forall(!state.utxos.contains(_)))
-        assert(transaction.body.value.collateralInputs.toSet.forall(state.utxos.contains))
-        assert(transaction.body.value.referenceInputs.toSet.forall(state.utxos.contains))
+        assert(result.isRight)
     }
 
-    test("AllInputsMustBeInUtxoValidator rule failure on collateralInputs") {
+    test("AllInputsMustBeInUtxoValidator failure on collateral inputs") {
         val context = Context()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  collateralInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  referenceInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  )
-                )
-              )
-            )
-        }
+        val collateralInput = Arbitrary.arbitrary[TransactionInput].sample.get
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            collateralInputs = TaggedSortedSet.from(Set(collateralInput)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
+        )
+        val state = State()
+
+        val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
+        assert(result.isLeft)
+    }
+
+    test("AllInputsMustBeInUtxoValidator success on reference inputs") {
+        val context = Context()
+        val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
+        )
         val state = State(
-          utxos = (
-            transaction.body.value.inputs.toSet.view ++
-                // missing collateralInputs
-                transaction.body.value.referenceInputs.toSet.view
-          )
+          utxos = transaction.body.value.referenceInputs.toSet.view
               .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
               .toMap
         )
 
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
-        assert(result.isLeft)
-        assert(transaction.body.value.inputs.toSet.forall(state.utxos.contains))
-        assert(transaction.body.value.collateralInputs.toSet.forall(!state.utxos.contains(_)))
-        assert(transaction.body.value.referenceInputs.toSet.forall(state.utxos.contains))
+        assert(result.isRight)
     }
 
-    test("AllInputsMustBeInUtxoValidator rule failure on referenceInputs") {
+    test("AllInputsMustBeInUtxoValidator failure on reference inputs") {
         val context = Context()
-        val transaction = {
-            val tx = randomTransactionWithIsValidField
-            tx.copy(
-              body = KeepRaw(
-                tx.body.value.copy(
-                  inputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  collateralInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  ),
-                  referenceInputs = TaggedSortedSet.from(
-                    genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
-                  )
-                )
-              )
-            )
-        }
-        val state = State(
-          utxos = (
-            transaction.body.value.inputs.toSet.view ++
-                transaction.body.value.collateralInputs.toSet.view
-                // missing referenceInputs
-          )
-              .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
-              .toMap
+        val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
         )
+        val state = State()
 
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
         assert(result.isLeft)
-        assert(transaction.body.value.inputs.toSet.forall(state.utxos.contains))
-        assert(transaction.body.value.collateralInputs.toSet.forall(state.utxos.contains))
-        assert(transaction.body.value.referenceInputs.toSet.forall(!state.utxos.contains(_)))
     }
-
 }

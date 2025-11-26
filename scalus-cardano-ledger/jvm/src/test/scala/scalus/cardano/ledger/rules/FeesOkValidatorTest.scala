@@ -112,6 +112,55 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(result.isRight)
     }
 
+    test(
+      "FeesOkValidator If the total ExUnits are 0 in both Memory and Steps, no further part needs to be checked"
+    ) {
+        given Arbitrary[scalus.builtin.Data] = Arbitrary(
+          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        )
+
+        val context = Context()
+
+        val transaction = {
+            val tx = randomTransactionWithIsValidField
+            tx.copy(
+              body = KeepRaw(
+                tx.body.value.copy(
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.empty,
+                  collateralReturnOutput = None,
+                  totalCollateral = None,
+                  fee = Coin(10000000L),
+                  referenceInputs = TaggedSortedSet.empty,
+                  outputs = IndexedSeq.empty,
+                  mint = None,
+                  votingProcedures = None,
+                  withdrawals = None,
+                  proposalProcedures = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
+                )
+              ),
+              auxiliaryData = None,
+              witnessSet = tx.witnessSet.copy(
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
+                redeemers = None
+              )
+            )
+        }
+
+        val state = State()
+
+        val result = FeesOkValidator.validate(context, state, transaction)
+        assert(result.isRight)
+    }
+
     test("FeesOkValidator feePaidIsGreeterOrEqualThanMinimumFee rule failure") {
         given Arbitrary[scalus.builtin.Data] = Arbitrary(
           Gen.const(scalus.builtin.Data.unit) // Simplified for testing

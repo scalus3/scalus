@@ -190,10 +190,10 @@ object TransactionException {
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
-        actual: ExUnits,
-        max: ExUnits
+        actualTxExecutionUnits: ExUnits,
+        maxTxExecutionUnits: ExUnits
     ) extends TransactionException(
-          s"Execution units for transaction $transactionId exceed the maximum. Actual: $actual, maximum: $max"
+          s"Execution units for transaction $transactionId exceed the maximum. Actual: $actualTxExecutionUnits, maximum: $maxTxExecutionUnits"
         )
 
     // It's Babbage.NoCollateralInputs in cardano-ledger
