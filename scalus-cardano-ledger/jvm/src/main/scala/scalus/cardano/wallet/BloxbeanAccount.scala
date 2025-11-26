@@ -12,10 +12,7 @@ class BloxbeanKeyPair(override val underlying: HdKeyPair) extends KeyPair {
 
     override def sign(message: Array[Byte]): Array[Byte] = {
         val signingProvider = CryptoConfiguration.INSTANCE.getSigningProvider
-        if privateKeyBytes.length == 64 then // extended pvt key (most prob for regular account)
-            // check for public key
-            signingProvider.signExtended(message, privateKeyBytes)
-        else signingProvider.sign(message, privateKeyBytes)
+        signingProvider.signExtended(message, privateKeyBytes)
     }
 }
 
