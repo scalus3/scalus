@@ -6,9 +6,9 @@ import com.bloxbean.cardano.client.crypto.config.CryptoConfiguration
 
 class BloxbeanKeyPair(override val underlying: HdKeyPair) extends KeyPair {
     type Underlying = HdKeyPair
-    override def publicKeyBytes: Array[Byte] = underlying.getPublicKey.getBytes
+    override def publicKeyBytes: Array[Byte] = underlying.getPublicKey.getKeyData
 
-    override def privateKeyBytes: Array[Byte] = underlying.getPrivateKey.getBytes
+    override def privateKeyBytes: Array[Byte] = underlying.getPrivateKey.getKeyData
 
     override def sign(message: Array[Byte]): Array[Byte] = {
         val signingProvider = CryptoConfiguration.INSTANCE.getSigningProvider
