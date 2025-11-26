@@ -83,19 +83,31 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     test("Conformance ledger rules test") {
         val results =
-            for vector <- vectorNames()
-            yield vector -> Try(for case (_, vector) <- loadAllVectors(vector) yield {
+            for vectorName <- vectorNames()
+            yield vectorName -> Try(for case (path, vector) <- loadAllVectors(vectorName) yield {
                 val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
                 val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
-                vector.success -> validators.validate(Context(), state, transaction)
+                (
+                  path.getFileName.toFile.getName,
+                  vector.success,
+                  validators.validate(Context(), state, transaction)
+                )
             })
 
-        for case (a, b) <- results do {
-            println(a)
-            println(pprint(b))
-            println()
-        }
+        val failed = failures(results)
+
+        for case (name, index, success, result) <- failed do
+            println(s"$name/$index ($success) ${pprint(result)}")
+
+        // assert(failed.isEmpty)
     }
+
+    private def failures(results: List[(String, Try[List[(String, Boolean, validators.Result)]])]) =
+        for
+            case (vectorName, result) <- results
+            x <- result.toOption.toList
+            case (n, success, result) <- x if success != result.isRight
+        yield (vectorName, n, success, result)
 
     test("Conway.Imp.AlonzoImpSpec.UTXO.PlutusV1.Insufficient collateral") {
         val vectorName = "Conway.Imp.AlonzoImpSpec.UTXO.PlutusV1.Insufficient collateral"
