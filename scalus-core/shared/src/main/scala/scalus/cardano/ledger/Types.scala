@@ -94,6 +94,21 @@ case class MultiAsset private (assets: SortedMap[PolicyId, SortedMap[AssetName, 
           .mapValues(_.view.mapValues(v => -v).to(SortedMap))
           .to(SortedMap)
     )
+
+    override def toString: String = {
+        if isEmpty then "{}"
+        else {
+            val pairs = assets.map { case (policyId, tokens) =>
+                val tokenPairs = tokens
+                    .map { case (name, amount) =>
+                        s"$name: $amount"
+                    }
+                    .mkString(", ")
+                s"${policyId.toHex}: {$tokenPairs}"
+            }
+            s"{${pairs.mkString(", ")}}"
+        }
+    }
 }
 
 object MultiAsset {
@@ -220,10 +235,10 @@ final case class AssetName(bytes: ByteString) derives Codec {
     /** Ensures the asset name is at most 32 bytes */
     require(bytes.size <= 32, s"AssetName must be at most 32 bytes, got ${bytes.size}")
 
-    /** Convert to ASCII string if possible, otherwise returns hex representation */
+    /** Convert to Latin1 string if printable, otherwise returns hex representation */
     override def toString: String = {
         if bytes.bytes.forall(b => b >= 32 && b < 127) then {
-            new String(bytes.bytes, "ASCII")
+            new String(bytes.bytes, "ISO-8859-1")
         } else {
             bytes.toHex
         }
