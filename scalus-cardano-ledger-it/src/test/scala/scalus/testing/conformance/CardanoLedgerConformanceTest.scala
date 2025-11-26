@@ -81,20 +81,30 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
       )
     )
 
+    private def validateVector(vectorName: String) =
+        for case (path, vector) <- loadAllVectors(vectorName) yield
+            val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
+            val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
+            (
+              path.getFileName.toFile.getName,
+              vector.success,
+              validators.validate(Context(), state, transaction)
+            )
+
+    private def failureVectors(
+        results: List[(String, Try[List[(String, Boolean, validators.Result)]])]
+    ) = for
+        case (vectorName, result) <- results
+        x <- result.toOption.toList
+        case (n, success, result) <- x if success != result.isRight
+    yield (vectorName, n, success, result)
+
     test("Conformance ledger rules test") {
         val results =
             for vectorName <- vectorNames()
-            yield vectorName -> Try(for case (path, vector) <- loadAllVectors(vectorName) yield {
-                val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
-                val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
-                (
-                  path.getFileName.toFile.getName,
-                  vector.success,
-                  validators.validate(Context(), state, transaction)
-                )
-            })
+            yield vectorName -> Try(validateVector(vectorName))
 
-        val failed = failures(results)
+        val failed = failureVectors(results)
 
         for case (name, index, success, result) <- failed do
             println(s"$name/$index ($success) ${pprint(result)}")
@@ -102,20 +112,25 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
         // assert(failed.isEmpty)
     }
 
-    private def failures(results: List[(String, Try[List[(String, Boolean, validators.Result)]])]) =
-        for
-            case (vectorName, result) <- results
-            x <- result.toOption.toList
-            case (n, success, result) <- x if success != result.isRight
-        yield (vectorName, n, success, result)
-
     test("Conway.Imp.AlonzoImpSpec.UTXO.PlutusV1.Insufficient collateral") {
         val vectorName = "Conway.Imp.AlonzoImpSpec.UTXO.PlutusV1.Insufficient collateral"
-        val result = for case (_, vector) <- loadAllVectors(vectorName) yield {
-            val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
-            val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
-            vector.success -> validators.validate(Context(), state, transaction)
-        }
+        val result = validateVector(vectorName)
+        println(pprint(result))
+    }
+
+    test("Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.Invalid plutus script fails in phase 2") {
+        val vectorName =
+            "Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.Invalid plutus script fails in phase 2"
+        val result = validateVector(vectorName)
+        println(pprint(result))
+    }
+
+    test(
+      "Conway.Imp.ConwayImpSpec - Version 10.RATIFY.When CC expired.SPOs alone can't enact hard-fork"
+    ) {
+        val vectorName =
+            "Conway.Imp.ConwayImpSpec - Version 10.RATIFY.When CC expired.SPOs alone can't enact hard-fork"
+        val result = validateVector(vectorName)
         println(pprint(result))
     }
 

@@ -96,7 +96,8 @@ object CardanoLedgerVectors {
             .map(_.getFileName.toFile.getName)
             .iterator()
             .asScala
-            .toList.sorted
+            .toList
+            .sorted
 
     /** Load all test vectors from a directory tree */
     def loadAllVectors(name: String): List[(Path, RawTestVector)] = {
@@ -116,12 +117,13 @@ object CardanoLedgerVectors {
             .filter(p => !p.getFileName.toString.endsWith(".tar.gz")) // Skip tar.gz files
             .flatMap { path =>
                 loadRawVector(path) match {
-                    case scala.util.Success(vector) => Some((path, vector))
+                    case scala.util.Success(vector) => Some((path.getFileName, vector))
                     case scala.util.Failure(e)      =>
                         // Skip files that aren't valid JSON vectors
                         None
                 }
             }
             .toList
+            .sortBy(_._1)
     }
 }
