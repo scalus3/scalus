@@ -1,12 +1,12 @@
 package scalus.testing.integration
 
-import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Networks
 import com.bloxbean.cardano.client.crypto.cip1852.{DerivationPath, Segment}
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
+import scalus.cardano.wallet.BloxbeanAccount
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.cardano.wallet.BloxbeanKeyPair
@@ -27,21 +27,11 @@ class HtlcIntegrationTest extends AnyFunSuite {
     )
 
     private def makeTransactionSigner(derivation: String, mnemonic: String): TransactionSigner = {
-        val derivationPieces = derivation.split("/").drop(1).map(_.stripSuffix("'")).map(_.toInt)
-        val derivationPath = DerivationPath
-            .builder()
-            .purpose(new Segment(derivationPieces(0), true))
-            .coinType(new Segment(derivationPieces(1), true))
-            .account(new Segment(derivationPieces(2), true))
-            .role(new Segment(derivationPieces(3), false))
-            .index(new Segment(derivationPieces(4), false))
-            .build()
-        val account = Account.createFromMnemonic(Networks.testnet(), mnemonic, derivationPath)
-        val keyPair = BloxbeanKeyPair(account.hdKeyPair())
-
+        val account = BloxbeanAccount(Network.Testnet, mnemonic, derivation)
+        val keyPair = account.paymentKeyPair
         new TransactionSigner(Set(keyPair))
     }
-    
+
     private def getEnvOrSkip(name: String, testEnv: TestEnv): String = {
         val postfix = testEnv match {
             case TestEnv.Local   => "LOCAL"
