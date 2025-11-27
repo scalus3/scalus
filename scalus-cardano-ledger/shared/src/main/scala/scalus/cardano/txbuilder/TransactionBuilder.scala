@@ -646,7 +646,7 @@ object StepError {
 
     case class DatumIsMissing(utxo: Utxo, step: TransactionBuilderStep) extends StepError {
         override def explain: String =
-            "Given witness to spend an output requires a datum that is missing: $utxo"
+            s"Given witness to spend an output requires a datum that is missing: $utxo"
     }
 
     case class IncorrectDatumHash(

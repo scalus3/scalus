@@ -24,6 +24,7 @@ object TaggedSortedMap extends TaggedSeq:
 
     extension [K, A](s: TaggedSortedMap[K, A])
         inline def toMap: Map[K, A] = s
+        inline def toSortedMap: SortedMap[K, A] = s
         inline def toSet: Set[A] = ListSet.from(s.values)
 
     given [K, A: Encoder]: Encoder[TaggedSortedMap[K, A]] = (w, a) => writeTagged(w, a.values)

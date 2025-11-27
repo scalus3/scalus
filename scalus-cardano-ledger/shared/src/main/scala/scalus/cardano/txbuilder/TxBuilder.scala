@@ -6,9 +6,8 @@ import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.cardano.ledger.utils.{AllNeededScriptHashes, MinCoinSizedTransactionOutput, TxBalance}
+import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, TxBalance}
 import scalus.cardano.node.Provider
-import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap

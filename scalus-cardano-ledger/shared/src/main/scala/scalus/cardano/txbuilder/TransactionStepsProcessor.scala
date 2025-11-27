@@ -4,7 +4,6 @@ import cats.*
 import cats.implicits.*
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
-import scalus.builtin.Builtins.{blake2b_224, serialiseData}
 import scalus.builtin.{platform, ByteString, Data}
 import scalus.cardano.address
 import scalus.cardano.address.*
@@ -253,33 +252,24 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         case Datum.DatumInlined =>
                             Left(DatumWitnessNotProvided(utxo, step))
                         case Datum.DatumValue(providedDatum) =>
-                            // TODO: is that correct? Upstream Data.dataHash extension?
                             val computedHash: DataHash =
-                                DataHash.fromByteString(
-                                  blake2b_224(serialiseData(providedDatum))
-                                )
+                                DataHash.fromByteString(providedDatum.dataHash)
 
-                            if datumHash == computedHash then {
+                            if datumHash == computedHash then
                                 modify0(
                                   unsafeCtxWitnessL
                                       .refocus(_.plutusData)
                                       .modify(plutusData =>
-                                          KeepRaw.apply(
-                                            TaggedSortedMap.from(
-                                              appendDistinct(
-                                                KeepRaw.apply(providedDatum),
-                                                plutusData.value.toMap.values.toSeq
-                                              )
+                                          KeepRaw(
+                                            TaggedSortedMap(
+                                              plutusData.value.toSortedMap
+                                                  .updated(datumHash, KeepRaw(providedDatum))
                                             )
                                           )
                                       )
                                 )
                                 unit
-                            } else {
-                                Left(
-                                  IncorrectDatumHash(utxo, providedDatum, datumHash, step)
-                                )
-                            }
+                            else Left(IncorrectDatumHash(utxo, providedDatum, datumHash, step))
                     }
             }
         } yield ()
@@ -1122,9 +1112,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         )
 
         // Add to expected signers
-        modify0(
-          Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
-        )
+        modify0(Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners))
 
         plutusScript match {
             case ScriptSource.PlutusScriptValue(ps: PlutusScript) =>
