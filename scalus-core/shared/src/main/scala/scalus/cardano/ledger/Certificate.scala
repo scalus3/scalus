@@ -175,6 +175,66 @@ object Certificate {
         Coin(totalRefund)
     }
 
+    /** Calculate total deposits required for Shelley-era certificates (stake pool and delegation)
+      *
+      * @param params
+      *   Protocol parameters containing deposit amounts
+      * @param certificates
+      *   Certificates in the transaction
+      * @return
+      *   Total deposit amount
+      */
+    def shelleyTotalDeposits(
+        params: ProtocolParams,
+        certificates: Iterable[Certificate]
+    ): Coin = {
+        val keyDeposit = params.stakeAddressDeposit
+        val poolDeposit = params.stakePoolDeposit
+        var totalDeposits = 0L
+
+        certificates.foreach {
+            case Certificate.RegCert(_, Some(deposit)) =>
+                // Conway-style registration with explicit deposit
+                totalDeposits += deposit.value
+            case Certificate.RegCert(_, None) =>
+                // Shelley-style registration using protocol parameter
+                totalDeposits += keyDeposit
+            case Certificate.StakeRegDelegCert(_, _, deposit) =>
+                // Registration and delegation with deposit
+                totalDeposits += deposit.value
+            case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) =>
+                // Pool registration
+                totalDeposits += poolDeposit
+            case _ => // Other certificates don't require deposits
+        }
+        Coin(totalDeposits)
+    }
+
+    /** Calculate total deposits required for Conway-era DRep certificates
+      *
+      * @param params
+      *   Protocol parameters containing DRep deposit amount
+      * @param certificates
+      *   Certificates in the transaction
+      * @return
+      *   Total DRep deposit amount
+      */
+    def conwayDRepDeposits(
+        params: ProtocolParams,
+        certificates: Iterable[Certificate]
+    ): Coin = {
+        val drepDeposit = params.dRepDeposit
+        var totalDeposits = 0L
+
+        certificates.foreach {
+            case Certificate.RegDRepCert(_, deposit, _) =>
+                // Use explicit deposit from certificate
+                totalDeposits += deposit.value
+            case _ => // Other certificates don't require DRep deposits
+        }
+        Coin(totalDeposits)
+    }
+
     given Encoder[Certificate] with
         def write(w: Writer, value: Certificate): Writer = value match
             case Certificate.RegCert(credential, None) =>

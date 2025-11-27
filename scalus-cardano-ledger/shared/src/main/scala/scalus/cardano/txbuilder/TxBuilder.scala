@@ -638,7 +638,8 @@ case class TxBuilder(
               mint,
               feeEstimate,
               certificates,
-              None
+              None,
+              env.protocolParams
             )
 
             val gap = produced - consumed

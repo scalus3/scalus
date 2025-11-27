@@ -19,7 +19,7 @@ object ValueNotConservedUTxOValidator extends STS.Validator {
 
         TxBalance.consumed(tx, state.certState, state.utxos, context.env.params).flatMap {
             consumed =>
-                val produced = TxBalance.produced(tx)
+                val produced = TxBalance.produced(tx, context.env.params)
                 if consumed == produced then success
                 else
                     failure(

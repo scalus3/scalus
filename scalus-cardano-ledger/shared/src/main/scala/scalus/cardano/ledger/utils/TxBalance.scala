@@ -26,14 +26,15 @@ object TxBalance {
         )
     }
 
-    def produced(tx: Transaction): Value = {
+    def produced(tx: Transaction, protocolParams: ProtocolParams): Value = {
         val txBody = tx.body.value
         producedFromFields(
           txBody.outputs.map(_.value),
           txBody.mint,
           txBody.fee,
           txBody.certificates.toSeq,
-          txBody.donation
+          txBody.donation,
+          protocolParams
         )
     }
 
@@ -147,6 +148,8 @@ object TxBalance {
       *   Certificates (for deposits)
       * @param donation
       *   Optional donation amount
+      * @param protocolParams
+      *   Protocol parameters for deposit amounts
       * @return
       *   Total produced value
       */
@@ -155,7 +158,8 @@ object TxBalance {
         mint: Option[MultiAsset],
         fee: Coin,
         certificates: Seq[Certificate],
-        donation: Option[Coin]
+        donation: Option[Coin],
+        protocolParams: ProtocolParams
     ): Value = {
         val mintAssets = mint.getOrElse(MultiAsset.empty)
         val burned = Value(
@@ -170,8 +174,19 @@ object TxBalance {
         val outputValues = outputs
             .map(_.value)
             .foldLeft(Value.zero)(_ + _)
-        val shelleyTotalDepositsTxCerts: Coin = Coin.zero // FIXME: implement
-        val conwayDRepDepositsTxCerts: Coin = Coin.zero // FIXME: implement
+
+        // Calculate total deposits for Shelley-era certificates (stake pool and delegation)
+        val shelleyTotalDepositsTxCerts: Coin = Certificate.shelleyTotalDeposits(
+          protocolParams,
+          certificates
+        )
+
+        // Calculate total deposits for Conway-era DRep certificates
+        val conwayDRepDepositsTxCerts: Coin = Certificate.conwayDRepDeposits(
+          protocolParams,
+          certificates
+        )
+
         val conwayTotalDepositsTxCerts = shelleyTotalDepositsTxCerts + conwayDRepDepositsTxCerts
         val getTotalDepositsTxBody = conwayTotalDepositsTxCerts
         val shelleyProducedValue = outputValues + Value(fee + getTotalDepositsTxBody)

@@ -180,13 +180,13 @@ def setFee(amount: Coin)(tx: Transaction) = modifyBody(tx, _.copy(fee = amount))
 
 @deprecated("Use calculateChangeValue() instead to handle both ADA and tokens", "scalus 0.13.0")
 def calculateChangeLovelace(tx: Transaction, utxo: Utxos, params: ProtocolParams): Long = {
-    val produced = TxBalance.produced(tx)
+    val produced = TxBalance.produced(tx, params)
     val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
     consumed.coin.value - produced.coin.value
 }
 
 def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
-    val produced = TxBalance.produced(tx)
+    val produced = TxBalance.produced(tx, params)
     val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
     consumed - produced
 }
