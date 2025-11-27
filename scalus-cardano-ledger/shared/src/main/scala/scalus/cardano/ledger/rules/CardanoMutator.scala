@@ -20,13 +20,24 @@ object CardanoMutator extends STS.Mutator {
             .map(v => v.name -> v)
             .toMap
 
-    val allMutators: Map[String, STS.Mutator] =
-        TraitObjectScanner
-            .findImplementors[STS.Mutator](packageName)
-            .view
-            .filter(_.name != this.name) // Exclude self to prevent infinite recursion
-            .map(v => v.name -> v)
-            .toMap
+    val allMutators: Map[String, STS.Mutator] = {
+        // FIXME: The TraitObjectScanner is non-deterministic; it can return the mutators in different orders.
+        // The mutators aren't commutative, so this is an issue.
+//        TraitObjectScanner
+//            .findImplementors[STS.Mutator](packageName)
+//            .view
+//            .filter(_.name != this.name) // Exclude self to prevent infinite recursion
+//            .map(v => v.name -> v)
+//            .toMap
+        // QUESTION: Should we add the outputs before or after running the plutus scripts transaction mutator?
+        // Does it matter?
+        Map(
+          "AddOutputsToUtxoMutator" -> AddOutputsToUtxoMutator,
+          "PlutusScriptsTransactionMutator" -> PlutusScriptsTransactionMutator,
+          "FeeMutator" -> FeeMutator,
+          "RemoveInputsFromUtxoMutator" -> RemoveInputsFromUtxoMutator
+        )
+    }
 
     val allSTSs: Map[String, STS] = allValidators ++ allMutators
 }
