@@ -691,11 +691,11 @@ object Lowering {
         def visit(value: IdentifiableLoweredValue): Unit = {
             if !visited.contains(value) then
                 visited.add(value)
-                value.usedUplevelVars.foreach(visit)
+                value.usedUplevelVars.toList.sortBy(_.id).foreach(visit)
                 if values.contains(value) then sorted.append(value)
         }
 
-        values.foreach(visit)
+        values.toList.sortBy(_.id).foreach(visit)
         sorted.toList
     }
 
