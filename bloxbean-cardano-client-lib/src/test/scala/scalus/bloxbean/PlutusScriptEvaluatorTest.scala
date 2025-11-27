@@ -64,7 +64,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
           ),
           witnessSet = TransactionWitnessSet(
             scripts = Seq(s),
-            redeemers = Redeemers(redeemer),
+            redeemers = Some(Redeemers(redeemer)),
             vkeyWitnesses = Set.empty,
             plutusData = Seq(datum)
           ),
@@ -119,7 +119,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
           ),
           witnessSet = TransactionWitnessSet(
             scripts = Seq(s),
-            redeemers = Redeemers(redeemer),
+            redeemers = Some(Redeemers(redeemer)),
             vkeyWitnesses = Set.empty,
             plutusData = Seq(datum)
           ),

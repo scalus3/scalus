@@ -26,6 +26,7 @@ object TaggedSortedStrictMap extends TaggedSeq:
 
     extension [K, A](s: TaggedSortedStrictMap[K, A])
         inline def toMap: Map[K, A] = s
+        inline def toSortedMap: SortedMap[K, A] = s
         inline def toSet: Set[A] = ListSet.from(s.values)
 
     trait KeyOf[K, A] extends (A => K) {}

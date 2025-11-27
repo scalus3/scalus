@@ -8,6 +8,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.BloxbeanToLedgerTranslation.*
 import scalus.cardano.node.Provider
 import scalus.utils.Hex.hexToBytes
+import scalus.cardano.node.SubmitError
+import scalus.cardano.node.SubmitError.*
 
 import scala.util.Try
 
@@ -65,7 +67,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
         }
     }
 
-    override def submit(tx: Transaction): Either[RuntimeException, Unit] = {
+    override def submit(tx: Transaction): Either[SubmitError, Unit] = {
         val url = s"$baseUrl/tx/submit"
         val txCbor = tx.toCbor
 
@@ -75,12 +77,17 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
               data = txCbor,
               headers = Map("project_id" -> apiKey, "Content-Type" -> "application/cbor")
             )
-            if response.is2xx then {
-                Right(())
-            } else {
-                Left(new RuntimeException(response.text()))
-            }
-        }.toEither.left.map(new RuntimeException(_)).flatten
+
+            if response.is4xx then {
+                Left(SubmitError.NodeError(response.text()))
+            } else if response.is5xx then
+                Left(SubmitError.NodeError(s"Blockfrost submit error: ${response.text()}"))
+            else Right(())
+        }.toEither.left
+            .map(exception =>
+                SubmitError.NetworkError(s"Blockfrost submit exception", Some(exception))
+            )
+            .flatten
     }
 
     override def findUtxo(

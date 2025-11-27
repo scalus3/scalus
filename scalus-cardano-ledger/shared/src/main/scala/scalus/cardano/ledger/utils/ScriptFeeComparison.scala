@@ -1,11 +1,9 @@
 package scalus.cardano.ledger.utils
 
 import scalus.builtin.{ByteString, Data}
-import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
+import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.address.Address
 import scalus.cardano.txbuilder.*
-import scalus.cardano.txbuilder.Datum.DatumInlined
 import scalus.compiler.sir.TargetLoweringBackend.{ScottEncodingLowering, SirToUplcV3Lowering, SumOfProductsLowering}
 import scalus.{plutusV3, toUplc, Compiler}
 import scalus.uplc.Program
@@ -49,13 +47,13 @@ object ScriptFeeComparison {
         script: PlutusScript,
         redeemer: Data,
         datum: Option[DatumOption],
-        context: BuilderContext,
+        env: Environment,
         additionalSigners: Set[ExpectedSigner] = Set.empty,
-        scriptValue: Value = Value.lovelace(10_000_000)
+        scriptValue: Value = Value.ada(10)
     ): Either[String, FeeComparison] = {
 
         val scriptAddress = ShelleyAddress(
-          network = context.env.network,
+          network = env.network,
           payment = ShelleyPaymentPart.Script(script.scriptHash),
           delegation = ShelleyDelegationPart.Null
         )
@@ -65,7 +63,7 @@ object ScriptFeeComparison {
           0
         )
 
-        val scriptUtxoOutput = TransactionOutput.Babbage(
+        val scriptUtxoOutput = TransactionOutput(
           address = scriptAddress,
           value = scriptValue,
           datumOption = datum,
@@ -73,18 +71,42 @@ object ScriptFeeComparison {
         )
         val scriptUtxo = Utxo(scriptUtxoInput, scriptUtxoOutput)
 
-        def createDirect = {
-            val directWitness = ThreeArgumentPlutusScriptWitness(
-              scriptSource = ScriptSource.PlutusScriptValue(script),
-              redeemer = redeemer,
-              datum = DatumInlined,
-              additionalSigners = additionalSigners
-            )
+        // Create funding UTXO to cover transaction fees
+        val fundingUtxoInput = TransactionInput(
+          TransactionHash.fromByteString(ByteString.fromHex("cc" * 32)),
+          0
+        )
+        val fundingUtxoOutput = TransactionOutput(
+          address = arbAddress(env),
+          value = Value.ada(100),
+          datumOption = None,
+          scriptRef = None
+        )
+        val fundingUtxo = Utxo(fundingUtxoInput, fundingUtxoOutput)
 
-            PaymentBuilder(context)
-                .withStep(TransactionBuilderStep.Spend(scriptUtxo, directWitness))
-                .payTo(arbAddress(context.env), scriptValue)
+        // Create collateral UTXO for script execution
+        val collateralUtxoInput = TransactionInput(
+          TransactionHash.fromByteString(ByteString.fromHex("dd" * 32)),
+          0
+        )
+        val collateralUtxoOutput = TransactionOutput(
+          address = arbAddress(env),
+          value = Value.ada(5),
+          datumOption = None,
+          scriptRef = None
+        )
+        val collateralUtxo = Utxo(collateralUtxoInput, collateralUtxoOutput)
+
+        def createDirect = {
+            val additionalSignerHashes = additionalSigners.map(_.hash)
+            TxBuilder(env)
+                .spend(fundingUtxo)
+                .collaterals(collateralUtxo)
+                .spend(scriptUtxo, redeemer, script, additionalSignerHashes)
+                .payTo(arbAddress(env), scriptValue)
+                .changeTo(arbAddress(env))
                 .build()
+                .transaction
         }
 
         def createRef = {
@@ -92,45 +114,46 @@ object ScriptFeeComparison {
               TransactionHash.fromByteString(ByteString.fromHex("bb" * 32)),
               0
             )
-            val refScriptUtxoOutput = TransactionOutput.Babbage(
-              address = arbAddress(context.env),
-              value = Value.lovelace(5_000_000),
+            val refScriptUtxoOutput = TransactionOutput(
+              address = arbAddress(env),
+              value = Value.ada(5),
               datumOption = None,
               scriptRef = Some(ScriptRef(script: Script))
             )
             val refScriptUtxo = Utxo(refScriptUtxoInput, refScriptUtxoOutput)
 
-            val refWitness = ThreeArgumentPlutusScriptWitness(
-              scriptSource = ScriptSource.PlutusScriptAttached,
-              redeemer = redeemer,
-              datum = DatumInlined,
-              additionalSigners = additionalSigners
-            )
-
-            PaymentBuilder(context)
-                .withStep(TransactionBuilderStep.ReferenceOutput(refScriptUtxo))
-                .withStep(TransactionBuilderStep.Spend(scriptUtxo, refWitness))
-                .payTo(arbAddress(context.env), scriptValue)
+            val additionalSignerHashes = additionalSigners.map(_.hash)
+            TxBuilder(env)
+                .spend(fundingUtxo)
+                .collaterals(collateralUtxo)
+                .references(refScriptUtxo)
+                .spend(scriptUtxo, redeemer, additionalSignerHashes)
+                .payTo(arbAddress(env), scriptValue)
+                .changeTo(arbAddress(env))
                 .build()
+                .transaction
         }
 
-        for
-            direct <- createDirect
-            reference <- createRef
-        yield FeeComparison(direct, reference)
+        try {
+            val direct = createDirect
+            val reference = createRef
+            Right(FeeComparison(direct, reference))
+        } catch {
+            case e: Exception => Left(e.getMessage)
+        }
     }
 
     inline def compareAll(
         inline code: Any,
         redeemer: Data,
         datum: Option[DatumOption],
-        context: BuilderContext,
+        env: Environment,
         additionalSigners: Set[ExpectedSigner] = Set.empty,
-        scriptValue: Value = Value.lovelace(10_000_000)
+        scriptValue: Value = Value.ada(10)
     ): Map[Compiler.Options, ComparisonResult] = enumerateOptions
         .groupMap(identity) { options =>
             val plutusV3 = makePlutusV3(options, code)
-            compareFees(plutusV3, redeemer, datum, context, additionalSigners, scriptValue) match {
+            compareFees(plutusV3, redeemer, datum, env, additionalSigners, scriptValue) match {
                 case Right(comparison)  => ComparisonResult.Ok(comparison, options)
                 case Left(errorMessage) => ComparisonResult.Fail(errorMessage, options)
             }

@@ -17,12 +17,12 @@ object Context {
 }
 
 case class State(
-    utxos: Utxos = Map.empty,
+    utxos: Utxos = Utxos.empty,
     certState: CertState = CertState.empty,
     deposited: Coin = Coin.zero, // Lazy field used only for assertions
     fees: Coin = Coin.zero, // Accumulated transaction fees
-    govState: GovState = (), // Governance state
-    stakeDistribution: StakeMap = Map.empty, // Stake distribution
+    govState: GovState = GovState.empty, // Governance state
+    stakeDistribution: StakeMap = StakeMap.empty, // Stake distribution
     donation: Coin = Coin.zero // Donation amount
 )
 

@@ -1,11 +1,13 @@
 package scalus.cardano.ledger
 
+import io.bullet.borer.Dom.Element
 import scalus.cardano.address.{Address, Network}
 
 // TODO: maybe replace on enum
 sealed abstract class TransactionException(message: String, cause: Throwable)
     extends RuntimeException(message, cause) {
     def this(message: String) = this(message, null)
+    def explain: String = message
 }
 
 object TransactionException {
@@ -189,10 +191,10 @@ object TransactionException {
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
-        actual: ExUnits,
-        max: ExUnits
+        actualTxExecutionUnits: ExUnits,
+        maxTxExecutionUnits: ExUnits
     ) extends TransactionException(
-          s"Execution units for transaction $transactionId exceed the maximum. Actual: $actual, maximum: $max"
+          s"Execution units for transaction $transactionId exceed the maximum. Actual: $actualTxExecutionUnits, maximum: $maxTxExecutionUnits"
         )
 
     // It's Babbage.NoCollateralInputs in cardano-ledger
@@ -307,7 +309,10 @@ object TransactionException {
 
 @deprecated("Use Utxos instead", "0.12.1")
 type UTxO = Map[TransactionInput, TransactionOutput]
+
 type Utxos = Map[TransactionInput, TransactionOutput]
+object Utxos:
+    def empty: Utxos = Map.empty
 
 /** Unspent Transaction Output
   *
@@ -324,8 +329,12 @@ object Utxo {
         Utxo(utxo._1, utxo._2)
 }
 
-type GovState = Unit
+type GovState = Array[Element]
+object GovState:
+    def empty: GovState = Array.empty
 type StakeMap = Map[Credential, Coin]
+object StakeMap:
+    def empty: StakeMap = Map.empty
 case class UTxOState(
     utxo: Utxos, // UtxO entries
     deposited: Coin, // Lazy field used only for assertions

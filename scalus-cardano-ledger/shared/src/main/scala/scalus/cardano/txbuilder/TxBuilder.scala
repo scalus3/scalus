@@ -6,13 +6,48 @@ import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.cardano.ledger.utils.TxBalance
+import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, TxBalance}
 import scalus.cardano.node.Provider
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 
+/** A high-level, fluent API for building Cardano transactions.
+  *
+  * TxBuilder provides a convenient way to construct transactions by chaining method calls. It
+  * handles input selection, output creation, script attachment, minting, and transaction
+  * finalization including fee calculation and change handling.
+  *
+  * TxBuilder is purely functional; each method returns a new instance with the updated state. The
+  * only methods that does effects is `complete`, others are pure.
+  *
+  * ==Usage==
+  * {{{
+  * val tx = TxBuilder(env)
+  *   .spend(utxo)
+  *   .payTo(recipientAddress, Value.ada(10))
+  *   .changeTo(changeAddress)
+  *   .build()
+  *   .sign(signer)
+  *   .transaction
+  * }}}
+  *
+  * @param env
+  *   the environment containing protocol parameters, network info, and slot configuration
+  * @param context
+  *   the current transaction builder context
+  * @param evaluator
+  *   the Plutus script evaluator used for script validation
+  * @param diffHandlerOpt
+  *   optional handler for managing transaction balance differences (change)
+  * @param steps
+  *   accumulated transaction building steps
+  * @param attachedScripts
+  *   scripts to be included in the transaction witness set
+  * @param attachedData
+  *   datum values to be included in the transaction witness set
+  */
 case class TxBuilder(
     env: Environment,
     context: TransactionBuilder.Context,
@@ -23,40 +58,35 @@ case class TxBuilder(
     attachedData: Map[DataHash, Data] = Map.empty,
 ) {
 
-    /** Adds the specified **pubkey** utxo to the list of inputs, thus spending it.
+    /** Adds the specified pubkey utxo to the list of inputs, thus spending it.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
       * according to [[changeTo]] or [[diffHandler]].
       * @param utxo
       *   utxo to spend
       * @note
-      *   use [[spend]] with utxo **and redeemer** to spend script protected utxos. Otherwise,
-      *   [[build]] throws.
+      *   use [[spend]] with utxo and redeemer to spend script-protected utxos. Otherwise, [[build]]
+      *   throws.
       */
     def spend(utxo: Utxo): TxBuilder =
-        addSteps(
-          TransactionBuilderStep.Spend(
-            utxo,
-            PubKeyWitness
-          )
-        )
+        addSteps(TransactionBuilderStep.Spend(utxo, PubKeyWitness))
 
-    /** Adds the specified **pubkey** utxos to the list of inputs, thus spending them.
+    /** Adds the specified pubkey utxos to the list of inputs, thus spending them.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
       * according to [[changeTo]] or [[diffHandler]].
       * @param utxos
       *   utxos to spend
       * @note
-      *   use [[spend]] with utxo **and redeemer** to spend script protected utxos. Otherwise,
-      *   [[build]] throws.
+      *   use [[spend]] with utxo and redeemer to spend script-protected utxos. Otherwise, [[build]]
+      *   throws.
       */
     def spend(utxos: Utxos): TxBuilder = {
         utxos.foldLeft(this) { case (builder, utxo) => builder.spend(Utxo(utxo)) }
     }
 
-    /** Adds the specified **script protected** utxo to the list of inputs and the specified
-      * redeemer to the witness set.
+    /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
+      * the witness set.
       *
       * Make sure to also call [[attach]] with the script that locks these utxos. If the script that
       * protects the `utxo` fails with the specified `redeemer`, [[build]] is going to throw.
@@ -67,10 +97,13 @@ case class TxBuilder(
       *   utxo to spend
       * @param redeemer
       *   redeemer to pass to the script to unlock the inputs
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
       */
     def spend[T: ToData](
         utxo: Utxo,
-        redeemer: T
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
         val scriptHash = extractScriptHash(utxo)
         val datum = buildDatumWitness(utxo)
@@ -84,11 +117,28 @@ case class TxBuilder(
           scriptSource = scriptSource,
           redeemer = redeemer.toData,
           datum = datum,
-          additionalSigners = Set.empty
+          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
 
+    /** Adds the specified script-protected utxo with a delayed redeemer that is computed from the
+      * built transaction.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts). The redeemer is computed after the transaction is assembled but
+      * before script evaluation.
+      *
+      * The script must be attached via [[attach]] or references via [[references]] before calling
+      * this method.
+      *
+      * @param utxo
+      *   utxo to spend
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      * @throws IllegalArgumentException
+      *   if the script for the utxo is not found in attachedScripts
+      */
     def spend(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data
@@ -117,10 +167,10 @@ case class TxBuilder(
         )
     }
 
-    /** Adds the specified **script protected** utxo to the list of inputs and the specified
-      * redeemer to the witness set.
+    /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
+      * the witness set.
       *
-      * If the specified `script` fails with the specified redeemer`, [[build]] is going to throw.
+      * If the specified `script` fails with the specified redeemer, [[build]] is going to throw.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
       * according to [[changeTo]] or [[diffHandler]].
@@ -137,19 +187,11 @@ case class TxBuilder(
         redeemer: T,
         script: PlutusScript
     ): TxBuilder = {
-        val datum = buildDatumWitness(utxo)
-
-        val witness = ThreeArgumentPlutusScriptWitness(
-          scriptSource = ScriptSource.PlutusScriptValue(script),
-          redeemer = redeemer.toData,
-          datum = datum,
-          additionalSigners = Set.empty
-        )
-        addSteps(TransactionBuilderStep.Spend(utxo, witness))
+        spend(utxo, redeemer, script, Set.empty)
     }
 
-    /** Adds the specified **script protected** utxo to the list of inputs and the specified
-      * redeemer to the witness set, with additional required signers.
+    /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
+      * the witness set, with additional required signers.
       *
       * Use this method when the validator script requires specific signatures beyond the spender.
       * The public key hashes in `additionalSigners` will be added to the transaction's required
@@ -166,14 +208,14 @@ case class TxBuilder(
       *   redeemer to pass to the script to unlock the inputs
       * @param script
       *   script that protects the `utxo`
-      * @param additionalSigners
+      * @param requiredSigners
       *   set of public key hashes that must sign the transaction
       */
     def spend[T: ToData](
         utxo: Utxo,
         redeemer: T,
         script: PlutusScript,
-        additionalSigners: Set[AddrKeyHash]
+        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
@@ -181,7 +223,7 @@ case class TxBuilder(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer.toData,
           datum = datum,
-          additionalSigners = additionalSigners.map(ExpectedSigner.apply)
+          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
@@ -208,7 +250,7 @@ case class TxBuilder(
       */
     def collaterals(utxos: Utxos): TxBuilder =
         addSteps(
-          utxos.view.map(utxo => TransactionBuilderStep.AddCollateral.apply(Utxo(utxo))).toSeq*
+          utxos.view.map(utxo => TransactionBuilderStep.AddCollateral(Utxo(utxo))).toSeq*
         )
 
     /** Adds the specified output to the list of transaction outputs.
@@ -281,19 +323,18 @@ case class TxBuilder(
     def attach(script: Script): TxBuilder =
         copy(attachedScripts = attachedScripts + (script.scriptHash -> script))
 
-    /** Attaches datum data to the transaction witness set.
+    /** Attaches a datum to the transaction witness set.
       *
-      * Use this method when sending to an address with a datum hash (via
-      * [[payTo(address:scalus\.cardano\.address\.Address,value:scalus\.cardano\.ledger\.Value,datumHash:scalus\.cardano\.ledger\.DataHash)* payTo]]).
-      * The datum will be included in the transaction's witness set and can be referenced by its
-      * hash.
+      * Use this method when spending UTXOs that have datum hashes instead of inline datums. The
+      * datum hash is computed automatically and the datum is stored for inclusion in the witness
+      * set.
       *
-      * @param data
-      *   the datum to attach
+      * @param datum
+      *   the datum data to attach
       */
-    def attach(data: Data): TxBuilder = {
-        val dataHash = DataHash.fromByteString(blake2b_256(serialiseData(data)))
-        copy(attachedData = attachedData + (dataHash -> data))
+    def attach(datum: Data): TxBuilder = {
+        val dataHash = DataHash.fromByteString(blake2b_256(serialiseData(datum)))
+        copy(attachedData = attachedData + (dataHash -> datum))
     }
 
     /** Adds transaction metadata (auxiliary data).
@@ -309,10 +350,28 @@ case class TxBuilder(
           TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData))
         )
 
+    /** Mints or burns native tokens under a minting policy.
+      *
+      * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
+      * script should be attached via [[attach]] before calling this method, or it must be present
+      * as a reference input.
+      *
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @param policyId
+      *   the policy ID (script hash) of the minting policy
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      * @tparam T
+      *   type of the redeemer (must have a ToData instance)
+      */
     def mint[T: ToData](
         redeemer: T,
         policyId: PolicyId,
-        assets: collection.Map[AssetName, Long]
+        assets: collection.Map[AssetName, Long],
+        requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
 
         val scriptSource = attachedScripts.get(policyId) match {
@@ -328,7 +387,7 @@ case class TxBuilder(
               witness = TwoArgumentPlutusScriptWitness(
                 scriptSource = scriptSource,
                 redeemer = redeemer.toData,
-                additionalSigners = Set.empty
+                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
               )
             )
         }.toSeq
@@ -336,10 +395,29 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
-    def mint[T: ToData](
+    /** Mints or burns native tokens and attaches the minting policy script in one call.
+      *
+      * This is a convenience method that combines [[mint]] and [[attach]] for the common case where
+      * you have the script available directly.
+      *
+      * Use positive amounts to mint tokens and negative amounts to burn tokens.
+      *
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param script
+      *   the minting policy script
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      * @tparam T
+      *   type of the redeemer (must have a ToData instance)
+      */
+    def mintAndAttach[T: ToData](
         redeemer: T,
         assets: collection.Map[AssetName, Long],
-        script: PlutusScript
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
 
         val mintSteps = assets.map { case (assetName, amount) =>
@@ -350,7 +428,7 @@ case class TxBuilder(
               witness = TwoArgumentPlutusScriptWitness(
                 scriptSource = ScriptSource.PlutusScriptValue(script),
                 redeemer = redeemer.toData,
-                additionalSigners = Set.empty
+                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
               )
             )
         }.toSeq
@@ -358,9 +436,25 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
+    /** Sets a minimum fee for the transaction.
+      *
+      * This overrides the automatically calculated fee. Use with caution; the actual fee may need
+      * to be higher to cover script execution costs.
+      *
+      * @param minFee
+      *   the minimum fee in lovelace
+      */
     def minFee(minFee: Coin): TxBuilder =
         addSteps(TransactionBuilderStep.Fee(minFee))
 
+    /** Sets the transaction validity interval using slot numbers.
+      *
+      * The transaction is only valid for inclusion in a block within the specified slot range. This
+      * is important for time-sensitive contracts.
+      *
+      * @param interval
+      *   the validity interval specifying the valid slot range
+      */
     def validDuring(interval: ValidityInterval): TxBuilder = {
         val steps = Seq(
           interval.invalidBefore.map(TransactionBuilderStep.ValidityStartSlot.apply),
@@ -369,25 +463,72 @@ case class TxBuilder(
         addSteps(steps*)
     }
 
+    /** Sets the earliest time from which the transaction is valid.
+      *
+      * The timestamp is converted to a slot number using the environment's slot configuration.
+      *
+      * @param from
+      *   the earliest valid time for the transaction
+      */
     def validFrom(from: Instant): TxBuilder = {
         val slot = env.slotConfig.timeToSlot(from.toEpochMilli)
         addSteps(TransactionBuilderStep.ValidityStartSlot(slot))
     }
 
+    /** Sets the latest time until which the transaction is valid.
+      *
+      * The timestamp is converted to a slot number using the environment's slot configuration. The
+      * transaction becomes invalid after this time.
+      *
+      * @param to
+      *   the latest valid time for the transaction (exclusive)
+      */
     def validTo(to: Instant): TxBuilder = {
         val slot = env.slotConfig.timeToSlot(to.toEpochMilli)
         addSteps(TransactionBuilderStep.ValidityEndSlot(slot))
     }
 
+    /** Sets a custom diff handler for managing transaction balance.
+      *
+      * The diff handler is called during [[build]] to handle the difference between consumed inputs
+      * and produced outputs (including fees). Use this for custom change handling logic.
+      *
+      * @param handler
+      *   the diff handler function
+      * @see
+      *   [[changeTo]] for the common case of sending change to an address
+      */
     def diffHandler(handler: DiffHandler): TxBuilder =
         copy(diffHandlerOpt = Some(handler))
 
+    /** Sets the change address for the transaction.
+      *
+      * Any excess value (inputs minus outputs and fees) will be sent to this address. This is
+      * equivalent to calling [[diffHandler]] with the standard change handling logic.
+      *
+      * @param address
+      *   the address to send change to
+      */
     def changeTo(address: Address): TxBuilder = {
         val handler: DiffHandler = (diff, tx) =>
             Change.handleChange(diff, tx, address, env.protocolParams)
         copy(diffHandlerOpt = Some(handler))
     }
 
+    /** Builds and finalizes the transaction.
+      *
+      * This method assembles the transaction from all the accumulated steps, calculates fees,
+      * handles change, validates and runs all Plutus scripts, and produces a ready-to-sign
+      * transaction.
+      *
+      * A diff handler must be set via [[changeTo]] or [[diffHandler]] before calling this method.
+      *
+      * @return
+      *   a new TxBuilder with the finalized transaction
+      * @throws RuntimeException
+      *   if no diff handler is set, if script execution fails, or if the transaction cannot be
+      *   balanced
+      */
     def build(): TxBuilder = {
         val network = env.network
         val params = env.protocolParams
@@ -415,14 +556,46 @@ case class TxBuilder(
         }
     }
 
+    /** Signs the transaction with the provided signer.
+      *
+      * This method should be called after [[build]] to add signatures to the transaction. Multiple
+      * signers can be applied by chaining sign calls.
+      *
+      * @param signer
+      *   the transaction signer
+      * @return
+      *   a new TxBuilder with the signed transaction
+      */
     def sign(signer: TransactionSigner): TxBuilder = {
         val tx = context.transaction
         val signedTx = signer.sign(transaction)
         copy(context = context.copy(transaction = signedTx))
     }
 
+    /** Returns the current transaction.
+      *
+      * Call this after [[build]] and optionally [[sign]] to get the final transaction ready for
+      * submission.
+      */
     def transaction: Transaction = context.transaction
 
+    /** Automatically completes the transaction by selecting UTXOs and collateral.
+      *
+      * This method queries the provider for available UTXOs at the sponsor address, selects inputs
+      * to cover all outputs and fees, selects collateral if needed (for script transactions), and
+      * sets up change handling to the sponsor address.
+      *
+      * After calling this method, you should call [[build]] to finalize the transaction.
+      *
+      * @param provider
+      *   the provider to query for UTXOs
+      * @param sponsor
+      *   the address to use for input selection, collateral, and change
+      * @return
+      *   a new TxBuilder with additional spend and collateral steps
+      * @throws RuntimeException
+      *   if insufficient UTXOs are available to cover the transaction requirements
+      */
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
         // TODO: suspiciously similar to the rest of balancing logic that we have, good refactoring candidate
         def doBalance(
@@ -468,34 +641,52 @@ case class TxBuilder(
 
             val gap = produced - consumed
 
-            if gap.coin.value <= 0 && gap.assets.isEmpty then return currentSteps
+            // excess produced tokens
+            val hasTokensInChange = gap.assets.assets.exists { case (_, assetMap) =>
+                assetMap.exists { case (_, amount) => amount < 0 }
+            }
+
+            // no excess production
+            if gap.coin.value <= 0 && !hasTokensInChange then return currentSteps
+
+            // If we do have excess tokens -- we need to make a change output.
+            // Ensure this change output has the tokens and min ADA
+            val gapToUse =
+                if gap.coin.value <= 0 && hasTokensInChange then {
+                    val excess = -gap.coin.value
+                    val changeTokens = MultiAsset(
+                      gap.assets.assets.map { case (policyId, assetMap) =>
+                          policyId -> assetMap.filter(_._2 < 0).map { case (name, amt) =>
+                              name -> (-amt)
+                          }
+                      }
+                    )
+                    // Calculate actual min ADA for change output with these tokens
+                    val estimatedChangeOutput = TransactionOutput(
+                      address = sponsor,
+                      value = Value(Coin(1_000_000), changeTokens) // mock 1 ada to pad the size
+                    )
+                    val minAdaRequired =
+                        MinCoinSizedTransactionOutput(
+                          Sized(estimatedChangeOutput),
+                          env.protocolParams
+                        )
+
+                    // If we have can cover those, we're done
+                    if excess >= minAdaRequired.value then return currentSteps
+
+                    // Otherwise, request exactly the shortfall
+                    val shortfall = minAdaRequired.value - excess
+                    Value(Coin(shortfall))
+                } else gap
 
             // Find more utxos, but exclude the ones we've already selected
             val newInputSteps =
-                selectAdditionalUtxos(provider, sponsor, gap, excludeInputs = inputs.keySet)
+                selectAdditionalUtxos(provider, sponsor, gapToUse, excludeInputs = inputs.keySet)
             if newInputSteps.isEmpty then
-                throw new RuntimeException(s"No UTXOs found to cover gap: $gap")
+                throw new RuntimeException(s"No UTXOs found to cover gap: $gapToUse")
 
-            val newInputs = newInputSteps.collect { case TransactionBuilderStep.Spend(utxo, _) =>
-                utxo
-            }
-            val tokensFromNewInputs = newInputs
-                .map(_.output.value.assets)
-                .foldLeft(MultiAsset.empty)(_ + _)
-            val tokenSurplus = tokensFromNewInputs - gap.assets
-
-            val tokenChangeSteps = if tokenSurplus.assets.nonEmpty then {
-                val changeOutput = TransactionOutput.Babbage(
-                  sponsor,
-                  Value(Coin.zero, tokenSurplus),
-                  None,
-                  None
-                )
-                val withMinAda = TransactionBuilder.ensureMinAda(changeOutput, env.protocolParams)
-                Seq(TransactionBuilderStep.Send(withMinAda))
-            } else Seq.empty
-
-            doBalance(currentSteps ++ newInputSteps ++ tokenChangeSteps, iteration + 1)
+            doBalance(currentSteps ++ newInputSteps, iteration + 1)
         }
 
         val balancedSteps = doBalance(steps, 0)
@@ -809,7 +1000,16 @@ case class TxBuilder(
     private def addSteps(s: TransactionBuilderStep*) = copy(steps = steps ++ s)
 }
 
+/** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
+
+    /** Creates a TxBuilder with the default Plutus script evaluator.
+      *
+      * The evaluator will both validate scripts and compute execution costs for fee calculation.
+      *
+      * @param env
+      *   the environment containing protocol parameters, network info, and slot configuration
+      */
     def apply(env: Environment): TxBuilder = {
         val evaluator = PlutusScriptEvaluator(
           CardanoInfo(env.protocolParams, env.network, env.slotConfig),
@@ -818,11 +1018,28 @@ object TxBuilder {
         withCustomEvaluator(env, evaluator)
     }
 
+    /** Creates a TxBuilder with an evaluator that uses constant maximum budget.
+      *
+      * This is useful for testing or when you want to skip actual script execution cost
+      * calculation. The evaluator will still validate scripts but use a fixed cost.
+      *
+      * @param env
+      *   the environment containing protocol parameters, network info, and slot configuration
+      */
     def withConstMaxBudgetEvaluator(env: Environment): TxBuilder = {
         val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
         withCustomEvaluator(env, evaluator)
     }
 
+    /** Creates a TxBuilder with a custom Plutus script evaluator.
+      *
+      * Use this method when you need fine-grained control over script evaluation behavior.
+      *
+      * @param env
+      *   the environment containing protocol parameters, network info, and slot configuration
+      * @param evaluator
+      *   the custom Plutus script evaluator
+      */
     def withCustomEvaluator(
         env: Environment,
         evaluator: PlutusScriptEvaluator

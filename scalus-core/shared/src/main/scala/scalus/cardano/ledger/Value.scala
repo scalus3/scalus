@@ -26,6 +26,12 @@ case class Value(coin: Coin, assets: MultiAsset = MultiAsset.empty) {
     private def binOp(op: (Long, Long) => Long)(rhs: Value): Value = (this, rhs) match
         case (Value(coin1, assets1), Value(coin2, assets2)) =>
             Value(Coin(op(coin1.value, coin2.value)), MultiAsset.binOp(op)(assets1, assets2))
+
+    override def toString: String = {
+        val adaStr = s"${coin.value / 1000000}.${"%06d".format(coin.value % 1000000)} ADA"
+        if assets.isEmpty then s"Value($adaStr)"
+        else s"Value($adaStr, $assets)"
+    }
 }
 
 object Value:

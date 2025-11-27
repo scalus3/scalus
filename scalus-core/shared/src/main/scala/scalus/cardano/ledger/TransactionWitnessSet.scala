@@ -56,7 +56,7 @@ object TransactionWitnessSet:
     /** Create a witness set from a set of scripts and redeemers, and optional VKey witnesses */
     def apply(
         scripts: Seq[Script],
-        redeemers: Redeemers,
+        redeemers: Option[Redeemers],
         vkeyWitnesses: Set[VKeyWitness],
         plutusData: Seq[Data]
     ): TransactionWitnessSet = {
@@ -83,7 +83,7 @@ object TransactionWitnessSet:
           plutusV2Scripts = plutusV2Scripts,
           plutusV3Scripts = plutusV3Scripts,
           plutusData = KeepRaw(TaggedSortedMap(plutusData.map(KeepRaw(_))*)),
-          redeemers = Some(KeepRaw(redeemers))
+          redeemers = redeemers.map { KeepRaw(_) }
         )
     }
 

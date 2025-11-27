@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
-import scalus.cardano.node.Provider
+import scalus.cardano.node.{Provider, SubmitError}
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.{plutusV3, toUplc, Compiler}
 
@@ -16,7 +16,7 @@ import scala.collection.immutable.SortedMap
 
 // TODO: can't depend `testkit`, since it'd introduce circular dependency. /
 class SimpleMockProvider(initialUtxos: Utxos) extends Provider {
-    override def submit(transaction: Transaction): Either[RuntimeException, Unit] = Right(())
+    override def submit(transaction: Transaction): Either[SubmitError, Unit] = Right(())
 
     override def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] =
         initialUtxos
@@ -103,7 +103,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     lazy val aliceSigner = peerSigner(Alice)
 
-    test("complete() should automatically add inputs for simple ADA payment") {
+    test("complete should automatically add inputs for simple ADA payment") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val provider = SimpleMockProvider(
           initialUtxos = Map(
@@ -141,7 +141,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(aliceOutputs.nonEmpty, "Should have change output to Alice")
     }
 
-    test("complete() inputs should be signable with sign()") {
+    test("complete inputs should be signable with sign()") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val provider = SimpleMockProvider(
           initialUtxos = Map(
@@ -159,7 +159,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val signedTx = unsignedBuilder.sign(aliceSigner).transaction
 
-        // Should have vkey witnesses for the inputs added by complete()
+        // Should have vkey witnesses for the inputs added by complete
         assert(
           signedTx.witnessSet.vkeyWitnesses.toSeq.nonEmpty,
           "Transaction should have vkey witnesses after signing"
@@ -172,7 +172,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
     }
 
-    test("complete() should handle multi-asset transactions") {
+    test("complete should handle multi-asset transactions") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val assetName = AssetName(utf8"co2")
         val policyId = alwaysOkScript.scriptHash
@@ -237,7 +237,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(aliceTokens.sum == 100L, "Alice should receive 100 tokens as change")
     }
 
-    test("complete() should auto-detect and add collateral for script spending") {
+    test("complete should auto-detect and add collateral for script spending") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         // Create script-locked UTXO
@@ -290,7 +290,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(bobOutputs.nonEmpty, "Should have output to Bob")
     }
 
-    test("complete() should auto-detect and add collateral for minting") {
+    test("complete should auto-detect and add collateral for minting") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
         val redeemer = Data.List(List.empty)
@@ -320,7 +320,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val builder = TxBuilder(testEnv)
-            .mint(redeemer, assets, alwaysOkScript)
+            .mintAndAttach(redeemer, assets, alwaysOkScript)
             .payTo(Bob.address, mintValue)
             .complete(provider, Alice.address)
             .build()
@@ -337,7 +337,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(tx.body.value.mint.isDefined, "Transaction should have mint field")
     }
 
-    test("complete() should fail with insufficient funds") {
+    test("complete should fail with insufficient funds") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         val provider = SimpleMockProvider(
@@ -363,7 +363,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
     }
 
-    test("complete() with explicit spend should only add necessary additional inputs") {
+    test("complete with explicit spend should only add necessary additional inputs") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 3_000_000).sample.get
 
@@ -378,7 +378,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         // User explicitly spends one UTXO with 5 ADA, wants to pay 3 ADA
-        // complete() should recognize the explicit input and only add more if needed for fees
+        // complete should recognize the explicit input and only add more if needed for fees
         val builder = TxBuilder(testEnv)
             .spend(Utxo(explicitUtxo))
             .payTo(Bob.address, explicitUtxo._2.value)
@@ -409,7 +409,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(aliceAda < Coin.ada(100) && aliceAda > Coin.ada(99))
     }
 
-    test("complete() followed by sign() should produce a valid transaction") {
+    test("complete followed by sign() should produce a valid transaction") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val provider = SimpleMockProvider(
           initialUtxos = Map(
@@ -441,11 +441,11 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         assert(
           aliceInputs.nonEmpty,
-          "Should have inputs from Alice that were added by complete()"
+          "Should have inputs from Alice that were added by complete"
         )
     }
 
-    test("complete() should send tokens acquired from additional input querying back as change") {
+    test("complete should send tokens acquired from additional input querying back as change") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
@@ -495,7 +495,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
     }
 
-    test("complete() should handle multiple different tokens from separate UTXOs") {
+    test("complete should handle multiple different tokens from separate UTXOs") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         val policyId1 = alwaysOkScript.scriptHash
@@ -582,7 +582,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test(
-      "complete() should add ADA-only UTXO when token UTXO has insufficient ADA for fees"
+      "complete should add ADA-only UTXO when token UTXO has insufficient ADA for fees"
     ) {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
@@ -594,7 +594,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             TransactionInput(genesisHash, 0) -> Babbage(
               address = Alice.address,
               value = Value(
-                Coin.ada(2),
+                Coin.ada(1),
                 MultiAsset(
                   SortedMap(
                     policyId -> SortedMap(assetName -> 100L)
@@ -656,7 +656,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(aliceTokens.sum == 50L, "Alice should receive 50 tokens as change")
     }
 
-    test("complete() should handle multiple token types in single UTXO efficiently") {
+    test("complete should handle multiple token types in single UTXO efficiently") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
         val tokenA = AssetName(utf8"co2")

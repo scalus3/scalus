@@ -14,10 +14,33 @@ object LowLevelTxBuilder {
     class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int)
         extends txbuilder.ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
 
+    @deprecated(
+      "Use `balanceFeeAndChange` with diffHandler: (Value, Transaction) instead.",
+      "scalus 0.13.0"
+    )
+    def balanceFeeAndChange(
+        initial: Transaction,
+        diffHandler: (Long, Transaction) => Either[TxBalancingError, Transaction],
+        protocolParams: ProtocolParams,
+        resolvedUtxo: Utxos,
+        evaluator: PlutusScriptEvaluator,
+    ): Either[TxBalancingError, Transaction] = {
+        val originalDiffHandler = diffHandler
+        val adaptedDiffHandler = (diff: Value, tx: Transaction) =>
+            originalDiffHandler(diff.coin.value, tx)
+        balanceFeeAndChangeWithTokens(
+          initial,
+          adaptedDiffHandler,
+          protocolParams,
+          resolvedUtxo,
+          evaluator
+        )
+    }
+
     /** Balances the transaction using a diff handler to adjust the transaction.
       *
       * Invariants:
-      *   - only ADA is adjusted, native tokens must be balanced beforehand
+      *   - both ADA and native tokens are adjusted by the diff handler
       *   - fees never go below the initial fee
       */
     def balanceFeeAndChange(
@@ -27,7 +50,7 @@ object LowLevelTxBuilder {
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
     ): Either[TxBalancingError, Transaction] = {
-        balanceFeeAndChange(
+        balanceFeeAndChangeWithTokens(
           initial,
           txbuilder
               .ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
@@ -41,12 +64,12 @@ object LowLevelTxBuilder {
     /** Balances the transaction using a diff handler to adjust the transaction.
       *
       * Invariants:
-      *   - only ADA is adjusted, native tokens must be balanced beforehand
+      *   - both ADA and native tokens are adjusted by the diff handler
       *   - fees never go below the initial fee
       */
-    def balanceFeeAndChange(
+    def balanceFeeAndChangeWithTokens(
         initial: Transaction,
-        diffHandler: (Long, Transaction) => Either[TxBalancingError, Transaction],
+        diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
@@ -56,7 +79,7 @@ object LowLevelTxBuilder {
         @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
             iteration += 1
             if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
-            val providedTxFee = tx.body.value.fee
+            val providedTxFee = tx.body.value.fee // ???: unused
 
             val eTrialTx = for {
                 txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
@@ -66,7 +89,7 @@ object LowLevelTxBuilder {
                 // Don't go below initial fee
                 fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
                 txWithFees = setFee(fee)(txWithExUnits)
-                diff = calculateChangeLovelace(txWithFees, resolvedUtxo, protocolParams)
+                diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
                 // try to balance it
                 balanced <- diffHandler(diff, txWithFees)
             } yield balanced
@@ -155,6 +178,7 @@ def modifyWs(tx: Transaction, f: TransactionWitnessSet => TransactionWitnessSet)
 
 def setFee(amount: Coin)(tx: Transaction) = modifyBody(tx, _.copy(fee = amount))
 
+@deprecated("Use calculateChangeValue() instead to handle both ADA and tokens", "scalus 0.13.0")
 def calculateChangeLovelace(tx: Transaction, utxo: Utxos, params: ProtocolParams): Long = {
     val produced = TxBalance.produced(tx)
     val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get

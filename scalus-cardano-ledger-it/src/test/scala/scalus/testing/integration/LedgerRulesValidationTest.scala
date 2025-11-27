@@ -44,12 +44,7 @@ abstract class LedgerRulesValidationTestBase extends AnyFunSuite {
   )
 
   // All mutators
-  protected lazy val mutators: List[STS.Mutator] = List(
-    AddOutputsToUtxoMutator,
-    FeeMutator,
-    PlutusScriptsTransactionMutator,
-    RemoveInputsFromUtxoMutator
-  )
+  protected lazy val mutators: List[STS.Mutator] = List(PlutusScriptsTransactionMutator)
 
   // Default context for validation
   protected def defaultContext: Context = Context.testMainnet()

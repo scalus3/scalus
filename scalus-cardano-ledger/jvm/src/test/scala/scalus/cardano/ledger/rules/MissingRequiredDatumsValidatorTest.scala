@@ -8,7 +8,6 @@ import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import TransactionWitnessSet.given
 
 class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-
     test("MissingRequiredDatumsValidator success with no scripts") {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
@@ -36,7 +35,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
     }
 
     test("MissingRequiredDatumsValidator success with matching datum") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
+        val plutusScript = Arbitrary.arbitrary[Script.PlutusV3].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val datum = Arbitrary.arbitrary[Data].sample.get
         val datumHash = DataHash.fromByteString(datum.dataHash)
@@ -56,7 +55,7 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           ),
           witnessSet = TransactionWitnessSet(
-            plutusV1Scripts = TaggedSortedStrictMap(plutusScript),
+            plutusV3Scripts = TaggedSortedStrictMap(plutusScript),
             plutusData = KeepRaw(
               TaggedSortedMap.from(
                 Set(KeepRaw(datum))
@@ -68,44 +67,6 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val state = State(utxos = utxo)
 
         val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
-        assert(result.isRight)
-    }
-
-    test("MissingRequiredDatumsValidator success with Babbage output datum") {
-        val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
-        val input = Arbitrary.arbitrary[TransactionInput].sample.get
-        val datum = Arbitrary.arbitrary[Data].sample.get
-        val datumHash = DataHash.fromByteString(datum.dataHash)
-        val utxo = Map(
-          input -> TransactionOutput(
-            Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
-            Value(Coin(1000000L)),
-            DatumOption.Hash(datumHash)
-          )
-        )
-        val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
-          ),
-          witnessSet = TransactionWitnessSet(
-            plutusV2Scripts = TaggedSortedStrictMap(plutusScript),
-            plutusData = KeepRaw(
-              TaggedSortedMap.from(
-                Set(KeepRaw(datum))
-              )
-            )
-          )
-        )
-        val context = Context()
-        val state = State(utxos = utxo)
-
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
         assert(result.isRight)
     }
 

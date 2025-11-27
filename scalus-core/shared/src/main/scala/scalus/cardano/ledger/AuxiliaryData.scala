@@ -133,6 +133,14 @@ enum AuxiliaryData:
         case _: AuxiliaryData.MetadataWithScripts => IndexedSeq.empty
         case data: AuxiliaryData.AlonzoFormat     => data.plutusV3Scripts
 
+    def getPlutusScripts: IndexedSeq[ByteString] =
+        (getPlutusV1Scripts.view ++ getPlutusV2Scripts.view ++ getPlutusV3Scripts.view).toIndexedSeq
+
+    def getAllScripts: IndexedSeq[Timelock | ByteString] =
+        (
+          getNativeScripts.view ++ getPlutusV1Scripts.view ++ getPlutusV2Scripts.view ++ getPlutusV3Scripts.view
+        ).toIndexedSeq
+
 object AuxiliaryData:
     /** CBOR encoder for AuxiliaryData */
     given Encoder[AuxiliaryData] with

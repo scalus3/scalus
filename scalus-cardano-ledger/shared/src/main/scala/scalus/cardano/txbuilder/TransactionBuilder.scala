@@ -23,7 +23,7 @@ import scalus.cardano.txbuilder.modifyWs
 import scalus.|>
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
-type DiffHandler = (Long, Transaction) => Either[TxBalancingError, Transaction]
+type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
 
 // ===================================
 // Tx Builder steps
@@ -105,7 +105,7 @@ object TransactionBuilderStep {
     case class ValidityEndSlot(slot: Long) extends TransactionBuilderStep
 
     /** Add a utxo as a collateral input. Utxo should contain ada only and be controlled by a key,
-      * not a script. If you need set collateral outputs ot `totalCollateral` field, please use
+      * not a script. If you need set collateral outputs at `totalCollateral` field, please use
       * optics.
       */
     case class AddCollateral(
@@ -411,7 +411,7 @@ object TransactionBuilder:
             // println(s"txWithDummySignatures=${HexUtil.encodeHexString(txWithDummySignatures.toCbor)}")
 
             for {
-                balanced <- LowLevelTxBuilder.balanceFeeAndChange(
+                balanced <- LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
                   initial = this.transaction,
                   diffHandler = diffHandler,
                   protocolParams = protocolParams,
@@ -777,7 +777,7 @@ object StepError {
     case class AttachedScriptNotFound(scriptHash: ScriptHash, step: TransactionBuilderStep)
         extends StepError {
         override def explain: String =
-            s"No witness or ref/spent output is found for script matching $scriptHash." +
+            s"No witness or ref/spent output is found for script matching $scriptHash. " +
                 "Note that the builder steps are not commutative: you must attach the script " +
                 "before using an AttachedScript ScriptWitness."
     }
