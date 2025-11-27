@@ -266,8 +266,9 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(revealTx) match
-            case Left(err) => assert(err.getMessage.endsWith(HtlcValidator.InvalidReceiverPreimage))
-            case Right(_)  => fail("Transaction should have failed")
+            case Left(message: String) =>
+                assert(message.endsWith(HtlcValidator.InvalidReceiverPreimage))
+            case _ => fail("Transaction should have failed")
     }
 
     test("receiver fails with wrong receiver pubkey hash") {
@@ -339,8 +340,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(revealTx) match
-            case Left(err) =>
-                assert(err.getMessage.endsWith(HtlcValidator.UnsignedReceiverTransaction))
+            case Left(message: String) =>
+                assert(message.endsWith(HtlcValidator.UnsignedReceiverTransaction))
             case Right(_) => fail("Transaction should have failed")
     }
 
@@ -411,8 +412,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
         provider.submit(revealTx) match
-            case Left(err) =>
-                assert(err.getMessage.endsWith(HtlcValidator.InvalidReceiverTimePoint))
+            case Left(message: String) =>
+                assert(message.endsWith(HtlcValidator.InvalidReceiverTimePoint))
             case Right(_) => fail("Transaction should have failed")
     }
 
@@ -562,8 +563,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
         provider.submit(timeoutTx) match
-            case Left(err) =>
-                assert(err.getMessage.endsWith(HtlcValidator.UnsignedCommitterTransaction))
+            case Left(message: String) =>
+                assert(message.endsWith(HtlcValidator.UnsignedCommitterTransaction))
             case Right(_) => fail("Transaction should have failed")
     }
 
@@ -633,8 +634,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(timeoutTx) match
-            case Left(err) =>
-                assert(err.getMessage.endsWith(HtlcValidator.InvalidCommitterTimePoint))
+            case Left(message: String) =>
+                assert(message.endsWith(HtlcValidator.InvalidCommitterTimePoint))
             case Right(_) => fail("Transaction should have failed")
     }
 }

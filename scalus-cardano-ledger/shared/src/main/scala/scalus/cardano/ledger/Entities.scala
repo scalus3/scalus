@@ -7,6 +7,7 @@ import scalus.cardano.address.{Address, Network}
 sealed abstract class TransactionException(message: String, cause: Throwable)
     extends RuntimeException(message, cause) {
     def this(message: String) = this(message, null)
+    def explain: String = message
 }
 
 object TransactionException {

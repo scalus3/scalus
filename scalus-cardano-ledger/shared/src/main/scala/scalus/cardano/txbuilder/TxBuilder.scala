@@ -339,6 +339,46 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
+    /** Mint tokens using a minting policy with required signers. The script is referenced from a
+      * reference input.
+      *
+      * @param redeemer
+      *   redeemer to pass to the script
+      * @param policyId
+      *   the policy id (script hash)
+      * @param assets
+      *   map of asset names to amounts
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      */
+    def mint[T: ToData](
+        redeemer: T,
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
+
+        val scriptSource = attachedScripts.get(policyId) match {
+            case Some(ps: PlutusScript) => ScriptSource.PlutusScriptValue(ps)
+            case _                      => ScriptSource.PlutusScriptAttached
+        }
+
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = policyId,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = scriptSource,
+                redeemer = redeemer.toData,
+                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
     def mint[T: ToData](
         redeemer: T,
         assets: collection.Map[AssetName, Long],
@@ -354,6 +394,40 @@ case class TxBuilder(
                 scriptSource = ScriptSource.PlutusScriptValue(script),
                 redeemer = redeemer.toData,
                 additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
+    /** Mint tokens using a Plutus script with required signers.
+      *
+      * @param redeemer
+      *   redeemer to pass to the script
+      * @param assets
+      *   map of asset names to amounts
+      * @param script
+      *   the minting policy script
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      */
+    def mint[T: ToData](
+        redeemer: T,
+        assets: collection.Map[AssetName, Long],
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
+
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = script.scriptHash,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = ScriptSource.PlutusScriptValue(script),
+                redeemer = redeemer.toData,
+                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
               )
             )
         }.toSeq

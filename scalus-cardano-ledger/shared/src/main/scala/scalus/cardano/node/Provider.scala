@@ -4,7 +4,11 @@ import scalus.cardano.ledger.*
 import scalus.cardano.address.Address
 
 trait Provider {
-    def submit(transaction: Transaction): Either[RuntimeException, Unit]
+    type LedgerRuleViolation = String
+    type NetworkError = RuntimeException
+    type SubmitError = LedgerRuleViolation | NetworkError
+
+    def submit(transaction: Transaction): Either[SubmitError, Unit]
 
     def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo]
 

@@ -65,7 +65,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
         }
     }
 
-    override def submit(tx: Transaction): Either[RuntimeException, Unit] = {
+    override def submit(tx: Transaction): Either[SubmitError, Unit] = {
         val url = s"$baseUrl/tx/submit"
         val txCbor = tx.toCbor
 
@@ -77,9 +77,9 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
             )
             if response.is2xx then {
                 Right(())
-            } else {
-                Left(new RuntimeException(response.text()))
-            }
+            } else if response.is4xx then {
+                Left(response.text())
+            } else Left(new RuntimeException(s"unexpected blockfrost error: ${response.text()}"))
         }.toEither.left.map(new RuntimeException(_)).flatten
     }
 

@@ -11,12 +11,12 @@ class MockLedgerApi(
     val validators: Iterable[STS.Validator] = MockLedgerApi.defaultValidators,
     val mutators: Iterable[STS.Mutator] = MockLedgerApi.defaultMutators
 ) extends Provider {
-    def submit(transaction: Transaction): Either[RuntimeException, Unit] = {
+    def submit(transaction: Transaction): Either[SubmitError, Unit] = {
         processTransaction(transaction) match {
             case Right(newState) =>
                 state = newState
                 Right(())
-            case Left(exception) => Left(exception)
+            case Left(t: TransactionException) => Left(t.explain)
         }
     }
 

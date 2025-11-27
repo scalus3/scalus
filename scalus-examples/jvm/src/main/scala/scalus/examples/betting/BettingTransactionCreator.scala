@@ -42,6 +42,7 @@ case class BettingTransactionCreator(
 
     def init(
         utxos: Utxos,
+        collateralUtxo: Utxo,
         scriptUtxo: Utxo,
         bet: Coin,
         player1: PubKeyHash,
@@ -54,12 +55,19 @@ case class BettingTransactionCreator(
         amount: Long = 1L
     ): Transaction = {
         val config = Config(player1, player2, oracle, expiration)
+        val player1Pkh = AddrKeyHash.fromByteString(player1.hash)
 
         TxBuilder
             .withCustomEvaluator(env, evaluator)
             .spend(utxos)
+            .collaterals(collateralUtxo)
             .references(scriptUtxo)
-            .mint(Data.unit, scala.collection.Map(token -> amount), script)
+            .mint(
+              Data.unit,
+              script.scriptHash,
+              scala.collection.Map(token -> amount),
+              Set(player1Pkh)
+            )
             .payTo(
               scriptAddress,
               Value.asset(script.scriptHash, token, amount, bet),
@@ -74,6 +82,7 @@ case class BettingTransactionCreator(
 
     def join(
         utxos: Utxos,
+        collateralUtxo: Utxo,
         scriptUtxo: Utxo,
         betUtxo: Utxo,
         bet: Coin,
@@ -91,8 +100,9 @@ case class BettingTransactionCreator(
         TxBuilder
             .withCustomEvaluator(env, evaluator)
             .spend(utxos)
+            .collaterals(collateralUtxo)
             .references(scriptUtxo)
-            .spend(betUtxo, Action.Join, script, Set(player2Pkh))
+            .spend(betUtxo, Action.Join, Set(player2Pkh))
             .payTo(scriptAddress, betUtxo.output.value + lovelace, config)
             .validTo(java.time.Instant.ofEpochMilli(beforeTime))
             .changeTo(changeAddress)
@@ -103,6 +113,7 @@ case class BettingTransactionCreator(
 
     def win(
         utxos: Utxos,
+        collateralUtxo: Utxo,
         scriptUtxo: Utxo,
         betUtxo: Utxo,
         isJoinWin: Boolean,
@@ -123,8 +134,9 @@ case class BettingTransactionCreator(
         TxBuilder
             .withCustomEvaluator(env, evaluator)
             .spend(utxos)
+            .collaterals(collateralUtxo)
             .references(scriptUtxo)
-            .spend(betUtxo, Action.AnnounceWinner(payout), script, Set(oraclePkh))
+            .spend(betUtxo, Action.AnnounceWinner(payout), Set(oraclePkh))
             .payTo(payoutAddress, betUtxo.output.value)
             .validFrom(java.time.Instant.ofEpochMilli(afterTime))
             .changeTo(changeAddress)

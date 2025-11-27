@@ -195,6 +195,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             transactionCreatorFor(player1Signer)
                 .init(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betAmount,
                   PubKeyHash(player1Pkh),
@@ -232,7 +233,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val deployTx = {
             val utxos = provider
-                .findUtxos(address = deploymentAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .findUtxos(
+                  address = deploymentAddress,
+                  minRequiredTotalAmount = Some(commissionAmount)
+                )
                 .toOption
                 .get
 
@@ -249,13 +253,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(address = player1Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player1Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player1Signer)
                 .init(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betAmount,
                   PubKeyHash(player1Pkh),
@@ -287,13 +295,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(address = player2Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player2Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player2Signer)
                 .join(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betUtxo,
                   betAmount,
@@ -310,8 +322,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, joinTx, betUtxo._1)
         assert(result.isSuccess)
 
-        provider.setSlot(env.slotConfig.timeToSlot(beforeTime))
-
+        provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).isRight)
 
         val joinConfig = Config(
@@ -339,7 +350,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val deployTx = {
             val utxos = provider
-                .findUtxos(address = deploymentAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .findUtxos(
+                  address = deploymentAddress,
+                  minRequiredTotalAmount = Some(commissionAmount)
+                )
                 .toOption
                 .get
 
@@ -356,13 +370,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(address = player1Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player1Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player1Signer)
                 .init(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betAmount,
                   PubKeyHash(player1Pkh),
@@ -396,13 +414,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(address = player2Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player2Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorWithConstEvaluatorFor(player2Signer)
                 .join(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betUtxo,
                   betAmount,
@@ -426,7 +448,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val deployTx = {
             val utxos = provider
-                .findUtxos(address = deploymentAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .findUtxos(
+                  address = deploymentAddress,
+                  minRequiredTotalAmount = Some(commissionAmount)
+                )
                 .toOption
                 .get
 
@@ -443,13 +468,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(address = player1Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player1Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player1Signer)
                 .init(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betAmount,
                   PubKeyHash(player1Pkh),
@@ -469,13 +498,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(address = player2Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player2Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player2Signer)
                 .join(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betUtxo,
                   betAmount,
@@ -489,7 +522,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        provider.setSlot(env.slotConfig.timeToSlot(beforeTime))
+        provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).isRight)
 
         val joinedBetUtxo = provider
@@ -506,6 +539,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             transactionCreatorFor(oracleSigner)
                 .win(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   joinedBetUtxo,
                   isJoinWin = true,
@@ -542,7 +576,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val deployTx = {
             val utxos = provider
-                .findUtxos(address = deploymentAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .findUtxos(
+                  address = deploymentAddress,
+                  minRequiredTotalAmount = Some(commissionAmount)
+                )
                 .toOption
                 .get
 
@@ -559,13 +596,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(address = player1Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player1Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player1Signer)
                 .init(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betAmount,
                   PubKeyHash(player1Pkh),
@@ -585,13 +626,17 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(address = player2Address, minRequiredTotalAmount = Some(betAmount + commissionAmount))
+                .findUtxos(
+                  address = player2Address,
+                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
+                )
                 .toOption
                 .get
 
             transactionCreatorFor(player2Signer)
                 .join(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   betUtxo,
                   betAmount,
@@ -605,7 +650,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        provider.setSlot(env.slotConfig.timeToSlot(beforeTime))
+        provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).isRight)
 
         val joinedBetUtxo = provider
@@ -622,6 +667,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             transactionCreatorWithConstEvaluatorFor(oracleSigner)
                 .win(
                   utxos,
+                  Utxo(utxos.head),
                   scriptUtxo,
                   joinedBetUtxo,
                   isJoinWin = true,
