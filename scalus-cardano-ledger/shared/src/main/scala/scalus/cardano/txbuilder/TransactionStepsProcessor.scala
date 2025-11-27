@@ -493,10 +493,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
           step = delayedSpend
         )
 
-        for {
-            _ <- useSpend(TransactionBuilderStep.Spend(utxo, witness))
-            _ = modify0(_.addDelayedRedeemer(spec))
-        } yield ()
+        for _ <- useSpend(TransactionBuilderStep.Spend(utxo, witness))
+        yield modify0(_.addDelayedRedeemer(spec))
     }
 
     // -------------------------------------------------------------------------
@@ -532,11 +530,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         val currentFee = ctx.transaction.body.value.fee.value
         currentFee match {
             case 0 =>
-                modify0(
-                  unsafeCtxBodyL
-                      .refocus(_.fee)
-                      .replace(step.fee)
-                )
+                modify0(unsafeCtxBodyL.refocus(_.fee).replace(step.fee))
                 unit
             case nonZero => Left(FeeAlreadySet(nonZero, step))
         }
@@ -554,11 +548,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             case Some(existingSlot) =>
                 Left(ValidityStartSlotAlreadySet(existingSlot, step))
             case None =>
-                modify0(
-                  unsafeCtxBodyL
-                      .refocus(_.validityStartSlot)
-                      .replace(Some(step.slot))
-                )
+                modify0(unsafeCtxBodyL.refocus(_.validityStartSlot).replace(Some(step.slot)))
                 unit
         }
     }
@@ -575,11 +565,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             case Some(existingSlot) =>
                 Left(ValidityEndSlotAlreadySet(existingSlot, step))
             case None =>
-                modify0(
-                  unsafeCtxBodyL
-                      .refocus(_.ttl)
-                      .replace(Some(step.slot))
-                )
+                modify0(unsafeCtxBodyL.refocus(_.ttl).replace(Some(step.slot)))
                 unit
         }
     }
@@ -924,21 +910,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                             )
                     }
                 case Voter.ConstitutionalCommitteeHotKey(credential) =>
-                    Right(
-                      Credential.KeyHash(credential)
-                    )
+                    Right(Credential.KeyHash(credential))
                 case Voter.ConstitutionalCommitteeHotScript(scriptHash) =>
-                    Right(
-                      Credential.ScriptHash(scriptHash)
-                    )
+                    Right(Credential.ScriptHash(scriptHash))
                 case Voter.DRepKey(credential) =>
-                    Right(
-                      Credential.KeyHash(credential)
-                    )
+                    Right(Credential.KeyHash(credential))
                 case Voter.DRepScript(scriptHash) =>
-                    Right(
-                      Credential.ScriptHash(scriptHash)
-                    )
+                    Right(Credential.ScriptHash(scriptHash))
             }
             _ <- useNonSpendingWitness(
               Operation.Voting(submitVotingProcedure.voter),
@@ -1183,15 +1161,21 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     case v1: Script.PlutusV1 =>
                         unsafeCtxWitnessL
                             .refocus(_.plutusV1Scripts)
-                            .modify(s => TaggedSortedStrictMap.from(s.toMap.values.toSet + v1))
+                            .modify(s =>
+                                TaggedSortedStrictMap(s.toSortedMap.updated(v1.scriptHash, v1))
+                            )
                     case v2: Script.PlutusV2 =>
                         unsafeCtxWitnessL
                             .refocus(_.plutusV2Scripts)
-                            .modify(s => TaggedSortedStrictMap.from(s.toMap.values.toSet + v2))
+                            .modify(s =>
+                                TaggedSortedStrictMap(s.toSortedMap.updated(v2.scriptHash, v2))
+                            )
                     case v3: Script.PlutusV3 =>
                         unsafeCtxWitnessL
                             .refocus(_.plutusV3Scripts)
-                            .modify(s => TaggedSortedStrictMap.from(s.toMap.values.toSet + v3))
+                            .modify(s =>
+                                TaggedSortedStrictMap(s.toSortedMap.updated(v3.scriptHash, v3))
+                            )
                 }
                 modify0(f)
             // Script should already be attached, see [[assertAttachedScriptExists]]
