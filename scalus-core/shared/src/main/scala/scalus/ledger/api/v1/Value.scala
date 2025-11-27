@@ -14,7 +14,21 @@ import scalus.prelude.{!==, <=>, ===}
 
 import scala.annotation.tailrec
 
-case class Value private (toSortedMap: SortedMap[PolicyId, SortedMap[TokenName, BigInt]])
+case class Value private (toSortedMap: SortedMap[PolicyId, SortedMap[TokenName, BigInt]]) {
+    override def toString: String = {
+        import Value.{adaPolicyId, adaTokenName}
+        val lovelace = toSortedMap
+            .get(adaPolicyId)
+            .flatMap(_.get(adaTokenName))
+            .getOrElse(BigInt(0))
+        val adaStr = s"${lovelace / 1000000}.${"%06d".format((lovelace % 1000000).toLong)} ADA"
+        val hasAssets = toSortedMap.toList.asScala.exists { case (cs, tokens) =>
+            cs != adaPolicyId || tokens.toList.asScala.exists(_._1 != adaTokenName)
+        }
+        if hasAssets then s"Value($adaStr, ${Value.debugToString(this)})"
+        else s"Value($adaStr)"
+    }
+}
 
 @Compile
 object Value extends ValueOffchainOps {
