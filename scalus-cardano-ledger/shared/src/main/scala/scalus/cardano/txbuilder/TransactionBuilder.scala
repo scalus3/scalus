@@ -411,7 +411,7 @@ object TransactionBuilder:
             // println(s"txWithDummySignatures=${HexUtil.encodeHexString(txWithDummySignatures.toCbor)}")
 
             for {
-                balanced <- LowLevelTxBuilder.balanceFeeAndChange(
+                balanced <- LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
                   initial = this.transaction,
                   diffHandler = diffHandler,
                   protocolParams = protocolParams,
