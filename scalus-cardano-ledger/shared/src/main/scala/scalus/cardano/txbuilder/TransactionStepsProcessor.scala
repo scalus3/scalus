@@ -83,7 +83,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                   )
                 )
             case Some(utxos) =>
-                modify0(Focus[Context](_.resolvedUtxos).replace(utxos))
+                modify0(_.copy(resolvedUtxos = utxos))
                 unit
         }
     }

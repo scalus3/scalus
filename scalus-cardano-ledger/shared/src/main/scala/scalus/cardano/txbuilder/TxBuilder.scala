@@ -6,8 +6,9 @@ import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, TxBalance}
+import scalus.cardano.ledger.utils.{AllNeededScriptHashes, MinCoinSizedTransactionOutput, TxBalance}
 import scalus.cardano.node.Provider
+import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
@@ -536,10 +537,11 @@ case class TxBuilder(
           throw new RuntimeException("Called `build` without setting a diff handler.")
         )
         // Could be a good idea to immediately `modify` on every step, maybe not tho.
-        val buildResult = TransactionBuilder.modify(context, steps)
         val finalizedContext = for {
-            built <- TransactionBuilder.build(network, steps)
-            withAttachments = addAttachmentsToContext(built)
+            built <- TransactionBuilder.modify(context, steps)
+            withAttachments = addAttachmentsToContext(
+              built
+            ) // TODO: remove after fixes with attachments
             finalized <- withAttachments.finalizeContext(
               params,
               handler,
@@ -702,6 +704,50 @@ case class TxBuilder(
 
         copy(steps = balancedSteps ++ collateralSteps).changeTo(sponsor)
     }
+
+    /*
+    def complete2(provider: Provider, sponsor: Address): TxBuilder = {
+
+        def needsCollateral2(tx: Transaction, resolvedUtxos: ResolvedUtxos): Boolean = {
+            AllNeededScriptHashes
+                .allNeededScriptHashesView(tx, resolvedUtxos.utxos)
+                .map(_.nonEmpty)
+                .getOrElse(
+                  throw new IllegalStateException("Could not determine needed script hashes")
+                )
+        }
+
+        def diffHandler(context: TransactionBuilder.Context)(diff: Value, tx: Transaction): Either[TxBalancingError, Transaction] = {
+            // TODO:
+            // - handle collateral: if scripts and not enough collateral =>
+            //      add collateral and return
+            //      Right(tx)
+            // - if diff > 0 then Change.diffHandler
+            // - if diff == 0 then Right(tx)
+            //
+//            if needsCollateral2(tx, )
+        }
+
+        // Could be a good idea to immediately `modify` on every step, maybe not tho.
+        val finalizedContext = for {
+            built <- TransactionBuilder.modify(context, steps)
+            finalized <- built.finalizeContext(
+              env.protocolParams,
+              diffHandler,
+              evaluator,
+              Seq.empty // todo: validators
+            )
+        } yield finalized
+
+        finalizedContext match {
+            case Right(finalized) =>
+                copy(context = finalized)
+            case Left(error) =>
+                throw new RuntimeException(error.reason)
+        }
+
+    }
+     */
 
     private def estimateFee(tx: Transaction): Coin = {
         val txSize = tx.toCbor.length

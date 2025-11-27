@@ -76,13 +76,13 @@ object LowLevelTxBuilder {
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0
 
+        val computeWitnesses = computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)
         @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
             iteration += 1
             if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
-            val providedTxFee = tx.body.value.fee // ???: unused
 
             val eTrialTx = for {
-                txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
+                txWithExUnits <- computeWitnesses(tx)
                 minFee <- MinTransactionFee(txWithExUnits, resolvedUtxo, protocolParams).left.map(
                   TxBalancingError.Failed(_)
                 )
