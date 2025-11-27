@@ -34,12 +34,7 @@ case class TxBuilder(
       *   [[build]] throws.
       */
     def spend(utxo: Utxo): TxBuilder =
-        addSteps(
-          TransactionBuilderStep.Spend(
-            utxo,
-            PubKeyWitness
-          )
-        )
+        addSteps(TransactionBuilderStep.Spend(utxo, PubKeyWitness))
 
     /** Adds the specified **pubkey** utxos to the list of inputs, thus spending them.
       *
@@ -140,15 +135,7 @@ case class TxBuilder(
         redeemer: T,
         script: PlutusScript
     ): TxBuilder = {
-        val datum = buildDatumWitness(utxo)
-
-        val witness = ThreeArgumentPlutusScriptWitness(
-          scriptSource = ScriptSource.PlutusScriptValue(script),
-          redeemer = redeemer.toData,
-          datum = datum,
-          additionalSigners = Set.empty
-        )
-        addSteps(TransactionBuilderStep.Spend(utxo, witness))
+        spend(utxo, redeemer, script, Set.empty)
     }
 
     /** Adds the specified **script protected** utxo to the list of inputs and the specified
@@ -169,14 +156,14 @@ case class TxBuilder(
       *   redeemer to pass to the script to unlock the inputs
       * @param script
       *   script that protects the `utxo`
-      * @param additionalSigners
+      * @param requiredSigners
       *   set of public key hashes that must sign the transaction
       */
     def spend[T: ToData](
         utxo: Utxo,
         redeemer: T,
         script: PlutusScript,
-        additionalSigners: Set[AddrKeyHash]
+        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
@@ -184,7 +171,7 @@ case class TxBuilder(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer.toData,
           datum = datum,
-          additionalSigners = additionalSigners.map(ExpectedSigner.apply)
+          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }

@@ -2,9 +2,11 @@ package scalus.cardano.txbuilder
 
 import monocle.syntax.all.*
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{ByteString, Data}
+import scalus.builtin.ByteString.{hex, utf8}
+import scalus.builtin.Data
+import scalus.builtin.Data.toData
+import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
-import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
@@ -32,15 +34,9 @@ class TxBuilderTest extends AnyFunSuite {
           utxo._1,
           utxo._2
               .focus(_.address)
-              .replace(
-                ShelleyAddress(
-                  network = Mainnet,
-                  payment = ShelleyPaymentPart.Script(script.scriptHash),
-                  delegation = ShelleyDelegationPart.Null
-                )
-              )
+              .replace(Address(Mainnet, Credential.ScriptHash(script.scriptHash)))
               .focus(_.datumOption)
-              .replace(Some(Inline(Data.I(42))))
+              .replace(Some(Inline(42.toData)))
         )
     }
 
@@ -63,9 +59,7 @@ class TxBuilderTest extends AnyFunSuite {
     test("TxBuilder mint without attaching script should fail when built") {
         val policyId: PolicyId = mintingPolicy.scriptHash
         val redeemer = Data.List(List.empty)
-        val assets = Map(
-          AssetName(ByteString.fromHex("deadbeef")) -> 100L
-        )
+        val assets = Map(AssetName(hex"deadbeef") -> 100L)
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
 
         val builder = TxBuilder(testEnv)
@@ -89,7 +83,7 @@ class TxBuilderTest extends AnyFunSuite {
 
         val validFrom = java.time.Instant.now()
         val validTo = validFrom.plusSeconds(3600)
-        val inlineDatum = Data.I(123)
+        val inlineDatum = 123.toData
 
         val tx = TxBuilder(testEnv)
             .spend(Utxo(paymentUtxo))
@@ -139,8 +133,8 @@ class TxBuilderTest extends AnyFunSuite {
 
     test("TxBuilder mint with script and payTo sends minted tokens to specified output") {
         val redeemer = Data.List(List.empty)
-        val assetName1 = AssetName(ByteString.fromHex("deadbeef"))
-        val assetName2 = AssetName(ByteString.fromHex("cafebabe"))
+        val assetName1 = AssetName(hex"deadbeef")
+        val assetName2 = AssetName(hex"cafebabe")
         val assets = Map(
           assetName1 -> 100L,
           assetName2 -> 50L
@@ -222,7 +216,7 @@ class TxBuilderTest extends AnyFunSuite {
         val customOutput = TransactionOutput(
           address = Bob.address,
           value = Value.ada(3),
-          datumOption = Some(Inline(Data.B(ByteString.fromHex("deadbeef")))),
+          datumOption = Some(Inline(hex"deadbeef".toData)),
           scriptRef = None
         )
 
@@ -240,7 +234,7 @@ class TxBuilderTest extends AnyFunSuite {
         assert(bobOutput.value.value.coin.value == 3_000_000L)
         assert(bobOutput.value.datumOption.isDefined)
         bobOutput.value.datumOption.get match {
-            case Inline(data) => assert(data == Data.B(ByteString.fromHex("deadbeef")))
+            case Inline(data) => assert(data == hex"deadbeef".toData)
             case _            => fail("Expected inline datum")
         }
     }
@@ -248,7 +242,7 @@ class TxBuilderTest extends AnyFunSuite {
     test("TxBuilder payTo with datum hash includes datum in witness set") {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
 
-        val datum = Data.Constr(0, List(Data.I(100), Data.B(ByteString.fromHex("abcd"))))
+        val datum = Data.Constr(0, List(100.toData, hex"abcd".toData))
         val datumHash = DataHash.fromByteString(
           scalus.builtin.Builtins.blake2b_256(scalus.builtin.Builtins.serialiseData(datum))
         )
@@ -283,9 +277,9 @@ class TxBuilderTest extends AnyFunSuite {
           Compiler.compile((sc: Data) => ()).toUplc().plutusV2.cborByteString
         )
 
-        val datum1 = Data.I(111)
-        val datum2 = Data.B(ByteString.fromHex("aabbcc"))
-        val datum3 = Data.Constr(1, List(Data.I(222)))
+        val datum1 = 111.toData
+        val datum2 = hex"aabbcc".toData
+        val datum3 = Data.Constr(1, List(222.toData))
 
         val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
@@ -328,7 +322,7 @@ class TxBuilderTest extends AnyFunSuite {
     }
 
     test("TxBuilder should return tokens to change when spending token UTXO") {
-        val co2 = AssetName(ByteString.fromString("co2"))
+        val co2 = AssetName(utf8"co2")
         val policyId = mintingPolicy.scriptHash
         val tokenAmount = 1000L
 
@@ -364,7 +358,7 @@ class TxBuilderTest extends AnyFunSuite {
     }
 
     test("TxBuilder should handle partial token sends with correct change") {
-        val co2 = AssetName(ByteString.fromString("co2"))
+        val co2 = AssetName(utf8"co2")
         val policyId = mintingPolicy.scriptHash
 
         val tokenAmount = 1000L
@@ -401,8 +395,8 @@ class TxBuilderTest extends AnyFunSuite {
     }
 
     test("TxBuilder should handle multiple token types in change") {
-        val co2 = AssetName(ByteString.fromString("co2"))
-        val h2so4 = AssetName(ByteString.fromString("h2so4"))
+        val co2 = AssetName(utf8"co2")
+        val h2so4 = AssetName(utf8"h2so4")
         val policyId = mintingPolicy.scriptHash
 
         val inputValue = Value(
