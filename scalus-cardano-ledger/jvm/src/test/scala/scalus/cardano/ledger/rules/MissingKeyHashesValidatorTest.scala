@@ -8,6 +8,31 @@ import org.scalatest.funsuite.AnyFunSuite
 import scala.collection.immutable.SortedMap
 
 class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+    test(
+      "MissingKeyHashesValidator success for no inputs, collateralInputs, votingProcedures, certificates, withdrawals, requiredSigners"
+    ) {
+        val context = Context()
+        val state = State()
+        val transaction = Transaction(
+          body = KeepRaw(
+            TransactionBody(
+              inputs = TaggedSortedSet.empty,
+              collateralInputs = TaggedSortedSet.empty,
+              votingProcedures = None,
+              certificates = TaggedOrderedStrictSet.empty,
+              withdrawals = None,
+              requiredSigners = TaggedSortedSet.empty,
+              outputs = IndexedSeq.empty,
+              fee = Coin.zero
+            )
+          ),
+          witnessSet = TransactionWitnessSet()
+        )
+
+        val result = MissingKeyHashesValidator.validate(context, state, transaction)
+        assert(result.isRight)
+    }
+
     test("MissingKeyHashesValidator Inputs rule success") {
         val context = Context()
 
