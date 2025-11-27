@@ -42,26 +42,34 @@ case class DetachedRedeemer(
 /** Contains a value that a redeemer corresponds to. Allows finding a redeemer index, given a
   * transaction contains the value.
   */
-sealed trait RedeemerPurpose
+sealed trait RedeemerPurpose {
+    def redeemerTag: RedeemerTag
+}
 
 object RedeemerPurpose {
-    case class ForSpend(input: TransactionInput) extends RedeemerPurpose
-    case class ForMint(scriptHash: ScriptHash) extends RedeemerPurpose
-    case class ForReward(rewardAddress: RewardAccount) extends RedeemerPurpose
-    case class ForCert(certificate: Certificate) extends RedeemerPurpose
-    case class ForVote(voter: Voter) extends RedeemerPurpose
-    case class ForPropose(proposal: ProposalProcedure) extends RedeemerPurpose
+    case class ForSpend(input: TransactionInput) extends RedeemerPurpose {
+        def redeemerTag: RedeemerTag = RedeemerTag.Spend
+    }
+    case class ForMint(scriptHash: ScriptHash) extends RedeemerPurpose {
+        def redeemerTag: RedeemerTag = RedeemerTag.Mint
+    }
+    case class ForReward(rewardAddress: RewardAccount) extends RedeemerPurpose {
+        def redeemerTag: RedeemerTag = RedeemerTag.Reward
+    }
+    case class ForCert(certificate: Certificate) extends RedeemerPurpose {
+        def redeemerTag: RedeemerTag = RedeemerTag.Cert
+    }
+    case class ForVote(voter: Voter) extends RedeemerPurpose {
+        def redeemerTag: RedeemerTag = RedeemerTag.Voting
+    }
+    case class ForPropose(proposal: ProposalProcedure) extends RedeemerPurpose {
+        def redeemerTag: RedeemerTag = RedeemerTag.Proposing
+    }
 }
 
 object RedeemerPurposeUtils {
-    def redeemerPurposeToRedeemerTag(purpose: RedeemerPurpose): RedeemerTag = purpose match {
-        case _: RedeemerPurpose.ForSpend   => RedeemerTag.Spend
-        case _: RedeemerPurpose.ForMint    => RedeemerTag.Mint
-        case _: RedeemerPurpose.ForReward  => RedeemerTag.Reward
-        case _: RedeemerPurpose.ForCert    => RedeemerTag.Cert
-        case _: RedeemerPurpose.ForPropose => RedeemerTag.Proposing
-        case _: RedeemerPurpose.ForVote    => RedeemerTag.Voting
-    }
+    def redeemerPurposeToRedeemerTag(purpose: RedeemerPurpose): RedeemerTag =
+        purpose.redeemerTag
 }
 
 // ============================================================================
@@ -131,19 +139,15 @@ object RedeemerManagement {
     }
 
     def attachRedeemer(ctx: RedeemersContext, detached: DetachedRedeemer): Option[Redeemer] = {
-        val (tag, indexOpt) = detached.purpose match {
-            case RedeemerPurpose.ForSpend(input) =>
-                (RedeemerTag.Spend, ctx.inputs.indexOf(input))
-            case RedeemerPurpose.ForMint(scriptHash) =>
-                (RedeemerTag.Mint, ctx.mintingPolicyHashes.indexOf(scriptHash))
+        val tag = detached.purpose.redeemerTag
+        val indexOpt = detached.purpose match {
+            case RedeemerPurpose.ForSpend(input)     => ctx.inputs.indexOf(input)
+            case RedeemerPurpose.ForMint(scriptHash) => ctx.mintingPolicyHashes.indexOf(scriptHash)
             case RedeemerPurpose.ForReward(rewardAddress) =>
-                (RedeemerTag.Reward, ctx.rewardAddresses.indexOf(rewardAddress))
-            case RedeemerPurpose.ForCert(certificate) =>
-                (RedeemerTag.Cert, ctx.certs.indexOf(certificate))
-            case RedeemerPurpose.ForPropose(proposal) =>
-                (RedeemerTag.Proposing, ctx.proposals.indexOf(proposal))
-            case RedeemerPurpose.ForVote(voter) =>
-                (RedeemerTag.Voting, ctx.voters.indexOf(voter))
+                ctx.rewardAddresses.indexOf(rewardAddress)
+            case RedeemerPurpose.ForCert(certificate) => ctx.certs.indexOf(certificate)
+            case RedeemerPurpose.ForPropose(proposal) => ctx.proposals.indexOf(proposal)
+            case RedeemerPurpose.ForVote(voter)       => ctx.voters.indexOf(voter)
         }
 
         if indexOpt >= 0 then {
@@ -205,7 +209,7 @@ object TransactionConversion {
         val redeemers = validRedeemers.flatMap(RedeemerManagement.detachRedeemer(ctx, _)).toVector
         val updatedWitnessSet = witnessSet.copy(redeemers =
             if invalidRedeemers.isEmpty then None
-            else Some(KeepRaw.apply(Redeemers.from(invalidRedeemers)))
+            else Some(KeepRaw(Redeemers(invalidRedeemers*)))
         )
 
         val updatedTx =
@@ -257,7 +261,7 @@ object TransactionConversion {
                 val updatedWitnessSet =
                     currentWitnessSet.copy(redeemers =
                         if allRedeemers.isEmpty then None
-                        else Some(KeepRaw.apply(Redeemers.from(allRedeemers)))
+                        else Some(KeepRaw(Redeemers(allRedeemers*)))
                     )
                 val updatedTx = editable.transaction
                     .focus(_.witnessSet)
@@ -281,7 +285,7 @@ object TransactionConversion {
         val updatedWitnessSet =
             currentWitnessSet.copy(redeemers =
                 if allRedeemers.isEmpty then None
-                else Some(KeepRaw.apply(Redeemers.from(allRedeemers)))
+                else Some(KeepRaw(Redeemers(allRedeemers*)))
             )
         val updatedTx = editable.transaction
             .focus(_.witnessSet)
