@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
-import scalus.cardano.node.Provider
+import scalus.cardano.node.{Provider, SubmitError}
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.{plutusV3, toUplc, Compiler}
 
@@ -16,7 +16,7 @@ import scala.collection.immutable.SortedMap
 
 // TODO: can't depend `testkit`, since it'd introduce circular dependency. /
 class SimpleMockProvider(initialUtxos: Utxos) extends Provider {
-    override def submit(transaction: Transaction): Either[RuntimeException, Unit] = Right(())
+    override def submit(transaction: Transaction): Either[SubmitError, Unit] = Right(())
 
     override def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] =
         initialUtxos
@@ -320,7 +320,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val builder = TxBuilder(testEnv)
-            .mint(redeemer, assets, alwaysOkScript)
+            .mintAndAttach(redeemer, assets, alwaysOkScript)
             .payTo(Bob.address, mintValue)
             .complete(provider, Alice.address)
             .build()

@@ -168,7 +168,7 @@ class TxBuilderTest extends AnyFunSuite {
 
         val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
-            .mint(redeemer, assets, mintingPolicy)
+            .mintAndAttach(redeemer, assets, mintingPolicy)
             .payTo(Bob.address, paymentValue)
             .metadata(metadata)
             .changeTo(Alice.address)

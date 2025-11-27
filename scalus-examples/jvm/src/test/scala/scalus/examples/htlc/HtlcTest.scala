@@ -7,6 +7,7 @@ import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
+import scalus.cardano.node.SubmitError
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.testing.kit.{MockLedgerApi, ScalusTest, TestUtil}
@@ -266,9 +267,12 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(revealTx) match
-            case Left(message: String) =>
-                assert(message.endsWith(HtlcValidator.InvalidReceiverPreimage))
-            case _ => fail("Transaction should have failed")
+            case Left(nodeError: SubmitError.NodeError) =>
+                assert(nodeError.message.endsWith(HtlcValidator.InvalidReceiverPreimage))
+            case _ =>
+                fail(
+                  "Transaction should have failed with a node error indicating the violated ledger rule"
+                )
     }
 
     test("receiver fails with wrong receiver pubkey hash") {
@@ -340,9 +344,12 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(revealTx) match
-            case Left(message: String) =>
-                assert(message.endsWith(HtlcValidator.UnsignedReceiverTransaction))
-            case Right(_) => fail("Transaction should have failed")
+            case Left(nodeError: SubmitError.NodeError) =>
+                assert(nodeError.message.endsWith(HtlcValidator.UnsignedReceiverTransaction))
+            case _ =>
+                fail(
+                  "Transaction should have failed with a node error indicating the violated ledger rule"
+                )
     }
 
     test("receiver fails after timeout") {
@@ -412,9 +419,12 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
         provider.submit(revealTx) match
-            case Left(message: String) =>
-                assert(message.endsWith(HtlcValidator.InvalidReceiverTimePoint))
-            case Right(_) => fail("Transaction should have failed")
+            case Left(nodeError: SubmitError.NodeError) =>
+                assert(nodeError.message.endsWith(HtlcValidator.InvalidReceiverTimePoint))
+            case _ =>
+                fail(
+                  "Transaction should have failed with a node error indicating the violated ledger rule"
+                )
     }
 
     test("committer reclaims after timeout") {
@@ -563,9 +573,12 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
         provider.submit(timeoutTx) match
-            case Left(message: String) =>
-                assert(message.endsWith(HtlcValidator.UnsignedCommitterTransaction))
-            case Right(_) => fail("Transaction should have failed")
+            case Left(nodeError: SubmitError.NodeError) =>
+                assert(nodeError.message.endsWith(HtlcValidator.UnsignedCommitterTransaction))
+            case _ =>
+                fail(
+                  "Transaction should have failed with a node error indicating the violated ledger rule"
+                )
     }
 
     test("committer fails before timeout") {
@@ -634,8 +647,11 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
         provider.submit(timeoutTx) match
-            case Left(message: String) =>
-                assert(message.endsWith(HtlcValidator.InvalidCommitterTimePoint))
-            case Right(_) => fail("Transaction should have failed")
+            case Left(nodeError: SubmitError.NodeError) =>
+                assert(nodeError.message.endsWith(HtlcValidator.InvalidCommitterTimePoint))
+            case _ =>
+                fail(
+                  "Transaction should have failed with a node error indicating the violated ledger rule"
+                )
     }
 }

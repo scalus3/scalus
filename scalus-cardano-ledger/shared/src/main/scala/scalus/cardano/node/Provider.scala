@@ -4,9 +4,6 @@ import scalus.cardano.ledger.*
 import scalus.cardano.address.Address
 
 trait Provider {
-    type LedgerRuleViolation = String
-    type NetworkError = RuntimeException
-    type SubmitError = LedgerRuleViolation | NetworkError
 
     def submit(transaction: Transaction): Either[SubmitError, Unit]
 
@@ -31,3 +28,7 @@ trait Provider {
 
 //    def setSlot(slot: SlotNo): Unit
 }
+
+enum SubmitError:
+    case NetworkError(message: String, exception: Option[Throwable] = None)
+    case NodeError(message: String, exception: Option[Throwable] = None)

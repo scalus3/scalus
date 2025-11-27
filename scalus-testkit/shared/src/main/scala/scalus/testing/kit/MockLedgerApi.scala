@@ -4,6 +4,8 @@ import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Provider
+import scalus.cardano.node.SubmitError
+import scalus.cardano.node.SubmitError.NodeError
 
 class MockLedgerApi(
     initialUtxos: Utxos = Map.empty,
@@ -16,7 +18,8 @@ class MockLedgerApi(
             case Right(newState) =>
                 state = newState
                 Right(())
-            case Left(t: TransactionException) => Left(t.explain)
+            case Left(t: TransactionException) =>
+                Left(NodeError(s"Ledger rule violation: ${t.explain}", Some(t)))
         }
     }
 
