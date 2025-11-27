@@ -15,6 +15,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.txbuilder.Datum.DatumValue
 import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TransactionBuilder.*
+import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint as _, *}
 import scalus.|>
 
 import scala.collection.immutable.SortedMap
@@ -69,10 +70,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     // Tries to add the output to the resolved utxo set, throwing an error if
     // the input is already mapped to another output
-    private def addResolvedUtxo(
-        utxo: Utxo,
-        step: TransactionBuilderStep
-    ): Result[Unit] = {
+    private def addResolvedUtxo(utxo: Utxo, step: TransactionBuilderStep): Result[Unit] = {
         val mbNewUtxos = ctx.resolvedUtxos.addUtxo(utxo)
         mbNewUtxos match {
             case None =>
@@ -91,47 +89,45 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     }
 
     private def processStep(step: TransactionBuilderStep): Result[Unit] = step match {
+        case spend: Spend => useSpend(spend)
 
-        case spend: TransactionBuilderStep.Spend =>
-            useSpend(spend)
-
-        case delayedSpend: TransactionBuilderStep.SpendWithDelayedRedeemer =>
+        case delayedSpend: SpendWithDelayedRedeemer =>
             useSpendWithDelayedRedeemer(delayedSpend)
 
-        case send: TransactionBuilderStep.Send =>
+        case send: Send =>
             useSend(send)
 
         case mint: TransactionBuilderStep.Mint =>
             useMint(mint)
 
-        case referenceOutput: TransactionBuilderStep.ReferenceOutput =>
+        case referenceOutput: ReferenceOutput =>
             useReferenceOutput(referenceOutput)
 
-        case fee: TransactionBuilderStep.Fee =>
+        case fee: Fee =>
             useFee(fee)
 
-        case validityStartSlot: TransactionBuilderStep.ValidityStartSlot =>
+        case validityStartSlot: ValidityStartSlot =>
             useValidityStartSlot(validityStartSlot)
 
-        case validityEndSlot: TransactionBuilderStep.ValidityEndSlot =>
+        case validityEndSlot: ValidityEndSlot =>
             useValidityEndSlot(validityEndSlot)
 
-        case addCollateral: TransactionBuilderStep.AddCollateral =>
+        case addCollateral: AddCollateral =>
             useAddCollateral(addCollateral)
 
-        case modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData =>
+        case modifyAuxiliaryData: ModifyAuxiliaryData =>
             Right(useModifyAuxiliaryData(modifyAuxiliaryData))
 
-        case issueCertificate: TransactionBuilderStep.IssueCertificate =>
+        case issueCertificate: IssueCertificate =>
             useIssueCertificate(issueCertificate)
 
-        case withdrawRewards: TransactionBuilderStep.WithdrawRewards =>
+        case withdrawRewards: WithdrawRewards =>
             useWithdrawRewards(withdrawRewards)
 
-        case submitProposal: TransactionBuilderStep.SubmitProposal =>
+        case submitProposal: SubmitProposal =>
             useSubmitProposal(submitProposal)
 
-        case submitVotingProcedure: TransactionBuilderStep.SubmitVotingProcedure =>
+        case submitVotingProcedure: SubmitVotingProcedure =>
             useSubmitVotingProcedure(submitVotingProcedure)
     }
 
@@ -143,10 +139,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
       * signature(s) to the Context's _.expectedSigners. Uses witness to try to satisfy spending
       * requirements.
       */
-    private def useSpend(
-        spend: TransactionBuilderStep.Spend
-    ): Result[Unit] = {
-
+    private def useSpend(spend: Spend): Result[Unit] = {
         val utxo = spend.utxo
         val witness = spend.witness
 
@@ -295,7 +288,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // Send step
     // -------------------------------------------------------------------------
 
-    private def useSend(send: TransactionBuilderStep.Send): Result[Unit] =
+    private def useSend(send: Send): Result[Unit] =
         for {
             _ <- assertNetworkId(send.output.address, send)
             _ = modify0(
@@ -310,9 +303,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // MintAsset step
     // -------------------------------------------------------------------------
 
-    private def useMint(
-        mint: TransactionBuilderStep.Mint
-    ): Result[Unit] = {
+    private def useMint(mint: TransactionBuilderStep.Mint): Result[Unit] = {
         val scriptHash = mint.scriptHash
         val assetName = mint.assetName
         val amount = mint.amount
@@ -470,7 +461,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     }
 
     private def useSpendWithDelayedRedeemer(
-        delayedSpend: TransactionBuilderStep.SpendWithDelayedRedeemer
+        delayedSpend: SpendWithDelayedRedeemer
     ): Result[Unit] = {
         val utxo = delayedSpend.utxo
         val validator = delayedSpend.validator
@@ -493,7 +484,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
           step = delayedSpend
         )
 
-        for _ <- useSpend(TransactionBuilderStep.Spend(utxo, witness))
+        for _ <- useSpend(Spend(utxo, witness))
         yield modify0(_.addDelayedRedeemer(spec))
     }
 
@@ -501,9 +492,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ReferenceOutput step
     // -------------------------------------------------------------------------
 
-    private def useReferenceOutput(
-        referenceOutput: TransactionBuilderStep.ReferenceOutput
-    ): Result[Unit] =
+    private def useReferenceOutput(referenceOutput: ReferenceOutput): Result[Unit] =
         for {
             _ <- assertNetworkId(referenceOutput.utxo.output.address, referenceOutput)
             _ <- assertInputDoesNotAlreadyExist(referenceOutput.utxo.input, referenceOutput)
@@ -526,7 +515,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // Fee step
     // -------------------------------------------------------------------------
 
-    private def useFee(step: TransactionBuilderStep.Fee): Result[Unit] = {
+    private def useFee(step: Fee): Result[Unit] = {
         val currentFee = ctx.transaction.body.value.fee.value
         currentFee match {
             case 0 =>
@@ -540,9 +529,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ValidityStartSlot step
     // -------------------------------------------------------------------------
 
-    private def useValidityStartSlot(
-        step: TransactionBuilderStep.ValidityStartSlot
-    ): Result[Unit] = {
+    private def useValidityStartSlot(step: ValidityStartSlot): Result[Unit] = {
         val currentValidityStartSlot = ctx.transaction.body.value.validityStartSlot
         currentValidityStartSlot match {
             case Some(existingSlot) =>
@@ -557,9 +544,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ValidityEndSlot step
     // -------------------------------------------------------------------------
 
-    private def useValidityEndSlot(
-        step: TransactionBuilderStep.ValidityEndSlot
-    ): Result[Unit] = {
+    private def useValidityEndSlot(step: ValidityEndSlot): Result[Unit] = {
         val currentValidityEndSlot = ctx.transaction.body.value.ttl
         currentValidityEndSlot match {
             case Some(existingSlot) =>
@@ -574,9 +559,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // AddCollateral step
     // -------------------------------------------------------------------------
 
-    private def useAddCollateral(
-        addCollateral: TransactionBuilderStep.AddCollateral
-    ): Result[Unit] =
+    private def useAddCollateral(addCollateral: AddCollateral): Result[Unit] =
         for
             _ <- assertNetworkId(addCollateral.utxo.output.address, addCollateral)
             _ <- assertAdaOnlyPubkeyUtxo(addCollateral.utxo, addCollateral)
@@ -593,10 +576,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         )
 
     /** Ensure that the output is a pubkey output containing only ada. */
-    private def assertAdaOnlyPubkeyUtxo(
-        utxo: Utxo,
-        step: TransactionBuilderStep
-    ): Result[Unit] =
+    private def assertAdaOnlyPubkeyUtxo(utxo: Utxo, step: TransactionBuilderStep): Result[Unit] =
         for {
             _ <-
                 if !utxo.output.value.assets.isEmpty
@@ -617,9 +597,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ModifyAuxiliaryData step
     // -------------------------------------------------------------------------
 
-    private def useModifyAuxiliaryData(
-        modifyAuxiliaryData: TransactionBuilderStep.ModifyAuxiliaryData
-    ): Unit = {
+    private def useModifyAuxiliaryData(modifyAuxiliaryData: ModifyAuxiliaryData): Unit = {
         val oldData = ctx.transaction.auxiliaryData
         val newData = modifyAuxiliaryData.f(oldData.map(_.value)).map(KeepRaw(_))
 
@@ -641,9 +619,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // IssueCertificate step
     // -------------------------------------------------------------------------
 
-    private def useIssueCertificate(
-        issueCertificate: TransactionBuilderStep.IssueCertificate
-    ): Result[Unit] =
+    private def useIssueCertificate(issueCertificate: IssueCertificate): Result[Unit] =
         modify0(
           unsafeCtxBodyL
               .refocus(_.certificates)
@@ -786,9 +762,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // WithdrawRewards step
     // -------------------------------------------------------------------------
 
-    private def useWithdrawRewards(
-        withdrawRewards: TransactionBuilderStep.WithdrawRewards
-    ): Result[Unit] = {
+    private def useWithdrawRewards(withdrawRewards: WithdrawRewards): Result[Unit] = {
         val rewardAccount = withdrawRewards.stakeCredential.credential match {
             case Credential.KeyHash(keyHash) =>
                 // Convert AddrKeyHash to StakeKeyHash - they're likely the same underlying type?
@@ -831,9 +805,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // SubmitProposal step
     // -------------------------------------------------------------------------
 
-    private def useSubmitProposal(
-        submitProposal: TransactionBuilderStep.SubmitProposal
-    ): Result[Unit] =
+    private def useSubmitProposal(submitProposal: SubmitProposal): Result[Unit] =
         modify0(
           unsafeCtxBodyL
               .refocus(_.proposalProcedures)
@@ -866,7 +838,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // -------------------------------------------------------------------------
 
     private def useSubmitVotingProcedure(
-        submitVotingProcedure: TransactionBuilderStep.SubmitVotingProcedure
+        submitVotingProcedure: SubmitVotingProcedure
     ): Result[Unit] =
         modify0(
           unsafeCtxBodyL
