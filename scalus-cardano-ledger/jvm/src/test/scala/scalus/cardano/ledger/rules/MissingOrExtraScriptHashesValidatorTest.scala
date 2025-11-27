@@ -37,6 +37,14 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           )
         )
 
+        // Create a redeemer for the spending input
+        val redeemer = Redeemer(
+          tag = RedeemerTag.Spend,
+          index = 0,
+          data = scalus.builtin.Data.I(0),
+          exUnits = ExUnits(100000, 100000)
+        )
+
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -45,7 +53,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           ),
           TransactionWitnessSet(
             scripts = Seq(plutusScript),
-            redeemers = None,
+            redeemers = Some(Redeemers.from(Seq(redeemer))),
             vkeyWitnesses = Set.empty,
             plutusData = Seq.empty
           )
@@ -66,6 +74,14 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           )
         )
 
+        // Create a redeemer for the spending input
+        val redeemer = Redeemer(
+          tag = RedeemerTag.Spend,
+          index = 0,
+          data = scalus.builtin.Data.I(0),
+          exUnits = ExUnits(100000, 100000)
+        )
+
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -74,7 +90,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           ),
           TransactionWitnessSet(
             scripts = Seq.empty,
-            redeemers = None,
+            redeemers = Some(Redeemers.from(Seq(redeemer))),
             vkeyWitnesses = Set.empty,
             plutusData = Seq.empty
           )

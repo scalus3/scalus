@@ -94,13 +94,18 @@ object ScriptDataHashGenerator {
         val datums = witnessSet.plutusData
 
         for
+            // Get ALL script-locked inputs (not filtered by redeemers)
+            // This matches Haskell's getSpendingScriptsNeeded which includes all script inputs
             allNeededScriptHashes <- AllNeededScriptHashes.allNeededScriptHashes(transaction, utxos)
 
+            // Get all Plutus scripts that are actually provided (in witnesses or via reference)
             allResolvedPlutusScripts <- AllResolvedScripts.allResolvedPlutusScriptsView(
               transaction,
               utxos
             )
         yield
+            // scriptsUsed = intersection of needed and provided
+            // This matches Haskell's: scriptsUsed = Map.elems $ Map.restrictKeys scriptsProvided scriptsNeeded
             val usedLanguages = TreeSet.from(
               allResolvedPlutusScripts
                   .filter(plutusScript => allNeededScriptHashes.contains(plutusScript.scriptHash))

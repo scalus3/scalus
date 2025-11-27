@@ -73,6 +73,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         )
 
         val dummyData = Arbitrary.arbitrary[Data].sample.get
+        // Create a redeemer for a different index to test missing redeemer
+        val wrongRedeemer = Redeemer(
+          tag = RedeemerTag.Spend,
+          index = 1, // Wrong index!
+          data = dummyData,
+          exUnits = ExUnits(100000, 100000)
+        )
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -81,7 +88,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           ),
           TransactionWitnessSet(
             scripts = Seq(plutusScript),
-            redeemers = None,
+            redeemers = Some(Redeemers.from(Seq(wrongRedeemer))),
             vkeyWitnesses = Set.empty,
             plutusData = Seq(dummyData)
           )

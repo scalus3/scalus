@@ -91,12 +91,36 @@ object MissingOrExtraScriptHashesValidator extends STS.Validator {
                 allProvidedReferenceScriptHashes <- AllResolvedScripts
                     .allProvidedReferenceScriptHashes(event, utxo)
 
-                allNeededInputsScriptHashes <- AllNeededScriptHashes.allNeededInputsScriptHashes(
+                allNeededInputsScriptHashesRaw <- AllNeededScriptHashes.allNeededInputsScriptHashes(
                   event,
                   utxo
                 )
 
                 allWitnessesScriptHashes = AllResolvedScripts.allWitnessesScriptHashes(event)
+
+                // Get spending redeemer indices - only these inputs need scripts in witnesses
+                spendingRedeemerIndices = event.witnessSet.redeemers
+                    .map { redeemersKeepRaw =>
+                        redeemersKeepRaw.value.toSeq.collect {
+                            case Redeemer(RedeemerTag.Spend, index, _, _) => index
+                        }.toSet
+                    }
+                    .getOrElse(Set.empty[Int])
+
+                // Get script hashes that correspond to inputs with redeemers
+                allNeededInputsScriptHashesWithRedeemers <- AllNeededScriptHashes
+                    .allNeededInputsScriptIndexHashesAndOutputs(event, utxo)
+                    .map { indexedHashes =>
+                        indexedHashes
+                            .filter { case (index, _, _) =>
+                                spendingRedeemerIndices.contains(index)
+                            }
+                            .map { case (_, scriptHash, _) => scriptHash }
+                    }
+
+                // Only check scripts for inputs with redeemers
+                // Native scripts without redeemers are validated by NativeScriptsValidator
+                allNeededInputsScriptHashes = allNeededInputsScriptHashesWithRedeemers
 
                 allNeededInputsScriptHashesNoRefs = allNeededInputsScriptHashes.diff(
                   allProvidedReferenceScriptHashes
