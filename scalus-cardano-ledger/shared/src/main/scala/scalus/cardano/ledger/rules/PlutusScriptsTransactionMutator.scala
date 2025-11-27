@@ -7,7 +7,7 @@ import scala.util.boundary
 import scala.util.boundary.break
 import scala.util.control.NonFatal
 
-// It's conwayEvalScriptsTxValid in cardano-ledger
+// It's conwayEvalScriptsTxValid and babbageEvalScriptsTxInvalid in cardano-ledger
 object PlutusScriptsTransactionMutator extends STS.Mutator {
     override final type Error = TransactionException.BadCollateralInputsUTxOException |
         TransactionException.IllegalArgumentException
@@ -33,7 +33,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
             ).evalPlutusScripts(event, utxo)
 
             if event.isValid then
-                val addedUtxo: Utxos = event.body.value.outputs.view.zipWithIndex.map {
+                val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
                     case (Sized(output, _), index) =>
                         TransactionInput(event.id, index) -> output
                 }.toMap
@@ -41,7 +41,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                 // TODO full transition
                 success(
                   state.copy(
-                    utxos = state.utxos -- event.body.value.inputs.toSet ++ addedUtxo,
+                    utxos = state.utxos -- event.body.value.inputs.toSet ++ addedUtxos,
                     fees = state.fees + event.body.value.fee,
                     donation = state.donation + event.body.value.donation.getOrElse(Coin.zero)
                   )
@@ -63,9 +63,14 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                       )
                     )
                 else
-                    val addedUtxo = event.body.value.collateralReturnOutput
+                    val addedUtxos = event.body.value.collateralReturnOutput
                         .map(v =>
-                            TransactionInput(event.id, event.body.value.outputs.size) -> v.value
+                            /** In the impossible event that there are more transaction outputs in
+                              * the transaction than will fit into a Word16, we give the collateral
+                              * return output an index of maxBound.
+                              */
+                            val index = event.body.value.outputs.size.min(65535)
+                            TransactionInput(event.id, index) -> v.value
                         )
                         .toMap
 
@@ -92,7 +97,8 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                     // TODO full transition
                     success(
                       state.copy(
-                        utxos = state.utxos -- event.body.value.collateralInputs.toSet ++ addedUtxo,
+                        utxos =
+                            state.utxos -- event.body.value.collateralInputs.toSet ++ addedUtxos,
                         fees = state.fees + (collateralCoins - collateralReturnCoins)
                       )
                     )
