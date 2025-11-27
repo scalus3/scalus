@@ -19,7 +19,7 @@ class TxBuilderTest extends AnyFunSuite {
 
     // Test scripts for validation - using PlutusV3
     val script1: Script.PlutusV3 = {
-        val alwaysOk = Compiler.compileInline((sc: Data) => ())
+        val alwaysOk = Compiler.compile((sc: Data) => ())
         val alwaysOkCborBytes = alwaysOk.toUplc().plutusV3.cborByteString
         Script.PlutusV3(alwaysOkCborBytes)
     }
@@ -277,10 +277,10 @@ class TxBuilderTest extends AnyFunSuite {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
 
         val script2 = Script.PlutusV3(
-          Compiler.compileInline((sc: Data) => ()).toUplc().plutusV3.cborByteString
+          Compiler.compile((sc: Data) => ()).toUplc().plutusV3.cborByteString
         )
         val script3 = Script.PlutusV2(
-          Compiler.compileInline((sc: Data) => ()).toUplc().plutusV2.cborByteString
+          Compiler.compile((sc: Data) => ()).toUplc().plutusV2.cborByteString
         )
 
         val datum1 = Data.I(111)

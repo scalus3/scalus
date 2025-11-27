@@ -211,7 +211,7 @@ case class TxBuilder(
       */
     def collaterals(utxos: Utxos): TxBuilder =
         addSteps(
-          utxos.view.map(utxo => TransactionBuilderStep.AddCollateral.apply(Utxo(utxo))).toSeq*
+          utxos.view.map(utxo => TransactionBuilderStep.AddCollateral(Utxo(utxo))).toSeq*
         )
 
     /** Adds the specified output to the list of transaction outputs.
