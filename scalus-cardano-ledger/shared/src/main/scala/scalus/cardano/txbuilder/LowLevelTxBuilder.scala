@@ -66,12 +66,16 @@ object LowLevelTxBuilder {
       * Invariants:
       *   - both ADA and native tokens are adjusted by the diff handler
       *   - fees never go below the initial fee
+      *
+      * @param resolvedUtxo
+      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
+      *   to dynamically add UTXOs that will be visible in subsequent iterations.
       */
     def balanceFeeAndChangeWithTokens(
         initial: Transaction,
         diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
-        resolvedUtxo: Utxos,
+        resolvedUtxo: => Utxos,
         evaluator: PlutusScriptEvaluator,
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0

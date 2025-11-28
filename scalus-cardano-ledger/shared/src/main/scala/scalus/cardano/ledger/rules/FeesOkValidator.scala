@@ -235,4 +235,20 @@ object FeesOkValidator extends STS.Validator {
             )
         else success
     }
+
+    /** Calculates the required collateral amount based on the transaction fee and collateral
+      * percentage from protocol parameters.
+      *
+      * The required collateral is calculated as: (fee * collateralPercentage) / 100
+      *
+      * @param fee
+      *   the transaction fee
+      * @param collateralPercentage
+      *   the collateral percentage from protocol parameters
+      * @return
+      *   the required collateral amount
+      */
+    def calculateRequiredCollateral(fee: Coin, collateralPercentage: Long): Coin = {
+        Coin((fee.value * collateralPercentage) / 100)
+    }
 }

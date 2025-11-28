@@ -49,7 +49,7 @@ object Change {
         protocolParams: ProtocolParams
     ): Either[TxBalancingError, Transaction] = {
         val body = tx.body.value
-        val changeOutputIdx = body.outputs.indexWhere(_.value.address == changeAddress)
+        val changeOutputIdx = findChangeOutput(tx, changeAddress)
 
         val adaDiff = diff.coin.value
         val tokensDiff = diff.assets
@@ -85,6 +85,10 @@ object Change {
             }
         }
     }
+
+    // FIXME: needs to be more sophisticated
+    def findChangeOutput(tx: Transaction, changeAddress: Address) =
+        tx.body.value.outputs.indexWhere(_.value.address == changeAddress)
 
     private def updateChangeOutput(
         tx: Transaction,
