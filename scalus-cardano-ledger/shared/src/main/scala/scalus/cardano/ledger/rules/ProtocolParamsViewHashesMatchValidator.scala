@@ -3,13 +3,10 @@ package rules
 
 // It's ppViewHashesMatch in cardano-ledger
 //
-// NOTE: Some conformance test vectors (approximately 13 cases, all PlutusV2 case index /2 or higher)
-// contain incorrect script data hashes in the transaction body. These appear to have been created
-// with different protocol parameters (cost models) than those available in our test resources.
-// Our implementation correctly computes the script data hash according to the Cardano specification:
+// Validates that the script data hash in the transaction body matches the computed hash from:
 //   hash = Blake2b-256(redeemers || datums || cost_models)
 // where cost_models are filtered by the intersection of needed scripts and provided scripts.
-// This has been verified by manual calculation and matches the Haskell cardano-ledger implementation.
+// This matches the Haskell cardano-ledger implementation.
 object ProtocolParamsViewHashesMatchValidator extends STS.Validator {
     override final type Error = TransactionException.BadInputsUTxOException |
         TransactionException.BadReferenceInputsUTxOException |

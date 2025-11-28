@@ -58,6 +58,11 @@ object CardanoLedgerVectors {
     val vectorsExist: Boolean =
         conformanceVectorsPath != null && Files.exists(conformanceVectorsPath)
 
+    // Path to pparams-by-hash directory
+    lazy val pparamsDir: Path =
+        if conformanceVectorsPath != null then conformanceVectorsPath.resolve("pparams-by-hash")
+        else null
+
     if !vectorsExist then {
         println(
           s"⚠ Conformance test vectors not found at $conformanceVectorsPath - skipping conformance tests"

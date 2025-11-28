@@ -34,7 +34,8 @@ object TxBalance {
           txBody.fee,
           txBody.certificates.toSeq,
           txBody.donation,
-          protocolParams
+          protocolParams,
+          txBody.proposalProcedures.toSeq
         )
     }
 
@@ -146,6 +147,8 @@ object TxBalance {
       *   Transaction fee
       * @param certificates
       *   Certificates (for deposits)
+      * @param proposalProcedures
+      *   Proposal procedures (for governance action deposits)
       * @param donation
       *   Optional donation amount
       * @param protocolParams
@@ -159,7 +162,8 @@ object TxBalance {
         fee: Coin,
         certificates: Seq[Certificate],
         donation: Option[Coin],
-        protocolParams: ProtocolParams
+        protocolParams: ProtocolParams,
+        proposalProcedures: Seq[ProposalProcedure] = Seq.empty
     ): Value = {
         val mintAssets = mint.getOrElse(MultiAsset.empty)
         val burned = Value(
@@ -187,8 +191,11 @@ object TxBalance {
           certificates
         )
 
+        // Calculate total deposits for proposal procedures (governance action deposits)
+        val proposalDeposits: Coin = proposalProcedures.foldLeft(Coin.zero)(_ + _.deposit)
+
         val conwayTotalDepositsTxCerts = shelleyTotalDepositsTxCerts + conwayDRepDepositsTxCerts
-        val getTotalDepositsTxBody = conwayTotalDepositsTxCerts
+        val getTotalDepositsTxBody = conwayTotalDepositsTxCerts + proposalDeposits
         val shelleyProducedValue = outputValues + Value(fee + getTotalDepositsTxBody)
         val getProducedMaryValue = shelleyProducedValue + burned
         val conwayProducedValue =
