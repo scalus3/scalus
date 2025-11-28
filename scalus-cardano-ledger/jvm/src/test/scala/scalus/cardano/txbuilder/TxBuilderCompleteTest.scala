@@ -1,7 +1,6 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.utf8
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
@@ -172,7 +171,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("complete should handle multi-asset transactions") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-        val assetName = AssetName(utf8"co2")
+        val assetName = AssetName.fromString("co2")
         val policyId = alwaysOkScript.scriptHash
 
         val tokenValue = Value(
@@ -452,7 +451,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val assetName = AssetName(utf8"co2")
+        val assetName = AssetName.fromString("co2")
         val policyId = alwaysOkScript.scriptHash
 
         val provider = SimpleMockProvider(
@@ -502,8 +501,8 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val policyId1 = alwaysOkScript.scriptHash
         val policyId2 = ScriptHash.fromByteString(ByteString.fromHex("1" * 56))
-        val token1 = AssetName(utf8"co2")
-        val token2 = AssetName(utf8"h2so4")
+        val token1 = AssetName.fromString("co2")
+        val token2 = AssetName.fromString("h2so4")
 
         val provider = SimpleMockProvider(
           initialUtxos = Map(
@@ -587,7 +586,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     ) {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
-        val assetName = AssetName(utf8"co2")
+        val assetName = AssetName.fromString("co2")
 
         val provider = SimpleMockProvider(
           initialUtxos = Map(
@@ -659,9 +658,9 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should handle multiple token types in single UTXO efficiently") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
-        val tokenA = AssetName(utf8"co2")
-        val tokenB = AssetName(utf8"h2so4")
-        val tokenC = AssetName(utf8"c11h15no2")
+        val tokenA = AssetName.fromString("co2")
+        val tokenB = AssetName.fromString("h2so4")
+        val tokenC = AssetName.fromString("c11h15no2")
 
         val provider = SimpleMockProvider(
           initialUtxos = Map(

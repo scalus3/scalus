@@ -257,14 +257,12 @@ object AssetName {
     /** Create an AssetName from a hex string */
     def fromHex(hex: String): AssetName = {
         val bytes = ByteString.fromHex(hex)
-        require(bytes.size <= 32, s"AssetName must be at most 32 bytes, got ${bytes.size}")
         AssetName(bytes)
     }
 
     /** Create an AssetName from a UTF-8 string */
     def fromString(str: String): AssetName = {
         val bytes = ByteString.fromString(str)
-        require(bytes.size <= 32, s"AssetName must be at most 32 bytes, got ${bytes.size}")
         AssetName(bytes)
     }
 }
