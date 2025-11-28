@@ -4,7 +4,7 @@ package rules
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scala.collection.mutable
 
-// // It's part of Babbage.missingRequiredDatums in cardano-ledger
+// It's part of Babbage.missingRequiredDatums in cardano-ledger
 object MissingRequiredDatumsValidator extends STS.Validator {
     override final type Error = TransactionException.BadInputsUTxOException |
         TransactionException.BadReferenceInputsUTxOException | TransactionException.DatumsException
@@ -19,27 +19,28 @@ object MissingRequiredDatumsValidator extends STS.Validator {
               utxos
             )
 
-            (inputHashes, txInsNoDataHash) = getInputDataHashesTxBody(
+            (neededDatumHashes, inputsWithMissingDatumHash) = getInputDataHashesTxBody(
               transaction,
               utxos,
               allResolvedPlutusScriptsMap
             )
 
-            txHashes = transaction.witnessSet.plutusData.value.toMap.keySet
-            unmatchedDatumHashes = inputHashes -- txHashes
-            allowedSupplementalDataHashes = getSupplementalDataHashes(transaction, utxos)
-            supplementalDatumHashes = txHashes -- inputHashes
-            notOkSupplementalDHs = supplementalDatumHashes -- allowedSupplementalDataHashes
+            witnessDatumHashes = transaction.witnessSet.plutusData.value.toMap.keySet
+            unmatchedDatumHashes = neededDatumHashes -- witnessDatumHashes
+            allowedSupplementalDatumHashes = getSupplementalDatumHashes(transaction, utxos)
+            actualSupplementalDatumHashes = witnessDatumHashes -- neededDatumHashes
+            notAllowedSupplementalDatumHashes =
+                actualSupplementalDatumHashes -- allowedSupplementalDatumHashes
 
             _ <-
-                if txInsNoDataHash.nonEmpty || unmatchedDatumHashes.nonEmpty || notOkSupplementalDHs.nonEmpty
+                if inputsWithMissingDatumHash.nonEmpty || unmatchedDatumHashes.nonEmpty || notAllowedSupplementalDatumHashes.nonEmpty
                 then
                     failure(
                       TransactionException.DatumsException(
                         transaction.id,
-                        txInsNoDataHash,
+                        inputsWithMissingDatumHash,
                         unmatchedDatumHashes,
-                        notOkSupplementalDHs
+                        notAllowedSupplementalDatumHashes
                       )
                     )
                 else success
@@ -53,8 +54,8 @@ object MissingRequiredDatumsValidator extends STS.Validator {
     ): (Set[DataHash], Set[TransactionInput]) = {
         val txBody = transaction.body.value
         val inputs = txBody.inputs.toSet.view
-        val inputHashes = mutable.Set.empty[DataHash]
-        val txInsNoDataHash = mutable.Set.empty[TransactionInput]
+        val neededDatumHashes = mutable.Set.empty[DataHash]
+        val inputsWithMissingDatumHash = mutable.Set.empty[TransactionInput]
 
         for
             input <- inputs
@@ -65,15 +66,15 @@ object MissingRequiredDatumsValidator extends STS.Validator {
             output.datumOption match
                 case Some(datumOption) =>
                     datumOption match
-                        case DatumOption.Hash(hash) => inputHashes += hash
+                        case DatumOption.Hash(hash) => neededDatumHashes += hash
                         case DatumOption.Inline(_)  => // Inline datum, no hash to collect
                 case None if script.language == Language.PlutusV3 => // Datum for Plutus V3 script is optional
-                case None => txInsNoDataHash += input
+                case None => inputsWithMissingDatumHash += input
 
-        (inputHashes.toSet, txInsNoDataHash.toSet)
+        (neededDatumHashes.toSet, inputsWithMissingDatumHash.toSet)
     }
 
-    private def getSupplementalDataHashes(
+    private def getSupplementalDatumHashes(
         transaction: Transaction,
         utxos: Utxos
     ): Set[DataHash] = {
