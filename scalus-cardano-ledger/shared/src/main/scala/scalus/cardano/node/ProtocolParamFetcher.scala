@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.cardano.node
 
 import scalus.cardano.ledger.ProtocolParams
 

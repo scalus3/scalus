@@ -5,6 +5,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
+import scalus.cardano.node.BlockfrostClient
 import scalus.cardano.txbuilder.*
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}

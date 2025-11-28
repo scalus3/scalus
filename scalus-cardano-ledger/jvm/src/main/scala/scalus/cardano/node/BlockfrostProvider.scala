@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.cardano.node
 
 import com.bloxbean.cardano.client.api.model as bloxbean
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -6,15 +6,13 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.BloxbeanToLedgerTranslation.*
-import scalus.cardano.node.Provider
-import scalus.cardano.node.SubmitError
-import scalus.cardano.node.SubmitError.*
+import scalus.cardano.node.{Provider, SubmitError}
 import scalus.utils.Hex.hexToBytes
 
 import scala.collection.immutable.SortedMap
 import scala.util.Try
 
-class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.PreviewUrl)
+class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostProvider.PreviewUrl)
     extends Provider
     with ProtocolParamFetcher {
 
@@ -58,7 +56,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
         val url = s"$baseUrl/addresses/$bech32/utxos"
         val response = requests.get(url, headers = Map("project_id" -> apiKey))
         if response.is2xx then {
-            val utxos = BlockfrostClient.parseUtxos(mapper, response.text())
+            val utxos = BlockfrostProvider.parseUtxos(mapper, response.text())
             // Apply filters
             val filtered = utxos.filter { case (input, output) =>
                 val txIdMatch = transactionId.forall(txId => input.transactionId == txId)
@@ -110,7 +108,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
             val response = requests.get(url, headers = Map("project_id" -> apiKey))
 
             if response.is2xx then {
-                val json = ujson.read(response.text())
+                val json = ujson.read(response.text(), trace = false)
                 val outputs = json("outputs").arr
 
                 if outputIndex >= outputs.size then {
@@ -160,11 +158,11 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
                 // Parse datum if present
                 val datumOption: Option[DatumOption] =
                     (outputJson.obj.get("data_hash"), outputJson.obj.get("inline_datum")) match {
-                        case (_, Some(inlineDatum)) =>
-                            Some(DatumOption.Inline(Data.fromCbor(hexToBytes(inlineDatum.str))))
-                        case (Some(dataHash), None) =>
-                            Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHash.str))))
-                        case (None, None) => None
+                        case (_, Some(inlineDatumJson)) =>
+                            Some(DatumOption.Inline(Data.fromCbor(hexToBytes(inlineDatumJson.str))))
+                        case (Some(dataHashJson), None) =>
+                            Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHashJson.str))))
+                        case _ => None
                     }
 
                 val output = TransactionOutput(
@@ -231,7 +229,7 @@ class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostClient.Previe
     }
 }
 
-object BlockfrostClient {
+object BlockfrostProvider {
     val MainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
     val PreviewUrl = "https://cardano-preview.blockfrost.io/api/v0"
     val PreprodUrl = "https://cardano-preprod.blockfrost.io/api/v0"

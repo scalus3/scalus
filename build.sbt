@@ -589,6 +589,9 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
+    .jvmSettings(
+      libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.0"
+    )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.4.2",
       // copy scalus-*-bundle.js to dist for publishing on npm
