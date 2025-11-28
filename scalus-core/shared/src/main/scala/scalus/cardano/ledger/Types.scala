@@ -577,7 +577,7 @@ object OriginalCborByteArray {
     def apply(bytes: Array[Byte]): OriginalCborByteArray = bytes
 }
 
-case class KeepRaw[A] private (val value: A, rawBytes: () => Array[Byte]) {
+class KeepRaw[A] private (val value: A, rawBytes: () => Array[Byte]) {
     @threadUnsafe lazy val raw: Array[Byte] = rawBytes()
     override def hashCode: Int =
         util.Arrays.hashCode(Array(value.hashCode(), util.Arrays.hashCode(raw)))
@@ -590,7 +590,18 @@ case class KeepRaw[A] private (val value: A, rawBytes: () => Array[Byte]) {
     override def toString: String = s"KeepRaw(value=$value, raw=${raw.toHex})"
 }
 
+object KeepRawValue {
+    def unapply[A](keepRaw: KeepRaw[A]): Some[A] = Some(keepRaw.value)
+}
+
+object KeepRawBytes {
+    def unapply[A](keepRaw: KeepRaw[A]): Some[Array[Byte]] = Some(keepRaw.raw)
+}
+
 object KeepRaw {
+    def unapply[A](keepRaw: KeepRaw[A]): Some[(A, Array[Byte])] =
+        Some((keepRaw.value, keepRaw.raw))
+
     def lens[A: Encoder](): Lens[KeepRaw[A], A] = {
         val get: KeepRaw[A] => A = kr => kr.value
         val replace: A => KeepRaw[A] => KeepRaw[A] = a => kr => KeepRaw(a)

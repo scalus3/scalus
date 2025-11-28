@@ -28,18 +28,18 @@ object MetadataValidator extends STS.Validator {
                   )
                 )
 
-            case (None, Some(keepRawAuxiliaryData)) =>
+            case (None, Some(KeepRawValue(auxiliaryData))) =>
                 failure(
                   TransactionException.MetadataException.MissingAuxiliaryDataHashException(
                     transactionId,
-                    keepRawAuxiliaryData.value
+                    auxiliaryData
                   )
                 )
 
-            case (Some(expectedAuxiliaryDataHash), Some(keepRawAuxiliaryData)) =>
-                val auxiliaryData = keepRawAuxiliaryData.value
-                val cborAuxiliaryData = keepRawAuxiliaryData.raw
-
+            case (
+                  Some(expectedAuxiliaryDataHash),
+                  Some(KeepRaw(auxiliaryData, cborAuxiliaryData))
+                ) =>
                 val actualAuxiliaryDataHash = AuxiliaryDataHash.fromByteString(
                   platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
                 )
