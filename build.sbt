@@ -453,7 +453,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .configurePlatform(JVMPlatform)(_.dependsOn(`scalus-bloxbean-cardano-client-lib`))
     .jvmSettings(
       Test / fork := true,
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.0"
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1"
     )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.4.2",
@@ -498,11 +498,11 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
         ProblemFilters
             .exclude[MissingClassProblem]("scalus.cardano.ledger.BloxbeanToLedgerTranslation$")
       ),
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.0" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0" % "test",
@@ -560,7 +560,7 @@ lazy val bench = project
       Jmh / incOptions := (Jmh / incOptions).value.withEnabled(false),
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
       libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.1",
       libraryDependencies += "io.bullet" %%% "borer-core" % "1.16.2",
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2"
@@ -580,13 +580,13 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         "io.bullet" %%% "borer-derivation" % "1.16.2"
       ),
       // For tx builder
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
       libraryDependencies += "com.outr" %%% "scribe" % "3.17.0", // logging
       libraryDependencies ++= Seq(
         "dev.optics" %%% "monocle-core" % "3.3.0",
         "dev.optics" %%% "monocle-macro" % "3.3.0",
       ),
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1" % "test",
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
@@ -629,8 +629,8 @@ lazy val scalusCardanoLedgerIt = project
       // which doesn't export the secp256k1_ec_pubkey_decompress function
       // that is needed by bitcoin-s-secp256k1jni, because it's an older fork of secp256k1
       Test / javaOptions += "-Djava.library.path=",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.0" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
