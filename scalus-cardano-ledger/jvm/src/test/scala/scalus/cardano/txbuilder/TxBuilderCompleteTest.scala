@@ -121,7 +121,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val paymentValue = Value.ada(10)
         val builder = TxBuilder(testEnv)
             .payTo(Bob.address, paymentValue)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -153,7 +153,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val unsignedBuilder = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val signedTx = unsignedBuilder.sign(aliceSigner).transaction
 
@@ -209,7 +209,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val builder = TxBuilder(testEnv)
             .payTo(Bob.address, paymentValue)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -271,7 +271,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val builder = TxBuilder(testEnv)
             .spend(scriptUtxo, redeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -287,11 +287,10 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should auto-detect and add collateral for minting") {
-        pending
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
         val redeemer = Data.List(List.empty)
-        val assetName = AssetName(ByteString.fromString("mint01"))
+        val assetName = AssetName(utf8"co2")
         val assets = Map(assetName -> 100L)
 
         val provider = SimpleMockProvider(
@@ -311,7 +310,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           coin = Coin.ada(5),
           assets = MultiAsset(
             SortedMap(
-              policyId -> SortedMap(assetName -> 100L)
+              policyId -> SortedMap.from(assets)
             )
           )
         )
@@ -319,7 +318,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val builder = TxBuilder(testEnv)
             .mintAndAttach(redeemer, assets, alwaysOkScript)
             .payTo(Bob.address, mintValue)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -331,6 +330,16 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         // Should have mint field
         assert(tx.body.value.mint.isDefined, "Transaction should have mint field")
+
+        // Bob should receive co2
+        val bobOuts = outputsOf(Bob, tx)
+        assert(bobOuts.size == 1, "Bob should have 1 output")
+
+        val bobOut = bobOuts.head
+        val bobTokens = bobOut.value.value.assets.assets.head._2
+        assert(bobTokens.size == 1, "Bob should receive 1 kind of token")
+        assert(bobTokens.head._1 == assetName, "Bob should receive co2")
+        assert(bobTokens.head._2 == 100L, "Bob should receive 100 co2")
     }
 
     test("complete should fail with insufficient funds") {
@@ -349,7 +358,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .payTo(Bob.address, Value.ada(100))
 
         val exception = intercept[RuntimeException] {
-            builder.complete2(provider, Alice.address)
+            builder.complete(provider, Alice.address)
         }
 
         assert(
@@ -378,7 +387,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val builder = TxBuilder(testEnv)
             .spend(Utxo(explicitUtxo))
             .payTo(Bob.address, explicitUtxo._2.value)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -421,7 +430,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val builtTx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(20))
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val signedTx = builtTx.sign(aliceSigner).transaction
 
@@ -466,7 +475,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val builder = TxBuilder(testEnv)
             .spend(Utxo(explicitUtxo))
             .payTo(Bob.address, explicitUtxo._2.value)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -489,7 +498,6 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle multiple different tokens from separate UTXOs") {
-        pending
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         val policyId1 = alwaysOkScript.scriptHash
@@ -541,7 +549,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val builder = TxBuilder(testEnv)
             .payTo(Bob.address, paymentValue)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -577,7 +585,6 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test(
       "complete should add ADA-only UTXO when token UTXO has insufficient ADA for fees"
     ) {
-        pending
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val policyId = alwaysOkScript.scriptHash
         val assetName = AssetName(utf8"co2")
@@ -616,7 +623,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val builder = TxBuilder(testEnv)
             .payTo(Bob.address, paymentValue)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 
@@ -695,7 +702,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val builder = TxBuilder(testEnv)
             .payTo(Bob.address, paymentValue)
-            .complete2(provider, Alice.address)
+            .complete(provider, Alice.address)
 
         val tx = builder.transaction
 

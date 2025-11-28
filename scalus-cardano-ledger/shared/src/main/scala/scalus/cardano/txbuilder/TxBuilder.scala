@@ -7,7 +7,7 @@ import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.FeesOkValidator
-import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, TxBalance}
+import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
@@ -600,121 +600,11 @@ case class TxBuilder(
       *   if insufficient UTXOs are available to cover the transaction requirements
       */
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
-        // TODO: suspiciously similar to the rest of balancing logic that we have, good refactoring candidate
-        def doBalance(
-            currentSteps: Seq[TransactionBuilderStep],
-            iteration: Int
-        ): Seq[TransactionBuilderStep] = {
-            if iteration >= 10 then
-                throw new RuntimeException("Could not balance transaction after 10 iterations")
-
-            val (inputs, outputs, mint, certificates) = extractFieldsFromSteps(currentSteps)
-
-            // draft up a tx without running the scripts to get the fee estimate
-            val draftContext = TransactionBuilder
-                .build(env.network, currentSteps :+ TransactionBuilderStep.Fee(Coin(0)))
-                .getOrElse(throw new RuntimeException("Failed to build draft transaction"))
-
-            val feeEstimate = estimateFee(draftContext.transaction)
-
-            // Calculate consumed and produced values
-            val consumed = TxBalance
-                .consumedFromFields(
-                  inputs.keySet,
-                  mint,
-                  None,
-                  certificates,
-                  inputs,
-                  CertState.empty,
-                  env.protocolParams
-                )
-                .getOrElse(Value.zero)
-
-            // ensure min ADA
-            val adjustedOutputs =
-                outputs.map(TransactionBuilder.ensureMinAda(_, env.protocolParams))
-
-            val produced = TxBalance.producedFromFields(
-              adjustedOutputs,
-              mint,
-              feeEstimate,
-              certificates,
-              None,
-              env.protocolParams
-            )
-
-            val gap = produced - consumed
-
-            // excess produced tokens
-            val hasTokensInChange = gap.assets.assets.exists { case (_, assetMap) =>
-                assetMap.exists { case (_, amount) => amount < 0 }
-            }
-
-            // no excess production
-            if gap.coin.value <= 0 && !hasTokensInChange then return currentSteps
-
-            // If we do have excess tokens -- we need to make a change output.
-            // Ensure this change output has the tokens and min ADA
-            val gapToUse =
-                if gap.coin.value <= 0 && hasTokensInChange then {
-                    val excess = -gap.coin.value
-                    val changeTokens = MultiAsset(
-                      gap.assets.assets.map { case (policyId, assetMap) =>
-                          policyId -> assetMap.filter(_._2 < 0).map { case (name, amt) =>
-                              name -> (-amt)
-                          }
-                      }
-                    )
-                    // Calculate actual min ADA for change output with these tokens
-                    val estimatedChangeOutput = TransactionOutput(
-                      address = sponsor,
-                      value = Value(Coin(1_000_000), changeTokens) // mock 1 ada to pad the size
-                    )
-                    val minAdaRequired =
-                        MinCoinSizedTransactionOutput(
-                          Sized(estimatedChangeOutput),
-                          env.protocolParams
-                        )
-
-                    // If we have can cover those, we're done
-                    if excess >= minAdaRequired.value then return currentSteps
-
-                    // Otherwise, request exactly the shortfall
-                    val shortfall = minAdaRequired.value - excess
-                    Value(Coin(shortfall))
-                } else gap
-
-            // Find more utxos, but exclude the ones we've already selected
-            val newInputSteps =
-                selectAdditionalUtxos(provider, sponsor, gapToUse, excludeInputs = inputs.keySet)
-            if newInputSteps.isEmpty then
-                throw new RuntimeException(s"No UTXOs found to cover gap: $gapToUse")
-
-            doBalance(currentSteps ++ newInputSteps, iteration + 1)
-        }
-
-        val balancedSteps = doBalance(steps, 0)
-
-        val collateralSteps = if needsCollateral(steps) && !hasCollateral(steps) then {
-            val context = TransactionBuilder
-                .build(env.network, balancedSteps)
-                .getOrElse(throw new RuntimeException("Failed to build draft for collateral"))
-            val feeEstimate = estimateFee(context.transaction)
-            val requiredCollateral = FeesOkValidator.calculateRequiredCollateral(
-              feeEstimate,
-              env.protocolParams.collateralPercentage
-            )
-            selectCollateral(provider, sponsor, requiredCollateral)
-        } else Seq.empty
-
-        copy(steps = balancedSteps ++ collateralSteps).changeTo(sponsor)
-    }
-
-    def complete2(provider: Provider, sponsor: Address): TxBuilder = {
         // Pre-build the context to get initial UTXOs
         val initialContext = TransactionBuilder
             .build(env.network, steps)
             .getOrElse(throw new RuntimeException("Failed to build initial context"))
+            .ensureMinAdaAll(env.protocolParams)
 
         // Keep track of all known UTXOs (initial + selected during balancing)
         val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
@@ -725,33 +615,22 @@ case class TxBuilder(
             diff: Value,
             tx: Transaction
         ): Either[TxBalancingError, Transaction] = {
-            // Ensure collateral if transaction has redeemers (scripts to execute)
-            val hasRedeemers = tx.witnessSet.redeemers.exists(_.value.toSeq.nonEmpty)
-            if hasRedeemers then {
-                val requiredCollateral = FeesOkValidator.calculateRequiredCollateral(
-                  tx.body.value.fee,
-                  env.protocolParams.collateralPercentage
-                )
-                val currentCollateral = totalCollateral(tx, selectedUtxos.utxos)
-                val collateralNeeded = requiredCollateral - currentCollateral
-
-                if collateralNeeded > Coin.zero then {
-                    val additionalCollateral = selectCollateral(
-                      provider,
-                      sponsor,
-                      collateralNeeded,
-                      excludeUtxos = selectedUtxos.inputSet
-                    )
-                    // Remember the utxos to not select them again on further iterations.
-                    selectedUtxos.addAll(additionalCollateral)
-
-                    val txWithMoreCollateral: Transaction = addCollaterals(tx, additionalCollateral)
-                    // Not an actual end of balancing, just the end of this loop iteration.
-                    return Right(txWithMoreCollateral)
-                }
+            // First, ensure collateral is balanced (happens every iteration since fee changes)
+            ensureCollateralBalanced(
+              tx,
+              provider,
+              sponsor,
+              selectedUtxos
+            ) match {
+                case Right(balancedTx) if balancedTx != tx =>
+                    // Collateral was adjusted, iterate further
+                    return Right(balancedTx)
+                case Left(error) =>
+                    return Left(error)
+                case Right(_) => // Collateral is balanced, continue with value diff handling
             }
 
-            // Collateral ensured -- now we can compute and process the Value diff
+            // Collateral balanced -- now we can compute and process the Value diff
             val Value(adaDiff, tokenDiff) = diff
             (adaDiff, tokenDiff) match {
                 // We don't have enough ADA
@@ -760,7 +639,22 @@ case class TxBuilder(
                     // If so, try to take ADA from it to achieve balance.
                     val changeIndex = Change.findChangeOutput(tx, sponsor)
                     if changeIndex >= 0 then {
-                        Change.handleChange(diff, tx, sponsor, env.protocolParams)
+                        Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
+                            case Right(updatedTx) =>
+                                // Successfully took from change
+                                Right(updatedTx)
+                            case Left(_) =>
+                                // Can't take from change (would go below minAda), need to query for more UTXOs
+                                val additionalUtxos = selectAdditionalUtxos2(
+                                  provider,
+                                  sponsor,
+                                  diff,
+                                  excludeInputs = selectedUtxos.inputSet
+                                )
+                                selectedUtxos.addAll(additionalUtxos)
+                                val withMoreInputs = addInputs(tx, additionalUtxos)
+                                Right(withMoreInputs)
+                        }
                     } else {
                         // There's no change output, the only way to get more ADA is to query the provider.
                         val additionalUtxos = selectAdditionalUtxos2(
@@ -839,29 +733,119 @@ case class TxBuilder(
         }
     }
 
-    object ZeroAda {
+    private def ensureCollateralBalanced(
+        tx: Transaction,
+        provider: Provider,
+        sponsor: Address,
+        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
+    ): Either[Nothing, Transaction] = {
+        val resolvedUtxos = selectedUtxos.utxos
+        val utxosToExclude = selectedUtxos.utxos
+        // For transactions that don't need collateral -- return early
+        val needsCollat = tx.witnessSet.redeemers.fold(false)(_.value.toSeq.nonEmpty)
+        if !needsCollat then return Right(tx)
+
+        // If we need collateral, first calculate how much we need vs how much is present
+        val currentCollateralAmount = totalCollateralValue(tx, resolvedUtxos)
+        val requiredCollateralAmount = FeesOkValidator.calculateRequiredCollateral(
+          tx.body.value.fee,
+          env.protocolParams.collateralPercentage
+        )
+        val gap = currentCollateralAmount - Value(requiredCollateralAmount)
+
+        // Zero means no ADA _and_ no tokens -- balanced, we're done
+        if gap.isZero then return Right(tx)
+
+        // Note that token gap is always positive -- collateral tokens must always be returned
+        val Value(adaGap, tokenGap) = gap
+
+        // If adaGap > min ADA, meaning the amount we need to return is greater than min ADA, we can
+        // create a single output = Value(adaGap, tokenGap).
+        // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
+        // We also need to make sure that we don't have more than 3 collateral inputs.
+
+        val minAda = MinCoinSizedTransactionOutput(
+          Sized(TransactionOutput(sponsor, gap)),
+          env.protocolParams
+        )
+        if adaGap < minAda then {
+            // Need more collateral to meet minAda requirement for return output
+            val additionalNeeded = minAda - adaGap
+            val additionalCollateral = selectCollateral(
+              provider,
+              sponsor,
+              additionalNeeded,
+              excludeUtxos = utxosToExclude.keySet
+            )
+            // Remember the utxos to not select them again in the `complete`.
+            selectedUtxos.addAll(additionalCollateral)
+            val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
+            Right(txWithMoreCollateral)
+        } else {
+            val returnOutput = TransactionOutput(sponsor, gap)
+            val withReturnOutput = addCollateralReturnOutput(tx, returnOutput, resolvedUtxos)
+            Right(withReturnOutput)
+        }
+    }
+
+    private def totalCollateralValue(tx: Transaction, utxos: Utxos): Value = {
+        tx.body.value.collateralInputs.toSet.foldLeft(Value.zero) { case (acc, input) =>
+            utxos.get(input).fold(acc)(output => acc + output.value)
+        }
+    }
+
+    /** Adds a collateral return output to the transaction and sets the totalCollateral field.
+      *
+      * @param tx
+      *   the transaction to modify
+      * @param returnOutput
+      *   the collateral return output to add
+      * @param resolvedUtxos
+      *   resolved UTXOs to calculate total collateral amount
+      * @return
+      *   modified transaction with collateral return output and totalCollateral set
+      */
+    private def addCollateralReturnOutput(
+        tx: Transaction,
+        returnOutput: TransactionOutput,
+        resolvedUtxos: Utxos
+    ): Transaction = {
+        // Calculate total collateral = sum of collateral inputs - return output value
+        val totalInputValue = totalCollateralValue(tx, resolvedUtxos)
+        val totalCollateralAmount = totalInputValue.coin - returnOutput.value.coin
+
+        modifyBody(
+          tx,
+          _.copy(
+            collateralReturnOutput = Some(Sized(returnOutput)),
+            totalCollateral = Some(totalCollateralAmount)
+          )
+        )
+    }
+
+    private object ZeroAda {
         def unapply(coin: Coin): Boolean = coin == Coin.zero
     }
 
-    object NegativeAda {
+    private object NegativeAda {
         def unapply(coin: Coin): Option[Coin] = Option.when(coin < Coin.zero)(coin)
     }
 
-    object PositiveAda {
+    private object PositiveAda {
         def unapply(coin: Coin): Option[Coin] = Option.when(coin > Coin.zero)(coin)
     }
 
-    object ZeroTokens {
+    private object ZeroTokens {
         def unapply(ma: MultiAsset): Boolean = ma.isEmpty
     }
 
-    object MissingTokens {
+    private object MissingTokens {
         def unapply(ma: MultiAsset): Boolean = ma.exists((_, amount) => amount < 0)
     }
 
     extension (mutableMap: mutable.Map[TransactionInput, TransactionOutput]) {
         def utxos: Utxos = mutableMap.toMap
-        def inputSet: Set[TransactionInput] = mutableMap.toMap.keySet
+        private def inputSet: Set[TransactionInput] = mutableMap.toMap.keySet
     }
 
     extension (ma: MultiAsset) {
@@ -931,12 +915,20 @@ case class TxBuilder(
         val selectedUtxos = mutable.Map.empty[TransactionInput, TransactionOutput]
 
         // Fulfill the token requirement first
+        // we `abs` all the tokens to represent the _amount_ of tokens that we're querying for.
         if gap.assets.assets.nonEmpty then {
+            val requiredTokens = MultiAsset(
+              gap.assets.assets.map { case (policyId, assets) =>
+                  policyId -> SortedMap.from(assets.map { case (assetName, amount) =>
+                      assetName -> Math.abs(amount)
+                  })
+              }
+            )
             val tokenUtxos =
                 selectUtxosWithTokens(
                   provider,
                   address,
-                  gap.assets,
+                  requiredTokens,
                   excludeInputs ++ selectedUtxos.keySet
                 )
             selectedUtxos.addAll(tokenUtxos)
@@ -946,7 +938,9 @@ case class TxBuilder(
         // have ADA too.
         if gap.coin.value < 0 then {
             val alreadySelectedAda = selectedUtxos.values.map(_.value.coin.value).sum
-            val remainingAdaNeeded = Math.abs(gap.coin.value + alreadySelectedAda)
+            // gap.coin.value is negative (deficit), so negate it to get the amount needed
+            val totalAdaNeeded = -gap.coin.value
+            val remainingAdaNeeded = totalAdaNeeded - alreadySelectedAda
 
             if remainingAdaNeeded > 0 then {
                 // Here, we get all of them, which is bad.
@@ -1125,7 +1119,7 @@ case class TxBuilder(
         val utxos = provider
             .findUtxos(
               address = address,
-              minAmount = Some(requiredAmount)
+              minRequiredTotalAmount = Some(requiredAmount)
             )
             .map(_ -- excludeUtxos)
         utxos match {
@@ -1186,9 +1180,9 @@ case class TxBuilder(
       * @return
       *   modified transaction with added collateral inputs
       */
-    private def addCollaterals(tx: Transaction, collaterals: Utxos): Transaction = {
+    private def addCollaterals(tx: Transaction, collaterals: Set[TransactionInput]): Transaction = {
         val currentCollaterals = tx.body.value.collateralInputs.toSet
-        val newCollaterals = currentCollaterals ++ collaterals.keySet
+        val newCollaterals = currentCollaterals ++ collaterals
         modifyBody(
           tx,
           _.copy(collateralInputs = TaggedSortedSet.from(newCollaterals))
