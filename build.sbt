@@ -1,4 +1,4 @@
-import com.typesafe.tools.mima.core.{IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, ProblemFilters}
+import com.typesafe.tools.mima.core.{IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, MissingClassProblem, ProblemFilters}
 import sbt.internal.util.ManagedLogger
 import sbtwelcome.*
 
@@ -491,7 +491,12 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
         // ExBudget -> ExUnits migration in 0.13.0
         ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.TxEvaluator.this"),
         ProblemFilters
-            .exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.TxEvaluator.initialBudget")
+            .exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.TxEvaluator.initialBudget"),
+        // BloxbeanToLedgerTranslation moved to scalus-cardano-ledger
+        ProblemFilters
+            .exclude[MissingClassProblem]("scalus.cardano.ledger.BloxbeanToLedgerTranslation"),
+        ProblemFilters
+            .exclude[MissingClassProblem]("scalus.cardano.ledger.BloxbeanToLedgerTranslation$")
       ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.0",
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
