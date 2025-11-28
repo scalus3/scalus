@@ -422,10 +422,57 @@ case class ByronAddress(bytes: ByteString) extends Address {
     def encode: Try[String] = Failure(
       new UnsupportedOperationException("Byron addresses don't use bech32")
     )
-    def keyHashOption: Option[AddrKeyHash | StakeKeyHash] =
-        None // Byron addresses don't have staking credentials
+
+    /** Extract payment key hash from Byron address.
+      *
+      * Byron addresses contain an `addrRoot` which is the payment key hash. The CBOR structure is:
+      * [tag24(payload), crc32] The payload is: [addrRoot, addrAttributes, addrType]
+      *
+      * This implementation extracts the addrRoot to match Haskell's bootstrapKeyHash.
+      */
+    def keyHashOption: Option[AddrKeyHash | StakeKeyHash] = {
+        extractAddrRoot(bytes).map(AddrKeyHash(_))
+    }
+
     def scriptHashOption: Option[ScriptHash] =
-        None // Byron addresses don't have staking credentials
+        None // Byron addresses don't have script hashes
+
+    /** Extract addrRoot (payment key hash) from Byron address CBOR bytes.
+      *
+      * Byron address structure:
+      *   - Array of 2 elements: [tag24(addressPayload), crc32]
+      *   - addressPayload is an array: [addrRoot, addrAttributes, addrType]
+      *   - addrRoot is the 28-byte payment key hash
+      */
+    private def extractAddrRoot(addressBytes: ByteString): Option[ByteString] = {
+        import io.bullet.borer.Cbor
+
+        try {
+            // Decode the outer array [tag24(payload), crc32]
+            val result = Cbor.decode(addressBytes.bytes).to[Array[Array[Byte]]].valueEither
+
+            result match {
+                case Right(outerArray) if outerArray.length >= 1 =>
+                    // The first element is the tagged address payload
+                    // Decode the inner array [addrRoot, addrAttributes, addrType]
+                    val payloadResult =
+                        Cbor.decode(outerArray(0)).to[Array[Array[Byte]]].valueEither
+
+                    payloadResult match {
+                        case Right(payload) if payload.length >= 1 =>
+                            // The first element is addrRoot (28 bytes)
+                            val addrRoot = payload(0)
+                            if addrRoot.length == 28 then {
+                                Some(ByteString.unsafeFromArray(addrRoot))
+                            } else None
+                        case _ => None
+                    }
+                case _ => None
+            }
+        } catch {
+            case _: Exception => None
+        }
+    }
 }
 
 /** Base trait for all Cardano addresses

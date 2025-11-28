@@ -149,4 +149,38 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
         println(pprint(result))
     }
 
+    test("Addr28Extra mempack parsing uses little-endian byte order", TestTag) {
+        assume(vectorsExist, "Conformance test vectors directory not found")
+        val vectorName =
+            "Conway.Imp.AlonzoImpSpec.UTXOW.Valid transactions.PlutusV1.Validating MINT script"
+        for case (path, vector) <- loadAllVectors(vectorName) do {
+            if path.getFileName.toString == "1" then
+                val ledgerState = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState))
+                val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
+
+                // Get all witness key hashes
+                val witnessKeyHashes = transaction.witnessSet.vkeyWitnesses.toSet.map(_.vkeyHash.toHex)
+
+                // Verify that input addresses have matching witnesses
+                transaction.body.value.inputs.toSeq.foreach { input =>
+                    ledgerState.ruleState.utxos.get(input) match {
+                        case Some(output) =>
+                            output.address.keyHashOption match {
+                                case Some(kh) =>
+                                    val khHex = kh.toHex
+                                    // This test verifies the Addr28Extra parsing fix:
+                                    // With correct little-endian parsing, the payment key hash
+                                    // should match one of the witness key hashes
+                                    assert(
+                                      witnessKeyHashes.contains(khHex),
+                                      s"Payment key hash $khHex should have a witness"
+                                    )
+                                case None => // Script address, no witness needed
+                            }
+                        case None =>
+                            fail(s"Input $input not found in UTxO set")
+                    }
+                }
+        }
+    }
 }
