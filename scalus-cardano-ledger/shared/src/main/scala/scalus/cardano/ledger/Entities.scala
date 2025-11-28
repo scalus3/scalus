@@ -303,6 +303,15 @@ object TransactionException {
           s"Datums validation failed for transactionId $transactionId, inputs with missing datum hashes: $inputsWithMissingDatumHashes, unmatched datum hashes: $unmatchedDatumHashes, not allowed supplemental datum hashes: $notAllowedSupplementalDatumHashes"
         )
 
+    final case class OutputBootAddrAttrsTooBigException(
+        transactionId: TransactionHash,
+        outputsWithOversizedAttrs: List[scalus.cardano.address.Address],
+        maxAllowedSize: Int
+    ) extends TransactionException(
+          s"Bootstrap address attributes too big for transaction $transactionId: " +
+              s"outputs with oversized attrs: $outputsWithOversizedAttrs, max allowed size: $maxAllowedSize"
+        )
+
     // TODO: placeholder for general exception, remove after finishing development
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 }

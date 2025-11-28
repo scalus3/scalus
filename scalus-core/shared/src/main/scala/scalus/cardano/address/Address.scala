@@ -437,6 +437,84 @@ case class ByronAddress(bytes: ByteString) extends Address {
     def scriptHashOption: Option[ScriptHash] =
         None // Byron addresses don't have script hashes
 
+    /** Calculate the size of Byron address attributes.
+      *
+      * This matches Haskell's bootstrapAddressAttrsSize which calculates: derivationPathLength +
+      * unknownAttributesLength
+      *
+      * Known attributes are:
+      *   - Key 1: Derivation path (HD address payload)
+      *   - Key 2: Network magic
+      *
+      * Only derivation path (key 1) and unknown attributes (keys other than 1 and 2) are counted in
+      * the size. Network magic (key 2) is NOT counted.
+      *
+      * @return
+      *   The total size of relevant attributes in bytes
+      */
+    def attributesSize: Int = {
+        import io.bullet.borer.{Cbor, Dom}
+
+        try {
+            // Decode the outer array [tag24(payload), crc32]
+            val outerDom = Cbor.decode(bytes.bytes).to[Dom.Element].value
+            outerDom match {
+                case Dom.ArrayElem.Sized(elems) if elems.length >= 1 =>
+                    // First element is tag24 containing the payload bytes
+                    val taggedElem = elems.head
+                    val payloadBytes = taggedElem match {
+                        case Dom.ByteArrayElem(bs) => bs
+                        case _                     => return 0
+                    }
+
+                    // Decode the inner payload [addrRoot, addrAttributes, addrType]
+                    val innerDom = Cbor.decode(payloadBytes).to[Dom.Element].value
+                    innerDom match {
+                        case Dom.ArrayElem.Sized(innerElems) if innerElems.length >= 2 =>
+                            val attrElem = innerElems(1)
+                            calculateAttributesSize(attrElem)
+                        case _ => 0
+                    }
+                case _ => 0
+            }
+        } catch {
+            case _: Exception => 0
+        }
+    }
+
+    private def calculateAttributesSize(attrElem: io.bullet.borer.Dom.Element): Int = {
+        import io.bullet.borer.Dom
+
+        attrElem match {
+            case mapElem: Dom.MapElem =>
+                var derivationPathLen = 0
+                var unknownAttrsLen = 0
+
+                val attrMap = mapElem.toMap
+                for (keyElem, valueElem) <- attrMap do {
+                    val key = keyElem match {
+                        case Dom.IntElem(v)  => v.toInt
+                        case Dom.LongElem(v) => v.toInt
+                        case _               => -1
+                    }
+                    val valueLen = valueElem match {
+                        case Dom.ByteArrayElem(bs) => bs.length
+                        case _                     => 0
+                    }
+
+                    key match {
+                        case 1 => derivationPathLen = valueLen // Derivation path
+                        case 2 => () // Network magic - NOT counted
+                        case _ => unknownAttrsLen += valueLen // Unknown attributes
+                    }
+                }
+
+                derivationPathLen + unknownAttrsLen
+
+            case _ => 0
+        }
+    }
+
     /** Extract addrRoot (payment key hash) from Byron address CBOR bytes.
       *
       * Byron address structure:
