@@ -109,6 +109,21 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
         for case (name, index, success, result) <- failed do
             println(s"$name/$index ($success) ${pprint(result)}")
 
+        println(s"\n=== Summary ===")
+        println(s"Total vectors: ${results.map(_._2.map(_.length).getOrElse(0)).sum}")
+        println(s"Failed vectors: ${failed.length}")
+        println(s"Success rate: ${100.0 * (results.map(_._2.map(_.length).getOrElse(0)).sum - failed.length) / results.map(_._2.map(_.length).getOrElse(0)).sum}%")
+
+        // Group by exception type
+        val byException = failed.groupBy {
+            case (_, _, _, Left(ex)) => ex.getClass.getSimpleName
+            case _ => "Unexpected success"
+        }
+        println(s"\nFailures by exception type:")
+        byException.toSeq.sortBy(-_._2.length).foreach { case (exType, failures) =>
+            println(s"  $exType: ${failures.length}")
+        }
+
         // assert(failed.isEmpty)
     }
 
