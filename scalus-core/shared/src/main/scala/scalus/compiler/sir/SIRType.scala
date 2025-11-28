@@ -10,6 +10,8 @@ sealed trait SIRType {
 
     def show: String
 
+    def showDebug: String
+
     infix def ~=~(that: SIRType): Boolean =
         SIRUnify.topLevelUnifyType(this, that, SIRUnify.Env.empty).isSuccess
 
@@ -40,6 +42,7 @@ object SIRType {
 
     sealed trait Primitive extends SIRType {
         def uplcType: DefaultUni
+        override def showDebug: String = show
     }
 
     case object ByteString extends Primitive {
@@ -122,6 +125,10 @@ object SIRType {
             if typeArgs.isEmpty then constrDecl.name
             else s"${constrDecl.name}[${typeArgs.map(_.show).mkString(", ")}]"
 
+        override def showDebug: String =
+            if typeArgs.isEmpty then constrDecl.name
+            else s"${constrDecl.name}[${typeArgs.map(_.showDebug).mkString(", ")}]"
+
     }
 
     case class SumCaseClass(decl: DataDecl, typeArgs: scala.List[SIRType]) extends SIRType {
@@ -129,6 +136,10 @@ object SIRType {
         override def show: String =
             if typeArgs.isEmpty then decl.name
             else s"${decl.name}[${typeArgs.map(_.show).mkString(", ")}]"
+
+        override def showDebug: String =
+            if typeArgs.isEmpty then decl.name
+            else s"${decl.name}[${typeArgs.map(_.showDebug).mkString(", ")}]"
 
     }
 
@@ -142,6 +153,18 @@ object SIRType {
                     s"(${in.show}) -> ${body.show}"
                 case _ =>
                     s"${in.show} -> ${out.show}"
+            }
+
+        }
+
+        override def showDebug: String = {
+            in match {
+                case inF: Fun =>
+                    s"(${in.showDebug}) -> ${out.showDebug}"
+                case SIRType.TypeLambda(params, body: Fun) =>
+                    s"(${in.showDebug}) -> ${body.showDebug}"
+                case _ =>
+                    s"${in.showDebug} -> ${out.showDebug}"
             }
 
         }
@@ -160,7 +183,9 @@ object SIRType {
     case class TypeVar(name: String, optId: Option[Long] = None, isBuiltin: Boolean)
         extends SIRType {
 
-        override def show: String = s"${name}#${optId.getOrElse(0L)}"
+        override def show: String = name
+
+        override def showDebug: String = s"${name}#${optId.getOrElse(0L)}"
 
         def :=>>(body: SIRType): TypeLambda = TypeLambda(scala.List(this), body)
 
@@ -179,6 +204,9 @@ object SIRType {
     case class TypeLambda(params: scala.List[TypeVar], body: SIRType) extends SIRType {
 
         override def show: String = s" [${params.map(_.show).mkString(",")}] =>> ${body.show}"
+
+        override def showDebug: String =
+            s" [${params.map(_.showDebug).mkString(",")}] =>> ${body.showDebug}"
 
     }
 
@@ -204,6 +232,7 @@ object SIRType {
 
     case object FreeUnificator extends SIRType {
         override def show: String = "*"
+        override def showDebug: String = show
     }
 
     class TypeProxy(
@@ -229,6 +258,11 @@ object SIRType {
         }
 
         override def show: String = {
+            if ref eq null then "Proxy(unresolved)"
+            else "Proxy"
+        }
+
+        override def showDebug: String = {
             val internal =
                 if ref eq null then "null" else java.lang.System.identityHashCode(ref).toString
             s"Proxy($internal)"
@@ -297,10 +331,12 @@ object SIRType {
       */
     case class TypeNonCaseModule(name: String) extends SIRType {
         override def show: String = s"PackageOrEnclosingObject($name)"
+        override def showDebug: String = show
     }
 
     case object TypeNothing extends SIRType {
         override def show: String = "Nothing"
+        override def showDebug: String = show
     }
 
     object List {
