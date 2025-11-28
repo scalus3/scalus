@@ -12,7 +12,7 @@ import scalus.utils.Hex.hexToBytes
 import scala.collection.immutable.SortedMap
 import scala.util.Try
 
-class BlockfrostClient(apiKey: String, baseUrl: String = BlockfrostProvider.PreviewUrl)
+class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.PreviewUrl)
     extends Provider
     with ProtocolParamFetcher {
 
@@ -235,16 +235,16 @@ object BlockfrostProvider {
     val PreprodUrl = "https://cardano-preprod.blockfrost.io/api/v0"
     val LocalUrl = "http://localhost:8080/api/v1"
 
-    def localYaci = BlockfrostClient("", LocalUrl)
+    def localYaci = BlockfrostProvider("", LocalUrl)
 
     /** Create a Blockfrost client for mainnet */
-    def mainnet(apiKey: String) = new BlockfrostClient(apiKey, MainnetUrl)
+    def mainnet(apiKey: String) = new BlockfrostProvider(apiKey, MainnetUrl)
 
     /** Create a Blockfrost client for preview testnet */
-    def preview(apiKey: String) = new BlockfrostClient(apiKey, PreviewUrl)
+    def preview(apiKey: String) = new BlockfrostProvider(apiKey, PreviewUrl)
 
     /** Create a Blockfrost client for preprod testnet */
-    def preprod(apiKey: String) = new BlockfrostClient(apiKey, PreprodUrl)
+    def preprod(apiKey: String) = new BlockfrostProvider(apiKey, PreprodUrl)
 
     enum BlockfrostError:
         case NetworkError(underlying: Throwable)

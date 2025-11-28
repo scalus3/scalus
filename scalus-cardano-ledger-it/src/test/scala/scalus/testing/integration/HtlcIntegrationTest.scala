@@ -5,7 +5,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.BlockfrostClient
+import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.*
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
@@ -18,7 +18,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
         case Preprod
 
     case class TestContext(
-        client: BlockfrostClient,
+        client: BlockfrostProvider,
         cardanoInfo: CardanoInfo,
         env: Environment,
         evaluator: PlutusScriptEvaluator
@@ -50,7 +50,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
     private def createTestContext(testEnv: TestEnv): TestContext = testEnv match {
         case TestEnv.Local =>
-            val client = BlockfrostClient.localYaci
+            val client = BlockfrostProvider.localYaci
             val protocolParams = client.fetchLatestParams()
             // YaciDevKit uses Start Time: 0, Slot Length: 1 sec
             val yaciSlotConfig = SlotConfig(
@@ -72,7 +72,7 @@ class HtlcIntegrationTest extends AnyFunSuite {
 
         case TestEnv.Preprod =>
             val apiKey = sys.env("BLOCKFROST_API_KEY")
-            val client = BlockfrostClient(apiKey, BlockfrostClient.PreprodUrl)
+            val client = BlockfrostProvider(apiKey, BlockfrostProvider.PreprodUrl)
             val protocolParams = client.fetchLatestParams()
             val cardanoInfo = CardanoInfo(
               protocolParams = protocolParams,
