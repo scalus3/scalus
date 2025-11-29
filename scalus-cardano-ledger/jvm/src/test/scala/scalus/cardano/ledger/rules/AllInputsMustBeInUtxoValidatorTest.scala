@@ -122,4 +122,24 @@ class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTest
         val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
         assert(result.isLeft)
     }
+
+    test(
+      "AllInputsMustBeInUtxoValidator success on empty inputs, collateralInputs, and referenceInputs"
+    ) {
+        val context = Context()
+        val transaction = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            collateralInputs = TaggedSortedSet.empty,
+            referenceInputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+          ),
+          TransactionWitnessSet.empty
+        )
+        val state = State()
+
+        val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
+        assert(result.isRight)
+    }
 }

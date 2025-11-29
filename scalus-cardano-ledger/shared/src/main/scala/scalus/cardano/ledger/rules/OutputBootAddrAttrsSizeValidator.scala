@@ -1,7 +1,7 @@
-package scalus.cardano.ledger.rules
+package scalus.cardano.ledger
+package rules
 
-import scalus.cardano.address.ByronAddress
-import scalus.cardano.ledger.*
+import scalus.cardano.address.{Address, ByronAddress}
 
 // validateOutputBootAddrAttrsTooBig in cardano-ledger
 //
@@ -14,30 +14,33 @@ import scalus.cardano.ledger.*
 object OutputBootAddrAttrsSizeValidator extends STS.Validator {
     override final type Error = TransactionException.OutputBootAddrAttrsTooBigException
 
-    private val maxBootstrapAttrsSize = 64
-
     override def validate(context: Context, state: State, event: Event): Result = {
         val transaction = event
-        val txBody = transaction.body.value
+        val outputs = transaction.body.value.outputs
 
-        val outputsWithOversizedBootAttrs = txBody.outputs.filter { output =>
-            output.value.address match {
-                case byronAddr: ByronAddress =>
-                    byronAddr.attributesSize > maxBootstrapAttrsSize
-                case _ => false
-            }
-        }
+        val outputsWithOversizedBootAttrs = findOutputsWithOversizedBootAttrs(outputs)
 
-        if outputsWithOversizedBootAttrs.nonEmpty then {
+        if outputsWithOversizedBootAttrs.nonEmpty then
             failure(
               TransactionException.OutputBootAddrAttrsTooBigException(
                 transaction.id,
-                outputsWithOversizedBootAttrs.map(_.value.address).toList,
+                outputsWithOversizedBootAttrs,
                 maxBootstrapAttrsSize
               )
             )
-        } else {
-            success
+        else success
+    }
+
+    def findOutputsWithOversizedBootAttrs(
+        outputs: IndexedSeq[Sized[TransactionOutput]]
+    ): IndexedSeq[Address] = {
+        outputs.flatMap { case SizedValue(output) =>
+            output.address match
+                case byronAddr: ByronAddress if byronAddr.attributesSize > maxBootstrapAttrsSize =>
+                    Some(output.address)
+                case _ => None
         }
     }
+
+    private val maxBootstrapAttrsSize = 64
 }

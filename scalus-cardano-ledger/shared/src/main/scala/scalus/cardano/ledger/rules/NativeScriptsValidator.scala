@@ -30,14 +30,14 @@ object NativeScriptsValidator extends STS.Validator {
 
             validatorKeys = extractValidatorKeys(event)
 
-            invalidWitnessesNativeScriptHashes = invalidNativeScriptHashes(
+            invalidWitnessesNativeScriptHashes = findInvalidNativeScriptHashes(
               allWitnessesNativeScripts,
               allNeededScriptHashes,
               validatorKeys,
               validityInterval
             )
 
-            invalidProvidedReferenceNativeScriptHashes = invalidNativeScriptHashes(
+            invalidProvidedReferenceNativeScriptHashes = findInvalidNativeScriptHashes(
               allProvidedReferenceNativeScripts,
               allNeededScriptHashes,
               validatorKeys,
@@ -63,7 +63,7 @@ object NativeScriptsValidator extends STS.Validator {
         event: Event
     ): Set[AddrKeyHash] = event.witnessSet.vkeyWitnesses.toSet.map(_.vkeyHash)
 
-    private def invalidNativeScriptHashes(
+    private def findInvalidNativeScriptHashes(
         nativeScripts: Set[Script.Native],
         neededScriptHashes: Set[ScriptHash],
         validatorKeys: Set[AddrKeyHash],

@@ -651,6 +651,14 @@ case class Sized[A] private (value: A, size: Int) {
     override def toString: String = s"Sized(value=$value, size=$size)"
 }
 
+object SizedValue {
+    def unapply[A](sized: Sized[A]): Some[A] = Some(sized.value)
+}
+
+object SizedSize {
+    def unapply[A](sized: Sized[A]): Some[Int] = Some(sized.size)
+}
+
 object Sized {
     def lens[A: Encoder](): Lens[Sized[A], A] = {
         val get: Sized[A] => A = kr => kr.value

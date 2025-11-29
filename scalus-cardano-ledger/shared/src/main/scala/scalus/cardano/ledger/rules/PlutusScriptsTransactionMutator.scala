@@ -34,7 +34,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
 
             if event.isValid then
                 val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
-                    case (Sized(output, _), index) =>
+                    case (SizedValue(output), index) =>
                         TransactionInput(event.id, index) -> output
                 }.toMap
 

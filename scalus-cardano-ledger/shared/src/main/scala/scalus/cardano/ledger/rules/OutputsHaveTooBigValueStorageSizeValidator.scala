@@ -38,7 +38,7 @@ object OutputsHaveTooBigValueStorageSizeValidator extends STS.Validator {
         maxValueSize: Long,
     ): IndexedSeq[(TransactionOutput, Int)] = {
         for
-            Sized(output, _) <- outputs
+            SizedValue(output) <- outputs
             // TODO maybe make serialization depending on the protocol version
             // serSize = fromIntegral $ BSL.length $ serialize (pvMajor protVer) v
             outputValueSerializationSize = Cbor.encode(output.value).length

@@ -305,7 +305,7 @@ object TransactionException {
 
     final case class OutputBootAddrAttrsTooBigException(
         transactionId: TransactionHash,
-        outputsWithOversizedAttrs: List[scalus.cardano.address.Address],
+        outputsWithOversizedAttrs: Seq[scalus.cardano.address.Address],
         maxAllowedSize: Int
     ) extends TransactionException(
           s"Bootstrap address attributes too big for transaction $transactionId: " +

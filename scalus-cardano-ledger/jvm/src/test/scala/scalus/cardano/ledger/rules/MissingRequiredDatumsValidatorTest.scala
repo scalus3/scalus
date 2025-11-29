@@ -345,4 +345,36 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
 
         assert(result.isRight)
     }
+
+    // Tests with inline datums
+    test("MissingRequiredDatumsValidator success with inline datum in inputs") {
+        val plutusScript = Arbitrary.arbitrary[Script.PlutusV3].sample.get
+        val input = Arbitrary.arbitrary[TransactionInput].sample.get
+        val datum = Arbitrary.arbitrary[Data].sample.get
+        val utxo = Map(
+          input -> TransactionOutput.Babbage(
+            Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
+            Value(Coin(1000000L)),
+            datumOption = Some(DatumOption.Inline(datum)),
+            scriptRef = None
+          )
+        )
+        val transaction = Transaction(
+          body = KeepRaw(
+            TransactionBody(
+              inputs = TaggedSortedSet.from(Set(input)),
+              outputs = IndexedSeq.empty,
+              fee = Coin.zero
+            )
+          ),
+          witnessSet = TransactionWitnessSet(
+            plutusV3Scripts = TaggedSortedStrictMap(plutusScript)
+          )
+        )
+        val context = Context()
+        val state = State(utxos = utxo)
+
+        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        assert(result.isRight)
+    }
 }

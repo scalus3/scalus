@@ -21,6 +21,21 @@ class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(result.isRight)
     }
 
+    test("ExUnitsTooBigValidator success with no redeemers") {
+        val context = Context()
+        val state = State()
+        val exUnits = ExUnits(1, 1)
+        val tx =
+            randomTransactionWithIsValidField
+                .copy(
+                  witnessSet = TransactionWitnessSet(
+                    redeemers = None
+                  )
+                )
+        val result = ExUnitsTooBigValidator.validate(context, state, tx)
+        assert(result.isRight)
+    }
+
     test("ExUnitsTooBigValidator failure") {
         val context = Context()
         val state = State()

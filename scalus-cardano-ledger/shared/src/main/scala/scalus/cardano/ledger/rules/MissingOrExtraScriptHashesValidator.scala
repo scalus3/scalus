@@ -81,7 +81,7 @@ object MissingOrExtraScriptHashesValidator extends STS.Validator {
     private object ScriptHashesValidator {
         def apply(
             event: Event,
-            utxo: Utxos
+            utxos: Utxos
         ): Either[
           TransactionException.BadInputsUTxOException |
               TransactionException.BadReferenceInputsUTxOException,
@@ -89,38 +89,14 @@ object MissingOrExtraScriptHashesValidator extends STS.Validator {
         ] = {
             for
                 allProvidedReferenceScriptHashes <- AllResolvedScripts
-                    .allProvidedReferenceScriptHashes(event, utxo)
-
-                allNeededInputsScriptHashesRaw <- AllNeededScriptHashes.allNeededInputsScriptHashes(
-                  event,
-                  utxo
-                )
+                    .allProvidedReferenceScriptHashes(event, utxos)
 
                 allWitnessesScriptHashes = AllResolvedScripts.allWitnessesScriptHashes(event)
 
-                // Get spending redeemer indices - only these inputs need scripts in witnesses
-                spendingRedeemerIndices = event.witnessSet.redeemers
-                    .map { redeemersKeepRaw =>
-                        redeemersKeepRaw.value.toSeq.collect {
-                            case Redeemer(RedeemerTag.Spend, index, _, _) => index
-                        }.toSet
-                    }
-                    .getOrElse(Set.empty[Int])
-
-                // Get script hashes that correspond to inputs with redeemers
-                allNeededInputsScriptHashesWithRedeemers <- AllNeededScriptHashes
-                    .allNeededInputsScriptIndexHashesAndOutputs(event, utxo)
-                    .map { indexedHashes =>
-                        indexedHashes
-                            .filter { case (index, _, _) =>
-                                spendingRedeemerIndices.contains(index)
-                            }
-                            .map { case (_, scriptHash, _) => scriptHash }
-                    }
-
-                // Only check scripts for inputs with redeemers
-                // Native scripts without redeemers are validated by NativeScriptsValidator
-                allNeededInputsScriptHashes = allNeededInputsScriptHashesWithRedeemers
+                allNeededInputsScriptHashes <- AllNeededScriptHashes.allNeededInputsScriptHashes(
+                  event,
+                  utxos
+                )
 
                 allNeededInputsScriptHashesNoRefs = allNeededInputsScriptHashes.diff(
                   allProvidedReferenceScriptHashes
