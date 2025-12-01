@@ -25,7 +25,8 @@ object AllWitnessesKeyHashes {
         allBootstrapWitnessesKeyHashesView(transaction).toSet
     }
 
+    // TODO implementation
     def allBootstrapWitnessesKeyHashesView(transaction: Transaction): View[AddrKeyHash] = {
-        transaction.witnessSet.bootstrapWitnesses.toSet.view.map(_.addrKeyHash)
+        View.empty
     }
 }
