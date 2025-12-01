@@ -2,7 +2,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     flake-utils.url = "github:numtide/flake-utils";
-    plutus.url = "github:input-output-hk/plutus/1.40.0.0";
+    plutus.url = "github:IntersectMBO/plutus/1.53.0.0";
     rust-overlay.url = "github:oxalica/rust-overlay";
     # cardano-node-flake.url = "github:input-output-hk/cardano-node/9.1.1";
   };
@@ -27,7 +27,7 @@
                   webkitgtk.abi = "4.1";
                 };
         };
-        uplc = plutus.cabalProject.${system}.hsPkgs.plutus-executables.components.exes.uplc;
+        uplc = plutus.packages.${system}.uplc;
         tiny_keccak_wrapper = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
             name = "tiny_keccak_wrapper";
             src = ./scalus-core/native/lib/tiny_keccak_wrapper;  # directory with Rust code

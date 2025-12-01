@@ -106,7 +106,12 @@ object UplcParser:
     val whitespaces0: Parser0[Unit] = whitespace.rep0.void
     val number: P[Int] = digits.map(_.toList.mkString.toInt)
     val long: P[Long] = digits.map(_.toList.mkString.toLong)
-    val word64: P[Word64] = long.map(Word64(_))
+    val word64: P[Word64] = digits.flatMap { d =>
+        val s = d.toList.mkString
+        try P.pure(Word64.fromUnsignedString(s))
+        catch
+            case _: NumberFormatException => P.failWith(s"Value $s exceeds range of unsigned long")
+    }
     val bigint: P[String] = (P.charIn('+', '-').?.with1 ~ digits).map { case (s, d) =>
         s.map(_.toString).getOrElse("") + d
     }
