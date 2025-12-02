@@ -80,24 +80,38 @@ class DropListTest extends AnyFunSuite {
         import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
 
-        val listConst = Constant.List(DefaultUni.Integer, List(
-            Constant.Integer(1), Constant.Integer(2), Constant.Integer(3),
-            Constant.Integer(4), Constant.Integer(5)
-        ))
+        val listConst = Constant.List(
+          DefaultUni.Integer,
+          List(
+            Constant.Integer(1),
+            Constant.Integer(2),
+            Constant.Integer(3),
+            Constant.Integer(4),
+            Constant.Integer(5)
+          )
+        )
         val term = Apply(
-            Apply(
-                Force(Builtin(DefaultFun.DropList)),
-                Const(Constant.Integer(2))
-            ),
-            Const(listConst)
+          Apply(
+            Force(Builtin(DefaultFun.DropList)),
+            Const(Constant.Integer(2))
+          ),
+          Const(listConst)
         )
         val result = term.evaluateDebug
         result match
             case Result.Success(resultTerm, _, _, _) =>
-                val expectedList = Constant.List(DefaultUni.Integer, List(
-                    Constant.Integer(3), Constant.Integer(4), Constant.Integer(5)
-                ))
-                assert(resultTerm == Const(expectedList), s"Expected $expectedList but got $resultTerm")
+                val expectedList = Constant.List(
+                  DefaultUni.Integer,
+                  List(
+                    Constant.Integer(3),
+                    Constant.Integer(4),
+                    Constant.Integer(5)
+                  )
+                )
+                assert(
+                  resultTerm == Const(expectedList),
+                  s"Expected $expectedList but got $resultTerm"
+                )
             case Result.Failure(e, _, _, _) =>
                 fail(s"Evaluation failed: $e")
     }
@@ -106,15 +120,20 @@ class DropListTest extends AnyFunSuite {
         import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
 
-        val listConst = Constant.List(DefaultUni.Integer, List(
-            Constant.Integer(1), Constant.Integer(2), Constant.Integer(3)
-        ))
+        val listConst = Constant.List(
+          DefaultUni.Integer,
+          List(
+            Constant.Integer(1),
+            Constant.Integer(2),
+            Constant.Integer(3)
+          )
+        )
         val term = Apply(
-            Apply(
-                Force(Builtin(DefaultFun.DropList)),
-                Const(Constant.Integer(0))
-            ),
-            Const(listConst)
+          Apply(
+            Force(Builtin(DefaultFun.DropList)),
+            Const(Constant.Integer(0))
+          ),
+          Const(listConst)
         )
         val result = term.evaluateDebug
         result match
@@ -128,15 +147,20 @@ class DropListTest extends AnyFunSuite {
         import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
 
-        val listConst = Constant.List(DefaultUni.Integer, List(
-            Constant.Integer(1), Constant.Integer(2), Constant.Integer(3)
-        ))
+        val listConst = Constant.List(
+          DefaultUni.Integer,
+          List(
+            Constant.Integer(1),
+            Constant.Integer(2),
+            Constant.Integer(3)
+          )
+        )
         val term = Apply(
-            Apply(
-                Force(Builtin(DefaultFun.DropList)),
-                Const(Constant.Integer(-5))
-            ),
-            Const(listConst)
+          Apply(
+            Force(Builtin(DefaultFun.DropList)),
+            Const(Constant.Integer(-5))
+          ),
+          Const(listConst)
         )
         val result = term.evaluateDebug
         result match
@@ -151,26 +175,34 @@ class DropListTest extends AnyFunSuite {
         import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
 
-        val listConst = Constant.List(DefaultUni.Integer, List(
-            Constant.Integer(1), Constant.Integer(2), Constant.Integer(3),
-            Constant.Integer(4), Constant.Integer(5)
-        ))
+        val listConst = Constant.List(
+          DefaultUni.Integer,
+          List(
+            Constant.Integer(1),
+            Constant.Integer(2),
+            Constant.Integer(3),
+            Constant.Integer(4),
+            Constant.Integer(5)
+          )
+        )
 
         val term1 = Apply(
-            Apply(Force(Builtin(DefaultFun.DropList)), Const(Constant.Integer(1))),
-            Const(listConst)
+          Apply(Force(Builtin(DefaultFun.DropList)), Const(Constant.Integer(1))),
+          Const(listConst)
         )
         val term100 = Apply(
-            Apply(Force(Builtin(DefaultFun.DropList)), Const(Constant.Integer(100))),
-            Const(listConst)
+          Apply(Force(Builtin(DefaultFun.DropList)), Const(Constant.Integer(100))),
+          Const(listConst)
         )
 
         val budget1 = term1.evaluateDebug.budget
         val budget100 = term100.evaluateDebug.budget
 
         // The cost for n=100 should be higher than n=1 due to linear_in_x cost model
-        assert(budget100.steps > budget1.steps,
-            s"Budget should increase with larger n: n=1 had ${budget1.steps}, n=100 had ${budget100.steps}")
+        assert(
+          budget100.steps > budget1.steps,
+          s"Budget should increase with larger n: n=1 had ${budget1.steps}, n=100 had ${budget100.steps}"
+        )
     }
 
     // Test SIR to UPLC compilation produces DropList builtin
@@ -195,8 +227,10 @@ class DropListTest extends AnyFunSuite {
             case Delay(t)                     => containsDropList(t)
             case _                            => false
 
-        assert(containsDropList(uplc),
-            s"UPLC should contain DropList builtin, got: ${uplc.pretty.flatten.render(100)}")
+        assert(
+          containsDropList(uplc),
+          s"UPLC should contain DropList builtin, got: ${uplc.pretty.flatten.render(100)}"
+        )
     }
 
     // TODO: Fix lowering issue with BuiltinList literal in dropList result

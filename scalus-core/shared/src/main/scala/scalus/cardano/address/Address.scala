@@ -358,6 +358,14 @@ case class ShelleyAddress(
     inline override def getNetwork: Option[Network] = Some(network)
 }
 
+object ShelleyAddress {
+    given Encoder[ShelleyAddress] with
+        def write(w: Writer, value: ShelleyAddress): Writer = {
+            w.write(value.toBytes)
+            w
+        }
+}
+
 /** A decoded Stake address for delegation purposes */
 case class StakeAddress(network: Network, payload: StakePayload) extends Address {
 
@@ -403,6 +411,14 @@ case class StakeAddress(network: Network, payload: StakePayload) extends Address
         case _                         => None
 
     inline override def getNetwork: Option[Network] = Some(network)
+}
+
+object StakeAddress {
+    given Encoder[StakeAddress] with
+        def write(w: Writer, value: StakeAddress): Writer = {
+            w.write(value.toBytes)
+            w
+        }
 }
 
 /** Placeholder for Byron address - complex legacy format */
@@ -551,6 +567,14 @@ case class ByronAddress(bytes: ByteString) extends Address {
             case _: Exception => None
         }
     }
+}
+
+object ByronAddress {
+    given Encoder[ByronAddress] with
+        def write(w: Writer, value: ByronAddress): Writer = {
+            w.write(value.toBytes)
+            w
+        }
 }
 
 /** Base trait for all Cardano addresses

@@ -1389,10 +1389,12 @@ object BuiltinCostModel {
           // Plutus 1.53 new builtins - default cost model until protocol params are updated
           // Values from builtinCostModelC.json (Plutus 1.53 reference implementation)
           dropList = DropListCostingFun(
-            cpu = TwoArguments.LinearInX(OneVariableLinearFunction(
-              intercept = CostingInteger(116711L),
-              slope = CostingInteger(1957L)
-            )),
+            cpu = TwoArguments.LinearInX(
+              OneVariableLinearFunction(
+                intercept = CostingInteger(116711L),
+                slope = CostingInteger(1957L)
+              )
+            ),
             memory = TwoArguments.ConstantCost(CostingInteger(4L))
           )
         )
