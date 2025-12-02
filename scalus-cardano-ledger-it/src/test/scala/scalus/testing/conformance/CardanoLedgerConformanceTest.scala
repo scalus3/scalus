@@ -18,36 +18,6 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     val TestTag = Tag("conformance")
 
-    val validators = STS.Validator(
-      List(
-        AllInputsMustBeInUtxoValidator,
-        EmptyInputsValidator,
-        ExactSetOfRedeemersValidator,
-        ExUnitsTooBigValidator,
-        FeesOkValidator,
-        InputsAndReferenceInputsDisjointValidator,
-        MetadataValidator,
-        MissingKeyHashesValidator,
-        MissingOrExtraScriptHashesValidator,
-        MissingRequiredDatumsValidator,
-        NativeScriptsValidator,
-        OutsideForecastValidator,
-        OutsideValidityIntervalValidator,
-        OutputBootAddrAttrsSizeValidator,
-        OutputsHaveNotEnoughCoinsValidator,
-        OutputsHaveTooBigValueStorageSizeValidator,
-        ProtocolParamsViewHashesMatchValidator,
-        ScriptsWellFormedValidator,
-        TooManyCollateralInputsValidator,
-        TransactionSizeValidator,
-        ValueNotConservedUTxOValidator,
-        VerifiedSignaturesInWitnessesValidator,
-        WrongNetworkInTxBodyValidator,
-        WrongNetworkValidator,
-        WrongNetworkWithdrawalValidator
-      )
-    )
-
     // Set to true to use extracted pparams, false to use default
     private val useExtractedPParams = true
 
@@ -65,7 +35,7 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
                 else None
 
             val params =
-                extractedParams.getOrElse(Context().env.params) // Fallback to default params
+                extractedParams.getOrElse(UtxoEnv.default.params) // Fallback to default params
             val context =
                 Context(env =
                     rules.UtxoEnv(
@@ -75,14 +45,15 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
                       scalus.cardano.address.Network.Testnet
                     )
                 )
+            val result = CardanoMutator.transit(context, state, transaction)
             (
               path.getFileName.toFile.getName,
               vector.success,
-              validators.validate(context, state, transaction)
+              result
             )
 
     private def failureVectors(
-        results: List[(String, Try[List[(String, Boolean, validators.Result)]])]
+        results: List[(String, Try[List[(String, Boolean, CardanoMutator.Result)]])]
     ) = for
         case (vectorName, result) <- results
         x <- result.toOption.toList
@@ -91,7 +62,7 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     test("Conformance ledger rules test") {
         val results =
-            for vectorName <- vectorNames()
+            for vectorName <- vectorNames().filter(_.contains(".UTXO"))
             yield vectorName -> Try(validateVector(vectorName))
 
         val failed = failureVectors(results)
@@ -122,23 +93,6 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
         )
 
         // assert(failed.isEmpty)
-    }
-
-    test("MissingOrExtraScriptHashesException") {
-        for vectorName <- List(
-              "Conway.Imp.AlonzoImpSpec.UTXOW.Valid transactions.PlutusV1.Validating scripts everywhere",
-              "Conway.Imp.AlonzoImpSpec.UTXOW.Valid transactions.PlutusV2.Validating scripts everywhere",
-              "Conway.Imp.AlonzoImpSpec.UTXOW.Valid transactions.PlutusV3.Validating scripts everywhere"
-            )
-        do println(vectorName -> pprint(validateVector(vectorName)))
-    }
-
-    test("ExactSetOfRedeemersException") {
-        for vectorName <- List(
-              "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.can use reference scripts",
-              "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.can use regular inputs for reference"
-            )
-        do println(vectorName -> pprint(validateVector(vectorName)))
     }
 
 }
