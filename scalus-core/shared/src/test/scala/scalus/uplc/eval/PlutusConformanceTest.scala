@@ -3,7 +3,6 @@ package uplc
 package eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{CardanoInfo, Language}
 
 import java.nio.file.{Files, Paths}
 import scala.util.Failure
@@ -18,18 +17,11 @@ import scala.util.Try
 abstract class PlutusConformanceTest extends AnyFunSuite:
     // Use builtinCostModelC.json which includes Plutus 1.53 builtins (dropList, etc.)
     // Combined with machine costs from protocol params for accurate budget calculation
-    private given PlutusVM = {
-        val builtinCostModel = BuiltinCostModel.fromInputStream(
-          getClass.getResourceAsStream("/builtinCostModelC.json")
-        )
-        // Get machine costs from protocol params (same as makePlutusV3VM does)
-        val baseParams = MachineParams.fromProtocolParams(
-          CardanoInfo.mainnet.protocolParams,
-          Language.PlutusV3
-        )
-        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
-        PlutusVM.makePlutusV3VM(params)
-    }
+    // This must be provided by platform-specific implementations since resource loading
+    // is not available in Scala.js
+    protected def createPlutusVM: PlutusVM
+
+    private given PlutusVM = createPlutusVM
     // Run this command in plutus-conformance to generate the test cases
     // find . -name "*.uplc" -print0 | sort -zf | xargs -0 -I {} bash -c 'file="{}"; rel_path="${file#./}"; without_ext="${rel_path%.uplc}"; echo "check(\"$without_ext\")"'
 

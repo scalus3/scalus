@@ -2,6 +2,8 @@ package scalus
 package uplc
 package eval
 
+import scalus.cardano.ledger.{CardanoInfo, Language}
+
 import scala.language.implicitConversions
 
 /** Tests for the Plutus Conformance Test Suite.
@@ -11,6 +13,19 @@ import scala.language.implicitConversions
   */
 class PlutusConformanceJvmTest extends PlutusConformanceTest:
     override protected val path = s"../../${super.path}"
+
+    override protected def createPlutusVM: PlutusVM = {
+        val builtinCostModel = BuiltinCostModel.fromInputStream(
+          getClass.getResourceAsStream("/builtinCostModelC.json")
+        )
+        // Get machine costs from protocol params (same as makePlutusV3VM does)
+        val baseParams = MachineParams.fromProtocolParams(
+          CardanoInfo.mainnet.protocolParams,
+          Language.PlutusV3
+        )
+        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
+        PlutusVM.makePlutusV3VM(params)
+    }
     // TODO: for now, the BLS12-381 builtins implemented only for JVM
     // TODO: move to PlutusConformanceTest when the BLS12-381 builtins are implemented for Scala.js
     // format: off

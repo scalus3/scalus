@@ -1,6 +1,7 @@
 package scalus.uplc.eval
 
 import scalus.builtin.platform
+import scalus.cardano.ledger.{CardanoInfo, Language}
 
 /** Tests for the Plutus Conformance Test Suite.
   *
@@ -10,6 +11,19 @@ import scalus.builtin.platform
 class PlutusConformanceJsTest extends PlutusConformanceTest:
     override protected def readFile(path: String): String = {
         new String(platform.readFile(path), "UTF-8")
+    }
+
+    override protected def createPlutusVM: PlutusVM = {
+        // Read the cost model from file system instead of classpath resources
+        val costModelJson = readFile("scalus-core/shared/src/test/resources/builtinCostModelC.json")
+        val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
+        // Get machine costs from protocol params (same as makePlutusV3VM does)
+        val baseParams = MachineParams.fromProtocolParams(
+          CardanoInfo.mainnet.protocolParams,
+          Language.PlutusV3
+        )
+        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
+        PlutusVM.makePlutusV3VM(params)
     }
 
     check("builtin/constant/bls12-381/G1/bad-syntax-01/bad-syntax-01")
