@@ -779,7 +779,7 @@ class CekMachine(
                 throw new NonFunctionalApplicationMachineError(fun, env)
     }
 
-    /** `force`` a term and proceed.
+    /** `force` a term and proceed.
       *
       * If `value` is a delay then compute the body of `value`; if v is a builtin application then
       * check that it's expecting a type argument, and either calculate the builtin application or
