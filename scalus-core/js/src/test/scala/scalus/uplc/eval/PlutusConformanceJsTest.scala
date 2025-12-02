@@ -15,7 +15,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
 
     override protected def createPlutusVM: PlutusVM = {
         // Read the cost model from file system instead of classpath resources
-        val costModelJson = readFile("scalus-core/shared/src/test/resources/builtinCostModelC.json")
+        val costModelJson = readFile("scalus-core/shared/src/main/resources/builtinCostModelC.json")
         val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
         // Get machine costs from protocol params (same as makePlutusV3VM does)
         val baseParams = MachineParams.fromProtocolParams(

@@ -14,7 +14,7 @@ class PlutusConformanceNativeTest extends PlutusConformanceTest:
         // Read the cost model from file system instead of classpath resources
         val costModelJson =
             new String(
-              platform.readFile("scalus-core/shared/src/test/resources/builtinCostModelC.json"),
+              platform.readFile("scalus-core/shared/src/main/resources/builtinCostModelC.json"),
               "UTF-8"
             )
         val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
