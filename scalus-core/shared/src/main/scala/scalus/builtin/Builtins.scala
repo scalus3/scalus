@@ -167,6 +167,18 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def tailList[A](l: BuiltinList[A]): BuiltinList[A] = l.tail
     def nullList[A](l: BuiltinList[A]): Boolean = l.isEmpty
 
+    /** Drop the first n elements from a list.
+      *
+      * If n is negative, no elements are dropped. If n is larger than the list length, an empty
+      * list is returned.
+      */
+    def dropList[A](n: BigInt, l: BuiltinList[A]): BuiltinList[A] =
+        if n.signum <= 0 then l
+        else
+            // For very large n, drop Int.MaxValue (same as Plutus reference impl)
+            val dropCount = if n.isValidInt then n.toInt else Int.MaxValue
+            BuiltinList.from(l.toList.drop(dropCount))
+
     // Data
     def chooseData[A](d: Data, constrCase: A, mapCase: A, listCase: A, iCase: A, bCase: A): A =
         d match

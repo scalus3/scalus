@@ -1103,6 +1103,29 @@ class BuiltinsMeaning(
           builtinCostModel.ripemd_160
         )
 
+    // Plutus 1.53 new builtins
+
+    // [ forall a, integer, list(a) ] -> list(a)
+    val DropList: BuiltinRuntime =
+        mkMeaning(
+          All("a", Integer ->: (DefaultUni.ProtoList $ "a") ->: (DefaultUni.ProtoList $ "a")),
+          (_: Logger, args: Seq[CekValue]) =>
+              val n = args(0).asInteger
+              args(1) match
+                  case VCon(Constant.List(tpe, ls)) =>
+                      // If n is negative or zero, don't drop anything
+                      // If n is larger than Int.MaxValue, drop Int.MaxValue elements
+                      // (same as Plutus reference implementation)
+                      val dropCount =
+                          if n.signum <= 0 then 0
+                          else if n.isValidInt then n.toInt
+                          else Int.MaxValue
+                      VCon(Constant.List(tpe, ls.drop(dropCount)))
+                  case _ => throw new DeserializationError(DefaultFun.DropList, args(1))
+          ,
+          builtinCostModel.dropList
+        )
+
     private inline def mkGetBuiltinRuntime: DefaultFun => BuiltinRuntime = ${
         Macros.mkGetBuiltinRuntime('this)
     }

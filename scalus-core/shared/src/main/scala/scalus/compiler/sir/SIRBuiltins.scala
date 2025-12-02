@@ -508,6 +508,17 @@ object SIRBuiltins {
       AnnotationsDecl.empty
     )
 
+    // Plutus 1.53 new builtins
+    val dropList: SIR.Builtin = SIR.Builtin(
+      DefaultFun.DropList,
+      SIRType.TypeLambda(
+        "dropList_A",
+        a => SIRType.Integer ->: SIRType.BuiltinList(a) ->: SIRType.BuiltinList(a),
+        true
+      ),
+      AnnotationsDecl.empty
+    )
+
     def fromUplc(uplcFun: DefaultFun): SIR.Builtin =
         uplcFun match
             case DefaultFun.AddInteger                      => addInteger
@@ -597,4 +608,6 @@ object SIRBuiltins {
             case DefaultFun.CountSetBits                    => countSetBits
             case DefaultFun.FindFirstSetBit                 => findFirstSetBit
             case DefaultFun.Ripemd_160                      => ripemd_160
+            // Plutus 1.53 new builtins
+            case DefaultFun.DropList => dropList
 }

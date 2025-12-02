@@ -106,7 +106,9 @@ case class BuiltinCostModel(
     rotateByteString: ShiftOrRotateByteStringCostingFun,
     countSetBits: DefaultCostingFun[OneArgument],
     findFirstSetBit: DefaultCostingFun[OneArgument],
-    ripemd_160: DefaultCostingFun[OneArgument]
+    ripemd_160: DefaultCostingFun[OneArgument],
+    // Plutus 1.53 new builtins
+    dropList: DropListCostingFun
 ) {
 
     /** Convert a [[BuiltinCostModel]] to a flat map of cost parameters
@@ -272,7 +274,9 @@ object BuiltinCostModel {
             "rotateByteString" -> writeJs(model.rotateByteString),
             "countSetBits" -> writeJs(model.countSetBits),
             "findFirstSetBit" -> writeJs(model.findFirstSetBit),
-            "ripemd_160" -> writeJs(model.ripemd_160)
+            "ripemd_160" -> writeJs(model.ripemd_160),
+            // Plutus 1.53 new builtins
+            "dropList" -> writeJs(model.dropList)
           ),
       json =>
           BuiltinCostModel(
@@ -453,6 +457,11 @@ object BuiltinCostModel {
             ripemd_160 =
                 if json.obj.keySet.contains("ripemd_160") then
                     read[DefaultCostingFun[OneArgument]](json("ripemd_160"))
+                else null,
+            // Plutus 1.53 new builtins
+            dropList =
+                if json.obj.keySet.contains("dropList") then
+                    read[DropListCostingFun](json("dropList"))
                 else null
           )
     )
@@ -464,6 +473,10 @@ object BuiltinCostModel {
         language: Language,
         semvar: BuiltinSemanticsVariant,
     ): BuiltinCostModel = {
+        // Local conversion from Long to CostingInteger for cleaner syntax
+        import scala.language.implicitConversions
+        given Conversion[Long, CostingInteger] = CostingInteger(_)
+
         val model = BuiltinCostModel(
           addInteger = DefaultCostingFun(
             cpu = TwoArguments.MaxSize(
@@ -1372,7 +1385,9 @@ object BuiltinCostModel {
             memory = OneArgument.ConstantCost(
               cost = params.`ripemd_160-memory-arguments`
             )
-          )
+          ),
+          // Plutus 1.53 new builtins - not yet in protocol params
+          dropList = null
         )
 
         model

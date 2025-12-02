@@ -27,38 +27,46 @@ object MemoryUsage {
 
     def memoryUsageLiteralByteSize(i: BigInt): CostingInteger =
         val l = i.toLong
-        if l == 0 then 0
-        else (l - 1) / 8 + 1
+        if l == 0 then CostingInteger(0L)
+        else CostingInteger((l - 1) / 8 + 1)
 
+    /** Memory usage as literal value (for IntegerCostedLiterally).
+      *
+      * Returns the absolute value of i, saturating to Long.MaxValue for values that don't fit. This
+      * matches Plutus behavior where fromIntegral narrows to maxBound::SatInt.
+      */
     def memoryUsageLiteral(i: BigInt): CostingInteger =
-        i.toLong.abs
+        val absVal = i.abs
+        if absVal.isValidLong then CostingInteger(absVal.toLong)
+        else CostingInteger(Long.MaxValue)
 
     def memoryUsageInteger(i: BigInt): CostingInteger =
-        if i.equals(BigInt(0)) then 1L
+        if i.equals(BigInt(0)) then CostingInteger(1L)
         else
             val ceilLog2 = i.abs.bitLength - 1L
-            ceilLog2 / 64 + 1
+            CostingInteger(ceilLog2 / 64 + 1)
 
     // this mimics the Haskell implementation
     def memoryUsageInteger2(i: BigInt): CostingInteger =
-        if i == 0 then 1 else (integerLog2(i.abs) / 64) + 1
+        if i == 0 then CostingInteger(1L) else CostingInteger((integerLog2(i.abs) / 64) + 1)
 
-    def memoryUsageByteString(bs: ByteString): CostingInteger = (bs.size - 1) / 8 + 1
+    def memoryUsageByteString(bs: ByteString): CostingInteger =
+        CostingInteger((bs.size - 1) / 8 + 1)
 
-    def memoryUsageString(s: String): CostingInteger = s.length
+    def memoryUsageString(s: String): CostingInteger = CostingInteger(s.length.toLong)
 
     def memoryUsageData(d: Data): CostingInteger = {
-        val nodeMem = 4L
-        val usage = d match
+        val nodeMem: CostingInteger = CostingInteger(4L)
+        val usage: CostingInteger = d match
             case Data.I(i)         => memoryUsageInteger(i)
             case Data.B(bs)        => memoryUsageByteString(bs)
             case Data.Constr(_, l) => sumList(l)
             case Data.Map(l) =>
-                var acc = 0L
+                var acc: CostingInteger = CostingInteger(0L)
                 val it = l.iterator
                 while it.hasNext do
                     val t = it.next()
-                    acc += memoryUsageData(t._1) + memoryUsageData(t._2)
+                    acc = acc + memoryUsageData(t._1) + memoryUsageData(t._2)
                 acc
             case Data.List(l) => sumList(l)
         // The cost of each node of the 'Data' object (in addition to the cost of its content).
@@ -66,28 +74,29 @@ object MemoryUsage {
     }
 
     private def sumList(l: List[Data]): CostingInteger =
-        var acc = 0L
+        var acc: CostingInteger = CostingInteger(0L)
         val it = l.iterator
-        while it.hasNext do acc += memoryUsageData(it.next())
+        while it.hasNext do acc = acc + memoryUsageData(it.next())
         acc
 
     def memoryUsage(a: CekValue): CostingInteger = a match
         case VCon(const) => memoryUsage(const)
-        case _           => 1
+        case _           => CostingInteger(1L)
 
     def memoryUsage(a: Constant): CostingInteger = a match
         case Constant.Integer(i)     => memoryUsageInteger(i)
         case Constant.ByteString(bs) => memoryUsageByteString(bs)
         case Constant.String(s)      => memoryUsageString(s)
-        case Constant.Unit           => 1
-        case _: Constant.Bool        => 1
+        case Constant.Unit           => CostingInteger(1L)
+        case _: Constant.Bool        => CostingInteger(1L)
         case Constant.Data(d)        => memoryUsageData(d)
         case Constant.List(tpe, l) =>
-            var acc = 0L
-            for d <- l do acc += memoryUsage(d)
+            var acc: CostingInteger = CostingInteger(0L)
+            for d <- l do acc = acc + memoryUsage(d)
             acc
-        case Constant.Pair(a, b)              => 1 + memoryUsage(a) + memoryUsage(b)
-        case Constant.BLS12_381_G1_Element(_) => 18
-        case Constant.BLS12_381_G2_Element(_) => 36
-        case Constant.BLS12_381_MlResult(_)   => 72
+        case Constant.Pair(a, b) =>
+            CostingInteger(1L) + memoryUsage(a) + memoryUsage(b)
+        case Constant.BLS12_381_G1_Element(_) => CostingInteger(18L)
+        case Constant.BLS12_381_G2_Element(_) => CostingInteger(36L)
+        case Constant.BLS12_381_MlResult(_)   => CostingInteger(72L)
 }

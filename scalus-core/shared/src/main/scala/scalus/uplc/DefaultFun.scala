@@ -128,6 +128,9 @@ enum DefaultFun extends Enum[DefaultFun]:
     case FindFirstSetBit
     case Ripemd_160
 
+    // Plutus 1.53 new builtins
+    case DropList
+
     //
     // case CaseList
 
@@ -236,6 +239,9 @@ object DefaultFun {
                 case FindFirstSetBit  => 85
                 case Ripemd_160       => 86
 
+                // Plutus 1.53 new builtins
+                case DropList => 88
+
             encode.bits(7, code.toByte)
 
         def decode(decode: DecoderState): DefaultFun =
@@ -327,6 +333,8 @@ object DefaultFun {
                 case 84 => CountSetBits
                 case 85 => FindFirstSetBit
                 case 86 => Ripemd_160
+                // Plutus 1.53 new builtins
+                case 88 => DropList
                 case c  => throw new Exception(s"Invalid builtin function code: $c")
 
 }

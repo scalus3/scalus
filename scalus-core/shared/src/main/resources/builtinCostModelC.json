@@ -382,6 +382,19 @@
             "type": "subtracted_sizes"
         }
     },
+    "dropList": {
+        "cpu": {
+            "arguments": {
+                "intercept": 116711,
+                "slope": 1957
+            },
+            "type": "linear_in_x"
+        },
+        "memory": {
+            "arguments": 4,
+            "type": "constant_cost"
+        }
+    },
     "encodeUtf8": {
         "cpu": {
             "arguments": {

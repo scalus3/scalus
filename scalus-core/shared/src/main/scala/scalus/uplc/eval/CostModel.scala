@@ -6,7 +6,77 @@ import upickle.default.*
 
 import scala.compiletime.erasedValue
 
-type CostingInteger = Long
+// Capture the Long ReadWriter before the opaque type is defined
+private[eval] val longReadWriter: ReadWriter[Long] = summon[ReadWriter[Long]]
+
+/** Saturating integer type for cost calculations.
+  *
+  * Matches Plutus SatInt behavior: arithmetic operations saturate to Long.MaxValue on overflow
+  * instead of wrapping around. This ensures cost calculations never produce negative or wrapped
+  * values.
+  */
+opaque type CostingInteger = Long
+
+object CostingInteger {
+    inline def apply(value: Long): CostingInteger = value
+
+    def fromBigInt(value: BigInt): CostingInteger =
+        if value.isValidLong then value.toLong
+        else if value > 0 then Long.MaxValue
+        else Long.MinValue
+
+    given ReadWriter[CostingInteger] = longReadWriter.bimap(
+      (c: CostingInteger) => c: Long,
+      (l: Long) => l: CostingInteger
+    )
+
+    /** Saturating addition - returns Long.MaxValue on positive overflow, Long.MinValue on negative
+      * overflow
+      */
+    def satPlus(a: Long, b: Long): Long = {
+        val r = a + b
+        // Overflow if both have same sign but result has different sign
+        if (a ^ r) < 0 && (a ^ b) >= 0 then if a >= 0 then Long.MaxValue else Long.MinValue
+        else r
+    }
+
+    /** Saturating subtraction */
+    def satMinus(a: Long, b: Long): Long = {
+        val r = a - b
+        // Overflow if operands have different signs and result has different sign from a
+        if (a ^ b) < 0 && (a ^ r) < 0 then if a >= 0 then Long.MaxValue else Long.MinValue
+        else r
+    }
+
+    /** Saturating multiplication */
+    def satMul(a: Long, b: Long): Long = {
+        if a == 0 || b == 0 then 0L
+        else
+            val r = a * b
+            // Check for overflow: result / a should equal b
+            if r / a != b then if (a > 0) == (b > 0) then Long.MaxValue else Long.MinValue
+            else r
+    }
+
+    extension (a: CostingInteger) {
+        inline def toLong: Long = a
+
+        inline def +(b: CostingInteger): CostingInteger = satPlus(a, b)
+        inline def -(b: CostingInteger): CostingInteger = satMinus(a, b)
+        inline def *(b: CostingInteger): CostingInteger = satMul(a, b)
+        inline def /(b: CostingInteger): CostingInteger = a / b
+
+        inline def min(b: CostingInteger): CostingInteger = Math.min(a, b)
+        inline def max(b: CostingInteger): CostingInteger = Math.max(a, b)
+
+        inline def >(b: CostingInteger): Boolean = a > b
+        inline def >=(b: CostingInteger): Boolean = a >= b
+        inline def <(b: CostingInteger): Boolean = a < b
+        inline def <=(b: CostingInteger): Boolean = a <= b
+        inline def ==(b: CostingInteger): Boolean = a == b
+    }
+}
+
 type Intercept = CostingInteger
 type Slope = CostingInteger
 
@@ -22,7 +92,7 @@ case class SubtractedSizesLinearFunction(
     minimum: CostingInteger
 ) derives ReadWriter {
     def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger = {
-        intercept + slope * Math.max(minimum, arg1 - arg2)
+        intercept + slope * (arg1 - arg2).max(minimum)
     }
 }
 
@@ -71,7 +141,7 @@ case class TwoVariableQuadraticFunction(
 ) derives ReadWriter {
     def apply(x: CostingInteger, y: CostingInteger): CostingInteger = {
         val result = c00 + c10 * x + c01 * y + c20 * x * x + c11 * x * y + c02 * y * y
-        Math.max(minimum, result)
+        result.max(minimum)
     }
 }
 
@@ -112,14 +182,14 @@ object OneArgument:
     given ReadWriter[OneArgument] = readwriter[ujson.Value].bimap(
       {
           case ConstantCost(cost) =>
-              ujson.Obj("type" -> "constant_cost", "arguments" -> cost)
+              ujson.Obj("type" -> "constant_cost", "arguments" -> cost.toLong)
           case LinearInX(cost) =>
               ujson.Obj("type" -> "linear_in_x", "arguments" -> writeJs(cost))
       },
       json => {
           json.obj("type").str match
               case "constant_cost" =>
-                  ConstantCost(json.obj("arguments").num.toLong)
+                  ConstantCost(CostingInteger(json.obj("arguments").num.toLong))
               case "linear_in_x" =>
                   LinearInX(read[OneVariableLinearFunction](json.obj("arguments")))
               case other => throw new RuntimeException(s"Unexpected type ${other}")
@@ -168,12 +238,12 @@ object TwoArguments {
 
     case class MinSize(cost: OneVariableLinearFunction) extends TwoArguments {
         def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger =
-            cost(Math.min(arg1, arg2))
+            cost(arg1.min(arg2))
     }
 
     case class MaxSize(cost: OneVariableLinearFunction) extends TwoArguments {
         def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger =
-            cost(Math.max(arg1, arg2))
+            cost(arg1.max(arg2))
     }
 
     case class LinearOnDiagonal(cost: ConstantOrLinear) extends TwoArguments {
@@ -207,7 +277,7 @@ object TwoArguments {
     given ReadWriter[TwoArguments] = readwriter[ujson.Value].bimap(
       {
           case ConstantCost(cost) =>
-              ujson.Obj("type" -> "constant_cost", "arguments" -> cost)
+              ujson.Obj("type" -> "constant_cost", "arguments" -> cost.toLong)
           case LinearInX(costFun) =>
               ujson.Obj("type" -> "linear_in_x", "arguments" -> writeJs(costFun))
           case LinearInY(costFun) =>
@@ -239,7 +309,7 @@ object TwoArguments {
       },
       json => {
           json.obj("type").str match
-              case "constant_cost" => ConstantCost(json.obj("arguments").num.toLong)
+              case "constant_cost" => ConstantCost(CostingInteger(json.obj("arguments").num.toLong))
               case "linear_in_x" =>
                   LinearInX(read[OneVariableLinearFunction](json.obj("arguments")))
               case "linear_in_y" =>
@@ -331,7 +401,7 @@ object ThreeArguments {
             arg2: CostingInteger,
             arg3: CostingInteger
         ): CostingInteger =
-            if arg2 == 0 then costFun(arg3) else arg2
+            if arg2 == CostingInteger(0L) then costFun(arg3) else arg2
     }
 
     case class LinearInMaxYZ(costFun: OneVariableLinearFunction) extends ThreeArguments {
@@ -340,7 +410,7 @@ object ThreeArguments {
             arg2: CostingInteger,
             arg3: CostingInteger
         ): CostingInteger =
-            costFun(Math.max(arg2, arg3))
+            costFun(arg2.max(arg3))
     }
 
     case class LinearInYAndZ(costFun: TwoVariableLinearFunction) extends ThreeArguments {
@@ -355,7 +425,7 @@ object ThreeArguments {
     given ReadWriter[ThreeArguments] = readwriter[ujson.Value].bimap(
       {
           case ConstantCost(cost) =>
-              ujson.Obj("type" -> "constant_cost", "arguments" -> cost)
+              ujson.Obj("type" -> "constant_cost", "arguments" -> cost.toLong)
           case LinearInX(costFun) =>
               ujson.Obj("type" -> "linear_in_x", "arguments" -> writeJs(costFun))
           case LinearInY(costFun) =>
@@ -373,7 +443,7 @@ object ThreeArguments {
       },
       json => {
           json.obj("type").str match
-              case "constant_cost" => ConstantCost(json.obj("arguments").num.toLong)
+              case "constant_cost" => ConstantCost(CostingInteger(json.obj("arguments").num.toLong))
               case "linear_in_x" =>
                   LinearInX(read[OneVariableLinearFunction](json.obj("arguments")))
               case "linear_in_y" =>
@@ -416,11 +486,11 @@ object FourArguments {
 
     given ReadWriter[FourArguments] = readwriter[ujson.Value].bimap(
       { case ConstantCost(cost) =>
-          ujson.Obj("type" -> "constant_cost", "arguments" -> cost)
+          ujson.Obj("type" -> "constant_cost", "arguments" -> cost.toLong)
       },
       json => {
           json.obj("type").str match
-              case "constant_cost" => ConstantCost(json.obj("arguments").num.toLong)
+              case "constant_cost" => ConstantCost(CostingInteger(json.obj("arguments").num.toLong))
               case other           => throw new RuntimeException(s"Unexpected type ${other}")
       }
     )
@@ -451,11 +521,11 @@ object FiveArguments {
 
     given ReadWriter[FiveArguments] = readwriter[ujson.Value].bimap(
       { case ConstantCost(cost) =>
-          ujson.Obj("type" -> "constant_cost", "arguments" -> cost)
+          ujson.Obj("type" -> "constant_cost", "arguments" -> cost.toLong)
       },
       json => {
           json.obj("type").str match
-              case "constant_cost" => ConstantCost(json.obj("arguments").num.toLong)
+              case "constant_cost" => ConstantCost(CostingInteger(json.obj("arguments").num.toLong))
               case other           => throw new RuntimeException(s"Unexpected type ${other}")
       }
     )
@@ -488,11 +558,11 @@ object SixArguments {
 
     given ReadWriter[SixArguments] = readwriter[ujson.Value].bimap(
       { case ConstantCost(cost) =>
-          ujson.Obj("type" -> "constant_cost", "arguments" -> cost)
+          ujson.Obj("type" -> "constant_cost", "arguments" -> cost.toLong)
       },
       json => {
           json.obj("type").str match
-              case "constant_cost" => ConstantCost(json.obj("arguments").num.toLong)
+              case "constant_cost" => ConstantCost(CostingInteger(json.obj("arguments").num.toLong))
               case other           => throw new RuntimeException(s"Unexpected type ${other}")
       }
     )
@@ -508,7 +578,7 @@ case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends Costing
         val argsMem = args.map(MemoryUsage.memoryUsage)
         val cpu = this.cpu.calculateCost(argsMem)
         val mem = this.memory.calculateCost(argsMem)
-        ExUnits(mem, cpu)
+        ExUnits(mem.toLong, cpu.toLong)
     }
 
     /** Calculate cost from pre-computed memory usage values. Useful for JIT to avoid CekValue
@@ -517,7 +587,7 @@ case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends Costing
     def calculateCostFromMemory(argsCostingInteger: Seq[CostingInteger]): ExUnits = {
         val cpu = this.cpu.calculateCost(argsCostingInteger)
         val mem = this.memory.calculateCost(argsCostingInteger)
-        ExUnits(mem, cpu)
+        ExUnits(mem.toLong, cpu.toLong)
     }
 }
 
@@ -527,7 +597,7 @@ case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends 
         constantCost
     }
 
-    val constantCost: ExUnits = ExUnits(memory, cpu)
+    val constantCost: ExUnits = ExUnits(memory.toLong, cpu.toLong)
 
     inline def toDefaultFun[M <: CostModel]: DefaultCostingFun[M] = {
         inline erasedValue[M] match {
@@ -612,7 +682,7 @@ case class IntegerToByteStringCostingFun(cpu: ThreeArguments, memory: ThreeArgum
         )
         val cpu = this.cpu.calculateCost(argsMem)
         val mem = this.memory.calculateCost(argsMem)
-        ExUnits(mem, cpu)
+        ExUnits(mem.toLong, cpu.toLong)
     }
 }
 
@@ -626,7 +696,7 @@ case class ReplicateByteCostingFun(cpu: TwoArguments, memory: TwoArguments) exte
         )
         val cpu = this.cpu.calculateCost(argsMem)
         val mem = this.memory.calculateCost(argsMem)
-        ExUnits(mem, cpu)
+        ExUnits(mem.toLong, cpu.toLong)
     }
 }
 
@@ -640,7 +710,7 @@ case class ShiftOrRotateByteStringCostingFun(cpu: TwoArguments, memory: TwoArgum
         )
         val cpu = this.cpu.calculateCost(argsMem)
         val mem = this.memory.calculateCost(argsMem)
-        ExUnits(mem, cpu)
+        ExUnits(mem.toLong, cpu.toLong)
     }
 }
 
@@ -649,10 +719,33 @@ case class WriteBitsCostingFun(cpu: ThreeArguments, memory: ThreeArguments) exte
     def calculateCost(args: CekValue*): ExUnits = {
         val Seq(arg0, CekValue.VCon(Constant.List(_, list)), arg2) = args.toSeq: @unchecked
         val argsMem =
-            Seq(MemoryUsage.memoryUsage(arg0), list.size.toLong, MemoryUsage.memoryUsage(arg2))
+            Seq(
+              MemoryUsage.memoryUsage(arg0),
+              CostingInteger(list.size.toLong),
+              MemoryUsage.memoryUsage(arg2)
+            )
         ExUnits(
-          this.memory.calculateCost(argsMem),
-          this.cpu.calculateCost(argsMem)
+          this.memory.calculateCost(argsMem).toLong,
+          this.cpu.calculateCost(argsMem).toLong
         )
+    }
+}
+
+/** Custom costing function for dropList builtin.
+  *
+  * dropList uses IntegerCostedLiterally for the first argument, meaning the cost is based on the
+  * absolute value of the integer, not its memory representation.
+  */
+case class DropListCostingFun(cpu: TwoArguments, memory: TwoArguments) extends CostingFun
+    derives ReadWriter {
+    def calculateCost(args: CekValue*): ExUnits = {
+        val Seq(CekValue.VCon(Constant.Integer(n)), arg1) = args.toSeq: @unchecked
+        val argsMem = Seq(
+          MemoryUsage.memoryUsageLiteral(n), // Use literal value, not memory representation
+          MemoryUsage.memoryUsage(arg1)
+        )
+        val cpu = this.cpu.calculateCost(argsMem)
+        val mem = this.memory.calculateCost(argsMem)
+        ExUnits(mem.toLong, cpu.toLong)
     }
 }

@@ -3,6 +3,7 @@ package uplc
 package eval
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.ledger.{CardanoInfo, Language}
 
 import java.nio.file.{Files, Paths}
 import scala.util.Failure
@@ -15,7 +16,20 @@ import scala.util.Try
   *   This tests run only on JVM right now.
   */
 abstract class PlutusConformanceTest extends AnyFunSuite:
-    private given PlutusVM = PlutusVM.makePlutusV3VM()
+    // Use builtinCostModelC.json which includes Plutus 1.53 builtins (dropList, etc.)
+    // Combined with machine costs from protocol params for accurate budget calculation
+    private given PlutusVM = {
+        val builtinCostModel = BuiltinCostModel.fromInputStream(
+          getClass.getResourceAsStream("/builtinCostModelC.json")
+        )
+        // Get machine costs from protocol params (same as makePlutusV3VM does)
+        val baseParams = MachineParams.fromProtocolParams(
+          CardanoInfo.mainnet.protocolParams,
+          Language.PlutusV3
+        )
+        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
+        PlutusVM.makePlutusV3VM(params)
+    }
     // Run this command in plutus-conformance to generate the test cases
     // find . -name "*.uplc" -print0 | sort -zf | xargs -0 -I {} bash -c 'file="{}"; rel_path="${file#./}"; without_ext="${rel_path%.uplc}"; echo "check(\"$without_ext\")"'
 
@@ -172,23 +186,23 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/divideInteger/divideInteger-pos-neg/divideInteger-pos-neg")
     check("builtin/semantics/divideInteger/divideInteger-pos-pos/divideInteger-pos-pos")
     check("builtin/semantics/divideInteger/divideInteger-zero/divideInteger-zero")
-    // TODO: Plutus 1.53 - dropList builtin not yet implemented
-    ignore("builtin/semantics/dropList/dropList-01/dropList-01")(())
-    ignore("builtin/semantics/dropList/dropList-02/dropList-02")(())
-    ignore("builtin/semantics/dropList/dropList-03/dropList-03")(())
-    ignore("builtin/semantics/dropList/dropList-04/dropList-04")(())
-    ignore("builtin/semantics/dropList/dropList-05/dropList-05")(())
-    ignore("builtin/semantics/dropList/dropList-06/dropList-06")(())
-    ignore("builtin/semantics/dropList/dropList-07/dropList-07")(())
-    ignore("builtin/semantics/dropList/dropList-08/dropList-08")(())
-    ignore("builtin/semantics/dropList/dropList-09/dropList-09")(())
-    ignore("builtin/semantics/dropList/dropList-10/dropList-10")(())
-    ignore("builtin/semantics/dropList/dropList-11/dropList-11")(())
-    ignore("builtin/semantics/dropList/dropList-12/dropList-12")(())
-    ignore("builtin/semantics/dropList/dropList-13/dropList-13")(())
-    ignore("builtin/semantics/dropList/dropList-14/dropList-14")(())
-    ignore("builtin/semantics/dropList/dropList-15/dropList-15")(())
-    ignore("builtin/semantics/dropList/dropList-16/dropList-16")(())
+    // Plutus 1.53 - dropList builtin
+    check("builtin/semantics/dropList/dropList-01/dropList-01")
+    check("builtin/semantics/dropList/dropList-02/dropList-02")
+    check("builtin/semantics/dropList/dropList-03/dropList-03")
+    check("builtin/semantics/dropList/dropList-04/dropList-04")
+    check("builtin/semantics/dropList/dropList-05/dropList-05")
+    check("builtin/semantics/dropList/dropList-06/dropList-06")
+    check("builtin/semantics/dropList/dropList-07/dropList-07")
+    check("builtin/semantics/dropList/dropList-08/dropList-08")
+    check("builtin/semantics/dropList/dropList-09/dropList-09")
+    check("builtin/semantics/dropList/dropList-10/dropList-10")
+    check("builtin/semantics/dropList/dropList-11/dropList-11")
+    check("builtin/semantics/dropList/dropList-12/dropList-12")
+    check("builtin/semantics/dropList/dropList-13/dropList-13")
+    check("builtin/semantics/dropList/dropList-14/dropList-14")
+    check("builtin/semantics/dropList/dropList-15/dropList-15")
+    check("builtin/semantics/dropList/dropList-16/dropList-16")
     check("builtin/semantics/encodeUtf8/encodeUtf8")
     check("builtin/semantics/equalsByteString/equalsByteString-01/equalsByteString-01")
     check("builtin/semantics/equalsByteString/equalsByteString-02/equalsByteString-02")

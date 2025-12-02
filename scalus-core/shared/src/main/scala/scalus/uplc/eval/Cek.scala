@@ -593,15 +593,15 @@ final class TallyingBudgetSpenderLogger(val budgetSpender: BudgetSpender)
 }
 
 final class CountingBudgetSpender extends BudgetSpender {
-    private var cpu: Long = 0
-    private var memory: Long = 0
+    private var cpu: CostingInteger = CostingInteger(0L)
+    private var memory: CostingInteger = CostingInteger(0L)
 
     def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
-        cpu += budget.steps
-        memory += budget.memory
+        cpu = cpu + CostingInteger(budget.steps)
+        memory = memory + CostingInteger(budget.memory)
     }
 
-    def getSpentBudget: ExUnits = ExUnits(memory, cpu)
+    def getSpentBudget: ExUnits = ExUnits(memory.toLong, cpu.toLong)
 }
 
 /** CEK machine implementation based on Cardano Plutus CEK machine.

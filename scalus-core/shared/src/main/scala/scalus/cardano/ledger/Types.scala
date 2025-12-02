@@ -391,7 +391,10 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
         val cpuFormatted = String.format("%.6f", steps / 1000000d)
         s"{ mem: $memoryFormatted, cpu: $cpuFormatted }"
     def +(other: ExUnits): ExUnits =
-        ExUnits(memory + other.memory, steps + other.steps)
+        ExUnits(
+          scalus.uplc.eval.CostingInteger.satPlus(memory, other.memory),
+          scalus.uplc.eval.CostingInteger.satPlus(steps, other.steps)
+        )
 
     /** Calculate fee for the execution units given the prices */
     def fee(prices: ExUnitPrices): Coin = {
@@ -430,7 +433,10 @@ object ExUnits {
     /** Cats Group instance for ExUnits, allowing algebraic operations including negative values */
     given cats.kernel.Group[ExUnits] with
         def combine(x: ExUnits, y: ExUnits): ExUnits =
-            ExUnits(x.memory + y.memory, x.steps + y.steps)
+            ExUnits(
+              scalus.uplc.eval.CostingInteger.satPlus(x.memory, y.memory),
+              scalus.uplc.eval.CostingInteger.satPlus(x.steps, y.steps)
+            )
         def empty: ExUnits = ExUnits.zero
         def inverse(x: ExUnits): ExUnits = ExUnits(-x.memory, -x.steps)
 }
