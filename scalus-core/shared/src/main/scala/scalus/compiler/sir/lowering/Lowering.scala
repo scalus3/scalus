@@ -234,10 +234,27 @@ object Lowering {
                 }
                 retval
             case sirConst @ SIR.Const(const, tp, anns) =>
+                // Handle BuiltinList constants - transform elements to Data if needed
+                // TODO: In the future, we may want to add SumConstBuiltinList representation
+                // to avoid this transformation and keep native UPLC list types
+                val (transformedConst, transformedTp, repr) = tp match {
+                    case SIRType.BuiltinList(elemType) if elemType != SIRType.Data =>
+                        const match {
+                            case Constant.List(_, elements) =>
+                                val dataElements = elements.map(constantToData)
+                                val newConst = Constant.List(DefaultUni.Data, dataElements)
+                                val newTp = SIRType.BuiltinList(SIRType.Data)
+                                (newConst, newTp, SumCaseClassRepresentation.SumDataList)
+                            case _ =>
+                                (const, tp, LoweredValueRepresentation.constRepresentation(tp))
+                        }
+                    case _ =>
+                        (const, tp, LoweredValueRepresentation.constRepresentation(tp))
+                }
                 StaticLoweredValue(
-                  sirConst,
-                  Term.Const(const),
-                  LoweredValueRepresentation.constRepresentation(tp),
+                  SIR.Const(transformedConst, transformedTp, anns),
+                  Term.Const(transformedConst),
+                  repr,
                   true
                 )
             case SIR.And(lhs, rhs, anns) =>
@@ -697,6 +714,45 @@ object Lowering {
 
         values.toList.sortBy(_.id).foreach(visit)
         sorted.toList
+    }
+
+    /** Convert a UPLC Constant to a Constant.Data. Used to transform BuiltinList elements to Data
+      * representation. TODO: In the future, we may want to add SumConstBuiltinList representation
+      * to avoid this transformation and keep native UPLC list types.
+      */
+    private def constantToData(c: Constant): Constant = c match {
+        case Constant.Integer(v)    => Constant.Data(scalus.builtin.Data.I(v))
+        case Constant.ByteString(v) => Constant.Data(scalus.builtin.Data.B(v))
+        case Constant.String(v)     =>
+            // String doesn't have direct Data representation, encode as ByteString
+            Constant.Data(scalus.builtin.Data.B(scalus.builtin.ByteString.fromString(v)))
+        case Constant.Bool(v) =>
+            // Bool encoded as Constr(0/1, [])
+            Constant.Data(scalus.builtin.Data.Constr(if v then 1 else 0, Nil))
+        case Constant.Unit =>
+            // Unit encoded as Constr(0, [])
+            Constant.Data(scalus.builtin.Data.Constr(0, Nil))
+        case Constant.Data(d) => c // already Data
+        case Constant.List(elemTpe, elements) =>
+            val dataElements = elements.map { elem =>
+                constantToData(elem) match {
+                    case Constant.Data(d) => d
+                    case other => throw new RuntimeException(s"Expected Data constant, got $other")
+                }
+            }
+            Constant.Data(scalus.builtin.Data.List(dataElements))
+        case Constant.Pair(a, b) =>
+            val aData = constantToData(a) match {
+                case Constant.Data(d) => d
+                case other => throw new RuntimeException(s"Expected Data constant, got $other")
+            }
+            val bData = constantToData(b) match {
+                case Constant.Data(d) => d
+                case other => throw new RuntimeException(s"Expected Data constant, got $other")
+            }
+            Constant.Data(scalus.builtin.Data.List(List(aData, bData)))
+        case other =>
+            throw new RuntimeException(s"Cannot convert constant $other to Data")
     }
 
 }

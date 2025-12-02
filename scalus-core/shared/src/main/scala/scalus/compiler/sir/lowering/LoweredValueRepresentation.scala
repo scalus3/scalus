@@ -467,6 +467,20 @@ object LoweredValueRepresentation {
 
     def constRepresentation(tp: SIRType)(using lc: LoweringContext): LoweredValueRepresentation = {
         tp match
+            // BuiltinList[Data] -> SumDataList (native UPLC list of Data)
+            case SIRType.BuiltinList(SIRType.Data) =>
+                SumCaseClassRepresentation.SumDataList
+            // BuiltinList[BuiltinPair[Data, Data]] -> SumDataPairList
+            case SIRType.BuiltinList(elemType)
+                if ProductCaseClassRepresentation.PairData.isPairOrTuple2(elemType) =>
+                SumCaseClassRepresentation.SumDataPairList
+            // BuiltinList with non-Data element type - not supported as constant
+            case SIRType.BuiltinList(elemType) =>
+                throw LoweringException(
+                  s"BuiltinList constant with non-Data element type ${elemType.show} is not supported. " +
+                      s"Only BuiltinList[Data] and BuiltinList[BuiltinPair[Data,Data]] can be constants.",
+                  SIRPosition.empty
+                )
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 SumCaseClassRepresentation.DataConstr
             case SIRType.CaseClass(constrDecl, targs, parent) =>

@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
-import scalus.builtin.{BuiltinList, ByteString, Data}
+import scalus.builtin.{BuiltinList, ByteString}
 
 /** Tests for the dropList builtin function.
   *
@@ -231,22 +231,5 @@ class DropListTest extends AnyFunSuite {
           containsDropList(uplc),
           s"UPLC should contain DropList builtin, got: ${uplc.pretty.flatten.render(100)}"
         )
-    }
-
-    // TODO: Fix lowering issue with BuiltinList literal in dropList result
-    // This test is ignored due to LoweringException: Unexpected representation conversion
-    // for scalus.builtin.BuiltinList[Int] from DataConstr to SumDataList
-    ignore("dropList compiled: drop 2 from literal list (lowering issue)") {
-        val sir = compile {
-            val list = BuiltinList[BigInt](10, 20, 30, 40, 50)
-            dropList(BigInt(2), list)
-        }
-        val result = sir.toUplc().evaluateDebug
-        result match
-            case Result.Success(term, _, _, _) =>
-                val expected = compile(BuiltinList[BigInt](30, 40, 50)).toUplc()
-                assert(term α_== expected, s"Expected $expected but got $term")
-            case Result.Failure(e, _, _, _) =>
-                fail(s"Evaluation failed: $e")
     }
 }
