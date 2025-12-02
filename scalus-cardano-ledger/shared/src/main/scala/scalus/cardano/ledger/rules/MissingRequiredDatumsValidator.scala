@@ -81,7 +81,8 @@ object MissingRequiredDatumsValidator extends STS.Validator {
         val txBody = transaction.body.value
         val txOutputs = txBody.outputs.view.map(_.value)
         val referenceOutputs = txBody.referenceInputs.toSeq.view.flatMap(utxos.get)
-        val allOutputs = txOutputs ++ referenceOutputs
+        val collateralReturnOutput = txBody.collateralReturnOutput.map(_.value).view
+        val allOutputs = txOutputs ++ referenceOutputs ++ collateralReturnOutput
 
         (
           for

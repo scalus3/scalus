@@ -34,6 +34,12 @@ case class Value(coin: Coin, assets: MultiAsset = MultiAsset.empty) {
     }
 }
 
+object ValueCoin:
+    def unapply(value: Value): Some[Coin] = Some(value.coin)
+
+object ValueAssets:
+    def unapply(value: Value): Some[MultiAsset] = Some(value.assets)
+
 object Value:
     /** Zero value (0 ADA, no assets) */
     val zero: Value = Value(Coin.zero)

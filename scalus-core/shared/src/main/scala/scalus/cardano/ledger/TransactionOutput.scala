@@ -13,6 +13,22 @@ sealed trait TransactionOutput:
     def datumOption: Option[DatumOption]
     def scriptRef: Option[ScriptRef]
 
+object TransactionOutputAddress:
+    def unapply(transactionOutput: TransactionOutput): Some[Address] = Some(
+      transactionOutput.address
+    )
+
+object TransactionOutputValue:
+    def unapply(transactionOutput: TransactionOutput): Some[Value] = Some(transactionOutput.value)
+
+object TransactionOutputDatumOption:
+    def unapply(transactionOutput: TransactionOutput): Option[DatumOption] =
+        transactionOutput.datumOption
+
+object TransactionOutputScriptRef:
+    def unapply(transactionOutput: TransactionOutput): Option[ScriptRef] =
+        transactionOutput.scriptRef
+
 object TransactionOutput:
     // Note: I think this will erase the distinction between Shelley and Babbage on using `Set`.
     // I don't think the compiler knows that this takes Shelley -> Shelley and Babbage -> Babbage.
@@ -26,6 +42,15 @@ object TransactionOutput:
             }
         Lens(get)(set)
     }
+
+    def unapply(
+        transactionOutput: TransactionOutput
+    ): (Address, Value, Option[DatumOption], Option[ScriptRef]) = (
+      transactionOutput.address,
+      transactionOutput.value,
+      transactionOutput.datumOption,
+      transactionOutput.scriptRef
+    )
 
     /** Shelley-era transaction output format */
     final case class Shelley(

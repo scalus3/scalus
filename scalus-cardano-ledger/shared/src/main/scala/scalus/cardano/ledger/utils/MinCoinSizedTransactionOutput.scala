@@ -22,14 +22,12 @@ object MinCoinSizedTransactionOutput {
         protocolParams: ProtocolParams
     ): Coin = {
         val utxoCostPerByte = protocolParams.utxoCostPerByte
-        val size = sizedTransactionOutput.size
-        val coin = sizedTransactionOutput.value.value.coin
+        val Sized(TransactionOutputValue(ValueCoin(coin)), size) = sizedTransactionOutput
 
         val minAda = Coin((constantOverhead + size) * utxoCostPerByte)
 
-        if minAda <= coin
-        then minAda
-        else {
+        if minAda <= coin then minAda
+        else
             val nextCandidateOutput = sizedTransactionOutput |>
                 Sized
                     .lens[TransactionOutput]()
@@ -37,7 +35,6 @@ object MinCoinSizedTransactionOutput {
                     .refocus(_.coin)
                     .replace(minAda)
             MinCoinSizedTransactionOutput(nextCandidateOutput, protocolParams)
-        }
     }
 
     private val constantOverhead = 160

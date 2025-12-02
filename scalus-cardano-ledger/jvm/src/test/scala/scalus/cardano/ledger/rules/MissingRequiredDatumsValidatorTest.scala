@@ -240,7 +240,51 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
     }
 
     test(
-      "MissingRequiredDatumsValidator success when datum is used in both outputs and reference inputs but skipped in witness"
+      "MissingRequiredDatumsValidator success with supplemental datum from collateralReturnOutput"
+    ) {
+        val input = Arbitrary.arbitrary[TransactionInput].sample.get
+        val datum = Arbitrary.arbitrary[Data].sample.get
+        val datumHash = DataHash.fromByteString(datum.dataHash)
+        val utxo = Map(
+          input -> TransactionOutput(
+            Arbitrary.arbitrary[ShelleyAddress].sample.get,
+            Value(Coin(1000000L))
+          )
+        )
+        val collateralReturn = Sized(
+          TransactionOutput(
+            Arbitrary.arbitrary[ShelleyAddress].sample.get,
+            Value(Coin(500000L)),
+            datumHash
+          )
+        )
+        val transaction = Transaction(
+          body = KeepRaw(
+            TransactionBody(
+              inputs = TaggedSortedSet.from(Set(input)),
+              outputs = IndexedSeq.empty,
+              fee = Coin.zero,
+              collateralReturnOutput = Some(collateralReturn)
+            )
+          ),
+          witnessSet = TransactionWitnessSet(
+            plutusData = KeepRaw(
+              TaggedSortedMap.from(
+                Set(KeepRaw(datum))
+              )
+            )
+          )
+        )
+        val context = Context()
+        val state = State(utxos = utxo)
+
+        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+
+        assert(result.isRight)
+    }
+
+    test(
+      "MissingRequiredDatumsValidator success when datum is used in outputs, reference inputs and collateral return but skipped in witness"
     ) {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -254,6 +298,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           referenceInput -> TransactionOutput(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(500000L)),
+            datumHash
+          )
+        )
+        val collateralReturn = Sized(
+          TransactionOutput(
+            Arbitrary.arbitrary[ShelleyAddress].sample.get,
+            Value(Coin(300000L)),
             datumHash
           )
         )
@@ -271,7 +322,8 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
                 )
               ),
               fee = Coin.zero,
-              referenceInputs = TaggedSortedSet.from(Set(referenceInput))
+              referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
+              collateralReturnOutput = Some(collateralReturn)
             )
           ),
           witnessSet = TransactionWitnessSet.empty

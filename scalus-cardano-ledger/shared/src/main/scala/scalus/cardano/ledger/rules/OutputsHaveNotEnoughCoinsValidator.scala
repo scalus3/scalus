@@ -11,25 +11,22 @@ object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
         val transactionId = event.id
         val protocolParams = context.env.params
         val outputs = event.body.value.outputs
-        val collateralReturnOutput = event.body.value.collateralReturnOutput
+        val collateralReturnOutput = event.body.value.collateralReturnOutput.toIndexedSeq
 
         val invalidOutputs = findInvalidOutputs(outputs, protocolParams)
 
-        val invalidCollateralReturnOutput = findInvalidOutputs(
-          collateralReturnOutput.map(IndexedSeq.apply(_)).getOrElse(IndexedSeq.empty),
-          protocolParams
-        ).headOption
+        val invalidCollateralReturnOutput =
+            findInvalidOutputs(collateralReturnOutput, protocolParams).headOption
 
         if invalidOutputs.nonEmpty || invalidCollateralReturnOutput.nonEmpty then
-            return failure(
+            failure(
               TransactionException.OutputsHaveNotEnoughCoinsException(
                 transactionId,
                 invalidOutputs,
                 invalidCollateralReturnOutput
               )
             )
-
-        success
+        else success
     }
 
     private def findInvalidOutputs(
@@ -37,12 +34,12 @@ object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
         protocolParams: ProtocolParams
     ): IndexedSeq[(TransactionOutput, Coin)] = {
         for
-            sizedOutput @ Sized(output, _) <- outputs
+            sizedOutput @ SizedValue(output @ TransactionOutputValue(ValueCoin(coin))) <- outputs
             minCoinSizedTransactionOutput = MinCoinSizedTransactionOutput(
               sizedOutput,
               protocolParams
             )
-            if output.value.coin < minCoinSizedTransactionOutput
+            if coin < minCoinSizedTransactionOutput
         yield (output, minCoinSizedTransactionOutput)
     }
 }
