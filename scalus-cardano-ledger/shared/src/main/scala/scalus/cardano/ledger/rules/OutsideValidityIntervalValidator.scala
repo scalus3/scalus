@@ -11,15 +11,14 @@ object OutsideValidityIntervalValidator extends STS.Validator {
         val slot = context.env.slot
 
         if !checkInterval(validityInterval, slot) then
-            return failure(
+            failure(
               TransactionException.OutsideValidityIntervalException(
                 transactionId,
                 validityInterval,
                 slot
               )
             )
-
-        success
+        else success
     }
 
     // Test if a slot is in the Validity interval. Recall that a ValidityInterval

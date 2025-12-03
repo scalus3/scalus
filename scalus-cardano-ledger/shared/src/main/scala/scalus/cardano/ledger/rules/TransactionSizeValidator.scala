@@ -13,14 +13,13 @@ object TransactionSizeValidator extends STS.Validator {
         val maxTransactionSize = context.env.params.maxTxSize
 
         if transactionSize > maxTransactionSize then
-            return failure(
+            failure(
               TransactionException.InvalidTransactionSizeException(
                 transactionId,
                 transactionSize,
                 maxTransactionSize
               )
             )
-
-        success
+        else success
     }
 }

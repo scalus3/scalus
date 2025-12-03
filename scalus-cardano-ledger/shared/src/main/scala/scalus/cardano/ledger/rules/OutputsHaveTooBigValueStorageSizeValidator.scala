@@ -11,17 +11,15 @@ object OutputsHaveTooBigValueStorageSizeValidator extends STS.Validator {
         val transactionId = event.id
         val maxValueSize = context.env.params.maxValueSize
         val outputs = event.body.value.outputs
-        val collateralReturnOutput = event.body.value.collateralReturnOutput
+        val collateralReturnOutput = event.body.value.collateralReturnOutput.toIndexedSeq
 
         val invalidOutputs = findInvalidOutputs(outputs, maxValueSize)
 
-        val invalidCollateralReturnOutput = findInvalidOutputs(
-          collateralReturnOutput.map(IndexedSeq.apply(_)).getOrElse(IndexedSeq.empty),
-          maxValueSize
-        ).headOption
+        val invalidCollateralReturnOutput =
+            findInvalidOutputs(collateralReturnOutput, maxValueSize).headOption
 
         if invalidOutputs.nonEmpty || invalidCollateralReturnOutput.nonEmpty then
-            return failure(
+            failure(
               TransactionException.OutputsHaveTooBigValueStorageSizeException(
                 transactionId,
                 maxValueSize,
@@ -29,20 +27,21 @@ object OutputsHaveTooBigValueStorageSizeValidator extends STS.Validator {
                 invalidCollateralReturnOutput
               )
             )
-
-        success
+        else success
     }
 
     private def findInvalidOutputs(
         outputs: IndexedSeq[Sized[TransactionOutput]],
-        maxValueSize: Long,
+        maxValueSize: Long
     ): IndexedSeq[(TransactionOutput, Int)] = {
-        for
-            SizedValue(output) <- outputs
-            // TODO maybe make serialization depending on the protocol version
-            // serSize = fromIntegral $ BSL.length $ serialize (pvMajor protVer) v
-            outputValueSerializationSize = Cbor.encode(output.value).length
-            if outputValueSerializationSize > maxValueSize
-        yield (output, outputValueSerializationSize)
+        (
+          for
+              SizedValue(output) <- outputs.view
+              // TODO maybe make serialization depending on the protocol version
+              // serSize = fromIntegral $ BSL.length $ serialize (pvMajor protVer) v
+              outputValueSerializationSize = Cbor.encode(output.value).length
+              if outputValueSerializationSize > maxValueSize
+          yield (output, outputValueSerializationSize)
+        ).toIndexedSeq
     }
 }

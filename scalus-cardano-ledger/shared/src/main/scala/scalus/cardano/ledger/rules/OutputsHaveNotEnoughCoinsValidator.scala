@@ -7,14 +7,14 @@ object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
 
     override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
-        val protocolParams = context.env.params
+        val utxoCostPerByte = context.env.params.utxoCostPerByte
         val outputs = event.body.value.outputs
         val collateralReturnOutput = event.body.value.collateralReturnOutput.toIndexedSeq
 
-        val invalidOutputs = findInvalidOutputs(outputs, protocolParams)
+        val invalidOutputs = findInvalidOutputs(outputs, utxoCostPerByte)
 
         val invalidCollateralReturnOutput =
-            findInvalidOutputs(collateralReturnOutput, protocolParams).headOption
+            findInvalidOutputs(collateralReturnOutput, utxoCostPerByte).headOption
 
         if invalidOutputs.nonEmpty || invalidCollateralReturnOutput.nonEmpty then
             failure(
@@ -29,9 +29,8 @@ object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
 
     private def findInvalidOutputs(
         outputs: IndexedSeq[Sized[TransactionOutput]],
-        protocolParams: ProtocolParams
+        utxoCostPerByte: Long
     ): IndexedSeq[(TransactionOutput, Coin, MultiAsset)] = {
-        val utxoCostPerByte = protocolParams.utxoCostPerByte
         (
           for
               Sized(output, size) <- outputs.view

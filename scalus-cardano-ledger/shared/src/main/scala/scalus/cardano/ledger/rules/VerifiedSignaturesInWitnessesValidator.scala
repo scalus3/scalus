@@ -17,15 +17,14 @@ object VerifiedSignaturesInWitnessesValidator extends STS.Validator {
 
         if invalidVkeyWitnessesSet.nonEmpty || invalidBootstrapWitnessesSet.nonEmpty
         then
-            return failure(
+            failure(
               TransactionException.InvalidSignaturesInWitnessesException(
                 transactionId,
                 invalidVkeyWitnessesSet,
                 invalidBootstrapWitnessesSet
               )
             )
-
-        success
+        else success
     }
 
     private def invalidVkeyWitnesses(
