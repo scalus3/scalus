@@ -21,7 +21,14 @@ case class Value(coin: Coin, assets: MultiAsset = MultiAsset.empty) {
 
     def isNegative: Boolean = coin.value < 0 && assets.isNegative
 
-    def isZero: Boolean = coin.value == 0 && assets.isEmpty
+    def isZeroAda: Boolean = coin.value == 0
+    def nonZeroAda: Boolean = coin.value != 0
+    def isEmptyAssets: Boolean = assets.isEmpty
+    def nonEmptyAssets: Boolean = assets.nonEmpty
+    def isOnlyAda: Boolean = coin.value != 0 && assets.isEmpty
+    def isOnlyAssets: Boolean = coin.value == 0 && assets.nonEmpty
+    def isZero: Boolean = isZeroAda && isEmptyAssets
+    def nonZero: Boolean = nonZeroAda || nonEmptyAssets
 
     private def binOp(op: (Long, Long) => Long)(rhs: Value): Value = (this, rhs) match
         case (Value(coin1, assets1), Value(coin2, assets2)) =>

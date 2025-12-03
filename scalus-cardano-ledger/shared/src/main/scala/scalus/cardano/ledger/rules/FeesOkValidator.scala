@@ -107,7 +107,7 @@ object FeesOkValidator extends STS.Validator {
                         .map(_.value)
                         .getOrElse(Value.zero)
                     if !(
-                          totalSumOfCollaterals.assets.isEmpty && collateralReturnOutputValue.assets.isEmpty ||
+                          totalSumOfCollaterals.isEmptyAssets && collateralReturnOutputValue.isEmptyAssets ||
                               (totalSumOfCollaterals.assets - collateralReturnOutputValue.assets).isEmpty
                         )
                     then

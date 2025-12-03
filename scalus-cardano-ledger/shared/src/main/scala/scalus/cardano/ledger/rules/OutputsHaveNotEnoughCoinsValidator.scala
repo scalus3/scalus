@@ -1,8 +1,6 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
-
 // It's Babbage.validateOutputTooSmallUTxO in cardano-ledger
 object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
     override final type Error = TransactionException.OutputsHaveNotEnoughCoinsException
@@ -32,14 +30,17 @@ object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
     private def findInvalidOutputs(
         outputs: IndexedSeq[Sized[TransactionOutput]],
         protocolParams: ProtocolParams
-    ): IndexedSeq[(TransactionOutput, Coin)] = {
-        for
-            sizedOutput @ SizedValue(output @ TransactionOutputValue(ValueCoin(coin))) <- outputs
-            minCoinSizedTransactionOutput = MinCoinSizedTransactionOutput(
-              sizedOutput,
-              protocolParams
-            )
-            if coin < minCoinSizedTransactionOutput
-        yield (output, minCoinSizedTransactionOutput)
+    ): IndexedSeq[(TransactionOutput, Coin, MultiAsset)] = {
+        val utxoCostPerByte = protocolParams.utxoCostPerByte
+        (
+          for
+              Sized(output, size) <- outputs.view
+              minAda = Coin((constantOverhead + size) * utxoCostPerByte)
+              negativeAssets = output.value.assets.negativeAssets
+              if output.value.coin < minAda || negativeAssets.nonEmpty
+          yield (output, minAda, negativeAssets)
+        ).toIndexedSeq
     }
+
+    private val constantOverhead = 160
 }

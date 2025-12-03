@@ -19,7 +19,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
-          Value(Coin(1000000000L))
+          Value(
+            Coin(1000000000L),
+            genMultiAsset(
+              minPolicies = 1,
+              maxPolicies = 4,
+              minAssets = 1,
+              maxAssets = 4
+            ).sample.get
+          )
         )
 
         val transaction = {
@@ -40,7 +48,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         assert(result.isRight)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure") {
+    test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure for minimum ada") {
         val context = Context()
 
         val output = TransactionOutput(
@@ -74,6 +82,47 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         assert(result.isLeft)
     }
 
+    test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure for negative assets") {
+        val context = Context()
+
+        val output = TransactionOutput(
+          Arbitrary
+              .arbitrary[ShelleyAddress]
+              .sample
+              .get
+              .copy(payment =
+                  ShelleyPaymentPart.keyHash(
+                    Arbitrary.arbitrary[AddrKeyHash].sample.get
+                  )
+              ),
+          Value(
+            Coin(1000000000L),
+            MultiAsset.asset(
+              Arbitrary.arbitrary[PolicyId].sample.get,
+              Arbitrary.arbitrary[AssetName].sample.get,
+              -1L
+            )
+          )
+        )
+
+        val transaction = {
+            val tx = randomTransactionWithIsValidField
+            tx.copy(
+              body = KeepRaw(
+                tx.body.value.copy(
+                  outputs = IndexedSeq(Sized(output)),
+                  collateralReturnOutput = None
+                )
+              )
+            )
+        }
+
+        val state = State()
+
+        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        assert(result.isLeft)
+    }
+
     test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput success") {
         val context = Context()
 
@@ -87,7 +136,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
-          Value(Coin(1000000000L))
+          Value(
+            Coin(1000000000L),
+            genMultiAsset(
+              minPolicies = 1,
+              maxPolicies = 4,
+              minAssets = 1,
+              maxAssets = 4
+            ).sample.get
+          )
         )
 
         val transaction = {
@@ -108,7 +165,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
         assert(result.isRight)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure") {
+    test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure for minimum ada") {
         val context = Context()
 
         val collateralReturnOutput = TransactionOutput(
@@ -122,6 +179,47 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
                   )
               ),
           Value(Coin(1L))
+        )
+
+        val transaction = {
+            val tx = randomTransactionWithIsValidField
+            tx.copy(
+              body = KeepRaw(
+                tx.body.value.copy(
+                  outputs = IndexedSeq.empty,
+                  collateralReturnOutput = Some(Sized(collateralReturnOutput))
+                )
+              )
+            )
+        }
+
+        val state = State()
+
+        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        assert(result.isLeft)
+    }
+
+    test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure for negative assets") {
+        val context = Context()
+
+        val collateralReturnOutput = TransactionOutput(
+          Arbitrary
+              .arbitrary[ShelleyAddress]
+              .sample
+              .get
+              .copy(payment =
+                  ShelleyPaymentPart.keyHash(
+                    Arbitrary.arbitrary[AddrKeyHash].sample.get
+                  )
+              ),
+          Value(
+            Coin(1000000000L),
+            MultiAsset.asset(
+              Arbitrary.arbitrary[PolicyId].sample.get,
+              Arbitrary.arbitrary[AssetName].sample.get,
+              -1L
+            )
+          )
         )
 
         val transaction = {

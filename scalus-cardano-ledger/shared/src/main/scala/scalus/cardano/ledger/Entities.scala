@@ -108,8 +108,8 @@ object TransactionException {
     // It's BabbageOutputTooSmallUTxO in cardano-ledger
     final case class OutputsHaveNotEnoughCoinsException(
         transactionId: TransactionHash,
-        invalidOutputs: Seq[(TransactionOutput, Coin)],
-        invalidCollateralOutput: Option[(TransactionOutput, Coin)]
+        invalidOutputs: Seq[(TransactionOutput, Coin, MultiAsset)],
+        invalidCollateralOutput: Option[(TransactionOutput, Coin, MultiAsset)]
     ) extends TransactionException(
           s"Transaction outputs are too small for transactionId $transactionId, invalid outputs: $invalidOutputs, invalid collateral output: $invalidCollateralOutput"
         )

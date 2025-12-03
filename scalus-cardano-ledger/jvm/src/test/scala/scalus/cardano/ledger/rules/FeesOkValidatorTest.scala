@@ -354,7 +354,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(result.isLeft)
     }
 
-    test("FeesOkValidator collateralDoesNotContainAnyNonADA rule failure") {
+    test(
+      "FeesOkValidator collateralDoesNotContainAnyNonADA rule failure when collateralReturnOutput has more tokens than collaterals"
+    ) {
         given Arbitrary[scalus.builtin.Data] = Arbitrary(
           Gen.const(scalus.builtin.Data.unit) // Simplified for testing
         )
@@ -454,6 +456,118 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                   ),
               Value(Coin(30000000L))
+            )
+          )
+        )
+
+        val result = FeesOkValidator.validate(context, state, transaction)
+        assert(result.isLeft)
+    }
+
+    test(
+      "FeesOkValidator collateralDoesNotContainAnyNonADA rule failure when collateralReturnOutput has less tokens than collaterals"
+    ) {
+        given Arbitrary[scalus.builtin.Data] = Arbitrary(
+          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        )
+
+        val context = Context()
+
+        val (privateKey1, publicKey1) = generateKeyPair()
+        val (privateKey2, publicKey2) = generateKeyPair()
+
+        val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
+        val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
+
+        val transaction = {
+            val tx = randomTransactionWithIsValidField
+            tx.copy(
+              body = KeepRaw(
+                tx.body.value.copy(
+                  inputs = TaggedSortedSet.empty,
+                  collateralInputs = TaggedSortedSet.from(Set(collateralInput1, collateralInput2)),
+                  collateralReturnOutput = Some(
+                    Sized(
+                      TransactionOutput(
+                        Arbitrary.arbitrary[ShelleyAddress].sample.get,
+                        Value(
+                          Coin(20000000L)
+                        )
+                      )
+                    )
+                  ),
+                  totalCollateral = Some(Coin(60000000L)),
+                  fee = Coin(10000000L),
+                  referenceInputs = TaggedSortedSet.empty,
+                  outputs = IndexedSeq.empty,
+                  mint = None,
+                  votingProcedures = None,
+                  withdrawals = None,
+                  proposalProcedures = TaggedOrderedSet.empty,
+                  certificates = TaggedOrderedStrictSet.empty,
+                  requiredSigners = TaggedSortedSet.empty
+                )
+              ),
+              auxiliaryData = None,
+              witnessSet = tx.witnessSet.copy(
+                vkeyWitnesses = TaggedSortedSet.empty,
+                bootstrapWitnesses = TaggedSortedSet.empty,
+                nativeScripts = TaggedSortedMap.empty,
+                plutusV1Scripts = TaggedSortedStrictMap.empty,
+                plutusV2Scripts = TaggedSortedStrictMap.empty,
+                plutusV3Scripts = TaggedSortedStrictMap.empty,
+                plutusData = KeepRaw(TaggedSortedMap.empty),
+                redeemers = Some(
+                  KeepRaw(
+                    Redeemers.Array(
+                      IndexedSeq(
+                        Redeemer(
+                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                          index = Gen.choose(0, Int.MaxValue).sample.get,
+                          data = scalus.builtin.Data.unit,
+                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+        }
+
+        val state = State(
+          utxos = Map(
+            collateralInput1 -> TransactionOutput(
+              Arbitrary
+                  .arbitrary[ShelleyAddress]
+                  .sample
+                  .get
+                  .copy(payment =
+                      ShelleyPaymentPart.keyHash(
+                        Hash(platform.blake2b_224(publicKey1))
+                      )
+                  ),
+              Value(Coin(30000000L))
+            ),
+            collateralInput2 -> TransactionOutput(
+              Arbitrary
+                  .arbitrary[ShelleyAddress]
+                  .sample
+                  .get
+                  .copy(payment =
+                      ShelleyPaymentPart.keyHash(
+                        Hash(platform.blake2b_224(publicKey2))
+                      )
+                  ),
+              Value(
+                Coin(30000000L),
+                genMultiAsset(
+                  minPolicies = 1,
+                  maxPolicies = 4,
+                  minAssets = 1,
+                  maxAssets = 4
+                ).sample.get
+              )
             )
           )
         )

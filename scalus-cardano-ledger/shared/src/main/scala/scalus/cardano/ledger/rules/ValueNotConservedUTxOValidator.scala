@@ -14,19 +14,17 @@ object ValueNotConservedUTxOValidator extends STS.Validator {
     override def validate(context: Context, state: State, tx: Transaction): Result = {
         val transactionId = tx.id
         val params = context.env.params
-        val txBody = tx.body.value
-        val mint = txBody.mint.getOrElse(MultiAsset.empty)
 
-        TxBalance.consumed(tx, state.certState, state.utxos, context.env.params).flatMap {
-            consumed =>
-                val produced = TxBalance.produced(tx, context.env.params)
+        for
+            consumed <- TxBalance.consumed(tx, state.certState, state.utxos, params)
+            produced = TxBalance.produced(tx, params)
+            _ <-
                 if consumed == produced then success
                 else
                     failure(
                       TransactionException
                           .ValueNotConservedUTxOException(transactionId, consumed, produced)
                     )
-        }
-
+        yield ()
     }
 }

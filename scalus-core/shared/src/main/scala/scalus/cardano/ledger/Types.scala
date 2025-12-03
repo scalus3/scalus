@@ -78,9 +78,23 @@ object Mint {
 
 case class MultiAsset private (assets: SortedMap[PolicyId, SortedMap[AssetName, Long]]) {
     def isEmpty: Boolean = assets.isEmpty
+    def nonEmpty: Boolean = assets.nonEmpty
 
     def isPositive: Boolean = assets.values.forall(_.values.forall(_ > 0))
     def isNegative: Boolean = assets.values.forall(_.values.forall(_ < 0))
+
+    /** Returns a MultiAsset containing only assets with negative quantities. Policies with no
+      * negative tokens are dropped.
+      */
+    def negativeAssets: MultiAsset = {
+        val filtered = SortedMap.from(
+          assets.view.flatMap { case (policyId, tokens) =>
+              val negTokens = tokens.view.filter(_._2 < 0).to(SortedMap)
+              if negTokens.nonEmpty then Some(policyId -> negTokens) else None
+          }
+        )
+        if filtered.isEmpty then MultiAsset.zero else new MultiAsset(filtered)
+    }
 
     @targetName("plus")
     infix def +(other: MultiAsset): MultiAsset = MultiAsset.binOp(_ + _)(this, other)

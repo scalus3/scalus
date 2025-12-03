@@ -14,7 +14,7 @@ object TxBalance {
         protocolParams: ProtocolParams
     ): Either[BadInputsUTxOException, Value] = boundary {
         val txBody = tx.body.value
-        val mint = txBody.mint.getOrElse(MultiAsset.empty)
+
         val inputs = txBody.inputs.toSet.view
             .map { input =>
                 utxo.get(input) match {
@@ -23,11 +23,19 @@ object TxBalance {
                 }
             }
             .foldLeft(Value.zero)(_ + _)
+
+        val mint = txBody.mint.getOrElse(MultiAsset.empty)
+        val minted = Value(
+          Coin.zero,
+          MultiAsset(mint.assets.flatMap { case (policy, assets) =>
+              val mints = assets.filter((_, value) => value > 0)
+              if mints.isEmpty then None else Some(policy -> mints)
+          })
+        )
+
         val withdrawals =
             txBody.withdrawals
-                .map { withdrawals =>
-                    withdrawals.withdrawals.values.foldLeft(Coin.zero)(_ + _)
-                }
+                .map { _.withdrawals.values.foldLeft(Coin.zero)(_ + _) }
                 .getOrElse(Coin.zero)
 
         def lookupStakingDeposit(cred: Credential): Option[Coin] = {
@@ -56,13 +64,7 @@ object TxBalance {
 
         // balance (txins tx ◁ u) + wbalance (txwdrls tx) + keyRefunds pp tx
         val consumedValue = inputs + Value(withdrawals + refunds)
-        val minted = Value(
-          Coin.zero,
-          MultiAsset(mint.assets.flatMap { case (policy, assets) =>
-              val mints = assets.filter((_, value) => value > 0)
-              if mints.isEmpty then None else Some(policy -> mints)
-          })
-        )
+
         val getConsumedMaryValue = consumedValue + minted
         val conwayConsumed = getConsumedMaryValue
         Right(conwayConsumed)
@@ -70,8 +72,12 @@ object TxBalance {
 
     def produced(tx: Transaction, protocolParams: ProtocolParams): Value = {
         val txBody = tx.body.value
+
+        val outputs = txBody.outputs
+            .map(_.value.value)
+            .foldLeft(Value.zero)(_ + _)
+
         val mint = txBody.mint.getOrElse(MultiAsset.empty)
-        val certificates = tx.body.value.certificates.toSeq
         val burned = Value(
           Coin.zero,
           MultiAsset(mint.assets.flatMap { case (policy, assets) =>
@@ -81,10 +87,9 @@ object TxBalance {
               if burns.isEmpty then None else Some(policy -> burns)
           })
         )
-        val outputs = txBody.outputs
-            .map(_.value.value)
-            .foldLeft(Value.zero)(_ + _)
+
         // Calculate total deposits for Shelley-era certificates (stake pool and delegation)
+        val certificates = tx.body.value.certificates.toSeq
         val shelleyTotalDepositsTxCerts: Coin = Certificate.shelleyTotalDeposits(
           protocolParams,
           certificates
