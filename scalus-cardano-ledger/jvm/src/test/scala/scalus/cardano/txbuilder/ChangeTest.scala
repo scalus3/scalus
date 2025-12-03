@@ -159,7 +159,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                       "Non-change outputs were modified"
                     )
                 case Left(_) =>
-                    // invariant: _if_ the change is handled, non-change outputs are preserved
+                // invariant: _if_ the change is handled, non-change outputs are preserved
             }
         }
     }
@@ -172,9 +172,12 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 case Right(updatedTx) =>
                     val changeCount = updatedTx.body.value.outputs
                         .count(_.value.address == changeAddr)
-                    assert(changeCount <= 1, s"Found $changeCount change outputs, expected at most 1")
+                    assert(
+                      changeCount <= 1,
+                      s"Found $changeCount change outputs, expected at most 1"
+                    )
                 case Left(_) =>
-                    // invariant: _if_ the change is handled, one change output exists
+                // invariant: _if_ the change is handled, one change output exists
             }
         }
     }
@@ -233,8 +236,8 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                       updatedTx.body.value.fee == tx.body.value.fee,
                       "Fee was modified"
                     )
-                case Left(e) => 
-                    // invariant _if_ the change is handled, ws is never modified
+                case Left(e) =>
+                // invariant _if_ the change is handled, ws is never modified
             }
         }
     }
@@ -254,7 +257,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             // Output range can depend on input if not specified
             outputAda <- outputAdaRange match {
                 case Some((min, max)) => Gen.choose(min, max)
-                case None => Gen.choose(2_000_000L, inputAda)
+                case None             => Gen.choose(2_000_000L, inputAda)
             }
 
             (_, tx) <- txGen(
@@ -288,9 +291,9 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             hasChangeOutput <- Gen.oneOf(true, false)
             changeAddr <- genPubkeyAddr()
 
-            txWithChange = if hasChangeOutput then
-                addChangeOutput(tx, changeAddr, Value.lovelace(2_000_000))
-            else tx
+            txWithChange =
+                if hasChangeOutput then addChangeOutput(tx, changeAddr, Value.lovelace(2_000_000))
+                else tx
 
             diff = Value.lovelace(diffAda)
         } yield (txWithChange, changeAddr, diff)
@@ -429,7 +432,8 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
             val adaDistribution = List.tabulate(parts) { i =>
                 if i < parts - 1 then adaPerPart
-                else math.max(minAdaForSimpleOutput, remainder) // Ensure last part also meets minAda
+                else
+                    math.max(minAdaForSimpleOutput, remainder) // Ensure last part also meets minAda
             }
 
             val tokenDistribution = List.tabulate(parts) { i =>
