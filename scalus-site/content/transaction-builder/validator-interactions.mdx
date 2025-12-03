@@ -1,0 +1,214 @@
+---
+title: Validator Interactions
+sidebarTitle: Validator Interactions
+---
+
+import { Callout } from 'nextra/components'
+
+# Validator Interactions
+
+This guide demonstrates how to build transactions that interact with Plutus validators, using a real-world example: a Hash Time Locked Contract (HTLC).
+
+## HTLC Overview
+
+An HTLC is a smart contract that locks funds until either:
+1. The receiver reveals a secret (preimage) before a timeout, or
+2. The timeout expires and the original sender can reclaim the funds
+
+This pattern is useful for atomic swaps, payment channels, and escrow services.
+
+## Sharing Code Between Validator and Transaction Builder
+
+One of TxBuilder's key advantages is code reuse. The same data types used in your validator can be used when building transactions:
+
+```scala copy
+import scalus.builtin.{ByteString, ToData}
+
+// Shared data types used in both validator and transaction building
+case class Config(
+  committer: PubKeyHash,
+  receiver: PubKeyHash,
+  image: ByteString,     // Hash of the secret
+  timeout: Long          // Deadline (slot number)
+) derives ToData
+
+enum Action derives ToData {
+  case Reveal(preimage: ByteString)
+  case Timeout
+}
+```
+
+These types are used in the validator logic and when constructing transactions, ensuring type safety across your entire application.
+
+## Lock Transaction
+
+Lock funds in the HTLC by sending them to the script address with the configuration as datum:
+
+```scala copy
+def lock(
+  utxos: Utxos,
+  value: Value,
+  changeAddress: Address,
+  committer: AddrKeyHash,
+  receiver: AddrKeyHash,
+  image: ByteString,
+  timeout: Long
+): Transaction = {
+  val datum = Config(
+    PubKeyHash(committer),
+    PubKeyHash(receiver),
+    image,
+    timeout
+  )
+
+  TxBuilder
+    .withCustomEvaluator(env, evaluator)
+    .spend(utxos)
+    .payTo(scriptAddress, value, datum)  // Lock funds with config
+    .changeTo(changeAddress)
+    .build()
+    .sign(signer)
+    .transaction
+}
+```
+
+The funds are now locked at the script address with the HTLC configuration stored in the datum.
+
+## Reveal Transaction
+
+The receiver can claim the funds by revealing the preimage:
+
+```scala copy
+def reveal(
+  utxos: Utxos,
+  collateralUtxos: Utxos,
+  lockedUtxo: Utxo,
+  payeeAddress: Address,
+  changeAddress: Address,
+  preimage: ByteString,
+  receiverPkh: AddrKeyHash,
+  time: Long
+): Transaction = {
+  val redeemer = Action.Reveal(preimage)
+
+  TxBuilder
+    .withCustomEvaluator(env, evaluator)
+    .spend(utxos)
+    .collaterals(collateralUtxos)
+    .spend(lockedUtxo, redeemer, script, Set(receiverPkh))  // Spend with redeemer
+    .payTo(payeeAddress, lockedUtxo.output.value)
+    .validFrom(java.time.Instant.ofEpochMilli(time))
+    .changeTo(changeAddress)
+    .build()
+    .sign(signer)
+    .transaction
+}
+```
+
+Key points:
+- The redeemer contains the preimage that hashes to the image in the datum
+- The receiver's signature is required (`Set(receiverPkh)`)
+- The validator checks that the hash matches and the receiver signed
+
+## Timeout Transaction
+
+After the timeout, the committer can reclaim the funds:
+
+```scala copy
+def timeout(
+  utxos: Utxos,
+  collateralUtxos: Utxos,
+  lockedUtxo: Utxo,
+  payeeAddress: Address,
+  changeAddress: Address,
+  committerPkh: AddrKeyHash,
+  time: Long
+): Transaction = {
+  val redeemer = Action.Timeout
+
+  TxBuilder
+    .withCustomEvaluator(env, evaluator)
+    .spend(utxos)
+    .collaterals(collateralUtxos)
+    .spend(lockedUtxo, redeemer, script, Set(committerPkh))
+    .payTo(payeeAddress, lockedUtxo.output.value)
+    .validFrom(java.time.Instant.ofEpochMilli(time))  // Must be after timeout
+    .changeTo(changeAddress)
+    .build()
+    .sign(signer)
+    .transaction
+}
+```
+
+Key points:
+- The validator checks that the timeout has passed
+- The committer's signature is required
+- The `validFrom` ensures the transaction is only valid after the timeout
+
+## Script Evaluation
+
+TxBuilder automatically evaluates the validator during `build()`:
+
+```scala copy
+val evaluator = PlutusScriptEvaluator(
+  CardanoInfo(env.protocolParams, env.network, env.slotConfig),
+  EvaluatorMode.EvaluateAndComputeCost
+)
+
+TxBuilder
+  .withCustomEvaluator(env, evaluator)
+  .spend(lockedUtxo, redeemer, script)
+  // ... rest of transaction
+  .build()  // Validator is evaluated here
+```
+
+If the validator fails (wrong preimage, wrong signer, wrong time, etc.), `build()` throws an exception with the error message from the validator.
+
+<Callout type="info">
+  Script evaluation happens locally during transaction building, allowing you to catch errors before submitting to the network.
+</Callout>
+
+## Type-Safe Data Serialization
+
+Because both the validator and transaction builder use the same Scala types, serialization is automatic and type-safe:
+
+```scala copy
+// In validator
+val config = datum.to[Config]  // Deserialize from Data
+
+// In transaction builder
+val datum = Config(...).toData  // Serialize to Data
+```
+
+This eliminates a whole class of serialization errors common in other ecosystems.
+
+## Testing the Full Flow
+
+You can test the complete flow in a single test:
+
+```scala copy
+test("HTLC full flow") {
+  val preimage = hex"deadbeef"
+  val image = blake2b_256(preimage)
+  val timeout = currentSlot + 100
+
+  // 1. Lock
+  val lockTx = lock(utxos, Value.ada(100), changeAddr, committer, receiver, image, timeout)
+
+  // 2. Extract locked UTxO
+  val lockedUtxo = findLockedUtxo(lockTx, scriptAddress)
+
+  // 3. Reveal before timeout
+  val revealTx = reveal(
+    utxos, collaterals, lockedUtxo,
+    receiverAddr, changeAddr, preimage, receiver, currentSlot + 50
+  )
+
+  assert(revealTx.body.value.inputs.contains(lockedUtxo.input))
+}
+```
+
+## Next Steps
+
+- **[Advanced Features](/docs/transaction-builder/advanced-features)** - Learn about `complete()`, reference scripts, and more
+- **[Smart Contract Examples](https://github.com/nau/scalus/tree/master/scalus-examples)** - More validator examples

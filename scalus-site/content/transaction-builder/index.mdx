@@ -4,6 +4,81 @@ title: Transaction Builder
 sidebarTitle: Transaction Builder
 ---
 
+import { Callout } from 'nextra/components'
+
 # Transaction Builder
 
+The Scalus Transaction Builder (`TxBuilder`) is a fluent API for constructing Cardano transactions. It automatically handles
+script evaluation and budget calculation, balancing and automatic UTxO querying.
 
+TxBuilder is designed to work togther with the rest of the Scalus ecosystem.
+Since your validators are written in Scala, you can build app-specific transactions that share code with your smart contracts. This enables:
+
+- **Code Reuse** - Share data types, validation logic, and utilities between on-chain and off-chain code
+- **Type Safety** - Leverage Scala's type system across your entire application stack
+- **Integrated Testing** - Test validators and transaction building together in the same environment
+
+## Basic Usage
+
+Here's a simple example of building a transaction:
+
+```scala copy
+val tx = TxBuilder(env)
+  .spend(utxo)                           // Add UTxO as input
+  .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA to recipient
+  .changeTo(changeAddress)                // Send excess value as change
+  .build()                                // Finalize: calculate fees, evaluate scripts
+  .sign(signer)                           // Add signature
+  .transaction                            // Get the final transaction
+```
+
+<Callout type="info">
+  TxBuilder is purely functional - each method returns a new instance with updated state. Only `build()` performs effects by evaluating scripts and balancing the transaction.
+</Callout>
+
+## Automatic Transaction Completion
+
+TxBuilder can automatically infer and fill in transaction details that would otherwise require manual specification.
+The `complete()` method handles everything that can be determined programmatically:
+
+```scala copy
+TxBuilder(env)
+  .payTo(recipient, Value.ada(10))
+  .complete(provider, sponsorAddress)  // Automatically complete the transaction using the funds from `sponsorAddress`
+  .build()
+```
+
+The `complete()` method automatically:
+- Selects UTxOs from the sponsor address to cover outputs and fees
+- Adds collateral inputs if the transaction includes script execution, respecting the collateral return output
+- Calculates and sets appropriate fees based on transaction size and execution costs
+- Creates change outputs to return excess value to the sponsor
+- Iteratively rebalances as the transaction grows and fees change
+
+This allows you to focus on the transaction's purpose (what you want to send, to whom) while `complete()` handles the mechanical details of making it valid.
+
+## Script Evaluation
+
+TxBuilder evaluates Plutus scripts during the build process to ensure they will succeed on-chain. If any script fails validation, `build()` throws an exception with details about the failure.
+
+```scala copy
+val evaluator = PlutusScriptEvaluator(
+  CardanoInfo(env.protocolParams, env.network, env.slotConfig),
+  EvaluatorMode.EvaluateAndComputeCost
+)
+
+TxBuilder.withCustomEvaluator(env, evaluator)
+  .spend(scriptUtxo, redeemer, script)
+  .payTo(recipient, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()  // Scripts are evaluated here
+```
+
+## Next Steps
+
+- **[First Transaction](/docs/transaction-builder/first-transaction)** - Build your first transaction step by step
+- **[Payment Methods](/docs/transaction-builder/pay-methods)** - Learn different ways to send ADA and tokens
+- **[Spending UTxOs](/docs/transaction-builder/spending-utxos)** - Understand input selection and spending script UTxOs
+- **[Minting & Burning](/docs/transaction-builder/mint-burn-assets)** - Create and destroy native tokens
+- **[Validator Interactions](/docs/transaction-builder/validator-interactions)** - Work with Plutus validators
+- **[Advanced Features](/docs/transaction-builder/advanced-features)** - Deep dive into advanced capabilities

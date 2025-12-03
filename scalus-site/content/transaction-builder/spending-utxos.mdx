@@ -1,0 +1,185 @@
+---
+title: Spending UTxOs
+sidebarTitle: Spending UTxOs
+---
+
+import { Callout } from 'nextra/components'
+
+# Spending UTxOs
+
+This guide covers how to spend different types of UTxOs: from regular addresses, from script addresses, and using reference inputs.
+
+## Spending from Public Key Addresses
+
+The simplest case is spending a UTxO locked by a public key:
+
+```scala copy
+val utxo: Utxo = // ... UTxO from a regular address
+
+TxBuilder(env)
+  .spend(utxo)  // Add as input
+  .payTo(recipient, Value.ada(10))
+  .changeTo(changeAddress)
+  .build()
+  .sign(signer)  // Must be signed by the address owner
+```
+
+You can also spend multiple UTxOs at once:
+
+```scala copy
+val utxos: Utxos = Map(
+  input1 -> output1,
+  input2 -> output2
+)
+
+TxBuilder(env)
+  .spend(utxos)  // Spend all UTxOs
+  .payTo(recipient, Value.ada(20))
+  .changeTo(changeAddress)
+  .build()
+```
+
+## Spending from Script Addresses
+
+When spending UTxOs locked by a validator script, you must provide a redeemer and the script itself:
+
+```scala copy
+import scalus.builtin.Data
+
+val scriptUtxo: Utxo = // ... UTxO at script address
+val redeemer = MyRedeemer(...)  // Your redeemer type
+
+// Spend with inline script
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .collaterals(collateralUtxo)  // Required for script execution
+  .payTo(recipient, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()
+```
+
+<Callout type="warning">
+  Script transactions require collateral inputs. These are only consumed if the script fails validation.
+</Callout>
+
+### With Required Signers
+
+If your validator requires additional signatures:
+
+```scala copy
+val requiredSigners = Set(pubKeyHash1, pubKeyHash2)
+
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script, requiredSigners)
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()
+  .sign(signer1)
+  .sign(signer2)  // Must provide all required signatures
+```
+
+The `requiredSigners` set is added to the transaction's required signers field, and the validator can check for these signatures in the transaction context.
+
+## Spending with Attached Scripts
+
+If you've attached a script earlier using `attach()`, you can reference it when spending:
+
+```scala copy
+TxBuilder(env)
+  .attach(script)  // Attach once
+  .spend(scriptUtxo1, redeemer1)  // References attached script
+  .spend(scriptUtxo2, redeemer2)  // Can reuse for multiple inputs
+  .collaterals(collateralUtxo)
+  .payTo(recipient, totalValue)
+  .changeTo(changeAddress)
+  .build()
+```
+
+TxBuilder will automatically find the script in the attached scripts map and use it for validation.
+
+## Delayed Redeemers
+
+For advanced cases where the redeemer depends on the final transaction structure:
+
+```scala copy
+def buildRedeemer(tx: Transaction): Data = {
+  // Compute redeemer based on final transaction
+  val outputCount = tx.body.value.outputs.size
+  MyRedeemer(outputCount).toData
+}
+
+TxBuilder(env)
+  .attach(script)  // Must attach script first
+  .spend(scriptUtxo, buildRedeemer)  // Redeemer computed after assembly
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()
+```
+
+The redeemer function is called after the transaction is assembled but before script evaluation, allowing self-referential validation logic.
+
+## Reference Inputs
+
+Reference inputs allow scripts to read UTxOs without consuming them:
+
+```scala copy
+val referenceUtxo: Utxo = // ... UTxO with reference data
+
+TxBuilder(env)
+  .spend(myUtxo)
+  .references(referenceUtxo)  // Add as reference input
+  .payTo(recipient, Value.ada(10))
+  .changeTo(changeAddress)
+  .build()
+```
+
+Multiple reference inputs can be added:
+
+```scala copy
+TxBuilder(env)
+  .spend(myUtxo)
+  .references(refUtxo1, refUtxo2, refUtxo3)
+  .payTo(recipient, Value.ada(10))
+  .changeTo(changeAddress)
+  .build()
+```
+
+Reference inputs are visible in the script context but are not spent.
+
+## Collateral Inputs
+
+Script transactions require collateral to cover fees if validation fails:
+
+```scala copy
+val collateral: Utxo = // ... Pure ADA UTxO
+
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .collaterals(collateral)  // Add single collateral
+  .payTo(recipient, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()
+```
+
+Multiple collateral inputs:
+
+```scala copy
+TxBuilder(env)
+  .spend(scriptUtxo, redeemer, script)
+  .collaterals(collateral1, collateral2)
+  .payTo(recipient, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()
+```
+
+<Callout type="info">
+  When using `complete()`, collateral inputs are automatically selected and added if the transaction includes script execution. TxBuilder also automatically creates collateral return outputs when needed and respects the protocol's collateral requirements.
+</Callout>
+
+## Next Steps
+
+- **[Minting & Burning](/docs/transaction-builder/mint-burn-assets)** - Create and destroy native tokens
+- **[Validator Interactions](/docs/transaction-builder/validator-interactions)** - Detailed guide on working with validators
+- **[Advanced Features](/docs/transaction-builder/advanced-features)** - Learn about `complete()` and automatic input selection

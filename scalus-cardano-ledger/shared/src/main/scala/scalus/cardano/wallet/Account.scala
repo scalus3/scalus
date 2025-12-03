@@ -1,6 +1,7 @@
 package scalus.cardano.wallet
 
 import scalus.builtin.{platform, ByteString}
+import scalus.cardano.txbuilder.TransactionSigner
 
 trait KeyPair {
     type Underlying
@@ -22,6 +23,8 @@ trait KeyPair {
           ByteString.fromArray(signature)
         )
     }
+
+    def toTuple: (Array[Byte], Array[Byte]) = (publicKeyBytes, privateKeyBytes)
 }
 
 trait Account {
@@ -29,4 +32,12 @@ trait Account {
     def changeKeyPair: KeyPair
     def stakeKeyPair: KeyPair
     def drepKeyPair: KeyPair
+
+    def signerForUtxos: TransactionSigner = {
+        val (publicBytes, privateBytes) = paymentKeyPair.toTuple
+        TransactionSigner(
+          Set((ByteString.fromArray(publicBytes), ByteString.fromArray(privateBytes)))
+        )
+
+    }
 }

@@ -1,0 +1,117 @@
+---
+title: Advanced Features
+sidebarTitle: Advanced Features
+---
+
+import { Callout } from 'nextra/components'
+
+# Advanced Features
+
+## Testing Validators with Custom Evaluators
+
+One of the challenges we encounter when testing Cardano smart contracts is testing negative cases-scenarios where your
+ validator *should* reject a transaction. TxBuilder's enables the developer to do it via custom evaluators.
+
+### The Problem with Negative Testing
+
+When building a transaction with scripts, TxBuilder evaluates them during `build()` to:
+1. Verify the script passes validation with the provided redeemer
+2. Calculate execution costs to fill out the `Redeemer`
+
+This creates a dilemma for negative testing:
+
+```scala copy
+// A redeemer that is known to fail with our validator
+val invalidRedeemer = Data(...)
+
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, invalidRedeemer, validator)
+  .payTo(attacker, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()  // Throws `PlutusScriptEvaluationError` by default
+```
+
+The validator correctly rejects the invalid redeemer during local evaluation, but this means `build()` throws an exception and you never get a transaction to test.
+You can't submit it to verify the on-chain behavior.
+
+### The Solution: Constant Budget Evaluator
+
+```scala copy
+// Use constant budget evaluator for negative tests
+val tx = TxBuilder.withConstMaxBudgetEvaluator(env)
+  .spend(scriptUtxo, invalidRedeemer, validator)
+  .payTo(attacker, scriptUtxo.output.value)
+  .changeTo(changeAddress)
+  .build()  // The previous exception is gone, as the scripts were never actually evaluated
+  .sign(signer)
+  .transaction
+
+// Now you can submit and verify it fails on-chain
+provider.submitTransaction(tx) match {
+  case Left(error) =>
+    assert(error.contains("MyValidator logic error"))
+  case Right(_) =>
+    fail("Transaction should have been rejected!")
+}
+```
+
+<Callout type="info">
+  This technique bridges unit testing (validator in isolation) and integration testing (full transaction flow including on-chain rejection).
+</Callout>
+
+### Testing Pattern: Positive and Negative Cases
+
+Here's a complete testing pattern using both evaluators:
+
+```scala copy
+class ValidatorIntegrationTest extends AnyFunSuite {
+  val defaultEvaluator = PlutusScriptEvaluator(
+    cardanoInfo,
+    EvaluatorMode.EvaluateAndComputeCost
+  )
+
+  test("valid redeemer is accepted on-chain") {
+    val validRedeemer = Action.Reveal(correctPreimage)
+
+    // Use default evaluator - should pass locally
+    val tx = TxBuilder.withCustomEvaluator(env, defaultEvaluator)
+      .spend(collateralUtxos)
+      .spend(scriptUtxo, validRedeemer, validator, Set(receiverPkh))
+      .payTo(receiver, scriptUtxo.output.value)
+      .changeTo(changeAddress)
+      .build()
+      .sign(signer)
+      .transaction
+
+    // Should succeed on-chain
+    provider.submitTransaction(tx) match {
+      case Right(txHash) =>
+        println(s"Transaction accepted: ${txHash.toHex}")
+      case Left(error) =>
+        fail(s"Valid transaction was rejected: $error")
+    }
+  }
+
+  test("invalid redeemer is rejected on-chain") {
+    val invalidRedeemer = Action.Reveal(wrongPreimage)
+
+    // Use constant budget evaluator - bypasses local validation
+    val tx = TxBuilder.withConstMaxBudgetEvaluator(env)
+      .spend(collateralUtxos)
+      .spend(scriptUtxo, invalidRedeemer, validator, Set(receiverPkh))
+      .payTo(attacker, scriptUtxo.output.value)
+      .changeTo(changeAddress)
+      .build()
+      .sign(signer)
+      .transaction
+
+    // Should fail on-chain
+    provider.submitTransaction(tx) match {
+      case Left(error) =>
+        assert(error.contains("preimage hash mismatch"))
+      case Right(txHash) =>
+        fail(s"Invalid transaction was accepted: ${txHash.toHex}")
+    }
+  }
+}
+```

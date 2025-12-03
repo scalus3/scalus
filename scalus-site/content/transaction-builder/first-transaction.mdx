@@ -1,0 +1,164 @@
+---
+title: First Transaction
+sidebarTitle: First Transaction
+---
+
+import { Steps, Callout } from 'nextra/components'
+
+# Building Your First Transaction
+
+This guide walks you through building a simple Cardano transaction using Scalus TxBuilder. You'll learn the fundamental workflow: setting up the environment, building, and signing a transaction.
+
+<Steps>
+
+## Set Up the `CardanoInfo`
+
+First, choose an instance of `CardanoInfo` with the protocol parameters, network, and slot configuration:
+
+```scala copy
+import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.*
+
+// For mainnet
+val cardanoInfo = CardanoInfo.mainnet
+
+// For preview testnet
+val envPreview = Environment(
+  protocolParams = previewParams, // queried from elsewhere
+  network = Network.Testnet,
+  slotConfig = SlotConfig.Preview
+)
+```
+
+TxBuilder depends on the general Cardano Info to construct valid transactions.
+
+## Build the Transaction
+
+Use TxBuilder's fluent API to specify inputs, outputs, and change handling:
+
+```scala copy
+import scalus.cardano.address.Address
+import scalus.cardano.ledger.Value
+
+// Your UTxOs and addresses
+val myUtxo: Utxo = // ... UTxO to spend
+val recipientAddress: Address = // ... recipient's address
+val changeAddress: Address = // ... your change address
+
+val builder = TxBuilder(env)
+  .spend(myUtxo)                          // Add input
+  .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA
+  .changeTo(changeAddress)                // Handle change
+  .build()                                // Finalize transaction
+```
+
+The `build()` method:
+- Calculates the transaction fee based on size
+- Creates a change output with the remaining value
+- Validates that the transaction is balanced
+- Returns a new builder with the finalized transaction
+
+<Callout type="info">
+    Note that `Value.ada(100)` creates a Value with ten million lovelace and no extra tokens.
+</Callout>
+
+## Sign the Transaction
+
+Add signatures to authorize spending the inputs. You can create a `TransactionSigner` in two ways:
+
+**From a mnemonic phrase and derivation path:**
+
+```scala copy
+import scalus.crypto.Bip32PrivateKey
+
+val mnemonic = "test " * 24 + "sauce"
+val derivationPath = "m/1852'/1815'/0'/0/0"  // Standard Cardano derivation path for the first ADA wallet
+
+val signer = BloxbeanAccount(network, mnemonic, derivationPath).signerForUtxos
+```
+
+**From a specific keypair:**
+
+```scala copy
+val keyPair: KeyPair = // ... your keypair
+val signer = TransactionSigner(Set(keyPair))
+```
+
+Then sign the transaction:
+
+```scala copy
+val signedBuilder = builder.sign(signer)
+val transaction = signedBuilder.transaction
+```
+
+The `sign()` method adds the signature to the transaction's witness set. You can chain multiple `sign()` calls if multiple signatures are needed.
+
+## Submit the Transaction
+
+Finally, submit the signed transaction to the Cardano network:
+
+```scala copy
+import scalus.cardano.node.Provider
+
+val provider: Provider = // ... blockfrost, ogmios, etc.
+
+provider.submitTransaction(transaction) match {
+  case Right(txHash) =>
+    println(s"Transaction submitted: ${txHash.toHex}")
+  case Left(error) =>
+    println(s"Submission failed: $error")
+}
+```
+
+</Steps>
+
+## Complete Example
+
+Here's the full workflow in one place:
+
+```scala copy
+import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.*
+import scalus.cardano.address.Address
+import scalus.cardano.node.Provider
+
+// Setup
+val env = Environment.mainnet
+val myUtxo: Utxo = // ...
+val recipientAddress: Address = // ...
+val changeAddress: Address = // ...
+val signer: TransactionSigner = // ...
+val provider: Provider = // ...
+
+// Build, sign, and submit
+val transaction = TxBuilder(env)
+  .spend(myUtxo)
+  .payTo(recipientAddress, Value.ada(10))
+  .changeTo(changeAddress)
+  .build()
+  .sign(signer)
+  .transaction
+
+provider.submitTransaction(transaction)
+```
+
+## Using Automatic Completion
+
+For simpler cases, use `complete()` to let TxBuilder handle input selection automatically:
+
+```scala copy
+val transaction = TxBuilder(env)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(provider, changeAddress)  // Automatic input selection
+  .build()
+  .sign(signer)
+  .transaction
+```
+
+The `complete()` method queries the provider for UTxOs at your address and selects inputs to cover the payment and fees.
+
+## Next Steps
+
+- **[Payment Methods](/docs/transaction-builder/pay-methods)** - Different ways to send ADA and tokens
+- **[Spending UTxOs](/docs/transaction-builder/spending-utxos)** - Manual input selection and spending from scripts
+- **[Minting & Burning](/docs/transaction-builder/mint-burn-assets)** - Create and destroy native tokens
