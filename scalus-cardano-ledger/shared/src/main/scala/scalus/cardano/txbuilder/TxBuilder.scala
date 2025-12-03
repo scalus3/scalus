@@ -10,6 +10,7 @@ import scalus.cardano.ledger.rules.FeesOkValidator
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
+import scalus.cardano.ledger.rules.STS.Validator
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
@@ -49,6 +50,8 @@ import scala.collection.mutable
   *   scripts to be included in the transaction witness set
   * @param attachedData
   *   datum values to be included in the transaction witness set
+  * @param validators
+  *   ledger rules to run against the built transaction for additional validations
   */
 case class TxBuilder(
     env: Environment,
@@ -58,6 +61,7 @@ case class TxBuilder(
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedScripts: Map[ScriptHash, Script] = Map.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
+    validators: Seq[Validator] = Seq.empty
 ) {
 
     /** Adds the specified pubkey utxo to the list of inputs, thus spending it.
@@ -547,7 +551,7 @@ case class TxBuilder(
               params,
               handler,
               evaluator,
-              Seq.empty // todo: validators
+              validators
             )
         } yield finalized
 
