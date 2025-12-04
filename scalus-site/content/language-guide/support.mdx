@@ -1,15 +1,16 @@
 ---
-title: Supported Scala features
-sidebarTitle: Supported Scala features
+title: Supported Scala Features for Cardano Smart Contracts
+sidebarTitle: Supported Features
+description: Learn which Scala 3 features are supported when compiling to Plutus Core. Includes lambdas, pattern matching, higher-order functions, case classes, enums, and more.
 ---
 
-# Supported Scala features
+# Supported Scala Features
 
-Scalus compiles Scala code to Untyped Plutus Core (UPLC), which is a minimalist form of lambda calculus designed for blockchain execution. This fundamental constraint means that only a subset of Scala's rich feature set can be supported.
+Scalus compiles Scala code to Untyped Plutus Core (UPLC), a minimalist lambda calculus designed for secure blockchain execution. This constraint means only a subset of Scala's feature set is supported—those that can be efficiently and deterministically translated to UPLC.
 
-The compilation process transforms your Scala code into an intermediate representation before generating the final UPLC that runs on the Cardano blockchain. Due to UPLC's deliberately limited nature (optimized for security and determinism), many high-level Scala features cannot be directly translated.
+The compilation process transforms your Scala code into an intermediate representation before generating the final UPLC that runs on Cardano. UPLC's deliberately limited nature (optimized for security and determinism) excludes many high-level language features.
 
-## What Scala features are supported?
+## Supported Features
 
 Below is a comprehensive list of what Scala features are currently supported in Scalus:
 
@@ -31,7 +32,7 @@ Below is a comprehensive list of what Scala features are currently supported in 
 * tuples
 * value destructuring in vals: `val Some((a, b)) = optionOfTuple` 
 
-## Scala features that are not supported
+## Unsupported Features
 
 * `var`s and `lazy val`s - use immutable `val` declarations instead
 * `while` loops - use recursion or higher-order functions like `fold`
