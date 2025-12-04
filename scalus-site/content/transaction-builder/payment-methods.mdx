@@ -1,15 +1,16 @@
 ---
-title: Payment Methods
+title: Cardano Payment Methods - Send ADA and Native Tokens
+description: Learn different ways to send ADA and native tokens on Cardano. Covers simple payments, token transfers, inline datums, and datum hashes using Scalus TxBuilder.
 sidebarTitle: Payment Methods
 ---
 
 import { Callout, Tabs } from 'nextra/components'
 
-# Payment Methods
+# Payment Methods: Send ADA and Native Tokens
 
 TxBuilder provides several methods for creating transaction outputs with different levels of control. This guide covers the various ways to send ADA and native tokens.
 
-## Simple ADA Payment
+## How to Make Simple ADA Payment
 
 The most basic payment sends ADA to an address without any datum:
 
@@ -21,7 +22,7 @@ TxBuilder(env)
   .build()
 ```
 
-## Sending Native Tokens
+## Sending Native Tokens on Cardano
 
 Send native tokens along with ADA:
 

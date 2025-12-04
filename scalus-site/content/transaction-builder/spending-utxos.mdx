@@ -1,15 +1,16 @@
 ---
-title: Spending UTxOs
+title: Spending UTxOs on Cardano - Inputs, Scripts & Collateral
+description: Complete guide to spending UTxOs from wallet addresses and Plutus script addresses. Learn about reference inputs, collateral requirements, and delayed redeemers.
 sidebarTitle: Spending UTxOs
 ---
 
 import { Callout } from 'nextra/components'
 
-# Spending UTxOs
+# Spending UTxOs: Inputs, Scripts, and Collateral
 
 This guide covers how to spend different types of UTxOs: from regular addresses, from script addresses, and using reference inputs.
 
-## Spending from Public Key Addresses
+## Spending from Wallet / Public Key Address
 
 The simplest case is spending a UTxO locked by a public key:
 
@@ -39,7 +40,7 @@ TxBuilder(env)
   .build()
 ```
 
-## Spending from Script Addresses
+## Spending from Script Address
 
 When spending UTxOs locked by a validator script, you must provide a redeemer and the script itself:
 

@@ -1,15 +1,16 @@
 ---
-title: Minting & Burning Assets
+title: Minting and Burning Native Tokens on Cardano
+description: Mint and burn Native tokens on Cardano with Scalus. Learn about minting policies, NFT creation, burning tokens, and working with multiple token types.
 sidebarTitle: Minting & Burning
 ---
 
 import { Callout } from 'nextra/components'
 
-# Minting & Burning Assets
+# Minting and Burning Native Tokens on Cardano
 
 This guide covers how to create (mint) and destroy (burn) native tokens on Cardano using TxBuilder.
 
-## Understanding Minting Policies
+## Understanding Cardano Minting Policies
 
 A minting policy is a Plutus script that controls when tokens can be created or destroyed. The policy ID (the script hash) becomes part of the token identifier.
 
@@ -17,7 +18,7 @@ A minting policy is a Plutus script that controls when tokens can be created or 
   Minting creates tokens but doesn't automatically send them anywhere. You must explicitly add outputs to receive the newly minted tokens.
 </Callout>
 
-## Minting Tokens
+## Minting Native Tokens
 
 To mint tokens, use the `mintAndAttach()` method which combines minting with script attachment:
 
@@ -43,7 +44,7 @@ TxBuilder(env)
 
 This mints 1000 tokens and sends them to the recipient along with 2 ADA.
 
-## Minting Multiple Token Types
+## Minting Multiple NativeToken Types
 
 Mint different tokens under the same policy:
 
@@ -75,7 +76,7 @@ TxBuilder(env)
   .build()
 ```
 
-## Burning Tokens
+## Burning Native Tokens
 
 To burn tokens, use negative amounts:
 
@@ -130,7 +131,7 @@ TxBuilder(env)
   .sign(signer)  // Must provide required signature
 ```
 
-## NFT Minting
+## How to Mint NFTs on Cardano
 
 Mint a unique NFT (1 token, typically with amount = 1):
 
