@@ -7,17 +7,35 @@ import scalus.cardano.node.Provider
 import scalus.cardano.node.SubmitError
 import scalus.cardano.node.SubmitError.NodeError
 
-class MockLedgerApi(
+import java.util.concurrent.atomic.AtomicReference
+
+/** An in-memory bare-bones node implementation.
+  *
+  * Allows submitting transaction and querying UTxO state. Runs [[validators]] and [[mutators]]
+  * against all submitted transactions. The default validator and mutator lists reflect the Cardano
+  * Node UTxO related ledger rules.
+  *
+  * @see
+  *   [[scalus.cardano.ledger.rules]] for the ledger rules
+  */
+class NodeEmulator(
     initialUtxos: Utxos = Map.empty,
-    private var context: Context = Context.testMainnet(),
-    val validators: Iterable[STS.Validator] = MockLedgerApi.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = MockLedgerApi.defaultMutators
+    initialContext: Context = Context.testMainnet(),
+    val validators: Iterable[STS.Validator] = NodeEmulator.defaultValidators,
+    val mutators: Iterable[STS.Mutator] = NodeEmulator.defaultMutators
 ) extends Provider {
-    def submit(transaction: Transaction): Either[SubmitError, Unit] = {
-        processTransaction(transaction) match {
+    private val stateRef = new AtomicReference[State](State(initialUtxos))
+    private val contextRef = new AtomicReference[Context](initialContext)
+
+    @scala.annotation.tailrec
+    final def submit(transaction: Transaction): Either[SubmitError, Unit] = {
+        val currentState = stateRef.get()
+        val currentContext = contextRef.get()
+
+        processTransaction(currentContext, currentState, transaction) match {
             case Right(newState) =>
-                state = newState
-                Right(())
+                if stateRef.compareAndSet(currentState, newState) then Right(())
+                else submit(transaction)
             case Left(t: TransactionException) =>
                 Left(NodeError(s"Ledger rule violation: ${t.explain}", Some(t)))
         }
@@ -108,33 +126,36 @@ class MockLedgerApi(
             )
     }
 
-    def setSlot(slot: SlotNo): Unit = {
-        context = Context(
-          fee = context.fee,
-          env = context.env.copy(slot = slot),
-          slotConfig = context.slotConfig
+    @scala.annotation.tailrec
+    final def setSlot(slot: SlotNo): Unit = {
+        val currentContext = contextRef.get()
+        val newContext = Context(
+          fee = currentContext.fee,
+          env = currentContext.env.copy(slot = slot),
+          slotConfig = currentContext.slotConfig
         )
+        if !contextRef.compareAndSet(currentContext, newContext) then setSlot(slot)
     }
 
-    def snapshot(): MockLedgerApi = MockLedgerApi(
+    def snapshot(): NodeEmulator = NodeEmulator(
       initialUtxos = this.utxos,
-      context = this.context,
+      initialContext = this.contextRef.get(),
       validators = this.validators,
       mutators = this.mutators
     )
 
-    private var state: State = State(initialUtxos)
-
-    private def utxos: Utxos = state.utxos
+    private def utxos: Utxos = stateRef.get().utxos
 
     private def processTransaction(
+        context: Context,
+        state: State,
         transaction: Transaction
     ): Either[TransactionException, State] = {
         STS.Mutator.transit(validators, mutators, context, state, transaction)
     }
 }
 
-object MockLedgerApi {
+object NodeEmulator {
     val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
     val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
 }

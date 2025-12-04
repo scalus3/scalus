@@ -26,6 +26,40 @@ trait Provider {
         minRequiredTotalAmount: Option[Coin] = None
     ): Either[RuntimeException, Utxos]
 
+    /** Submit transaction and wait for confirmation by polling for the first output.
+      *
+      * Returns when the transaction appears on the ledger, or when the [[maxAttempts]] are made or
+      * [[delayMs]] elapses, whatever happens first.
+      */
+    def submitAndWait(
+        tx: Transaction,
+        maxAttempts: Int = 10,
+        delayMs: Int = 500
+    ): Either[SubmitError, Unit] = {
+        submit(tx) match {
+            case Left(error) => return Left(error)
+            case Right(_)    => ()
+        }
+
+        val txOutRef = TransactionInput(tx.id, 0)
+        var attempts = 0
+
+        while attempts < maxAttempts do {
+            findUtxo(txOutRef) match {
+                case Right(_) => return Right(())
+                case Left(_) =>
+                    attempts += 1
+                    if attempts < maxAttempts then Thread.sleep(delayMs)
+            }
+        }
+
+        Left(
+          SubmitError.NetworkError(
+            s"Transaction not confirmed after ${maxAttempts} attempts (${maxAttempts * delayMs}ms)"
+          )
+        )
+    }
+
 //    def setSlot(slot: SlotNo): Unit
 }
 

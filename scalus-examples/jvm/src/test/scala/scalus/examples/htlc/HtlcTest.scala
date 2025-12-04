@@ -10,7 +10,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.SubmitError
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.testing.kit.{MockLedgerApi, ScalusTest, TestUtil}
+import scalus.testing.kit.{NodeEmulator, ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 
@@ -76,10 +76,10 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
       timeout
     ).toData
 
-    private def createProvider(): MockLedgerApi = {
+    private def createProvider(): NodeEmulator = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-        MockLedgerApi(
+        NodeEmulator(
           initialUtxos = Map(
             TransactionInput(genesisHash, 0) ->
                 TransactionOutput.Babbage(
@@ -92,13 +92,13 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   value = Value.lovelace(100_000_000L)
                 )
           ),
-          context = Context.testMainnet(),
+          initialContext = Context.testMainnet(),
           mutators = Set(PlutusScriptsTransactionMutator)
         )
     }
 
     private def runValidator(
-        provider: MockLedgerApi,
+        provider: NodeEmulator,
         tx: Transaction,
         lockedInput: TransactionInput
     ): Result = {
