@@ -1,14 +1,14 @@
 ---
 title: Testing Cardano Smart Contracts
 sidebarTitle: Testing
+description: Test Cardano validators using property-based testing with ScalaCheck. Generate random test data, create test scenarios, and ensure validator correctness.
 ---
 
 # Testing Smart Contracts
 
-Scalus leverages [ScalaCheck](https://www.scalacheck.org/) for property-based testing of validators.
+Scalus leverages [ScalaCheck](https://www.scalacheck.org/) for property-based testing of validators, enabling you to test your contracts robustly across a wide range of inputs.
 
-Property-based tests allow you to test your validator robustly, ensuring that every invariant is held for a specified
-range of inputs.
+Property-based tests ensure that every invariant holds for a specified range of inputs, catching edge cases that example-based tests might miss.
 
 ## The `ScalusTest` Trait
 
@@ -29,8 +29,6 @@ trait ScalusTest {
 ```
 
 `extend` your test suite from `ScalusTest` to get access to many useful testing utilities.
-
-
 
 ## Setting Up Tests
 

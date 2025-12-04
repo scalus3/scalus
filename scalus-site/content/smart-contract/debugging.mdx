@@ -1,9 +1,11 @@
 ---
 title: Debugging Cardano Smart Contracts
 sidebarTitle: Debugging
+description: Debug Cardano validators as regular Scala code. Use IDE debuggers, breakpoints, logging, error traces, and troubleshooting techniques for smart contracts.
 ---
 
 # Debugging Smart Contracts
+
 ## Scala-Level Debugging
 
 Before compiling to UPLC, you can debug your validator as regular Scala code:
@@ -68,3 +70,46 @@ val result = compiled.toUplc(generateErrorTraces = true).evaluateDebug
 **The `generateErrorTraces` flag:**
 - `true`: Adds error location information (useful for debugging, but increases script size)
 - `false`: Minimal script size (for production deployment)
+
+## Debugging with IDE
+
+One of Scalus's biggest advantages is the ability to debug validators as regular Scala code:
+
+### Setting Up Debug Mode
+
+1. **Run tests in debug mode** - Use your IDE's debug test runner
+2. **Set breakpoints** - Click in the gutter next to line numbers
+3. **Inspect variables** - Hover over variables or use the debug panel
+4. **Step through code** - Use step over, step into, step out
+
+### Example Debug Session
+
+```scala
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    val owner = datum.getOrFail("No datum").to[PubKeyHash]
+    // Set breakpoint here ⬅
+    val signed = tx.signatories.contains(owner)
+    // Inspect 'signed' variable
+    require(signed, "Not signed")
+  }
+```
+
+**Debugging workflow:**
+1. Set a breakpoint in your validator
+2. Run test in debug mode
+3. When breakpoint hits, inspect variables
+4. Step through execution to understand behavior
+5. Fix logic errors before compiling to UPLC
+
+## Next Steps
+
+- **[Testing](/docs/smart-contract/testing)** - Write comprehensive tests for your validators
+- **[Compiling](/docs/smart-contract/compiling)** - Compile debugged validators to Plutus scripts
+- **[Optimisations](/docs/smart-contract/optimisations)** - Optimize script size and execution costs

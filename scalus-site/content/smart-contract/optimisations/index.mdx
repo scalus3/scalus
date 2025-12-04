@@ -1,20 +1,33 @@
 ---
 asIndexPage: true
 title: Cardano Smart Contract Optimisations
-sidebarTitle: Advanced optimisations
+sidebarTitle: Advanced Optimisations
+description: Advanced optimization techniques for Cardano smart contracts. Learn macros, Script Context access, SIR debugging, and UPLC optimizations to reduce script size and execution costs.
 ---
 
 # Advanced Smart Contract Optimisations
 
-This section covers advanced topics in Scalus that help you optimize your on-chain code, access specific data efficiently, and understand the underlying compilation process.
+Optimize your Cardano validators to reduce script size and execution costs. This section covers advanced techniques to make your smart contracts more efficient on-chain.
 
-Scalus provides powerful features:
+## Why Optimize?
 
-- **[Macros](/docs/smart-contract/optimisations/macros)** - Inlining constants and conditional code generation
-- **[Direct access to Script Context fields](/docs/smart-contract/optimisations/script-context)**
-- **[Scalus Intermediate Representation (SIR)](/docs/smart-contract/optimisations/sir)** for debugging
-- **[UPLC optimizations](/docs/smart-contract/optimisations/uplc)** to reduce script size and execution costs
+On Cardano, validators consume blockchain resources:
+- **Memory usage** - Affects transaction fees
+- **CPU execution steps** - Limited per transaction
+- **Script size** - Larger scripts cost more to deploy and execute
 
-These advanced techniques allow you to write more efficient validators that consume less memory and execution units on the Cardano blockchain.
+Optimization reduces these costs, making your DApp more economical for users.
 
+## Optimization Techniques
 
+- **[Macros](/docs/smart-contract/optimisations/macros)** - Inline constants and conditional code generation at compile-time
+- **[Direct Script Context Access](/docs/smart-contract/optimisations/script-context)** - Efficiently extract specific fields without full deserialization
+- **[Scalus Intermediate Representation (SIR)](/docs/smart-contract/optimisations/sir)** - Understand and optimize the compilation pipeline
+- **[UPLC Optimizations](/docs/smart-contract/optimisations/uplc)** - Apply low-level optimizations to reduce execution costs
+
+## When to Optimize
+
+1. **After functionality is correct** - Get it working first, then optimize
+2. **When hitting limits** - Transaction size or execution budget constraints
+3. **For production deployment** - Reduce user costs and improve UX
+4. **Iteratively** - Profile, optimize, measure, repeat
