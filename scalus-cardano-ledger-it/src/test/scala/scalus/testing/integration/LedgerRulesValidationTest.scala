@@ -1,8 +1,8 @@
 package scalus.testing.integration
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.rules.*
 import scalus.testing.integration.BlocksTestUtils.*
 
 import java.nio.file.Files
@@ -23,16 +23,14 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         val failed = for
             path <- blocks
             bytes = Files.readAllBytes(path)
-            transaction <- BlockFile
-                .fromCborArray(bytes)
-                .block
-                .transactions(using OriginalCborByteArray(bytes))
+            block = BlockFile.fromCborArray(bytes).block
+            transaction <- block.transactions(using OriginalCborByteArray(bytes))
             _ = transactionsCount.incrementAndGet()
             utxos <- Try(scalusUtxoResolver.resolveUtxos(transaction)).toOption
             _ = utxosResolvedCount.incrementAndGet()
             state = State(utxos = utxos)
             result <- CardanoMutator
-                .transit(Context.testMainnet(), state, transaction)
+                .transit(Context.testMainnet(block.slot), state, transaction)
                 .swap
                 .toOption
         yield (path.getFileName, transaction.id, result)
