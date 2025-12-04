@@ -35,7 +35,9 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                       )
                     )
                   ),
-                  totalCollateral = Some(Coin(60000000L)),
+                  // totalCollateral = net collateral (inputs - return)
+                  // 30000000 + 30000000 - 20000000 = 40000000
+                  totalCollateral = Some(Coin(40000000L)),
                   fee = Coin(10000000L),
                   referenceInputs = TaggedSortedSet.empty,
                   outputs = IndexedSeq.empty,

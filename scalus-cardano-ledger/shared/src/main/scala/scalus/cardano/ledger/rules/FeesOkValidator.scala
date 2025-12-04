@@ -211,15 +211,33 @@ object FeesOkValidator extends STS.Validator {
     ): Result = {
         val transactionId = event.id
         val totalCollateral = event.body.value.totalCollateral
+        val collateralReturnOutput = event.body.value.collateralReturnOutput
+
+        // The totalCollateral field represents the net collateral (inputs - return).
+        // This is defined in the Cardano Ledger specification and implemented in:
+        //   - cardano-ledger/eras/babbage/impl/src/Cardano/Ledger/Babbage/Collateral.hs
+        //     function: collAdaBalance
+        //       collAdaBalance txBody utxoCollateral = toDeltaCoin $
+        //         case txBody ^. collateralReturnTxBodyL of
+        //           SNothing -> colbal
+        //           SJust txOut -> colbal <-> (txOut ^. coinTxOutL)
+        //         where colbal = sumAllCoin utxoCollateral
+        //   - cardano-ledger/eras/babbage/impl/src/Cardano/Ledger/Babbage/Rules/Utxo.hs
+        //     function: validateCollateralEqBalance
+        //       validates that: bal == totalCollateral (when totalCollateral is present)
+        val netCollateralCoins = collateralReturnOutput match
+            case Some(returnOutput) =>
+                totalSumOfCollateralCoins - returnOutput.value.value.coin
+            case None => totalSumOfCollateralCoins
 
         totalCollateral match
             case None => success
             case Some(collateral) =>
-                if collateral != totalSumOfCollateralCoins then
+                if collateral != netCollateralCoins then
                     failure(
                       TransactionException.IncorrectTotalCollateralException(
                         transactionId,
-                        totalSumOfCollateralCoins,
+                        netCollateralCoins,
                         totalCollateral
                       )
                     )
