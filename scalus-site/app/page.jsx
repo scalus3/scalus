@@ -2,7 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Scalus - DApps Development Platform for Cardano',
+  title: 'Scalus - Cardano Smart Contracts and dApps Development Platform',
   description: 'Write smart contracts, build transactions and application business logic — all in Scala 3, backed by industry-grade tools and great development experience.',
 }
 
