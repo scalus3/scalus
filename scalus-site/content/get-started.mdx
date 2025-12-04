@@ -1,15 +1,19 @@
+---
+title: Getting Started with Scalus
+description: Complete guide to setting up Scalus development environment. Install Scala 3, create your first Cardano smart contract validator, and start building dApps in minutes.
+sidebarTitle: Getting Started
+---
+
 import { Steps, Tabs } from 'nextra/components'
 
-# Getting Started
+# Getting Started with Scalus
 
-This guide will help you set up your development environment and get your first Scalus Validator.
+This guide will help you set up your Scalus development environment and create your first Cardano validator in minutes. You'll install Scala 3, generate a starter project, and run your first smart contract tests.
 
 <Steps>
-    ## Install Scala on your computer
+    ## Install Scala 3 Development Environment
 
-    We  recommend using Scala Installer - [Coursier](https://get-coursier.io/docs/cli-overview), that ensures that a
-     JVM and standard Scala tools are installed on
-    your system.
+    We recommend using [Coursier](https://get-coursier.io/docs/cli-overview), the official Scala installer that sets up your complete development environment including JVM, Scala compiler, build tools, and code formatters.
 
     <Tabs items={['macOS - Brew', 'macOS', 'Linux', 'Windows']}>
       <Tabs.Tab>
@@ -48,7 +52,7 @@ This guide will help you set up your development environment and get your first 
         REPL: [Ammonite](https://ammonite.io/) and
         Code formatter: [Scalafmt](https://scalameta.org/scalafmt/).
 
-    ## Get your first Scalus Validator
+    ## Get Your First Cardano Validator
     
     ```sh copy
    sbt new scalus3/hello.g8
@@ -62,7 +66,7 @@ This guide will help you set up your development environment and get your first 
     └── README.md
     ```
 
-    ## Test
+    ## Run Your First Validator Tests
     Run unit tests (MUnit, ScalaTest and ScalaCheck):
     ```sh copy
     scala-cli test hello
@@ -73,7 +77,7 @@ This guide will help you set up your development environment and get your first 
     - Hello Cardano message is signed by the owner
     ```
 
-    ## Configure IDE
+    ## Set Up Your IDE for Cardano Development
     Setting up a productive development environment will significantly improve your Scala/Scalus development experience.
     Scala offers wide range of IDE support, the most popular are IntelliJ and VSCode.
 
@@ -134,3 +138,12 @@ This guide will help you set up your development environment and get your first 
     ```
 
 </Steps>
+
+## Next Steps
+
+Now that you have your development environment set up and a working validator, continue your Scalus journey:
+
+- **[Learn Smart Contract Development](/docs/smart-contract/developing-smart-contracts)** - Deep dive into writing Cardano validators with Scala 3, understanding the compilation process, and leveraging the Scalus type system
+- **[Build and Submit Transactions](/docs/transaction-builder/building-first-transaction)** - Use TxBuilder to construct transactions, evaluate scripts off-chain, and submit them to the Cardano network
+
+**New to Cardano or Scala?** Check out our [onboarding guides](/docs/onboarding) for developers coming from either ecosystem.

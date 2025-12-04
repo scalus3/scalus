@@ -1,6 +1,22 @@
 @import 'tailwindcss';
- 
+
 /* Optional: import Nextra theme styles */
 @import 'nextra-theme-docs/style.css'; /* or nextra-theme-blog/style.css */
- 
+
 @variant dark (&:where(.dark *));
+
+/* Override Nextra's default heading sizes */
+article h1 {
+  font-size: 2rem !important; /* text-3xl: 30px */
+  line-height: 2.75rem !important;
+}
+
+article h2 {
+  font-size: 1.5rem !important; /* text-2xl: 24px */
+  line-height: 2rem !important;
+}
+
+article h3 {
+  font-size: 1.25rem !important; /* text-xl: 20px */
+  line-height: 1.75rem !important;
+}

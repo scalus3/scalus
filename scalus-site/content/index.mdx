@@ -1,11 +1,18 @@
+---
+title: Scalus - Build Cardano Smart Contracts and dApps with Scala 3
+description: Scalus is a development platform for building Cardano decentralized applications (dApps). Write smart contracts and off-chain logic in Scala 3 with type safety and professional tooling.
+sidebarTitle: Introduction
+---
+
 import { Bleed, Cards } from 'nextra/components'
 import Image from 'next/image'
+import { DescriptionCards } from '../components/DescriptionCards'
 
-# Introduction
+# Build Cardano Smart Contracts and dApps with Scala 3
 
-<Image src="/scalus-logo-dark.png" alt="Scalus Logo" width={400} height={400} style={{ display: 'block', margin: '0 auto' }} />
+<Image src="/scalus-logo-dark.png" alt="Scalus - Cardano Development Platform for Scala" width={400} height={400} style={{ display: 'block', margin: '1rem auto' }} />
 
-**Scalus** is a development platform for building decentralized applications (DApps) on the Cardano blockchain. It provides a unified environment where developers can write both on-chain smart contracts and off-chain logic using [Scala 3](/docs/language-guide/scala3) - a modern, expressive, and type-safe functional programming language.
+**Scalus** is a development platform for building smart contracts and decentralized applications (dApps) on the Cardano blockchain. It provides a unified environment where developers can write both on-chain smart contracts and off-chain logic using [Scala 3](/docs/language-guide/scala3) - a modern, expressive, and type-safe functional programming language.
 
 ## Quick Start
 
@@ -15,39 +22,76 @@ import Image from 'next/image'
   <Cards.Card title="Examples Repository" href="https://github.com/nau/scalus/tree/master/scalus-examples" target="_blank" />
 </Cards>
 
-## Why Scalus?
+## Why Choose Scalus for Cardano Development?
 
-**One Language, Full Stack** - Write smart contracts and application logic in Scala 3.
-No context switching between Plinth/Aiken for contracts and JavaScript/Python for frontends and backends.
+### One Language, Full Stack
+Write smart contracts and application logic in Scala 3. No context switching between Plutus/Aiken for contracts and JavaScript/Python for frontends and backends.
 
-**Type-Safe by Design** - Catch errors at compile time, not on-chain. Leverage Scala's powerful type system to prevent entire classes of bugs before deployment.
+### Type-Safe by Design
+Catch errors at compile time, not on-chain. Leverage Scala's powerful type system to prevent entire classes of bugs before deployment.
 
-**Professional Tooling** - Debug validators with breakpoints in IntelliJ IDEA or VS Code. Step through execution, inspect variables, and use the tools you already know.
+### Professional Tooling
+Debug validators with breakpoints in IntelliJ IDEA or VS Code. Step through execution, inspect variables, and use the tools you already know.
 
-**Battle-Tested Ecosystem** - Built on the JVM with access to thousands of proven libraries. Use ScalaTest for testing, Akka for concurrency, and the entire Scala ecosystem.
+### Battle-Tested Ecosystem
+Built on the JVM with access to thousands of proven libraries. Use ScalaTest for testing, Akka for concurrency, and the entire Scala ecosystem.
 
-**Fine-Grained Control** - Advanced optimizations give you control over generated UPLC code. Reduce script size and execution costs with macros, inline optimizations, and direct Script Context access.
+### Fine-Grained Control
+Advanced optimizations give you control over generated UPLC code. Reduce script size and execution costs with macros, inline optimizations, and direct Script Context access.
 
-## Complete Development Lifecycle
+## Full Development Lifecycle for Cardano
 
-- [Write Cardano smart contracts](/docs/smart-contract/developing-smart-contracts) in Scala 3 that compile to UPLC
-- Optimize on-chain code with [advanced optimization techniques](/docs/smart-contract/optimisations)
-- [Debug smart contracts](/docs/smart-contract/debugging) as regular Scala code with your IDE's debugger
-- Build and evaluate transactions off-chain with the transaction builder
-- Integrate on-chain and off-chain components in your full-stack application
-- [Test your entire application](/docs/smart-contract/testing) with unit, integration, and property-based tests
-- Verify your solution on a testnet with the familiar tools
-- Deploy production-ready applications to mainnet with confidence
+Scalus supports the complete development workflow for Cardano applications:
 
-## Developer Experience First
+- **Write** - [Cardano smart contracts in Scala 3](/docs/smart-contract/developing-smart-contracts) that compile to UPLC
+- **Optimize** - Use [advanced optimization techniques](/docs/smart-contract/optimisations) to reduce on-chain costs
+- **Debug** - [Debug validators](/docs/smart-contract/debugging) as regular Scala code with your IDE's debugger
+- **Build** - [Construct transactions](/docs/transaction-builder) with the transaction builder and evaluate them off-chain
+- **Integrate** - Seamlessly integrate on-chain and off-chain components in your full-stack application
+- **Test** - [Test thoroughly](/docs/smart-contract/testing) with unit, integration, and property-based tests
+- **Deploy** - Verify on testnet and deploy production-ready applications to mainnet with confidence
 
-Enjoy a modern development experience with excellent IDE support, comprehensive testing tools, and the [extensive Scala](https://index.scala-lang.org/) & JVM ecosystems.
+## Modern Development Experience
 
-Say goodbye to juggling multiple languages, libraries, and tools—meet Scalus, a development platform made for professionals and businesses who want to get things done.
+Built for professional developers and teams, Scalus provides:
 
-## Get Started
+- **Industry-Standard IDEs** - Full support for IntelliJ IDEA and VS Code with intelligent code completion
+- **Comprehensive Testing** - Unit tests, integration tests, and property-based testing with ScalaTest and ScalaCheck
+- **Rich Ecosystem** - Access to thousands of JVM libraries and the entire [Scala ecosystem](https://index.scala-lang.org/)
+- **One Language** - Write everything in Scala 3—no juggling multiple languages, tools, or paradigms
 
-Ready to build? [Write your first smart contract](/docs/smart-contract/developing-smart-contracts) or explore the [examples repository](https://github.com/nau/scalus/tree/master/scalus-examples) to see Scalus in action.
+Scalus is a development platform made for professionals and businesses who value productivity, type safety, and code quality.
+
+## Get Started with Scalus
+
+<DescriptionCards>
+  <DescriptionCards.Card
+    icon="🚀"
+    title="Quick Start Guide"
+    href="/docs/get-started"
+    description="Install Scalus and create your first validator in 5 minutes"
+  />
+  <DescriptionCards.Card
+    icon="⚙️"
+    title="Build a Smart Contract"
+    href="/docs/smart-contract/developing-smart-contracts"
+    description="Learn to write, compile, and test Cardano validators"
+  />
+  <DescriptionCards.Card
+    icon="🏗️"
+    title="Build Transactions"
+    href="/docs/transaction-builder/building-first-transaction"
+    description="Construct and submit Cardano transactions with TxBuilder"
+  />
+  <DescriptionCards.Card
+    icon="💡"
+    title="Browse Examples"
+    href="https://github.com/nau/scalus/tree/master/scalus-examples"
+    description="Explore working examples and real-world use cases"
+  />
+</DescriptionCards>
+
+**New to Cardano or Scala?** Check out our [onboarding guides](/docs/onboarding) for developers coming from either ecosystem.
 
 
 {/*
