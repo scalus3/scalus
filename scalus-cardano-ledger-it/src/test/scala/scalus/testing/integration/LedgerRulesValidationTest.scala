@@ -14,6 +14,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
 
     test("validate transactions") {
         val transactionsCount = AtomicInteger()
+        val utxosResolvedCount = AtomicInteger()
 
         val blocks = getAllBlocksPaths().take(1000)
 
@@ -26,9 +27,10 @@ class LedgerRulesValidationTest extends AnyFunSuite {
                 .fromCborArray(bytes)
                 .block
                 .transactions(using OriginalCborByteArray(bytes))
-            utxos <- Try(scalusUtxoResolver.resolveUtxos(transaction)).toOption
-            state = State(utxos = utxos)
             _ = transactionsCount.incrementAndGet()
+            utxos <- Try(scalusUtxoResolver.resolveUtxos(transaction)).toOption
+            _ = utxosResolvedCount.incrementAndGet()
+            state = State(utxos = utxos)
             result <- CardanoMutator
                 .transit(Context.testMainnet(), state, transaction)
                 .swap
@@ -37,16 +39,15 @@ class LedgerRulesValidationTest extends AnyFunSuite {
             .tap(x => println(pprint(x)))
 
         val groups = failed
-            .groupBy {
-                case (_, _, ex) => ex.getClass.getSimpleName
-                case _          => "Unexpected success"
-            }
+            .groupBy(_._3.getClass.getSimpleName)
             .toSeq
             .sortBy(-_._2.length)
 
+        println()
         println(s"Transactions count: ${transactionsCount.get()}")
+        println(s"UTXOs resolved count: ${utxosResolvedCount.get()}")
         println(s"Failed transactions: ${failed.size}")
-        println(s"Failures rate: ${(100 * failed.size) / transactionsCount.get()}%")
+        println(s"Failures rate: ${(100 * failed.size) / utxosResolvedCount.get()}%")
         println(s"\nFailures by exception type:")
         groups.foreach { case (exType, failures) =>
             println(s"  $exType: ${failures.length}")
