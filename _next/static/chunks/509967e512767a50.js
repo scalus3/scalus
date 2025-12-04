@@ -1,0 +1,1 @@
+(globalThis.TURBOPACK||(globalThis.TURBOPACK=[])).push(["object"==typeof document?document.currentScript:void 0,45205,e=>{"use strict";var i=e.i(5663);e.i(45787),e.s([],1297),e.i(1297),e.s(["GitGraphModule",()=>i.GitGraphModule,"createGitGraphServices",()=>i.createGitGraphServices],45205)}]);
