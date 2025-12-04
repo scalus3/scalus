@@ -10,11 +10,11 @@ export const metadata = {
   // For more information on metadata API, see: https://nextjs.org/docs/app/building-your-application/optimizing/metadata
   metadataBase: new URL('https://scalus.org'),
   title: {
-    template: '%s | Documentation | Scalus'
+    template: '%s | Docs | Scalus'
   },
   description: 'Documentation for Scalus: Cardano Smart Contracts and dApps Development Platform',
   applicationName: 'Scalus',
-  generator: 'Next.js',
+  //generator: 'Next.js',
   appleWebApp: {
     title: 'Scalus'
   },
