@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.Dom.Element
-import scalus.cardano.address.{Address, Network}
+import scalus.cardano.address.Address
 
 // TODO: maybe replace on enum
 sealed abstract class TransactionException(message: String, cause: Throwable)
@@ -204,10 +204,10 @@ object TransactionException {
     // It's Alonzo.TooManyCollateralInputs in cardano-ledger
     final case class TooManyCollateralInputsException(
         transactionId: TransactionHash,
-        actual: Int,
-        expected: Long
+        actualCollateralInputsSize: Int,
+        maxCollateralInputsSize: Long
     ) extends TransactionException(
-          s"Too many collateral inputs for transactionId $transactionId. Actual: $actual, expected at most: $expected"
+          s"Too many collateral inputs for transactionId $transactionId. Actual: $actualCollateralInputsSize, maximum: $maxCollateralInputsSize"
         )
 
     // It's Alonzo.PPViewHashesDontMatch in cardano-ledger
@@ -231,21 +231,27 @@ object TransactionException {
     // It's part of Shelley.validateWrongNetwork in cardano-ledger
     final case class WrongNetworkAddress(
         transactionId: TransactionHash,
-        wrongNetworkAddress: Address
+        invalidOutputAddresses: Seq[Address],
+        invalidCollateralReturnAddresses: Option[Address]
     ) extends TransactionException(
-          s"Wrong network address $wrongNetworkAddress in transaction $transactionId"
+          s"Wrong network address in transaction $transactionId, invalid output addresses: $invalidOutputAddresses, invalid collateral return addresses: $invalidCollateralReturnAddresses"
         )
 
     // It's part of Shelley.validateWrongNetworkWithdrawal in cardano-ledger
-    final case class WrongNetworkWithdrawal(transactionId: TransactionHash, wrongNetwork: Network)
-        extends TransactionException(
-          s"Wrong network withdrawal $wrongNetwork in transaction $transactionId"
+    final case class WrongNetworkWithdrawal(
+        transactionId: TransactionHash,
+        invalidWithdrawals: Seq[(RewardAccount, Coin)]
+    ) extends TransactionException(
+          s"Wrong network in withdrawals for transactionId $transactionId, invalid withdrawals: $invalidWithdrawals"
         )
 
     // It's part of Alonzo.validateWrongNetworkInTxBody in cardano-ledger
-    final case class WrongNetworkInTxBody(transactionId: TransactionHash, wrongNetworkId: Int)
-        extends TransactionException(
-          s"Wrong networkId $wrongNetworkId in body of transaction $transactionId"
+    final case class WrongNetworkInTxBody(
+        transactionId: TransactionHash,
+        actualNetworkId: Int,
+        expectedNetworkId: Int
+    ) extends TransactionException(
+          s"Wrong network id in transaction body for transactionId $transactionId. Actual: $actualNetworkId, expected: $expectedNetworkId"
         )
 
     sealed class MetadataException(message: String) extends TransactionException(message)

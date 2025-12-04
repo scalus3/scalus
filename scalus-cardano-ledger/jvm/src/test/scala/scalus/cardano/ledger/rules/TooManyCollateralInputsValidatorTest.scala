@@ -1,7 +1,8 @@
-package scalus.cardano.ledger.rules
+package scalus.cardano.ledger
+package rules
+
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.*
 
 class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 

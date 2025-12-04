@@ -5,7 +5,6 @@ import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
 
 import scala.annotation.targetName
 
-// FIXME: make sure we validate Value is non-negative in ledger rules
 /** Represents a value in Cardano, which can be either pure ADA or ADA with multi-assets */
 case class Value(coin: Coin, assets: MultiAsset = MultiAsset.empty) {
     @targetName("plus")

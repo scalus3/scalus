@@ -95,7 +95,6 @@ sealed trait Network {
 object Network {
     case object Testnet extends Network {
         override def toString: String = "Testnet"
-
         def networkId: Byte = 0
     }
 

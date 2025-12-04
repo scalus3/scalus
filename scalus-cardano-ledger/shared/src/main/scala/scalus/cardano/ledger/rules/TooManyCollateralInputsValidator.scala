@@ -1,28 +1,24 @@
-package scalus.cardano.ledger.rules
-import scalus.cardano.ledger.TransactionException
+package scalus.cardano.ledger
+package rules
 
 // ‖collateral tx‖  ≤  maxCollInputs
 // Alonzo.validateTooManyCollateralInputs
 object TooManyCollateralInputsValidator extends STS.Validator {
-
     override type Error = TransactionException.TooManyCollateralInputsException
 
-    override def validate(
-        context: Context,
-        state: State,
-        tx: Event
-    ): TooManyCollateralInputsValidator.Result = {
-        val maxColl = context.env.params.maxCollateralInputs
-        val numColl = tx.body.value.collateralInputs.toSet.size
+    override def validate(context: Context, state: State, event: Event): Result = {
+        val transactionId = event.id
+        val actualCollateralInputsSize = event.body.value.collateralInputs.toSet.size
+        val maxCollateralInputsSize = context.env.params.maxCollateralInputs
 
-        if numColl > maxColl then {
+        if actualCollateralInputsSize > maxCollateralInputsSize then
             failure(
               TransactionException.TooManyCollateralInputsException(
-                tx.id,
-                numColl,
-                maxColl
+                transactionId,
+                actualCollateralInputsSize,
+                maxCollateralInputsSize
               )
             )
-        } else success
+        else success
     }
 }

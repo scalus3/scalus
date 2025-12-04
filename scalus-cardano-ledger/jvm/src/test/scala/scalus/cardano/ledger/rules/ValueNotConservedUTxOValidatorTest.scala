@@ -1,11 +1,9 @@
-package scalus.cardano.ledger.rules
+package scalus.cardano.ledger
+package rules
 
-import org.scalacheck.Arbitrary
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.ValueNotConservedUTxOValidator.validate
 
 class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances {
 
@@ -21,7 +19,10 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        assert(validate(context, State(), tx).isRight, "Empty transaction should preserve value")
+        assert(
+          ValueNotConservedUTxOValidator.validate(context, State(), tx).isRight,
+          "Empty transaction should preserve value"
+        )
     }
 
     test("value is not preserved when inputs and outputs are not equal") {
@@ -52,9 +53,8 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        assert(validate(context, state, tx).isLeft)
+        assert(ValueNotConservedUTxOValidator.validate(context, state, tx).isLeft)
     }
 
-    private def randomValidTransaction =
-        Arbitrary.arbitrary[Transaction].sample.get.copy(isValid = true)
+    private def randomValidTransaction = arbitrary[Transaction].sample.get.copy(isValid = true)
 }
