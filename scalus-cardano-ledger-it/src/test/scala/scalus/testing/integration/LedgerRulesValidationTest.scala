@@ -17,7 +17,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
 
         println(s"Validate ${blocks.size} blocks ...")
 
-        val failures = for
+        val failed = for
             path <- blocks
             bytes = Files.readAllBytes(path)
             transaction <- BlockFile
@@ -33,7 +33,18 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         yield (path.getFileName, transaction.id, result)
             .tap(x => println(pprint(x)))
 
-        println(s"Failed transactions: ${failures.size}")
+        val groups = failed
+            .groupBy {
+                case (_, _, ex) => ex.getClass.getSimpleName
+                case _          => "Unexpected success"
+            }
+            .toSeq
+            .sortBy(-_._2.length)
 
+        println(s"Failed transactions: ${failed.size}")
+        println(s"\nFailures by exception type:")
+        groups.foreach { case (exType, failures) =>
+            println(s"  $exType: ${failures.length}")
+        }
     }
 }
