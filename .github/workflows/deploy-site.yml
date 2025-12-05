@@ -74,6 +74,6 @@ jobs:
       - name: Deploy to gh-pages
         working-directory: scalus-site
         run: |
-          npx gh-pages -d out -b gh-pages -r https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          npx gh-pages -d out -b gh-pages -r https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git --cname scalus.org
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
