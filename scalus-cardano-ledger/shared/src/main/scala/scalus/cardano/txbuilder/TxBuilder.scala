@@ -3,7 +3,7 @@ package scalus.cardano.txbuilder
 import scalus.builtin.Builtins.{blake2b_256, serialiseData}
 import scalus.builtin.Data.toData
 import scalus.builtin.{Data, ToData}
-import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart}
+import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.FeesOkValidator
@@ -442,6 +442,133 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
+    /** Registers a stake key with the network.
+      *
+      * Note that the deposit is still going to be deducted, and it's going to be calculated
+      * according to the protocol parameters from [[env]]/
+      */
+    def registerStake(stakeAddress: StakeAddress): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        // Use None for Shelley-era registration (deposit from protocol params)
+        val cert = Certificate.RegCert(credential, None)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers a stake key with an explicit deposit amount. */
+    def registerStake(stakeAddress: StakeAddress, deposit: Coin): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.RegCert(credential, Some(deposit))
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Deregisters a stake key from the network. */
+    def deregisterStake(stakeAddress: StakeAddress): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        // Use None for Shelley-era deregistration
+        val cert = Certificate.UnregCert(credential, None)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Deregisters a stake key with an explicit deposit refund amount. */
+    def deregisterStake(stakeAddress: StakeAddress, refund: Coin): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.UnregCert(credential, Some(refund))
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Delegates a stake key to the specified stake pool. */
+    def delegateTo(stakeAddress: StakeAddress, poolId: PoolKeyHash): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.StakeDelegation(credential, poolId)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers a stake key and delegates to a stake pool in a single transaction. */
+    def stakeAndDelegate(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        deposit: Coin
+    ): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.StakeRegDelegCert(credential, poolId, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Withdraws staking rewards. */
+    def withdrawRewards(stakeAddress: StakeAddress, amount: Coin): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        addSteps(
+          TransactionBuilderStep.WithdrawRewards(
+            StakeCredential(credential),
+            amount,
+            PubKeyWitness
+          )
+        )
+    }
+
+    /** Delegates voting power to a DRep. */
+    def delegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.VoteDelegCert(credential, drep)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers stake address and delegates voting power to a DRep in one transaction. */
+    def registerAndDelegateVoteToDRep(
+        stakeAddress: StakeAddress,
+        drep: DRep,
+        deposit: Coin
+    ): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.VoteRegDelegCert(credential, drep, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Delegates to both a stake pool and a DRep. */
+    def delegateToPoolAndDRep(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        drep: DRep
+    ): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.StakeVoteDelegCert(credential, poolId, drep)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers stake address and delegates to both stake pool and DRep in one transaction. */
+    def registerAndDelegateToPoolAndDRep(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        drep: DRep,
+        deposit: Coin
+    ): TxBuilder = {
+        val credential = stakeAddressToCredential(stakeAddress)
+        val cert = Certificate.StakeVoteRegDelegCert(credential, poolId, drep, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers as a DRep. */
+    def registerDRep(
+        drepCredential: Credential,
+        deposit: Coin,
+        anchor: Option[Anchor]
+    ): TxBuilder = {
+        val cert = Certificate.RegDRepCert(drepCredential, deposit, anchor)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Unregisters as a DRep. */
+    def unregisterDRep(drepCredential: Credential, deposit: Coin): TxBuilder = {
+        val cert = Certificate.UnregDRepCert(drepCredential, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Updates DRep metadata anchor. */
+    def updateDRep(drepCredential: Credential, anchor: Option[Anchor]): TxBuilder = {
+        val cert = Certificate.UpdateDRepCert(drepCredential, anchor)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
     /** Sets a minimum fee for the transaction.
       *
       * This overrides the automatically calculated fee. Use with caution; the actual fee may need
@@ -649,7 +776,7 @@ case class TxBuilder(
                                 Right(updatedTx)
                             case Left(_) =>
                                 // Can't take from change (would go below minAda), need to query for more UTXOs
-                                val additionalUtxos = selectAdditionalUtxos2(
+                                val additionalUtxos = selectAdditionalUtxos(
                                   provider,
                                   sponsor,
                                   diff,
@@ -661,7 +788,7 @@ case class TxBuilder(
                         }
                     } else {
                         // There's no change output, the only way to get more ADA is to query the provider.
-                        val additionalUtxos = selectAdditionalUtxos2(
+                        val additionalUtxos = selectAdditionalUtxos(
                           provider,
                           sponsor,
                           diff,
@@ -679,7 +806,7 @@ case class TxBuilder(
 
                 case (ZeroAda(), MissingTokens()) =>
                     // We are missing tokens -- need to query more
-                    val additionalUtxos = selectAdditionalUtxos2(
+                    val additionalUtxos = selectAdditionalUtxos(
                       provider,
                       sponsor,
                       diff,
@@ -697,7 +824,7 @@ case class TxBuilder(
                 case (PositiveAda(_), MissingTokens()) =>
                     // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
                     // on further iterations
-                    val additionalUtxos = selectAdditionalUtxos2(
+                    val additionalUtxos = selectAdditionalUtxos(
                       provider,
                       sponsor,
                       diff,
@@ -858,59 +985,7 @@ case class TxBuilder(
         }
     }
 
-    private def estimateFee(tx: Transaction): Coin = {
-        val txSize = tx.toCbor.length
-        val minFeeA = env.protocolParams.txFeePerByte
-        val minFeeB = env.protocolParams.txFeeFixed
-        Coin(minFeeA * txSize + minFeeB)
-    }
-
-    private def estimateRequiredCollateral(tx: Transaction, fee: Coin): Coin = {
-        val collateralPercentage = env.protocolParams.collateralPercentage
-        val requiredCollateral = (fee.value * collateralPercentage) / 100
-        Coin(requiredCollateral)
-    }
-
-    private def extractFieldsFromSteps(
-        steps: Seq[TransactionBuilderStep]
-    ): (Utxos, Seq[TransactionOutput], Option[MultiAsset], Seq[Certificate]) = {
-        val inputs = steps
-            .collect {
-                case TransactionBuilderStep.Spend(utxo, _)                          => utxo
-                case TransactionBuilderStep.SpendWithDelayedRedeemer(utxo, _, _, _) => utxo
-            }
-            .map(_.toTuple)
-            .toMap
-
-        val outputs = steps.collect { case TransactionBuilderStep.Send(out) =>
-            out
-        }
-
-        // Aggregate mints/burns
-        val mintMap = steps
-            .collect { case TransactionBuilderStep.Mint(policyId, assetName, amount, _) =>
-                (policyId, assetName, amount)
-            }
-            .groupBy(_._1) // Group by policy ID
-            .map { case (policyId, mints) =>
-                val assetMap = mints.map { case (_, assetName, amount) =>
-                    assetName -> amount
-                }.toMap
-                policyId -> SortedMap.from(assetMap)
-            }
-
-        val mint =
-            if mintMap.nonEmpty then Some(MultiAsset(SortedMap.from(mintMap)))
-            else None
-
-        val certificates = steps.collect { case TransactionBuilderStep.IssueCertificate(cert, _) =>
-            cert
-        }
-
-        (inputs, outputs, mint, certificates)
-    }
-
-    private def selectAdditionalUtxos2(
+    private def selectAdditionalUtxos(
         provider: Provider,
         address: Address,
         gap: Value,
@@ -975,63 +1050,6 @@ case class TxBuilder(
         selectedUtxos.toMap
     }
 
-    private def selectAdditionalUtxos(
-        provider: Provider,
-        address: Address,
-        gap: Value,
-        excludeInputs: Set[TransactionInput]
-    ): Seq[TransactionBuilderStep] = {
-        val selectedUtxos = mutable.Map.empty[TransactionInput, TransactionOutput]
-
-        // Fulfill the token requirement first
-        if gap.assets.assets.nonEmpty then {
-            val tokenUtxos =
-                selectUtxosWithTokens(
-                  provider,
-                  address,
-                  gap.assets,
-                  excludeInputs ++ selectedUtxos.keySet
-                )
-            selectedUtxos.addAll(tokenUtxos)
-        }
-
-        // Then cover the insufficient ADA, which is now less than it initially was because the token utxos
-        // have ADA too.
-        if gap.coin.value > 0 then {
-            val alreadySelectedAda = selectedUtxos.values.map(_.value.coin.value).sum
-            val remainingAdaNeeded = gap.coin.value - alreadySelectedAda
-
-            if remainingAdaNeeded > 0 then {
-                // Here, we get all of them, which is bad.
-                // Ideally the provider would allow us to exclude utxos.
-                val allUtxos = provider
-                    .findUtxos(address = address)
-                    .getOrElse(Map.empty)
-                    .filterNot { case (input, _) =>
-                        excludeInputs.contains(input) || selectedUtxos.contains(input)
-                    }
-
-                var accumulatedAda = 0L
-                val adaUtxos = allUtxos.takeWhile { case (_, output) =>
-                    val shouldTake = accumulatedAda < remainingAdaNeeded
-                    if shouldTake then accumulatedAda += output.value.coin.value
-                    shouldTake
-                }
-
-                if accumulatedAda < remainingAdaNeeded then
-                    throw new RuntimeException(
-                      s"Insufficient ADA: need $remainingAdaNeeded more lovelace, found only $accumulatedAda"
-                    )
-
-                selectedUtxos.addAll(adaUtxos)
-            }
-        }
-
-        selectedUtxos.map { case (input, output) =>
-            TransactionBuilderStep.Spend(Utxo(input, output), PubKeyWitness)
-        }.toSeq
-    }
-
     /** Selects UTXOs that contain the required native tokens */
     private def selectUtxosWithTokens(
         provider: Provider,
@@ -1088,32 +1106,6 @@ case class TxBuilder(
         selectedUtxos
     }
 
-    /** Selects a pure ADA UTXO for collateral */
-    private def selectCollateral(
-        provider: Provider,
-        address: Address,
-        requiredAmount: Coin
-    ): Seq[TransactionBuilderStep] = {
-        val collateralUtxo = provider
-            .findUtxo(
-              address = address,
-              minAmount = Some(requiredAmount)
-            )
-            .getOrElse(
-              throw new RuntimeException(
-                s"Could not find suitable collateral UTXO (need at least ${requiredAmount.value} lovelace) at address $address"
-              )
-            )
-
-        if collateralUtxo.output.value.assets.assets.nonEmpty then {
-            throw new RuntimeException(
-              "Collateral UTXO must contain only ADA, no assets"
-            )
-        }
-
-        Seq(TransactionBuilderStep.AddCollateral(collateralUtxo))
-    }
-
     private def selectCollateral(
         provider: Provider,
         address: Address,
@@ -1135,55 +1127,7 @@ case class TxBuilder(
 
     }
 
-    /** Checks if any step requires collateral (script spending or minting) */
-    private def needsCollateral(steps: Seq[TransactionBuilderStep]): Boolean = {
-        steps.exists {
-            case TransactionBuilderStep.Spend(_, witness) =>
-                witness match {
-                    case _: ThreeArgumentPlutusScriptWitness => true
-                    case _                                   => false
-                }
-            case TransactionBuilderStep.SpendWithDelayedRedeemer(_, _, _, _) => true
-            case TransactionBuilderStep.Mint(_, _, _, witness) =>
-                witness match {
-                    case _: TwoArgumentPlutusScriptWitness => true
-                    case _                                 => false
-                }
-            case _ => false
-        }
-    }
-
-    private def hasCollateral(steps: Seq[TransactionBuilderStep]): Boolean = {
-        steps.exists {
-            case TransactionBuilderStep.AddCollateral(_) => true
-            case _                                       => false
-        }
-    }
-
-    /** Calculates the total ADA value in the transaction's collateral inputs.
-      *
-      * @param tx
-      *   the transaction
-      * @param utxos
-      *   resolved UTXOs map to look up collateral input values
-      * @return
-      *   total collateral amount in lovelace
-      */
-    private def totalCollateral(tx: Transaction, utxos: Utxos): Coin = {
-        tx.body.value.collateralInputs.toSet.foldLeft(Coin.zero) { case (acc, input) =>
-            utxos.get(input).fold(acc)(output => acc + output.value.coin)
-        }
-    }
-
-    /** Adds collateral inputs to a transaction.
-      *
-      * @param tx
-      *   the transaction to modify
-      * @param collaterals
-      *   map of collateral inputs to outputs to add
-      * @return
-      *   modified transaction with added collateral inputs
-      */
+    /** Adds collateral inputs to a transaction. */
     private def addCollaterals(tx: Transaction, collaterals: Set[TransactionInput]): Transaction = {
         val currentCollaterals = tx.body.value.collateralInputs.toSet
         val newCollaterals = currentCollaterals ++ collaterals
@@ -1193,15 +1137,7 @@ case class TxBuilder(
         )
     }
 
-    /** Adds inputs to a transaction.
-      *
-      * @param tx
-      *   the transaction to modify
-      * @param inputs
-      *   map of inputs to outputs to add
-      * @return
-      *   modified transaction with added inputs
-      */
+    /** Adds inputs to a transaction. */
     private def addInputs(tx: Transaction, inputs: Utxos): Transaction = {
         val currentInputs = tx.body.value.inputs.toSet
         val newInputs = currentInputs ++ inputs.keySet
@@ -1290,6 +1226,14 @@ case class TxBuilder(
     }
 
     private def addSteps(s: TransactionBuilderStep*) = copy(steps = steps ++ s)
+
+    private def stakeAddressToCredential(stakeAddress: StakeAddress): Credential = {
+        stakeAddress.payload match {
+            case StakePayload.Stake(stakeKeyHash) =>
+                Credential.KeyHash(stakeKeyHash.asInstanceOf[AddrKeyHash])
+            case StakePayload.Script(scriptHash) => Credential.ScriptHash(scriptHash)
+        }
+    }
 }
 
 /** Factory methods for creating TxBuilder instances. */
