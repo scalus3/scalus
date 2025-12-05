@@ -235,22 +235,18 @@ object JIT extends JitRunner {
                         $expr
                     }
                 case Term.Case(arg, cases) =>
-                    val constr =
+                    val scrutinee =
                         genCode(arg, env, logger, budget, params, nativeStackContext)
-                            .asExprOf[(Long, List[Any])]
-                    val caseFuncs =
-                        Expr.ofList(
-                          cases.map(c =>
-                              genCode(c, env, logger, budget, params, nativeStackContext)
-                                  .asExprOf[Any => Any]
-                          )
-                        )
+                    val branchExprs: List[Expr[Any]] =
+                        cases.map(c => genCode(c, env, logger, budget, params, nativeStackContext))
                     '{
                         $budget.spendBudget(Step(StepKind.Case), $params.machineCosts.caseCost, Nil)
-                        val (tag, args) = $constr
-                        args.foldLeft($caseFuncs(tag.toInt))((f, a) =>
-                            f(a).asInstanceOf[Any => Any]
-                        )
+                        ${
+                            CaseHelper.genCaseDispatch(
+                              scrutinee,
+                              branchExprs
+                            )
+                        }
                     }
         }
 
