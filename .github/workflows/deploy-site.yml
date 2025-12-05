@@ -44,24 +44,6 @@ jobs:
         if: inputs.api_mode == 'regenerate'
         run: sbt docs/unidoc
 
-      - name: Install dependencies
-        working-directory: scalus-site
-        run: yarn install --frozen-lockfile
-
-      - name: Build site
-        working-directory: scalus-site
-        run: yarn build
-
-      - name: Copy generated API docs to build output
-        if: inputs.api_mode == 'regenerate'
-        run: |
-          if [ -d "scalus-site/public/api" ]; then
-            cp -r scalus-site/public/api scalus-site/out/
-            echo "Copied newly generated /api folder to build output"
-          else
-            echo "Warning: No /api folder found in scalus-site/public/"
-          fi
-
       - name: Preserve /api folder from gh-pages
         if: inputs.api_mode == 'preserve'
         run: |
@@ -69,11 +51,20 @@ jobs:
           if git rev-parse --verify gh-pages > /dev/null 2>&1; then
             git checkout gh-pages -- api || echo "No /api folder found in gh-pages"
             if [ -d "api" ]; then
-              cp -r api scalus-site/out/
-              echo "Copied /api folder from gh-pages to build output"
+              mkdir -p scalus-site/public
+              cp -r api scalus-site/public/
+              echo "Copied /api folder from gh-pages to scalus-site/public/"
             fi
             git checkout ${{ github.ref_name }}
           fi
+
+      - name: Install dependencies
+        working-directory: scalus-site
+        run: yarn install --frozen-lockfile
+
+      - name: Build site (Next.js copies public/ to out/)
+        working-directory: scalus-site
+        run: yarn build
 
       - name: Configure git
         run: |
