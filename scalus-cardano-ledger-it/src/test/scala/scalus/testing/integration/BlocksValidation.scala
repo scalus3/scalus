@@ -363,6 +363,7 @@ class BlocksValidation extends AnyFunSuite {
         val scripts = stats.size
         val runs = stats.values.sum
         println(s"Scripts v$ver: $runs runs of $scripts scripts")
+        if stats.isEmpty then return
         val top = stats.toSeq.sortBy(_._2)(using Ordering[Int].reverse)
         println(
           s"  Top 1: ${top.head._2} (${100 * top.head._2 / runs}%) runs by 1 script "
