@@ -2,8 +2,7 @@ package scalus
 package uplc
 package eval
 
-/** JVM-specific Plutus Conformance tests.
-  * BLS12-381 and ripemd_160 tests are only available on JVM.
+/** JVM-specific Plutus Conformance tests. BLS12-381 and ripemd_160 tests are only available on JVM.
   */
 class PlutusConformanceJvmTest extends PlutusConformanceTest:
     // format: off

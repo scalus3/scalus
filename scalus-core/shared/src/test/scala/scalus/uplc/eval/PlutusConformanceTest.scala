@@ -757,7 +757,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("term/constant-case/integer/integer-02/integer-02")
     check("term/constant-case/integer/integer-03/integer-03")
     check("term/constant-case/integer/integer-04/integer-04")
-    // TODO: Plutus 1.53 - constant-case tests for list, pair, unit (requires new syntax support)
+    // TODO: Plutus 1.53 - constant-case tests for list, pair (requires new syntax support)
     ignore("term/constant-case/list/list-01/list-01")(())
     ignore("term/constant-case/list/list-02/list-02")(())
     ignore("term/constant-case/list/list-03/list-03")(())
@@ -770,9 +770,9 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     ignore("term/constant-case/pair/pair-03/pair-03")(())
     ignore("term/constant-case/pair/pair-04/pair-04")(())
     ignore("term/constant-case/pair/pair-05/pair-05")(())
-    ignore("term/constant-case/unit/unit-01/unit-01")(())
-    ignore("term/constant-case/unit/unit-02/unit-02")(())
-    ignore("term/constant-case/unit/unit-03/unit-03")(())
+    check("term/constant-case/unit/unit-01/unit-01")
+    check("term/constant-case/unit/unit-02/unit-02")
+    check("term/constant-case/unit/unit-03/unit-03")
 
     private type EvalFailure = "evaluation failure"
     private type ParseError = "parse error"

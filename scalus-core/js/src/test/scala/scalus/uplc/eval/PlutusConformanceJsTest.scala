@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
-/** JS-specific Plutus Conformance tests.
-  * BLS12-381 and ripemd_160 tests are available on JS (uses noble-curves library).
+/** JS-specific Plutus Conformance tests. BLS12-381 and ripemd_160 tests are available on JS (uses
+  * noble-curves library).
   */
 class PlutusConformanceJsTest extends PlutusConformanceTest:
     // format: off

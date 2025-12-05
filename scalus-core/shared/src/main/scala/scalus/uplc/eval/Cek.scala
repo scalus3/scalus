@@ -342,6 +342,12 @@ class CaseBoolBranchMissing(val value: Boolean, val branchCount: Int, env: CekVa
       env
     )
 
+class CaseUnitBranchMissing(val branchCount: Int, env: CekValEnv)
+    extends StackTraceMachineError(
+      s"Case on unit requires exactly 1 branch, but $branchCount provided",
+      env
+    )
+
 class InvalidReturnValue(val value: Term)
     extends RuntimeException(s"Invalid return value: expected Unit, got $value")
 
@@ -777,6 +783,11 @@ class CekMachine(
                                 val index = if b then 1 else 0
                                 if index < cases.size then Compute(ctx, env, cases(index))
                                 else throw new CaseBoolBranchMissing(b, cases.size, env)
+                            case Constant.Unit =>
+                                // Unit has exactly 1 constructor (Unit=0)
+                                // Valid: exactly 1 branch
+                                if cases.size == 1 then Compute(ctx, env, cases(0))
+                                else throw new CaseUnitBranchMissing(cases.size, env)
                             case _ => throw new NonConstrScrutinized(value, env)
                     case _ => throw new NonConstrScrutinized(value, env)
     }
