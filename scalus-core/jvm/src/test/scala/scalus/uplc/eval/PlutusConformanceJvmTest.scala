@@ -2,34 +2,12 @@ package scalus
 package uplc
 package eval
 
-import scalus.cardano.ledger.{CardanoInfo, Language, MajorProtocolVersion}
-
-import scala.language.implicitConversions
-
-/** Tests for the Plutus Conformance Test Suite.
-  *
-  * @note
-  *   This tests run only on JVM right now.
+/** JVM-specific Plutus Conformance tests.
+  * BLS12-381 and ripemd_160 tests are only available on JVM.
   */
 class PlutusConformanceJvmTest extends PlutusConformanceTest:
-    override protected val path = s"../../${super.path}"
-
-    override protected def createPlutusVM: PlutusVM = {
-        val builtinCostModel = BuiltinCostModel.fromInputStream(
-          getClass.getResourceAsStream("/builtinCostModelC.json")
-        )
-        // Get machine costs from cost models with dijkstraPV (protocol version 11) for PlutusV4
-        val baseParams = MachineParams.fromCostModels(
-          CardanoInfo.mainnet.protocolParams.costModels,
-          Language.PlutusV4,
-          MajorProtocolVersion.dijkstraPV
-        )
-        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
-        PlutusVM.makePlutusV4VM(params)
-    }
-    // TODO: for now, the BLS12-381 builtins implemented only for JVM
-    // TODO: move to PlutusConformanceTest when the BLS12-381 builtins are implemented for Scala.js
     // format: off
+    // BLS12-381 tests - only available on JVM (uses blst-java native library)
     check("builtin/constant/bls12-381/G1/bad-syntax-01/bad-syntax-01")
     check("builtin/constant/bls12-381/G1/bad-syntax-02/bad-syntax-02")
     check("builtin/constant/bls12-381/G1/bad-zero-01/bad-zero-01")
@@ -173,5 +151,6 @@ class PlutusConformanceJvmTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381_millerLoop/left-additive/left-additive")
     check("builtin/semantics/bls12_381_millerLoop/random-pairing/random-pairing")
     check("builtin/semantics/bls12_381_millerLoop/right-additive/right-additive")
+    // ripemd_160 tests - only available on JVM
     check("builtin/semantics/ripemd_160/ripemd_160-empty/ripemd_160-empty")
     check("builtin/semantics/ripemd_160/ripemd_160-length-200/ripemd_160-length-200")

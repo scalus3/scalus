@@ -3,25 +3,31 @@ package uplc
 package eval
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.builtin.platform
+import scalus.cardano.ledger.{CardanoInfo, Language, MajorProtocolVersion}
 
-import java.nio.file.{Files, Paths}
 import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
-/** Tests for the Plutus Conformance Test Suite.
-  *
-  * @note
-  *   This tests run only on JVM right now.
-  */
+/** Tests for the Plutus Conformance Test Suite. */
 abstract class PlutusConformanceTest extends AnyFunSuite:
-    // Use builtinCostModelC.json which includes Plutus 1.53 builtins (dropList, etc.)
-    // Combined with machine costs from protocol params for accurate budget calculation
-    // This must be provided by platform-specific implementations since resource loading
-    // is not available in Scala.js
-    protected def createPlutusVM: PlutusVM
+    protected lazy val plutusVM: PlutusVM = {
+        val costModelJson = new String(
+          platform.readFile("scalus-core/shared/src/main/resources/builtinCostModelC.json"),
+          "UTF-8"
+        )
+        val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
+        val baseParams = MachineParams.fromCostModels(
+          CardanoInfo.mainnet.protocolParams.costModels,
+          Language.PlutusV4,
+          MajorProtocolVersion.dijkstraPV
+        )
+        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
+        PlutusVM.makePlutusV4VM(params)
+    }
 
-    private given PlutusVM = createPlutusVM
+    protected given PlutusVM = plutusVM
     // Run this command in plutus-conformance to generate the test cases
     // find . -name "*.uplc" -print0 | sort -zf | xargs -0 -I {} bash -c 'file="{}"; rel_path="${file#./}"; without_ext="${rel_path%.uplc}"; echo "check(\"$without_ext\")"'
 
@@ -792,7 +798,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     }
 
     protected def readFile(path: String): String = {
-        Files.readString(Paths.get(path))
+        new String(platform.readFile(path), "UTF-8")
     }
 
     protected def path = s"plutus-conformance/test-cases/uplc/evaluation"

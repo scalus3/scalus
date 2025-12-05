@@ -322,6 +322,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     }
     .jvmSettings(
       Test / fork := true,
+      // Run forked tests from project root so paths are consistent across platforms
+      Test / baseDirectory := (LocalRootProject / baseDirectory).value,
       // needed for secp256k1jni. Otherwise, JVM loads secp256k1 library from LD_LIBRARY_PATH
       // which doesn't export the secp256k1_ec_pubkey_decompress function
       // that is needed by bitcoin-s-secp256k1jni, because it's an older fork of secp256k1

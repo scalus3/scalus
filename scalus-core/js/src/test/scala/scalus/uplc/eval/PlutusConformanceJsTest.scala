@@ -1,31 +1,11 @@
 package scalus.uplc.eval
 
-import scalus.builtin.platform
-import scalus.cardano.ledger.{CardanoInfo, Language}
-
-/** Tests for the Plutus Conformance Test Suite.
-  *
-  * @note
-  *   This tests run only on JVM right now.
+/** JS-specific Plutus Conformance tests.
+  * BLS12-381 and ripemd_160 tests are available on JS (uses noble-curves library).
   */
 class PlutusConformanceJsTest extends PlutusConformanceTest:
-    override protected def readFile(path: String): String = {
-        new String(platform.readFile(path), "UTF-8")
-    }
-
-    override protected def createPlutusVM: PlutusVM = {
-        // Read the cost model from file system instead of classpath resources
-        val costModelJson = readFile("scalus-core/shared/src/main/resources/builtinCostModelC.json")
-        val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
-        // Get machine costs from protocol params (same as makePlutusV3VM does)
-        val baseParams = MachineParams.fromProtocolParams(
-          CardanoInfo.mainnet.protocolParams,
-          Language.PlutusV3
-        )
-        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
-        PlutusVM.makePlutusV3VM(params)
-    }
-
+    // format: off
+    // BLS12-381 tests - available on JS (uses @noble/curves library)
     check("builtin/constant/bls12-381/G1/bad-syntax-01/bad-syntax-01")
     check("builtin/constant/bls12-381/G1/bad-syntax-02/bad-syntax-02")
     check("builtin/constant/bls12-381/G1/bad-zero-01/bad-zero-01")
@@ -34,9 +14,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/constant/bls12-381/G1/off-curve/off-curve")
     check("builtin/constant/bls12-381/G1/on-curve-bit3-clear/on-curve-bit3-clear")
     check("builtin/constant/bls12-381/G1/on-curve-bit3-set/on-curve-bit3-set")
-    check(
-      "builtin/constant/bls12-381/G1/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed"
-    )
+    check("builtin/constant/bls12-381/G1/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed")
     check("builtin/constant/bls12-381/G1/out-of-group/out-of-group")
     check("builtin/constant/bls12-381/G1/too-long/too-long")
     check("builtin/constant/bls12-381/G1/too-short/too-short")
@@ -49,9 +27,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/constant/bls12-381/G2/off-curve/off-curve")
     check("builtin/constant/bls12-381/G2/on-curve-bit3-clear/on-curve-bit3-clear")
     check("builtin/constant/bls12-381/G2/on-curve-bit3-set/on-curve-bit3-set")
-    check(
-      "builtin/constant/bls12-381/G2/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed"
-    )
+    check("builtin/constant/bls12-381/G2/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed")
     check("builtin/constant/bls12-381/G2/out-of-group/out-of-group")
     check("builtin/constant/bls12-381/G2/too-long/too-long")
     check("builtin/constant/bls12-381/G2/too-short/too-short")
@@ -60,25 +36,17 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G1/arith/neg/neg")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G1/arith/scalarMul/scalarMul")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G1/uncompress/off-curve/off-curve")
-    check(
-      "builtin/semantics/bls12_381-cardano-crypto-tests/G1/uncompress/out-of-group/out-of-group"
-    )
+    check("builtin/semantics/bls12_381-cardano-crypto-tests/G1/uncompress/out-of-group/out-of-group")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G2/arith/add/add")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G2/arith/neg/neg")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G2/arith/scalarMul/scalarMul")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/G2/uncompress/off-curve/off-curve")
-    check(
-      "builtin/semantics/bls12_381-cardano-crypto-tests/G2/uncompress/out-of-group/out-of-group"
-    )
+    check("builtin/semantics/bls12_381-cardano-crypto-tests/G2/uncompress/out-of-group/out-of-group")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/pairing/balanced/balanced")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/pairing/left-additive/left-additive")
-    check(
-      "builtin/semantics/bls12_381-cardano-crypto-tests/pairing/left-multiplicative/left-multiplicative"
-    )
+    check("builtin/semantics/bls12_381-cardano-crypto-tests/pairing/left-multiplicative/left-multiplicative")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/pairing/right-additive/right-additive")
-    check(
-      "builtin/semantics/bls12_381-cardano-crypto-tests/pairing/right-multiplicative/right-multiplicative"
-    )
+    check("builtin/semantics/bls12_381-cardano-crypto-tests/pairing/right-multiplicative/right-multiplicative")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/pairing/swap-scalars/swap-scalars")
     check("builtin/semantics/bls12_381-cardano-crypto-tests/signature/augmented/augmented")
     // FIXME: This test is failing because blst Java binding for hash_to receive a String for DST
@@ -93,9 +61,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381_G1_compress/compress/compress")
     check("builtin/semantics/bls12_381_G1_equal/equal-false/equal-false")
     check("builtin/semantics/bls12_381_G1_equal/equal-true/equal-true")
-    check(
-      "builtin/semantics/bls12_381_G1_hashToGroup/hash-different-msg-same-dst/hash-different-msg-same-dst"
-    )
+    check("builtin/semantics/bls12_381_G1_hashToGroup/hash-different-msg-same-dst/hash-different-msg-same-dst")
     // FIXME: This test is failing because blst Java binding for hash_to receive a String for DST
     //  and then convert it to a byte array as UTF-8. This is a bug in the Java bindings.
     // Here is the discussion: https://github.com/supranational/blst/pull/232
@@ -103,9 +69,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     ignore("builtin/semantics/bls12_381_G1_hashToGroup/hash-dst-len-255/hash-dst-len-255")(())
     check("builtin/semantics/bls12_381_G1_hashToGroup/hash-dst-len-256/hash-dst-len-256")
     check("builtin/semantics/bls12_381_G1_hashToGroup/hash-empty-dst/hash-empty-dst")
-    check(
-      "builtin/semantics/bls12_381_G1_hashToGroup/hash-same-msg-different-dst/hash-same-msg-different-dst"
-    )
+    check("builtin/semantics/bls12_381_G1_hashToGroup/hash-same-msg-different-dst/hash-same-msg-different-dst")
     check("builtin/semantics/bls12_381_G1_hashToGroup/hash/hash")
     check("builtin/semantics/bls12_381_G1_neg/add-neg/add-neg")
     check("builtin/semantics/bls12_381_G1_neg/neg-zero/neg-zero")
@@ -130,9 +94,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381_G1_uncompress/on-curve-bit1-clear/on-curve-bit1-clear")
     check("builtin/semantics/bls12_381_G1_uncompress/on-curve-bit3-clear/on-curve-bit3-clear")
     check("builtin/semantics/bls12_381_G1_uncompress/on-curve-bit3-set/on-curve-bit3-set")
-    check(
-      "builtin/semantics/bls12_381_G1_uncompress/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed"
-    )
+    check("builtin/semantics/bls12_381_G1_uncompress/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed")
     check("builtin/semantics/bls12_381_G1_uncompress/out-of-group/out-of-group")
     check("builtin/semantics/bls12_381_G1_uncompress/too-long/too-long")
     check("builtin/semantics/bls12_381_G1_uncompress/too-short/too-short")
@@ -144,9 +106,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381_G2_compress/compress/compress")
     check("builtin/semantics/bls12_381_G2_equal/equal-false/equal-false")
     check("builtin/semantics/bls12_381_G2_equal/equal-true/equal-true")
-    check(
-      "builtin/semantics/bls12_381_G2_hashToGroup/hash-different-msg-same-dst/hash-different-msg-same-dst"
-    )
+    check("builtin/semantics/bls12_381_G2_hashToGroup/hash-different-msg-same-dst/hash-different-msg-same-dst")
     // FIXME: This test is failing because blst Java binding for hash_to receive a String for DST
     //  and then convert it to a byte array as UTF-8. This is a bug in the Java bindings.
     // Here is the discussion: https://github.com/supranational/blst/pull/232
@@ -154,9 +114,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     ignore("builtin/semantics/bls12_381_G2_hashToGroup/hash-dst-len-255/hash-dst-len-255")(())
     check("builtin/semantics/bls12_381_G2_hashToGroup/hash-dst-len-256/hash-dst-len-256")
     check("builtin/semantics/bls12_381_G2_hashToGroup/hash-empty-dst/hash-empty-dst")
-    check(
-      "builtin/semantics/bls12_381_G2_hashToGroup/hash-same-msg-different-dst/hash-same-msg-different-dst"
-    )
+    check("builtin/semantics/bls12_381_G2_hashToGroup/hash-same-msg-different-dst/hash-same-msg-different-dst")
     check("builtin/semantics/bls12_381_G2_hashToGroup/hash/hash")
     check("builtin/semantics/bls12_381_G2_neg/add-neg/add-neg")
     check("builtin/semantics/bls12_381_G2_neg/neg-zero/neg-zero")
@@ -181,9 +139,7 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381_G2_uncompress/on-curve-bit1-clear/on-curve-bit1-clear")
     check("builtin/semantics/bls12_381_G2_uncompress/on-curve-bit3-clear/on-curve-bit3-clear")
     check("builtin/semantics/bls12_381_G2_uncompress/on-curve-bit3-set/on-curve-bit3-set")
-    check(
-      "builtin/semantics/bls12_381_G2_uncompress/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed"
-    )
+    check("builtin/semantics/bls12_381_G2_uncompress/on-curve-serialised-not-compressed/on-curve-serialised-not-compressed")
     check("builtin/semantics/bls12_381_G2_uncompress/out-of-group/out-of-group")
     check("builtin/semantics/bls12_381_G2_uncompress/too-long/too-long")
     check("builtin/semantics/bls12_381_G2_uncompress/too-short/too-short")
@@ -193,5 +149,6 @@ class PlutusConformanceJsTest extends PlutusConformanceTest:
     check("builtin/semantics/bls12_381_millerLoop/left-additive/left-additive")
     check("builtin/semantics/bls12_381_millerLoop/random-pairing/random-pairing")
     check("builtin/semantics/bls12_381_millerLoop/right-additive/right-additive")
+    // ripemd_160 tests - available on JS
     check("builtin/semantics/ripemd_160/ripemd_160-empty/ripemd_160-empty")
     check("builtin/semantics/ripemd_160/ripemd_160-length-200/ripemd_160-length-200")
