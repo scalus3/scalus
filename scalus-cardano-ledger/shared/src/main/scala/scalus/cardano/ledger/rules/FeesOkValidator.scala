@@ -131,22 +131,16 @@ object FeesOkValidator extends STS.Validator {
         collateralInputs: Set[TransactionInput],
         utxos: Utxos
     ): Either[TransactionException.BadCollateralInputsUTxOException, Utxos] = boundary {
-        val collateralUtxos = (
-          for
-              collateralInput <- collateralInputs.view
-              collateralOutput <- utxos.get(collateralInput) match
-                  case collateralOutputSome @ Some(_) => collateralOutputSome
-                  // This check allows to be an order independent in the sequence of validation rules
-                  case None =>
-                      break(
-                        Left(
-                          TransactionException.BadCollateralInputsUTxOException(
-                            transactionId
-                          )
-                        )
-                      )
-          yield collateralInput -> collateralOutput
-        ).toMap
+        val collateralUtxos = collateralInputs.view.map { input =>
+            utxos.get(input) match {
+                case Some(output) => input -> output
+                // This check allows to be an order independent in the sequence of validation rules
+                case None =>
+                    break(
+                      Left(TransactionException.BadCollateralInputsUTxOException(transactionId))
+                    )
+            }
+        }.toMap
 
         Right(collateralUtxos)
     }
