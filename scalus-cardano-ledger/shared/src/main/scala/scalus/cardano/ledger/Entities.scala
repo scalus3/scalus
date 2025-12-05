@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.Dom.Element
 import scalus.cardano.address.Address
+import scalus.cardano.ledger.utils.CollateralSufficient
 
 // TODO: maybe replace on enum
 sealed abstract class TransactionException(message: String, cause: Throwable)
@@ -142,51 +143,85 @@ object TransactionException {
           s"Value not conserved for transactionId $transactionId, consumed: $consumed, produced: $produced"
         )
 
-    // It's Babbage.FeeTooSmallUTxO in cardano-ledger
-    final case class FeeTooSmallException(
+    /** It's Babbage.FeeTooSmallUTxO && Alonzo.ScriptsNotPaidUTxO &&
+      * Babbage.CollateralContainsNonADA && Alonzo.InsufficientCollateral &&
+      * Babbage.IncorrectTotalCollateralField && Babbage.NoCollateralInputs in cardano-ledger
+      */
+    final case class FeesOkException(
         transactionId: TransactionHash,
         transactionFee: Coin,
-        minTransactionFee: Coin
-    ) extends TransactionException(
-          s"Transaction fee is too small for transactionId $transactionId, transaction fee: $transactionFee, minimum transaction fee: $minTransactionFee"
-        )
+        minRequiredFee: Coin,
+        collateralPercentage: Long,
+        areTotalExUnitsZero: Boolean, // 2) If the total ExUnits are 0 in both Memory and Steps, no further part needs to be checked.
+        collateralReturnOutput: Option[TransactionOutput] = None,
+        actualTotalSumOfCollateralCoins: Coin = Coin.zero,
+        expectedTotalSumOfCollateralCoins: Option[Coin] = None,
+        collateralsConsistNotVKeyAddress: Utxos = Utxos.empty,
+        collateralsContainNotOnlyADA: Utxos = Utxos.empty,
+        remainingAssets: MultiAsset = MultiAsset.empty,
+        hasCollateralInputs: Boolean = false
+    ) extends TransactionException({
+            val failures = Seq(
+              Option.when(transactionFee < minRequiredFee)(
+                s"fee $transactionFee is less than minimum required $minRequiredFee"
+              ),
+              Option.when(!areTotalExUnitsZero && collateralsConsistNotVKeyAddress.nonEmpty)(
+                s"collateral contains non-VKey addresses: $collateralsConsistNotVKeyAddress"
+              ),
+              Option.when(!areTotalExUnitsZero && remainingAssets.nonEmpty)(
+                s"collateral contains non-ADA assets: $remainingAssets (UTxOs: $collateralsContainNotOnlyADA, collateral return: $collateralReturnOutput)"
+              ),
+              Option.when(
+                !areTotalExUnitsZero && CollateralSufficient.check(
+                  actualTotalSumOfCollateralCoins,
+                  transactionFee,
+                  collateralPercentage
+                )
+              )(
+                s"collateral $actualTotalSumOfCollateralCoins is insufficient (required $collateralPercentage% of fee $transactionFee)"
+              ),
+              Option.when(
+                !areTotalExUnitsZero && expectedTotalSumOfCollateralCoins.exists(
+                  actualTotalSumOfCollateralCoins != _
+                )
+              )(
+                s"collateral $actualTotalSumOfCollateralCoins does not match expected $expectedTotalSumOfCollateralCoins"
+              ),
+              Option.when(!areTotalExUnitsZero && !hasCollateralInputs)(
+                "no collateral inputs provided"
+              )
+            ).flatten
 
-    // It's Alonzo.ScriptsNotPaidUTxO in cardano-ledger
-    final case class CollateralsConsistNotOnlyVKeyAddressException(
-        transactionId: TransactionHash,
-        invalidCollaterals: Set[(TransactionInput, TransactionOutput)]
-    ) extends TransactionException(
-          s"Collaterals consist not only VKey addresses for transactionId $transactionId, invalid collaterals: $invalidCollaterals"
-        )
+            s"Fee or collateral validation failed for transaction $transactionId: ${failures.mkString("; ")}"
+        }) {
+        // 1) The fee paid is >= the minimum fee
+        def isTransactionFeeLessThanMinRequiredFee: Boolean = transactionFee < minRequiredFee
 
-    // It's Babbage.CollateralContainsNonADA in cardano-ledger
-    final case class CollateralsContainNotOnlyADAException(
-        transactionId: TransactionHash,
-        invalidCollaterals: Set[(TransactionInput, TransactionOutput)],
-        collateralReturnOutput: Option[TransactionOutput]
-    ) extends TransactionException(
-          s"Collaterals contain non-ADA assets for transactionId $transactionId, invalid collaterals: $invalidCollaterals, collateral return output: $collateralReturnOutput"
-        )
+        // 3) The collateral consists only of VKey addresses
+        def hasCollateralsConsistNotVKeyAddress: Boolean =
+            !areTotalExUnitsZero && collateralsConsistNotVKeyAddress.nonEmpty
 
-    // It's Alonzo.InsufficientCollateral in cardano-ledger
-    final case class InsufficientTotalSumOfCollateralCoinsException(
-        transactionId: TransactionHash,
-        totalSumOfCollateralCoins: Coin,
-        collateralReturnOutput: Option[TransactionOutput],
-        transactionFee: Coin,
-        collateralPercentage: Long
-    ) extends TransactionException(
-          s"Insufficient total sum of collateral coins for transactionId $transactionId, total sum of collateral coins: $totalSumOfCollateralCoins, collateral return output: $collateralReturnOutput, transaction fee: $transactionFee, collateral percentage: $collateralPercentage"
-        )
+        // 4) The collateral inputs do not contain any non-ADA part
+        def hasCollateralsContainNotOnlyADA: Boolean =
+            !areTotalExUnitsZero && remainingAssets.nonEmpty
 
-    // It's Babbage.IncorrectTotalCollateralField in cardano-ledger
-    final case class IncorrectTotalCollateralException(
-        transactionId: TransactionHash,
-        totalSumOfCollateralCoins: Coin,
-        totalCollateral: Option[Coin]
-    ) extends TransactionException(
-          s"Incorrect total collateral for transactionId $transactionId, total sum of collateral coins: $totalSumOfCollateralCoins, total collateral: $totalCollateral"
-        )
+        // 5) The collateral is sufficient to cover the appropriate percentage of the fee marked in the transaction
+        def isCollateralInsufficient: Boolean =
+            !areTotalExUnitsZero && CollateralSufficient.check(
+              actualTotalSumOfCollateralCoins,
+              transactionFee,
+              collateralPercentage
+            )
+
+        // 6) The collateral is equivalent to total collateral asserted by the transaction
+        def isCollateralNotEqualToExpected: Boolean =
+            !areTotalExUnitsZero && expectedTotalSumOfCollateralCoins.exists {
+                actualTotalSumOfCollateralCoins != _
+            }
+
+        // 7) There is at least one collateral input
+        def areCollateralInputsMissing: Boolean = !areTotalExUnitsZero && !hasCollateralInputs
+    }
 
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
@@ -196,10 +231,6 @@ object TransactionException {
     ) extends TransactionException(
           s"Execution units for transaction $transactionId exceed the maximum. Actual: $actualTxExecutionUnits, maximum: $maxTxExecutionUnits"
         )
-
-    // It's Babbage.NoCollateralInputs in cardano-ledger
-    final case class NoCollateralInputsException(transactionId: TransactionHash)
-        extends TransactionException(s"No collateral inputs for transactionId $transactionId")
 
     // It's Alonzo.TooManyCollateralInputs in cardano-ledger
     final case class TooManyCollateralInputsException(

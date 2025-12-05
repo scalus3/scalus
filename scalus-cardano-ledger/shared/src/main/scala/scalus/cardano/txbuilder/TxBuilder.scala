@@ -6,8 +6,7 @@ import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.cardano.ledger.rules.FeesOkValidator
-import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
+import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 import scalus.cardano.ledger.rules.STS.Validator
@@ -878,7 +877,7 @@ case class TxBuilder(
 
         // If we need collateral, first calculate how much we need vs how much is present
         val currentCollateralAmount = totalCollateralValue(tx, resolvedUtxos)
-        val requiredCollateralAmount = FeesOkValidator.calculateRequiredCollateral(
+        val requiredCollateralAmount = CollateralSufficient.calculateRequiredCollateral(
           tx.body.value.fee,
           env.protocolParams.collateralPercentage
         )

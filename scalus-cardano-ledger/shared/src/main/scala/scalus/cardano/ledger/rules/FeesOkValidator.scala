@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.cardano.ledger.utils.MinTransactionFee
+import scalus.cardano.ledger.utils.{CollateralSufficient, MinTransactionFee}
 import scala.util.boundary
 import scala.util.boundary.break
 
@@ -18,255 +18,152 @@ import scala.util.boundary.break
 object FeesOkValidator extends STS.Validator {
     override final type Error = TransactionException.BadInputsUTxOException |
         TransactionException.BadCollateralInputsUTxOException |
-        TransactionException.BadReferenceInputsUTxOException |
-        TransactionException.FeeTooSmallException |
-        TransactionException.CollateralsConsistNotOnlyVKeyAddressException |
-        TransactionException.CollateralsContainNotOnlyADAException |
-        TransactionException.InsufficientTotalSumOfCollateralCoinsException |
-        TransactionException.IncorrectTotalCollateralException |
-        TransactionException.NoCollateralInputsException
+        TransactionException.BadReferenceInputsUTxOException | TransactionException.FeesOkException
 
-    override def validate(context: Context, state: State, event: Event): Result = boundary {
+    override def validate(context: Context, state: State, event: Event): Result = {
         val transactionId = event.id
-        val collateralInputs = event.body.value.collateralInputs
-        val collateralReturnOutput = event.body.value.collateralReturnOutput.map(_.value)
-        val utxo = state.utxos
-
-        for
-            _ <- feePaidIsGreeterOrEqualThanMinimumFee(context, state, event)
-            _ <-
-                if totalExUnitsAreZero(event) then success
-                else
-                    val (
-                      notVKeyAddressCollaterals,
-                      notOnlyADACollaterals,
-                      totalSumOfCollaterals
-                    ) = collateralInputs.toSet.view
-                        .map { collateralInput =>
-                            utxo.get(collateralInput) match
-                                case Some(collateralOutput) => collateralInput -> collateralOutput
-                                // This check allows to be an order independent in the sequence of validation rules
-                                case None =>
-                                    break(
-                                      failure(
-                                        TransactionException.BadCollateralInputsUTxOException(
-                                          transactionId
-                                        )
-                                      )
-                                    )
-                        }
-                        .foldLeft(
-                          (
-                            Set.empty[(TransactionInput, TransactionOutput)],
-                            Set.empty[(TransactionInput, TransactionOutput)],
-                            Value.zero
-                          )
-                        ) { (acc, collateralData) =>
-                            val (_, collateralOutput) = collateralData
-
-                            val (
-                              notVKeyAddressCollaterals,
-                              notOnlyADACollaterals,
-                              totalSumOfCollaterals
-                            ) = acc
-
-                            val newNotVKeyAddressCollaterals =
-                                if isCollateralConsistsOnlyVKeyAddress(collateralOutput) then
-                                    notVKeyAddressCollaterals
-                                else notVKeyAddressCollaterals + collateralData
-
-                            val newNotOnlyADACollaterals =
-                                if isCollateralContainsOnlyADA(collateralOutput) then
-                                    notOnlyADACollaterals
-                                else notOnlyADACollaterals + collateralData
-
-                            val newTotalSumOfCollaterals =
-                                totalSumOfCollaterals + collateralOutput.value
-
-                            (
-                              newNotVKeyAddressCollaterals,
-                              newNotOnlyADACollaterals,
-                              newTotalSumOfCollaterals
-                            )
-                        }
-
-                    if notVKeyAddressCollaterals.nonEmpty then
-                        break(
-                          failure(
-                            TransactionException.CollateralsConsistNotOnlyVKeyAddressException(
-                              transactionId,
-                              notVKeyAddressCollaterals
-                            )
-                          )
-                        )
-
-                    // Collateral inputs can contain multi-assets, as long all of them are returned to the
-                    // `collateralReturnTxBodyL`. This design decision was also intentional, in order to
-                    // simplify utxo selection for collateral.
-                    val collateralReturnOutputValue = collateralReturnOutput
-                        .map(_.value)
-                        .getOrElse(Value.zero)
-                    if !(
-                          totalSumOfCollaterals.isEmptyAssets && collateralReturnOutputValue.isEmptyAssets ||
-                              (totalSumOfCollaterals.assets - collateralReturnOutputValue.assets).isEmpty
-                        )
-                    then
-                        break(
-                          failure(
-                            TransactionException.CollateralsContainNotOnlyADAException(
-                              transactionId,
-                              notOnlyADACollaterals,
-                              collateralReturnOutput
-                            )
-                          )
-                        )
-
-                    for
-                        _ <- totalSumOfCollateralCoinsIsSufficient(
-                          context,
-                          event,
-                          totalSumOfCollaterals.coin
-                        )
-                        _ <- totalSumOfCollateralCoinsIsEquivalentToTotalCollateral(
-                          event,
-                          totalSumOfCollaterals.coin
-                        )
-                        _ <- isAtLeastOneCollateralInput(event)
-                    yield ()
-        yield ()
-    }
-
-    private def feePaidIsGreeterOrEqualThanMinimumFee(
-        context: Context,
-        state: State,
-        event: Event
-    ): Result = {
-        val transactionId = event.id
-        val transactionFee = event.body.value.fee
-        val utxo = state.utxos
+        val body = event.body.value
+        val utxos = state.utxos
+        val transactionFee = body.fee
         val protocolParams = context.env.params
+        val collateralPercentage = protocolParams.collateralPercentage
 
-        for
-            minTransactionFee <- MinTransactionFee(event, utxo, protocolParams)
-            _ <-
-                if transactionFee < minTransactionFee then
-                    failure(
-                      TransactionException.FeeTooSmallException(
-                        transactionId,
-                        transactionFee,
-                        minTransactionFee
-                      )
-                    )
-                else success
-        yield ()
-    }
+        val collateralInputs = body.collateralInputs.toSet
+        val expectedTotalSumOfCollateralCoins = body.totalCollateral
+        val collateralReturnOutput = body.collateralReturnOutput.map(_.value)
+        val Value(collateralReturnOutputCoin, collateralReturnOutputAssets) =
+            collateralReturnOutput.map(_.value).getOrElse(Value.zero)
 
-    private def totalExUnitsAreZero(event: Event): Boolean = {
+        val collateralUtxos = extractCollateralUtxos(transactionId, collateralInputs, utxos) match
+            case Right(utxos) => utxos
+            case Left(error)  => return failure(error)
+
+        val Value(totalSumOfCollateralCoins, totalSumOfCollateralAssets) =
+            calculateTotalSumOfCollateralValues(collateralUtxos)
+
+        val actualTotalSumOfCollateralCoins =
+            totalSumOfCollateralCoins - collateralReturnOutputCoin
+
+        val minRequiredFee = MinTransactionFee(event, utxos, protocolParams) match
+            case Right(fee)  => fee
+            case Left(error) => return failure(error)
+
+        // 1) The fee paid is >= the minimum fee
+        val isTransactionFeeGreaterOrEqualThanMinRequiredFee = transactionFee >= minRequiredFee
+
+        // 2) If the total ExUnits are 0 in both Memory and Steps, no further part needs to be checked.
         // The total ExUnits are zero if there are no redeemers in the witness set
         // or if all redeemers have ExUnits.zero.
         // This is a simplified check, as in original haskell cardano code and specification.
-//        calculateTotalExUnits(event: Event) == ExUnits.zero
-        event.witnessSet.redeemers.isEmpty
-    }
+        val areTotalExUnitsZero = event.witnessSet.redeemers.isEmpty
+        if areTotalExUnitsZero then
+            return if isTransactionFeeGreaterOrEqualThanMinRequiredFee then success
+            else
+                failure(
+                  TransactionException.FeesOkException(
+                    transactionId,
+                    transactionFee,
+                    minRequiredFee,
+                    collateralPercentage,
+                    areTotalExUnitsZero,
+                    collateralReturnOutput,
+                    actualTotalSumOfCollateralCoins,
+                    expectedTotalSumOfCollateralCoins
+                  )
+                )
 
-    private def isCollateralConsistsOnlyVKeyAddress(
-        collateralOutput: TransactionOutput
-    ): Boolean = collateralOutput.address.keyHashOption.nonEmpty
+        // 3) The collateral consists only of VKey addresses
+        val collateralsConsistNotVKeyAddress =
+            findCollateralsConsistNotVKeyAddress(collateralUtxos)
 
-    private def isCollateralContainsOnlyADA(
-        collateralOutput: TransactionOutput
-    ): Boolean = collateralOutput.value.assets.isEmpty
+        // 4) The collateral inputs do not contain any non-ADA part
+        // Collateral inputs can contain multi-assets, as long all of them are returned to the
+        // `collateralReturnTxBodyL`. This design decision was also intentional, in order to
+        // simplify utxos selection for collateral.
+        val remainingAssets = totalSumOfCollateralAssets - collateralReturnOutputAssets
+        val collateralsContainNotOnlyADA =
+            findCollateralsContainNotOnlyADA(collateralUtxos)
 
-    private def totalSumOfCollateralCoinsIsSufficient(
-        context: Context,
-        event: Event,
-        totalSumOfCollateralCoins: Coin
-    ): Result = {
-        val transactionId = event.id
-        val transactionFee = event.body.value.fee
-        val collateralReturnOutput = event.body.value.collateralReturnOutput
-        val collateralPercentage = context.env.params.collateralPercentage
+        // 5) The collateral is sufficient to cover the appropriate percentage of the fee marked in the transaction
+        val isCollateralSufficient = CollateralSufficient.check(
+          actualTotalSumOfCollateralCoins,
+          transactionFee,
+          collateralPercentage
+        )
 
-        val deltaCoins = collateralReturnOutput match
-            case Some(collateralReturnOutput) =>
-                totalSumOfCollateralCoins - collateralReturnOutput.value.value.coin
-            case None => totalSumOfCollateralCoins
+        // 6) The collateral is equivalent to total collateral asserted by the transaction
+        val isCollateralEqualToExpected =
+            expectedTotalSumOfCollateralCoins.forall {
+                actualTotalSumOfCollateralCoins == _
+            } // True when expectedTotalSumOfCollateralCoins is None
 
-        if (deltaCoins.value * 100) < transactionFee.value * collateralPercentage then
+        // 7) There is at least one collateral input
+        val hasCollateralInputs = collateralInputs.nonEmpty
+
+        if !isTransactionFeeGreaterOrEqualThanMinRequiredFee ||
+            collateralsConsistNotVKeyAddress.nonEmpty ||
+            remainingAssets.nonEmpty ||
+            !isCollateralSufficient ||
+            !isCollateralEqualToExpected ||
+            !hasCollateralInputs
+        then
             failure(
-              TransactionException.InsufficientTotalSumOfCollateralCoinsException(
+              TransactionException.FeesOkException(
                 transactionId,
-                totalSumOfCollateralCoins,
-                collateralReturnOutput.map(_.value),
                 transactionFee,
-                collateralPercentage
+                minRequiredFee,
+                collateralPercentage,
+                areTotalExUnitsZero,
+                collateralReturnOutput,
+                actualTotalSumOfCollateralCoins,
+                expectedTotalSumOfCollateralCoins,
+                collateralsConsistNotVKeyAddress,
+                collateralsContainNotOnlyADA,
+                remainingAssets,
+                hasCollateralInputs
               )
             )
         else success
     }
 
-    private def totalSumOfCollateralCoinsIsEquivalentToTotalCollateral(
-        event: Event,
-        totalSumOfCollateralCoins: Coin
-    ): Result = {
-        val transactionId = event.id
-        val totalCollateral = event.body.value.totalCollateral
-        val collateralReturnOutput = event.body.value.collateralReturnOutput
-
-        // The totalCollateral field represents the net collateral (inputs - return).
-        // This is defined in the Cardano Ledger specification and implemented in:
-        //   - cardano-ledger/eras/babbage/impl/src/Cardano/Ledger/Babbage/Collateral.hs
-        //     function: collAdaBalance
-        //       collAdaBalance txBody utxoCollateral = toDeltaCoin $
-        //         case txBody ^. collateralReturnTxBodyL of
-        //           SNothing -> colbal
-        //           SJust txOut -> colbal <-> (txOut ^. coinTxOutL)
-        //         where colbal = sumAllCoin utxoCollateral
-        //   - cardano-ledger/eras/babbage/impl/src/Cardano/Ledger/Babbage/Rules/Utxo.hs
-        //     function: validateCollateralEqBalance
-        //       validates that: bal == totalCollateral (when totalCollateral is present)
-        val netCollateralCoins = collateralReturnOutput match
-            case Some(returnOutput) =>
-                totalSumOfCollateralCoins - returnOutput.value.value.coin
-            case None => totalSumOfCollateralCoins
-
-        totalCollateral match
-            case None => success
-            case Some(collateral) =>
-                if collateral != netCollateralCoins then
-                    failure(
-                      TransactionException.IncorrectTotalCollateralException(
-                        transactionId,
-                        netCollateralCoins,
-                        totalCollateral
+    private def extractCollateralUtxos(
+        transactionId: TransactionHash,
+        collateralInputs: Set[TransactionInput],
+        utxos: Utxos
+    ): Either[TransactionException.BadCollateralInputsUTxOException, Utxos] = boundary {
+        val collateralUtxos = (
+          for
+              collateralInput <- collateralInputs.view
+              collateralOutput <- utxos.get(collateralInput) match
+                  case collateralOutputSome @ Some(_) => collateralOutputSome
+                  // This check allows to be an order independent in the sequence of validation rules
+                  case None =>
+                      break(
+                        Left(
+                          TransactionException.BadCollateralInputsUTxOException(
+                            transactionId
+                          )
+                        )
                       )
-                    )
-                else success
+          yield collateralInput -> collateralOutput
+        ).toMap
+
+        Right(collateralUtxos)
     }
 
-    private def isAtLeastOneCollateralInput(
-        event: Event
-    ): Result = {
-        if event.body.value.collateralInputs.toSet.isEmpty then
-            failure(
-              TransactionException.NoCollateralInputsException(event.id)
-            )
-        else success
+    private def calculateTotalSumOfCollateralValues(
+        collateralUtxos: Utxos
+    ): scalus.cardano.ledger.Value = {
+        collateralUtxos.foldLeft(Value.zero) { case (acc, (_, collateralOutput)) =>
+            acc + collateralOutput.value
+        }
     }
 
-    /** Calculates the required collateral amount based on the transaction fee and collateral
-      * percentage from protocol parameters.
-      *
-      * The required collateral is calculated as: (fee * collateralPercentage) / 100
-      *
-      * @param fee
-      *   the transaction fee
-      * @param collateralPercentage
-      *   the collateral percentage from protocol parameters
-      * @return
-      *   the required collateral amount
-      */
-    def calculateRequiredCollateral(fee: Coin, collateralPercentage: Long): Coin = {
-        Coin((fee.value * collateralPercentage) / 100)
-    }
+    private def findCollateralsConsistNotVKeyAddress(
+        collateralUtxos: Utxos
+    ): Utxos = collateralUtxos.filter { _._2.address.keyHashOption.isEmpty }
+
+    private def findCollateralsContainNotOnlyADA(
+        collateralUtxos: Utxos
+    ): Utxos = collateralUtxos.filter { _._2.value.nonEmptyAssets }
 }
