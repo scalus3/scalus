@@ -2,6 +2,15 @@ name: Deploy Site
 
 on:
   workflow_dispatch:
+    inputs:
+      api_mode:
+        description: 'API Documentation'
+        required: true
+        type: choice
+        options:
+          - preserve
+          - regenerate
+        default: preserve
 
 permissions:
   contents: write
@@ -23,6 +32,18 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: scalus-site/yarn.lock
 
+      - name: Setup Java and SBT (for Scaladoc generation)
+        if: inputs.api_mode == 'regenerate'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'sbt'
+
+      - name: Generate Scaladoc API documentation
+        if: inputs.api_mode == 'regenerate'
+        run: sbt docs/unidoc
+
       - name: Install dependencies
         working-directory: scalus-site
         run: yarn install --frozen-lockfile
@@ -31,7 +52,18 @@ jobs:
         working-directory: scalus-site
         run: yarn build
 
+      - name: Copy generated API docs to build output
+        if: inputs.api_mode == 'regenerate'
+        run: |
+          if [ -d "scalus-site/public/api" ]; then
+            cp -r scalus-site/public/api scalus-site/out/
+            echo "Copied newly generated /api folder to build output"
+          else
+            echo "Warning: No /api folder found in scalus-site/public/"
+          fi
+
       - name: Preserve /api folder from gh-pages
+        if: inputs.api_mode == 'preserve'
         run: |
           git fetch origin gh-pages:gh-pages || echo "gh-pages branch does not exist yet"
           if git rev-parse --verify gh-pages > /dev/null 2>&1; then

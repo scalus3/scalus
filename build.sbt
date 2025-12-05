@@ -35,7 +35,7 @@ ThisBuild / description := "Scalus - DApps Development Platform for Cardano"
 ThisBuild / licenses := List(
   "Apache 2" -> new URI("http://www.apache.org/licenses/LICENSE-2.0.txt").toURL
 )
-ThisBuild / homepage := Some(url("https://github.com/nau/scalus"))
+ThisBuild / homepage := Some(url("https://github.com/scalus3/scalus"))
 ThisBuild / versionScheme := Some("early-semver")
 Test / publishArtifact := false
 
