@@ -770,6 +770,10 @@ class CekMachine(
                                 if i >= 0 && i < cases.size then Compute(ctx, env, cases(i.toInt))
                                 else throw new CaseIndexOutOfBounds(i, cases.size, env)
                             case Constant.Bool(b) =>
+                                // Bool has exactly 2 constructors (False=0, True=1)
+                                // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
+                                if cases.size == 0 || cases.size > 2 then
+                                    throw new CaseBoolBranchMissing(b, cases.size, env)
                                 val index = if b then 1 else 0
                                 if index < cases.size then Compute(ctx, env, cases(index))
                                 else throw new CaseBoolBranchMissing(b, cases.size, env)
