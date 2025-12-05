@@ -25,14 +25,21 @@ jobs:
             experimental-features = nix-command flakes
       - uses: DeterminateSystems/magic-nix-cache-action@main
       - name: Build and test in Nix devshell
-        run: nix develop .#ci --accept-flake-config --command bash -c "sbt ci-jvm"
+        id: build
+        run: |
+          nix develop .#ci --accept-flake-config --command bash -c "sbt ci-jvm" 2>&1 | tee build.log
+          WARNINGS=$(grep -ci "warning:" build.log || echo "0")
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          exit ${PIPESTATUS[0]}
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: always()
+        env:
+          WARNINGS: ${{ steps.build.outputs.warnings }}
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
           title: "[${{ github.event.repository.name }}] CI-JVM ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
-          description: "[${{ github.event.head_commit.message }}](${{ github.event.head_commit.url }})"
+          description: "[${{ github.event.head_commit.message }}](${{ github.event.head_commit.url }})${{ steps.build.outputs.warnings > 0 && format('\n⚠️ Warnings: {0}', steps.build.outputs.warnings) || '' }}"
           url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           username: "GitHub Actions"
           avatar_url: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
