@@ -31,6 +31,18 @@ jobs:
         working-directory: scalus-site
         run: yarn build
 
+      - name: Preserve /api folder from gh-pages
+        run: |
+          git fetch origin gh-pages:gh-pages || echo "gh-pages branch does not exist yet"
+          if git rev-parse --verify gh-pages > /dev/null 2>&1; then
+            git checkout gh-pages -- api || echo "No /api folder found in gh-pages"
+            if [ -d "api" ]; then
+              cp -r api scalus-site/out/
+              echo "Copied /api folder from gh-pages to build output"
+            fi
+            git checkout ${{ github.ref_name }}
+          fi
+
       - name: Configure git
         run: |
           git config --global user.name "github-actions[bot]"

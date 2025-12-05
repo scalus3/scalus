@@ -2,11 +2,11 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Cardano Smart Contracts & dApps Development Platform | Scalus',
+  title: 'Cardano Smart Contracts & dApps Development Platform | Scalus Docs',
   description: 'Professional Cardano smart contracts and dApps development in Scala 3. Scalus compiles to Plutus Core for on-chain validation with full-stack Cardano development: write smart contracts, build transactions, and application logic in one unified platform.',
   keywords: 'Cardano smart contracts, Cardano dApps development, Plutus smart contracts, Cardano blockchain development, UPLC compiler, Cardano developer platform, Scala blockchain, Cardano full-stack development',
   openGraph: {
-    title: 'Cardano Smart Contracts & dApps Development Platform | Scalus',
+    title: 'Cardano Smart Contracts & dApps Development Platform | Scalus Docs',
     description: 'Professional Cardano smart contracts and dApps development in Scala 3. Write Plutus contracts, build transactions, and create full-stack Cardano applications.',
     url: 'https://scalus.org',
     siteName: 'Scalus',
