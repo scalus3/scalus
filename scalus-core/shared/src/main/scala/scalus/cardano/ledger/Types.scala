@@ -293,6 +293,9 @@ enum Language extends java.lang.Enum[Language] {
     /** Plutus V3, introduced in Conway hard fork */
     case PlutusV3
 
+    /** Plutus V4, introduced in protocol version 11 */
+    case PlutusV4
+
     def languageId: Int = this.ordinal
 }
 
@@ -306,6 +309,7 @@ object Language {
             case Language.PlutusV1 => "v1"
             case Language.PlutusV2 => "v2"
             case Language.PlutusV3 => "v3"
+            case Language.PlutusV4 => "v4"
         }
     }
 
@@ -314,6 +318,7 @@ object Language {
             case Language.PlutusV1 => MajorProtocolVersion.alonzoPV
             case Language.PlutusV2 => MajorProtocolVersion.vasilPV
             case Language.PlutusV3 => MajorProtocolVersion.changPV
+            case Language.PlutusV4 => MajorProtocolVersion.dijkstraPV
         }
     }
 

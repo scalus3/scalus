@@ -55,7 +55,7 @@ object MajorProtocolVersion {
     val valentinePV = MajorProtocolVersion(8)
     val changPV = MajorProtocolVersion(9)
     val plominPV = MajorProtocolVersion(10)
-    val pv11PV = MajorProtocolVersion(11)
+    val dijkstraPV = MajorProtocolVersion(11)
     val futurePV = MajorProtocolVersion(Int.MaxValue)
 
     // Known protocol versions
@@ -69,6 +69,6 @@ object MajorProtocolVersion {
           valentinePV,
           changPV,
           plominPV,
-          pv11PV
+          dijkstraPV
         )
 }

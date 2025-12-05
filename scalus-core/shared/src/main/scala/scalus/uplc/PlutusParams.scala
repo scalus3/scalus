@@ -1353,3 +1353,10 @@ object PlutusV2Params:
 object PlutusV3Params:
     given ReadWriter[PlutusV3Params] = JsonUtils.mkClassFieldsReadWriter[PlutusV3Params]
     val (toSeq, fromSeq) = JsonUtils.mkClassFieldsFromSeqIso[PlutusV3Params]
+
+// TODO: Create a real PlutusV4Params class with costs for new builtins when they are finalized
+// For now, PlutusV4 uses the same cost model parameters as PlutusV3
+type PlutusV4Params = PlutusV3Params
+
+object PlutusV4Params:
+    export PlutusV3Params.{fromSeq, given_ReadWriter_PlutusV3Params as given_ReadWriter_PlutusV4Params, toSeq}

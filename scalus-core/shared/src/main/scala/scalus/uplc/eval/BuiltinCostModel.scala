@@ -523,7 +523,7 @@ object BuiltinCostModel {
                     )
                   )
               case (Language.PlutusV1 | Language.PlutusV2, BuiltinSemanticsVariant.B) |
-                  (Language.PlutusV3, BuiltinSemanticsVariant.C) =>
+                  (Language.PlutusV3 | Language.PlutusV4, BuiltinSemanticsVariant.C) =>
                   DefaultCostingFun(
                     cpu = TwoArguments.MultipliedSizes(
                       OneVariableLinearFunction(
@@ -566,7 +566,7 @@ object BuiltinCostModel {
                       )
                     )
                   )
-              case Language.PlutusV3 =>
+              case Language.PlutusV3 | Language.PlutusV4 =>
                   DefaultCostingFun(
                     cpu = TwoArguments.ConstAboveDiagonal(
                       ConstantOrTwoArguments(
@@ -616,7 +616,7 @@ object BuiltinCostModel {
                       )
                     )
                   )
-              case Language.PlutusV3 =>
+              case Language.PlutusV3 | Language.PlutusV4 =>
                   DefaultCostingFun(
                     cpu = TwoArguments.ConstAboveDiagonal(
                       ConstantOrTwoArguments(
@@ -667,7 +667,7 @@ object BuiltinCostModel {
                       )
                     )
                   )
-              case Language.PlutusV3 =>
+              case Language.PlutusV3 | Language.PlutusV4 =>
                   // same as modInteger
                   DefaultCostingFun(
                     cpu = TwoArguments.ConstAboveDiagonal(
@@ -717,7 +717,7 @@ object BuiltinCostModel {
                       )
                     )
                   )
-              case Language.PlutusV3 =>
+              case Language.PlutusV3 | Language.PlutusV4 =>
                   DefaultCostingFun(
                     cpu = TwoArguments.ConstAboveDiagonal(
                       ConstantOrTwoArguments(

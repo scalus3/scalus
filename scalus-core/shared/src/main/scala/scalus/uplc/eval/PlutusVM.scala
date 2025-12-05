@@ -34,6 +34,8 @@ class PlutusVM(
       semanticVariant
     )
 
+    private val caseOnBuiltinsEnabled: Boolean = language == Language.PlutusV4
+
     /** Evaluates a Plutus script according to the Plutus specification.
       *
       * This includes CIP-117.
@@ -109,12 +111,13 @@ class PlutusVM(
           machineParams,
           budgetSpender,
           logger,
-          builtins.getBuiltinRuntime
+          builtins.getBuiltinRuntime,
+          caseOnBuiltinsEnabled
         )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
     }
 
-    /** Plutus V3 requires the result to be `Unit` to be considered valid.
+    /** Plutus V3 and V4 require the result to be `Unit` to be considered valid.
       * @param res
       *   The result term
       * @return
@@ -124,13 +127,13 @@ class PlutusVM(
       *   [CIP-117](https://cips.cardano.org/cip/CIP-0117/)
       */
     private def isResultValid(res: Term): Boolean = (language, res) match
-        case (Language.PlutusV1 | Language.PlutusV2, _)     => true
-        case (Language.PlutusV3, Term.Const(Constant.Unit)) => true
-        case _                                              => false
+        case (Language.PlutusV1 | Language.PlutusV2, _)                         => true
+        case (Language.PlutusV3 | Language.PlutusV4, Term.Const(Constant.Unit)) => true
+        case _                                                                  => false
 }
 
 /** Companion object for PlutusVM that provides factory methods for creating VM instances for
-  * different Plutus versions (V1, V2, V3).
+  * different Plutus versions (V1, V2, V3, V4).
   */
 object PlutusVM {
 
@@ -231,5 +234,43 @@ object PlutusVM {
           Language.PlutusV3
         )
         makePlutusV3VM(params)
+    }
+
+    /** Creates a Plutus V4 VM with custom parameters.
+      *
+      * @param params
+      *   Custom machine parameters to use for the VM
+      * @return
+      *   A configured Plutus V4 VM instance
+      */
+    def makePlutusV4VM(params: MachineParams): PlutusVM = {
+        import scalus.cardano.ledger.MajorProtocolVersion
+        // PlutusV4 requires protocol version 11 (dijkstraPV)
+        val semanticVariant = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
+          MajorProtocolVersion.dijkstraPV,
+          Language.PlutusV4
+        )
+        new PlutusVM(
+          Language.PlutusV4,
+          params,
+          semanticVariant,
+          platform
+        )
+    }
+
+    /** Creates a Plutus V4 VM with default parameters.
+      *
+      * @return
+      *   A Plutus V4 VM instance with default parameters
+      */
+    def makePlutusV4VM(): PlutusVM = {
+        import scalus.cardano.ledger.MajorProtocolVersion
+        // PlutusV4 requires protocol version 11 (dijkstraPV)
+        val params = MachineParams.fromCostModels(
+          CardanoInfo.mainnet.protocolParams.costModels,
+          Language.PlutusV4,
+          MajorProtocolVersion.dijkstraPV
+        )
+        makePlutusV4VM(params)
     }
 }

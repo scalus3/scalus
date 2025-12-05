@@ -182,7 +182,7 @@ object Builtins {
         val tmp = Map(
           Language.PlutusV1 -> SortedMap(
             MajorProtocolVersion.alonzoPV -> Batches.batch1,
-            MajorProtocolVersion.pv11PV -> (
+            MajorProtocolVersion.dijkstraPV -> (
               Batches.batch2 ++ Batches.batch3 ++
                   Batches.batch4 ++ Batches.batch5 ++
                   Batches.batch6
@@ -192,7 +192,7 @@ object Builtins {
             MajorProtocolVersion.vasilPV -> (Batches.batch1 ++ Batches.batch2),
             MajorProtocolVersion.valentinePV -> Batches.batch3,
             MajorProtocolVersion.plominPV -> Batches.batch4b,
-            MajorProtocolVersion.pv11PV -> (Batches.batch4a ++ Batches.batch5 ++ Batches.batch6)
+            MajorProtocolVersion.dijkstraPV -> (Batches.batch4a ++ Batches.batch5 ++ Batches.batch6)
           ),
           Language.PlutusV3 -> SortedMap(
             MajorProtocolVersion.changPV -> (
@@ -200,7 +200,14 @@ object Builtins {
                   Batches.batch3 ++ Batches.batch4
             ),
             MajorProtocolVersion.plominPV -> Batches.batch5,
-            MajorProtocolVersion.pv11PV -> Batches.batch6
+            MajorProtocolVersion.dijkstraPV -> Batches.batch6
+          ),
+          Language.PlutusV4 -> SortedMap(
+            MajorProtocolVersion.dijkstraPV -> (
+              Batches.batch1 ++ Batches.batch2 ++
+                  Batches.batch3 ++ Batches.batch4 ++
+                  Batches.batch5 ++ Batches.batch6
+            )
           )
         )
 

@@ -266,6 +266,13 @@ object MachineParams {
             case Language.PlutusV3 =>
                 val costs = costModels.models(language.ordinal)
                 PlutusV3Params.fromSeq(costs)
+            case Language.PlutusV4 =>
+                // Use V3 cost models for V4 until V4 cost models are available on-chain
+                val costs = costModels.models.getOrElse(
+                  language.ordinal,
+                  costModels.models(Language.PlutusV3.ordinal)
+                )
+                PlutusV4Params.fromSeq(costs)
 
         val semvar = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
           protocolVersion,
@@ -318,6 +325,20 @@ class MissingCaseBranch(val tag: Word64, env: CekValEnv)
 class NonConstrScrutinized(val value: CekValue, env: CekValEnv)
     extends StackTraceMachineError(
       s"A non-constructor value was scrutinized in a case expression: $value",
+      env
+    )
+
+class CaseIndexOutOfBounds(val index: BigInt, val branchCount: Int, env: CekValEnv)
+    extends StackTraceMachineError(
+      s"Case index $index out of bounds for $branchCount branches",
+      env
+    )
+
+class CaseBoolBranchMissing(val value: Boolean, val branchCount: Int, env: CekValEnv)
+    extends StackTraceMachineError(
+      s"Case on boolean $value requires ${
+              if value then 2 else 1
+          } branches, but only $branchCount provided",
       env
     )
 
@@ -633,7 +654,8 @@ class CekMachine(
     val params: MachineParams,
     budgetSpender: BudgetSpender,
     logger: Logger,
-    getBuiltinRuntime: DefaultFun => BuiltinRuntime
+    getBuiltinRuntime: DefaultFun => BuiltinRuntime,
+    caseOnBuiltinsEnabled: Boolean = false
 ) {
     import CekValue.*
     import Context.*
@@ -742,6 +764,16 @@ class CekMachine(
                         if index < cases.size then
                             Compute(transferArgStack(args, ctx), env, cases(index))
                         else throw new MissingCaseBranch(tag, env)
+                    case VCon(const) if caseOnBuiltinsEnabled =>
+                        const match
+                            case Constant.Integer(i) =>
+                                if i >= 0 && i < cases.size then Compute(ctx, env, cases(i.toInt))
+                                else throw new CaseIndexOutOfBounds(i, cases.size, env)
+                            case Constant.Bool(b) =>
+                                val index = if b then 1 else 0
+                                if index < cases.size then Compute(ctx, env, cases(index))
+                                else throw new CaseBoolBranchMissing(b, cases.size, env)
+                            case _ => throw new NonConstrScrutinized(value, env)
                     case _ => throw new NonConstrScrutinized(value, env)
     }
 
