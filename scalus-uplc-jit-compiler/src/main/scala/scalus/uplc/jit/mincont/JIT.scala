@@ -268,20 +268,17 @@ object JIT extends JitRunner {
                         Return((${ Expr(tag.value) }, evaluatedArgs))
                     }
                 case Term.Case(arg, cases) =>
-                    // TODO: Implement Case with continuation support
-                    // For now, fall back to simple evaluation
-                    val constrCont = genCode(arg, env, logger, budget, params)
-                    val caseFuncs = Expr.ofList(
-                      cases.map(c => genCode(c, env, logger, budget, params))
-                    )
+                    val scrutineeCont = genCode(arg, env, logger, budget, params)
+                    val branchExprs: List[Expr[ContinuationJitRepr]] =
+                        cases.map(c => genCode(c, env, logger, budget, params))
                     '{
                         $budget.spendBudget(Step(StepKind.Case), $params.machineCosts.caseCost, Nil)
-                        val constr =
-                            ContinuationJitRepr.eval($constrCont).asInstanceOf[(Long, List[Any])]
-                        val (tag, args) = constr
-                        val caseFunc = $caseFuncs(tag.toInt)
-                        // Apply all args to the case function
-                        args.foldLeft[ContinuationJitRepr](caseFunc)((f, a) => Apply(f, Return(a)))
+                        ${
+                            CaseHelper.genCaseDispatchCont(
+                              scrutineeCont,
+                              branchExprs
+                            )
+                        }
                     }
             wrapWithDebug(result, termDesc)
         }
