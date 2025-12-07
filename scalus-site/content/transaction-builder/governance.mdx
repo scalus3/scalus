@@ -1,0 +1,107 @@
+---
+title: Governance Operations
+description: Delegate voting power to DReps and manage DRep registration
+---
+
+# Governance Operations
+
+## Delegate to DRep
+
+```scala copy
+val drep = DRep.KeyHash(drepKeyHash)
+
+val tx = TxBuilder(env)
+  .delegateVoteToDRep(stakeAddress, drep)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+DRep types:
+
+```scala copy
+DRep.KeyHash(keyHash)           // Specific DRep
+DRep.ScriptHash(scriptHash)     // Script-based DRep
+DRep.Abstain                    // Abstain from voting
+DRep.NoConfidence               // Vote no confidence
+```
+
+## Register and Delegate to DRep
+
+```scala copy
+val drep = DRep.KeyHash(drepKeyHash)
+val deposit = Coin.ada(2)
+
+val tx = TxBuilder(env)
+  .registerAndDelegateVoteToDRep(stakeAddress, drep, deposit)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Delegate to Pool and DRep
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+val drep = DRep.KeyHash(drepKeyHash)
+
+val tx = TxBuilder(env)
+  .delegateToPoolAndDRep(stakeAddress, poolId, drep)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Register and Delegate to Both
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+val drep = DRep.KeyHash(drepKeyHash)
+val deposit = Coin.ada(2)
+
+val tx = TxBuilder(env)
+  .registerAndDelegateToPoolAndDRep(stakeAddress, poolId, drep, deposit)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Register as DRep
+
+```scala copy
+val drepCredential = Credential.KeyHash(yourKeyHash)
+val deposit = Coin.ada(500)
+val anchor = Some(Anchor(
+  url = "https://example.com/drep-metadata.json",
+  dataHash = metadataHash
+))
+
+val tx = TxBuilder(env)
+  .registerDRep(drepCredential, deposit, anchor)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Update DRep Metadata
+
+```scala copy
+val newAnchor = Some(Anchor(
+  url = "https://example.com/updated-metadata.json",
+  dataHash = newMetadataHash
+))
+
+val tx = TxBuilder(env)
+  .updateDRep(drepCredential, newAnchor)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Unregister DRep
+
+```scala copy
+val tx = TxBuilder(env)
+  .unregisterDRep(drepCredential, Coin.ada(500))
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## See Also
+
+- [Staking Operations](/docs/transaction-builder/staking-operations)
+- [Building Your First Transaction](/docs/transaction-builder/building-first-transaction)

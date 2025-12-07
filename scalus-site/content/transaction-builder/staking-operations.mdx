@@ -1,0 +1,104 @@
+---
+title: Staking Operations
+description: Register stake keys, delegate to pools, and withdraw rewards using TxBuilder
+---
+
+import { Callout } from 'nextra/components'
+
+# Staking Operations
+
+## Register Stake Key
+
+```scala copy
+val tx = TxBuilder(env)
+  .registerStake(stakeAddress)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+Specify deposit explicitly (Conway-era):
+
+```scala copy
+val tx = TxBuilder(env)
+  .registerStake(stakeAddress, Coin.ada(2))
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Delegate to Pool
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+
+val tx = TxBuilder(env)
+  .delegateTo(stakeAddress, poolId)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Register and Delegate Together
+
+```scala copy
+val poolId = PoolKeyHash.fromHex("pool1...")
+val deposit = Coin.ada(2)
+
+val tx = TxBuilder(env)
+  .stakeAndDelegate(stakeAddress, poolId, deposit)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Withdraw Rewards
+
+```scala copy
+val tx = TxBuilder(env)
+  .withdrawRewards(stakeAddress, rewardAmount)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Deregister
+
+```scala copy
+val tx = TxBuilder(env)
+  .deregisterStake(stakeAddress)
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+With explicit refund:
+
+```scala copy
+val tx = TxBuilder(env)
+  .deregisterStake(stakeAddress, Coin.ada(2))
+  .complete(provider, sponsorAddress)
+  .build()
+```
+
+## Creating Stake Addresses
+
+From a stake key hash:
+
+```scala copy
+import scalus.cardano.address.{StakeAddress, StakePayload}
+
+val stakeAddress = StakeAddress(
+  Network.Mainnet,
+  StakePayload.Stake(stakeKeyHash)
+)
+```
+
+From a Shelley address:
+
+```scala copy
+val stakeAddress = shelleyAddress.delegation match {
+  case ShelleyDelegationPart.Key(keyHash) =>
+    StakeAddress(shelleyAddress.network, StakePayload.Stake(keyHash))
+  case _ => throw new Exception("No stake key")
+}
+```
+
+## See Also
+
+- [Governance](/docs/transaction-builder/governance)
+- [Building Your First Transaction](/docs/transaction-builder/building-first-transaction)
