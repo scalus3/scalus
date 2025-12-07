@@ -1,11 +1,22 @@
 ---
-title: Governance Operations
-description: Delegate voting power to DReps and manage DRep registration
+title: Cardano Governance Operations - DRep Delegation & Voting
+description: Complete guide to Cardano on-chain governance with Scalus TxBuilder. Learn how to delegate voting power to DReps, register as a DRep, manage metadata, and participate in Conway era governance decisions.
+sidebarTitle: Governance
 ---
 
-# Governance Operations
+import { Callout } from 'nextra/components'
 
-## Delegate to DRep
+# Cardano Governance 
+
+Scalus TxBuilder provides comprehensive support for Cardano's Conway era governance features. ADA holders can participate in on-chain governance by delegating voting power to Delegated Representatives (DReps) or by becoming DReps themselves.
+
+<Callout type="info">
+  Governance operations are part of the Conway era upgrade. These features enable decentralized decision-making for the Cardano protocol.
+</Callout>
+
+## Delegating Voting Power to DReps
+
+Delegate your voting power to a Delegated Representative (DRep) to participate in Cardano governance decisions.
 
 ```scala copy
 val drep = DRep.KeyHash(drepKeyHash)
@@ -16,7 +27,9 @@ val tx = TxBuilder(env)
   .build()
 ```
 
-DRep types:
+### DRep Types
+
+Scalus supports multiple DRep delegation options:
 
 ```scala copy
 DRep.KeyHash(keyHash)           // Specific DRep
@@ -25,7 +38,11 @@ DRep.Abstain                    // Abstain from voting
 DRep.NoConfidence               // Vote no confidence
 ```
 
-## Register and Delegate to DRep
+**Script-based DReps** enable programmatic voting aligned with community policies or institutional strategies, allowing automated governance participation.
+
+## Registering Stake Keys and Delegating to DRep
+
+Combine stake registration and DRep delegation in a single transaction:
 
 ```scala copy
 val drep = DRep.KeyHash(drepKeyHash)
@@ -37,7 +54,13 @@ val tx = TxBuilder(env)
   .build()
 ```
 
-## Delegate to Pool and DRep
+<Callout type="info">
+  This requires the standard 2 ADA stake registration deposit, which is refundable upon deregistration.
+</Callout>
+
+## Delegating to Stake Pool and DRep
+
+Delegate both your staking power (to a stake pool) and voting power (to a DRep) simultaneously:
 
 ```scala copy
 val poolId = PoolKeyHash.fromHex("pool1...")
@@ -49,7 +72,13 @@ val tx = TxBuilder(env)
   .build()
 ```
 
-## Register and Delegate to Both
+<Callout type="warning">
+  **Post-Chang Era**: Delegating to a DRep is required to withdraw staking rewards. See [Staking Operations](/docs/transaction-builder/staking-operations) for more details.
+</Callout>
+
+## Registering and Delegating to Both
+
+Register your stake key and delegate to both a stake pool and DRep in one efficient transaction:
 
 ```scala copy
 val poolId = PoolKeyHash.fromHex("pool1...")
@@ -62,7 +91,15 @@ val tx = TxBuilder(env)
   .build()
 ```
 
-## Register as DRep
+<Callout type="info">
+  Combining operations saves transaction fees and simplifies the user experience.
+</Callout>
+
+## Becoming a Delegated Representative (DRep)
+
+### Registering as a DRep
+
+To become a DRep and accept voting delegation, you need to register with a stake address:
 
 ```scala copy
 val drepCredential = Credential.KeyHash(yourKeyHash)
@@ -78,7 +115,15 @@ val tx = TxBuilder(env)
   .build()
 ```
 
-## Update DRep Metadata
+<Callout type="warning">
+  DRep registration requires a **500 ADA deposit**, which is significantly higher than the stake registration deposit. This deposit is refundable upon deregistration.
+</Callout>
+
+The `anchor` parameter is optional but recommended. It should point to metadata describing your governance positions, credentials, and voting philosophy.
+
+### Updating DRep Metadata
+
+Update your DRep metadata to reflect changes in your governance positions or credentials:
 
 ```scala copy
 val newAnchor = Some(Anchor(
@@ -92,7 +137,9 @@ val tx = TxBuilder(env)
   .build()
 ```
 
-## Unregister DRep
+### Unregistering as DRep
+
+Unregister your DRep credential and reclaim your 500 ADA deposit:
 
 ```scala copy
 val tx = TxBuilder(env)
@@ -103,5 +150,5 @@ val tx = TxBuilder(env)
 
 ## See Also
 
-- [Staking Operations](/docs/transaction-builder/staking-operations)
+- [Staking & Rewards](/docs/transaction-builder/staking-rewards)
 - [Building Your First Transaction](/docs/transaction-builder/building-first-transaction)

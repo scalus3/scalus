@@ -3,7 +3,7 @@ export default {
   'payment-methods': '',
   'spending-utxos': '',
   'minting-burning-assets': '',
-  'staking-operations': '',
+  'staking-rewards': '',
   'governance': '',
   'validator-interactions': '',
   'advanced-features': '',
