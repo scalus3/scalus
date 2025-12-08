@@ -172,5 +172,10 @@ object ScriptFeeComparison {
         traces <- Seq(true, false)
         optimize <- Seq(true, false)
         debug <- Seq(true, false)
-    } yield Compiler.Options(backend, traces, optimize, debug = debug)
+    } yield Compiler.Options(
+      targetLoweringBackend = backend,
+      generateErrorTraces = traces,
+      optimizeUplc = optimize,
+      debug = debug
+    )
 }

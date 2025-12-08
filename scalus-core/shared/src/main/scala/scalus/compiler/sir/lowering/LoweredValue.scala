@@ -970,6 +970,49 @@ case class IfThenElseLoweredValue(
 
 }
 
+/** LoweredValue for case on boolean builtins (PlutusV4 feature).
+  *
+  * In PlutusV4, `Case` can be used directly on boolean constants: Case(bool, [falseBranch,
+  * trueBranch]) where False = index 0 and True = index 1.
+  */
+case class CaseBooleanLoweredValue(
+    scrutinee: LoweredValue,
+    falseBranch: LoweredValue,
+    trueBranch: LoweredValue,
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(Set.empty, scrutinee, falseBranch, trueBranch) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        // Case(scrutinee, [falseBranch, trueBranch])
+        // False = 0, True = 1
+        Term.Case(
+          scrutinee.termWithNeededVars(gctx),
+          List(
+            falseBranch.termWithNeededVars(gctx),
+            trueBranch.termWithNeededVars(gctx)
+          )
+        )
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
+            + (line + text("False ->") + (lineOrSpace + falseBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("True ->") + (lineOrSpace + trueBranch.docRef(ctx)).nested(
+              2
+            )).grouped).aligned
+    }
+
+}
+
 object LoweredValue {
 
     class PrettyPrintingContext(
@@ -1047,6 +1090,61 @@ object LoweredValue {
               inPos
             )
 
+        }
+
+        /** Generate a case expression on a boolean value (PlutusV4 feature).
+          *
+          * In PlutusV4, `Case` can be used directly on boolean constants: Case(bool, [falseBranch,
+          * trueBranch]) where False = index 0 and True = index 1.
+          */
+        def lvCaseBoolean(
+            scrutinee: LoweredValue,
+            falseBranch: LoweredValue,
+            trueBranch: LoweredValue,
+            inPos: SIRPosition,
+            optTargetType: Option[SIRType] = None
+        )(using lctx: LoweringContext): LoweredValue = {
+
+            val resType = optTargetType.getOrElse(
+              SIRUnify.topLevelUnifyType(
+                trueBranch.sirType,
+                falseBranch.sirType,
+                SIRUnify.Env.empty.withUpcasting
+              ) match {
+                  case SIRUnify.UnificationSuccess(_, tp) =>
+                      if tp == SIRType.FreeUnificator then
+                          throw LoweringException(
+                            s"case branches return unrelated types: ${trueBranch.sirType.show} and ${falseBranch.sirType.show}",
+                            inPos
+                          )
+                      tp
+                  case failure @ SIRUnify.UnificationFailure(path, l, r) =>
+                      lctx.warn("Unification failure: " + failure, inPos)
+                      SIRType.FreeUnificator
+              }
+            )
+
+            val trueBranchUpcasted = trueBranch.maybeUpcast(resType, inPos)
+            val falseBranchUpcasted = falseBranch.maybeUpcast(resType, inPos)
+
+            val targetRepresentation = chooseCommonRepresentation(
+              Seq(trueBranchUpcasted, falseBranchUpcasted),
+              resType,
+              inPos
+            )
+
+            val trueBranchR = trueBranchUpcasted.toRepresentation(targetRepresentation, inPos)
+            val falseBranchR = falseBranchUpcasted.toRepresentation(targetRepresentation, inPos)
+            val scrutineeR = scrutinee.toRepresentation(PrimitiveRepresentation.Constant, inPos)
+
+            CaseBooleanLoweredValue(
+              scrutineeR,
+              falseBranchR,
+              trueBranchR,
+              resType,
+              targetRepresentation,
+              inPos
+            )
         }
 
         def lvApply(

@@ -1,5 +1,6 @@
 package scalus
 
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType}
 import scalus.builtin.Data
 import scalus.utils.Macros
@@ -25,6 +26,7 @@ object Compiler:
 
     case class Options(
         targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
+        targetLanguage: Language = Language.PlutusV3,
         generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
         optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
         debugLevel: Int = SIRDefaultOptions.debugLevel,

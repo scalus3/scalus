@@ -55,7 +55,8 @@ package object scalus {
                     SirToUplcV3Lowering(
                       sir,
                       generateErrorTraces = generateErrorTraces,
-                      debug = debug
+                      debug = debug,
+                      targetLanguage = options.targetLanguage
                     ).lower()
             val retval =
                 if optimizeUplc then
@@ -89,7 +90,8 @@ package object scalus {
             val retval = SirToUplcV3Lowering(
               sir,
               generateErrorTraces = options.generateErrorTraces,
-              debug = options.debug
+              debug = options.debug,
+              targetLanguage = options.targetLanguage
             ).toLoweredValue()
             retval
         }
@@ -107,7 +109,8 @@ package object scalus {
                     SirToUplcV3Lowering(
                       sir,
                       generateErrorTraces = options.generateErrorTraces,
-                      debug = options.debug
+                      debug = options.debug,
+                      targetLanguage = options.targetLanguage
                     ).lower()
             val retval =
                 if options.optimizeUplc then

@@ -1,6 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
@@ -176,6 +177,100 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
           matchData.scrutinee.anns.pos
         )
 
+        // For PlutusV4+, use Case on builtins directly
+        if lctx.targetLanguage == Language.PlutusV4 then {
+            genMatchV4(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
+        } else {
+            genMatchLegacy(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
+        }
+    }
+
+    /** Generate match using Case on builtins (PlutusV4 feature).
+      *
+      * Case(bool, [falseBranch, trueBranch]) where False = index 0 and True = index 1.
+      */
+    private def genMatchV4(
+        matchData: SIR.Match,
+        scrutinee: LoweredValue,
+        optTargetType: Option[SIRType],
+        isUnchecked: Boolean
+    )(using lctx: LoweringContext): LoweredValue = {
+        var falseBranch: Option[(LoweredValue, SIRPosition)] = None
+        var trueBranch: Option[(LoweredValue, SIRPosition)] = None
+        var wildcardBranch: Option[(LoweredValue, SIRPosition)] = None
+
+        for c <- matchData.cases do {
+            c match {
+                case SIR.Case(SIR.Pattern.Const(constValue), body, anns) =>
+                    constValue.uplcConst match {
+                        case scalus.uplc.Constant.Bool(false) =>
+                            if falseBranch.isDefined then
+                                throw LoweringException(
+                                  s"Duplicate case for False",
+                                  anns.pos
+                                )
+                            falseBranch = Some((lctx.lower(body, optTargetType), anns.pos))
+                        case scalus.uplc.Constant.Bool(true) =>
+                            if trueBranch.isDefined then
+                                throw LoweringException(
+                                  s"Duplicate case for True",
+                                  anns.pos
+                                )
+                            trueBranch = Some((lctx.lower(body, optTargetType), anns.pos))
+                        case _ =>
+                            throw LoweringException(
+                              s"Expected Boolean constant, got ${constValue.uplcConst}",
+                              anns.pos
+                            )
+                    }
+                case SIR.Case(SIR.Pattern.Wildcard, body, anns) =>
+                    if wildcardBranch.isDefined then
+                        throw LoweringException(
+                          s"Duplicate wildcard pattern",
+                          anns.pos
+                        )
+                    wildcardBranch = Some((lctx.lower(body, optTargetType), anns.pos))
+                case SIR.Case(SIR.Pattern.Constr(_, _, _), _, anns) =>
+                    throw LoweringException(
+                      s"Constructor pattern not supported for Boolean",
+                      anns.pos
+                    )
+            }
+        }
+
+        // Fill in missing branches with wildcard if available
+        val finalFalseBranch = falseBranch.orElse(wildcardBranch)
+        val finalTrueBranch = trueBranch.orElse(wildcardBranch)
+
+        (finalFalseBranch, finalTrueBranch) match {
+            case (Some((fb, _)), Some((tb, _))) =>
+                lvCaseBoolean(scrutinee, fb, tb, matchData.anns.pos, optTargetType)
+            case (None, _) | (_, None) =>
+                if isUnchecked then
+                    // Generate error for missing branches
+                    val errorBranch = lctx.lower(
+                      SIR.Error("Non-exhaustive pattern match for Boolean", matchData.anns),
+                      optTargetType
+                    )
+                    val fb = finalFalseBranch.map(_._1).getOrElse(errorBranch)
+                    val tb = finalTrueBranch.map(_._1).getOrElse(errorBranch)
+                    lvCaseBoolean(scrutinee, fb, tb, matchData.anns.pos, optTargetType)
+                else
+                    throw LoweringException(
+                      s"Non-exhaustive pattern match for Boolean",
+                      matchData.anns.pos
+                    )
+        }
+    }
+
+    /** Generate match using ifThenElse (legacy approach for PlutusV1-V3). */
+    private def genMatchLegacy(
+        matchData: SIR.Match,
+        scrutinee: LoweredValue,
+        optTargetType: Option[SIRType],
+        isUnchecked: Boolean
+    )(using lctx: LoweringContext): LoweredValue = {
+
         def processCases(cases: List[SIR.Case], matchedValues: Set[Boolean]): LoweredValue =
             cases match {
                 case Nil =>
@@ -208,14 +303,14 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
                                 // if constValue is false: if scrutinee then rest else body
                                 if boolValue then
                                     lvIfThenElse(
-                                      scrutineeInConstRepr,
+                                      scrutinee,
                                       thenBranch,
                                       elseBranch,
                                       anns.pos
                                     )
                                 else
                                     lvIfThenElse(
-                                      scrutineeInConstRepr,
+                                      scrutinee,
                                       elseBranch,
                                       thenBranch,
                                       anns.pos

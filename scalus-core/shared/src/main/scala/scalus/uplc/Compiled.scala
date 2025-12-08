@@ -61,7 +61,8 @@ case class PlutusV3[A](
                 SirToUplcV3Lowering(
                   sir,
                   generateErrorTraces = options.generateErrorTraces,
-                  debug = options.debug
+                  debug = options.debug,
+                  targetLanguage = options.targetLanguage
                 ).lower()
         val retval =
             if options.optimizeUplc then optimizer(uplc)
