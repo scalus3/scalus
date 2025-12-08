@@ -15,7 +15,8 @@ import scala.collection.immutable.SortedMap
 
 // TODO: can't depend `testkit`, since it'd introduce circular dependency. /
 class SimpleMockProvider(initialUtxos: Utxos) extends Provider {
-    override def submit(transaction: Transaction): Either[SubmitError, Unit] = Right(())
+    override def submit(transaction: Transaction): Either[SubmitError, TransactionHash] =
+        Right(transaction.id)
 
     override def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] =
         initialUtxos

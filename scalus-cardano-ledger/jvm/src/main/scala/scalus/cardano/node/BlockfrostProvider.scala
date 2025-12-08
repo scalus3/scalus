@@ -73,7 +73,7 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.Pr
         }
     }
 
-    override def submit(tx: Transaction): Either[SubmitError, Unit] = {
+    override def submit(tx: Transaction): Either[SubmitError, TransactionHash] = {
         val url = s"$baseUrl/tx/submit"
         val txCbor = tx.toCbor
 
@@ -88,7 +88,7 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.Pr
                 Left(SubmitError.NodeError(response.text()))
             } else if response.is5xx then
                 Left(SubmitError.NodeError(s"Blockfrost submit error: ${response.text()}"))
-            else Right(())
+            else Right(tx.id)
         }.toEither.left
             .map(exception =>
                 SubmitError.NetworkError(s"Blockfrost submit exception", Some(exception))

@@ -28,13 +28,13 @@ class NodeEmulator(
     private val contextRef = new AtomicReference[Context](initialContext)
 
     @scala.annotation.tailrec
-    final def submit(transaction: Transaction): Either[SubmitError, Unit] = {
+    final def submit(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         val currentState = stateRef.get()
         val currentContext = contextRef.get()
 
         processTransaction(currentContext, currentState, transaction) match {
             case Right(newState) =>
-                if stateRef.compareAndSet(currentState, newState) then Right(())
+                if stateRef.compareAndSet(currentState, newState) then Right(transaction.id)
                 else submit(transaction)
             case Left(t: TransactionException) =>
                 Left(NodeError(s"Ledger rule violation: ${t.explain}", Some(t)))
