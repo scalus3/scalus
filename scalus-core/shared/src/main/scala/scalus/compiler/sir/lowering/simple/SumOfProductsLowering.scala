@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.cardano.ledger.Word64
+import scalus.cardano.ledger.{Language, Word64}
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
 import scalus.uplc.*
@@ -24,9 +24,14 @@ type SirToUplc110Lowering = SumOfProductsLowering
   *   the Scalus Intermediate Representation to lower
   * @param generateErrorTraces
   *   whether to generate error traces
+  * @param targetLanguage
+  *   the target Plutus language version
   */
-class SumOfProductsLowering(sir: SIR, generateErrorTraces: Boolean = false)
-    extends BaseSimpleLowering(sir, generateErrorTraces):
+class SumOfProductsLowering(
+    sir: SIR,
+    generateErrorTraces: Boolean = false,
+    targetLanguage: Language = Language.PlutusV3
+) extends BaseSimpleLowering(sir, generateErrorTraces, targetLanguage):
 
     /** For wildcard patterns in SirToUplc110Lowering, use unused binding names */
     override protected def getWildcardBindings(constrDecl: ConstrDecl): List[String] =

@@ -1,5 +1,6 @@
 package scalus.compiler.sir.lowering.simple
 
+import scalus.cardano.ledger.Language
 import scalus.showShort
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
@@ -18,8 +19,14 @@ import scala.collection.mutable
   *   the Scalus Intermediate Representation to lower
   * @param generateErrorTraces
   *   whether to generate error traces
+  * @param targetLanguage
+  *   the target Plutus language version
   */
-abstract class BaseSimpleLowering(sir: SIR, generateErrorTraces: Boolean = false):
+abstract class BaseSimpleLowering(
+    sir: SIR,
+    generateErrorTraces: Boolean = false,
+    targetLanguage: Language = Language.PlutusV3
+):
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
@@ -191,6 +198,101 @@ abstract class BaseSimpleLowering(sir: SIR, generateErrorTraces: Boolean = false
 
     /** Lower Boolean constant pattern match. */
     protected def lowerBooleanMatch(
+        scrutineeTerm: Term,
+        cases: List[SIR.Case],
+        isUnchecked: Boolean,
+        anns: AnnotationsDecl
+    ): Term = {
+        // For PlutusV4+, use Case on builtins directly
+        if targetLanguage == Language.PlutusV4 then {
+            lowerBooleanMatchV4(scrutineeTerm, cases, isUnchecked, anns)
+        } else {
+            lowerBooleanMatchLegacy(scrutineeTerm, cases, isUnchecked, anns)
+        }
+    }
+
+    /** Lower Boolean match using Case on builtins (PlutusV4 feature).
+      *
+      * Case(bool, [falseBranch, trueBranch]) where False = index 0 and True = index 1.
+      */
+    private def lowerBooleanMatchV4(
+        scrutineeTerm: Term,
+        cases: List[SIR.Case],
+        isUnchecked: Boolean,
+        anns: AnnotationsDecl
+    ): Term = {
+        var falseBranch: Option[Term] = None
+        var trueBranch: Option[Term] = None
+        var wildcardBranch: Option[Term] = None
+
+        for c <- cases do {
+            c match {
+                case SIR.Case(SIR.Pattern.Const(constValue), body, caseAnns) =>
+                    constValue.uplcConst match {
+                        case Constant.Bool(false) =>
+                            if falseBranch.isDefined then {
+                                val pos = caseAnns.pos
+                                throw new IllegalArgumentException(
+                                  s"Duplicate case for False at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                                )
+                            }
+                            falseBranch = Some(lowerInner(body))
+                        case Constant.Bool(true) =>
+                            if trueBranch.isDefined then {
+                                val pos = caseAnns.pos
+                                throw new IllegalArgumentException(
+                                  s"Duplicate case for True at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                                )
+                            }
+                            trueBranch = Some(lowerInner(body))
+                        case _ =>
+                            val pos = caseAnns.pos
+                            throw new IllegalArgumentException(
+                              s"Expected Boolean constant, got ${constValue.uplcConst} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                            )
+                    }
+                case SIR.Case(SIR.Pattern.Wildcard, body, caseAnns) =>
+                    if wildcardBranch.isDefined then {
+                        val pos = caseAnns.pos
+                        throw new IllegalArgumentException(
+                          s"Duplicate wildcard pattern at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                        )
+                    }
+                    wildcardBranch = Some(lowerInner(body))
+                case SIR.Case(SIR.Pattern.Constr(_, _, _), _, caseAnns) =>
+                    val pos = caseAnns.pos
+                    throw new IllegalArgumentException(
+                      s"Constructor pattern not supported for Boolean at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                    )
+            }
+        }
+
+        // Fill in missing branches with wildcard if available
+        val finalFalseBranch = falseBranch.orElse(wildcardBranch)
+        val finalTrueBranch = trueBranch.orElse(wildcardBranch)
+
+        (finalFalseBranch, finalTrueBranch) match {
+            case (Some(fb), Some(tb)) =>
+                // Case(scrutinee, [falseBranch, trueBranch])
+                Term.Case(scrutineeTerm, List(fb, tb))
+            case (None, _) | (_, None) =>
+                if isUnchecked then {
+                    val errorBranch =
+                        lowerInner(SIR.Error("Non-exhaustive pattern match for Boolean", anns))
+                    val fb = finalFalseBranch.getOrElse(errorBranch)
+                    val tb = finalTrueBranch.getOrElse(errorBranch)
+                    Term.Case(scrutineeTerm, List(fb, tb))
+                } else {
+                    val pos = anns.pos
+                    throw new IllegalArgumentException(
+                      s"Non-exhaustive pattern match for Boolean at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                    )
+                }
+        }
+    }
+
+    /** Lower Boolean match using ifThenElse (legacy approach for PlutusV1-V3). */
+    private def lowerBooleanMatchLegacy(
         scrutineeTerm: Term,
         cases: List[SIR.Case],
         isUnchecked: Boolean,
