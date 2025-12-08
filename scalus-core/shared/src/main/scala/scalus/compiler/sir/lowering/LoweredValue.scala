@@ -1014,6 +1014,48 @@ case class CaseBooleanLoweredValue(
 
 }
 
+/** LoweredValue for case on integer builtins (PlutusV4 feature).
+  *
+  * In PlutusV4, `Case` can be used directly on integer constants when the cases form a contiguous
+  * sequence starting from 0: Case(int, [branch0, branch1, ..., branchN]) where integer value i
+  * selects branch i.
+  *
+  * Note: This only works when cases are 0, 1, 2, ..., n without gaps. For integers outside this
+  * range, behavior is undefined (will error at runtime).
+  */
+case class CaseIntegerLoweredValue(
+    scrutinee: LoweredValue,
+    branches: scala.collection.immutable.List[LoweredValue],
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(Set.empty, (scrutinee :: branches)*) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        // Case(scrutinee, [branch0, branch1, ..., branchN])
+        Term.Case(
+          scrutinee.termWithNeededVars(gctx),
+          branches.map(_.termWithNeededVars(gctx))
+        )
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        val branchDocs = branches.zipWithIndex.map { case (branch, i) =>
+            line + text(s"$i ->") + (lineOrSpace + branch.docRef(ctx)).nested(2)
+        }
+        ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
+            + branchDocs.foldLeft(Doc.empty)(_ + _.grouped)).aligned
+    }
+
+}
+
 object LoweredValue {
 
     class PrettyPrintingContext(
@@ -1153,6 +1195,66 @@ object LoweredValue {
               scrutineeR,
               falseBranchR,
               trueBranchR,
+              resType,
+              targetRepresentation,
+              inPos
+            )
+        }
+
+        /** Generate a case expression on an integer value (PlutusV4 feature).
+          *
+          * In PlutusV4, `Case` can be used directly on integer constants when cases form a
+          * contiguous sequence starting from 0: Case(int, [branch0, branch1, ..., branchN]).
+          *
+          * @param scrutinee
+          *   the integer value to match on
+          * @param branches
+          *   list of branches indexed by integer value (0 -> branches(0), 1 -> branches(1), etc.)
+          * @param inPos
+          *   source position
+          * @param optTargetType
+          *   optional target type for the result
+          */
+        def lvCaseInteger(
+            scrutinee: LoweredValue,
+            branches: scala.collection.immutable.List[LoweredValue],
+            inPos: SIRPosition,
+            optTargetType: Option[SIRType] = None
+        )(using lctx: LoweringContext): LoweredValue = {
+            require(branches.nonEmpty, "Case on integer requires at least one branch")
+
+            // Unify all branch types
+            val resType = optTargetType.getOrElse {
+                branches.map(_.sirType).reduce { (t1, t2) =>
+                    SIRUnify.topLevelUnifyType(t1, t2, SIRUnify.Env.empty.withUpcasting) match {
+                        case SIRUnify.UnificationSuccess(_, tp) =>
+                            if tp == SIRType.FreeUnificator then
+                                throw LoweringException(
+                                  s"case branches return unrelated types: ${t1.show} and ${t2.show}",
+                                  inPos
+                                )
+                            tp
+                        case failure @ SIRUnify.UnificationFailure(path, l, r) =>
+                            lctx.warn("Unification failure: " + failure, inPos)
+                            SIRType.FreeUnificator
+                    }
+                }
+            }
+
+            val branchesUpcasted = branches.map(_.maybeUpcast(resType, inPos))
+
+            val targetRepresentation = chooseCommonRepresentation(
+              branchesUpcasted,
+              resType,
+              inPos
+            )
+
+            val branchesR = branchesUpcasted.map(_.toRepresentation(targetRepresentation, inPos))
+            val scrutineeR = scrutinee.toRepresentation(PrimitiveRepresentation.Constant, inPos)
+
+            CaseIntegerLoweredValue(
+              scrutineeR,
+              branchesR,
               resType,
               targetRepresentation,
               inPos

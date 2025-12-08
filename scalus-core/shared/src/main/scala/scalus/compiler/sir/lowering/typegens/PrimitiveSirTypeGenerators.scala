@@ -381,6 +381,71 @@ object SIRTypeUplcIntegerGenerator extends PrimitiveSirTypeGenerator {
           matchData.scrutinee.anns.pos
         )
 
+        // For PlutusV4, try to use Case on integer if cases form a contiguous sequence from 0
+        if lctx.targetLanguage == Language.PlutusV4 then {
+            tryGenMatchV4(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
+                .getOrElse(
+                  genMatchLegacy(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
+                )
+        } else {
+            genMatchLegacy(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
+        }
+    }
+
+    /** Try to generate a Case on integer (PlutusV4 feature).
+      *
+      * Returns Some(loweredValue) if cases form a contiguous sequence starting from 0 without gaps
+      * and without wildcard. Returns None if the pattern doesn't fit this optimization.
+      */
+    private def tryGenMatchV4(
+        matchData: SIR.Match,
+        scrutinee: LoweredValue,
+        optTargetType: Option[SIRType],
+        isUnchecked: Boolean
+    )(using lctx: LoweringContext): Option[LoweredValue] = {
+        // Collect all integer constant cases
+        val intCases = matchData.cases.collect {
+            case SIR.Case(SIR.Pattern.Const(constValue), body, _)
+                if constValue.uplcConst.isInstanceOf[scalus.uplc.Constant.Integer] =>
+                val scalus.uplc.Constant.Integer(intValue) = constValue.uplcConst: @unchecked
+                (intValue, body)
+        }
+
+        // Check if there's a wildcard
+        val hasWildcard = matchData.cases.exists {
+            case SIR.Case(SIR.Pattern.Wildcard, _, _) => true
+            case _                                    => false
+        }
+
+        // Case on integer only works if:
+        // 1. All cases are integer constants (no wildcard fallback supported directly)
+        // 2. Cases form a contiguous sequence starting from 0
+        // 3. No duplicates
+        if intCases.size != matchData.cases.size || hasWildcard then return None
+
+        // Check for contiguous sequence starting from 0
+        val sortedCases = intCases.sortBy(_._1)
+        val expectedSequence = (0 until sortedCases.size).map(BigInt(_))
+        val actualValues = sortedCases.map(_._1)
+
+        if actualValues != expectedSequence.toList then return None
+
+        // All checks passed - generate Case on integer
+        val branches = sortedCases.map { case (_, body) =>
+            lctx.lower(body, optTargetType)
+        }
+
+        Some(lvCaseInteger(scrutinee, branches, matchData.anns.pos, optTargetType))
+    }
+
+    /** Generate match using equalsInteger + ifThenElse (general approach, works for all cases). */
+    private def genMatchLegacy(
+        matchData: SIR.Match,
+        scrutinee: LoweredValue,
+        optTargetType: Option[SIRType],
+        isUnchecked: Boolean
+    )(using lctx: LoweringContext): LoweredValue = {
+
         def processCases(cases: List[SIR.Case]): LoweredValue = cases match {
             case Nil =>
                 if isUnchecked then
@@ -399,7 +464,7 @@ object SIRTypeUplcIntegerGenerator extends PrimitiveSirTypeGenerator {
                   PrimitiveRepresentation.Constant,
                   anns.pos
                 )
-                val comparison = lvEqualsInteger(scrutineeInConstRepr, constInConstRepr, anns.pos)
+                val comparison = lvEqualsInteger(scrutinee, constInConstRepr, anns.pos)
                 val thenBranch = lctx.lower(body, optTargetType)
                 val elseBranch = processCases(rest)
                 lvIfThenElse(comparison, thenBranch, elseBranch, anns.pos)

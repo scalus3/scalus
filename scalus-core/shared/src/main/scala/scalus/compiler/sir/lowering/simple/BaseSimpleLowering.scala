@@ -362,6 +362,67 @@ abstract class BaseSimpleLowering(
         isUnchecked: Boolean,
         anns: AnnotationsDecl
     ): Term = {
+        // For PlutusV4, try to use Case on integer if cases form a contiguous sequence from 0
+        if targetLanguage == Language.PlutusV4 then {
+            tryLowerIntegerMatchV4(scrutineeTerm, cases, anns)
+                .getOrElse(lowerIntegerMatchLegacy(scrutineeTerm, cases, isUnchecked, anns))
+        } else {
+            lowerIntegerMatchLegacy(scrutineeTerm, cases, isUnchecked, anns)
+        }
+    }
+
+    /** Try to generate a Case on integer (PlutusV4 feature).
+      *
+      * Returns Some(term) if cases form a contiguous sequence starting from 0 without gaps and
+      * without wildcard. Returns None if the pattern doesn't fit this optimization.
+      */
+    private def tryLowerIntegerMatchV4(
+        scrutineeTerm: Term,
+        cases: List[SIR.Case],
+        anns: AnnotationsDecl
+    ): Option[Term] = {
+        // Collect all integer constant cases
+        val intCases = cases.collect {
+            case SIR.Case(SIR.Pattern.Const(constValue), body, _)
+                if constValue.uplcConst.isInstanceOf[Constant.Integer] =>
+                val Constant.Integer(intValue) = constValue.uplcConst: @unchecked
+                (intValue, body)
+        }
+
+        // Check if there's a wildcard
+        val hasWildcard = cases.exists {
+            case SIR.Case(SIR.Pattern.Wildcard, _, _) => true
+            case _                                    => false
+        }
+
+        // Case on integer only works if:
+        // 1. All cases are integer constants (no wildcard fallback supported directly)
+        // 2. Cases form a contiguous sequence starting from 0
+        // 3. No duplicates
+        if intCases.size != cases.size || hasWildcard then return None
+
+        // Check for contiguous sequence starting from 0
+        val sortedCases = intCases.sortBy(_._1)
+        val expectedSequence = (0 until sortedCases.size).map(BigInt(_))
+        val actualValues = sortedCases.map(_._1)
+
+        if actualValues != expectedSequence.toList then return None
+
+        // All checks passed - generate Case on integer
+        val branches = sortedCases.map { case (_, body) =>
+            lowerInner(body)
+        }
+
+        Some(Term.Case(scrutineeTerm, branches))
+    }
+
+    /** Generate match using equalsInteger + ifThenElse (general approach, works for all cases). */
+    private def lowerIntegerMatchLegacy(
+        scrutineeTerm: Term,
+        cases: List[SIR.Case],
+        isUnchecked: Boolean,
+        anns: AnnotationsDecl
+    ): Term = {
         def processCases(cases: List[SIR.Case]): Term = cases match {
             case Nil =>
                 if isUnchecked then

@@ -326,3 +326,59 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
           s"Case ($caseBudget) should use less or equal CPU than ifThenElse ($ifThenElseBudget)"
         )
     }
+
+    // Budget comparison tests: equalsInteger chain vs Case on integer
+
+    test("V4: Compare budget of equalsInteger chain vs Case on integer (3 branches)") {
+        val branch0 = Const(Constant.String("zero"))
+        val branch1 = Const(Constant.String("one"))
+        val branch2 = Const(Constant.String("two"))
+        val scrutinee = Const(Constant.Integer(1))
+
+        // equalsInteger chain version:
+        // force(ifThenElse (equalsInteger n 0) (delay branch0)
+        //       (delay (force(ifThenElse (equalsInteger n 1) (delay branch1) (delay branch2)))))
+        def mkEqualsChain(n: Term): Term = {
+            val eq0 =
+                Apply(Apply(Builtin(DefaultFun.EqualsInteger), n), Const(Constant.Integer(0)))
+            val eq1 =
+                Apply(Apply(Builtin(DefaultFun.EqualsInteger), n), Const(Constant.Integer(1)))
+            Force(
+              Apply(
+                Apply(Apply(Force(Builtin(DefaultFun.IfThenElse)), eq0), Delay(branch0)),
+                Delay(
+                  Force(
+                    Apply(
+                      Apply(Apply(Force(Builtin(DefaultFun.IfThenElse)), eq1), Delay(branch1)),
+                      Delay(branch2)
+                    )
+                  )
+                )
+              )
+            )
+        }
+
+        val equalsChainTerm = mkEqualsChain(scrutinee)
+
+        // Case version: Case(n, [branch0, branch1, branch2])
+        val caseTerm = Case(scrutinee, List(branch0, branch1, branch2))
+
+        val (equalsChainResult, equalsChainBudget) = evalWithBudget(v4vm, equalsChainTerm)
+        val (caseResult, caseBudget) = evalWithBudget(v4vm, caseTerm)
+
+        // Both should produce the same result
+        assert(equalsChainResult == branch1, s"equalsChain result: $equalsChainResult")
+        assert(caseResult == branch1, s"Case result: $caseResult")
+
+        println(s"equalsInteger chain budget (3 branches, select 1): $equalsChainBudget")
+        println(s"Case on integer budget (3 branches, select 1): $caseBudget")
+        println(
+          s"Savings: ${equalsChainBudget.cpu - caseBudget.cpu} cpu, ${equalsChainBudget.memory - caseBudget.memory} mem"
+        )
+
+        // Case should be more efficient (less budget)
+        assert(
+          caseBudget.cpu <= equalsChainBudget.cpu,
+          s"Case ($caseBudget) should use less or equal CPU than equalsInteger chain ($equalsChainBudget)"
+        )
+    }
