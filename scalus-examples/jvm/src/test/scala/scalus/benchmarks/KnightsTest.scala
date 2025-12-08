@@ -37,7 +37,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 290_419732L, steps = 81631_850372L)
+                ExUnits(memory = 268_866397L, steps = 74203_193934L)
             else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
@@ -138,7 +138,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 754_493278L, steps = 207083_171810L)
+                ExUnits(memory = 733_353698L, steps = 199855_053795L)
             else
                 options.targetLoweringBackend match
                     case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -241,7 +241,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 1513_862337L, steps = 411725_951421L)
+                ExUnits(memory = 1486_230165L, steps = 402314_876346L)
             else
                 options.targetLoweringBackend match {
                     case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>

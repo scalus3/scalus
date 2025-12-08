@@ -1,6 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
@@ -367,26 +368,34 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
           matchData.scrutinee.anns.pos
         )
 
-        val lastTerm = lctx.lower(
-          SIR.Error(
-            s"Incorrect constructor index for type ${loweredScrutinee.sirType.show}",
-            matchData.anns
-          )
-        )
+        // For PlutusV4, use Case on integer directly since orderedCases are already 0..n-1
+        val body = if lctx.targetLanguage == Language.PlutusV4 then {
+            val branches = orderedCases.map { sirCase =>
+                genMatchDataConstrCase(sirCase, dataListVar, optTargetType, false)
+            }
+            lvCaseInteger(constrIdxVar, branches, matchData.anns.pos, optTargetType)
+        } else {
+            val lastTerm = lctx.lower(
+              SIR.Error(
+                s"Incorrect constructor index for type ${loweredScrutinee.sirType.show}",
+                matchData.anns
+              )
+            )
 
-        val body = orderedCases.zipWithIndex.foldRight(lastTerm) {
-            case ((sirCase, caseIndex), state) =>
-                val body = genMatchDataConstrCase(sirCase, dataListVar, optTargetType, false)
+            orderedCases.zipWithIndex.foldRight(lastTerm) { case ((sirCase, caseIndex), state) =>
+                val caseBody =
+                    genMatchDataConstrCase(sirCase, dataListVar, optTargetType, false)
                 lvIfThenElse(
                   lvEqualsInteger(
                     constrIdxVar,
                     lvIntConstant(caseIndex, sirCase.anns.pos),
-                    body.pos
+                    caseBody.pos
                   ),
-                  body,
+                  caseBody,
                   state,
                   sirCase.anns.pos
                 )
+            }
         }
 
         lctx.scope = prevScope
