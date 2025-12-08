@@ -3,15 +3,20 @@ package scalus.benchmarks
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Builtins.{multiplyInteger, remainderInteger}
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnits, Language}
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
 
 class KnightsTest extends AnyFunSuite, ScalusTest:
     import KnightsTest.{*, given}
+    import scalus.uplc.eval.PlutusVM
+
+    // Use PlutusV4 VM to evaluate code compiled with PlutusV4 features (case on booleans)
+    override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV4VM()
 
     given scalus.Compiler.Options = scalus.Compiler.Options(
       targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLanguage = Language.PlutusV4,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
@@ -29,14 +34,13 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         // println(s"Lowered value: ${lw.pretty.render(100)}")
         val result = sir.toUplcOptimized(false).evaluateDebug
 
+        val options = summon[scalus.Compiler.Options]
         val scalusBudget =
-            if summon[
-                  scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 290_419732L, steps = 81631_850372L)
+            else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
-            else if summon[
-                  scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
+            else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
             then ExUnits(memory = 247_807177L, steps = 44783_358238L)
             else {
                 // actually we don't know, need recheck
@@ -131,14 +135,18 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
+        val options = summon[scalus.Compiler.Options]
         val scalusBudget =
-            summon[scalus.Compiler.Options].targetLoweringBackend match
-                case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExUnits(memory = 822_015659L, steps = 228266_926079L)
-                case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
-                    ExUnits(memory = 645_799142L, steps = 115775_218834L)
-                case _ =>
-                    throw new IllegalStateException("Unsupported target lowering backend")
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 754_493278L, steps = 207083_171810L)
+            else
+                options.targetLoweringBackend match
+                    case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
+                        ExUnits(memory = 822_015659L, steps = 228266_926079L)
+                    case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
+                        ExUnits(memory = 645_799142L, steps = 115775_218834L)
+                    case _ =>
+                        throw new IllegalStateException("Unsupported target lowering backend")
         if !result.isSuccess then println(s"Result:  $result")
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
@@ -230,16 +238,19 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        val scalusBudget = {
-            summon[scalus.Compiler.Options].targetLoweringBackend match {
-                case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                    ExUnits(memory = 1645_356753L, steps = 452914_801705L)
-                case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
-                    ExUnits(memory = 1315_097779L, steps = 235822_700067L)
-                case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
-                    ExUnits(memory = 1315_097779L, steps = 235822_700067L)
-            }
-        }
+        val options = summon[scalus.Compiler.Options]
+        val scalusBudget =
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 1513_862337L, steps = 411725_951421L)
+            else
+                options.targetLoweringBackend match {
+                    case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
+                        ExUnits(memory = 1645_356753L, steps = 452914_801705L)
+                    case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
+                        ExUnits(memory = 1315_097779L, steps = 235822_700067L)
+                    case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
+                        ExUnits(memory = 1315_097779L, steps = 235822_700067L)
+                }
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 

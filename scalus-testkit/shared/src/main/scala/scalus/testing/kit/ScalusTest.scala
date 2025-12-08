@@ -61,7 +61,8 @@ object Mock:
         TransactionInput(TransactionHash.fromByteString(id.hash), index.toInt)
 
 trait ScalusTest extends ArbitraryInstances {
-    protected given PlutusVM = PlutusVM.makePlutusV3VM()
+    protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
+    protected given PlutusVM = plutusVM
 
     extension (self: SIR)
         def runScript(using

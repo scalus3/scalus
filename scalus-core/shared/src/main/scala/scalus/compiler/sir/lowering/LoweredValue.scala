@@ -1,6 +1,7 @@
 package scalus.compiler.sir.lowering
 
 import org.typelevel.paiges.Doc
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.Lowering.tpf
 import scalus.compiler.sir.*
 import scalus.uplc.*
@@ -1081,14 +1082,25 @@ object LoweredValue {
 
             val condR = cond.toRepresentation(PrimitiveRepresentation.Constant, inPos)
 
-            IfThenElseLoweredValue(
-              condR,
-              thenBranchR,
-              elseBranchR,
-              resType,
-              targetRepresentation,
-              inPos
-            )
+            // For PlutusV4+, use Case on boolean which is more efficient
+            if lctx.targetLanguage == Language.PlutusV4 then
+                CaseBooleanLoweredValue(
+                  condR,
+                  elseBranchR, // falseBranch = index 0
+                  thenBranchR, // trueBranch = index 1
+                  resType,
+                  targetRepresentation,
+                  inPos
+                )
+            else
+                IfThenElseLoweredValue(
+                  condR,
+                  thenBranchR,
+                  elseBranchR,
+                  resType,
+                  targetRepresentation,
+                  inPos
+                )
 
         }
 

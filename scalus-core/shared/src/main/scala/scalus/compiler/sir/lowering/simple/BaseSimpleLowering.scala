@@ -571,9 +571,14 @@ abstract class BaseSimpleLowering(
                   )
                 )
             case SIR.IfThenElse(cond, t, f, _, _) =>
-                !(builtinTerms(DefaultFun.IfThenElse) $ lowerInner(cond) $ ~lowerInner(
-                  t
-                ) $ ~lowerInner(f))
+                val condTerm = lowerInner(cond)
+                val thenTerm = lowerInner(t)
+                val elseTerm = lowerInner(f)
+                // For PlutusV4+, use Case on boolean which is more efficient
+                if targetLanguage == Language.PlutusV4 then
+                    // Case(cond, [falseBranch, trueBranch]) - False=0, True=1
+                    Term.Case(condTerm, List(elseTerm, thenTerm))
+                else !(builtinTerms(DefaultFun.IfThenElse) $ condTerm $ ~thenTerm $ ~elseTerm)
             case SIR.Cast(term, tp, anns) =>
                 lowerInner(term)
             case SIR.Builtin(bn, _, _) => builtinTerms(bn)

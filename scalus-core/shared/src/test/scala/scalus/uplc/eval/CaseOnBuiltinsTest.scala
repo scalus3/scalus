@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.Word64
+import scalus.cardano.ledger.{ExUnits, Word64}
 import scalus.uplc.*
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
@@ -229,3 +229,100 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
     //           s"prime($n) should be ${primes(n)}"
     //         )
     // }
+
+    // Budget comparison tests: ifThenElse vs Case on boolean
+
+    def evalWithBudget(vm: PlutusVM, term: Term): (Term, ExUnits) = {
+        val spender = CountingBudgetSpender()
+        val deTerm = DeBruijn.deBruijnTerm(term)
+        val result = vm.evaluateDeBruijnedTerm(deTerm, spender, NoLogger)
+        (result, spender.getSpentBudget)
+    }
+
+    test("V4: Compare budget of ifThenElse vs Case on boolean (true branch)") {
+        val thenBranch = Const(Constant.Integer(1))
+        val elseBranch = Const(Constant.Integer(0))
+
+        // ifThenElse version: force (ifThenElse cond (delay then) (delay else))
+        val ifThenElseTerm = Force(
+          Apply(
+            Apply(
+              Apply(
+                Force(Builtin(DefaultFun.IfThenElse)),
+                Const(Constant.Bool(true))
+              ),
+              Delay(thenBranch)
+            ),
+            Delay(elseBranch)
+          )
+        )
+
+        // Case version: Case(cond, [falseBranch, trueBranch])
+        val caseTerm = Case(
+          Const(Constant.Bool(true)),
+          List(elseBranch, thenBranch)
+        )
+
+        val (ifThenElseResult, ifThenElseBudget) = evalWithBudget(v4vm, ifThenElseTerm)
+        val (caseResult, caseBudget) = evalWithBudget(v4vm, caseTerm)
+
+        // Both should produce the same result
+        assert(ifThenElseResult == thenBranch, s"ifThenElse result: $ifThenElseResult")
+        assert(caseResult == thenBranch, s"Case result: $caseResult")
+
+        println(s"ifThenElse budget (true): $ifThenElseBudget")
+        println(s"Case budget (true): $caseBudget")
+        println(
+          s"Savings: ${ifThenElseBudget.cpu - caseBudget.cpu} cpu, ${ifThenElseBudget.memory - caseBudget.memory} mem"
+        )
+
+        // Case should be more efficient (less budget)
+        assert(
+          caseBudget.cpu <= ifThenElseBudget.cpu,
+          s"Case ($caseBudget) should use less or equal CPU than ifThenElse ($ifThenElseBudget)"
+        )
+    }
+
+    test("V4: Compare budget of ifThenElse vs Case on boolean (false branch)") {
+        val thenBranch = Const(Constant.Integer(1))
+        val elseBranch = Const(Constant.Integer(0))
+
+        // ifThenElse version: force (ifThenElse cond (delay then) (delay else))
+        val ifThenElseTerm = Force(
+          Apply(
+            Apply(
+              Apply(
+                Force(Builtin(DefaultFun.IfThenElse)),
+                Const(Constant.Bool(false))
+              ),
+              Delay(thenBranch)
+            ),
+            Delay(elseBranch)
+          )
+        )
+
+        // Case version: Case(cond, [falseBranch, trueBranch])
+        val caseTerm = Case(
+          Const(Constant.Bool(false)),
+          List(elseBranch, thenBranch)
+        )
+
+        val (ifThenElseResult, ifThenElseBudget) = evalWithBudget(v4vm, ifThenElseTerm)
+        val (caseResult, caseBudget) = evalWithBudget(v4vm, caseTerm)
+
+        // Both should produce the same result
+        assert(ifThenElseResult == elseBranch, s"ifThenElse result: $ifThenElseResult")
+        assert(caseResult == elseBranch, s"Case result: $caseResult")
+
+        println(s"ifThenElse budget (false): $ifThenElseBudget")
+        println(s"Case budget (false): $caseBudget")
+        println(
+          s"Savings: ${ifThenElseBudget.cpu - caseBudget.cpu} cpu, ${ifThenElseBudget.memory - caseBudget.memory} mem"
+        )
+
+        // Case should be more efficient (less budget)
+        assert(
+          caseBudget.cpu <= ifThenElseBudget.cpu,
+          s"Case ($caseBudget) should use less or equal CPU than ifThenElse ($ifThenElseBudget)"
+        )
+    }

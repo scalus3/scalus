@@ -2,7 +2,7 @@ package scalus.benchmarks
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnits, Language}
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
 
@@ -11,12 +11,17 @@ import scala.language.implicitConversions
 
 class ClausifyTest extends AnyFunSuite, ScalusTest:
     import ClausifyTest.*
+    import scalus.uplc.eval.PlutusVM
 
     inline val isAlwaysPrintComparison = true
+
+    // Use PlutusV4 VM to evaluate code compiled with PlutusV4 features (case on booleans)
+    override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV4VM()
 
     @Ignore
     given scalus.Compiler.Options = scalus.Compiler.Options(
       targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLanguage = Language.PlutusV4,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -34,20 +39,18 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val result = uplc.evaluateDebug
 
-        val scalusBudget = {
-            if summon[
-                  scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+        val options = summon[scalus.Compiler.Options]
+        val scalusBudget =
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 58361029L, steps = 17400247988L)
+            else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 75014277L, steps = 22595514040L)
-            else if summon[
-                  scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
+            else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
             then ExUnits(memory = 45835971L, steps = 7879192811L)
             else {
                 // not tested
                 ExUnits(memory = 100000L, steps = 1000000000L)
             }
-        }
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
@@ -70,16 +73,20 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        val compilerOptions = summon[scalus.Compiler.Options]
-        val scalusBudget = compilerOptions.targetLoweringBackend match {
-            case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
-                ExUnits(memory = 93117893L, steps = 27997423766L)
-            case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
-                ExUnits(memory = 57029883L, steps = 9813458115L)
-            case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
-                // not tested
-                ExUnits(memory = 100000L, steps = 1000000000L)
-        }
+        val options = summon[scalus.Compiler.Options]
+        val scalusBudget =
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 72664625L, steps = 21615880334L)
+            else
+                options.targetLoweringBackend match {
+                    case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
+                        ExUnits(memory = 93117893L, steps = 27997423766L)
+                    case scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering =>
+                        ExUnits(memory = 57029883L, steps = 9813458115L)
+                    case scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering =>
+                        // not tested
+                        ExUnits(memory = 100000L, steps = 1000000000L)
+                }
 
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
@@ -103,11 +110,11 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        //
+        val options = summon[scalus.Compiler.Options]
         val scalusBudget =
-            if summon[
-                  scalus.Compiler.Options
-                ].targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 193955776L, steps = 57737593283L)
+            else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 248968345L, steps = 74900219564L)
             else ExUnits(memory = 152347441L, steps = 26254484239L)
         assert(result.isSuccess)
@@ -1034,7 +1041,11 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        val scalusBudget = ExUnits(memory = 344589971L, steps = 100725854354L)
+        val options = summon[scalus.Compiler.Options]
+        val scalusBudget =
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 275475644L, steps = 79154886531L)
+            else ExUnits(memory = 344589971L, steps = 100725854354L)
         // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
@@ -1058,7 +1069,11 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             .toUplcOptimized(false)
             .evaluateDebug
 
-        val scalusBudget = ExUnits(memory = 1205574641L, steps = 363306861308L)
+        val options = summon[scalus.Compiler.Options]
+        val scalusBudget =
+            if options.targetLanguage == Language.PlutusV4 then
+                ExUnits(memory = 934639091L, steps = 278806363058L)
+            else ExUnits(memory = 1205574641L, steps = 363306861308L)
         // val scalusBudget = ExUnits(memory = 736503639L, steps = 127163562591L)
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)

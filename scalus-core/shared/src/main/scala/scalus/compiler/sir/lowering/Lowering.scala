@@ -1,6 +1,7 @@
 package scalus.compiler.sir.lowering
 
 import org.typelevel.paiges.Doc
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
