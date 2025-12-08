@@ -4,6 +4,8 @@ import scalus.builtin.{BLS12_381_G1_Element, ByteString, PlatformSpecific}
 import scalus.builtin.Builtins.*
 import scalus.prelude.Eq
 
+import scala.annotation.nowarn
+
 @Compile
 object G1 {
 
@@ -59,12 +61,17 @@ object G1 {
         bls12_381_G1_hashToGroup(bs, dst)
     }
 
+    // The `+` and `unary_-` extensions must stay in shared code (not platform-specific)
+    // because Scalus compiler plugin compiles this @Compile-annotated object to Plutus.
+    // The plugin recognizes builtin calls like bls12_381_G1_add but not class methods.
+    // On JS platform, BLS12_381_G1_Element class already has these methods, causing warnings.
     extension (self: BLS12_381_G1_Element) {
 
         /** Checks if two points in the G1 group are equal */
         inline def equal(rhs: BLS12_381_G1_Element): Boolean = bls12_381_G1_equal(self, rhs)
 
         /** Adds two points in the G1 group */
+        @nowarn("msg=Extension method .* will never be selected")
         infix inline def +(rhs: BLS12_381_G1_Element): BLS12_381_G1_Element =
             bls12_381_G1_add(self, rhs)
 
@@ -82,6 +89,7 @@ object G1 {
         }
 
         /** Negates the point in the G1 group */
+        @nowarn("msg=Extension method .* will never be selected")
         inline def unary_- : BLS12_381_G1_Element = {
             bls12_381_G1_neg(self)
         }
