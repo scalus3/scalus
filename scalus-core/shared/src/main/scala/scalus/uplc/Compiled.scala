@@ -51,11 +51,9 @@ case class PlutusV3[A](
     protected def toUplc: Term = {
         val backend = options.targetLoweringBackend
         val uplc = backend match
-            case TargetLoweringBackend.ScottEncodingLowering |
-                TargetLoweringBackend.SimpleSirToUplcLowering =>
+            case TargetLoweringBackend.ScottEncodingLowering =>
                 ScottEncodingLowering(sir, options.generateErrorTraces).lower()
-            case TargetLoweringBackend.SumOfProductsLowering |
-                TargetLoweringBackend.SirToUplc110Lowering =>
+            case TargetLoweringBackend.SumOfProductsLowering =>
                 SumOfProductsLowering(sir, options.generateErrorTraces).lower()
             case TargetLoweringBackend.SirToUplcV3Lowering =>
                 SirToUplcV3Lowering(

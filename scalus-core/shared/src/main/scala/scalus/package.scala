@@ -45,11 +45,9 @@ package object scalus {
         ): Term = {
             val backend = options.targetLoweringBackend
             val uplc = backend match
-                case TargetLoweringBackend.ScottEncodingLowering |
-                    TargetLoweringBackend.SimpleSirToUplcLowering =>
+                case TargetLoweringBackend.ScottEncodingLowering =>
                     ScottEncodingLowering(sir, generateErrorTraces).lower()
-                case TargetLoweringBackend.SumOfProductsLowering |
-                    TargetLoweringBackend.SirToUplc110Lowering =>
+                case TargetLoweringBackend.SumOfProductsLowering =>
                     SumOfProductsLowering(sir, generateErrorTraces).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
                     SirToUplcV3Lowering(
@@ -99,11 +97,9 @@ package object scalus {
         def lowerToUplc(using options: Compiler.Options = Compiler.Options()): Term = {
             val backend = options.targetLoweringBackend
             val uplc = backend match
-                case TargetLoweringBackend.ScottEncodingLowering |
-                    TargetLoweringBackend.SimpleSirToUplcLowering =>
+                case TargetLoweringBackend.ScottEncodingLowering =>
                     ScottEncodingLowering(sir, options.generateErrorTraces).lower()
-                case TargetLoweringBackend.SumOfProductsLowering |
-                    TargetLoweringBackend.SirToUplc110Lowering =>
+                case TargetLoweringBackend.SumOfProductsLowering =>
                     SumOfProductsLowering(sir, options.generateErrorTraces).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
                     SirToUplcV3Lowering(
