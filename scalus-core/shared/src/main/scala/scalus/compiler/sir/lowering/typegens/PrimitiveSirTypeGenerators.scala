@@ -133,7 +133,7 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
         )
 
     override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValue =
 
         val unconstr = lvBuiltinApply(
@@ -153,16 +153,27 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
           PrimitiveRepresentation.Constant,
           pos
         )
-        lvIfThenElse(
-          lvEqualsInteger(
-            asInt,
-            lvIntConstant(0, pos),
-            pos
-          ),
-          lvBoolConstant(false, pos),
-          lvBoolConstant(true, pos),
-          pos
-        )
+        // For PlutusV4, use Case on integer: index 0 -> false, index 1 -> true
+        if lctx.targetLanguage == Language.PlutusV4 then
+            lvCaseInteger(
+              asInt,
+              scala.collection.immutable.List(
+                lvBoolConstant(false, pos),
+                lvBoolConstant(true, pos)
+              ),
+              pos
+            )
+        else
+            lvIfThenElse(
+              lvEqualsInteger(
+                asInt,
+                lvIntConstant(0, pos),
+                pos
+              ),
+              lvBoolConstant(false, pos),
+              lvBoolConstant(true, pos),
+              pos
+            )
 
     override def genMatch(
         matchData: SIR.Match,
