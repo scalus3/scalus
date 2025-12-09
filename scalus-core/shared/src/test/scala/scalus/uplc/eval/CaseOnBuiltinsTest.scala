@@ -382,3 +382,181 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
           s"Case ($caseBudget) should use less or equal CPU than equalsInteger chain ($equalsChainBudget)"
         )
     }
+
+    // Case on List tests for V4
+    // List has 2 constructors: Cons=0 (head, tail args), Nil=1 (no args)
+    // For Cons, the branch should be a function taking head and tail
+
+    val intListType = DefaultUni.Apply(DefaultUni.ProtoList, DefaultUni.Integer)
+
+    test("V4: Case on empty list selects nil branch") {
+        // Branches: [cons_branch, nil_branch]
+        val term = Case(
+          Const(Constant.List(intListType, Nil)),
+          List(
+            LamAbs("h", LamAbs("t", Const(Constant.String("cons")))),
+            Const(Constant.String("nil"))
+          )
+        )
+        assert(evalV4(term) == Const(Constant.String("nil")))
+    }
+
+    test("V4: Case on non-empty list selects cons branch and applies head and tail") {
+        // For cons branch, we receive head and tail as arguments
+        // The branch should be: \h t -> h (returns the head)
+        // Branches: [cons_branch, nil_branch]
+        val term = Case(
+          Const(Constant.List(intListType, List(Constant.Integer(42), Constant.Integer(43)))),
+          List(
+            LamAbs("h", LamAbs("t", Var(NamedDeBruijn("h", 0)))),
+            Const(Constant.String("nil"))
+          )
+        )
+        assert(evalV4(term) == Const(Constant.Integer(42)))
+    }
+
+    test("V4: Case on non-empty list can access tail") {
+        // For cons branch: \h t -> t (returns the tail)
+        // Branches: [cons_branch, nil_branch]
+        val term = Case(
+          Const(Constant.List(intListType, List(Constant.Integer(42), Constant.Integer(43)))),
+          List(
+            LamAbs("h", LamAbs("t", Var(NamedDeBruijn("t", 0)))),
+            Const(Constant.String("nil"))
+          )
+        )
+        val expected = Const(Constant.List(intListType, List(Constant.Integer(43))))
+        assert(evalV4(term) == expected)
+    }
+
+    test("V4: Case on single-element list - tail is empty") {
+        // For cons branch: \h t -> t (returns the tail, which should be empty)
+        // Branches: [cons_branch, nil_branch]
+        val term = Case(
+          Const(Constant.List(intListType, List(Constant.Integer(42)))),
+          List(
+            LamAbs("h", LamAbs("t", Var(NamedDeBruijn("t", 0)))),
+            Const(Constant.String("nil"))
+          )
+        )
+        val expected = Const(Constant.List(intListType, Nil))
+        assert(evalV4(term) == expected)
+    }
+
+    test("V4: Case on non-empty list with single branch works") {
+        // Only cons branch provided, no nil branch
+        val term = Case(
+          Const(Constant.List(intListType, List(Constant.Integer(42)))),
+          List(LamAbs("h", LamAbs("t", Var(NamedDeBruijn("h", 0)))))
+        )
+        assert(evalV4(term) == Const(Constant.Integer(42)))
+    }
+
+    test("V4: Case on empty list with single branch throws CaseListBranchError") {
+        // Only cons branch provided, but list is empty - needs nil branch
+        val term = Case(
+          Const(Constant.List(intListType, Nil)),
+          List(LamAbs("h", LamAbs("t", Const(Constant.String("cons-only")))))
+        )
+        assertThrows[CaseListBranchError](evalV4(term))
+    }
+
+    test("V4: Case on list with no branches throws CaseListBranchError") {
+        val term = Case(
+          Const(Constant.List(intListType, Nil)),
+          List()
+        )
+        assertThrows[CaseListBranchError](evalV4(term))
+    }
+
+    test("V4: Case on list with three branches throws CaseListBranchError") {
+        val term = Case(
+          Const(Constant.List(intListType, Nil)),
+          List(
+            Const(Constant.String("one")),
+            Const(Constant.String("two")),
+            Const(Constant.String("three"))
+          )
+        )
+        assertThrows[CaseListBranchError](evalV4(term))
+    }
+
+    test("V3: Case on list throws NonConstrScrutinized") {
+        val term = Case(
+          Const(Constant.List(intListType, Nil)),
+          List(
+            LamAbs("h", LamAbs("t", Const(Constant.String("cons")))),
+            Const(Constant.String("nil"))
+          )
+        )
+        assertThrows[NonConstrScrutinized](evalV3(term))
+    }
+
+    // Nested case on list - compute list length
+    test("V4: Nested case on list to compute length") {
+        // length [] = 0
+        // length (h:t) = 1 + length t
+        // We'll test with a list of 3 elements
+        // Branches order: [cons_branch, nil_branch]
+        val list3 = Constant.List(
+          intListType,
+          List(
+            Constant.Integer(1),
+            Constant.Integer(2),
+            Constant.Integer(3)
+          )
+        )
+
+        // Manually unroll: Case [1,2,3] of cons h t -> 1 + (Case t of ...); nil -> 0
+        val term = Case(
+          Const(list3),
+          List(
+            LamAbs(
+              "h",
+              LamAbs(
+                "t",
+                Apply(
+                  Apply(Builtin(DefaultFun.AddInteger), Const(Constant.Integer(1))),
+                  Case(
+                    Var(NamedDeBruijn("t", 0)),
+                    List(
+                      LamAbs(
+                        "h2",
+                        LamAbs(
+                          "t2",
+                          Apply(
+                            Apply(Builtin(DefaultFun.AddInteger), Const(Constant.Integer(1))),
+                            Case(
+                              Var(NamedDeBruijn("t2", 0)),
+                              List(
+                                LamAbs(
+                                  "h3",
+                                  LamAbs(
+                                    "t3",
+                                    Apply(
+                                      Apply(
+                                        Builtin(DefaultFun.AddInteger),
+                                        Const(Constant.Integer(1))
+                                      ),
+                                      Const(Constant.Integer(0)) // we know t3 is empty
+                                    )
+                                  )
+                                ),
+                                Const(Constant.Integer(0)) // nil -> 0
+                              )
+                            )
+                          )
+                        )
+                      ),
+                      Const(Constant.Integer(0)) // nil -> 0
+                    )
+                  )
+                )
+              )
+            ),
+            Const(Constant.Integer(0)) // nil -> 0
+          )
+        )
+
+        assert(evalV4(term) == Const(Constant.Integer(3)))
+    }

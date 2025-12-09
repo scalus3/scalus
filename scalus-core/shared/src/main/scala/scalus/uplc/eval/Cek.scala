@@ -328,14 +328,18 @@ class NonConstrScrutinized(val value: CekValue, env: CekValEnv)
       env
     )
 
+/** Base class for case-on-builtin errors (PlutusV4+) */
+abstract class CaseOnBuiltinError(msg: String, env: CekValEnv)
+    extends StackTraceMachineError(msg, env)
+
 class CaseIndexOutOfBounds(val index: BigInt, val branchCount: Int, env: CekValEnv)
-    extends StackTraceMachineError(
+    extends CaseOnBuiltinError(
       s"Case index $index out of bounds for $branchCount branches",
       env
     )
 
 class CaseBoolBranchMissing(val value: Boolean, val branchCount: Int, env: CekValEnv)
-    extends StackTraceMachineError(
+    extends CaseOnBuiltinError(
       s"Case on boolean $value requires ${
               if value then 2 else 1
           } branches, but only $branchCount provided",
@@ -343,8 +347,14 @@ class CaseBoolBranchMissing(val value: Boolean, val branchCount: Int, env: CekVa
     )
 
 class CaseUnitBranchMissing(val branchCount: Int, env: CekValEnv)
-    extends StackTraceMachineError(
+    extends CaseOnBuiltinError(
       s"Case on unit requires exactly 1 branch, but $branchCount provided",
+      env
+    )
+
+class CaseListBranchError(val branchCount: Int, env: CekValEnv)
+    extends CaseOnBuiltinError(
+      s"Case on list requires 1 or 2 branches (cons, nil), but $branchCount provided",
       env
     )
 
@@ -788,6 +798,28 @@ class CekMachine(
                                 // Valid: exactly 1 branch
                                 if cases.size == 1 then Compute(ctx, env, cases(0))
                                 else throw new CaseUnitBranchMissing(cases.size, env)
+                            case list @ Constant.List(elemType, elements) =>
+                                // List has 2 constructors: Cons=0 (head, tail), Nil=1
+                                // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
+                                if cases.size == 0 || cases.size > 2 then
+                                    throw new CaseListBranchError(cases.size, env)
+                                elements match
+                                    case head :: tail =>
+                                        // Non-empty list -> Cons branch (index 0)
+                                        // Apply head and tail as arguments to the cons branch
+                                        // Order: head first, then tail (like transferArgStack foldRight)
+                                        val headVal = VCon(head)
+                                        val tailVal = VCon(Constant.List(elemType, tail))
+                                        val newCtx = FrameAwaitFunValue(
+                                          headVal,
+                                          FrameAwaitFunValue(tailVal, ctx)
+                                        )
+                                        Compute(newCtx, env, cases(0))
+                                    case Nil =>
+                                        // Empty list -> Nil branch (index 1), no arguments
+                                        if cases.size < 2 then
+                                            throw new CaseListBranchError(cases.size, env)
+                                        Compute(ctx, env, cases(1))
                             case _ => throw new NonConstrScrutinized(value, env)
                     case _ => throw new NonConstrScrutinized(value, env)
     }
