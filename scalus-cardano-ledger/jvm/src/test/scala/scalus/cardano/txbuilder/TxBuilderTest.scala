@@ -19,6 +19,10 @@ class TxBuilderTest extends AnyFunSuite {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
 
+    // Deterministic test mnemonic for cross-platform signature comparison
+    private val testMnemonic = "test walk nut penalty hip pave soap entry language right filter choice"
+    private val testDerivationPath = "m/1852'/1815'/0'/0/0"
+
     // Test scripts for validation - using PlutusV3
     val script1: Script.PlutusV3 = {
         val alwaysOk = Compiler.compile((sc: Data) => ())
@@ -55,6 +59,7 @@ class TxBuilderTest extends AnyFunSuite {
         assert(exception.getMessage.contains("No witness or ref/spent output is found for script"))
         assert(exception.getMessage.contains(scriptUtxo.output.address.scriptHashOption.get.toHex))
     }
+
 
     test("TxBuilder mint without attaching script should fail when built") {
         val policyId: PolicyId = mintingPolicy.scriptHash

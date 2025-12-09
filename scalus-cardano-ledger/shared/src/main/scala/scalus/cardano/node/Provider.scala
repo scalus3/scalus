@@ -1,12 +1,11 @@
 package scalus.cardano.node
 
-import scalus.cardano.ledger.*
 import scalus.cardano.address.Address
+import scalus.cardano.ledger.*
 
 import scala.annotation.tailrec
-import scala.concurrent.{blocking, Await, ExecutionContext, Future}
 import scala.concurrent.duration.*
-import scala.util.{Failure, Success}
+import scala.concurrent.{Await, ExecutionContext, Future, blocking}
 
 trait Provider {
 
