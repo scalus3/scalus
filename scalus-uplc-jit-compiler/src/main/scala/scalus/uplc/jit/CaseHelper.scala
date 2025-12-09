@@ -75,6 +75,25 @@ object CaseHelper {
                           s"Case on unit requires exactly 1 branch, but $bc provided"
                         )
                     cases(0)
+                case list: List[Any @unchecked] =>
+                    // List case - Cons=0 (head, tail), Nil=1
+                    val bc = $branchCountExpr
+                    if bc == 0 || bc > 2 then
+                        throw new JitEvaluationFailure(
+                          s"Case on list requires 1 or 2 branches, but $bc provided"
+                        )
+                    list match
+                        case head :: tail =>
+                            // Cons branch (index 0) - apply head and tail
+                            val consBranch = cases(0).asInstanceOf[Any => Any]
+                            consBranch(head).asInstanceOf[Any => Any](tail)
+                        case Nil =>
+                            // Nil branch (index 1) - no arguments
+                            if bc < 2 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on list requires 1 or 2 branches, but $bc provided"
+                                )
+                            cases(1)
                 case other =>
                     throw new JitEvaluationFailure(
                       s"Non-constructor value in case expression: $other"
@@ -147,6 +166,24 @@ object CaseHelper {
                           s"Case on unit requires exactly 1 branch, but $bc provided"
                         )
                     cases(0)
+                case list: List[Any @unchecked] =>
+                    // List case - Cons=0 (head, tail), Nil=1
+                    val bc = $branchCountExpr
+                    if bc == 0 || bc > 2 then
+                        throw new JitEvaluationFailure(
+                          s"Case on list requires 1 or 2 branches, but $bc provided"
+                        )
+                    list match
+                        case head :: tail =>
+                            // Cons branch (index 0) - apply head and tail via continuations
+                            Apply(Apply(cases(0), Return(head)), Return(tail))
+                        case Nil =>
+                            // Nil branch (index 1) - no arguments
+                            if bc < 2 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on list requires 1 or 2 branches, but $bc provided"
+                                )
+                            cases(1)
                 case other =>
                     throw new JitEvaluationFailure(
                       s"Non-constructor value in case expression: $other"
