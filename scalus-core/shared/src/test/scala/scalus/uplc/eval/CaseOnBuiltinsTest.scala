@@ -732,7 +732,9 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         assert(evalV4(describeData(Data.Map(Nil))) == Const(Constant.String("map")))
         assert(evalV4(describeData(Data.List(Nil))) == Const(Constant.String("list")))
         assert(evalV4(describeData(Data.I(0))) == Const(Constant.String("integer")))
-        assert(evalV4(describeData(Data.B(ByteString.empty))) == Const(Constant.String("bytestring")))
+        assert(
+          evalV4(describeData(Data.B(ByteString.empty))) == Const(Constant.String("bytestring"))
+        )
     }
 
     // Case on Pair tests for V4

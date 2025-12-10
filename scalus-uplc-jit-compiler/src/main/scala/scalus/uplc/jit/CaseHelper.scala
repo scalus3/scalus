@@ -1,5 +1,6 @@
 package scalus.uplc.jit
 
+import scalus.builtin.{BuiltinPair, Data}
 import scalus.uplc.jit.mincont.ContinuationJitRepr
 import scalus.uplc.jit.mincont.ContinuationJitRepr.{Apply, Return}
 
@@ -94,6 +95,63 @@ object CaseHelper {
                                   s"Case on list requires 1 or 2 branches, but $bc provided"
                                 )
                             cases(1)
+                case data: Data =>
+                    // Data case - Constr=0, Map=1, List=2, I=3, B=4
+                    val bc = $branchCountExpr
+                    if bc == 0 || bc > 5 then
+                        throw new JitEvaluationFailure(
+                          s"Case on data requires 1 to 5 branches, but $bc provided"
+                        )
+                    data match
+                        case Data.Constr(tag, args) =>
+                            // Constr branch (index 0) - apply tag (BigInt) and args (List[Data])
+                            if bc < 1 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 1 branch for Constr"
+                                )
+                            val constrBranch = cases(0).asInstanceOf[Any => Any]
+                            constrBranch(tag).asInstanceOf[Any => Any](args)
+                        case Data.Map(entries) =>
+                            // Map branch (index 1) - apply entries as List[BuiltinPair[Data, Data]]
+                            if bc < 2 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 2 branches for Map"
+                                )
+                            val mapBranch = cases(1).asInstanceOf[Any => Any]
+                            mapBranch(entries.map(BuiltinPair.apply))
+                        case Data.List(elements) =>
+                            // List branch (index 2) - apply elements as List[Data]
+                            if bc < 3 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 3 branches for List"
+                                )
+                            val listBranch = cases(2).asInstanceOf[Any => Any]
+                            listBranch(elements)
+                        case Data.I(integer) =>
+                            // I branch (index 3) - apply integer value
+                            if bc < 4 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 4 branches for I"
+                                )
+                            val iBranch = cases(3).asInstanceOf[Any => Any]
+                            iBranch(integer)
+                        case Data.B(bs) =>
+                            // B branch (index 4) - apply bytestring value
+                            if bc < 5 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires 5 branches for B"
+                                )
+                            val bBranch = cases(4).asInstanceOf[Any => Any]
+                            bBranch(bs)
+                case pair: BuiltinPair[?, ?] =>
+                    // Pair case - exactly 1 branch receiving both elements
+                    val bc = $branchCountExpr
+                    if bc != 1 then
+                        throw new JitEvaluationFailure(
+                          s"Case on pair requires exactly 1 branch, but $bc provided"
+                        )
+                    val pairBranch = cases(0).asInstanceOf[Any => Any]
+                    pairBranch(pair.fst).asInstanceOf[Any => Any](pair.snd)
                 case other =>
                     throw new JitEvaluationFailure(
                       s"Non-constructor value in case expression: $other"
@@ -184,6 +242,57 @@ object CaseHelper {
                                   s"Case on list requires 1 or 2 branches, but $bc provided"
                                 )
                             cases(1)
+                case data: Data =>
+                    // Data case - Constr=0, Map=1, List=2, I=3, B=4
+                    val bc = $branchCountExpr
+                    if bc == 0 || bc > 5 then
+                        throw new JitEvaluationFailure(
+                          s"Case on data requires 1 to 5 branches, but $bc provided"
+                        )
+                    data match
+                        case Data.Constr(tag, args) =>
+                            // Constr branch (index 0) - apply tag (BigInt) and args (List[Data])
+                            if bc < 1 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 1 branch for Constr"
+                                )
+                            Apply(Apply(cases(0), Return(tag)), Return(args))
+                        case Data.Map(entries) =>
+                            // Map branch (index 1) - apply entries as List[BuiltinPair[Data, Data]]
+                            if bc < 2 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 2 branches for Map"
+                                )
+                            Apply(cases(1), Return(entries.map(BuiltinPair.apply)))
+                        case Data.List(elements) =>
+                            // List branch (index 2) - apply elements as List[Data]
+                            if bc < 3 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 3 branches for List"
+                                )
+                            Apply(cases(2), Return(elements))
+                        case Data.I(integer) =>
+                            // I branch (index 3) - apply integer value
+                            if bc < 4 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires at least 4 branches for I"
+                                )
+                            Apply(cases(3), Return(integer))
+                        case Data.B(bs) =>
+                            // B branch (index 4) - apply bytestring value
+                            if bc < 5 then
+                                throw new JitEvaluationFailure(
+                                  s"Case on data requires 5 branches for B"
+                                )
+                            Apply(cases(4), Return(bs))
+                case pair: BuiltinPair[?, ?] =>
+                    // Pair case - exactly 1 branch receiving both elements
+                    val bc = $branchCountExpr
+                    if bc != 1 then
+                        throw new JitEvaluationFailure(
+                          s"Case on pair requires exactly 1 branch, but $bc provided"
+                        )
+                    Apply(Apply(cases(0), Return(pair.fst)), Return(pair.snd))
                 case other =>
                     throw new JitEvaluationFailure(
                       s"Non-constructor value in case expression: $other"

@@ -845,7 +845,10 @@ class CekMachine(
                                             throw new CaseDataBranchError(cases.size, env)
                                         val tagVal = VCon(Constant.Integer(tag))
                                         val argsVal = VCon(
-                                          Constant.List(DefaultUni.Data, args.map(Constant.Data.apply))
+                                          Constant.List(
+                                            DefaultUni.Data,
+                                            args.map(Constant.Data.apply)
+                                          )
                                         )
                                         val newCtx = FrameAwaitFunValue(
                                           tagVal,
