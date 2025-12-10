@@ -1044,7 +1044,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 185773562L, steps = 47135599782L)
+                ExUnits(memory = 185769466L, steps = 47117431014L)
             else ExUnits(memory = 344589971L, steps = 100725854354L)
         // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
         assert(result.isSuccess)

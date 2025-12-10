@@ -145,7 +145,9 @@ object ScalusRuntime {
     
      */
 
-    private def genPairDataListToDataList(name: String)(using LoweringContext): LoweredValue = {
+    private def genPairDataListToDataList(
+        name: String
+    )(using lctx: LoweringContext): LoweredValue = {
         val hc = name.hashCode
         val tpA = SIRType.TypeVar("A", Some(hc), isBuiltin = false)
         val tpB = SIRType.TypeVar("B", Some(hc), isBuiltin = false)
@@ -177,61 +179,91 @@ object ScalusRuntime {
             tail: IdentifiableLoweredValue,
             recFun: IdentifiableLoweredValue,
         ): LoweredValue = {
-            val first = lvBuiltinApply(
-              SIRBuiltins.fstPair,
-              head,
-              tpA,
-              TypeVarRepresentation(false),
-              AnnotationsDecl.empty.pos
-            )
-            val second = lvBuiltinApply(
-              SIRBuiltins.sndPair,
-              head,
-              tpB,
-              TypeVarRepresentation(false),
-              AnnotationsDecl.empty.pos
-            )
-            // val tupleDecl = SIRType.Tuple2.constrDecl
-            val dataNil = lvDataNil(AnnotationsDecl.empty.pos)
-            val t1 = lvBuiltinApply2(
-              SIRBuiltins.mkCons,
-              second,
-              dataNil,
-              SIRType.List(SIRType.Data),
-              SumCaseClassRepresentation.SumDataList,
-              AnnotationsDecl.empty.pos
-            )
-            val t2 = lvBuiltinApply2(
-              SIRBuiltins.mkCons,
-              first,
-              t1,
-              SIRType.List(SIRType.Data),
-              SumCaseClassRepresentation.SumDataList,
-              AnnotationsDecl.empty.pos
-            )
-            val tupleInTvRepr = lvBuiltinApply2(
-              SIRBuiltins.constrData,
-              lvIntConstant(0, AnnotationsDecl.empty.pos),
-              t2,
-              SIRType.Tuple2(tpA, tpB),
-              ProductCaseClassRepresentation.ProdDataConstr,
-              AnnotationsDecl.empty.pos
-            )
-            val recCons = lvApply(
-              recFun,
-              tail,
-              AnnotationsDecl.empty.pos,
-              Some(tpOutTupleList),
-              Some(SumCaseClassRepresentation.SumDataList)
-            )
-            lvBuiltinApply2(
-              SIRBuiltins.mkCons,
-              tupleInTvRepr,
-              recCons,
-              tpOutTupleList,
-              SumCaseClassRepresentation.SumDataList,
-              AnnotationsDecl.empty.pos
-            )
+            def buildTupleBody(
+                first: LoweredValue,
+                second: LoweredValue
+            ): LoweredValue = {
+                // val tupleDecl = SIRType.Tuple2.constrDecl
+                val dataNil = lvDataNil(AnnotationsDecl.empty.pos)
+                val t1 = lvBuiltinApply2(
+                  SIRBuiltins.mkCons,
+                  second,
+                  dataNil,
+                  SIRType.List(SIRType.Data),
+                  SumCaseClassRepresentation.SumDataList,
+                  AnnotationsDecl.empty.pos
+                )
+                val t2 = lvBuiltinApply2(
+                  SIRBuiltins.mkCons,
+                  first,
+                  t1,
+                  SIRType.List(SIRType.Data),
+                  SumCaseClassRepresentation.SumDataList,
+                  AnnotationsDecl.empty.pos
+                )
+                val tupleInTvRepr = lvBuiltinApply2(
+                  SIRBuiltins.constrData,
+                  lvIntConstant(0, AnnotationsDecl.empty.pos),
+                  t2,
+                  SIRType.Tuple2(tpA, tpB),
+                  ProductCaseClassRepresentation.ProdDataConstr,
+                  AnnotationsDecl.empty.pos
+                )
+                val recCons = lvApply(
+                  recFun,
+                  tail,
+                  AnnotationsDecl.empty.pos,
+                  Some(tpOutTupleList),
+                  Some(SumCaseClassRepresentation.SumDataList)
+                )
+                lvBuiltinApply2(
+                  SIRBuiltins.mkCons,
+                  tupleInTvRepr,
+                  recCons,
+                  tpOutTupleList,
+                  SumCaseClassRepresentation.SumDataList,
+                  AnnotationsDecl.empty.pos
+                )
+            }
+
+            if lctx.targetLanguage == Language.PlutusV4 then {
+                // For PlutusV4: use Case on Pair
+                val fstVarId = lctx.uniqueVarName("pair_fst")
+                val fstVar = new VariableLoweredValue(
+                  id = fstVarId,
+                  name = fstVarId,
+                  sir = SIR.Var(fstVarId, tpA, AnnotationsDecl.empty),
+                  representation = TypeVarRepresentation(false),
+                  optRhs = None
+                )
+                val sndVarId = lctx.uniqueVarName("pair_snd")
+                val sndVar = new VariableLoweredValue(
+                  id = sndVarId,
+                  name = sndVarId,
+                  sir = SIR.Var(sndVarId, tpB, AnnotationsDecl.empty),
+                  representation = TypeVarRepresentation(false),
+                  optRhs = None
+                )
+                val body = buildTupleBody(fstVar, sndVar)
+                lvCasePair(head, fstVar, sndVar, body, AnnotationsDecl.empty.pos)
+            } else {
+                // For V1-V3: use fstPair/sndPair builtins (original code)
+                val first = lvBuiltinApply(
+                  SIRBuiltins.fstPair,
+                  head,
+                  tpA,
+                  TypeVarRepresentation(false),
+                  AnnotationsDecl.empty.pos
+                )
+                val second = lvBuiltinApply(
+                  SIRBuiltins.sndPair,
+                  head,
+                  tpB,
+                  TypeVarRepresentation(false),
+                  AnnotationsDecl.empty.pos
+                )
+                buildTupleBody(first, second)
+            }
         }
 
         val letDef = lvLetRec(

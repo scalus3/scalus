@@ -1110,6 +1110,55 @@ case class CaseListLoweredValue(
 
 }
 
+/** LoweredValue for Case on Pair (PlutusV4+).
+  *
+  * In PlutusV4, `Case` can be used directly on pair constants: Case(pair, [branch]) where the
+  * branch receives fst and snd as arguments.
+  *
+  * The branch must be a lambda that accepts fst and snd: λfst.λsnd.body
+  */
+case class CasePairLoweredValue(
+    scrutinee: LoweredValue,
+    fstVar: IdentifiableLoweredValue,
+    sndVar: IdentifiableLoweredValue,
+    body: LoweredValue,
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(Set(fstVar, sndVar), scrutinee, body) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        // Case(scrutinee, [λfst.λsnd.body])
+        // Pair has exactly 1 branch that receives both elements
+        // Add fstVar and sndVar to generatedVars so they're recognized as lambda-bound
+        val bodyCtx = gctx.copy(generatedVars = gctx.generatedVars + fstVar.id + sndVar.id)
+        Term.Case(
+          scrutinee.termWithNeededVars(gctx),
+          scala.collection.immutable.List(
+            Term.LamAbs(
+              fstVar.id,
+              Term.LamAbs(sndVar.id, body.termWithNeededVars(bodyCtx))
+            )
+          )
+        )
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
+            + (line + text("Pair") + space + fstVar.docRef(ctx) + space + sndVar.docRef(
+              ctx
+            ) + text(" ->") + (lineOrSpace + body.docRef(ctx)).nested(2)).grouped).aligned
+    }
+
+}
+
 /** LoweredValue for ChooseList builtin (PlutusV1-V3).
   *
   * Uses the ChooseList builtin with delayed branches: Force(ChooseList list (Delay nil) (Delay
@@ -1432,6 +1481,37 @@ object LoweredValue {
               nilBranchR,
               resType,
               targetRepresentation,
+              inPos
+            )
+        }
+
+        /** Create a Case on Pair for PlutusV4+.
+          *
+          * @param scrutinee
+          *   the pair to match on
+          * @param fstVar
+          *   variable to bind to the first element
+          * @param sndVar
+          *   variable to bind to the second element
+          * @param body
+          *   the body expression using fstVar and sndVar
+          * @param inPos
+          *   source position
+          */
+        def lvCasePair(
+            scrutinee: LoweredValue,
+            fstVar: IdentifiableLoweredValue,
+            sndVar: IdentifiableLoweredValue,
+            body: LoweredValue,
+            inPos: SIRPosition
+        )(using lctx: LoweringContext): LoweredValue = {
+            CasePairLoweredValue(
+              scrutinee,
+              fstVar,
+              sndVar,
+              body,
+              body.sirType,
+              body.representation,
               inPos
             )
         }

@@ -2,6 +2,7 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import org.typelevel.paiges.Doc
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
@@ -228,38 +229,76 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                           other,
                           pos
                         )
-                val frs = lvBuiltinApply(
-                  SIRBuiltins.fstPair,
-                  inputIdv,
-                  SIRType.Data,
-                  PrimitiveRepresentation.PackedData,
-                  pos
-                )
-                val snd = lvBuiltinApply(
-                  SIRBuiltins.sndPair,
-                  inputIdv,
-                  SIRType.Data,
-                  PrimitiveRepresentation.PackedData,
-                  pos
-                )
-                val consSndNil =
-                    lvBuiltinApply2(
+                if lctx.targetLanguage == Language.PlutusV4 then {
+                    // For PlutusV4: use Case on Pair
+                    val frsVarId = lctx.uniqueVarName("pair_frs")
+                    val frsVar = new VariableLoweredValue(
+                      id = frsVarId,
+                      name = frsVarId,
+                      sir = SIR.Var(frsVarId, SIRType.Data, AnnotationsDecl.empty),
+                      representation = PrimitiveRepresentation.PackedData,
+                      optRhs = None
+                    )
+                    val sndVarId = lctx.uniqueVarName("pair_snd")
+                    val sndVar = new VariableLoweredValue(
+                      id = sndVarId,
+                      name = sndVarId,
+                      sir = SIR.Var(sndVarId, SIRType.Data, AnnotationsDecl.empty),
+                      representation = PrimitiveRepresentation.PackedData,
+                      optRhs = None
+                    )
+                    val consSndNil = lvBuiltinApply2(
                       SIRBuiltins.mkCons,
-                      snd,
+                      sndVar,
                       lvDataNil(pos),
                       SIRType.List(SIRType.Data),
                       ProductCaseClassRepresentation.ProdDataList,
                       pos
                     )
-                val retval = lvBuiltinApply2(
-                  SIRBuiltins.mkCons,
-                  frs,
-                  consSndNil,
-                  input.sirType,
-                  ProductCaseClassRepresentation.ProdDataList,
-                  pos
-                )
-                retval
+                    val body = lvBuiltinApply2(
+                      SIRBuiltins.mkCons,
+                      frsVar,
+                      consSndNil,
+                      input.sirType,
+                      ProductCaseClassRepresentation.ProdDataList,
+                      pos
+                    )
+                    lvCasePair(inputIdv, frsVar, sndVar, body, pos)
+                } else {
+                    // For V1-V3: use fstPair/sndPair builtins
+                    val frs = lvBuiltinApply(
+                      SIRBuiltins.fstPair,
+                      inputIdv,
+                      SIRType.Data,
+                      PrimitiveRepresentation.PackedData,
+                      pos
+                    )
+                    val snd = lvBuiltinApply(
+                      SIRBuiltins.sndPair,
+                      inputIdv,
+                      SIRType.Data,
+                      PrimitiveRepresentation.PackedData,
+                      pos
+                    )
+                    val consSndNil =
+                        lvBuiltinApply2(
+                          SIRBuiltins.mkCons,
+                          snd,
+                          lvDataNil(pos),
+                          SIRType.List(SIRType.Data),
+                          ProductCaseClassRepresentation.ProdDataList,
+                          pos
+                        )
+                    val retval = lvBuiltinApply2(
+                      SIRBuiltins.mkCons,
+                      frs,
+                      consSndNil,
+                      input.sirType,
+                      ProductCaseClassRepresentation.ProdDataList,
+                      pos
+                    )
+                    retval
+                }
             case (PairData, TypeVarRepresentation(isBuiltin)) =>
                 if isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
                 else
@@ -630,31 +669,54 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val sndTp = SIRType.substitute(constrDecl.params.tail.head.tp, argsMapping, Map.empty)
         // val SIRType.partitionGround()
         val frsRepr = lctx.typeGenerator(frsTp).defaultDataRepresentation(frsTp)
-        val frs = lvNewLazyNamedVar(
-          frsName,
-          frsTp,
-          frsRepr,
-          lvBuiltinApply(SIRBuiltins.fstPair, matchVal, frsTp, frsRepr, myCase.anns.pos),
-          myCase.anns.pos
-        )
         val sndRepr = lctx.typeGenerator(sndTp).defaultDataRepresentation(sndTp)
-        val snd = lvNewLazyNamedVar(
-          sndName,
-          sndTp,
-          sndRepr,
-          lvBuiltinApply(SIRBuiltins.sndPair, matchVal, sndTp, sndRepr, myCase.anns.pos),
-          myCase.anns.pos
-        )
-        val lwBody = lctx.lower(myCase.body, optTargetType)
-        // lwBody
-        MatchPairDataLoweredValue(
-          frs,
-          snd,
-          matchVal,
-          addMatchValToScope,
-          lwBody,
-          matchData.anns.pos
-        )
+
+        if lctx.targetLanguage == Language.PlutusV4 then {
+            // For PlutusV4: use Case on Pair - frs and snd are lambda parameters
+            val frsVarId = lctx.uniqueVarName(frsName)
+            val frsVar = new VariableLoweredValue(
+              id = frsVarId,
+              name = frsName,
+              sir = SIR.Var(frsVarId, frsTp, AnnotationsDecl.empty),
+              representation = frsRepr,
+              optRhs = None // lambda parameter, not derived from builtin
+            )
+            val sndVarId = lctx.uniqueVarName(sndName)
+            val sndVar = new VariableLoweredValue(
+              id = sndVarId,
+              name = sndName,
+              sir = SIR.Var(sndVarId, sndTp, AnnotationsDecl.empty),
+              representation = sndRepr,
+              optRhs = None // lambda parameter, not derived from builtin
+            )
+            val lwBody = lctx.lower(myCase.body, optTargetType)
+            lvCasePair(matchVal, frsVar, sndVar, lwBody, matchData.anns.pos)
+        } else {
+            // For V1-V3: use fstPair/sndPair builtins
+            val frs = lvNewLazyNamedVar(
+              frsName,
+              frsTp,
+              frsRepr,
+              lvBuiltinApply(SIRBuiltins.fstPair, matchVal, frsTp, frsRepr, myCase.anns.pos),
+              myCase.anns.pos
+            )
+            val snd = lvNewLazyNamedVar(
+              sndName,
+              sndTp,
+              sndRepr,
+              lvBuiltinApply(SIRBuiltins.sndPair, matchVal, sndTp, sndRepr, myCase.anns.pos),
+              myCase.anns.pos
+            )
+            val lwBody = lctx.lower(myCase.body, optTargetType)
+            MatchPairDataLoweredValue(
+              frs,
+              snd,
+              matchVal,
+              addMatchValToScope,
+              lwBody,
+              matchData.anns.pos
+            )
+        }
 
     }
 
