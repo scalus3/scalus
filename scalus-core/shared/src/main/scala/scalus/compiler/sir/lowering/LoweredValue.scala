@@ -1056,6 +1056,107 @@ case class CaseIntegerLoweredValue(
 
 }
 
+/** LoweredValue for case on list builtins (PlutusV4 feature).
+  *
+  * In PlutusV4, `Case` can be used directly on list constants: Case(list, [consBranch, nilBranch])
+  * where Cons = index 0 (receives head and tail as arguments) and Nil = index 1 (no arguments).
+  *
+  * The consBranch must be a lambda that accepts head and tail: λhead.λtail.body
+  */
+case class CaseListLoweredValue(
+    scrutinee: LoweredValue,
+    consHead: IdentifiableLoweredValue,
+    consTail: IdentifiableLoweredValue,
+    consBranch: LoweredValue,
+    nilBranch: LoweredValue,
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(Set(consHead, consTail), scrutinee, consBranch, nilBranch) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        // Case(scrutinee, [λhead.λtail.consBranch, nilBranch])
+        // Cons = 0 (with head, tail args), Nil = 1 (no args)
+        // Add consHead and consTail to generatedVars so they're recognized as lambda-bound
+        val consCtx = gctx.copy(generatedVars = gctx.generatedVars + consHead.id + consTail.id)
+        Term.Case(
+          scrutinee.termWithNeededVars(gctx),
+          scala.collection.immutable.List(
+            Term.LamAbs(
+              consHead.id,
+              Term.LamAbs(consTail.id, consBranch.termWithNeededVars(consCtx))
+            ),
+            nilBranch.termWithNeededVars(gctx)
+          )
+        )
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
+            + (line + text("Cons") + space + consHead.docRef(ctx) + space + consTail.docRef(
+              ctx
+            ) + text(" ->") + (lineOrSpace + consBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("Nil ->") + (lineOrSpace + nilBranch.docRef(ctx)).nested(
+              2
+            )).grouped).aligned
+    }
+
+}
+
+/** LoweredValue for ChooseList builtin (PlutusV1-V3).
+  *
+  * Uses the ChooseList builtin with delayed branches: Force(ChooseList list (Delay nil) (Delay
+  * cons))
+  */
+case class ChooseListLoweredValue(
+    listInput: LoweredValue,
+    consHead: IdentifiableLoweredValue,
+    consTail: IdentifiableLoweredValue,
+    consBody: LoweredValue,
+    nilBody: LoweredValue,
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(Set(consHead, consTail), listInput, consBody, nilBody) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        import scalus.uplc.DefaultFun
+        import scalus.compiler.sir.lowering.Lowering.tpf
+        !(DefaultFun.ChooseList.tpf $ listInput.termWithNeededVars(gctx)
+            $ ~nilBody.termWithNeededVars(gctx)
+            $ ~consBody.termWithNeededVars(gctx))
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        text("ChooseList") + PrettyPrinter.inBraces(
+          listInput.docRef(ctx) + space + text("match") +
+              (
+                line + (
+                  text("Cons") + PrettyPrinter.inParens(
+                    consHead.docRef(ctx) + text(",") + consTail.docRef(ctx)
+                  ) + text(" =>") + consBody.docRef(ctx).nested(2)
+                ).grouped + line +
+                    (text("Nil") + text(" =>") + nilBody.docRef(ctx).nested(2)).grouped
+              ).aligned
+        ) + text(":") + text(tp.show)
+    }
+
+}
+
 object LoweredValue {
 
     class PrettyPrintingContext(
@@ -1255,6 +1356,80 @@ object LoweredValue {
             CaseIntegerLoweredValue(
               scrutineeR,
               branchesR,
+              resType,
+              targetRepresentation,
+              inPos
+            )
+        }
+
+        /** Generate a case expression on a list value (PlutusV4 feature).
+          *
+          * In PlutusV4, `Case` can be used directly on list constants: Case(list, [consBranch,
+          * nilBranch]) where Cons = index 0 (receives head and tail as arguments) and Nil = index 1
+          * (no arguments).
+          *
+          * @param scrutinee
+          *   the list value to match on
+          * @param consHead
+          *   variable for the head element in cons branch
+          * @param consTail
+          *   variable for the tail list in cons branch
+          * @param consBranch
+          *   the branch to execute for non-empty list (Cons)
+          * @param nilBranch
+          *   the branch to execute for empty list (Nil)
+          * @param inPos
+          *   source position
+          * @param optTargetType
+          *   optional target type for the result
+          */
+        def lvCaseList(
+            scrutinee: LoweredValue,
+            consHead: IdentifiableLoweredValue,
+            consTail: IdentifiableLoweredValue,
+            consBranch: LoweredValue,
+            nilBranch: LoweredValue,
+            inPos: SIRPosition,
+            optTargetType: Option[SIRType] = None
+        )(using lctx: LoweringContext): LoweredValue = {
+
+            val resType = optTargetType.getOrElse(
+              SIRUnify.topLevelUnifyType(
+                consBranch.sirType,
+                nilBranch.sirType,
+                SIRUnify.Env.empty.withUpcasting
+              ) match {
+                  case SIRUnify.UnificationSuccess(_, tp) =>
+                      if tp == SIRType.FreeUnificator then
+                          throw LoweringException(
+                            s"case branches return unrelated types: ${consBranch.sirType.show} and ${nilBranch.sirType.show}",
+                            inPos
+                          )
+                      tp
+                  case failure @ SIRUnify.UnificationFailure(path, l, r) =>
+                      lctx.warn("Unification failure: " + failure, inPos)
+                      SIRType.FreeUnificator
+              }
+            )
+
+            val consBranchUpcasted = consBranch.maybeUpcast(resType, inPos)
+            val nilBranchUpcasted = nilBranch.maybeUpcast(resType, inPos)
+
+            val targetRepresentation = chooseCommonRepresentation(
+              Seq(consBranchUpcasted, nilBranchUpcasted),
+              resType,
+              inPos
+            )
+
+            val consBranchR = consBranchUpcasted.toRepresentation(targetRepresentation, inPos)
+            val nilBranchR = nilBranchUpcasted.toRepresentation(targetRepresentation, inPos)
+
+            CaseListLoweredValue(
+              scrutinee,
+              consHead,
+              consTail,
+              consBranchR,
+              nilBranchR,
               resType,
               targetRepresentation,
               inPos

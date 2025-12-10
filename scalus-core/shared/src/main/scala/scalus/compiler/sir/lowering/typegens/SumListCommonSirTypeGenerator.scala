@@ -1,11 +1,9 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import org.typelevel.paiges.Doc
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.compiler.sir.lowering.Lowering.tpf
 import scalus.compiler.sir.*
-import scalus.uplc.{DefaultFun, Term}
 
 import scala.util.control.NonFatal
 
@@ -454,40 +452,6 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         }
     }
 
-    case class ListMatchLoweredValue(
-        listInput: LoweredValue,
-        consHead: IdentifiableLoweredValue,
-        consTail: IdentifiableLoweredValue,
-        consBody: LoweredValue,
-        nilBody: LoweredValue,
-        sirType: SIRType,
-        representation: LoweredValueRepresentation,
-        pos: SIRPosition
-    ) extends ComplexLoweredValue(Set(consHead, consTail), listInput, consBody, nilBody) {
-
-        override def termInternal(gctx: TermGenerationContext): Term = {
-            !(DefaultFun.ChooseList.tpf $ listInput.termWithNeededVars(gctx)
-                $ ~nilBody.termWithNeededVars(gctx)
-                $ ~consBody.termWithNeededVars(gctx))
-        }
-
-        override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-            Doc.text("ListMatch") + PrettyPrinter.inBraces(
-              listInput.docRef(ctx) + Doc.space + Doc.text("match") +
-                  (
-                    Doc.line + (
-                      Doc.text("Cons") + PrettyPrinter.inParens(
-                        consHead.docRef(ctx) + Doc.text(",") + consTail.docRef(ctx)
-                      ) + Doc.text(" =>") + consBody.docRef(ctx).nested(2)
-                    ).grouped + Doc.line +
-                        (Doc.text("Nil") + Doc
-                            .text(" =>") + nilBody.docRef(ctx).nested(2)).grouped
-                  ).aligned
-            ) + Doc.text(":") + Doc.text(sirType.show)
-        }
-
-    }
-
     override def genMatch(
         matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
@@ -588,6 +552,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
         val consHeadRepresentation = defaultElementRepresentation(elementType, matchData.anns.pos)
 
+        val useCaseOnList = lctx.targetLanguage == Language.PlutusV4
+
+        // For PlutusV4 Case on list, head/tail are lambda parameters (no optRhs)
+        // For ChooseList, they're derived from headList/tailList builtins
         val consHead = new VariableLoweredValue(
           id = lctx.uniqueVarName("consHead"),
           name = consHeadName,
@@ -597,15 +565,18 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             matchData.anns
           ),
           representation = consHeadRepresentation,
-          optRhs = Some(
-            lvBuiltinApply(
-              SIRBuiltins.headList,
-              listInput,
-              elementType,
-              consHeadRepresentation,
-              matchData.anns.pos
-            )
-          )
+          optRhs =
+              if useCaseOnList then None
+              else
+                  Some(
+                    lvBuiltinApply(
+                      SIRBuiltins.headList,
+                      listInput,
+                      elementType,
+                      consHeadRepresentation,
+                      matchData.anns.pos
+                    )
+                  )
         )
 
         val consTail = new VariableLoweredValue(
@@ -617,15 +588,18 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             matchData.anns
           ),
           representation = defaultListRepresentation,
-          optRhs = Some(
-            lvBuiltinApply(
-              SIRBuiltins.tailList,
-              listInput,
-              listType,
-              defaultListRepresentation,
-              matchData.anns.pos
-            )
-          )
+          optRhs =
+              if useCaseOnList then None
+              else
+                  Some(
+                    lvBuiltinApply(
+                      SIRBuiltins.tailList,
+                      listInput,
+                      listType,
+                      defaultListRepresentation,
+                      matchData.anns.pos
+                    )
+                  )
         )
 
         val prevScope = lctx.scope
@@ -684,16 +658,30 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                   matchData.anns.pos
                 )
 
-            val retval = ListMatchLoweredValue(
-              listInput,
-              consHead,
-              consTail,
-              loweredConsBodyR,
-              loweredNilBodyR,
-              resType,
-              resRepr,
-              matchData.anns.pos
-            )
+            // For PlutusV4, use Case on list; otherwise use ChooseList builtin
+            val retval =
+                if useCaseOnList then
+                    CaseListLoweredValue(
+                      listInput,
+                      consHead,
+                      consTail,
+                      loweredConsBodyR,
+                      loweredNilBodyR,
+                      resType,
+                      resRepr,
+                      matchData.anns.pos
+                    )
+                else
+                    ChooseListLoweredValue(
+                      listInput,
+                      consHead,
+                      consTail,
+                      loweredConsBodyR,
+                      loweredNilBodyR,
+                      resType,
+                      resRepr,
+                      matchData.anns.pos
+                    )
 
             retval
     }

@@ -1,0 +1,17 @@
+"Benchmark","Mode","Threads","Samples","Score","Score Error (99.9%)","Unit","Param: file"
+"scalus.uplc.eval.CekJVMBenchmark.bench","avgt",1,5,227.418764,8.699718,"us/op",auction_1-1.flat
+"scalus.uplc.eval.CekJVMBenchmark.bench","avgt",1,5,934.244263,70.160584,"us/op",auction_1-2.flat
+"scalus.uplc.eval.CekJVMBenchmark.bench","avgt",1,5,906.719956,95.247463,"us/op",auction_1-3.flat
+"scalus.uplc.eval.CekJVMBenchmark.bench","avgt",1,5,294.527424,86.943268,"us/op",auction_1-4.flat
+"scalus.uplc.eval.JITHybridBenchmark.benchJIT_Hybrid","avgt",1,5,36.811298,7.258868,"us/op",auction_1-1.flat
+"scalus.uplc.eval.JITHybridBenchmark.benchJIT_Hybrid","avgt",1,5,196.550544,36.687424,"us/op",auction_1-2.flat
+"scalus.uplc.eval.JITHybridBenchmark.benchJIT_Hybrid","avgt",1,5,147.667988,23.106326,"us/op",auction_1-3.flat
+"scalus.uplc.eval.JITHybridBenchmark.benchJIT_Hybrid","avgt",1,5,37.112862,2.985434,"us/op",auction_1-4.flat
+"scalus.uplc.eval.JITMincontBenchmark.benchJIT_Mincont","avgt",1,5,129.747246,24.371829,"us/op",auction_1-1.flat
+"scalus.uplc.eval.JITMincontBenchmark.benchJIT_Mincont","avgt",1,5,801.291483,674.413344,"us/op",auction_1-2.flat
+"scalus.uplc.eval.JITMincontBenchmark.benchJIT_Mincont","avgt",1,5,651.592042,478.946255,"us/op",auction_1-3.flat
+"scalus.uplc.eval.JITMincontBenchmark.benchJIT_Mincont","avgt",1,5,154.362206,4.421433,"us/op",auction_1-4.flat
+"scalus.uplc.eval.JITNativeStackBenchmark.benchJIT_NativeStack","avgt",1,5,33.876571,1.254064,"us/op",auction_1-1.flat
+"scalus.uplc.eval.JITNativeStackBenchmark.benchJIT_NativeStack","avgt",1,5,198.254046,38.604331,"us/op",auction_1-2.flat
+"scalus.uplc.eval.JITNativeStackBenchmark.benchJIT_NativeStack","avgt",1,5,145.790725,11.333166,"us/op",auction_1-3.flat
+"scalus.uplc.eval.JITNativeStackBenchmark.benchJIT_NativeStack","avgt",1,5,40.466976,1.318497,"us/op",auction_1-4.flat

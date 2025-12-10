@@ -42,7 +42,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 40412984L, steps = 11178281888L)
+                ExUnits(memory = 39553100L, steps = 10777880482L)
             else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 75014277L, steps = 22595514040L)
             else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering
@@ -76,7 +76,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 50578644L, steps = 13957079034L)
+                ExUnits(memory = 49393832L, steps = 13402487336L)
             else
                 options.targetLoweringBackend match {
                     case scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -113,7 +113,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 134239730L, steps = 37017473523L)
+                ExUnits(memory = 131034190L, steps = 35505498890L)
             else if options.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 248968345L, steps = 74900219564L)
             else ExUnits(memory = 152347441L, steps = 26254484239L)
@@ -1044,7 +1044,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 202595010L, steps = 53997755668L)
+                ExUnits(memory = 185840286L, steps = 47169474024L)
             else ExUnits(memory = 344589971L, steps = 100725854354L)
         // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
         assert(result.isSuccess)
@@ -1072,7 +1072,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[scalus.Compiler.Options]
         val scalusBudget =
             if options.targetLanguage == Language.PlutusV4 then
-                ExUnits(memory = 639506750L, steps = 176388783314L)
+                ExUnits(memory = 625050874L, steps = 169481682322L)
             else ExUnits(memory = 1205574641L, steps = 363306861308L)
         // val scalusBudget = ExUnits(memory = 736503639L, steps = 127163562591L)
         assert(result.isSuccess)
