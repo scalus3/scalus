@@ -319,7 +319,9 @@ object TransactionBody:
                         currentTreasuryValue = Some(r.read[Coin]())
 
                     case 22 => // Deposit return
-                        donation = Some(r.read[Coin]())
+                        val value = r.read[Coin]()
+                        if value == Coin.zero then r.validationFailure("Donation cannot be zero")
+                        donation = Some(value)
 
                     case _ =>
                         r.skipElement()

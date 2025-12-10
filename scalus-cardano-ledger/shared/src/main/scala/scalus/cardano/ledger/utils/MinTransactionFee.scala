@@ -9,8 +9,7 @@ import scalus.|>
 import scala.annotation.tailrec
 
 object MinTransactionFee {
-    @tailrec
-    def apply(
+    def extractMinFee(
         transaction: Transaction,
         utxo: Utxos,
         protocolParams: ProtocolParams
@@ -19,7 +18,29 @@ object MinTransactionFee {
           TransactionException.BadReferenceInputsUTxOException,
       Coin
     ] = {
-        AllResolvedScripts.allProvidedReferenceScripts(transaction, utxo) match {
+        AllResolvedScripts.allProvidedReferenceScriptsNonDistinctSeq(transaction, utxo) match {
+            case Left(e) => Left(e)
+            case Right(scripts) =>
+                val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
+                val transactionSizeFee = calculateTransactionSizeFee(transaction, protocolParams)
+                val exUnitsFee = calculateExUnitsFee(transaction, protocolParams)
+
+                val minFee = refScriptsFee + transactionSizeFee + exUnitsFee
+                Right(minFee)
+        }
+    }
+
+    @tailrec
+    def findMinFee(
+        transaction: Transaction,
+        utxo: Utxos,
+        protocolParams: ProtocolParams
+    ): Either[
+      TransactionException.BadInputsUTxOException |
+          TransactionException.BadReferenceInputsUTxOException,
+      Coin
+    ] = {
+        AllResolvedScripts.allProvidedReferenceScriptsNonDistinctSeq(transaction, utxo) match {
             case Left(e) => Left(e)
             case Right(scripts) =>
                 val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
@@ -29,19 +50,18 @@ object MinTransactionFee {
                 val minFee = refScriptsFee + transactionSizeFee + exUnitsFee
                 if minFee <= transaction.body.value.fee
                 then Right(minFee)
-                else {
+                else
                     val nextCandidateTransaction = transaction |>
                         Focus[Transaction](_.body)
                             .andThen(KeepRaw.lens[TransactionBody]())
                             .refocus(_.fee)
                             .replace(minFee)
-                    MinTransactionFee(nextCandidateTransaction, utxo, protocolParams)
-                }
+                    findMinFee(nextCandidateTransaction, utxo, protocolParams)
         }
     }
 
     private object RefScriptsFeeCalculator {
-        def apply(scripts: Set[Script], protocolParams: ProtocolParams): Coin = {
+        def apply(scripts: Seq[Script], protocolParams: ProtocolParams): Coin = {
             def tierRefScriptFee(
                 multiplier: NonNegativeInterval,
                 sizeIncrement: Int,

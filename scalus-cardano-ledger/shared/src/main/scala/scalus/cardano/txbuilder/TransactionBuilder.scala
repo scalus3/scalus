@@ -522,7 +522,7 @@ object TransactionBuilder:
         candidateOutput: TransactionOutput,
         params: ProtocolParams
     ): TransactionOutput = {
-        val minAda = MinCoinSizedTransactionOutput(Sized(candidateOutput), params)
+        val minAda = MinCoinSizedTransactionOutput.findMinAda(Sized(candidateOutput), params)
         if candidateOutput.value.coin < minAda
         then candidateOutput |> TransactionOutput.valueLens.refocus(_.coin).replace(minAda)
         else candidateOutput

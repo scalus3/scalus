@@ -9,6 +9,17 @@ import scala.annotation.tailrec
 
 object MinCoinSizedTransactionOutput {
 
+    def extractMinAda(
+        sizedTransactionOutput: Sized[TransactionOutput],
+        protocolParams: ProtocolParams
+    ): Coin = {
+        val utxoCostPerByte = protocolParams.utxoCostPerByte
+        val Sized(TransactionOutputValue(ValueCoin(coin)), size) = sizedTransactionOutput
+
+        val minAda = Coin((constantOverhead + size) * utxoCostPerByte)
+        minAda
+    }
+
     /** Recursively calculate the minimum ada that the given utxo must have in order to satisfy the
       * minAda requirement.
       *
@@ -17,7 +28,7 @@ object MinCoinSizedTransactionOutput {
       * @return
       */
     @tailrec
-    def apply(
+    def findMinAda(
         sizedTransactionOutput: Sized[TransactionOutput],
         protocolParams: ProtocolParams
     ): Coin = {
@@ -34,7 +45,7 @@ object MinCoinSizedTransactionOutput {
                     .andThen(TransactionOutput.valueLens)
                     .refocus(_.coin)
                     .replace(minAda)
-            MinCoinSizedTransactionOutput(nextCandidateOutput, protocolParams)
+            MinCoinSizedTransactionOutput.findMinAda(nextCandidateOutput, protocolParams)
     }
 
     private val constantOverhead = 160

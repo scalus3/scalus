@@ -138,11 +138,10 @@ object Certificate {
                                 totalRefunds += keyDeposit
                                 regCreds -= cred // Remove to avoid double refund
                             else
-                                lookupStakingDeposit(cred) match {
-                                    case Some(deposit) =>
-                                        totalRefunds += deposit.value
-                                    case None =>
-                                }
+                                lookupStakingDeposit(cred) match
+                                    case Some(deposit) => totalRefunds += deposit.value
+                                    case None          =>
+
                         case None =>
         }
         Coin(totalRefunds)
@@ -161,15 +160,13 @@ object Certificate {
                 drepRegsInTx.put(cred, deposit)
             case Certificate.UnregDRepCert(cred, _) =>
                 // DRep previously registered in the same tx
-                drepRegsInTx.remove(cred) match {
+                drepRegsInTx.remove(cred) match
                     case Some(deposit) =>
                         totalRefund += deposit.value
                     case None =>
                         // DRep previously registered in some other tx
-                        lookupDRepDeposit(cred).foreach { deposit =>
-                            totalRefund += deposit.value
-                        }
-                }
+                        lookupDRepDeposit(cred).foreach { deposit => totalRefund += deposit.value }
+
             case _ => // Do nothing for other certificate types
         }
         Coin(totalRefund)

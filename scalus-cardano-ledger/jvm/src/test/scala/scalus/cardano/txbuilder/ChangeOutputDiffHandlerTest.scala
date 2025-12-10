@@ -77,10 +77,11 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     test("MinCoinSizedTransactionOutput should ceil the output up to an actual min coin value") {
         val zeroOut = Babbage(address = addr, value = Value.zero)
         val zeroOutAfterMinCoin =
-            MinCoinSizedTransactionOutput(Sized(zeroOut), protocolParams = params)
+            MinCoinSizedTransactionOutput.findMinAda(Sized(zeroOut), protocolParams = params)
 
         val minOut = Babbage(address = addr, value = Value(zeroOutAfterMinCoin))
-        val minOutValueCoin = MinCoinSizedTransactionOutput(Sized(minOut), protocolParams = params)
+        val minOutValueCoin =
+            MinCoinSizedTransactionOutput.findMinAda(Sized(minOut), protocolParams = params)
 
         assert(
           zeroOutAfterMinCoin == minOutValueCoin,
@@ -99,13 +100,13 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         )
 
         val res = for {
-            initialFee <- MinTransactionFee(emptyTx, Map.empty, params)
+            initialFee <- MinTransactionFee.findMinFee(emptyTx, Map.empty, params)
             newTx = emptyTx |>
                 Focus[Transaction](_.body)
                     .andThen(KeepRaw.lens[TransactionBody]())
                     .refocus(_.fee)
                     .replace(initialFee)
-            newFee <- MinTransactionFee(newTx, Map.empty, params)
+            newFee <- MinTransactionFee.findMinFee(newTx, Map.empty, params)
         } yield (initialFee, newFee)
 
         res match {

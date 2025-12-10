@@ -24,7 +24,7 @@ class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: I
         val newValue = Value(Coin(updatedCoinValue), updatedAssets)
 
         val newChangeOut = Sized(changeOut.value.withValue(newValue))
-        val minAda = MinCoinSizedTransactionOutput(newChangeOut, protocolParams)
+        val minAda = MinCoinSizedTransactionOutput.findMinAda(newChangeOut, protocolParams)
 
         if updatedCoinValue < minAda.value then {
             return Left(
@@ -110,7 +110,7 @@ object Change {
 
         // Ensure minAda
         val sizedOutput = Sized(updatedOutput)
-        val minAda = MinCoinSizedTransactionOutput(sizedOutput, protocolParams)
+        val minAda = MinCoinSizedTransactionOutput.findMinAda(sizedOutput, protocolParams)
 
         if newCoinValue < minAda.value then {
             // Bump to minAda if needed
@@ -150,7 +150,7 @@ object Change {
 
         // Ensure min ADA
         val sizedOutput = Sized(changeOutput)
-        val minAda = MinCoinSizedTransactionOutput(sizedOutput, protocolParams)
+        val minAda = MinCoinSizedTransactionOutput.findMinAda(sizedOutput, protocolParams)
 
         if value.coin.value < minAda.value then {
             // Bump to min ADA
@@ -216,7 +216,7 @@ object Change {
             }
 
             val sizedOutput = Sized(updatedOutput)
-            val minAda = MinCoinSizedTransactionOutput(sizedOutput, protocolParams).value
+            val minAda = MinCoinSizedTransactionOutput.findMinAda(sizedOutput, protocolParams).value
 
             if newCoinValue < minAda then {
                 // Can't satisfy - change output would be below min ADA

@@ -8,83 +8,124 @@ import scala.util.boundary.break
 object AllProvidedReferenceScripts {
     def allProvidedReferenceScriptsMap(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Map[ScriptHash, Script]
     ] = {
-        allProvidedReferenceScriptsView(transaction, utxo).map(
+        allProvidedReferenceScriptsView(transaction, utxos).map(
           _.map(script => script.scriptHash -> script).toMap
         )
     }
 
+    /** Returns all reference scripts provided by transaction inputs and reference inputs as a
+      * non-distinct sequence.
+      *
+      * Unlike `allProvidedReferenceScripts`, this method preserves duplicates. Each occurrence of a
+      * script in the UTxO set is counted separately, which is important for fee calculation where
+      * the same script referenced multiple times counts towards the minFee calculation for each
+      * reference.
+      *
+      * @param transaction
+      *   the transaction to analyze
+      * @param utxos
+      *   the UTxO set containing the referenced outputs
+      * @return
+      *   Either a `BadInputsUTxOException` or `BadReferenceInputsUTxOException` if any input is
+      *   missing from the UTxO set, or a sequence containing all reference scripts (with duplicates
+      *   preserved)
+      */
+    def allProvidedReferenceScriptsNonDistinctSeq(
+        transaction: Transaction,
+        utxos: Utxos
+    ): Either[
+      TransactionException.BadInputsUTxOException |
+          TransactionException.BadReferenceInputsUTxOException,
+      Seq[Script]
+    ] = {
+        for
+            inputScripts <- providedReferenceScriptsSeq(
+              transaction.id,
+              transaction.body.value.inputs.toSeq,
+              utxos,
+              TransactionException.BadInputsUTxOException(_)
+            )
+            refInputScripts <- providedReferenceScriptsSeq(
+              transaction.id,
+              transaction.body.value.referenceInputs.toSeq,
+              utxos,
+              TransactionException.BadReferenceInputsUTxOException(_)
+            )
+        yield inputScripts ++ refInputScripts
+    }
+
     def allProvidedReferenceScripts(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Set[Script]
     ] = {
-        allProvidedReferenceScriptsView(transaction, utxo).map(_.toSet)
+        allProvidedReferenceScriptsView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferenceScriptHashes(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Set[ScriptHash]
     ] = {
-        allProvidedReferenceScriptHashesView(transaction, utxo).map(_.toSet)
+        allProvidedReferenceScriptHashesView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferenceScriptHashesView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       View[ScriptHash]
     ] = {
-        allProvidedReferenceScriptsView(transaction, utxo).map(_.map(_.scriptHash))
+        allProvidedReferenceScriptsView(transaction, utxos).map(_.map(_.scriptHash))
     }
 
     def allProvidedReferencePlutusScriptsMap(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Map[ScriptHash, PlutusScript]
     ] = {
-        allProvidedReferencePlutusScriptsView(transaction, utxo).map(
+        allProvidedReferencePlutusScriptsView(transaction, utxos).map(
           _.map(script => script.scriptHash -> script).toMap
         )
     }
 
     def allProvidedReferencePlutusScripts(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Set[PlutusScript]
     ] = {
-        allProvidedReferencePlutusScriptsView(transaction, utxo).map(_.toSet)
+        allProvidedReferencePlutusScriptsView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferencePlutusScriptsView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       View[PlutusScript]
     ] = {
-        allProvidedReferenceScriptsView(transaction, utxo).map(_.flatMap {
+        allProvidedReferenceScriptsView(transaction, utxos).map(_.flatMap {
             case plutusScript: PlutusScript => Some(plutusScript)
             case _                          => None
         })
@@ -92,59 +133,59 @@ object AllProvidedReferenceScripts {
 
     def allProvidedReferencePlutusScriptHashes(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Set[ScriptHash]
     ] = {
-        allProvidedReferencePlutusScriptHashesView(transaction, utxo).map(_.toSet)
+        allProvidedReferencePlutusScriptHashesView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferencePlutusScriptHashesView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       View[ScriptHash]
     ] = {
-        allProvidedReferencePlutusScriptsView(transaction, utxo).map(_.map(_.scriptHash))
+        allProvidedReferencePlutusScriptsView(transaction, utxos).map(_.map(_.scriptHash))
     }
 
     def allProvidedReferenceNativeScriptsMap(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Map[ScriptHash, Script.Native]
     ] = {
-        allProvidedReferenceNativeScriptsView(transaction, utxo).map(
+        allProvidedReferenceNativeScriptsView(transaction, utxos).map(
           _.map(script => script.scriptHash -> script).toMap
         )
     }
 
     def allProvidedReferenceNativeScripts(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Set[Script.Native]
     ] = {
-        allProvidedReferenceNativeScriptsView(transaction, utxo).map(_.toSet)
+        allProvidedReferenceNativeScriptsView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferenceNativeScriptsView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       View[Script.Native]
     ] = {
-        allProvidedReferenceScriptsView(transaction, utxo).map(_.flatMap {
+        allProvidedReferenceScriptsView(transaction, utxos).map(_.flatMap {
             case timelock: Script.Native => Some(timelock)
             case _                       => None
         })
@@ -152,29 +193,29 @@ object AllProvidedReferenceScripts {
 
     def allProvidedReferenceNativeScriptHashes(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       Set[ScriptHash]
     ] = {
-        allProvidedReferenceNativeScriptHashesView(transaction, utxo).map(_.toSet)
+        allProvidedReferenceNativeScriptHashesView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferenceNativeScriptHashesView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
       View[ScriptHash]
     ] = {
-        allProvidedReferenceNativeScriptsView(transaction, utxo).map(_.map(_.scriptHash))
+        allProvidedReferenceNativeScriptsView(transaction, utxos).map(_.map(_.scriptHash))
     }
 
     def allProvidedReferenceScriptsView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[
       TransactionException.BadInputsUTxOException |
           TransactionException.BadReferenceInputsUTxOException,
@@ -183,12 +224,12 @@ object AllProvidedReferenceScripts {
         for
             allProvidedInputsReferenceScripts <- allProvidedInputsReferenceScripts(
               transaction,
-              utxo
+              utxos
             )
             allProvidedReferenceInputsReferenceScripts <-
                 allProvidedReferenceInputsReferenceScripts(
                   transaction,
-                  utxo
+                  utxos
                 )
         yield allProvidedInputsReferenceScripts.view ++
             allProvidedReferenceInputsReferenceScripts.view
@@ -196,77 +237,77 @@ object AllProvidedReferenceScripts {
 
     def allProvidedInputsReferenceScriptsMap(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadInputsUTxOException, Map[ScriptHash, Script]] = {
-        allProvidedInputsReferenceScripts(transaction, utxo).map(
+        allProvidedInputsReferenceScripts(transaction, utxos).map(
           _.map(script => script.scriptHash -> script).toMap
         )
     }
 
     def allProvidedInputsReferenceScripts(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadInputsUTxOException, Set[Script]] = {
         providedReferenceScripts(
           transaction.id,
           transaction.body.value.inputs.toSet,
-          utxo,
+          utxos,
           TransactionException.BadInputsUTxOException(_)
         )
     }
 
     def allProvidedInputsReferenceScriptHashes(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadInputsUTxOException, Set[ScriptHash]] = {
-        allProvidedInputsReferenceScriptHashesView(transaction, utxo).map(_.toSet)
+        allProvidedInputsReferenceScriptHashesView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedInputsReferenceScriptHashesView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadInputsUTxOException, View[ScriptHash]] = {
         allProvidedInputsReferenceScripts(
           transaction,
-          utxo
+          utxos
         ).map(_.view.map(_.scriptHash))
     }
 
     def allProvidedReferenceInputsReferenceScriptsMap(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadReferenceInputsUTxOException, Map[ScriptHash, Script]] = {
-        allProvidedReferenceInputsReferenceScripts(transaction, utxo).map(
+        allProvidedReferenceInputsReferenceScripts(transaction, utxos).map(
           _.map(script => script.scriptHash -> script).toMap
         )
     }
 
     def allProvidedReferenceInputsReferenceScripts(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadReferenceInputsUTxOException, Set[Script]] = {
         providedReferenceScripts(
           transaction.id,
           transaction.body.value.referenceInputs.toSet,
-          utxo,
+          utxos,
           TransactionException.BadReferenceInputsUTxOException(_)
         )
     }
 
     def allProvidedReferenceInputsReferenceScriptHashes(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadReferenceInputsUTxOException, Set[ScriptHash]] = {
-        allProvidedReferenceInputsReferenceScriptHashesView(transaction, utxo).map(_.toSet)
+        allProvidedReferenceInputsReferenceScriptHashesView(transaction, utxos).map(_.toSet)
     }
 
     def allProvidedReferenceInputsReferenceScriptHashesView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadReferenceInputsUTxOException, View[ScriptHash]] = {
         allProvidedReferenceInputsReferenceScripts(
           transaction,
-          utxo
+          utxos
         ).map(_.view.map(_.scriptHash))
     }
 
@@ -276,15 +317,33 @@ object AllProvidedReferenceScripts {
     ](
         transactionId: TransactionHash,
         inputs: Set[TransactionInput],
-        utxo: Utxos,
+        utxos: Utxos,
         missingUTxOException: TransactionHash => ExceptionT
     ): Either[ExceptionT, Set[Script]] = boundary {
         val result = for
             input <- inputs
-            script <- utxo.get(input) match
+            script <- utxos.get(input) match
                 case Some(output) => output.scriptRef.map(_.script)
                 // This check allows to be an order independent in the sequence of validation rules
                 case None => break(Left(missingUTxOException(transactionId)))
+        yield script
+        Right(result)
+    }
+
+    private def providedReferenceScriptsSeq[
+        ExceptionT <: TransactionException.BadInputsUTxOException |
+            TransactionException.BadReferenceInputsUTxOException
+    ](
+        transactionId: TransactionHash,
+        inputs: Seq[TransactionInput],
+        utxos: Utxos,
+        missingUTxOException: TransactionHash => ExceptionT
+    ): Either[ExceptionT, Seq[Script]] = boundary {
+        val result = for
+            input <- inputs
+            script <- utxos.get(input) match
+                case Some(output) => output.scriptRef.map(_.script)
+                case None         => break(Left(missingUTxOException(transactionId)))
         yield script
         Right(result)
     }
