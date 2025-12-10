@@ -19,6 +19,11 @@ class TxBuilderTest extends AnyFunSuite {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
 
+    // Deterministic test mnemonic for cross-platform signature comparison
+    private val testMnemonic =
+        "test walk nut penalty hip pave soap entry language right filter choice"
+    private val testDerivationPath = "m/1852'/1815'/0'/0/0"
+
     // Test scripts for validation - using PlutusV3
     val script1: Script.PlutusV3 = {
         val alwaysOk = Compiler.compile((sc: Data) => ())
