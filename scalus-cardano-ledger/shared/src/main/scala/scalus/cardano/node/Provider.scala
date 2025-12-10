@@ -5,7 +5,7 @@ import scalus.cardano.ledger.*
 
 import scala.annotation.tailrec
 import scala.concurrent.duration.*
-import scala.concurrent.{Await, ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, Await, ExecutionContext, Future}
 
 trait Provider {
 

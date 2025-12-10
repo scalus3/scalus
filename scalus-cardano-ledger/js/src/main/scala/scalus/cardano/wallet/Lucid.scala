@@ -1,9 +1,9 @@
 package scalus.cardano.wallet
 
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.JSImport
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.js.JSConverters.*
 
 // LucidEvolution wrappers for wallet + signing logic
 //
@@ -12,7 +12,7 @@ import scala.scalajs.js.JSConverters.*
 @js.native
 def walletFromSeed(seed: String, options: js.UndefOr[WalletOptions]): WalletCredentials = js.native
 
-class WalletOptions(
+private[wallet] class WalletOptions(
     val password: js.UndefOr[String] = js.undefined,
     val addressType: js.UndefOr[String] = js.undefined, // "Base" | "Enterprise"
     val accountIndex: js.UndefOr[Int] = js.undefined,
@@ -20,7 +20,7 @@ class WalletOptions(
 ) extends js.Object
 
 @js.native
-trait WalletCredentials extends js.Object {
+private[wallet] trait WalletCredentials extends js.Object {
     val address: String = js.native
     val rewardAddress: js.UndefOr[String] = js.native
     // Bech32-encoded private keys
@@ -33,12 +33,12 @@ trait WalletCredentials extends js.Object {
 
 @JSImport("@anastasia-labs/cardano-multiplatform-lib-nodejs", JSImport.Namespace)
 @js.native
-object CML extends js.Object {
+private[wallet] object CML extends js.Object {
     val PrivateKey: CMLPrivateKeyModule = js.native
 }
 
 @js.native
-trait CMLPrivateKeyModule extends js.Object {
+private[wallet] trait CMLPrivateKeyModule extends js.Object {
     def from_bech32(bech32: String): CMLPrivateKey = js.native
 }
 
@@ -50,24 +50,11 @@ trait CMLPrivateKey extends js.Object {
 }
 
 @js.native
-trait CMLPublicKey extends js.Object {
+private[wallet] trait CMLPublicKey extends js.Object {
     def to_raw_bytes(): Uint8Array = js.native
 }
 
 @js.native
 trait CMLSignature extends js.Object {
     def to_raw_bytes(): Uint8Array = js.native
-}
-
-object TypeConversions {
-    import scala.scalajs.js.typedarray.Int8Array
-
-    def uint8ArrayToBytes(arr: Uint8Array): Array[Byte] = {
-        new Int8Array(arr.buffer, arr.byteOffset, arr.length).toArray
-    }
-
-    def bytesToUint8Array(bytes: Array[Byte]): Uint8Array = {
-        val int8Array = new Int8Array(bytes.toJSArray)
-        new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
-    }
 }

@@ -1,7 +1,10 @@
 package scalus.cardano.wallet
 
+import scalus.builtin.ByteString
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner
+import scalus.builtin.NodeJsPlatformSpecific.toByteString
+import scalus.builtin.NodeJsPlatformSpecific.toUint8Array
 
 import scala.util.{Failure, Success, Try}
 
@@ -21,22 +24,19 @@ class LucidEvolutionKeyPair(bech32PrivateKey: String) extends KeyPair {
 
     override def underlying: CMLPrivateKey = cmlKey
 
-    override def publicKeyBytes: Array[Byte] = {
-        TypeConversions.uint8ArrayToBytes(cmlKey.to_public().to_raw_bytes())
-    }
+    override def publicKeyBytes: Array[Byte] = cmlKey.to_public().to_raw_bytes().toByteString.bytes
 
-    override def privateKeyBytes: Array[Byte] = {
-        TypeConversions.uint8ArrayToBytes(cmlKey.to_raw_bytes())
-    }
+    override def privateKeyBytes: Array[Byte] =
+        cmlKey.to_raw_bytes().toByteString.bytes
 
     override def sign(message: Array[Byte]): Array[Byte] = {
-        val messageUint8 = TypeConversions.bytesToUint8Array(message)
+        val messageUint8 = ByteString(message*).toUint8Array
         val signature = cmlKey.sign(messageUint8)
-        TypeConversions.uint8ArrayToBytes(signature.to_raw_bytes())
+        signature.to_raw_bytes().toByteString.bytes
     }
 }
 
-class LucidEvolutionAccount(
+class LucidAccount(
     mnemonic: String,
     derivationPath: String,
     network: Network
@@ -95,9 +95,9 @@ class LucidEvolutionAccount(
     def baseAddress: String = credentials.address
 }
 
-object LucidEvolutionAccount {
+object LucidAccount {
 
-    def apply(network: Network, mnemonic: String, derivationPath: String): LucidEvolutionAccount = {
-        new LucidEvolutionAccount(mnemonic, derivationPath, network)
+    def apply(network: Network, mnemonic: String, derivationPath: String): LucidAccount = {
+        new LucidAccount(mnemonic, derivationPath, network)
     }
 }
