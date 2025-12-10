@@ -358,6 +358,18 @@ class CaseListBranchError(val branchCount: Int, env: CekValEnv)
       env
     )
 
+class CaseDataBranchError(val branchCount: Int, env: CekValEnv)
+    extends CaseOnBuiltinError(
+      s"Case on data requires 1 to 5 branches (Constr, Map, List, I, B), but $branchCount provided",
+      env
+    )
+
+class CasePairBranchError(val branchCount: Int, env: CekValEnv)
+    extends CaseOnBuiltinError(
+      s"Case on pair requires exactly 1 branch, but $branchCount provided",
+      env
+    )
+
 class InvalidReturnValue(val value: Term)
     extends RuntimeException(s"Invalid return value: expected Unit, got $value")
 
@@ -820,6 +832,83 @@ class CekMachine(
                                         if cases.size < 2 then
                                             throw new CaseListBranchError(cases.size, env)
                                         Compute(ctx, env, cases(1))
+                            case Constant.Data(data) =>
+                                // Data has 5 constructors:
+                                // Constr=0 (tag, args), Map=1, List=2, I=3, B=4
+                                // Each branch receives the inner value(s) as arguments
+                                if cases.size == 0 || cases.size > 5 then
+                                    throw new CaseDataBranchError(cases.size, env)
+                                data match
+                                    case Data.Constr(tag, args) =>
+                                        // Constr branch (index 0) receives tag (as Integer) and args (as list of Data)
+                                        if cases.size < 1 then
+                                            throw new CaseDataBranchError(cases.size, env)
+                                        val tagVal = VCon(Constant.Integer(tag))
+                                        val argsVal = VCon(
+                                          Constant.List(DefaultUni.Data, args.map(Constant.Data.apply))
+                                        )
+                                        val newCtx = FrameAwaitFunValue(
+                                          tagVal,
+                                          FrameAwaitFunValue(argsVal, ctx)
+                                        )
+                                        Compute(newCtx, env, cases(0))
+                                    case Data.Map(entries) =>
+                                        // Map branch (index 1) receives entries as list of pairs
+                                        if cases.size < 2 then
+                                            throw new CaseDataBranchError(cases.size, env)
+                                        val entriesVal = VCon(
+                                          Constant.List(
+                                            DefaultUni.Apply(
+                                              DefaultUni.Apply(
+                                                DefaultUni.ProtoPair,
+                                                DefaultUni.Data
+                                              ),
+                                              DefaultUni.Data
+                                            ),
+                                            entries.map { case (k, v) =>
+                                                Constant.Pair(Constant.Data(k), Constant.Data(v))
+                                            }
+                                          )
+                                        )
+                                        val newCtx = FrameAwaitFunValue(entriesVal, ctx)
+                                        Compute(newCtx, env, cases(1))
+                                    case Data.List(elements) =>
+                                        // List branch (index 2) receives elements as list of Data
+                                        if cases.size < 3 then
+                                            throw new CaseDataBranchError(cases.size, env)
+                                        val elementsVal = VCon(
+                                          Constant.List(
+                                            DefaultUni.Data,
+                                            elements.map(Constant.Data.apply)
+                                          )
+                                        )
+                                        val newCtx = FrameAwaitFunValue(elementsVal, ctx)
+                                        Compute(newCtx, env, cases(2))
+                                    case Data.I(integer) =>
+                                        // I branch (index 3) receives the integer value
+                                        if cases.size < 4 then
+                                            throw new CaseDataBranchError(cases.size, env)
+                                        val intVal = VCon(Constant.Integer(integer))
+                                        val newCtx = FrameAwaitFunValue(intVal, ctx)
+                                        Compute(newCtx, env, cases(3))
+                                    case Data.B(bs) =>
+                                        // B branch (index 4) receives the bytestring value
+                                        if cases.size < 5 then
+                                            throw new CaseDataBranchError(cases.size, env)
+                                        val bsVal = VCon(Constant.ByteString(bs))
+                                        val newCtx = FrameAwaitFunValue(bsVal, ctx)
+                                        Compute(newCtx, env, cases(4))
+                            case Constant.Pair(left, right) =>
+                                // Pair has exactly 1 constructor that receives both elements
+                                if cases.size != 1 then
+                                    throw new CasePairBranchError(cases.size, env)
+                                val leftVal = VCon(left)
+                                val rightVal = VCon(right)
+                                val newCtx = FrameAwaitFunValue(
+                                  leftVal,
+                                  FrameAwaitFunValue(rightVal, ctx)
+                                )
+                                Compute(newCtx, env, cases(0))
                             case _ => throw new NonConstrScrutinized(value, env)
                     case _ => throw new NonConstrScrutinized(value, env)
     }
