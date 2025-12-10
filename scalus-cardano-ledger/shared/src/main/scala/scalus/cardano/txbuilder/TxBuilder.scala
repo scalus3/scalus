@@ -8,12 +8,14 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
-import scalus.cardano.node.Provider
+import scalus.cardano.node.{AsyncProvider, Provider}
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
+import scala.annotation.experimental
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
+import scala.concurrent.{ExecutionContext, Future}
 
 /** A high-level, fluent API for building Cardano transactions.
   *
@@ -719,6 +721,7 @@ case class TxBuilder(
       * @throws RuntimeException
       *   if insufficient UTXOs are available to cover the transaction requirements
       */
+    @experimental
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
         // Pre-build the context to get initial UTXOs
         val initialContext = TransactionBuilder
@@ -851,6 +854,375 @@ case class TxBuilder(
             case Left(error) =>
                 throw new RuntimeException(s"Failed to balance transaction: $error")
         }
+    }
+
+    // FIXME: this is a copy of `async`. Only difference: usage of future based APIs.
+    //  Reason: when ensuring ScalaJS support, it turned out that we cannot use methods that synchronously block.
+    //  Either only 1 complete should exist, or at the very least, the common parts must be refactored.
+    @experimental
+    def asyncComplete(provider: AsyncProvider, sponsor: Address)(using
+        ExecutionContext
+    ): Future[TxBuilder] = {
+        // Pre-build the context to get initial UTXOs
+        val initialContext = TransactionBuilder
+            .build(env.network, steps)
+            .getOrElse(throw new RuntimeException("Failed to build initial context"))
+            .ensureMinAdaAll(env.protocolParams)
+
+        // Keep track of all known UTXOs (initial + selected during balancing)
+        val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
+
+        // The entire diff handler is launched in a loop, and every return Right() is just an end of an iteration,
+        // not necessarily the end of the algorithm.
+        def handleDiffByQueryingMore(
+            diff: Value,
+            tx: Transaction
+        ): Either[TxBalancingError, Transaction] = {
+            // First, ensure collateral is balanced (happens every iteration since fee changes)
+            val collateralResult = scala.concurrent.Await.result(
+              asyncEnsureCollateralBalanced(
+                tx,
+                provider,
+                sponsor,
+                selectedUtxos
+              ),
+              scala.concurrent.duration.Duration.Inf
+            )
+
+            collateralResult match {
+                case Right(balancedTx) if balancedTx != tx =>
+                    // Collateral was adjusted, iterate further
+                    return Right(balancedTx)
+                case Left(error) =>
+                    return Left(error)
+                case Right(_) => // Collateral is balanced, continue with value diff handling
+            }
+
+            // Collateral balanced -- now we can compute and process the Value diff
+            val Value(adaDiff, tokenDiff) = diff
+            (adaDiff, tokenDiff) match {
+                // We don't have enough ADA
+                case (NegativeAda(_), _) =>
+                    // We don't have enough ADA, but we may have added a change output on past iterations.
+                    // If so, try to take ADA from it to achieve balance.
+                    val changeIndex = Change.findChangeOutput(tx, sponsor)
+                    if changeIndex >= 0 then {
+                        Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
+                            case Right(updatedTx) =>
+                                // Successfully took from change
+                                Right(updatedTx)
+                            case Left(_) =>
+                                // Can't take from change (would go below minAda), need to query for more UTXOs
+                                val additionalUtxos = scala.concurrent.Await.result(
+                                  asyncSelectAdditionalUtxos(
+                                    provider,
+                                    sponsor,
+                                    diff,
+                                    excludeInputs = selectedUtxos.inputSet
+                                  ),
+                                  scala.concurrent.duration.Duration.Inf
+                                )
+                                selectedUtxos.addAll(additionalUtxos)
+                                val withMoreInputs = addInputs(tx, additionalUtxos)
+                                Right(withMoreInputs)
+                        }
+                    } else {
+                        // There's no change output, the only way to get more ADA is to query the provider.
+                        val additionalUtxos = scala.concurrent.Await.result(
+                          asyncSelectAdditionalUtxos(
+                            provider,
+                            sponsor,
+                            diff,
+                            excludeInputs = selectedUtxos.inputSet
+                          ),
+                          scala.concurrent.duration.Duration.Inf
+                        )
+                        // Remember the utxos to not select them again on further iterations.
+                        selectedUtxos.addAll(additionalUtxos)
+                        val withMoreInputs = addInputs(tx, additionalUtxos)
+                        Right(withMoreInputs)
+                    }
+
+                case (ZeroAda(), ZeroTokens()) =>
+                    // Balanced perfectly, we're done
+                    Right(tx)
+
+                case (ZeroAda(), MissingTokens()) =>
+                    // We are missing tokens -- need to query more
+                    val additionalUtxos = scala.concurrent.Await.result(
+                      asyncSelectAdditionalUtxos(
+                        provider,
+                        sponsor,
+                        diff,
+                        excludeInputs = selectedUtxos.inputSet
+                      ),
+                      scala.concurrent.duration.Duration.Inf
+                    )
+                    // Remember the utxos to not select them again on further iterations.
+                    selectedUtxos.addAll(additionalUtxos)
+                    val withMoreInputs = addInputs(tx, additionalUtxos)
+                    Right(withMoreInputs)
+
+                case (ZeroAda(), _) =>
+                    // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
+                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
+
+                case (PositiveAda(_), MissingTokens()) =>
+                    // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
+                    // on further iterations
+                    val additionalUtxos = scala.concurrent.Await.result(
+                      asyncSelectAdditionalUtxos(
+                        provider,
+                        sponsor,
+                        diff,
+                        excludeInputs = selectedUtxos.inputSet
+                      ),
+                      scala.concurrent.duration.Duration.Inf
+                    )
+                    // Remember the utxos to not select them again on further iterations.
+                    selectedUtxos.addAll(additionalUtxos)
+                    val withMoreInputs = addInputs(tx, additionalUtxos)
+                    Right(withMoreInputs)
+
+                case (PositiveAda(_), _) =>
+                    // We either have more tokens than necessary, or exactly the right amount of tokens.
+                    // In any case -- send the ADA and potentially some tokens back as change.
+                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
+            }
+        }
+
+        // Build the transaction with balancing, then update context with all selected UTXOs
+        val balancedTx = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
+          addAttachmentsToContext(initialContext).transaction,
+          handleDiffByQueryingMore,
+          env.protocolParams,
+          selectedUtxos.utxos,
+          evaluator
+        )
+
+        Future.successful {
+            balancedTx match {
+                case Right(tx) =>
+                    // Update context with the balanced transaction and all selected UTXOs
+                    val updatedContext = initialContext.copy(
+                      transaction = tx,
+                      resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos)
+                    )
+                    copy(context = updatedContext).changeTo(sponsor)
+                case Left(error) =>
+                    throw new RuntimeException(s"Failed to balance transaction: $error")
+            }
+        }
+    }
+
+    // FIXME: see `asyncComplete`
+    private def asyncEnsureCollateralBalanced(
+        tx: Transaction,
+        provider: AsyncProvider,
+        sponsor: Address,
+        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
+    )(using ExecutionContext): Future[Either[Nothing, Transaction]] = {
+        val resolvedUtxos = selectedUtxos.utxos
+        val utxosToExclude = selectedUtxos.utxos
+        // For transactions that don't need collateral -- return early
+        val needsCollat = tx.witnessSet.redeemers.fold(false)(_.value.toSeq.nonEmpty)
+        if !needsCollat then return Future.successful(Right(tx))
+
+        // If we need collateral, first calculate how much we need vs how much is present
+        val currentCollateralAmount = totalCollateralValue(tx, resolvedUtxos)
+        val requiredCollateralAmount = CollateralSufficient.calculateRequiredCollateral(
+          tx.body.value.fee,
+          env.protocolParams.collateralPercentage
+        )
+        val gap = currentCollateralAmount - Value(requiredCollateralAmount)
+
+        // Zero means no ADA _and_ no tokens -- balanced, we're done
+        if gap.isZero then return Future.successful(Right(tx))
+
+        // Note that token gap is always positive -- collateral tokens must always be returned
+        val Value(adaGap, tokenGap) = gap
+
+        // If adaGap > min ADA, meaning the amount we need to return is greater than min ADA, we can
+        // create a single output = Value(adaGap, tokenGap).
+        // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
+        // We also need to make sure that we don't have more than 3 collateral inputs.
+
+        val minAda = MinCoinSizedTransactionOutput(
+          Sized(TransactionOutput(sponsor, gap)),
+          env.protocolParams
+        )
+        if adaGap < minAda then {
+            // Need more collateral to meet minAda requirement for return output
+            val additionalNeeded = minAda - adaGap
+            asyncSelectCollateral(
+              provider,
+              sponsor,
+              additionalNeeded,
+              excludeUtxos = utxosToExclude.keySet
+            ).map { additionalCollateral =>
+                // Remember the utxos to not select them again in the `complete`.
+                selectedUtxos.addAll(additionalCollateral)
+                val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
+                Right(txWithMoreCollateral)
+            }
+        } else {
+            val returnOutput = TransactionOutput(sponsor, gap)
+            val withReturnOutput = addCollateralReturnOutput(tx, returnOutput, resolvedUtxos)
+            Future.successful(Right(withReturnOutput))
+        }
+    }
+
+    // FIXME: see `asyncComplete`
+    private def asyncSelectAdditionalUtxos(
+        provider: AsyncProvider,
+        address: Address,
+        gap: Value,
+        excludeInputs: Set[TransactionInput]
+    )(using ExecutionContext): Future[Utxos] = {
+        val selectedUtxos = mutable.Map.empty[TransactionInput, TransactionOutput]
+
+        // Fulfill the token requirement first
+        val tokensFuture: Future[Unit] = if gap.assets.assets.nonEmpty then {
+            val requiredTokens = MultiAsset(
+              gap.assets.assets.map { case (policyId, assets) =>
+                  policyId -> SortedMap.from(assets.map { case (assetName, amount) =>
+                      assetName -> Math.abs(amount)
+                  })
+              }
+            )
+            asyncSelectUtxosWithTokens(
+              provider,
+              address,
+              requiredTokens,
+              excludeInputs ++ selectedUtxos.keySet
+            ).map { tokenUtxos =>
+                selectedUtxos.addAll(tokenUtxos)
+            }
+        } else {
+            Future.successful(())
+        }
+
+        // Then cover the insufficient ADA
+        tokensFuture.flatMap { _ =>
+            if gap.coin.value < 0 then {
+                val alreadySelectedAda = selectedUtxos.values.map(_.value.coin.value).sum
+                val totalAdaNeeded = -gap.coin.value
+                val remainingAdaNeeded = totalAdaNeeded - alreadySelectedAda
+
+                if remainingAdaNeeded > 0 then {
+                    provider
+                        .findUtxos(address = address)
+                        .map { result =>
+                            val allUtxos = result
+                                .getOrElse(Map.empty)
+                                .filterNot { case (input, _) =>
+                                    excludeInputs.contains(input) || selectedUtxos.contains(input)
+                                }
+
+                            var accumulatedAda = 0L
+                            val adaUtxos = allUtxos.takeWhile { case (_, output) =>
+                                val shouldTake = accumulatedAda < remainingAdaNeeded
+                                if shouldTake then accumulatedAda += output.value.coin.value
+                                shouldTake
+                            }
+
+                            if accumulatedAda < remainingAdaNeeded then
+                                throw new RuntimeException(
+                                  s"Insufficient ADA: need $remainingAdaNeeded more lovelace, found only $accumulatedAda"
+                                )
+
+                            selectedUtxos.addAll(adaUtxos)
+                            selectedUtxos.toMap
+                        }
+                } else {
+                    Future.successful(selectedUtxos.toMap)
+                }
+            } else {
+                Future.successful(selectedUtxos.toMap)
+            }
+        }
+    }
+
+    // FIXME: see `asyncComplete`
+    private def asyncSelectUtxosWithTokens(
+        provider: AsyncProvider,
+        address: Address,
+        requiredAssets: MultiAsset,
+        excludeInputs: Set[TransactionInput]
+    )(using ExecutionContext): Future[Map[TransactionInput, TransactionOutput]] = {
+        provider
+            .findUtxos(address = address)
+            .map { result =>
+                val allUtxos = result
+                    .getOrElse(Map.empty)
+                    .filterNot { case (input, _) => excludeInputs.contains(input) }
+
+                var selectedUtxos = Map.empty[TransactionInput, TransactionOutput]
+
+                // For each required token, find UTXOs that contain it
+                requiredAssets.assets.foreach { case (policyId, assets) =>
+                    assets.foreach { case (assetName, requiredAmount) =>
+                        if requiredAmount > 0 then {
+                            var collected = 0L
+
+                            // First, count tokens from already-selected UTXOs
+                            selectedUtxos.foreach { case (_, output) =>
+                                output.value.assets.assets
+                                    .get(policyId)
+                                    .flatMap(_.get(assetName))
+                                    .foreach { amount => collected += amount }
+                            }
+
+                            // Then select additional UTXOs if needed
+                            if collected < requiredAmount then {
+                                allUtxos.foreach { case (input, output) =>
+                                    if collected < requiredAmount && !selectedUtxos.contains(input)
+                                    then {
+                                        output.value.assets.assets
+                                            .get(policyId)
+                                            .flatMap(_.get(assetName))
+                                            .foreach { amount =>
+                                                selectedUtxos = selectedUtxos + (input -> output)
+                                                collected += amount
+                                            }
+                                    }
+                                }
+                            }
+
+                            if collected < requiredAmount then {
+                                throw new RuntimeException(
+                                  s"Insufficient tokens: need $requiredAmount of ${policyId.toHex}.${assetName.toString}, found only $collected"
+                                )
+                            }
+                        }
+                    }
+                }
+
+                selectedUtxos
+            }
+    }
+
+    // FIXME: see `asyncComplete`
+    private def asyncSelectCollateral(
+        provider: AsyncProvider,
+        address: Address,
+        requiredAmount: Coin,
+        excludeUtxos: Set[TransactionInput]
+    )(using ExecutionContext): Future[Utxos] = {
+        provider
+            .findUtxos(
+              address = address,
+              minRequiredTotalAmount = Some(requiredAmount)
+            )
+            .map { result =>
+                val utxos = result.map(_ -- excludeUtxos)
+                utxos match {
+                    case Right(u) if u.nonEmpty => u
+                    case Right(u) if u.isEmpty =>
+                        throw new RuntimeException("Could not find collateral uxtos")
+                    case Left(e) => throw new RuntimeException("Could not find collateral utxos", e)
+                }
+            }
     }
 
     private def ensureCollateralBalanced(

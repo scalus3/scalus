@@ -11,6 +11,7 @@ import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.{plutusV3, toUplc, Compiler}
 
 import java.time.Instant
+import scala.annotation.experimental
 import scala.collection.immutable.SortedMap
 
 // TODO: can't depend `testkit`, since it'd introduce circular dependency. /
@@ -81,6 +82,7 @@ class SimpleMockProvider(initialUtxos: Utxos) extends Provider {
     }
 }
 
+@experimental // until we refactor the complete & completeAsync
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet

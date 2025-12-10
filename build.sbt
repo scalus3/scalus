@@ -593,12 +593,11 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.5" % "test",
+      libraryDependencies += "com.softwaremill.sttp.client3" %%% "core" % "3.9.1",
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
-    .jvmSettings(
-      libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.0"
-    )
+    .jvmSettings()
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.4.2",
       // Lucid Evolution and CML for transaction signing
@@ -649,6 +648,31 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.5" % "test",
       inConfig(Test)(PluginDependency)
     )
+
+lazy val scalusCardanoLedgerXplatformIt = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-cardano-ledger-xplatform-it"))
+    .dependsOn(scalusCardanoLedger, scalusExamples)
+    .settings(
+      name := "scalus-cardano-ledger-xplatform-it",
+      scalacOptions ++= commonScalacOptions,
+      publish / skip := true,
+      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.5" % "test",
+      inConfig(Test)(PluginDependency)
+    )
+    .jvmSettings(
+      Test / fork := true,
+      Test / testOptions += Tests.Argument("-oF"),
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test"
+    )
+    .jsSettings(
+      Test / scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+      Compile / npmDependencies ++= Seq(
+        "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3"
+      ),
+      Test / envVars := sys.env.toMap
+    )
+    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
 
 // =============================================================================
 // UTILS
