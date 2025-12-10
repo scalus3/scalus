@@ -430,26 +430,42 @@ object MempackParser {
             case _ => throw new IllegalArgumentException(s"Unsupported Datum tag: $datumTag")
         }
 
-        // Parse Script (tag + script bytes)
+        // Parse Script (outer tag: 0=NativeScript, 1=PlutusScript)
         val scriptTag = bytes(offset) & 0xff
         offset += 1
 
         val scriptRef: Option[ScriptRef] = scriptTag match {
             case 0 =>
-                // NativeScript - ShortByteString with length prefix
-                val scriptLen = bytes(offset) & 0xff
-                offset += 1
+                // NativeScript - ShortByteString with VarLen length prefix
+                val scriptLenBytes = bytes.slice(offset, bytes.length)
+                val scriptLen = parseVarLenWord64(scriptLenBytes).toInt
+                offset += varLenEncodedLength(scriptLenBytes)
+
                 val scriptBytes = bytes.slice(offset, offset + scriptLen)
-                // TODO: Parse actual native script (Timelock)
-                // For now, skip the script ref parsing
-                None
+                // Parse native script from CBOR
+                val nativeScript = Cbor.decode(scriptBytes).to[Script.Native].value
+                Some(ScriptRef(nativeScript))
             case 1 =>
-                // PlutusScript - ShortByteString with length prefix
-                val scriptLen = bytes(offset) & 0xff
+                // PlutusScript - first read version tag, then script bytes
+                // Version tags: 0=PlutusV1, 1=PlutusV2, 2=PlutusV3
+                val versionTag = bytes(offset) & 0xff
                 offset += 1
+
+                // Script length uses VarLen encoding (ShortByteString)
+                val scriptLenBytes = bytes.slice(offset, bytes.length)
+                val scriptLen = parseVarLenWord64(scriptLenBytes).toInt
+                offset += varLenEncodedLength(scriptLenBytes)
+
                 val scriptBytes = bytes.slice(offset, offset + scriptLen)
-                // Assume PlutusV3 as default (latest version)
-                val script = Script.PlutusV3(scalus.builtin.ByteString.fromArray(scriptBytes))
+                val scriptBs = scalus.builtin.ByteString.fromArray(scriptBytes)
+
+                val script = versionTag match {
+                    case 0 => Script.PlutusV1(scriptBs)
+                    case 1 => Script.PlutusV2(scriptBs)
+                    case 2 => Script.PlutusV3(scriptBs)
+                    case _ =>
+                        throw new IllegalArgumentException(s"Unsupported PlutusScript version tag: $versionTag")
+                }
                 Some(ScriptRef(script))
             case _ => throw new IllegalArgumentException(s"Unsupported Script tag: $scriptTag")
         }
