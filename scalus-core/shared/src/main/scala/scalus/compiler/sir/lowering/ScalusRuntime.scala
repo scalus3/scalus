@@ -1,5 +1,6 @@
 package scalus.compiler.sir.lowering
 
+import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIRType.TypeVar
@@ -171,20 +172,6 @@ object ScalusRuntime {
             )
         }
 
-        def whenCons(
-            l: IdentifiableLoweredValue,
-            acceptHeadTail: (IdentifiableLoweredValue, IdentifiableLoweredValue) => LoweredValue
-        ): LoweredValue = {
-            processCons(
-              l,
-              acceptHeadTail,
-              tpInTupleList,
-              tpInTuple,
-              SumCaseClassRepresentation.SumDataPairList,
-              ProductCaseClassRepresentation.PairData
-            )
-        }
-
         def pairDataToTupleAsData(
             head: IdentifiableLoweredValue,
             tail: IdentifiableLoweredValue,
@@ -257,13 +244,14 @@ object ScalusRuntime {
                 tpInTupleList,
                 SumCaseClassRepresentation.SumDataPairList,
                 list =>
-                    lvChooseList(
+                    lvMatchList(
                       list,
                       whenNil,
-                      whenCons(
-                        list,
-                        (head, tail) => pairDataToTupleAsData(head, tail, rec),
-                      ),
+                      (head, tail) => pairDataToTupleAsData(head, tail, rec),
+                      tpInTupleList,
+                      tpInTuple,
+                      SumCaseClassRepresentation.SumDataPairList,
+                      ProductCaseClassRepresentation.PairData,
                       tpOutTupleList,
                       SumCaseClassRepresentation.SumDataList
                     ),
@@ -302,20 +290,6 @@ object ScalusRuntime {
           SumCaseClassRepresentation.SumDataPairList,
           AnnotationsDecl.empty.pos
         )
-
-        def whenCons(
-            l: IdentifiableLoweredValue,
-            acceptHeadTail: (IdentifiableLoweredValue, IdentifiableLoweredValue) => LoweredValue
-        ): LoweredValue = {
-            processCons(
-              l,
-              acceptHeadTail,
-              tpInTupleList,
-              SIRType.Tuple2(tpA, tpB),
-              SumCaseClassRepresentation.SumDataList,
-              ProductCaseClassRepresentation.ProdDataConstr
-            )
-        }
 
         def mapTupleToPair(
             head: IdentifiableLoweredValue,
@@ -401,10 +375,14 @@ object ScalusRuntime {
                 tpInTupleList,
                 SumCaseClassRepresentation.SumDataList,
                 list =>
-                    lvChooseList(
+                    lvMatchList(
                       list,
                       whenNil,
-                      whenCons(list, (head, tail) => mapTupleToPair(head, tail, rec)),
+                      (head, tail) => mapTupleToPair(head, tail, rec),
+                      tpInTupleList,
+                      SIRType.Tuple2(tpA, tpB),
+                      SumCaseClassRepresentation.SumDataList,
+                      ProductCaseClassRepresentation.ProdDataConstr,
                       tpOutPairList,
                       SumCaseClassRepresentation.SumDataPairList
                     ),
@@ -415,6 +393,81 @@ object ScalusRuntime {
         )
 
         letDef
+    }
+
+    /** Unified list matching that uses Case on list for PlutusV4 and ChooseList for V1-V3.
+      *
+      * @param list
+      *   the list to match on
+      * @param nilBody
+      *   the body for the empty list case
+      * @param consBodyFn
+      *   function that takes head and tail variables and returns the cons body
+      * @param listType
+      *   the SIR type of the list
+      * @param elementType
+      *   the SIR type of list elements
+      * @param listRepresentation
+      *   the representation of the list
+      * @param elementRepresentation
+      *   the representation of list elements
+      * @param outType
+      *   the output type
+      * @param outRepresentation
+      *   the output representation
+      */
+    private def lvMatchList(
+        list: IdentifiableLoweredValue,
+        nilBody: LoweredValue,
+        consBodyFn: (IdentifiableLoweredValue, IdentifiableLoweredValue) => LoweredValue,
+        listType: SIRType,
+        elementType: SIRType,
+        listRepresentation: SumCaseClassRepresentation,
+        elementRepresentation: LoweredValueRepresentation,
+        outType: SIRType,
+        outRepresentation: LoweredValueRepresentation
+    )(using lctx: LoweringContext): LoweredValue = {
+        if lctx.targetLanguage == Language.PlutusV4 then {
+            // For PlutusV4: use Case on list with head/tail as lambda parameters
+            val headValId = lctx.uniqueVarName("headVal")
+            val headVal = new VariableLoweredValue(
+              id = headValId,
+              name = headValId,
+              sir = SIR.Var(headValId, elementType, AnnotationsDecl.empty),
+              representation = elementRepresentation,
+              optRhs = None // lambda parameter, not derived from builtin
+            )
+            val tailValId = lctx.uniqueVarName("tailVal")
+            val tailVal = new VariableLoweredValue(
+              id = tailValId,
+              name = tailValId,
+              sir = SIR.Var(tailValId, listType, AnnotationsDecl.empty),
+              representation = listRepresentation,
+              optRhs = None // lambda parameter, not derived from builtin
+            )
+            val consBody = consBodyFn(headVal, tailVal)
+            CaseListLoweredValue(
+              list,
+              headVal,
+              tailVal,
+              consBody,
+              nilBody,
+              outType,
+              outRepresentation,
+              AnnotationsDecl.empty.pos
+            )
+        } else {
+            // For V1-V3: use ChooseList with head/tail derived from builtins
+            val consBody = processCons(
+              list,
+              consBodyFn,
+              listType,
+              elementType,
+              listRepresentation,
+              elementRepresentation
+            )
+            lvChooseList(list, nilBody, consBody, outType, outRepresentation)
+        }
     }
 
     private def lvChooseList(
