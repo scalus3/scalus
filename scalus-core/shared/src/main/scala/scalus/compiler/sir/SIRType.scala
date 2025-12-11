@@ -75,11 +75,119 @@ object SIRType {
 
     // sealed trait MappedBuiltin[T] extends Lifted[T] with ULPCMapped
 
-    case object Data extends Primitive {
-        override def uplcType: DefaultUni = DefaultUni.Data
-        override def show: String = "Data"
+    object Data {
+        val name = "scalus.builtin.Data"
+
+        object Constr {
+            val name = "scalus.builtin.Data$.Constr"
+
+            def buildConstrDecl(dataType: SIRType): ConstrDecl = {
+                ConstrDecl(
+                  name,
+                  scala.List(
+                    TypeBinding("constr", Integer),
+                    TypeBinding("args", SIRType.List(dataType))
+                  ),
+                  scala.Nil,
+                  scala.Nil,
+                  AnnotationsDecl.empty
+                )
+            }
+        }
+
+        object Map {
+            val name = "scalus.builtin.Data$.Map"
+
+            def buildConstrDecl(dataType: SIRType): ConstrDecl = {
+                ConstrDecl(
+                  name,
+                  scala.List(
+                    TypeBinding("values", SIRType.List(BuiltinPair(dataType, dataType)))
+                  ),
+                  scala.Nil,
+                  scala.Nil,
+                  AnnotationsDecl.empty
+                )
+            }
+        }
+
+        object List {
+            val name = "scalus.builtin.Data$.List"
+
+            def buildConstrDecl(dataType: SIRType): ConstrDecl = {
+                ConstrDecl(
+                  name,
+                  scala.List(TypeBinding("values", SIRType.List(dataType))),
+                  scala.Nil,
+                  scala.Nil,
+                  AnnotationsDecl.empty
+                )
+            }
+        }
+
+        object I {
+            val name = "scalus.builtin.Data$.I"
+
+            val constrDecl: ConstrDecl = {
+                ConstrDecl(
+                  name,
+                  scala.List(TypeBinding("value", Integer)),
+                  scala.Nil,
+                  scala.Nil,
+                  AnnotationsDecl.empty
+                )
+            }
+        }
+
+        object B {
+            val name = "scalus.builtin.Data$.B"
+
+            val constrDecl: ConstrDecl = {
+                ConstrDecl(
+                  name,
+                  scala.List(TypeBinding("value", ByteString)),
+                  scala.Nil,
+                  scala.Nil,
+                  AnnotationsDecl.empty
+                )
+            }
+        }
+
+        lazy val dataDecl: DataDecl = {
+            val proxy = new TypeProxy(null)
+            val retval = DataDecl(
+              name,
+              scala.List(
+                Constr.buildConstrDecl(proxy),
+                Map.buildConstrDecl(proxy),
+                List.buildConstrDecl(proxy),
+                I.constrDecl,
+                B.constrDecl
+              ),
+              scala.Nil,
+              AnnotationsDecl.empty
+            )
+            proxy.ref = SumCaseClass(retval, scala.Nil)
+            retval
+        }
+
+        def apply(): SumCaseClass = SumCaseClass(dataDecl, scala.Nil)
+
+        lazy val tp: SIRType = dataDecl.tp
+
+        def unapply(tp: SIRType): Boolean = {
+            tp match
+                case SumCaseClass(decl, scala.Nil) if decl.name == name => true
+                case CaseClass(constrDecl, _, _)
+                    if constrDecl.name == Constr.name ||
+                        constrDecl.name == Map.name ||
+                        constrDecl.name == List.name ||
+                        constrDecl.name == I.name ||
+                        constrDecl.name == B.name =>
+                    true
+                case _ => false
+        }
     }
-    given Data.type = Data
 
     case object BLS12_381_G1_Element extends Primitive {
         override def uplcType: DefaultUni = DefaultUni.BLS12_381_G1_Element
@@ -935,7 +1043,7 @@ object SIRType {
             case DefaultUni.String               => String
             case DefaultUni.Bool                 => Boolean
             case DefaultUni.Unit                 => Unit
-            case DefaultUni.Data                 => Data
+            case DefaultUni.Data                 => Data.tp
             case DefaultUni.BLS12_381_G1_Element => BLS12_381_G1_Element
             case DefaultUni.BLS12_381_G2_Element => BLS12_381_G2_Element
             case DefaultUni.BLS12_381_MlResult   => BLS12_381_MlResult
@@ -1224,7 +1332,7 @@ object SIRType {
                         }
                     case TypeNonCaseModule(_) =>
                     case FreeUnificator | TypeNothing | Unit | Integer | String | Boolean |
-                        ByteString | Data | BLS12_381_G1_Element | BLS12_381_G2_Element |
+                        ByteString | BLS12_381_G1_Element | BLS12_381_G2_Element |
                         BLS12_381_MlResult =>
                     // do nothing, these types are not type variables
                 }

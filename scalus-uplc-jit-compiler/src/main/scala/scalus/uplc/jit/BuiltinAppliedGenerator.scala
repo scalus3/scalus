@@ -2,6 +2,7 @@ package scalus.uplc.jit
 
 import cats.syntax.semigroup.*
 import scalus.builtin.{Builtins, ByteString, Data}
+import scalus.prelude.List as PList
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.*
 import scalus.uplc.eval.ExBudgetCategory.{BuiltinApp, Step}
@@ -712,7 +713,7 @@ object BuiltinAppliedGenerator {
             )
             Data.Constr(
               ${ x }.asInstanceOf[BigInt].longValue,
-              ${ y }.asInstanceOf[List[Data]]
+              PList.from(${ y }.asInstanceOf[List[Data]])
             )
         }
     }
@@ -1026,7 +1027,7 @@ object BuiltinAppliedGenerator {
               ${ params }.builtinCostModel.listData.constantCost,
               Nil
             )
-            Data.List(${ x }.asInstanceOf[List[Data]])
+            Data.List(PList.from(${ x }.asInstanceOf[List[Data]]))
         }
     }
 
@@ -1052,9 +1053,11 @@ object BuiltinAppliedGenerator {
               Nil
             )
             Data.Map(
-              ${ x }
-                  .asInstanceOf[List[scalus.builtin.BuiltinPair[Data, Data]]]
-                  .map(p => (p.fst, p.snd))
+              PList.from(
+                ${ x }
+                    .asInstanceOf[List[scalus.builtin.BuiltinPair[Data, Data]]]
+                    .map(p => (p.fst, p.snd))
+              )
             )
         }
     }

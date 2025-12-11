@@ -221,7 +221,7 @@ class SirToUplcSmLoweringTest
         val representation1 = gen1.defaultRepresentation(originSir1.tp)
         assert(representation1 == SumCaseClassRepresentation.SumDataList)
 
-        val genDataList = SirTypeUplcGenerator(SIRType.List(SIRType.Data))
+        val genDataList = SirTypeUplcGenerator(SIRType.List(SIRType.Data.tp))
 
         val origin1 = lower(originSir1)
         val expected1 = Term.Builtin(DefaultFun.MkNilData) $ ().asTerm

@@ -18,7 +18,8 @@ import scalus.ledger.api.v1.{DCert, ScriptPurpose, StakingCredential}
 import scalus.ledger.api.{v1, v2, v3}
 import scalus.ledger.api.v3.GovernanceActionId
 import scalus.{builtin, ledger, prelude}
-import scalus.prelude.{asScalus, List, SortedMap}
+import scalus.prelude.{asScalus, List as PList, SortedMap}
+import scalus.prelude.List.toScalaList
 import scalus.uplc.eval.*
 
 import java.math.BigInteger
@@ -124,16 +125,16 @@ object Interop {
             datum match
                 case c: ConstrPlutusData =>
                     val args = c.getData.getPlutusDataList.asScala.map(_.toScalusData).toList
-                    Data.Constr(c.getAlternative, args)
+                    Data.Constr(c.getAlternative, PList.from(args))
                 case m: MapPlutusData =>
                     val entries = m.getMap.entrySet().iterator().asScala
                     val values = entries.map { e =>
                         (e.getKey.toScalusData, e.getValue.toScalusData)
                     }.toList
-                    Data.Map(values)
+                    Data.Map(PList.from(values))
                 case l: ListPlutusData =>
                     val values = l.getPlutusDataList.asScala.map(_.toScalusData).toList
-                    Data.List(values)
+                    Data.List(PList.from(values))
                 case i: BigIntPlutusData =>
                     Data.I(i.getValue)
                 case b: BytesPlutusData =>
@@ -148,18 +149,18 @@ object Interop {
             case Data.Constr(tag, args) =>
                 val convertedArgs = ListPlutusData
                     .builder()
-                    .plutusDataList(args.map(toPlutusData).asJava)
+                    .plutusDataList(args.toScalaList.map(toPlutusData).asJava)
                     .build()
                 ConstrPlutusData
                     .builder()
-                    .alternative(tag)
+                    .alternative(tag.toLong)
                     .data(convertedArgs)
                     .build()
             case Data.Map(items) =>
                 MapPlutusData
                     .builder()
                     .map(
-                      items
+                      items.toScalaList
                           .map { case (k, v) =>
                               (toPlutusData(k), toPlutusData(v))
                           }
@@ -170,7 +171,7 @@ object Interop {
             case Data.List(items) =>
                 ListPlutusData
                     .builder()
-                    .plutusDataList(items.map(toPlutusData).asJava)
+                    .plutusDataList(items.toScalaList.map(toPlutusData).asJava)
                     .build()
             case Data.I(i) =>
                 BigIntPlutusData.of(i.bigInteger)
@@ -323,7 +324,7 @@ object Interop {
         )
     }
 
-    private val ADA_ZERO = ByteString.empty -> List(ByteString.empty -> BigInt(0))
+    private val ADA_ZERO = ByteString.empty -> PList(ByteString.empty -> BigInt(0))
 
     def getMintValue(value: util.List[MultiAsset]): v1.Value = {
         // Always include ADA entry with zero value for minting

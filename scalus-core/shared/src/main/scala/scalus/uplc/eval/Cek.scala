@@ -847,7 +847,7 @@ class CekMachine(
                                         val argsVal = VCon(
                                           Constant.List(
                                             DefaultUni.Data,
-                                            args.map(Constant.Data.apply)
+                                            args.toScalaList.map(Constant.Data.apply)
                                           )
                                         )
                                         val newCtx = FrameAwaitFunValue(
@@ -868,7 +868,7 @@ class CekMachine(
                                               ),
                                               DefaultUni.Data
                                             ),
-                                            entries.map { case (k, v) =>
+                                            entries.toScalaList.map { case (k, v) =>
                                                 Constant.Pair(Constant.Data(k), Constant.Data(v))
                                             }
                                           )
@@ -882,7 +882,7 @@ class CekMachine(
                                         val elementsVal = VCon(
                                           Constant.List(
                                             DefaultUni.Data,
-                                            elements.map(Constant.Data.apply)
+                                            elements.toScalaList.map(Constant.Data.apply)
                                           )
                                         )
                                         val newCtx = FrameAwaitFunValue(elementsVal, ctx)

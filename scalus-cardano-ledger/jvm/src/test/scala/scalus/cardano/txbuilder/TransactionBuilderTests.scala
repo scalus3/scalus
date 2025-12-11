@@ -9,6 +9,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
+import scalus.prelude.List as PList
 import scalus.cardano.address.Network.{Mainnet, Testnet}
 import scalus.cardano.address.ShelleyDelegationPart.{Key, Null}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
@@ -81,7 +82,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     val plutusScript2Witness =
         ThreeArgumentPlutusScriptWitness(
           PlutusScriptValue(script2),
-          Data.List(List()),
+          Data.List(PList.Nil),
           DatumInlined,
           script2Signers
         )
@@ -105,7 +106,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         Utxo(
           setScriptAddr(script1.scriptHash, utxo)
               .focus(_._2.datumOption)
-              .replace(Some(Inline(Data.List(List.empty))))
+              .replace(Some(Inline(Data.List(PList.Nil))))
         )
     }
 
@@ -139,21 +140,21 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     val plutusScript1RefWitness = ThreeArgumentPlutusScriptWitness(
       PlutusScriptAttached,
-      Data.List(List()),
+      Data.List(PList.Nil),
       DatumInlined,
       psRefWitnessExpectedSigners
     )
 
     val plutusScript1RefSpentWitness = ThreeArgumentPlutusScriptWitness(
       PlutusScriptAttached,
-      Data.List(List()),
+      Data.List(PList.Nil),
       DatumInlined,
       psRefWitnessExpectedSigners
     )
 
     val plutusScript2RefWitness = ThreeArgumentPlutusScriptWitness(
       PlutusScriptAttached,
-      Data.List(List()),
+      Data.List(PList.Nil),
       DatumInlined,
       psRefWitnessExpectedSigners
     )
@@ -244,7 +245,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     test("SpendWithDelayedRedeemer sees transaction inputs") {
         val redeemerBuilder: Transaction => Data = { tx =>
             val inputCount = tx.body.value.inputs.toSeq.size
-            Data.Constr(0, List(Data.I(inputCount)))
+            Data.Constr(0, PList(Data.I(inputCount)))
         }
 
         val delayedStep = SpendWithDelayedRedeemer(
@@ -275,7 +276,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 datum
         }
         scriptRedeemer match {
-            case Some(Data.Constr(0, List(Data.I(inCount)))) =>
+            case Some(Data.Constr(0, PList.Cons(Data.I(inCount), PList.Nil))) =>
                 assert(inCount == 2)
             case other => fail("unreachable")
         }
@@ -431,7 +432,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                   address =
                       ShelleyAddress(Mainnet, ShelleyPaymentPart.Script(script2.scriptHash), Null),
                   value = Value.zero,
-                  datumOption = Some(Inline(Data.List(List.empty))),
+                  datumOption = Some(Inline(Data.List(PList.Nil))),
                   scriptRef = None
                 )
               ),
@@ -489,7 +490,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           amount = 1L,
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            redeemer = Data.List(List.empty),
+            redeemer = Data.List(PList.Nil),
             additionalSigners = Set.empty
           )
         )
@@ -539,7 +540,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     val mintSigners = Set(ExpectedSigner(genAddrKeyHash.sample.get))
 
     // Mint the given amount of tokens from script 1
-    def mintScript1(amount: Long, redeemer: Data = Data.List(List.empty)): Mint =
+    def mintScript1(amount: Long, redeemer: Data = Data.List(PList.Nil)): Mint =
         Mint(
           scriptHash = scriptHash1,
           assetName = AssetName.empty,
@@ -575,7 +576,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     testBuilderSteps(
       label = "Mint 0 via reciprocal mint/burn with different redeemers",
-      steps = List(mintScript1(5), mintScript1(-5, Data.List(List(Data.List(List.empty))))),
+      steps = List(mintScript1(5), mintScript1(-5, Data.List(PList(Data.List(PList.Nil))))),
       expected =
           // NOTE: In the case of reciprocal mint/burns, we don't strip script witnesses or signatures because
           // we don't currently track the purposes associated with these objects.
@@ -591,7 +592,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     testBuilderSteps(
       label = "Monoidal mint with same policy id but different redeemers",
-      steps = List(mintScript1(1), mintScript1(1, Data.List(List(Data.List(List.empty))))),
+      steps = List(mintScript1(1), mintScript1(1, Data.List(PList(Data.List(PList.Nil))))),
       expected = Context.empty(Mainnet).toTuple
           |> (transactionL >>> txBodyL.refocus(_.mint))
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, 2L)))))
@@ -611,7 +612,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                       Redeemer(
                         tag = RedeemerTag.Mint,
                         index = 0,
-                        data = Data.List(List(Data.List(List.empty))),
+                        data = Data.List(PList(Data.List(PList.Nil))),
                         exUnits = ExUnits.zero
                       )
                     )
@@ -621,7 +622,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           |> ctxRedeemersL.replace(
             List(
               DetachedRedeemer(
-                datum = Data.List(List(Data.List(List.empty))),
+                datum = Data.List(PList(Data.List(PList.Nil))),
                 purpose = ForMint(scriptHash1)
               )
             )
@@ -650,7 +651,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                       Redeemer(
                         tag = RedeemerTag.Mint,
                         index = 0,
-                        data = Data.List(List.empty),
+                        data = Data.List(PList.Nil),
                         exUnits = ExUnits.zero
                       )
                     )
@@ -658,7 +659,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 )
               )
           |> ctxRedeemersL.replace(
-            List(DetachedRedeemer(datum = Data.List(List.empty), purpose = ForMint(scriptHash1)))
+            List(DetachedRedeemer(datum = Data.List(PList.Nil), purpose = ForMint(scriptHash1)))
           )
     )
 
@@ -723,7 +724,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           cert = Certificate.UnregCert(Credential.ScriptHash(script1.scriptHash), coin = None),
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            Data.List(List.empty),
+            Data.List(PList.Nil),
             Set.empty
           )
         )
@@ -762,7 +763,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     )
 
     val witness =
-        TwoArgumentPlutusScriptWitness(PlutusScriptValue(script1), Data.List(List.empty), Set.empty)
+        TwoArgumentPlutusScriptWitness(PlutusScriptValue(script1), Data.List(PList.Nil), Set.empty)
 
     testBuilderStepsFail(
       label = "Deregistering stake credential with unneeded witness fails",
@@ -781,7 +782,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           cert = UnregCert(Credential.ScriptHash(script2.scriptHash), coin = None),
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            Data.List(List.empty),
+            Data.List(PList.Nil),
             Set.empty
           )
         )
@@ -793,7 +794,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           cert = UnregCert(Credential.ScriptHash(script2.scriptHash), coin = None),
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            Data.List(List.empty),
+            Data.List(PList.Nil),
             Set.empty
           )
         )
@@ -820,12 +821,12 @@ def redeemers(rs: Redeemer*) = Some(KeepRaw(Redeemers(rs*)))
 def unitRedeemer(tag: RedeemerTag, index: Int) = Redeemer(
   tag = tag,
   index = index,
-  data = Data.List(List.empty),
+  data = Data.List(PList.Nil),
   exUnits = ExUnits.zero
 )
 
 def unitDRedeemer(purpose: RedeemerPurpose) = DetachedRedeemer(
-  datum = Data.List(List.empty),
+  datum = Data.List(PList.Nil),
   purpose = purpose
 )
 

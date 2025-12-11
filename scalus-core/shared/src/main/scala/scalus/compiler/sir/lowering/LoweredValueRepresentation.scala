@@ -49,6 +49,35 @@ object SumCaseClassRepresentation {
 
     }
 
+    /** Representation for the builtin Data type and its constructors (Constr, Map, List, I, B).
+      * Data values are stored as raw UPLC Data.
+      */
+    case object DataData extends SumCaseClassRepresentation(false, true) {
+        override def isCompatibleWithType(tp: SIRType): Boolean = {
+            tp match
+                case SIRType.SumCaseClass(decl, _) if decl.name == SIRType.Data.name => true
+                case SIRType.CaseClass(constrDecl, _, _)
+                    if constrDecl.name == SIRType.Data.Constr.name ||
+                        constrDecl.name == SIRType.Data.Map.name ||
+                        constrDecl.name == SIRType.Data.List.name ||
+                        constrDecl.name == SIRType.Data.I.name ||
+                        constrDecl.name == SIRType.Data.B.name =>
+                    true
+                case _ => false
+        }
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case DataData                 => true
+                case TypeVarRepresentation(_) => true
+                case _                        => false
+            }
+    }
+
     /** Representation for sum case classes that are represented as a Pair of Int and DataList.
       */
     case object PairIntDataList extends SumCaseClassRepresentation(false, true)
@@ -414,7 +443,7 @@ sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentri
 
     override def isCompatibleWithType(tp: SIRType): Boolean = {
         tp match {
-            case SIRType.Integer | SIRType.Data | SIRType.ByteString | SIRType.String |
+            case SIRType.Integer | SIRType.Data() | SIRType.ByteString | SIRType.String |
                 SIRType.Boolean | SIRType.Unit | SIRType.BLS12_381_G1_Element |
                 SIRType.BLS12_381_G2_Element | SIRType.BLS12_381_MlResult =>
                 true
@@ -468,7 +497,7 @@ object LoweredValueRepresentation {
     def constRepresentation(tp: SIRType)(using lc: LoweringContext): LoweredValueRepresentation = {
         tp match
             // BuiltinList[Data] -> SumDataList (native UPLC list of Data)
-            case SIRType.BuiltinList(SIRType.Data) =>
+            case SIRType.BuiltinList(SIRType.Data()) =>
                 SumCaseClassRepresentation.SumDataList
             // BuiltinList[BuiltinPair[Data, Data]] -> SumDataPairList
             case SIRType.BuiltinList(elemType)
@@ -482,12 +511,19 @@ object LoweredValueRepresentation {
                   SIRPosition.empty
                 )
             case SIRType.SumCaseClass(decl, typeArgs) =>
-                SumCaseClassRepresentation.DataConstr
+                // scalus.prelude.List uses native UPLC list representation for Data-compatible elements
+                // TODO: add containsFun check like in SirTypeUplcGenerator.apply
+                if decl.name == "scalus.prelude.List" || decl.name == SIRType.BuiltinList.name then
+                    if typeArgs.nonEmpty && ProductCaseClassRepresentation.PairData
+                            .isPairOrTuple2(typeArgs.head)
+                    then SumCaseClassRepresentation.SumDataPairList
+                    else SumCaseClassRepresentation.SumDataList
+                else SumCaseClassRepresentation.DataConstr
             case SIRType.CaseClass(constrDecl, targs, parent) =>
                 ProductCaseClassRepresentation.ProdDataConstr
             case SIRType.TypeLambda(params, body) =>
                 constRepresentation(body)
-            case SIRType.Integer | SIRType.Data | SIRType.ByteString | SIRType.String |
+            case SIRType.Integer | SIRType.Data() | SIRType.ByteString | SIRType.String |
                 SIRType.Boolean | SIRType.Unit | SIRType.BLS12_381_G1_Element |
                 SIRType.BLS12_381_G2_Element | SIRType.BLS12_381_MlResult =>
                 PrimitiveRepresentation.Constant

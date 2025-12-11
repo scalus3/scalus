@@ -2262,7 +2262,7 @@ final class SIRCompiler(
                   SIR.Apply(
                     SIRBuiltins.equalsData,
                     lhsExpr,
-                    SIRType.Fun(SIRType.Data, SIRType.Boolean),
+                    SIRType.Fun(SIRType.Data.tp, SIRType.Boolean),
                     posAnns
                   ),
                   rhsExpr,

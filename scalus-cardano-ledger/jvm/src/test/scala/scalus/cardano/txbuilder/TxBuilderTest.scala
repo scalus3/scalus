@@ -5,6 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.{hex, utf8}
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.prelude.List as PList
 import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
@@ -47,7 +48,7 @@ class TxBuilderTest extends AnyFunSuite {
 
     test("TxBuilder spend without attaching script should fail when built") {
         val scriptUtxo = createScriptLockedUtxo(script1)
-        val redeemer = Data.List(List.empty)
+        val redeemer = Data.List(PList.Nil)
 
         val builder = TxBuilder(testEnv)
             .spend(scriptUtxo, redeemer)
@@ -62,7 +63,7 @@ class TxBuilderTest extends AnyFunSuite {
 
     test("TxBuilder mint without attaching script should fail when built") {
         val policyId: PolicyId = mintingPolicy.scriptHash
-        val redeemer = Data.List(List.empty)
+        val redeemer = Data.List(PList.Nil)
         val assets = Map(AssetName(hex"deadbeef") -> 100L)
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
 
@@ -80,7 +81,7 @@ class TxBuilderTest extends AnyFunSuite {
 
     test("TxBuilder spend with script should include script in witness set") {
         val scriptUtxo = createScriptLockedUtxo(script1)
-        val redeemer = Data.List(List.empty)
+        val redeemer = Data.List(PList.Nil)
         val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
@@ -134,7 +135,7 @@ class TxBuilderTest extends AnyFunSuite {
     }
 
     test("TxBuilder mint with script and payTo sends minted tokens to specified output") {
-        val redeemer = Data.List(List.empty)
+        val redeemer = Data.List(PList.Nil)
         val assetName1 = AssetName(hex"deadbeef")
         val assetName2 = AssetName(hex"cafebabe")
         val assets = Map(
@@ -242,7 +243,7 @@ class TxBuilderTest extends AnyFunSuite {
     test("TxBuilder payTo with datum hash includes datum in witness set") {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
 
-        val datum = Data.Constr(0, List(100.toData, hex"abcd".toData))
+        val datum = Data.Constr(0, PList(100.toData, hex"abcd".toData))
         val datumHash = DataHash.fromByteString(
           scalus.builtin.Builtins.blake2b_256(scalus.builtin.Builtins.serialiseData(datum))
         )
@@ -278,7 +279,7 @@ class TxBuilderTest extends AnyFunSuite {
 
         val datum1 = 111.toData
         val datum2 = hex"aabbcc".toData
-        val datum3 = Data.Constr(1, List(222.toData))
+        val datum3 = Data.Constr(1, PList(222.toData))
 
         val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))

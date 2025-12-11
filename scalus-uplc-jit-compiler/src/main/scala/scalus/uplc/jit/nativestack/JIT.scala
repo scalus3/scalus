@@ -2,6 +2,8 @@ package scalus.uplc.jit.nativestack
 
 import scalus.*
 import scalus.builtin.*
+import scalus.prelude.List as PList
+import scalus.prelude.List.toScalaList
 import scalus.uplc.eval.*
 import scalus.uplc.eval.ExBudgetCategory.{Startup, Step}
 import scalus.uplc.jit.*
@@ -34,17 +36,17 @@ object JIT extends JitRunner {
         def apply(x: Data)(using Quotes): Expr[Data] = x match
             case Data.Constr(tag, args) =>
                 val tagExpr = Expr(tag)
-                val argsExpr = Expr.ofList(args.map(apply))
-                '{ Data.Constr($tagExpr, $argsExpr) }
+                val argsExpr = Expr.ofList(args.toScalaList.map(apply))
+                '{ Data.Constr($tagExpr, PList.from($argsExpr)) }
             case Data.List(value) =>
-                val valueExpr = Expr.ofList(value.map(apply))
-                '{ Data.List($valueExpr) }
+                val valueExpr = Expr.ofList(value.toScalaList.map(apply))
+                '{ Data.List(PList.from($valueExpr)) }
             case Data.Map(values) =>
-                val argsListOfExprTuple = values.map { case (k, v) =>
+                val argsListOfExprTuple = values.toScalaList.map { case (k, v) =>
                     Expr.ofTuple(apply(k), apply(v))
                 }
                 val argsExpr = Expr.ofList(argsListOfExprTuple)
-                '{ Data.Map($argsExpr) }
+                '{ Data.Map(PList.from($argsExpr)) }
             case Data.I(value) => '{ Data.I(${ Expr(value) }) }
             case Data.B(value) => '{ Data.B(${ Expr(value) }) }
     }

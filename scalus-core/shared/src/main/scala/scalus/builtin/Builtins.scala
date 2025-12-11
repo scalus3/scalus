@@ -1,5 +1,6 @@
 package scalus.builtin
 import io.bullet.borer.Cbor
+import scalus.prelude.List as PList
 
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
@@ -189,21 +190,21 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
             case Data.B(_)         => bCase
 
     def constrData(ctor: BigInt, args: BuiltinList[Data]): Data =
-        Data.Constr(ctor.toLong, args.toList)
+        Data.Constr(ctor, PList.from(args.toList))
     def mapData(values: BuiltinList[BuiltinPair[Data, Data]]): Data =
-        Data.Map(values.toList.map(p => (p.fst, p.snd)))
-    def listData(values: BuiltinList[Data]): Data = Data.List(values.toList)
+        Data.Map(PList.from(values.toList.map(p => (p.fst, p.snd))))
+    def listData(values: BuiltinList[Data]): Data = Data.List(PList.from(values.toList))
     def iData(value: BigInt): Data = Data.I(value)
     def bData(value: ByteString): Data = Data.B(value)
     def unConstrData(d: Data): BuiltinPair[BigInt, BuiltinList[Data]] = d match
-        case Data.Constr(constr, args) => BuiltinPair(constr: BigInt, BuiltinList(args*))
+        case Data.Constr(constr, args) => BuiltinPair(constr, BuiltinList.from(args.toScalaList))
         case _                         => throw new Exception(s"not a constructor but $d")
     def unListData(d: Data): BuiltinList[Data] = d match
-        case Data.List(values) => BuiltinList(values*)
+        case Data.List(values) => BuiltinList.from(values.toScalaList)
         case _                 => throw new Exception(s"not a list but $d")
 
     def unMapData(d: Data): BuiltinList[BuiltinPair[Data, Data]] = d match
-        case Data.Map(values) => BuiltinList(values.map(BuiltinPair.apply)*)
+        case Data.Map(values) => BuiltinList.from(values.toScalaList.map(BuiltinPair.apply))
         case _                => throw new Exception(s"not a list but $d")
     def unIData(d: Data): BigInt = d match
         case Data.I(value) => value

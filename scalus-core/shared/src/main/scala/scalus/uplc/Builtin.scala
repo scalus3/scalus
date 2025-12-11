@@ -3,6 +3,7 @@ package scalus.uplc
 import scalus.builtin.*
 import scalus.builtin.Builtins.*
 import scalus.cardano.ledger.ExUnits
+import scalus.prelude.List as PList
 import scalus.uplc.Constant.given
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.DefaultUni.{Bool, Integer, given}
@@ -524,7 +525,7 @@ class BuiltinsMeaning(
                   case Constant.Data(d) => d
                   case _ => throw new DeserializationError(DefaultFun.ConstrData, args(1))
               }
-              VCon(Constant.Data(Data.Constr(i.longValue, argsList)))
+              VCon(Constant.Data(Data.Constr(i, PList.from(argsList))))
           ,
           builtinCostModel.constrData
         )
@@ -535,14 +536,14 @@ class BuiltinsMeaning(
           (_: Logger, args: Seq[CekValue]) =>
               val aa = args(0).asList
               VCon(
-                Constant.Data(Data.Map(aa.map {
+                Constant.Data(Data.Map(PList.from(aa.map {
                     case Constant.Pair(Constant.Data(a), Constant.Data(b)) => (a, b)
                     case _ =>
                         throw new KnownTypeUnliftingError(
                           DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data),
                           args(0)
                         )
-                }))
+                })))
               )
           ,
           builtinCostModel.mapData
@@ -553,10 +554,10 @@ class BuiltinsMeaning(
           DefaultUni.List(DefaultUni.Data) ->: DefaultUni.Data,
           (_: Logger, args: Seq[CekValue]) =>
               val aa = args(0).asList
-              VCon(Constant.Data(Data.List(aa.map {
+              VCon(Constant.Data(Data.List(PList.from(aa.map {
                   case Constant.Data(value) => value
                   case _ => throw new KnownTypeUnliftingError(DefaultUni.Data, args(0))
-              })))
+              }))))
           ,
           builtinCostModel.listData
         )
@@ -590,7 +591,7 @@ class BuiltinsMeaning(
           (_: Logger, args: Seq[CekValue]) =>
               args(0) match
                   case VCon(Constant.Data(Data.Constr(i, ls))) =>
-                      VCon(Constant.Pair(asConstant(i), asConstant(ls)))
+                      VCon(Constant.Pair(asConstant(i), asConstant(ls.toScalaList)))
                   case _ => throw new DeserializationError(DefaultFun.UnConstrData, args(0))
           ,
           builtinCostModel.unConstrData
@@ -605,7 +606,7 @@ class BuiltinsMeaning(
                       VCon(
                         Constant.List(
                           DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data),
-                          values.map { case (k, v) =>
+                          values.toScalaList.map { case (k, v) =>
                               Constant.Pair(asConstant(k), asConstant(v))
                           }
                         )
@@ -621,7 +622,7 @@ class BuiltinsMeaning(
           (_: Logger, args: Seq[CekValue]) =>
               args(0) match
                   case VCon(Constant.Data(Data.List(values))) =>
-                      VCon(Constant.List(DefaultUni.Data, values.map(asConstant)))
+                      VCon(Constant.List(DefaultUni.Data, values.toScalaList.map(asConstant)))
                   case _ => throw new DeserializationError(DefaultFun.UnListData, args(0))
           ,
           builtinCostModel.unListData

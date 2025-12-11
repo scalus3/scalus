@@ -1,6 +1,8 @@
 package scalus.uplc.jit
 
 import scalus.builtin.{BuiltinPair, Builtins, ByteString, Data}
+import scalus.prelude.List as PList
+import scalus.prelude.List.toScalaList
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.ExBudgetCategory.BuiltinApp
 import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams}
@@ -293,7 +295,7 @@ object BuiltinSnippets {
                   params.builtinCostModel.constrData.constantCost,
                   Nil
                 )
-                Data.Constr(tag.longValue, fields)
+                Data.Constr(tag.longValue, PList.from(fields))
             }
 
     @inline def iData(budget: BudgetSpender, params: MachineParams): BigInt => Data =
@@ -323,7 +325,7 @@ object BuiltinSnippets {
               params.builtinCostModel.listData.constantCost,
               Nil
             )
-            Data.List(x)
+            Data.List(PList.from(x))
         }
 
     @inline def mapData(
@@ -336,7 +338,7 @@ object BuiltinSnippets {
               params.builtinCostModel.mapData.constantCost,
               Nil
             )
-            Data.Map(x.map(p => (p.fst, p.snd)))
+            Data.Map(PList.from(x.map(p => (p.fst, p.snd))))
         }
 
     @inline def unMapData(
@@ -350,7 +352,7 @@ object BuiltinSnippets {
               Nil
             )
             x match
-                case Data.Map(values) => values.map(BuiltinPair.apply)
+                case Data.Map(values) => values.toScalaList.map(BuiltinPair.apply)
                 case _                => throw new Exception(s"not a map but $x")
         }
 

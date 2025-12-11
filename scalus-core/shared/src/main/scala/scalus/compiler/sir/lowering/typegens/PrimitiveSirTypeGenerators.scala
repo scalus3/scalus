@@ -123,7 +123,7 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
           asInt,
           lvBuiltinApply0(
             SIRBuiltins.mkNilData,
-            SIRType.BuiltinList(SIRType.Data),
+            SIRType.BuiltinList(SIRType.Data.tp),
             PrimitiveRepresentation.Constant,
             pos
           ),
@@ -141,7 +141,7 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
           input,
           SIRType.BuiltinPair(
             SIRType.Integer,
-            SIRType.BuiltinList(SIRType.Data)
+            SIRType.BuiltinList(SIRType.Data.tp)
           ),
           PrimitiveRepresentation.Constant,
           pos
@@ -685,20 +685,6 @@ object SIRTypeUplcStringGenerator extends PrimitiveSirTypeGenerator {
 
         processCases(matchData.cases)
     }
-
-}
-
-object SIRTypeUplcDataGenerator extends PrimitiveSirTypeGenerator {
-
-    override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
-        LoweringContext
-    ): LoweredValue =
-        RepresentationProxyLoweredValue(input, PrimitiveRepresentation.PackedData, pos)
-
-    override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
-        LoweringContext
-    ): LoweredValue =
-        RepresentationProxyLoweredValue(input, PrimitiveRepresentation.Constant, pos)
 
 }
 

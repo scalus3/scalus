@@ -3,6 +3,8 @@ package scalus.bloxbean
 import com.bloxbean.cardano.client.plutus.spec.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{ByteString, Data}
+import scalus.prelude.List as PList
+import scalus.prelude.List.toScalaList
 
 class InteropMapOrderingTest extends AnyFunSuite:
 
@@ -19,11 +21,11 @@ class InteropMapOrderingTest extends AnyFunSuite:
         val key5 =
             ByteString.fromHex("b00c3f7b645c66bb3d35e7e084e6f0ac5184ab6d6eee01000000000000000000")
 
-        val value1 = Data.Constr(0, List.empty)
-        val value2 = Data.Constr(0, List.empty)
-        val value3 = Data.Constr(0, List.empty)
-        val value4 = Data.Constr(0, List.empty)
-        val value5 = Data.Constr(0, List.empty)
+        val value1 = Data.Constr(0, PList.Nil)
+        val value2 = Data.Constr(0, PList.Nil)
+        val value3 = Data.Constr(0, PList.Nil)
+        val value4 = Data.Constr(0, PList.Nil)
+        val value5 = Data.Constr(0, PList.Nil)
 
         // Create map with entries in sorted order
         val originalEntries = List(
@@ -38,7 +40,7 @@ class InteropMapOrderingTest extends AnyFunSuite:
         val originalKeys = originalEntries.map(_._1)
 
         // Convert to PlutusData
-        val mapData = Data.Map(originalEntries)
+        val mapData = Data.Map(PList.from(originalEntries))
         val plutusData = Interop.toPlutusData(mapData)
 
         // Serialize to CBOR (this should preserve deterministic ordering)
@@ -58,8 +60,8 @@ class InteropMapOrderingTest extends AnyFunSuite:
 
         // Verify that the key order is preserved
         assert(
-          originalKeys == deserializedKeys,
-          s"Map key order was not preserved!\nOriginal:     ${originalKeys.map(keyToHex).mkString(", ")}\nDeserialized: ${deserializedKeys.map(keyToHex).mkString(", ")}"
+          originalKeys == deserializedKeys.toScalaList,
+          s"Map key order was not preserved!\nOriginal:     ${originalKeys.map(keyToHex).mkString(", ")}\nDeserialized: ${deserializedKeys.toScalaList.map(keyToHex).mkString(", ")}"
         )
     }
 
@@ -82,7 +84,7 @@ class InteropMapOrderingTest extends AnyFunSuite:
             (Data.B(key), Data.I(BigInt(i)))
         }.toList
 
-        val originalMap = Data.Map(entries)
+        val originalMap = Data.Map(PList.from(entries))
 
         // Serialize and deserialize
         val plutusData = Interop.toPlutusData(originalMap)
@@ -99,10 +101,10 @@ class InteropMapOrderingTest extends AnyFunSuite:
 
         // Verify ordering
         assert(
-          originalKeys == deserializedKeys,
+          originalKeys.toScalaList == deserializedKeys.toScalaList,
           s"Map key order was not preserved for ${keys.length} entries!\n" +
-              s"Original:     ${originalKeys.map(keyToHex).take(5).mkString(", ")} ...\n" +
-              s"Deserialized: ${deserializedKeys.map(keyToHex).take(5).mkString(", ")} ..."
+              s"Original:     ${originalKeys.toScalaList.map(keyToHex).take(5).mkString(", ")} ...\n" +
+              s"Deserialized: ${deserializedKeys.toScalaList.map(keyToHex).take(5).mkString(", ")} ..."
         )
     }
 

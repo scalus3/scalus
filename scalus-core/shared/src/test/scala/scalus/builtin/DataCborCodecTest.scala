@@ -6,6 +6,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data.*
+import scalus.prelude.List as PList
 import scalus.uplc.test.ArbitraryInstances
 import scalus.utils.Hex.toHex
 import scalus.utils.Hex.hexToBytes
@@ -80,18 +81,20 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
     }
 
     test("Encoding/decoding of Constrs") {
-        assert(encodeHex(Constr(3, Constr(3, Nil) :: Nil)) == "d87c9fd87c80ff")
-        assert(decodeHex("d8 7c 9f d8 7c 80 ff") == Constr(3, Constr(3, Nil) :: Nil))
+        assert(encodeHex(Constr(3, PList(Constr(3, PList.Nil)))) == "d87c9fd87c80ff")
+        assert(decodeHex("d8 7c 9f d8 7c 80 ff") == Constr(3, PList(Constr(3, PList.Nil))))
 
-        assert(encodeHex(List(Constr(3, Nil) :: Nil)) == "9fd87c80ff")
-        assert(decodeHex("9f d8 7c 80 ff") == List(Constr(3, Nil) :: Nil))
+        assert(encodeHex(List(PList(Constr(3, PList.Nil)))) == "9fd87c80ff")
+        assert(decodeHex("9f d8 7c 80 ff") == List(PList(Constr(3, PList.Nil))))
 
-        assert(encodeHex(List(Constr(7, Nil) :: Nil)) == "9fd9050080ff")
-        assert(decodeHex("9f d9 05 00 80 ff") == List(Constr(7, Nil) :: Nil))
+        assert(encodeHex(List(PList(Constr(7, PList.Nil)))) == "9fd9050080ff")
+        assert(decodeHex("9f d9 05 00 80 ff") == List(PList(Constr(7, PList.Nil))))
 
-        assert(encodeHex(List(Constr(1234567890, Nil) :: Nil)) == "9fd866821a499602d280ff")
+        assert(encodeHex(List(PList(Constr(1234567890, PList.Nil)))) == "9fd866821a499602d280ff")
         assert(
-          decodeHex("9f d8 66 82 1a 49 96 02 d2 80 ff") == List(Constr(1234567890, Nil) :: Nil)
+          decodeHex("9f d8 66 82 1a 49 96 02 d2 80 ff") == List(
+            PList(Constr(1234567890, PList.Nil))
+          )
         )
     }
 
@@ -99,14 +102,14 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
         assert(
           encodeHex(
             List(
-              I(0) :: I(-1) :: I(100) :: I(1000) :: I(BigInt("1234567890111213141516")) :: Nil
+              PList(I(0), I(-1), I(100), I(1000), I(BigInt("1234567890111213141516")))
             ): Data
           ) == "9f002018641903e8c24942ed123b08fe58fe0cff"
         )
         assert(
           decodeHex("9f 00 20 18 64 19 03 e8 c2 49 42 ed 12 3b 08 fe 58 fe 0c ff") ==
               (List(
-                I(0) :: I(-1) :: I(100) :: I(1000) :: I(BigInt("1234567890111213141516")) :: Nil
+                PList(I(0), I(-1), I(100), I(1000), I(BigInt("1234567890111213141516")))
               ): Data)
         )
     }
@@ -135,18 +138,18 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
     test("Map can have duplicate keys") {
         val data =
             Map(
-              immutable.List(
+              PList(
                 (
                   Map(
-                    immutable.List(
+                    PList(
                       (
-                        Map(Nil),
+                        Map(PList.Nil),
                         B(
                           hex"95800c7f4d004080660000dec201ffd1ff01ff9d00ce9058267fa001807f62bd7f7f80baffbccf567fffbb06ff9b7f4eff39807fc7010b0001ffca00d0c1f8"
                         )
                       ),
                       (
-                        Map(Nil),
+                        Map(PList.Nil),
                         B(hex"4f0138e6010000b2017f7f01de01")
                       )
                     )

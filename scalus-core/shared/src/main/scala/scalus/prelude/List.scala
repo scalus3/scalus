@@ -1387,5 +1387,20 @@ object List {
             val buf = mutable.ListBuffer.empty[A]
             for e <- self do buf.addOne(e)
             buf.toList
+
+        /** Converts this list to a [[scala.collection.immutable.List]].
+          *
+          * This method allows you to convert a `List[A]` to a Scala standard library
+          * `scala.collection.immutable.List[A]`. This is an offchain-only operation.
+          *
+          * @return
+          *   A `scala.collection.immutable.List[A]` containing all the elements from this list in
+          *   the same order.
+          */
+        @Ignore
+        def toScalaList: scala.collection.immutable.List[A] =
+            val buf = mutable.ListBuffer.empty[A]
+            for e <- self do buf.addOne(e)
+            buf.toList
     }
 }

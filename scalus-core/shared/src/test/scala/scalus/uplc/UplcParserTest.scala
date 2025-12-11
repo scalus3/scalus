@@ -9,6 +9,7 @@ import scalus.*
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.cardano.ledger.Word64
+import scalus.prelude.List as PList
 import scalus.uplc.Constant.given
 import scalus.uplc.DefaultUni.ProtoList
 import scalus.uplc.DefaultUni.ProtoPair
@@ -150,7 +151,9 @@ class UplcParserTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbi
         def p(input: String) = UplcParser.dataTerm.parse(input).map(_._2).left.map(e => e.show)
         assert(p("B #  ") == Right(Data.B(scalus.builtin.ByteString.empty)))
         assert(p("I 123 ") == Right(Data.I(123)))
-        assert(p("Constr 0 [Constr 1 []] ") == Right(Data.Constr(0, List(Data.Constr(1, Nil)))))
+        assert(
+          p("Constr 0 [Constr 1 []] ") == Right(Data.Constr(0, PList(Data.Constr(1, PList.Nil))))
+        )
     }
 
     test("Parse constants") {

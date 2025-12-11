@@ -111,7 +111,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         given LoweringContext = LoweringContext()
 
         // BuiltinList[Data] should return SumDataList
-        val builtinListDataType = SIRType.BuiltinList(SIRType.Data)
+        val builtinListDataType = SIRType.BuiltinList(SIRType.Data.tp)
         val dataListRepr = LoweredValueRepresentation.constRepresentation(builtinListDataType)
         assert(
           dataListRepr == SumCaseClassRepresentation.SumDataList,
@@ -121,7 +121,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         // BuiltinList[BuiltinPair[Data, Data]] should return SumDataPairList
         val pairType = SIRType.CaseClass(
           SIRType.BuiltinPair.constrDecl,
-          List(SIRType.Data, SIRType.Data),
+          List(SIRType.Data.tp, SIRType.Data.tp),
           None
         )
         val builtinListPairType = SIRType.BuiltinList(pairType)
