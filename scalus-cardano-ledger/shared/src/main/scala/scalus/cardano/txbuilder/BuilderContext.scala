@@ -2,12 +2,14 @@ package scalus.cardano.txbuilder
 
 import scalus.cardano.ledger.{ExUnits, PlutusScriptEvaluator}
 
+@deprecated("Will be removed", "0.13.0")
 case class BuilderContext(
     env: Environment,
     wallet: Wallet,
     evaluator: PlutusScriptEvaluator
 )
 
+@deprecated("Will be removed", "0.13.0")
 object BuilderContext {
 
     /** Create a BuilderContext with a dummy evaluator.

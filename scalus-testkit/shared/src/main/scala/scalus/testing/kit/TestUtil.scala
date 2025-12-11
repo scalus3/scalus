@@ -32,6 +32,7 @@ object TestUtil extends ScalusTest {
         )
     }
 
+    @deprecated("Will be removed", "0.13.0")
     def createTestWallet(address: Address, ada: BigInt): WalletTrait = new WalletTrait {
         private val testInput = TransactionInput(
           TransactionHash.fromByteString(ByteString.fromHex("0" * 64)),
@@ -62,6 +63,7 @@ object TestUtil extends ScalusTest {
         }
     }
 
+    @deprecated("Will be removed", "0.13.0")
     def createTestWallet(provider: Provider, address: Address): WalletTrait =
         new WalletTrait {
             override val owner: Address = address
@@ -171,6 +173,7 @@ object TestUtil extends ScalusTest {
         )
     }
 
+    @deprecated("Will be removed", "0.13.0")
     def runValidator(
         validatorProgram: Program,
         tx: Transaction,

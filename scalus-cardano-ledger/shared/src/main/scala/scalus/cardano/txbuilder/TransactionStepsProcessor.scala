@@ -162,10 +162,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     sa.payment match {
                         case s: ShelleyPaymentPart.Script => Right(s.hash)
                         case _: ShelleyPaymentPart.Key =>
-                            Left(
-                              WrongOutputType(WitnessKind.ScriptBased, utxo, spend)
-                            )
-
+                            Left(WrongOutputType(WitnessKind.ScriptBased, utxo, spend))
                     }
                 case _ =>
                     Left(WrongOutputType(WitnessKind.ScriptBased, utxo, spend))
