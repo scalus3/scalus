@@ -66,4 +66,7 @@ class LoweringContext(
         println(s"warning: ${msg} at ${pos.show}")
     }
 
+    def info(msg: String, pos: SIRPosition): Unit = {
+        println(s"info: ${msg} at ${pos.show}")
+    }
 }

@@ -496,7 +496,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         constrDecl: ConstrDecl
     )(using lctx: LoweringContext): SIR.Case = {
         if matchData.cases.length > 1 then
-            lctx.warn(
+            lctx.info(
               s"More than one case for product ${loweredScroutine.sirType.show} in match, will shrink to one case",
               matchData.anns.pos
             )
@@ -578,7 +578,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   loweredScrutinee,
                   constrDecl
                 )
-                lctx.warn(
+                lctx.info(
                   s"Product case class match should have only one case, but ${matchData.cases.length} found. Non-matched cases will be statically optimized out",
                   matchData.anns.pos
                 )
