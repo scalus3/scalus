@@ -222,8 +222,9 @@ object TransactionBody:
 
             // Deposit return (key 22)
             value.donation.foreach { coin =>
-                w.writeInt(22)
-                w.write(coin)
+                if coin.nonZero then
+                    w.writeInt(22)
+                    w.write(coin)
             }
 
             w

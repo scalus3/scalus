@@ -129,7 +129,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 case Right(updatedTx) =>
                     updatedTx.body.value.outputs.foreach { output =>
                         val minAda =
-                            scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput.findMinAda(
+                            scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput.ensureMinAda(
                               output,
                               testEnv.protocolParams
                             )
@@ -417,7 +417,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           value = Value.zero
         )
         scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
-            .findMinAda(Sized(simpleOutput), testEnv.protocolParams)
+            .ensureMinAda(Sized(simpleOutput), testEnv.protocolParams)
             .value
     }
 

@@ -87,7 +87,7 @@ object LowLevelTxBuilder {
             val eTrialTx = for {
                 txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
                 minFee <- MinTransactionFee
-                    .findMinFee(txWithExUnits, resolvedUtxo, protocolParams)
+                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
                     .left
                     .map(
                       TxBalancingError.Failed(_)

@@ -898,7 +898,7 @@ case class TxBuilder(
         // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
         // We also need to make sure that we don't have more than 3 collateral inputs.
 
-        val minAda = MinCoinSizedTransactionOutput.findMinAda(
+        val minAda = MinCoinSizedTransactionOutput.ensureMinAda(
           Sized(TransactionOutput(sponsor, gap)),
           env.protocolParams
         )

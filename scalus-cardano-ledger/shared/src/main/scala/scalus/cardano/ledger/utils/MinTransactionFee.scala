@@ -1,15 +1,14 @@
 package scalus.cardano.ledger
 package utils
 
-import monocle.Focus
+import monocle.{Focus, Lens}
 import monocle.Focus.refocus
 import scalus.serialization.cbor.Cbor
-import scalus.|>
 
 import scala.annotation.tailrec
 
 object MinTransactionFee {
-    def extractMinFee(
+    def computeMinFee(
         transaction: Transaction,
         utxo: Utxos,
         protocolParams: ProtocolParams
@@ -30,8 +29,7 @@ object MinTransactionFee {
         }
     }
 
-    @tailrec
-    def findMinFee(
+    def ensureMinFee(
         transaction: Transaction,
         utxo: Utxos,
         protocolParams: ProtocolParams
@@ -44,19 +42,21 @@ object MinTransactionFee {
             case Left(e) => Left(e)
             case Right(scripts) =>
                 val refScriptsFee = RefScriptsFeeCalculator(scripts, protocolParams)
-                val transactionSizeFee = calculateTransactionSizeFee(transaction, protocolParams)
                 val exUnitsFee = calculateExUnitsFee(transaction, protocolParams)
 
-                val minFee = refScriptsFee + transactionSizeFee + exUnitsFee
-                if minFee <= transaction.body.value.fee
-                then Right(minFee)
-                else
-                    val nextCandidateTransaction = transaction |>
-                        Focus[Transaction](_.body)
-                            .andThen(KeepRaw.lens[TransactionBody]())
-                            .refocus(_.fee)
-                            .replace(minFee)
-                    findMinFee(nextCandidateTransaction, utxo, protocolParams)
+                @tailrec
+                def go(transaction: Transaction): Coin = {
+                    val fee = transaction.body.value.fee
+                    val transactionSizeFee =
+                        calculateTransactionSizeFee(transaction, protocolParams)
+                    val minFee = refScriptsFee + transactionSizeFee + exUnitsFee
+                    if minFee <= fee then minFee
+                    else
+                        val updatedTransaction = feeLens.replace(minFee)(transaction)
+                        go(updatedTransaction)
+                }
+
+                Right(go(transaction))
         }
     }
 
@@ -139,4 +139,10 @@ object MinTransactionFee {
             })
             .getOrElse(ExUnits.zero)
     }
+
+    // Cache the lens at object level
+    private val feeLens: Lens[Transaction, Coin] =
+        Focus[Transaction](_.body)
+            .andThen(KeepRaw.lens[TransactionBody]())
+            .refocus(_.fee)
 }

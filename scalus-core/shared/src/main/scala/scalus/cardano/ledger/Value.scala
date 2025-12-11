@@ -20,12 +20,12 @@ case class Value(coin: Coin, assets: MultiAsset = MultiAsset.empty) {
 
     def isNegative: Boolean = coin.value < 0 && assets.isNegative
 
-    def isZeroAda: Boolean = coin.value == 0
-    def nonZeroAda: Boolean = coin.value != 0
+    def isZeroAda: Boolean = coin.isZero
+    def nonZeroAda: Boolean = coin.nonZero
     def isEmptyAssets: Boolean = assets.isEmpty
     def nonEmptyAssets: Boolean = assets.nonEmpty
-    def isOnlyAda: Boolean = coin.value != 0 && assets.isEmpty
-    def isOnlyAssets: Boolean = coin.value == 0 && assets.nonEmpty
+    def isOnlyAda: Boolean = coin.nonZero && assets.isEmpty
+    def isOnlyAssets: Boolean = coin.isZero && assets.nonEmpty
     def isZero: Boolean = isZeroAda && isEmptyAssets
     def nonZero: Boolean = nonZeroAda || nonEmptyAssets
 

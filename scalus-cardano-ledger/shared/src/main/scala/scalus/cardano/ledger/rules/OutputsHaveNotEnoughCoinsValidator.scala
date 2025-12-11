@@ -36,7 +36,7 @@ object OutputsHaveNotEnoughCoinsValidator extends STS.Validator {
         (
           for
               sizedOutput @ SizedValue(output) <- outputs.view
-              minAda = MinCoinSizedTransactionOutput.extractMinAda(sizedOutput, protocolParams)
+              minAda = MinCoinSizedTransactionOutput.computeMinAda(sizedOutput, protocolParams)
               negativeAssets = output.value.assets.negativeAssets
               if output.value.coin < minAda || negativeAssets.nonEmpty
           yield (output, minAda, negativeAssets)

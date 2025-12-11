@@ -44,7 +44,7 @@ object FeesOkValidator extends STS.Validator {
         val actualTotalSumOfCollateralCoins =
             totalSumOfCollateralCoins - collateralReturnOutputCoin
 
-        val minRequiredFee = MinTransactionFee.extractMinFee(event, utxos, protocolParams) match
+        val minRequiredFee = MinTransactionFee.computeMinFee(event, utxos, protocolParams) match
             case Right(fee)  => fee
             case Left(error) => return failure(error)
 
