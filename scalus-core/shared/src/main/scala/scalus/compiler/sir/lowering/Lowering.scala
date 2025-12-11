@@ -576,18 +576,19 @@ object Lowering {
             override def sirType: SIRType = app.tp
             override def pos: SIRPosition = app.anns.pos
             override def representation: LoweredValueRepresentation =
-                PrimitiveRepresentation.PackedData
+                // Data is now a sum type with DataData representation
+                SumCaseClassRepresentation.DataData
             override def termInternal(gctx: TermGenerationContext): Term =
                 value.termInternal(gctx)
 
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-                val left = Doc.text("FromData(")
+                val left = Doc.text("ToData(")
                 val right = Doc.text(s", ${app.tp.show})")
                 value.docRef(ctx).bracketBy(left, right)
             }
 
             override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-                val left = Doc.text("FromData(")
+                val left = Doc.text("ToData(")
                 val right = Doc.text(")")
                 value.docRef(ctx).bracketBy(left, right)
             }
