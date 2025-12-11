@@ -42,7 +42,7 @@ class ByteString private[builtin] (val bytes: Array[Byte]) {
       *
       * Offchain operation, not available onchain.
       */
-    @threadUnsafe val toHex: String = bytes.toHex
+    @threadUnsafe lazy val toHex: String = bytes.toHex
 
     /** Converts the ByteString to a binary string representation
       *
