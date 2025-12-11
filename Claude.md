@@ -25,7 +25,7 @@ in to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 
 ## Key Principles for Claude Code
 
-- **Always run `sbtn quick` before considering any task complete** - This ensures formatting,
+- Propose to run `sbtn quick` before considering any task complete** - This ensures formatting,
   compilation, and tests pass
 - **Use existing patterns and conventions** - Study similar files before making changes
 - **Prefer editing existing files over creating new ones** - Only create files when absolutely
