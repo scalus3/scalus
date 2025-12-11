@@ -37,8 +37,7 @@ case class VaultTransactionCreator(
         TxBuilder(env, evaluator)
             .spend(utxos)
             .payTo(scriptAddress, Value(ada), datum)
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -72,8 +71,7 @@ case class VaultTransactionCreator(
             .spend(vaultUtxo, Action.InitiateWithdrawal, script)
             .validFrom(java.time.Instant.ofEpochMilli(validityStartTime))
             .payTo(scriptAddress, vaultValue, newDatum)
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -107,8 +105,7 @@ case class VaultTransactionCreator(
             .collaterals(collateralUtxos)
             .spend(vaultUtxo, Action.Deposit, script)
             .payTo(scriptAddress, newValue, newDatum)
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -136,8 +133,7 @@ case class VaultTransactionCreator(
             .spend(vaultUtxo, Action.FinalizeWithdrawal, script)
             .validFrom(java.time.Instant.ofEpochMilli(validityStartTime))
             .payTo(ownerAddress, vaultValue)
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }

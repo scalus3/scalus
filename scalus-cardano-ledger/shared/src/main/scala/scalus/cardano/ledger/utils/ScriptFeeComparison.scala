@@ -104,8 +104,7 @@ object ScriptFeeComparison {
                 .collaterals(collateralUtxo)
                 .spend(scriptUtxo, redeemer, script, additionalSignerHashes)
                 .payTo(arbAddress(env), scriptValue)
-                .changeTo(arbAddress(env))
-                .build()
+                .build(changeTo = arbAddress(env))
                 .transaction
         }
 
@@ -129,8 +128,7 @@ object ScriptFeeComparison {
                 .references(refScriptUtxo)
                 .spend(scriptUtxo, redeemer, additionalSignerHashes)
                 .payTo(arbAddress(env), scriptValue)
-                .changeTo(arbAddress(env))
-                .build()
+                .build(changeTo = arbAddress(env))
                 .transaction
         }
 

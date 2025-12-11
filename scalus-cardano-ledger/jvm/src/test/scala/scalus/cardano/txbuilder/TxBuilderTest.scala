@@ -51,10 +51,9 @@ class TxBuilderTest extends AnyFunSuite {
 
         val builder = TxBuilder(testEnv)
             .spend(scriptUtxo, redeemer)
-            .changeTo(Alice.address)
 
         val exception = intercept[RuntimeException] {
-            builder.build()
+            builder.build(changeTo = Alice.address)
         }
 
         assert(exception.getMessage.contains("No witness or ref/spent output is found for script"))
@@ -70,10 +69,9 @@ class TxBuilderTest extends AnyFunSuite {
         val builder = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .mint(redeemer, policyId, assets)
-            .changeTo(Alice.address)
 
         val exception = intercept[RuntimeException] {
-            builder.build()
+            builder.build(changeTo = Alice.address)
         }
 
         assert(exception.getMessage.contains("No witness or ref/spent output is found for script"))
@@ -98,8 +96,7 @@ class TxBuilderTest extends AnyFunSuite {
             .payTo(Bob.address, Value.ada(2), inlineDatum)
             .validFrom(validFrom)
             .validTo(validTo)
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
@@ -170,8 +167,7 @@ class TxBuilderTest extends AnyFunSuite {
             .mintAndAttach(redeemer, assets, mintingPolicy)
             .payTo(Bob.address, paymentValue)
             .metadata(metadata)
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         // Check that mintingPolicy is in the plutus V3 scripts witness set
@@ -228,8 +224,7 @@ class TxBuilderTest extends AnyFunSuite {
         val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .output(customOutput)
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         val bobOutputs = tx.body.value.outputs.filter(_.value.address == Bob.address)
@@ -256,8 +251,7 @@ class TxBuilderTest extends AnyFunSuite {
             .spend(Utxo(utxo))
             .attach(datum)
             .payTo(Bob.address, Value.ada(2), datumHash)
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         val bobOutput = tx.body.value.outputs.find(_.value.address == Bob.address)
@@ -295,8 +289,7 @@ class TxBuilderTest extends AnyFunSuite {
             .attach(datum2)
             .attach(datum3)
             .payTo(Bob.address, Value.ada(1))
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         val v3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values.toSeq
@@ -318,10 +311,9 @@ class TxBuilderTest extends AnyFunSuite {
         val builder = TxBuilder(testEnv)
             .spend(scriptUtxo)
             .payTo(Bob.address, Value.ada(20))
-            .changeTo(Alice.address)
 
         val exception = intercept[RuntimeException] {
-            builder.build()
+            builder.build(changeTo = Alice.address)
         }
         succeed
     }
@@ -340,8 +332,7 @@ class TxBuilderTest extends AnyFunSuite {
         val tx = TxBuilder(testEnv)
             .spend(Utxo(tokenUtxo))
             .payTo(Bob.address, Value.ada(5))
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         // Bob should receive only ADA
@@ -378,8 +369,7 @@ class TxBuilderTest extends AnyFunSuite {
         val tx = TxBuilder(testEnv)
             .spend(Utxo(tokenUtxo))
             .payTo(Bob.address, paymentValue)
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         // Bob should receive 300 tokens
@@ -425,8 +415,7 @@ class TxBuilderTest extends AnyFunSuite {
         val tx = TxBuilder(testEnv)
             .spend(Utxo(tokenUtxo))
             .payTo(Bob.address, paymentValue)
-            .changeTo(Alice.address)
-            .build()
+            .build(changeTo = Alice.address)
             .transaction
 
         // Bob should receive 200 co2

@@ -32,8 +32,7 @@ case class BettingTransactionCreator(
                 Some(ScriptRef(script))
               )
             )
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -71,8 +70,7 @@ case class BettingTransactionCreator(
               config
             )
             .validTo(java.time.Instant.ofEpochMilli(beforeTime))
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -101,8 +99,7 @@ case class BettingTransactionCreator(
             .spend(betUtxo, Action.Join, Set(player2Pkh))
             .payTo(scriptAddress, betUtxo.output.value + lovelace, config)
             .validTo(java.time.Instant.ofEpochMilli(beforeTime))
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -134,8 +131,7 @@ case class BettingTransactionCreator(
             .spend(betUtxo, Action.AnnounceWinner(payout), Set(oraclePkh))
             .payTo(payoutAddress, betUtxo.output.value)
             .validFrom(java.time.Instant.ofEpochMilli(afterTime))
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }

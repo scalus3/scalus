@@ -29,8 +29,7 @@ import scala.collection.mutable
   * val tx = TxBuilder(env)
   *   .spend(utxo)
   *   .payTo(recipientAddress, Value.ada(10))
-  *   .changeTo(changeAddress)
-  *   .build()
+  *   .build(changeTo = changeAddress)
   *   .sign(signer)
   *   .transaction
   * }}}
@@ -56,7 +55,6 @@ case class TxBuilder(
     env: Environment,
     context: TransactionBuilder.Context,
     evaluator: PlutusScriptEvaluator,
-    diffHandlerOpt: Option[DiffHandler] = None,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedScripts: Map[ScriptHash, Script] = Map.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
@@ -66,7 +64,7 @@ case class TxBuilder(
     /** Adds the specified pubkey utxo to the list of inputs, thus spending it.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
-      * according to [[changeTo]] or [[diffHandler]].
+      * according to the `changeTo` or `diffHandler` parameter of [[build]].
       * @param utxo
       *   utxo to spend
       * @note
@@ -79,7 +77,7 @@ case class TxBuilder(
     /** Adds the specified pubkey utxos to the list of inputs, thus spending them.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
-      * according to [[changeTo]] or [[diffHandler]].
+      * according to the `changeTo` or `diffHandler` parameter of [[build]].
       * @param utxos
       *   utxos to spend
       * @note
@@ -97,7 +95,7 @@ case class TxBuilder(
       * protects the `utxo` fails with the specified `redeemer`, [[build]] is going to throw.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
-      * according to [[changeTo]] or [[diffHandler]].
+      * according to the `changeTo` or `diffHandler` parameter of [[build]].
       * @param utxo
       *   utxo to spend
       * @param redeemer
@@ -182,7 +180,7 @@ case class TxBuilder(
       * If the specified `script` fails with the specified redeemer, [[build]] is going to throw.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
-      * according to [[changeTo]] or [[diffHandler]].
+      * according to the `changeTo` or `diffHandler` parameter of [[build]].
       *
       * @param utxo
       *   utxo to spend
@@ -209,7 +207,7 @@ case class TxBuilder(
       * If the specified `script` fails with the specified redeemer, [[build]] is going to throw.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
-      * according to [[changeTo]] or [[diffHandler]].
+      * according to the `changeTo` or `diffHandler` parameter of [[build]].
       *
       * @param utxo
       *   utxo to spend
@@ -624,53 +622,22 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.ValidityEndSlot(slot))
     }
 
-    /** Sets a custom diff handler for managing transaction balance.
-      *
-      * The diff handler is called during [[build]] to handle the difference between consumed inputs
-      * and produced outputs (including fees). Use this for custom change handling logic.
-      *
-      * @param handler
-      *   the diff handler function
-      * @see
-      *   [[changeTo]] for the common case of sending change to an address
-      */
-    def diffHandler(handler: DiffHandler): TxBuilder =
-        copy(diffHandlerOpt = Some(handler))
-
-    /** Sets the change address for the transaction.
-      *
-      * Any excess value (inputs minus outputs and fees) will be sent to this address. This is
-      * equivalent to calling [[diffHandler]] with the standard change handling logic.
-      *
-      * @param address
-      *   the address to send change to
-      */
-    def changeTo(address: Address): TxBuilder = {
-        val handler: DiffHandler = (diff, tx) =>
-            Change.handleChange(diff, tx, address, env.protocolParams)
-        copy(diffHandlerOpt = Some(handler))
-    }
-
     /** Builds and finalizes the transaction.
       *
       * This method assembles the transaction from all the accumulated steps, calculates fees,
       * handles change, validates and runs all Plutus scripts, and produces a ready-to-sign
       * transaction.
       *
-      * A diff handler must be set via [[changeTo]] or [[diffHandler]] before calling this method.
-      *
+      * @param diffHandler
+      *   the handler for managing transaction balance differences (change)
       * @return
       *   a new TxBuilder with the finalized transaction
       * @throws RuntimeException
-      *   if no diff handler is set, if script execution fails, or if the transaction cannot be
-      *   balanced
+      *   if script execution fails or if the transaction cannot be balanced
       */
-    def build(): TxBuilder = {
+    def build(diffHandler: DiffHandler): TxBuilder = {
         val network = env.network
         val params = env.protocolParams
-        val handler = this.diffHandlerOpt.getOrElse(
-          throw new RuntimeException("Called `build` without setting a diff handler.")
-        )
         // Could be a good idea to immediately `modify` on every step, maybe not tho.
         val finalizedContext = for {
             built <- TransactionBuilder.modify(context, steps)
@@ -679,7 +646,7 @@ case class TxBuilder(
             ) // TODO: remove after fixes with attachments
             finalized <- withAttachments.finalizeContext(
               params,
-              handler,
+              diffHandler,
               evaluator,
               validators
             )
@@ -691,6 +658,25 @@ case class TxBuilder(
             case Left(error) =>
                 throw new RuntimeException(error.reason)
         }
+    }
+
+    /** Builds and finalizes the transaction, sending any remaining value to the specified change
+      * address.
+      *
+      * This is a convenience method that uses the default change handling strategy. Any difference
+      * between inputs and outputs (minus fees) will be sent to the provided address.
+      *
+      * @param changeTo
+      *   the address to receive any remaining value (change)
+      * @return
+      *   a new TxBuilder with the finalized transaction
+      * @throws RuntimeException
+      *   if script execution fails or if the transaction cannot be balanced
+      */
+    def build(changeTo: Address): TxBuilder = {
+        build(diffHandler =
+            (diff, tx) => Change.handleChange(diff, tx, changeTo, env.protocolParams)
+        )
     }
 
     /** Signs the transaction with the provided signer.
@@ -861,7 +847,7 @@ case class TxBuilder(
                   transaction = tx,
                   resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos)
                 )
-                copy(context = updatedContext).changeTo(sponsor)
+                copy(context = updatedContext)
             case Left(error) =>
                 throw new RuntimeException(s"Failed to balance transaction: $error")
         }

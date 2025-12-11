@@ -29,8 +29,7 @@ case class HtlcTransactionCreator(
         TxBuilder(env, evaluator)
             .spend(utxos)
             .payTo(scriptAddress, value, datum)
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -53,8 +52,7 @@ case class HtlcTransactionCreator(
             .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
             .validFrom(java.time.Instant.ofEpochMilli(time))
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -76,8 +74,7 @@ case class HtlcTransactionCreator(
             .spend(lockedUtxo, redeemer, script, Set(committerPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
             .validFrom(java.time.Instant.ofEpochMilli(time))
-            .changeTo(changeAddress)
-            .build()
+            .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }

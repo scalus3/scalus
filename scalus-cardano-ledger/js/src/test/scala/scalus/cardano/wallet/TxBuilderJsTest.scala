@@ -33,8 +33,7 @@ class TxBuilderJsTest extends AnyFunSuite {
         val tx = TxBuilder(cardanoInfo)
             .payTo(bob, payment)
             .spend(aliceUtxo)
-            .changeTo(alice)
-            .build()
+            .build(changeTo = alice)
             .sign(account.signerForUtxos)
             .transaction
 

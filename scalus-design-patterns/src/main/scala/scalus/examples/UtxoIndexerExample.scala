@@ -75,5 +75,5 @@ object Offchain:
               }
             )
             .payTo(recipientAddress, scriptUtxo.output.value)
-            .changeTo(recipientAddress)
+        // Caller should call .build(changeTo = address)
     }
