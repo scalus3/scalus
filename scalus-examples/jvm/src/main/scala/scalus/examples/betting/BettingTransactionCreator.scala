@@ -23,8 +23,7 @@ case class BettingTransactionCreator(
         deploymentAddress: Address,
         changeAddress: Address
     ): Transaction = {
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .output(
               TransactionOutput(
@@ -57,8 +56,7 @@ case class BettingTransactionCreator(
         val config = Config(player1, player2, oracle, expiration)
         val player1Pkh = AddrKeyHash.fromByteString(player1.hash)
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxo)
             .references(scriptUtxo)
@@ -97,8 +95,7 @@ case class BettingTransactionCreator(
         val lovelace = Value(bet)
         val config = Config(player1, player2, oracle, expiration)
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxo)
             .references(scriptUtxo)
@@ -131,8 +128,7 @@ case class BettingTransactionCreator(
           delegation = ShelleyDelegationPart.Null
         )
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxo)
             .references(scriptUtxo)

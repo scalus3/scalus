@@ -35,8 +35,7 @@ case class VaultTransactionCreator(
           BigInt(0)
         )
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .payTo(scriptAddress, Value(ada), datum)
             .changeTo(changeAddress)
@@ -68,8 +67,7 @@ case class VaultTransactionCreator(
         )
         val vaultValue = vaultUtxo.output.value
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxos)
             .spend(vaultUtxo, Action.InitiateWithdrawal, script)
@@ -105,8 +103,7 @@ case class VaultTransactionCreator(
           finalizationDeadline = currentDatum.finalizationDeadline
         )
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxos)
             .spend(vaultUtxo, Action.Deposit, script)
@@ -134,8 +131,7 @@ case class VaultTransactionCreator(
 
         val vaultValue = vaultUtxo.output.value
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxos)
             .spend(vaultUtxo, Action.FinalizeWithdrawal, script)

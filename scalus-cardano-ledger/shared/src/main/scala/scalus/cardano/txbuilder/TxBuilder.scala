@@ -3,13 +3,13 @@ package scalus.cardano.txbuilder
 import scalus.builtin.Builtins.{blake2b_256, serialiseData}
 import scalus.builtin.Data.toData
 import scalus.builtin.{Data, ToData}
-import scalus.cardano.address.{Address, ShelleyAddress, ShelleyPaymentPart, StakeAddress, StakePayload}
+import scalus.cardano.address.{Address, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
+import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
-import scalus.cardano.ledger.rules.STS.Validator
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
@@ -110,7 +110,9 @@ case class TxBuilder(
         redeemer: T,
         requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
-        val scriptHash = extractScriptHash(utxo)
+        val scriptHash = utxo.output.address.scriptHashOption.getOrElse(
+          throw new IllegalArgumentException(s"UTxO is not script-locked: $utxo")
+        )
         val datum = buildDatumWitness(utxo)
 
         val scriptSource = attachedScripts.get(scriptHash) match {
@@ -148,7 +150,9 @@ case class TxBuilder(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data
     ): TxBuilder = {
-        val scriptHash = extractScriptHash(utxo)
+        val scriptHash = utxo.output.address.scriptHashOption.getOrElse(
+          throw new IllegalArgumentException(s"UTxO is not script-locked: $utxo")
+        )
         val datum = buildDatumWitness(utxo)
 
         val validator = attachedScripts.get(scriptHash) match {
@@ -1146,23 +1150,6 @@ case class TxBuilder(
         )
     }
 
-    private def extractScriptHash(utxo: Utxo): ScriptHash = {
-        utxo.output.address match {
-            case sa: ShelleyAddress =>
-                sa.payment match {
-                    case s: ShelleyPaymentPart.Script => s.hash
-                    case _ =>
-                        throw new IllegalArgumentException(
-                          s"Cannot spend from non-script address: ${utxo.output.address}"
-                        )
-                }
-            case _ =>
-                throw new IllegalArgumentException(
-                  s"Cannot spend from non-Shelley address: ${utxo.output.address}"
-                )
-        }
-    }
-
     private def buildDatumWitness(utxo: Utxo): Datum = {
         utxo.output.datumOption match {
             case None                        => Datum.DatumInlined
@@ -1238,6 +1225,23 @@ case class TxBuilder(
 /** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
 
+    /** Creates a TxBuilder with a custom Plutus script evaluator.
+      *
+      * Use this method when you need fine-grained control over script evaluation behavior.
+      *
+      * @param env
+      *   the environment containing protocol parameters, network info, and slot configuration
+      * @param evaluator
+      *   the custom Plutus script evaluator
+      */
+    def apply(
+        env: Environment,
+        evaluator: PlutusScriptEvaluator
+    ): TxBuilder = {
+        val context = TransactionBuilder.Context.empty(env.network)
+        TxBuilder(env, context, evaluator)
+    }
+
     /** Creates a TxBuilder with the default Plutus script evaluator.
       *
       * The evaluator will both validate scripts and compute execution costs for fee calculation.
@@ -1250,7 +1254,7 @@ object TxBuilder {
           CardanoInfo(env.protocolParams, env.network, env.slotConfig),
           EvaluatorMode.EvaluateAndComputeCost
         )
-        withCustomEvaluator(env, evaluator)
+        apply(env, evaluator)
     }
 
     /** Creates a TxBuilder with an evaluator that uses constant maximum budget.
@@ -1263,23 +1267,6 @@ object TxBuilder {
       */
     def withConstMaxBudgetEvaluator(env: Environment): TxBuilder = {
         val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
-        withCustomEvaluator(env, evaluator)
-    }
-
-    /** Creates a TxBuilder with a custom Plutus script evaluator.
-      *
-      * Use this method when you need fine-grained control over script evaluation behavior.
-      *
-      * @param env
-      *   the environment containing protocol parameters, network info, and slot configuration
-      * @param evaluator
-      *   the custom Plutus script evaluator
-      */
-    def withCustomEvaluator(
-        env: Environment,
-        evaluator: PlutusScriptEvaluator
-    ): TxBuilder = {
-        val context = TransactionBuilder.Context.empty(env.network)
-        TxBuilder(env, context, evaluator)
+        apply(env, evaluator)
     }
 }

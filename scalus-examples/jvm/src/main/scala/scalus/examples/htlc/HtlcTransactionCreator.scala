@@ -26,8 +26,7 @@ case class HtlcTransactionCreator(
     ): Transaction = {
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .payTo(scriptAddress, value, datum)
             .changeTo(changeAddress)
@@ -48,8 +47,7 @@ case class HtlcTransactionCreator(
     ): Transaction = {
         val redeemer = Action.Reveal(preimage)
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxos)
             .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
@@ -72,8 +70,7 @@ case class HtlcTransactionCreator(
     ): Transaction = {
         val redeemer = Action.Timeout
 
-        TxBuilder
-            .withCustomEvaluator(env, evaluator)
+        TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxos)
             .spend(lockedUtxo, redeemer, script, Set(committerPkh))
