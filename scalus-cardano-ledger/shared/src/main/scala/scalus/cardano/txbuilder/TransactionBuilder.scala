@@ -420,13 +420,7 @@ object TransactionBuilder:
                 )
 
                 // _ = println(HexUtil.encodeHexString(txWithoutDummySignatures.toCbor))
-            } yield Context(
-              transaction = balanced,
-              redeemers = this.redeemers,
-              network = this.network,
-              expectedSigners = this.expectedSigners,
-              resolvedUtxos = this.resolvedUtxos
-            )
+            } yield copy(transaction = balanced)
         }
 
         /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */

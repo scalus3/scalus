@@ -1050,10 +1050,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             _ <-
                 if resolvedScripts.map(_.scriptHash).contains(scriptHash)
                 then unit
-                else
-                    Left(
-                      AttachedScriptNotFound(scriptHash, step)
-                    )
+                else Left(AttachedScriptNotFound(scriptHash, step))
         } yield ()
 
     // -------------------------------------------------------------------------
@@ -1068,9 +1065,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         additionalSigners: Set[ExpectedSigner]
     ): Unit = {
         // Regardless of how the witness is passed, add the additional signers
-        modify0(
-          Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
-        )
+        modify0(Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners))
 
         nativeScript match {
             case ScriptSource.NativeScriptValue(ns) =>
