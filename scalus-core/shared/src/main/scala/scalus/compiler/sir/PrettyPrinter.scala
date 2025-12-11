@@ -67,17 +67,17 @@ object PrettyPrinter:
                 text("Constr") & str(tag) &
                     text("[") + intercalate(
                       text(",") + space,
-                      args.map(pretty)
+                      args.toScalaList.map(pretty)
                     ) + text("]")
             case Data.List(values) =>
                 text("List") & text("[") + intercalate(
                   text(",") + space,
-                  values.map(pretty)
+                  values.toScalaList.map(pretty)
                 ) + text("]")
             case Data.Map(entries) =>
                 text("Map") & text("[") + intercalate(
                   text(",") + space,
-                  entries.map { case (k, v) =>
+                  entries.toScalaList.map { case (k, v) =>
                       inParens(pretty(k) + text(",") & pretty(v))
                   }
                 ) + text("]")

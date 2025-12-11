@@ -566,6 +566,7 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
     // Each branch receives the inner value(s) as arguments
 
     import scalus.builtin.{ByteString, Data}
+    import scalus.prelude.List as PList
 
     def mkDataConst(d: Data): Constant = Constant.Data(d)
 
@@ -573,7 +574,7 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         // Case on Data.Constr(42, [I(1), I(2)])
         // Constr branch: \tag args -> tag (returns the constructor tag)
         val term = Case(
-          Const(mkDataConst(Data.Constr(42, List(Data.I(1), Data.I(2))))),
+          Const(mkDataConst(Data.Constr(42, PList(Data.I(1), Data.I(2))))),
           List(
             LamAbs("tag", LamAbs("args", Var(NamedDeBruijn("tag", 0)))),
             LamAbs("entries", Const(Constant.String("map"))),
@@ -589,7 +590,7 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         // Case on Data.Constr(0, [I(100)])
         // Constr branch: \tag args -> args (returns the args list)
         val term = Case(
-          Const(mkDataConst(Data.Constr(0, List(Data.I(100))))),
+          Const(mkDataConst(Data.Constr(0, PList(Data.I(100))))),
           List(
             LamAbs("tag", LamAbs("args", Var(NamedDeBruijn("args", 0)))),
             LamAbs("entries", Const(Constant.String("map"))),
@@ -606,7 +607,7 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         // Case on Data.Map([(I(1), I(2))])
         // Map branch: \entries -> "map"
         val term = Case(
-          Const(mkDataConst(Data.Map(List((Data.I(1), Data.I(2)))))),
+          Const(mkDataConst(Data.Map(PList((Data.I(1), Data.I(2)))))),
           List(
             LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
             LamAbs("entries", Const(Constant.String("map"))),
@@ -622,7 +623,7 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         // Case on Data.List([I(1), I(2), I(3)])
         // List branch: \elements -> "list"
         val term = Case(
-          Const(mkDataConst(Data.List(List(Data.I(1), Data.I(2), Data.I(3))))),
+          Const(mkDataConst(Data.List(PList(Data.I(1), Data.I(2), Data.I(3))))),
           List(
             LamAbs("tag", LamAbs("args", Const(Constant.String("constr")))),
             LamAbs("entries", Const(Constant.String("map"))),
@@ -728,9 +729,9 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
           )
         )
 
-        assert(evalV4(describeData(Data.Constr(0, Nil))) == Const(Constant.String("constr")))
-        assert(evalV4(describeData(Data.Map(Nil))) == Const(Constant.String("map")))
-        assert(evalV4(describeData(Data.List(Nil))) == Const(Constant.String("list")))
+        assert(evalV4(describeData(Data.Constr(0, PList.Nil))) == Const(Constant.String("constr")))
+        assert(evalV4(describeData(Data.Map(PList.Nil))) == Const(Constant.String("map")))
+        assert(evalV4(describeData(Data.List(PList.Nil))) == Const(Constant.String("list")))
         assert(evalV4(describeData(Data.I(0))) == Const(Constant.String("integer")))
         assert(
           evalV4(describeData(Data.B(ByteString.empty))) == Const(Constant.String("bytestring"))

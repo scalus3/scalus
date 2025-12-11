@@ -356,12 +356,12 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val dataListVarId = lctx.uniqueVarName("_match_datalist")
         val dataListVar = lvNewLazyIdVar(
           dataListVarId,
-          SIRType.List(SIRType.Data),
+          SIRType.List(SIRType.Data.tp),
           SumCaseClassRepresentation.SumDataList,
           lvBuiltinApply(
             SIRBuiltins.sndPair,
             scrutineeVar,
-            SIRType.List(SIRType.Data),
+            SIRType.List(SIRType.Data.tp),
             SumCaseClassRepresentation.SumDataList,
             matchData.scrutinee.anns.pos
           ),
@@ -424,7 +424,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
         val dataListId = dataListVar.id
 
-        val listDataType = SIRType.List(SIRType.Data)
+        val listDataType = SIRType.List(SIRType.Data.tp)
 
         val constrDecl = constrPattern.constr
         if constrDecl.params.length != constrPattern.bindings.length then

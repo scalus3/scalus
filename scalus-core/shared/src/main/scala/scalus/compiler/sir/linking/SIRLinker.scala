@@ -144,7 +144,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                             SIR.ExternalVar(
                               "scalus.builtin.internal.UniversalDataConversion$",
                               "scalus.builtin.internal.UniversalDataConversion$.fromData",
-                              SIRType.Fun(SIRType.Data, tp),
+                              SIRType.Fun(SIRType.Data.tp, tp),
                               AnnotationsDecl.empty.copy(pos = f.anns.pos)
                             )
                         case None =>
@@ -153,7 +153,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                                     SIR.ExternalVar(
                                       "scalus.builtin.internal.UniversalDataConversion$",
                                       "scalus.builtin.internal.UniversalDataConversion$.toData",
-                                      SIRType.Fun(arg.tp, SIRType.Data),
+                                      SIRType.Fun(arg.tp, SIRType.Data.tp),
                                       AnnotationsDecl.empty.copy(pos = f.anns.pos)
                                     )
                                 case None => f

@@ -290,7 +290,7 @@ class SIRTyper(using Context) {
         tpArgs: List[SIRType],
         env: SIRTypeEnv
     ): Option[SIRType] = {
-        if symbol == Symbols.requiredClass("scalus.builtin.Data") then Some(SIRType.Data)
+        if symbol == Symbols.requiredClass("scalus.builtin.Data") then Some(SIRType.Data.tp)
         else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinList") then
             tpArgs match
                 case List(elemType) => Some(SIRType.BuiltinList(elemType))

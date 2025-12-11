@@ -5,6 +5,7 @@ import io.bullet.borer.Tag.{NegativeBigNum, Other, PositiveBigNum}
 import io.bullet.borer.{ByteAccess, Cbor, DataItem as DI, Decoder, Encoder, Reader, Tag}
 import scalus.Compiler
 import scalus.builtin.Data.{B, Constr, FromData, I, Map}
+import scalus.prelude.List as PList
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import upickle.default.*
@@ -31,14 +32,15 @@ private trait DataApi {
               case Data.Constr(constr, args) =>
                   ujson.Obj(
                     "constructor" -> writeJs(constr),
-                    "fields" -> ujson.Arr(ArrayBuffer.from(args.map(writeJs)))
+                    "fields" -> ujson.Arr(ArrayBuffer.from(args.toScalaList.map(writeJs)))
                   )
               case Data.Map(values) =>
-                  ujson.Obj("map" -> ujson.Arr(ArrayBuffer.from(values.map { case (k, v) =>
-                      ujson.Obj("k" -> writeJs(k), "v" -> writeJs(v))
+                  ujson.Obj("map" -> ujson.Arr(ArrayBuffer.from(values.toScalaList.map {
+                      case (k, v) =>
+                          ujson.Obj("k" -> writeJs(k), "v" -> writeJs(v))
                   })))
               case Data.List(values) =>
-                  ujson.Obj("list" -> ujson.Arr(ArrayBuffer.from(values.map(writeJs))))
+                  ujson.Obj("list" -> ujson.Arr(ArrayBuffer.from(values.toScalaList.map(writeJs))))
               case Data.I(value) =>
                   val v = if value.isValidLong then writeJs(value.toLong) else writeJs(value)
                   ujson.Obj("int" -> v)
@@ -47,22 +49,25 @@ private trait DataApi {
           json =>
               if json.obj.get("constructor").isDefined then
                   Data.Constr(
-                    json.obj("constructor").num.toLong,
-                    json.obj("fields").arr.map(f => read[Data](f)).toList
+                    BigInt(json.obj("constructor").num.toLong),
+                    PList.from(json.obj("fields").arr.map(f => read[Data](f)).toList)
                   )
               else if json.obj.get("map").isDefined then
                   Data.Map(
-                    json.obj("map")
-                        .arr
-                        .map { obj =>
-                            val k = read[Data](obj.obj("k"))
-                            val v = read[Data](obj.obj("v"))
-                            k -> v
-                        }
-                        .toList
+                    PList.from(
+                      json
+                          .obj("map")
+                          .arr
+                          .map { obj =>
+                              val k = read[Data](obj.obj("k"))
+                              val v = read[Data](obj.obj("v"))
+                              k -> v
+                          }
+                          .toList
+                    )
                   )
               else if json.obj.get("list").isDefined then
-                  Data.List(json.obj("list").arr.map(e => read[Data](e)).toList)
+                  Data.List(PList.from(json.obj("list").arr.map(e => read[Data](e)).toList))
               else if json.obj.get("int").isDefined then Data.I(json.obj("int").num.toLong)
               else if json.obj.get("bytes").isDefined then
                   Data.B(ByteString.fromHex(json.obj("bytes").str))
@@ -99,18 +104,18 @@ private trait DataApi {
 
             data match
                 case Constr(constr, args) if 0 <= constr && constr < 7 =>
-                    writer.writeTag(Other(121 + constr))
-                    writer.writeLinearSeq(args)
+                    writer.writeTag(Other((121 + constr).toLong))
+                    writer.writeLinearSeq(args.toScalaList)
                 case Constr(constr, args) if 7 <= constr && constr < 128 =>
-                    writer.writeTag(Other(1280 + (constr - 7)))
-                    writer.writeLinearSeq(args)
+                    writer.writeTag(Other((1280 + (constr - 7)).toLong))
+                    writer.writeLinearSeq(args.toScalaList)
                 case Constr(constr, args) =>
                     writer.writeTag(Other(102))
                     writer.writeArrayHeader(2)
-                    writer.writeLong(constr)
-                    writer.writeLinearSeq(args)
-                case Map(values)       => writeMap(writer, values)
-                case Data.List(values) => writer.writeLinearSeq(values)
+                    writer.writeLong(constr.toLong)
+                    writer.writeLinearSeq(args.toScalaList)
+                case Map(values)       => writeMap(writer, values.toScalaList)
+                case Data.List(values) => writer.writeLinearSeq(values.toScalaList)
                 case I(value)          => writeChunkedBigInt(value)
                 case B(value)          => writeChunkedByteArray(value.bytes)
         /*
@@ -166,9 +171,9 @@ private trait DataApi {
 
             r.dataItem() match
                 case DI.Int | DI.Long | DI.OverLong => I(Decoder.forBigInt.read(r))
-                case DI.MapHeader | DI.MapStart     => Map(readMap.read(r))
+                case DI.MapHeader | DI.MapStart     => Map(PList.from(readMap.read(r)))
                 case DI.ArrayStart | DI.ArrayHeader =>
-                    Data.List(Decoder.forArray[Data].read(r).toList)
+                    Data.List(PList.from(Decoder.forArray[Data].read(r).toList))
                 case DI.Bytes | DI.BytesStart => B(ByteString.unsafeFromArray(readBoundedBytes()))
                 case DI.Tag =>
                     r.readTag() match
@@ -176,11 +181,17 @@ private trait DataApi {
                             val _ = r.readArrayHeader()
                             val i = r.readLong()
                             val args = Decoder.forArray[Data].read(r)
-                            Constr(i, args.toList)
+                            Constr(BigInt(i), PList.from(args.toList))
                         case Other(value) if 121 <= value && value < 128 =>
-                            Constr(value - 121, Decoder.forArray[Data].read(r).toList)
+                            Constr(
+                              BigInt(value - 121),
+                              PList.from(Decoder.forArray[Data].read(r).toList)
+                            )
                         case Other(value) if 1280 <= value && value < 1401 =>
-                            Constr(value - 1280 + 7, Decoder.forArray[Data].read(r).toList)
+                            Constr(
+                              BigInt(value - 1280 + 7),
+                              PList.from(Decoder.forArray[Data].read(r).toList)
+                            )
                         case PositiveBigNum => I(BigInteger(1, readBoundedBytes()))
                         case NegativeBigNum => I(BigInteger(1, readBoundedBytes()).not)
                         case tag =>

@@ -5,7 +5,6 @@ import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.{ProdDataConstr, ProdDataList}
 import scalus.compiler.sir.*
-import scalus.compiler.sir.SIRType.Data
 import scalus.uplc.Term
 
 case class ProductCaseOneElementSirTypeGenerator(
@@ -65,7 +64,7 @@ case class ProductCaseOneElementSirTypeGenerator(
                   argInData,
                   lvBuiltinApply0(
                     SIRBuiltins.mkNilData,
-                    SIRType.List(Data),
+                    SIRType.List(SIRType.Data.tp),
                     SumCaseClassRepresentation.SumDataList,
                     pos
                   ),
@@ -162,11 +161,11 @@ case class ProductCaseOneElementSirTypeGenerator(
           argValue,
           lvBuiltinApply0(
             SIRBuiltins.mkNilData,
-            SIRType.List(Data),
+            SIRType.List(SIRType.Data.tp),
             SumCaseClassRepresentation.SumDataList,
             pos
           ),
-          SIRType.List(Data),
+          SIRType.List(SIRType.Data.tp),
           SumCaseClassRepresentation.SumDataList,
           pos
         )

@@ -1159,6 +1159,112 @@ case class CasePairLoweredValue(
 
 }
 
+/** LoweredValue for Case on Data (PlutusV4+).
+  *
+  * Data has 5 constructors with different bound variables:
+  *   - Constr (index 0): receives tag (Integer) and args (List[Data])
+  *   - Map (index 1): receives entries (List[(Data, Data)])
+  *   - List (index 2): receives elements (List[Data])
+  *   - I (index 3): receives value (Integer)
+  *   - B (index 4): receives value (ByteString)
+  *
+  * Each branch is a lambda that receives the appropriate arguments.
+  */
+case class CaseDataLoweredValue(
+    scrutinee: LoweredValue,
+    // Constr branch: λtag.λargs.body
+    constrTagVar: IdentifiableLoweredValue,
+    constrArgsVar: IdentifiableLoweredValue,
+    constrBranch: LoweredValue,
+    // Map branch: λentries.body
+    mapEntriesVar: IdentifiableLoweredValue,
+    mapBranch: LoweredValue,
+    // List branch: λelements.body
+    listElementsVar: IdentifiableLoweredValue,
+    listBranch: LoweredValue,
+    // I branch: λvalue.body
+    iValueVar: IdentifiableLoweredValue,
+    iBranch: LoweredValue,
+    // B branch: λvalue.body
+    bValueVar: IdentifiableLoweredValue,
+    bBranch: LoweredValue,
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(
+      Set(
+        constrTagVar,
+        constrArgsVar,
+        mapEntriesVar,
+        listElementsVar,
+        iValueVar,
+        bValueVar
+      ),
+      scrutinee,
+      constrBranch,
+      mapBranch,
+      listBranch,
+      iBranch,
+      bBranch
+    ) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        // Case(scrutinee, [λtag.λargs.constrBranch, λentries.mapBranch, λelems.listBranch, λi.iBranch, λbs.bBranch])
+        val constrCtx =
+            gctx.copy(generatedVars = gctx.generatedVars + constrTagVar.id + constrArgsVar.id)
+        val mapCtx = gctx.copy(generatedVars = gctx.generatedVars + mapEntriesVar.id)
+        val listCtx = gctx.copy(generatedVars = gctx.generatedVars + listElementsVar.id)
+        val iCtx = gctx.copy(generatedVars = gctx.generatedVars + iValueVar.id)
+        val bCtx = gctx.copy(generatedVars = gctx.generatedVars + bValueVar.id)
+
+        Term.Case(
+          scrutinee.termWithNeededVars(gctx),
+          scala.collection.immutable.List(
+            // Constr branch (index 0): λtag.λargs.body
+            Term.LamAbs(
+              constrTagVar.id,
+              Term.LamAbs(constrArgsVar.id, constrBranch.termWithNeededVars(constrCtx))
+            ),
+            // Map branch (index 1): λentries.body
+            Term.LamAbs(mapEntriesVar.id, mapBranch.termWithNeededVars(mapCtx)),
+            // List branch (index 2): λelements.body
+            Term.LamAbs(listElementsVar.id, listBranch.termWithNeededVars(listCtx)),
+            // I branch (index 3): λvalue.body
+            Term.LamAbs(iValueVar.id, iBranch.termWithNeededVars(iCtx)),
+            // B branch (index 4): λvalue.body
+            Term.LamAbs(bValueVar.id, bBranch.termWithNeededVars(bCtx))
+          )
+        )
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
+            + (line + text("Constr") + space + constrTagVar.docRef(ctx) + space + constrArgsVar
+                .docRef(ctx) + text(" ->") + (lineOrSpace + constrBranch.docRef(ctx)).nested(
+              2
+            )).grouped
+            + (line + text("Map") + space + mapEntriesVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + mapBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("List") + space + listElementsVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + listBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("I") + space + iValueVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + iBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("B") + space + bValueVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + bBranch.docRef(ctx)).nested(2)).grouped).aligned
+    }
+}
+
 /** LoweredValue for ChooseList builtin (PlutusV1-V3).
   *
   * Uses the ChooseList builtin with delayed branches: Force(ChooseList list (Delay nil) (Delay
@@ -1512,6 +1618,103 @@ object LoweredValue {
               body,
               body.sirType,
               body.representation,
+              inPos
+            )
+        }
+
+        /** Create a Case on Data for PlutusV4+.
+          *
+          * @param scrutinee
+          *   the Data value to match on
+          * @param constrTagVar
+          *   variable to bind to the constructor tag (Integer)
+          * @param constrArgsVar
+          *   variable to bind to the constructor args (List[Data])
+          * @param constrBranch
+          *   the branch to execute for Constr case
+          * @param mapEntriesVar
+          *   variable to bind to the map entries (List[(Data, Data)])
+          * @param mapBranch
+          *   the branch to execute for Map case
+          * @param listElementsVar
+          *   variable to bind to the list elements (List[Data])
+          * @param listBranch
+          *   the branch to execute for List case
+          * @param iValueVar
+          *   variable to bind to the integer value (Integer)
+          * @param iBranch
+          *   the branch to execute for I case
+          * @param bValueVar
+          *   variable to bind to the bytestring value (ByteString)
+          * @param bBranch
+          *   the branch to execute for B case
+          * @param inPos
+          *   source position
+          * @param optTargetType
+          *   optional target type for the result
+          */
+        def lvCaseData(
+            scrutinee: LoweredValue,
+            constrTagVar: IdentifiableLoweredValue,
+            constrArgsVar: IdentifiableLoweredValue,
+            constrBranch: LoweredValue,
+            mapEntriesVar: IdentifiableLoweredValue,
+            mapBranch: LoweredValue,
+            listElementsVar: IdentifiableLoweredValue,
+            listBranch: LoweredValue,
+            iValueVar: IdentifiableLoweredValue,
+            iBranch: LoweredValue,
+            bValueVar: IdentifiableLoweredValue,
+            bBranch: LoweredValue,
+            inPos: SIRPosition,
+            optTargetType: Option[SIRType] = None
+        )(using lctx: LoweringContext): LoweredValue = {
+
+            val allBranches = Seq(constrBranch, mapBranch, listBranch, iBranch, bBranch)
+
+            val resType = optTargetType.getOrElse {
+                allBranches.map(_.sirType).reduce { (t1, t2) =>
+                    SIRUnify.topLevelUnifyType(t1, t2, SIRUnify.Env.empty.withUpcasting) match {
+                        case SIRUnify.UnificationSuccess(_, tp) =>
+                            if tp == SIRType.FreeUnificator then
+                                throw LoweringException(
+                                  s"case branches return unrelated types: ${t1.show} and ${t2.show}",
+                                  inPos
+                                )
+                            tp
+                        case failure @ SIRUnify.UnificationFailure(path, l, r) =>
+                            lctx.warn("Unification failure: " + failure, inPos)
+                            SIRType.FreeUnificator
+                    }
+                }
+            }
+
+            val branchesUpcasted = allBranches.map(_.maybeUpcast(resType, inPos))
+
+            val targetRepresentation = chooseCommonRepresentation(
+              branchesUpcasted,
+              resType,
+              inPos
+            )
+
+            val Seq(constrR, mapR, listR, iR, bR) =
+                branchesUpcasted.map(_.toRepresentation(targetRepresentation, inPos)).toSeq
+
+            CaseDataLoweredValue(
+              scrutinee,
+              constrTagVar,
+              constrArgsVar,
+              constrR,
+              mapEntriesVar,
+              mapR,
+              listElementsVar,
+              listR,
+              iValueVar,
+              iR,
+              bValueVar,
+              bR,
+              resType,
+              targetRepresentation,
               inPos
             )
         }
@@ -2008,7 +2211,7 @@ object LoweredValue {
         ): LoweredValue = {
             lvBuiltinApply0(
               SIRBuiltins.mkNilData,
-              SIRType.List(SIRType.Data),
+              SIRType.List(SIRType.Data.tp),
               SumDataList,
               inPos
             )

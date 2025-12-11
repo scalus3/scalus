@@ -104,14 +104,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val headTail = lvBuiltinApply(
                   SIRBuiltins.tailList,
                   inputIdv,
-                  SIRType.List(SIRType.Data),
+                  SIRType.List(SIRType.Data.tp),
                   ProductCaseClassRepresentation.ProdDataList,
                   pos
                 )
                 val headTailHead = lvBuiltinApply(
                   SIRBuiltins.headList,
                   headTail,
-                  SIRType.Data,
+                  SIRType.Data.tp,
                   ProductCaseClassRepresentation.ProdDataList,
                   pos
                 )
@@ -157,7 +157,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val pairIntDataList = lvBuiltinApply(
                   SIRBuiltins.unConstrData,
                   input,
-                  SIRType.BuiltinPair(SIRType.Integer, SIRType.Data),
+                  SIRType.BuiltinPair(SIRType.Integer, SIRType.Data.tp),
                   ProductCaseClassRepresentation.PairIntDataList,
                   pos
                 )
@@ -178,7 +178,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 lvBuiltinApply(
                   SIRBuiltins.unConstrData,
                   input,
-                  SIRType.BuiltinPair(SIRType.Integer, SIRType.Data),
+                  SIRType.BuiltinPair(SIRType.Integer, SIRType.Data.tp),
                   ProductCaseClassRepresentation.PairIntDataList,
                   pos
                 )
@@ -235,7 +235,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val frsVar = new VariableLoweredValue(
                       id = frsVarId,
                       name = frsVarId,
-                      sir = SIR.Var(frsVarId, SIRType.Data, AnnotationsDecl.empty),
+                      sir = SIR.Var(frsVarId, SIRType.Data.tp, AnnotationsDecl.empty),
                       representation = PrimitiveRepresentation.PackedData,
                       optRhs = None
                     )
@@ -243,7 +243,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val sndVar = new VariableLoweredValue(
                       id = sndVarId,
                       name = sndVarId,
-                      sir = SIR.Var(sndVarId, SIRType.Data, AnnotationsDecl.empty),
+                      sir = SIR.Var(sndVarId, SIRType.Data.tp, AnnotationsDecl.empty),
                       representation = PrimitiveRepresentation.PackedData,
                       optRhs = None
                     )
@@ -251,7 +251,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                       SIRBuiltins.mkCons,
                       sndVar,
                       lvDataNil(pos),
-                      SIRType.List(SIRType.Data),
+                      SIRType.List(SIRType.Data.tp),
                       ProductCaseClassRepresentation.ProdDataList,
                       pos
                     )
@@ -269,14 +269,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val frs = lvBuiltinApply(
                       SIRBuiltins.fstPair,
                       inputIdv,
-                      SIRType.Data,
+                      SIRType.Data.tp,
                       PrimitiveRepresentation.PackedData,
                       pos
                     )
                     val snd = lvBuiltinApply(
                       SIRBuiltins.sndPair,
                       inputIdv,
-                      SIRType.Data,
+                      SIRType.Data.tp,
                       PrimitiveRepresentation.PackedData,
                       pos
                     )
@@ -285,7 +285,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                           SIRBuiltins.mkCons,
                           snd,
                           lvDataNil(pos),
-                          SIRType.List(SIRType.Data),
+                          SIRType.List(SIRType.Data.tp),
                           ProductCaseClassRepresentation.ProdDataList,
                           pos
                         )
@@ -451,12 +451,12 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     case None =>
                         lvNewLazyIdVar(
                           tailId,
-                          SIRType.List(SIRType.Data),
+                          SIRType.List(SIRType.Data.tp),
                           SumDataList,
                           lvBuiltinApply(
                             SIRBuiltins.tailList,
                             acc._1,
-                            SIRType.List(SIRType.Data),
+                            SIRType.List(SIRType.Data.tp),
                             SumDataList,
                             sel.anns.pos
                           ),
@@ -560,7 +560,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     case other =>
                         val v = lvNewLazyIdVar(
                           lctx.uniqueVarName("_match_data_list"),
-                          SIRType.List(SIRType.Data),
+                          SIRType.List(SIRType.Data.tp),
                           SumCaseClassRepresentation.SumDataList,
                           other,
                           matchData.anns.pos
@@ -646,7 +646,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 (
                   lvNewLazyIdVar(
                     lctx.uniqueVarName("match_pair_data"),
-                    SIRType.List(SIRType.Data),
+                    SIRType.List(SIRType.Data.tp),
                     SumCaseClassRepresentation.SumDataList,
                     other,
                     matchData.anns.pos
@@ -754,7 +754,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         // TODO: check UplcConstrOnData, it can be more efficient
         val s0 = lvBuiltinApply0(
           SIRBuiltins.mkNilData,
-          SIRType.List(SIRType.Data),
+          SIRType.List(SIRType.Data.tp),
           SumDataList,
           constr.anns.pos
         )
@@ -763,7 +763,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
               SIRBuiltins.mkCons,
               arg,
               acc,
-              SIRType.List(SIRType.Data),
+              SIRType.List(SIRType.Data.tp),
               SumDataList,
               constr.anns.pos
             )

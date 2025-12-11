@@ -60,15 +60,15 @@ object MemoryUsage {
         val usage: CostingInteger = d match
             case Data.I(i)         => memoryUsageInteger(i)
             case Data.B(bs)        => memoryUsageByteString(bs)
-            case Data.Constr(_, l) => sumList(l)
+            case Data.Constr(_, l) => sumList(l.toScalaList)
             case Data.Map(l) =>
                 var acc: CostingInteger = CostingInteger(0L)
-                val it = l.iterator
+                val it = l.toScalaList.iterator
                 while it.hasNext do
                     val t = it.next()
                     acc = acc + memoryUsageData(t._1) + memoryUsageData(t._2)
                 acc
-            case Data.List(l) => sumList(l)
+            case Data.List(l) => sumList(l.toScalaList)
         // The cost of each node of the 'Data' object (in addition to the cost of its content).
         nodeMem + usage
     }

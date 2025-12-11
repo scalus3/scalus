@@ -52,7 +52,7 @@ class ContextTest
         forAll { (i: Interval) =>
             assert(i === i)
             val d = i.toData
-            val applied = sir $ SIR.Const(Constant.Data(d), SIRType.Data, AnnotationsDecl.empty)
+            val applied = sir $ SIR.Const(Constant.Data(d), SIRType.Data.tp, AnnotationsDecl.empty)
             assertEval(applied, true)
         }
     }

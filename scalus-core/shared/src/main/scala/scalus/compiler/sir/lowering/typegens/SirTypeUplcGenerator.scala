@@ -76,13 +76,12 @@ object SirTypeUplcGenerator {
                 SIRTypeUplcByteStringGenerator
             case SIRType.String =>
                 SIRTypeUplcStringGenerator
-            case SIRType.Data =>
-                SIRTypeUplcDataGenerator
             case SIRType.Unit =>
                 UnitSirTypeGenerator
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 val trace = new IdentityHashMap[SIRType, SIRType]()
-                if decl.name == "scalus.prelude.List" then
+                if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
+                else if decl.name == "scalus.prelude.List" then
                     if !containsFun(tp, trace) then {
                         if isPair(typeArgs.head) // isPairOrTuple2(typeArgs.head)
                         then SumPairDataListSirTypeGenerator
@@ -94,7 +93,14 @@ object SirTypeUplcGenerator {
                 else if !containsFun(tp, trace) then SumCaseSirTypeGenerator
                 else SumCaseUplcOnlySirTypeGenerator
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
-                if constrDecl.name == "scalus.ledger.api.v1.PubKeyHash"
+                // Data constructors are handled by SIRTypeUplcDataGenerator
+                if constrDecl.name == SIRType.Data.Constr.name
+                    || constrDecl.name == SIRType.Data.Map.name
+                    || constrDecl.name == SIRType.Data.List.name
+                    || constrDecl.name == SIRType.Data.I.name
+                    || constrDecl.name == SIRType.Data.B.name
+                then SIRTypeUplcDataGenerator
+                else if constrDecl.name == "scalus.ledger.api.v1.PubKeyHash"
                     || constrDecl.name == "scalus.ledger.api.v3.TxId"
                 then ProductCaseOneElementSirTypeGenerator(SIRTypeUplcByteStringGenerator)
                 else if constrDecl.name == "scalus.prelude.AssocMap" || constrDecl.name == "scalus.prelude.SortedMap"

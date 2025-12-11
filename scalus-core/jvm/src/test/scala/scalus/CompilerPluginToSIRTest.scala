@@ -28,7 +28,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     private given PlutusVM = PlutusVM.makePlutusV2VM()
     val deadbeef = Constant.ByteString(hex"deadbeef")
 
-    val sirData = SIRType.Data
+    val sirData = SIRType.Data.tp
     val sirBool = SIRType.Boolean
     val sirInt = SIRType.Integer
     val sirString = SIRType.String
@@ -44,7 +44,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     def sirConst(x: String) = Const(Constant.String(x), SIRType.String, AnnotationsDecl.empty)
     def sirConst(x: ByteString) =
         Const(Constant.ByteString(x), SIRType.ByteString, AnnotationsDecl.empty)
-    def sirConst(x: Data) = Const(Constant.Data(x), SIRType.Data, AnnotationsDecl.empty)
+    def sirConst(x: Data) = Const(Constant.Data(x), SIRType.Data.tp, AnnotationsDecl.empty)
     def sirConstUnit = Const(Constant.Unit, SIRType.Unit, AnnotationsDecl.empty)
 
     def AnE = AnnotationsDecl.empty
@@ -238,7 +238,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val a = TypeVar("A", Some(1), false)
         val builtinListA = SIRType.BuiltinList(a)
-        val builtinListData = SIRType.BuiltinList(SIRType.Data)
+        val builtinListData = SIRType.BuiltinList(SIRType.Data.tp)
         val tailType = SIRType.TypeLambda(List(a), Fun(builtinListA, builtinListA))
 
         val constructedExpr = LamAbs(

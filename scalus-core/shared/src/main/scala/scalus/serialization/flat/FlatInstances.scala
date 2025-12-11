@@ -2,6 +2,7 @@ package scalus.serialization.flat
 
 import scalus.builtin
 import scalus.builtin.Data
+import scalus.prelude.List as PList
 import scalus.serialization.flat.HashConsed.CachedTaggedRef
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.compiler.sir.*
@@ -27,25 +28,36 @@ object FlatInstances:
 
         def bitSize(a: Data): Int = a match
             case Data.Constr(constr, args) =>
-                width + summon[Flat[Long]].bitSize(constr) + summon[Flat[List[Data]]].bitSize(args)
+                require(
+                  constr.isValidLong,
+                  s"Data.Constr tag must fit in Long, got $constr"
+                )
+                width + summon[Flat[Long]].bitSize(constr.toLong) + summon[Flat[List[Data]]]
+                    .bitSize(
+                      args.toScalaList
+                    )
             case Data.Map(values) =>
-                width + summon[Flat[List[(Data, Data)]]].bitSize(values)
-            case Data.List(values) => width + summon[Flat[List[Data]]].bitSize(values)
+                width + summon[Flat[List[(Data, Data)]]].bitSize(values.toScalaList)
+            case Data.List(values) => width + summon[Flat[List[Data]]].bitSize(values.toScalaList)
             case Data.I(value)     => width + summon[Flat[BigInt]].bitSize(value)
             case Data.B(value)     => width + summon[Flat[builtin.ByteString]].bitSize(value)
 
         def encode(a: Data, enc: EncoderState): Unit =
             a match
                 case Data.Constr(constr, args) =>
+                    require(
+                      constr.isValidLong,
+                      s"Data.Constr tag must fit in Long, got $constr"
+                    )
                     enc.bits(width, 0)
-                    summon[Flat[Long]].encode(constr, enc)
-                    summon[Flat[List[Data]]].encode(args, enc)
+                    summon[Flat[Long]].encode(constr.toLong, enc)
+                    summon[Flat[List[Data]]].encode(args.toScalaList, enc)
                 case Data.Map(values) =>
                     enc.bits(width, 1)
-                    summon[Flat[List[(Data, Data)]]].encode(values, enc)
+                    summon[Flat[List[(Data, Data)]]].encode(values.toScalaList, enc)
                 case Data.List(values) =>
                     enc.bits(width, 2)
-                    summon[Flat[List[Data]]].encode(values, enc)
+                    summon[Flat[List[Data]]].encode(values.toScalaList, enc)
                 case Data.I(value) =>
                     enc.bits(width, 3)
                     summon[Flat[BigInt]].encode(value, enc)
@@ -56,15 +68,15 @@ object FlatInstances:
         def decode(decode: DecoderState): Data =
             decode.bits8(width) match
                 case 0 =>
-                    val constr = summon[Flat[Long]].decode(decode)
+                    val constr = BigInt(summon[Flat[Long]].decode(decode))
                     val args = summon[Flat[List[Data]]].decode(decode)
-                    Data.Constr(constr, args)
+                    Data.Constr(constr, PList.from(args))
                 case 1 =>
                     val values = summon[Flat[List[(Data, Data)]]].decode(decode)
-                    Data.Map(values)
+                    Data.Map(PList.from(values))
                 case 2 =>
                     val values = summon[Flat[List[Data]]].decode(decode)
-                    Data.List(values)
+                    Data.List(PList.from(values))
                 case 3 =>
                     val value = summon[Flat[BigInt]].decode(decode)
                     Data.I(value)
@@ -447,7 +459,7 @@ object FlatInstances:
         val tagPrimitiveString: Byte = 0x02
         val tagPrimitiveBoolean: Byte = 0x03
         val tagPrimitiveVoid: Byte = 0x04
-        val tagPrimitiveData: Byte = 0x05
+        val tagData: Byte = 0x05
         val tagCaseClass: Byte = 0x06
         val tagSumCaseClass: Byte = 0x07
         val tagFun: Byte = 0x08
@@ -517,14 +529,14 @@ object FlatInstances:
                     encode.encode.bits(tagWidth, tagPrimitiveBoolean)
                 case SIRType.Unit =>
                     encode.encode.bits(tagWidth, tagPrimitiveVoid)
-                case SIRType.Data =>
-                    encode.encode.bits(tagWidth, tagPrimitiveData)
                 case cc: SIRType.CaseClass =>
                     encode.encode.bits(tagWidth, tagCaseClass)
                     SIRTypeCaseClassFlat.encodeHC(cc, encode)
                 case scc: SIRType.SumCaseClass =>
-                    encode.encode.bits(tagWidth, tagSumCaseClass)
-                    SIRTypeSumCaseClassFlat.encodeHC(scc, encode)
+                    if scc.decl.name == SIRType.Data.name then encode.encode.bits(tagWidth, tagData)
+                    else
+                        encode.encode.bits(tagWidth, tagSumCaseClass)
+                        SIRTypeSumCaseClassFlat.encodeHC(scc, encode)
                 case fun @ SIRType.Fun(from, to) =>
                     encode.encode.bits(tagWidth, tagFun)
                     SIRTypeHashConsedFlat.encodeHC(from, encode)
@@ -565,7 +577,7 @@ object FlatInstances:
                 case `tagPrimitiveString`     => SIRTypeHashConsedRef.fromData(SIRType.String)
                 case `tagPrimitiveBoolean`    => SIRTypeHashConsedRef.fromData(SIRType.Boolean)
                 case `tagPrimitiveVoid`       => SIRTypeHashConsedRef.fromData(SIRType.Unit)
-                case `tagPrimitiveData`       => SIRTypeHashConsedRef.fromData(SIRType.Data)
+                case `tagData`                => SIRTypeHashConsedRef.fromData(SIRType.Data.tp)
                 case `tagCaseClass` =>
                     SIRTypeCaseClassFlat.decodeHC(decode)
                 case `tagSumCaseClass` =>

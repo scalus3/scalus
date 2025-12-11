@@ -6,6 +6,7 @@ import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.{ByteString, Data}
 import scalus.builtin.ByteString.*
+import scalus.prelude.List as PList
 import scalus.uplc.Constant.Pair
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Constant.asConstant
@@ -130,7 +131,7 @@ open class CekBuiltinsTest
 
     test("UnConstrData") {
         assert(
-          (UnConstrData $ Data.Constr(12, 1 :: Nil)).evaluate ==
+          (UnConstrData $ Data.Constr(12, PList(Data.I(1)))).evaluate ==
               Const(
                 Pair(asConstant(12), Constant.List(DefaultUni.Data, List(Constant.Data(Data.I(1)))))
               )
@@ -139,11 +140,11 @@ open class CekBuiltinsTest
 
     test("UnMapData") {
         assert(
-          (UnMapData $ Data.Map((12, 1) :: Nil)).evaluate ==
+          (UnMapData $ Data.Map(PList((Data.I(12), Data.I(1))))).evaluate ==
               Const(
                 Constant.List(
                   DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data),
-                  Pair(Constant.Data(12), Constant.Data(1)) :: Nil
+                  Pair(Constant.Data(Data.I(12)), Constant.Data(Data.I(1))) :: Nil
                 )
               )
         )
@@ -151,7 +152,7 @@ open class CekBuiltinsTest
 
     test("UnListData") {
         assert(
-          (UnListData $ Data.List(Data.I(12) :: Data.I(1) :: Nil)).evaluate ==
+          (UnListData $ Data.List(PList(Data.I(12), Data.I(1)))).evaluate ==
               Const(Constant.List(DefaultUni.Data, Constant.Data(12) :: Constant.Data(1) :: Nil))
         )
     }

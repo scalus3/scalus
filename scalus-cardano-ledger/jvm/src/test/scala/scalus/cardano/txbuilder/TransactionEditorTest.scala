@@ -6,6 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
+import scalus.prelude.List as PList
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.RedeemerTag.Spend
 import scalus.cardano.txbuilder.*
@@ -117,13 +118,13 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                         Redeemer(
                           tag = Spend,
                           index = 1,
-                          data = Data.List(List()),
+                          data = Data.List(PList.Nil),
                           exUnits = ExUnits.zero
                         ),
                         Redeemer(
                           tag = Spend,
                           index = 2,
-                          data = Data.Map(List.empty),
+                          data = Data.Map(PList.Nil),
                           exUnits = ExUnits.zero
                         )
                       )
@@ -144,7 +145,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                         Redeemer(
                           tag = Spend,
                           index = 0,
-                          data = Data.List(List.empty),
+                          data = Data.List(PList.Nil),
                           exUnits = ExUnits.zero
                         )
                       )
@@ -176,7 +177,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                         Redeemer(
                           tag = Spend,
                           index = 1,
-                          data = Data.Map(List.empty),
+                          data = Data.Map(PList.Nil),
                           exUnits = ExUnits.zero
                         )
                       )
@@ -198,13 +199,13 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                         Redeemer(
                           tag = Spend,
                           index = 1,
-                          data = Data.Map(List.empty),
+                          data = Data.Map(PList.Nil),
                           exUnits = ExUnits.zero
                         ),
                         Redeemer(
                           tag = Spend,
                           index = 0,
-                          data = Data.List(List.empty),
+                          data = Data.List(PList.Nil),
                           exUnits = ExUnits.zero
                         )
                       )
@@ -231,7 +232,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                               Redeemer(
                                 tag = Spend,
                                 index = 0,
-                                data = Data.List(List.empty),
+                                data = Data.List(PList.Nil),
                                 exUnits = ExUnits.zero
                               )
                             )

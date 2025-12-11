@@ -62,7 +62,7 @@ object SirDSL:
                 case Constant.String(value) => SIR.Const(c, SIRType.String, AnnotationsDecl.empty)
                 case Constant.Unit          => SIR.Const(c, SIRType.Unit, AnnotationsDecl.empty)
                 case Constant.Bool(value)   => SIR.Const(c, SIRType.Boolean, AnnotationsDecl.empty)
-                case Constant.Data(value)   => SIR.Const(c, SIRType.Data, AnnotationsDecl.empty)
+                case Constant.Data(value)   => SIR.Const(c, SIRType.Data.tp, AnnotationsDecl.empty)
                 case Constant.List(elemType, value) =>
                     SIR.Const(
                       c,

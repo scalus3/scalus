@@ -2,6 +2,7 @@ package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{ByteString, Data}
+import scalus.prelude.List as PList
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
@@ -104,7 +105,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     val c11h15no2: AssetName = AssetName.fromString("c11h15no2")
     val token: AssetName = AssetName.fromString("token")
 
-    val emptyRedeemer: Data = Data.List(List.empty)
+    val emptyRedeemer: Data = Data.List(PList.Nil)
     val inlineDatum42: DatumOption = Inline(Data.I(42))
 
     val scriptAddress: ShelleyAddress = ShelleyAddress(

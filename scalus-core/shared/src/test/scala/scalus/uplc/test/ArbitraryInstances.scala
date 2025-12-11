@@ -9,6 +9,7 @@ import scalus.builtin.ByteString.utf8
 import scalus.builtin.Data
 import scalus.builtin.Data.{B, Constr, I, List, Map}
 import scalus.cardano.ledger.Word64
+import scalus.prelude.List as PList
 import scalus.uplc.DefaultUni.{ProtoList, ProtoPair}
 import scalus.uplc.Term.*
 import scalus.prelude.{asScalus, Eq, Ord}
@@ -86,14 +87,17 @@ trait ArbitraryInstances:
                       )
                     )
             case Constr(c, args) =>
-                if args.isEmpty then Stream.empty
-                else Shrink.shrink(args).map(Constr(c, _))
+                val scalaArgs = args.toScalaList
+                if scalaArgs.isEmpty then Stream.empty
+                else Shrink.shrink(scalaArgs).map(a => Constr(c, PList.from(a)))
             case List(args) =>
-                if args.isEmpty then Stream.empty
-                else Shrink.shrink(args).map(List.apply)
+                val scalaArgs = args.toScalaList
+                if scalaArgs.isEmpty then Stream.empty
+                else Shrink.shrink(scalaArgs).map(a => List(PList.from(a)))
             case Map(args) =>
-                if args.isEmpty then Stream.empty
-                else Shrink.shrink(args).map(Map.apply)
+                val scalaArgs = args.toScalaList
+                if scalaArgs.isEmpty then Stream.empty
+                else Shrink.shrink(scalaArgs).map(a => Map(PList.from(a)))
         }
 
     given arbData: Arbitrary[Data] = Arbitrary {
@@ -101,18 +105,18 @@ trait ArbitraryInstances:
             c <- Gen.posNum[Long]
             n <- Gen.choose(sz / 3, sz / 2)
             args <- Gen.listOfN(n, sizedTree(sz / 2))
-        yield Constr(c, args)
+        yield Constr(c, PList.from(args))
 
         def listGen(sz: Int): Gen[List] = for
             n <- Gen.choose(sz / 3, sz / 2)
             args <- Gen.listOfN(n, sizedTree(sz / 2))
-        yield List(args)
+        yield List(PList.from(args))
 
         def mapGen(sz: Int): Gen[Map] = for
             n <- Gen.choose(sz / 3, sz / 2)
             tuple = Gen.zip(sizedTree(sz / 2), sizedTree(sz / 2))
             args <- Gen.mapOfN(n, tuple)
-        yield Map(args.toList)
+        yield Map(PList.from(args.toList))
 
         def sizedTree(sz: Int): Gen[Data] =
             if sz <= 0 then Gen.oneOf(iArb.arbitrary, bArb.arbitrary)

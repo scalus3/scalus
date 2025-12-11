@@ -1,18 +1,18 @@
 package scalus.builtin
 
 import scalus.builtin.Data.{B, Constr, I, List, Map}
+import scalus.prelude.List as PList
 
-import scala.collection.immutable
 import scala.compiletime.asMatchable
 
 sealed abstract class Data {
     private[scalus] def showDebug: String = this match {
         case Constr(constr, args) =>
-            s"<$constr, [${args.map(_.showDebug).mkString(", ")}]>"
+            s"<$constr, [${args.toScalaList.map(_.showDebug).mkString(", ")}]>"
         case Map(values) =>
-            s"{${values.map { case (k, v) => s"${k.showDebug}: ${v.showDebug}" }.mkString(", ")}}"
+            s"{${values.toScalaList.map { case (k, v) => s"${k.showDebug}: ${v.showDebug}" }.mkString(", ")}}"
         case List(values) =>
-            s"[${values.map(_.showDebug).mkString(", ")}]"
+            s"[${values.toScalaList.map(_.showDebug).mkString(", ")}]"
         case I(value) =>
             s"$value"
         case B(value) =>
@@ -35,24 +35,25 @@ object Data extends DataApi:
       data
     )
 
-    case class Constr(constr: Long, args: immutable.List[Data]) extends Data {
+    case class Constr(constr: BigInt, args: PList[Data]) extends Data {
         assert(constr >= 0, s"Constructor must be non-negative, got $constr")
     }
 
-    case class Map(values: immutable.List[(Data, Data)]) extends Data {
-        override def hashCode(): Int = values.toSet.hashCode()
+    case class Map(values: PList[(Data, Data)]) extends Data {
+        override def hashCode(): Int = values.toScalaList.toSet.hashCode()
         override def equals(x: Any): Boolean = x.asMatchable match {
-            case Map(otherValues) => values.toSet == otherValues.toSet
+            case Map(otherValues) => values.toScalaList.toSet == otherValues.toScalaList.toSet
             case _                => false
         }
     }
 
-    case class List(values: immutable.List[Data]) extends Data:
-        override def toString: String = s"List(${values.map(v => v.toString + "::").mkString}Nil)"
+    case class List(values: PList[Data]) extends Data:
+        override def toString: String =
+            s"List(${values.toScalaList.map(v => v.toString + "::").mkString}Nil)"
 
     case class I(value: BigInt) extends Data
 
     case class B(value: ByteString) extends Data:
         override def toString: String = s"B(\"${value.toHex}\")"
 
-    val unit: Data = Constr(0, immutable.Nil)
+    val unit: Data = Constr(0, PList.Nil)

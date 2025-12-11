@@ -1,6 +1,7 @@
 package scalus.uplc.jit
 
 import scalus.builtin.*
+import scalus.prelude.List.toScalaList
 import scalus.uplc.*
 
 object RuntimeHelper {
@@ -41,8 +42,8 @@ object RuntimeHelper {
         d match {
             case Data.Constr(index, fields) =>
                 BuiltinPair(
-                  BigInt(index),
-                  fields // Plain List[Data]
+                  index,
+                  fields.toScalaList // Convert PList to scala List
                 )
             case _ =>
                 throw new IllegalArgumentException("Data is not a Constr")
@@ -50,12 +51,12 @@ object RuntimeHelper {
     }
 
     final def unListData(d: Data): List[Data] = d match
-        case Data.List(values) => values // Plain List[Data]
+        case Data.List(values) => values.toScalaList // Convert PList to scala List
         case _                 => throw new Exception(s"not a list but $d")
 
     final def unMapData(d: Data): List[BuiltinPair[Data, Data]] = d match
         case Data.Map(values) =>
-            values.map(BuiltinPair.apply) // Plain List[BuiltinPair[Data, Data]]
+            values.toScalaList.map(BuiltinPair.apply) // Convert PList to scala List, then map
         case _ => throw new Exception(s"not a map but $d")
 
 }

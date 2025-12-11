@@ -189,7 +189,7 @@ object ScalusRuntime {
                   SIRBuiltins.mkCons,
                   second,
                   dataNil,
-                  SIRType.List(SIRType.Data),
+                  SIRType.List(SIRType.Data.tp),
                   SumCaseClassRepresentation.SumDataList,
                   AnnotationsDecl.empty.pos
                 )
@@ -197,7 +197,7 @@ object ScalusRuntime {
                   SIRBuiltins.mkCons,
                   first,
                   t1,
-                  SIRType.List(SIRType.Data),
+                  SIRType.List(SIRType.Data.tp),
                   SumCaseClassRepresentation.SumDataList,
                   AnnotationsDecl.empty.pos
                 )
@@ -338,7 +338,7 @@ object ScalusRuntime {
             val prodList = lvBuiltinApply(
               SIRBuiltins.sndPair,
               pairIntData,
-              SIRType.List(SIRType.Data),
+              SIRType.List(SIRType.Data.tp),
               SumCaseClassRepresentation.SumDataList,
               AnnotationsDecl.empty.pos
             )
@@ -346,28 +346,28 @@ object ScalusRuntime {
             val prodListVal = new VariableLoweredValue(
               id = prodListId,
               name = prodListId,
-              sir = SIR.Var(prodListId, SIRType.List(SIRType.Data), AnnotationsDecl.empty),
+              sir = SIR.Var(prodListId, SIRType.List(SIRType.Data.tp), AnnotationsDecl.empty),
               representation = SumCaseClassRepresentation.SumDataList,
               optRhs = Some(prodList),
             )
             val firstProdList = lvBuiltinApply(
               SIRBuiltins.headList,
               prodListVal,
-              SIRType.Data,
+              SIRType.Data.tp,
               PrimitiveRepresentation.PackedData,
               AnnotationsDecl.empty.pos
             )
             val tailProdList = lvBuiltinApply(
               SIRBuiltins.tailList,
               prodListVal,
-              SIRType.List(SIRType.Data),
+              SIRType.List(SIRType.Data.tp),
               SumCaseClassRepresentation.SumDataList,
               AnnotationsDecl.empty.pos
             )
             val secondProdList = lvBuiltinApply(
               SIRBuiltins.headList,
               tailProdList,
-              SIRType.Data,
+              SIRType.Data.tp,
               PrimitiveRepresentation.PackedData,
               AnnotationsDecl.empty.pos
             )

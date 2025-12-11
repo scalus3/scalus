@@ -24,7 +24,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
     private val deadbeef = Constant.ByteString(hex"deadbeef")
 
-    private val sirData = SIRType.Data
+    private val sirData = SIRType.Data.tp
     private val sirBool = SIRType.Boolean
     private val sirInt = SIRType.Integer
     private val sirString = SIRType.String
@@ -48,7 +48,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     def sirConst(x: ByteString) =
         Const(Constant.ByteString(x), SIRType.ByteString, AnnotationsDecl.empty)
 
-    def sirConst(x: Data) = Const(Constant.Data(x), SIRType.Data, AnnotationsDecl.empty)
+    def sirConst(x: Data) = Const(Constant.Data(x), SIRType.Data.tp, AnnotationsDecl.empty)
 
     def sirConstUnit = Const(Constant.Unit, SIRType.Unit, AnnotationsDecl.empty)
 

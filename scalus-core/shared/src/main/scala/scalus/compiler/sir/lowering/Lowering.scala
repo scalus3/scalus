@@ -4,6 +4,7 @@ import org.typelevel.paiges.Doc
 import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
+import scalus.prelude.List as PList
 import scalus.pretty
 import scalus.uplc.*
 
@@ -238,12 +239,12 @@ object Lowering {
                 // TODO: In the future, we may want to add SumConstBuiltinList representation
                 // to avoid this transformation and keep native UPLC list types
                 val (transformedConst, transformedTp, repr) = tp match {
-                    case SIRType.BuiltinList(elemType) if elemType != SIRType.Data =>
+                    case SIRType.BuiltinList(elemType) if !SIRType.Data.unapply(elemType) =>
                         const match {
                             case Constant.List(_, elements) =>
                                 val dataElements = elements.map(constantToData)
                                 val newConst = Constant.List(DefaultUni.Data, dataElements)
-                                val newTp = SIRType.BuiltinList(SIRType.Data)
+                                val newTp = SIRType.BuiltinList(SIRType.Data.tp)
                                 (newConst, newTp, SumCaseClassRepresentation.SumDataList)
                             case _ =>
                                 (const, tp, LoweredValueRepresentation.constRepresentation(tp))
@@ -481,13 +482,13 @@ object Lowering {
     }
 
     private def isFromDataType(tp: SIRType): Boolean = tp match {
-        case SIRType.Fun(SIRType.Data, _)    => true
+        case SIRType.Fun(SIRType.Data(), _)  => true
         case SIRType.TypeLambda(params, tp1) => isFromDataType(tp1)
         case _                               => false
     }
 
     private def isToDataType(tp: SIRType): Boolean = tp match {
-        case SIRType.Fun(_, SIRType.Data)    => true
+        case SIRType.Fun(_, SIRType.Data())  => true
         case SIRType.TypeLambda(params, tp1) => isToDataType(tp1)
         case _                               => false
     }
@@ -728,10 +729,10 @@ object Lowering {
             Constant.Data(scalus.builtin.Data.B(scalus.builtin.ByteString.fromString(v)))
         case Constant.Bool(v) =>
             // Bool encoded as Constr(0/1, [])
-            Constant.Data(scalus.builtin.Data.Constr(if v then 1 else 0, Nil))
+            Constant.Data(scalus.builtin.Data.Constr(if v then 1 else 0, PList.Nil))
         case Constant.Unit =>
             // Unit encoded as Constr(0, [])
-            Constant.Data(scalus.builtin.Data.Constr(0, Nil))
+            Constant.Data(scalus.builtin.Data.Constr(0, PList.Nil))
         case Constant.Data(d) => c // already Data
         case Constant.List(elemTpe, elements) =>
             val dataElements = elements.map { elem =>
@@ -740,7 +741,7 @@ object Lowering {
                     case other => throw new RuntimeException(s"Expected Data constant, got $other")
                 }
             }
-            Constant.Data(scalus.builtin.Data.List(dataElements))
+            Constant.Data(scalus.builtin.Data.List(PList.from(dataElements)))
         case Constant.Pair(a, b) =>
             val aData = constantToData(a) match {
                 case Constant.Data(d) => d
@@ -750,7 +751,7 @@ object Lowering {
                 case Constant.Data(d) => d
                 case other => throw new RuntimeException(s"Expected Data constant, got $other")
             }
-            Constant.Data(scalus.builtin.Data.List(List(aData, bData)))
+            Constant.Data(scalus.builtin.Data.List(PList.from(List(aData, bData))))
         case other =>
             throw new RuntimeException(s"Cannot convert constant $other to Data")
     }

@@ -10,6 +10,7 @@ import cats.parse.Rfc5234.digit
 import cats.parse.Rfc5234.hexdig
 import scalus.builtin.{platform, BLS12_381_G1_Element, BLS12_381_G2_Element, ByteString, Data, given}
 import scalus.cardano.ledger.Word64
+import scalus.prelude.List as PList
 import scalus.uplc.DefaultUni.ProtoList
 import scalus.uplc.DefaultUni.ProtoPair
 import scalus.uplc.Constant.asConstant
@@ -271,11 +272,16 @@ object UplcParser:
         def args: P[List[Data]] =
             symbol("[") *> lexeme(self).repSep0(symbol(",")) <* symbol("]")
         def dataConstr: P[Data] =
-            symbol("Constr") *> lexeme(long) ~ args `map` Data.Constr.apply
+            symbol("Constr") *> lexeme(Numbers.bigInt) ~ args `map` { case (tag, argsList) =>
+                Data.Constr(tag, PList.from(argsList))
+            }
 
-        def dataList: P[Data] = symbol("List") *> args `map` Data.List.apply
+        def dataList: P[Data] =
+            symbol("List") *> args `map` { argsList => Data.List(PList.from(argsList)) }
         def dataMap: P[Data] = symbol("Map") *>
-            symbol("[") *> dataPair.repSep0(symbol(",")) <* symbol("]") `map` Data.Map.apply
+            symbol("[") *> dataPair.repSep0(symbol(",")) <* symbol("]") `map` { pairs =>
+                Data.Map(PList.from(pairs))
+            }
 
         def dataB: P[Data] = symbol("B") *> lexeme(bytestring) `map` Data.B.apply
         def dataI: P[Data] = symbol("I") *> lexeme(Numbers.bigInt) `map` Data.I.apply
