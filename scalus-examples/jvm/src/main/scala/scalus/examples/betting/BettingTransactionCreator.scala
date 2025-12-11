@@ -2,7 +2,6 @@ package scalus.examples.betting
 
 import scalus.builtin.ByteString.{hex, utf8}
 import scalus.builtin.Data
-import scalus.builtin.Data.toData
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*

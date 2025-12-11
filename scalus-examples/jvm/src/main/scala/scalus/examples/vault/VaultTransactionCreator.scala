@@ -1,6 +1,5 @@
 package scalus.examples.vault
 
-import scalus.builtin.Data.toData
 import scalus.cardano.address.Address
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*

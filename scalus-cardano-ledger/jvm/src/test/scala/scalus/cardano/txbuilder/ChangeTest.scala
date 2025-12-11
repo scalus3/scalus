@@ -101,6 +101,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 )
 
             case Left(InsufficientFunds(_, _)) => succeed
+            case _                             => fail("Expected InsufficientFunds error")
         }
     }
 

@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnits, Word64}
 import scalus.uplc.*
 import scalus.uplc.Term.*
-import scalus.uplc.TermDSL.given
 
 import scala.language.implicitConversions
 
@@ -273,12 +272,12 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         println(s"ifThenElse budget (true): $ifThenElseBudget")
         println(s"Case budget (true): $caseBudget")
         println(
-          s"Savings: ${ifThenElseBudget.cpu - caseBudget.cpu} cpu, ${ifThenElseBudget.memory - caseBudget.memory} mem"
+          s"Savings: ${ifThenElseBudget.steps - caseBudget.steps} cpu, ${ifThenElseBudget.memory - caseBudget.memory} mem"
         )
 
         // Case should be more efficient (less budget)
         assert(
-          caseBudget.cpu <= ifThenElseBudget.cpu,
+          caseBudget.steps <= ifThenElseBudget.steps,
           s"Case ($caseBudget) should use less or equal CPU than ifThenElse ($ifThenElseBudget)"
         )
     }
@@ -317,12 +316,12 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         println(s"ifThenElse budget (false): $ifThenElseBudget")
         println(s"Case budget (false): $caseBudget")
         println(
-          s"Savings: ${ifThenElseBudget.cpu - caseBudget.cpu} cpu, ${ifThenElseBudget.memory - caseBudget.memory} mem"
+          s"Savings: ${ifThenElseBudget.steps - caseBudget.steps} cpu, ${ifThenElseBudget.memory - caseBudget.memory} mem"
         )
 
         // Case should be more efficient (less budget)
         assert(
-          caseBudget.cpu <= ifThenElseBudget.cpu,
+          caseBudget.steps <= ifThenElseBudget.steps,
           s"Case ($caseBudget) should use less or equal CPU than ifThenElse ($ifThenElseBudget)"
         )
     }
@@ -373,12 +372,12 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
         println(s"equalsInteger chain budget (3 branches, select 1): $equalsChainBudget")
         println(s"Case on integer budget (3 branches, select 1): $caseBudget")
         println(
-          s"Savings: ${equalsChainBudget.cpu - caseBudget.cpu} cpu, ${equalsChainBudget.memory - caseBudget.memory} mem"
+          s"Savings: ${equalsChainBudget.steps - caseBudget.steps} cpu, ${equalsChainBudget.memory - caseBudget.memory} mem"
         )
 
         // Case should be more efficient (less budget)
         assert(
-          caseBudget.cpu <= equalsChainBudget.cpu,
+          caseBudget.steps <= equalsChainBudget.steps,
           s"Case ($caseBudget) should use less or equal CPU than equalsInteger chain ($equalsChainBudget)"
         )
     }

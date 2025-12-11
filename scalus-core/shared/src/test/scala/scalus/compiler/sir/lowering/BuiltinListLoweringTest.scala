@@ -3,8 +3,8 @@ package scalus.compiler.sir.lowering
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
-import scalus.builtin.Builtins.*
 import scalus.builtin.BuiltinList
+import scalus.builtin.Builtins.*
 import scalus.uplc.eval.{PlutusVM, Result}
 
 /** Tests for lowering issues with BuiltinList literals.
@@ -23,9 +23,9 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     // This test fails with LoweringException: Unexpected representation conversion
     // for scalus.builtin.BuiltinList[Int] from DataConstr to SumDataList
     test("dropList with BuiltinList literal") {
-        import scalus.compiler.sir.lowering.{LoweringContext, SumCaseClassRepresentation}
-        import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
         import scalus.compiler.sir.SIRType
+        import scalus.compiler.sir.lowering.LoweringContext
+        import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 
         val sir = compile {
             val list = BuiltinList[BigInt](10, 20, 30, 40, 50)
@@ -107,7 +107,6 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     // Test constRepresentation for BuiltinList[Data] and BuiltinList[BuiltinPair[Data,Data]]
     test("constRepresentation for BuiltinList[Data] returns SumDataList") {
         import scalus.compiler.sir.SIRType
-        import scalus.builtin.Data
 
         given LoweringContext = LoweringContext()
 

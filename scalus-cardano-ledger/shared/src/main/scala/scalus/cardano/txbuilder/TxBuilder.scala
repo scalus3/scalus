@@ -1123,9 +1123,8 @@ case class TxBuilder(
             .map(_ -- excludeUtxos)
         utxos match {
             case Right(u) if u.nonEmpty => u
-            case Right(u) if u.isEmpty =>
-                throw new RuntimeException("Could not find collateral uxtos")
-            case Left(e) => throw new RuntimeException("Could not find collateral utxos", e)
+            case Right(u) => throw new RuntimeException("Could not find collateral uxtos")
+            case Left(e)  => throw new RuntimeException("Could not find collateral utxos", e)
         }
 
     }
