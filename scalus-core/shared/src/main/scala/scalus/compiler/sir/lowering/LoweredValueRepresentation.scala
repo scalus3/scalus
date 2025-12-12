@@ -511,9 +511,12 @@ object LoweredValueRepresentation {
                   SIRPosition.empty
                 )
             case SIRType.SumCaseClass(decl, typeArgs) =>
+                // Data type uses DataData representation, not DataConstr
+                if decl.name == SIRType.Data.name then SumCaseClassRepresentation.DataData
                 // scalus.prelude.List uses native UPLC list representation for Data-compatible elements
                 // TODO: add containsFun check like in SirTypeUplcGenerator.apply
-                if decl.name == "scalus.prelude.List" || decl.name == SIRType.BuiltinList.name then
+                else if decl.name == "scalus.prelude.List" || decl.name == SIRType.BuiltinList.name
+                then
                     if typeArgs.nonEmpty && ProductCaseClassRepresentation.PairData
                             .isPairOrTuple2(typeArgs.head)
                     then SumCaseClassRepresentation.SumDataPairList
@@ -523,9 +526,9 @@ object LoweredValueRepresentation {
                 ProductCaseClassRepresentation.ProdDataConstr
             case SIRType.TypeLambda(params, body) =>
                 constRepresentation(body)
-            case SIRType.Integer | SIRType.Data() | SIRType.ByteString | SIRType.String |
-                SIRType.Boolean | SIRType.Unit | SIRType.BLS12_381_G1_Element |
-                SIRType.BLS12_381_G2_Element | SIRType.BLS12_381_MlResult =>
+            case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean |
+                SIRType.Unit | SIRType.BLS12_381_G1_Element | SIRType.BLS12_381_G2_Element |
+                SIRType.BLS12_381_MlResult =>
                 PrimitiveRepresentation.Constant
             case SIRType.Fun(in, out) =>
                 val inRepresentation = lc.typeGenerator(in).defaultRepresentation(in)

@@ -118,18 +118,23 @@ class FromDataDerivationTest
         import ToDataBigRecord.given
         given PlutusVM = PlutusVM.makePlutusV2VM()
         val sir = compile { (d: Data) => fromData[BigRecord](d).toData }
-        // println(s"fromData SIR = ${sir.pretty.render(100)}")
+        println(s"fromData SIR = ${sir.pretty.render(100)}")
         val term = sir.toUplc()
+        println(s"fromData UPLC = ${term.show}")
         forAll { (r: BigRecord) =>
             val d = r.toData
             assert(fromData[BigRecord](d) == r)
             val script = term.plutusV2 $ d
+            println(s"script = ${script.show}")
+            println(s"d.asTerm = ${d.asTerm.show}")
             val out = UplcCli.evalFlat(script)
+            println(s"out = $out")
             out match
-                case UplcEvalResult.Success(term, _) =>
-                    assert(term == d.asTerm)
-                case UplcEvalResult.UplcFailure(errorCode, error) => fail(error)
-                case UplcEvalResult.TermParsingError(error)       => fail(error)
+                case UplcEvalResult.Success(resultTerm, _) =>
+                    println(s"resultTerm = ${resultTerm.show}")
+                    assert(resultTerm == d.asTerm)
+                case UplcEvalResult.UplcFailure(errorCode, error) => fail(s"UplcFailure: $error")
+                case UplcEvalResult.TermParsingError(error) => fail(s"TermParsingError: $error")
             assert(script.term.evaluate == d.asTerm)
         }
     }
