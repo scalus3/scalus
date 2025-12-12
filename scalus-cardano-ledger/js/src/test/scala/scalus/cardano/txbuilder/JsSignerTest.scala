@@ -2,7 +2,7 @@ package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
-import scalus.cardano.wallet.LucidEvolutionAccount
+import scalus.cardano.wallet.LucidAccount
 import scalus.builtin.ByteString
 
 class JsSignerTest extends AnyFunSuite {
@@ -18,7 +18,7 @@ class JsSignerTest extends AnyFunSuite {
         "6ea31d27d585439ea8fd9cd8e6664ed83e605c06aec24d32dfaba488e49287d9"
 
     test("produces expected signature for test mnemonic") {
-        val account = LucidEvolutionAccount(Network.Mainnet, mnemonic, derivationPath)
+        val account = LucidAccount(Network.Mainnet, mnemonic, derivationPath)
         val signature = account.paymentKeyPair.sign(message.bytes)
 
         assert(
@@ -28,7 +28,7 @@ class JsSignerTest extends AnyFunSuite {
     }
 
     test("verifies own signature") {
-        val account = LucidEvolutionAccount(Network.Mainnet, mnemonic, derivationPath)
+        val account = LucidAccount(Network.Mainnet, mnemonic, derivationPath)
 
         val signature = account.paymentKeyPair.sign(message.bytes)
         val isValid = account.paymentKeyPair.verify(message.bytes, signature)

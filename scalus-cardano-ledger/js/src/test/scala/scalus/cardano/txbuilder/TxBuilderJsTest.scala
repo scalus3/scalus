@@ -3,7 +3,7 @@ package scalus.cardano.txbuilder
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.{CardanoInfo, TransactionHash, TransactionInput, TransactionOutput, Utxo, Value}
-import scalus.cardano.wallet.LucidEvolutionAccount
+import scalus.cardano.wallet.LucidAccount
 
 class TxBuilderJsTest extends AnyFunSuite {
 
@@ -11,7 +11,7 @@ class TxBuilderJsTest extends AnyFunSuite {
     private val derivationPath = "m/1852'/1815'/0'/0/0"
     private val cardanoInfo = CardanoInfo.mainnet
 
-    private val account = LucidEvolutionAccount(cardanoInfo.network, mnemonic, derivationPath)
+    private val account = LucidAccount(cardanoInfo.network, mnemonic, derivationPath)
 
     private val alice = Address.fromBech32(account.baseAddress)
     // arbitrary test address
@@ -33,8 +33,7 @@ class TxBuilderJsTest extends AnyFunSuite {
         val tx = TxBuilder(cardanoInfo)
             .payTo(bob, payment)
             .spend(aliceUtxo)
-            .changeTo(alice)
-            .build()
+            .build(changeTo = alice)
             .sign(account.signerForUtxos)
             .transaction
 
