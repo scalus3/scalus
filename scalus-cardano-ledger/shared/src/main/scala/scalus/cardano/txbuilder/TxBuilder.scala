@@ -1008,7 +1008,7 @@ case class TxBuilder(
                       transaction = tx,
                       resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos)
                     )
-                    copy(context = updatedContext).changeTo(sponsor)
+                    copy(context = updatedContext)
                 case Left(error) =>
                     throw new RuntimeException(s"Failed to balance transaction: $error")
             }
@@ -1047,7 +1047,7 @@ case class TxBuilder(
         // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
         // We also need to make sure that we don't have more than 3 collateral inputs.
 
-        val minAda = MinCoinSizedTransactionOutput(
+        val minAda = MinCoinSizedTransactionOutput.ensureMinAda(
           Sized(TransactionOutput(sponsor, gap)),
           env.protocolParams
         )
