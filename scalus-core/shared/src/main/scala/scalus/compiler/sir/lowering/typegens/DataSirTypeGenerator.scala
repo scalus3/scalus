@@ -201,9 +201,81 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
-        LoweringContext
-    ): LoweredValue =
-        ???
+        lctx: LoweringContext
+    ): LoweredValue = {
+        val pos = sel.anns.pos
+
+        // Determine which Data variant we're selecting from based on scrutinee type
+        SIRType.collectProd(loweredScrutinee.sirType) match {
+            case Some((_, constrDecl, _)) =>
+                constrDecl.name match {
+                    case SIRType.Data.Map.name =>
+                        // Data.Map.values -> TypeProxy with SumDataAssocMap representation
+                        TypeRepresentationProxyLoweredValue(
+                          loweredScrutinee,
+                          sel.tp,
+                          SumCaseClassRepresentation.SumDataAssocMap,
+                          pos
+                        )
+
+                    case SIRType.Data.Constr.name =>
+                        // Data.Constr has two fields: constr (tag) and args
+                        // unConstrData returns Pair[Int, List[Data]]
+                        val pairType = SIRType.BuiltinPair(
+                          SIRType.Integer,
+                          SIRType.List(SIRType.Data.tp)
+                        )
+                        val unConstr = lvBuiltinApply(
+                          SIRBuiltins.unConstrData,
+                          loweredScrutinee,
+                          pairType,
+                          PrimitiveRepresentation.Constant,
+                          pos
+                        )
+                        sel.field match {
+                            case "constr" =>
+                                // fstPair to get the tag - Int in Constant representation
+                                lvBuiltinApply(
+                                  SIRBuiltins.fstPair,
+                                  unConstr,
+                                  sel.tp,
+                                  PrimitiveRepresentation.Constant,
+                                  pos
+                                )
+                            case "args" =>
+                                // sndPair to get the args - List[Data] in SumDataList representation
+                                lvBuiltinApply(
+                                  SIRBuiltins.sndPair,
+                                  unConstr,
+                                  sel.tp,
+                                  SumCaseClassRepresentation.SumDataList,
+                                  pos
+                                )
+                            case other =>
+                                throw LoweringException(
+                                  s"Unknown field '$other' for Data.Constr",
+                                  pos
+                                )
+                        }
+
+                    case _ =>
+                        // For I, B, List - use TypeProxy, toRepresentation handles unpacking
+                        val fieldTypeGen = lctx.typeGenerator(sel.tp)
+                        val fieldRepr = fieldTypeGen.defaultDataRepresentation(sel.tp)
+                        TypeRepresentationProxyLoweredValue(
+                          loweredScrutinee,
+                          sel.tp,
+                          fieldRepr,
+                          pos
+                        )
+                }
+            case None =>
+                throw LoweringException(
+                  s"Cannot select field from non-product Data type: ${loweredScrutinee.sirType.show}",
+                  pos
+                )
+        }
+    }
 
     override def genMatch(
         matchData: SIR.Match,
