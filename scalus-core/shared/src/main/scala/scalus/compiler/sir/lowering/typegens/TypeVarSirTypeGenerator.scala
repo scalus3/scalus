@@ -73,7 +73,8 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                 new RepresentationProxyLoweredValue(input, representation, pos)
                         case sumRepr: SumCaseClassRepresentation =>
                             sumRepr match {
-                                case SumCaseClassRepresentation.DataConstr =>
+                                case SumCaseClassRepresentation.DataConstr |
+                                    SumCaseClassRepresentation.DataData =>
                                     new RepresentationProxyLoweredValue(input, representation, pos)
                                 case SumCaseClassRepresentation.UplcConstr |
                                     SumCaseClassRepresentation.UplcConstrOnData |
