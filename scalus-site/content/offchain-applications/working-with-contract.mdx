@@ -175,8 +175,7 @@ def unlock(
     recipientAddress: Address
 ): Transaction = {
   TxBuilder(env)
-    .attach(script)
-    .spend(lockedUtxo, redeemer.toData)
+    .spend(lockedUtxo, redeemer.toData, script)
     .payTo(recipientAddress, lockedUtxo.output.value)
     .collaterals(collateralUtxo)
     .changeTo(recipientAddress)

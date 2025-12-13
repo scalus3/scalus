@@ -92,16 +92,16 @@ TxBuilder(env)
 
 The tokens are removed from circulation and the UTxO containing them is consumed.
 
-## Using Pre-attached Scripts
+## Using Reference Scripts
 
-If you've already attached the minting policy, use `mint()` instead:
+If you've already attached the minting policy with a reference input, use `mint()` instead:
 
 ```scala copy
 val policyId = mintingPolicy.scriptHash
 
 TxBuilder(env)
   .spend(utxo)
-  .attach(mintingPolicy)
+  .references(mintingPolicyReferenceUtxo)
   .mint(redeemer, policyId, assets)
   .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
   .build(changeAddress)

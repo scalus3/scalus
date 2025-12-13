@@ -80,13 +80,12 @@ The `requiredSigners` set is added to the transaction's required signers field, 
 
 ## Spending with Attached Scripts
 
-If you've attached a script earlier using `attach()`, you can reference it when spending:
+You can attach a script multiple times, it will be reused for all inputs that reference it:
 
 ```scala copy
 TxBuilder(env)
-  .attach(script)  // Attach once
-  .spend(scriptUtxo1, redeemer1)  // References attached script
-  .spend(scriptUtxo2, redeemer2)  // Can reuse for multiple inputs
+  .spend(scriptUtxo1, redeemer1, script)  // attach a script
+  .spend(scriptUtxo2, redeemer2, script)  // Can reuse for multiple inputs
   .collaterals(collateralUtxo)
   .payTo(recipient, totalValue)
   .build(changeAddress)
