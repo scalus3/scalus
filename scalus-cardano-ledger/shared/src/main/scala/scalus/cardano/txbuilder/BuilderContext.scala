@@ -1,10 +1,10 @@
 package scalus.cardano.txbuilder
 
-import scalus.cardano.ledger.{ExUnits, PlutusScriptEvaluator}
+import scalus.cardano.ledger.{CardanoInfo, ExUnits, PlutusScriptEvaluator}
 
 @deprecated("Will be removed", "0.13.0")
 case class BuilderContext(
-    env: Environment,
+    env: CardanoInfo,
     wallet: Wallet,
     evaluator: PlutusScriptEvaluator
 )
@@ -24,7 +24,7 @@ object BuilderContext {
       * @return
       *   BuilderContext with a no-op evaluator
       */
-    def withNoopEvaluator(env: Environment, wallet: Wallet): BuilderContext =
+    def withNoopEvaluator(env: CardanoInfo, wallet: Wallet): BuilderContext =
         BuilderContext(env, wallet, PlutusScriptEvaluator.noop)
 
     /** Create a BuilderContext with an evaluator built from environment parameters.
@@ -42,7 +42,7 @@ object BuilderContext {
       *   BuilderContext with a configured evaluator
       */
     def withEvaluator(
-        env: Environment,
+        env: CardanoInfo,
         wallet: Wallet,
         initialBudget: ExUnits = ExUnits(Long.MaxValue, Long.MaxValue)
     ): BuilderContext = {
@@ -68,7 +68,7 @@ object BuilderContext {
       *   BuilderContext with a constant max budget evaluator
       */
     def withConstMaxBudgetEvaluator(
-        env: Environment,
+        env: CardanoInfo,
         wallet: Wallet
     ): BuilderContext = {
         val evaluator = PlutusScriptEvaluator.constMaxBudget(env)

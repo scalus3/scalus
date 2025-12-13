@@ -27,7 +27,6 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
     case class TestContext(
         client: AsyncBlockfrostProvider,
         cardanoInfo: CardanoInfo,
-        env: Environment,
         evaluator: PlutusScriptEvaluator
     )
 
@@ -72,8 +71,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
                       cardanoInfo,
                       EvaluatorMode.EvaluateAndComputeCost
                     )
-                    val env = Environment(cardanoInfo)
-                    TestContext(client, cardanoInfo, env, evaluator)
+                    TestContext(client, cardanoInfo, evaluator)
                 }(executionContext)
 
         case TestEnv.Preprod =>
@@ -96,8 +94,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
                       cardanoInfo,
                       EvaluatorMode.EvaluateAndComputeCost
                     )
-                    val env = Environment(cardanoInfo)
-                    TestContext(client, cardanoInfo, env, evaluator)
+                    TestContext(client, cardanoInfo, evaluator)
                 }(executionContext)
     }
 
@@ -137,7 +134,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
             )
 
             txCreator = HtlcTransactionCreator(
-              ctx.env,
+              ctx.cardanoInfo,
               ctx.evaluator,
               signer,
               compiledContract
@@ -181,7 +178,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
             preimage = utf8"secret_preimage_54321"
             compiledContract = HtlcContract.defaultCompiledContract
             scriptAddress = Address(
-              ctx.env.network,
+              ctx.cardanoInfo.network,
               Credential.ScriptHash(compiledContract.script.scriptHash)
             )
 
@@ -215,7 +212,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
             }
 
             txCreator = HtlcTransactionCreator(
-              ctx.env,
+              ctx.cardanoInfo,
               ctx.evaluator,
               signer,
               compiledContract

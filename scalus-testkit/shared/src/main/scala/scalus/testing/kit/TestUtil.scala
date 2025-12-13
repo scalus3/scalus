@@ -4,14 +4,14 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Provider
-import scalus.cardano.txbuilder.{Environment, PubKeyWitness, Wallet as WalletTrait, Witness}
+import scalus.cardano.txbuilder.{PubKeyWitness, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v3
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 
 object TestUtil extends ScalusTest {
 
-    val testEnvironment: Environment = CardanoInfo.mainnet
+    val testEnvironment: CardanoInfo = CardanoInfo.mainnet
 
     val testEvaluator: PlutusScriptEvaluator =
         PlutusScriptEvaluator(testEnvironment, EvaluatorMode.EvaluateAndComputeCost)
@@ -144,7 +144,7 @@ object TestUtil extends ScalusTest {
         utxos: Utxos,
         input: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironment
+        environment: CardanoInfo = testEnvironment
     ): v3.ScriptContext = {
         val inputs = tx.body.value.inputs
         // assume 1 script input
@@ -181,7 +181,7 @@ object TestUtil extends ScalusTest {
         wallet: WalletTrait,
         scriptInput: TransactionInput,
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: Environment = testEnvironment
+        environment: CardanoInfo = testEnvironment
     ) = {
         val scriptContext =
             TestUtil.getScriptContextV3(tx, utxo, scriptInput, redeemerTag, environment)

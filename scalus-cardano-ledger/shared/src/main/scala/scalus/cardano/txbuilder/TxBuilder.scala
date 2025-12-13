@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
-import scalus.cardano.node.{AsyncProvider, Provider, toAsync}
+import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
@@ -53,7 +53,7 @@ import scala.util.Try
   *   ledger rules to run against the built transaction for additional validations
   */
 case class TxBuilder(
-    env: Environment,
+    env: CardanoInfo,
     context: TransactionBuilder.Context,
     evaluator: PlutusScriptEvaluator,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
@@ -1486,7 +1486,7 @@ object TxBuilder {
       *   the custom Plutus script evaluator
       */
     def apply(
-        env: Environment,
+        env: CardanoInfo,
         evaluator: PlutusScriptEvaluator
     ): TxBuilder = {
         val context = TransactionBuilder.Context.empty(env.network)
@@ -1500,11 +1500,8 @@ object TxBuilder {
       * @param env
       *   the environment containing protocol parameters, network info, and slot configuration
       */
-    def apply(env: Environment): TxBuilder = {
-        val evaluator = PlutusScriptEvaluator(
-          CardanoInfo(env.protocolParams, env.network, env.slotConfig),
-          EvaluatorMode.EvaluateAndComputeCost
-        )
+    def apply(env: CardanoInfo): TxBuilder = {
+        val evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
         apply(env, evaluator)
     }
 
@@ -1516,7 +1513,7 @@ object TxBuilder {
       * @param env
       *   the environment containing protocol parameters, network info, and slot configuration
       */
-    def withConstMaxBudgetEvaluator(env: Environment): TxBuilder = {
+    def withConstMaxBudgetEvaluator(env: CardanoInfo): TxBuilder = {
         val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
         apply(env, evaluator)
     }

@@ -7,7 +7,7 @@ import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
 
 case class HtlcTransactionCreator(
-    env: Environment,
+    env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,
     compiledContract: PlutusV3CompiledContract = HtlcContract.defaultCompiledContract

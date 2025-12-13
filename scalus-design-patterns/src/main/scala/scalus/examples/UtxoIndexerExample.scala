@@ -50,12 +50,12 @@ object IndexerValidatorContract:
 object Offchain:
     import scalus.builtin.Data.toData
     import scalus.cardano.address.Address
-    import scalus.cardano.ledger.{Transaction, Utxo}
+    import scalus.cardano.ledger.{CardanoInfo, Transaction, Utxo}
     import scalus.cardano.ledger.Script.PlutusV3
-    import scalus.cardano.txbuilder.{Environment, TxBuilder}
+    import scalus.cardano.txbuilder.TxBuilder
 
     def buildTransaction(
-        env: Environment,
+        env: CardanoInfo,
         scriptUtxo: Utxo,
         recipientAddress: Address
     ): TxBuilder = {

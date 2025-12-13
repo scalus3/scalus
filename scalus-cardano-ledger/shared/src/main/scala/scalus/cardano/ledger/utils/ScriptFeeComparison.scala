@@ -36,7 +36,7 @@ object ScriptFeeComparison {
 
     case class ComparisonMatrix(results: Map[Compiler.Options, ComparisonResult])
 
-    private def arbAddress(env: Environment) = Address(
+    private def arbAddress(env: CardanoInfo) = Address(
       env.network,
       Credential.KeyHash(
         AddrKeyHash(ByteString.fromString("a".repeat(28)))
@@ -47,7 +47,7 @@ object ScriptFeeComparison {
         script: PlutusScript,
         redeemer: Data,
         datum: Option[DatumOption],
-        env: Environment,
+        env: CardanoInfo,
         additionalSigners: Set[ExpectedSigner] = Set.empty,
         scriptValue: Value = Value.ada(10)
     ): Either[String, FeeComparison] = {
@@ -145,7 +145,7 @@ object ScriptFeeComparison {
         inline code: Any,
         redeemer: Data,
         datum: Option[DatumOption],
-        env: Environment,
+        env: CardanoInfo,
         additionalSigners: Set[ExpectedSigner] = Set.empty,
         scriptValue: Value = Value.ada(10)
     ): Map[Compiler.Options, ComparisonResult] = enumerateOptions

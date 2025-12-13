@@ -3,10 +3,10 @@ package scalus.examples.vault
 import scalus.cardano.address.Address
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.{Environment, TransactionSigner, TxBuilder}
+import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 
 case class VaultTransactionCreator(
-    env: Environment,
+    env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,
     compiledContract: PlutusV3CompiledContract = VaultContract.defaultCompiledContract
