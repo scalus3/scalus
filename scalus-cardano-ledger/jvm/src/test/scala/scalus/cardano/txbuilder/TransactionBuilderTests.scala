@@ -242,22 +242,25 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       error = WrongNetworkId(pkhUtxoTestNet.output.address, Spend(pkhUtxoTestNet, PubKeyWitness))
     )
 
-    test("SpendWithDelayedRedeemer sees transaction inputs") {
+    test("Spend with delayed redeemer sees transaction inputs") {
         val redeemerBuilder: Transaction => Data = { tx =>
             val inputCount = tx.body.value.inputs.toSeq.size
             Data.Constr(0, PList(Data.I(inputCount)))
         }
 
-        val delayedStep = SpendWithDelayedRedeemer(
+        val delayedSpend = Spend(
           utxo = script1Utxo,
-          redeemerBuilder = redeemerBuilder,
-          validator = script1,
-          datum = None
+          witness = ThreeArgumentPlutusScriptWitness(
+            scriptSource = PlutusScriptValue(script1),
+            redeemerBuilder = redeemerBuilder,
+            datum = DatumInlined,
+            additionalSigners = Set.empty
+          )
         )
 
         val steps = Seq(
           Spend(pkhUtxo, PubKeyWitness),
-          delayedStep,
+          delayedSpend,
           Send(
             Babbage(
               address = pkhOutput.address,
