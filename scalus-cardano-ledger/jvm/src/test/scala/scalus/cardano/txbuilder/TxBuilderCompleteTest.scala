@@ -2,17 +2,17 @@ package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{ByteString, Data}
-import scalus.prelude.List as PList
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
+import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.{Provider, SubmitError}
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
+import scalus.prelude.List as PList
 import scalus.{plutusV3, toUplc, Compiler}
 
 import java.time.Instant
-import scala.annotation.experimental
 import scala.collection.immutable.SortedMap
 
 // TODO: can't depend `testkit`, since it'd introduce circular dependency. /
@@ -83,7 +83,7 @@ class SimpleMockProvider(initialUtxos: Utxos) extends Provider {
     }
 }
 
-@experimental // until we refactor the complete & completeAsync
+// until we refactor the complete & completeAsync
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
@@ -826,6 +826,47 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(tx1.body.value.inputs == tx2.body.value.inputs, "Inputs should be deterministic")
         assert(tx1.body.value.outputs == tx2.body.value.outputs, "Outputs should be deterministic")
         assert(tx1.body.value.fee == tx2.body.value.fee, "Fee should be deterministic")
+    }
+
+    // ============================================================================
+    // Fee Calculation Bug Test
+    // ============================================================================
+
+    test("complete should account for signature size in fee calculation") {
+        // BUG: TxBuilder.complete doesn't add dummy signatures during fee calculation,
+        // unlike finalizeContext which uses addDummySignatures(this.expectedSigners.size, this.transaction)
+        // before balancing. This means the fee is calculated without accounting for the
+        // size of signatures that will be added when signing.
+
+        val provider = SimpleMockProvider(
+          Map(input(0) -> adaOutput(Alice.address, 100))
+        )
+
+        val completedBuilder = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(provider, Alice.address)
+
+        val unsignedTx = completedBuilder.transaction
+        val signedTx = completedBuilder.sign(aliceSigner).transaction
+
+        // Calculate the minimum fee required for the signed transaction
+        // For simple pubkey transactions without reference scripts, pass the input UTXOs
+        val resolvedUtxos: Utxos = signedTx.body.value.inputs.toSeq.flatMap { input =>
+            provider.findUtxo(input).toOption.map(u => input -> u.output)
+        }.toMap
+        val signedTxMinFee = MinTransactionFee
+            .computeMinFee(signedTx, resolvedUtxos, testEnv.protocolParams)
+            .getOrElse(Coin.zero)
+
+        val feeInTx = signedTx.body.value.fee
+
+        // The fee calculated during complete should be >= the minimum required fee for signed tx
+        // This test will FAIL because complete doesn't account for signature size
+        assert(
+          feeInTx >= signedTxMinFee,
+          s"Fee in transaction ($feeInTx) should be >= min fee for signed tx ($signedTxMinFee). " +
+              s"Difference: ${signedTxMinFee.value - feeInTx.value} lovelace"
+        )
     }
 
 }

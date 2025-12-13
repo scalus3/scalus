@@ -3,7 +3,7 @@ package scalus.cardano.txbuilder
 import scalus.builtin.Builtins.{blake2b_256, serialiseData}
 import scalus.builtin.Data.toData
 import scalus.builtin.{Data, ToData}
-import scalus.cardano.address.{Address, StakeAddress, StakePayload}
+import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
@@ -12,7 +12,6 @@ import scalus.cardano.node.{AsyncProvider, Provider}
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
-import scala.annotation.experimental
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
@@ -717,7 +716,6 @@ case class TxBuilder(
       * @throws RuntimeException
       *   if insufficient UTXOs are available to cover the transaction requirements
       */
-    @experimental
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
         // Pre-build the context to get initial UTXOs
         val initialContext = TransactionBuilder
@@ -727,6 +725,18 @@ case class TxBuilder(
 
         // Keep track of all known UTXOs (initial + selected during balancing)
         val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
+
+        // Count expected signers: initial context + 1 for sponsor (if pubkey address)
+        val sponsorExpectedSigner = sponsor match {
+            case sa: ShelleyAddress =>
+                sa.payment match {
+                    case ShelleyPaymentPart.Key(hash) => Some(ExpectedSigner(hash))
+                    case _                            => None
+                }
+            case _ => None
+        }
+        val allExpectedSigners = initialContext.expectedSigners ++ sponsorExpectedSigner.toSet
+        val expectedSignerCount = allExpectedSigners.size
 
         // The entire diff handler is launched in a loop, and every return Right() is just an end of an iteration,
         // not necessarily the end of the algorithm.
@@ -831,8 +841,13 @@ case class TxBuilder(
         }
 
         // Build the transaction with balancing, then update context with all selected UTXOs
+        // Add dummy signatures for fee calculation (similar to finalizeContext)
+        val txWithDummySigs = addDummySignatures(
+          expectedSignerCount,
+          addAttachmentsToContext(initialContext).transaction
+        )
         val balancedTx = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
-          addAttachmentsToContext(initialContext).transaction,
+          txWithDummySigs,
           handleDiffByQueryingMore,
           env.protocolParams,
           selectedUtxos.utxos,
@@ -841,10 +856,13 @@ case class TxBuilder(
 
         balancedTx match {
             case Right(tx) =>
+                // Remove dummy signatures before returning
+                val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
                 // Update context with the balanced transaction and all selected UTXOs
                 val updatedContext = initialContext.copy(
-                  transaction = tx,
-                  resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos)
+                  transaction = txWithoutDummySigs,
+                  resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
+                  expectedSigners = allExpectedSigners
                 )
                 copy(context = updatedContext)
             case Left(error) =>
@@ -855,7 +873,6 @@ case class TxBuilder(
     // FIXME: this is a copy of `async`. Only difference: usage of future based APIs.
     //  Reason: when ensuring ScalaJS support, it turned out that we cannot use methods that synchronously block.
     //  Either only 1 complete should exist, or at the very least, the common parts must be refactored.
-    @experimental
     def asyncComplete(provider: AsyncProvider, sponsor: Address)(using
         ExecutionContext
     ): Future[TxBuilder] = {
@@ -867,6 +884,18 @@ case class TxBuilder(
 
         // Keep track of all known UTXOs (initial + selected during balancing)
         val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
+
+        // Count expected signers: initial context + 1 for sponsor (if pubkey address)
+        val sponsorExpectedSigner = sponsor match {
+            case sa: ShelleyAddress =>
+                sa.payment match {
+                    case ShelleyPaymentPart.Key(hash) => Some(ExpectedSigner(hash))
+                    case _                            => None
+                }
+            case _ => None
+        }
+        val allExpectedSigners = initialContext.expectedSigners ++ sponsorExpectedSigner.toSet
+        val expectedSignerCount = allExpectedSigners.size
 
         // The entire diff handler is launched in a loop, and every return Right() is just an end of an iteration,
         // not necessarily the end of the algorithm.
@@ -988,8 +1017,13 @@ case class TxBuilder(
         }
 
         // Build the transaction with balancing, then update context with all selected UTXOs
+        // Add dummy signatures for fee calculation (similar to finalizeContext)
+        val txWithDummySigs = addDummySignatures(
+          expectedSignerCount,
+          addAttachmentsToContext(initialContext).transaction
+        )
         val balancedTx = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
-          addAttachmentsToContext(initialContext).transaction,
+          txWithDummySigs,
           handleDiffByQueryingMore,
           env.protocolParams,
           selectedUtxos.utxos,
@@ -999,10 +1033,13 @@ case class TxBuilder(
         Future.successful {
             balancedTx match {
                 case Right(tx) =>
+                    // Remove dummy signatures before returning
+                    val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
                     // Update context with the balanced transaction and all selected UTXOs
                     val updatedContext = initialContext.copy(
-                      transaction = tx,
-                      resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos)
+                      transaction = txWithoutDummySigs,
+                      resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
+                      expectedSigners = allExpectedSigners
                     )
                     copy(context = updatedContext)
                 case Left(error) =>
@@ -1214,8 +1251,7 @@ case class TxBuilder(
                 val utxos = result.map(_ -- excludeUtxos)
                 utxos match {
                     case Right(u) if u.nonEmpty => u
-                    case Right(u) if u.isEmpty =>
-                        throw new RuntimeException("Could not find collateral uxtos")
+                    case Right(u) => throw new RuntimeException("Could not find collateral uxtos")
                     case Left(e) => throw new RuntimeException("Could not find collateral utxos", e)
                 }
             }
