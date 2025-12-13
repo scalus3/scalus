@@ -18,6 +18,140 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.Try
 
+// -----------------------------------------------------------------------------
+// TxBuilderException Hierarchy
+// -----------------------------------------------------------------------------
+
+/** Base exception for all TxBuilder errors.
+  *
+  * This sealed hierarchy provides typed exceptions for different failure modes in TxBuilder,
+  * enabling programmatic error handling while remaining backwards compatible with RuntimeException.
+  */
+sealed abstract class TxBuilderException(message: String, cause: Throwable = null)
+    extends RuntimeException(message, cause)
+
+object TxBuilderException {
+
+    // -------------------------------------------------------------------------
+    // Build Phase Errors - wraps SomeBuildError from TransactionBuilder
+    // -------------------------------------------------------------------------
+
+    /** Error during transaction building step processing. */
+    final case class BuildStepException(
+        stepError: StepError,
+        context: TransactionBuilder.Context
+    ) extends TxBuilderException(s"Build step error: ${stepError.explain}") {
+        def step: TransactionBuilderStep = stepError.step
+    }
+
+    /** Error during redeemer indexing. */
+    final case class RedeemerIndexingException(
+        error: RedeemerIndexingInternalError,
+        context: TransactionBuilder.Context
+    ) extends TxBuilderException(s"Redeemer indexing error: $error")
+
+    /** Error during transaction balancing. */
+    final case class BalancingException(
+        error: TxBalancingError,
+        context: TransactionBuilder.Context
+    ) extends TxBuilderException(
+          error match {
+              case TxBalancingError.EvaluationFailed(cause) =>
+                  s"Plutus script evaluation failed: ${cause.getMessage}"
+              case TxBalancingError.Failed(cause) =>
+                  s"Balancing failed: ${cause.getMessage}"
+              case TxBalancingError.CantBalance(lastDiff) =>
+                  s"Cannot balance transaction, last diff: $lastDiff lovelace"
+              case TxBalancingError.InsufficientFunds(diff, minRequired) =>
+                  s"Insufficient funds: need $minRequired more lovelace, diff is $diff"
+          },
+          error match {
+              case TxBalancingError.EvaluationFailed(cause) => cause
+              case TxBalancingError.Failed(cause)           => cause
+              case _                                        => null
+          }
+        ) {
+
+        /** Returns true if this error was caused by a Plutus script failure. */
+        def isScriptFailure: Boolean = error match {
+            case TxBalancingError.EvaluationFailed(_) => true
+            case _                                    => false
+        }
+
+        /** Returns script execution logs if this was a script failure. */
+        def scriptLogs: Option[Seq[String]] = error match {
+            case TxBalancingError.EvaluationFailed(cause) => Some(cause.logs.toSeq)
+            case _                                        => None
+        }
+    }
+
+    /** Ledger validation error. */
+    final case class LedgerValidationException(
+        error: TransactionException,
+        context: TransactionBuilder.Context
+    ) extends TxBuilderException(s"Validation error: ${error.explain}", error)
+
+    // -------------------------------------------------------------------------
+    // Selection Phase Errors - TxBuilder-specific errors
+    // -------------------------------------------------------------------------
+
+    /** Insufficient ADA for transaction completion. */
+    final case class InsufficientAdaException(
+        required: Coin,
+        available: Coin,
+        sponsorAddress: Address
+    ) extends TxBuilderException(
+          s"Insufficient ADA at $sponsorAddress: need ${required.value} lovelace, found only ${available.value}"
+        )
+
+    /** Insufficient tokens for transaction completion. */
+    final case class InsufficientTokensException(
+        policyId: PolicyId,
+        assetName: AssetName,
+        required: Long,
+        available: Long,
+        sponsorAddress: Address
+    ) extends TxBuilderException(
+          s"Insufficient tokens at $sponsorAddress: need $required of ${policyId.toHex}.${assetName.toString}, found only $available"
+        )
+
+    /** Could not find suitable collateral UTXOs. */
+    final case class CollateralSelectionException(
+        requiredAmount: Coin,
+        sponsorAddress: Address,
+        cause: Option[Throwable] = None
+    ) extends TxBuilderException(
+          s"Could not find collateral UTXOs at $sponsorAddress (required: ${requiredAmount.value} lovelace)",
+          cause.orNull
+        )
+
+    /** Context initialization failed. */
+    final case class ContextInitializationException(
+        msg: String,
+        buildError: Option[SomeBuildError] = None
+    ) extends TxBuilderException(
+          s"Failed to initialize transaction context: $msg",
+          buildError.map(_.reason).orNull
+        )
+
+    /** Delayed redeemer computation failed. */
+    final case class DelayedRedeemerException(
+        msg: String,
+        cause: Option[Throwable] = None
+    ) extends TxBuilderException(
+          s"Failed to compute delayed redeemer: $msg",
+          cause.orNull
+        )
+
+    /** Converts a SomeBuildError to the appropriate TxBuilderException. */
+    def fromBuildError(error: SomeBuildError): TxBuilderException = error match {
+        case SomeBuildError.SomeStepError(e, ctx)             => BuildStepException(e, ctx)
+        case SomeBuildError.SomeRedeemerIndexingError(e, ctx) => RedeemerIndexingException(e, ctx)
+        case SomeBuildError.BalancingError(e, ctx)            => BalancingException(e, ctx)
+        case SomeBuildError.ValidationError(e, ctx)           => LedgerValidationException(e, ctx)
+    }
+}
+
 /** A high-level, fluent API for building Cardano transactions.
   *
   * TxBuilder provides a convenient way to construct transactions by chaining method calls. It
@@ -25,7 +159,7 @@ import scala.util.Try
   * finalization including fee calculation and change handling.
   *
   * TxBuilder is purely functional; each method returns a new instance with the updated state. The
-  * only methods that does effects is `complete`, others are pure.
+  * only methods that do effects are `complete` and `completeAsync`, others are pure.
   *
   * ==Usage==
   * {{{
@@ -654,7 +788,7 @@ case class TxBuilder(
             case Right(finalized) =>
                 copy(context = finalized)
             case Left(error) =>
-                throw new RuntimeException(error.reason)
+                throw TxBuilderException.fromBuildError(error)
         }
     }
 
@@ -733,9 +867,14 @@ case class TxBuilder(
     ): Future[TxBuilder] = {
         // Pre-build the context to get initial UTXOs
         val initialContext = TransactionBuilder
-            .build(env.network, steps)
-            .getOrElse(throw new RuntimeException("Failed to build initial context"))
-            .ensureMinAdaAll(env.protocolParams)
+            .build(env.network, steps) match {
+            case Right(ctx) => ctx.ensureMinAdaAll(env.protocolParams)
+            case Left(error) =>
+                throw TxBuilderException.ContextInitializationException(
+                  "initial context build failed",
+                  Some(error)
+                )
+        }
 
         // Keep track of all known UTXOs (initial + selected during balancing)
         val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
@@ -916,8 +1055,14 @@ case class TxBuilder(
                                 } match {
                                 case Right(tx) => tx
                                 case Left(error) =>
-                                    throw new RuntimeException(
-                                      s"Failed to recompute delayed redeemers: $error"
+                                    val cause: Throwable = error match {
+                                        case stepError: StepError =>
+                                            new RuntimeException(stepError.explain)
+                                        case t: Throwable => t
+                                    }
+                                    throw TxBuilderException.DelayedRedeemerException(
+                                      error.toString,
+                                      Some(cause)
                                     )
                             }
                         } else txWithoutDummySigs
@@ -930,7 +1075,7 @@ case class TxBuilder(
                     )
                     copy(context = updatedContext)
                 case Left(error) =>
-                    throw new RuntimeException(s"Failed to balance transaction: $error")
+                    throw TxBuilderException.BalancingException(error, initialContext)
             }
         })
     }
@@ -1047,8 +1192,10 @@ case class TxBuilder(
                             }
 
                             if accumulatedAda < remainingAdaNeeded then
-                                throw new RuntimeException(
-                                  s"Insufficient ADA: need $remainingAdaNeeded more lovelace, found only $accumulatedAda"
+                                throw TxBuilderException.InsufficientAdaException(
+                                  required = Coin(remainingAdaNeeded),
+                                  available = Coin(accumulatedAda),
+                                  sponsorAddress = address
                                 )
 
                             selectedUtxos.addAll(adaUtxos)
@@ -1110,8 +1257,12 @@ case class TxBuilder(
                             }
 
                             if collected < requiredAmount then {
-                                throw new RuntimeException(
-                                  s"Insufficient tokens: need $requiredAmount of ${policyId.toHex}.${assetName.toString}, found only $collected"
+                                throw TxBuilderException.InsufficientTokensException(
+                                  policyId = policyId,
+                                  assetName = assetName,
+                                  required = requiredAmount,
+                                  available = collected,
+                                  sponsorAddress = address
                                 )
                             }
                         }
@@ -1138,8 +1289,17 @@ case class TxBuilder(
                 val utxos = result.map(_ -- excludeUtxos)
                 utxos match {
                     case Right(u) if u.nonEmpty => u
-                    case Right(u) => throw new RuntimeException("Could not find collateral uxtos")
-                    case Left(e) => throw new RuntimeException("Could not find collateral utxos", e)
+                    case Right(_) =>
+                        throw TxBuilderException.CollateralSelectionException(
+                          requiredAmount = requiredAmount,
+                          sponsorAddress = address
+                        )
+                    case Left(e) =>
+                        throw TxBuilderException.CollateralSelectionException(
+                          requiredAmount = requiredAmount,
+                          sponsorAddress = address,
+                          cause = Some(e)
+                        )
                 }
             }
     }
@@ -1319,8 +1479,10 @@ case class TxBuilder(
                 }
 
                 if accumulatedAda < remainingAdaNeeded then
-                    throw new RuntimeException(
-                      s"Insufficient ADA: need $remainingAdaNeeded more lovelace, found only $accumulatedAda"
+                    throw TxBuilderException.InsufficientAdaException(
+                      required = Coin(remainingAdaNeeded),
+                      available = Coin(accumulatedAda),
+                      sponsorAddress = address
                     )
 
                 selectedUtxos.addAll(adaUtxos)
@@ -1375,8 +1537,12 @@ case class TxBuilder(
                     }
 
                     if collected < requiredAmount then {
-                        throw new RuntimeException(
-                          s"Insufficient tokens: need $requiredAmount of ${policyId.toHex}.${assetName.toString}, found only $collected"
+                        throw TxBuilderException.InsufficientTokensException(
+                          policyId = policyId,
+                          assetName = assetName,
+                          required = requiredAmount,
+                          available = collected,
+                          sponsorAddress = address
                         )
                     }
                 }
@@ -1400,8 +1566,17 @@ case class TxBuilder(
             .map(_ -- excludeUtxos)
         utxos match {
             case Right(u) if u.nonEmpty => u
-            case Right(u) => throw new RuntimeException("Could not find collateral uxtos")
-            case Left(e)  => throw new RuntimeException("Could not find collateral utxos", e)
+            case Right(_) =>
+                throw TxBuilderException.CollateralSelectionException(
+                  requiredAmount = requiredAmount,
+                  sponsorAddress = address
+                )
+            case Left(e) =>
+                throw TxBuilderException.CollateralSelectionException(
+                  requiredAmount = requiredAmount,
+                  sponsorAddress = address,
+                  cause = Some(e)
+                )
         }
 
     }

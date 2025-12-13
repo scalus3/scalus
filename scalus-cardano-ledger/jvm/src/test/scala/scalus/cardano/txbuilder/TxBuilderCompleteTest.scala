@@ -639,7 +639,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.InsufficientTokensException] {
             TxBuilder(testEnv)
                 .payTo(
                   Bob.address,
@@ -649,9 +649,12 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         }
 
         assert(
-          exception.getMessage.contains("Insufficient tokens") ||
-              exception.getMessage.contains("not found"),
-          s"Should indicate insufficient tokens, got: ${exception.getMessage}"
+          exception.policyId == policyId,
+          s"Should indicate insufficient tokens for policyId $policyId"
+        )
+        assert(
+          exception.assetName == nonexistent,
+          s"Should indicate insufficient tokens for asset $nonexistent"
         )
     }
 
@@ -755,33 +758,30 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           Map(input(0) -> adaOutput(Alice.address, 5))
         )
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.InsufficientAdaException] {
             TxBuilder(testEnv)
                 .payTo(Bob.address, Value.ada(100))
                 .complete(provider, Alice.address)
         }
 
         assert(
-          exception.getMessage.contains("Utxos not found") ||
-              exception.getMessage.contains("Insufficient"),
-          s"Should indicate insufficient funds, got: ${exception.getMessage}"
+          exception.required.value > exception.available.value,
+          s"Required ${exception.required.value} should be greater than available ${exception.available.value}"
         )
     }
 
     test("complete should handle empty UTXO set from provider") {
         val provider = SimpleMockProvider(Map.empty)
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.InsufficientAdaException] {
             TxBuilder(testEnv)
                 .payTo(Bob.address, Value.ada(10))
                 .complete(provider, Alice.address)
         }
 
         assert(
-          exception.getMessage.contains("Insufficient") ||
-              exception.getMessage.contains("not found") ||
-              exception.getMessage.contains("Utxos not found"),
-          s"Should indicate no UTXOs available, got: ${exception.getMessage}"
+          exception.available.value == 0,
+          s"Should indicate no UTXOs available (0 ADA), got: ${exception.available.value}"
         )
     }
 
@@ -790,15 +790,14 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           Map(input(0) -> adaOutput(Alice.address, 10))
         )
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.InsufficientAdaException] {
             TxBuilder(testEnv)
                 .payTo(Bob.address, Value.ada(1000))
                 .complete(provider, Alice.address)
         }
 
         assert(
-          exception.getMessage.contains("Insufficient") ||
-              exception.getMessage.contains("not found"),
+          exception.required.value > exception.available.value,
           s"Should indicate insufficient funds, got: ${exception.getMessage}"
         )
     }

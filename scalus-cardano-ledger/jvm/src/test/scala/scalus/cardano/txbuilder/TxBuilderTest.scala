@@ -53,7 +53,7 @@ class TxBuilderTest extends AnyFunSuite {
         val builder = TxBuilder(testEnv)
             .spend(scriptUtxo, redeemer)
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.BuildStepException] {
             builder.build(changeTo = Alice.address)
         }
 
@@ -71,7 +71,7 @@ class TxBuilderTest extends AnyFunSuite {
             .spend(Utxo(utxo))
             .mint(redeemer, policyId, assets)
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.BuildStepException] {
             builder.build(changeTo = Alice.address)
         }
 
@@ -296,7 +296,7 @@ class TxBuilderTest extends AnyFunSuite {
             .spend(scriptUtxo)
             .payTo(Bob.address, Value.ada(20))
 
-        val exception = intercept[RuntimeException] {
+        val exception = intercept[TxBuilderException.BuildStepException] {
             builder.build(changeTo = Alice.address)
         }
         succeed
