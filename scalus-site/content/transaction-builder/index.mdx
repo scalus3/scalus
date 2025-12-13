@@ -33,7 +33,8 @@ val tx = TxBuilder(env)
 ```
 
 <Callout type="info">
-  TxBuilder is purely functional - each method returns a new instance with updated state. Only `build()` performs effects by evaluating scripts and balancing the transaction.
+  TxBuilder is purely functional - each method returns a new instance with updated state, and it's fully immutable.
+  Only `build()` and `complete*()` can throw while evaluating scripts and balancing the transaction.
 </Callout>
 
 ## Automatic Transaction Completion
