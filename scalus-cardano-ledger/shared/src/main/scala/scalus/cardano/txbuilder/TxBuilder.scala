@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
-import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
+import scalus.cardano.node.{AsyncProvider, Provider, toAsync}
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
@@ -16,6 +16,7 @@ import scala.collection.immutable.SortedMap
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Try
 
 /** A high-level, fluent API for building Cardano transactions.
   *
@@ -884,7 +885,7 @@ case class TxBuilder(
           evaluator
         )
 
-        Future.successful {
+        Future.fromTry(Try {
             balancedTx match {
                 case Right(tx) =>
                     // Remove dummy signatures before returning
@@ -931,7 +932,7 @@ case class TxBuilder(
                 case Left(error) =>
                     throw new RuntimeException(s"Failed to balance transaction: $error")
             }
-        }
+        })
     }
 
     // FIXME: see `completeAsync`
