@@ -50,8 +50,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     ).map { updatedRedeemers =>
                         modify0(ctx =>
                             ctx.copy(
-                              redeemers = updatedRedeemers,
-                              delayedRedeemerSpecs = Seq.empty
+                              redeemers = updatedRedeemers
+                              // Keep delayedRedeemerSpecs for potential recomputation in complete()
                             )
                         )
                     }

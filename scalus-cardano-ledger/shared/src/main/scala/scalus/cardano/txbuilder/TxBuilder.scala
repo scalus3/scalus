@@ -889,9 +889,41 @@ case class TxBuilder(
                 case Right(tx) =>
                     // Remove dummy signatures before returning
                     val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
+
+                    // Recompute delayed redeemers with the final balanced transaction
+                    // This is needed because complete() may have added inputs, changing the tx structure
+                    val finalTx =
+                        if initialContext.delayedRedeemerSpecs.nonEmpty then {
+                            TransactionBuilder
+                                .replaceDelayedRedeemers(
+                                  initialContext.redeemers,
+                                  initialContext.delayedRedeemerSpecs,
+                                  txWithoutDummySigs
+                                )
+                                .flatMap { updatedRedeemers =>
+                                    TransactionConversion
+                                        .fromEditableTransactionSafe(
+                                          EditableTransaction(
+                                            txWithoutDummySigs,
+                                            updatedRedeemers.toVector
+                                          )
+                                        )
+                                        .left
+                                        .map(_ =>
+                                            new RuntimeException("Failed to update redeemers")
+                                        )
+                                } match {
+                                case Right(tx) => tx
+                                case Left(error) =>
+                                    throw new RuntimeException(
+                                      s"Failed to recompute delayed redeemers: $error"
+                                    )
+                            }
+                        } else txWithoutDummySigs
+
                     // Update context with the balanced transaction and all selected UTXOs
                     val updatedContext = initialContext.copy(
-                      transaction = txWithoutDummySigs,
+                      transaction = finalTx,
                       resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
                       expectedSigners = allExpectedSigners
                     )

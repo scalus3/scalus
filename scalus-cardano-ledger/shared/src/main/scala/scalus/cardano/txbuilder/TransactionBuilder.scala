@@ -244,22 +244,21 @@ object TransactionBuilder:
     ) {
 
         /** Extract tupled information from a Context. This method is provided to avoid breaking
-          * opacity while making it easier to check for equality in testing.
+          * opacity while making it easier to check for equality in testing. Note:
+          * delayedRedeemerSpecs is excluded since it contains lambdas that can't be compared.
           */
         val toTuple: (
             Transaction,
             Seq[DetachedRedeemer],
             Network,
             Set[ExpectedSigner],
-            ResolvedUtxos,
-            Seq[DelayedRedeemerSpec]
+            ResolvedUtxos
         ) = (
           this.transaction,
           this.redeemers,
           this.network,
           this.expectedSigners,
-          this.resolvedUtxos,
-          this.delayedRedeemerSpecs
+          this.resolvedUtxos
         )
 
         /** Add additional signers to the Context.

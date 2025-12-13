@@ -932,11 +932,11 @@ private def fromRight[A, B](e: Either[A, B]): B =
     }
 
 // The fields of a Context, to cut down on noise
+// Note: delayedRedeemerSpecs is excluded since it contains lambdas that can't be compared
 private type ContextTuple = (
     Transaction,
     Seq[DetachedRedeemer],
     Network,
     Set[ExpectedSigner],
-    ResolvedUtxos,
-    Seq[DelayedRedeemerSpec]
+    ResolvedUtxos
 )

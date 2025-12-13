@@ -4,6 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.Credential
+import scalus.builtin.Data.toData
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.MinTransactionFee
@@ -866,6 +868,64 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           feeInTx >= signedTxMinFee,
           s"Fee in transaction ($feeInTx) should be >= min fee for signed tx ($signedTxMinFee). " +
               s"Difference: ${signedTxMinFee.value - feeInTx.value} lovelace"
+        )
+    }
+
+    // ============================================================================
+    // Delayed Redeemer Bug Test
+    // ============================================================================
+
+    test("complete should recompute delayed redeemers after adding inputs") {
+        // BUG: complete adds inputs dynamically but doesn't recompute delayed redeemers
+        // The redeemerBuilder is called BEFORE additional inputs are added, so redeemer
+        // data computed from transaction (like input count) will be wrong.
+
+        // Create script address using the alwaysOkScript already defined in the test
+        val scriptAddr = Address(testEnv.network, Credential.ScriptHash(alwaysOkScript.scriptHash))
+
+        // Script UTXO with minimal ADA - NOT enough for payment + fees + change
+        // Contains the script as a reference script in the UTXO itself
+        val scriptUtxo = Utxo(
+          input(0),
+          TransactionOutput(
+            scriptAddr,
+            Value.ada(3), // Only 3 ADA - not enough for 1 ADA payment + fees + change
+            Some(DatumOption.Inline(0.toData)),
+            scriptRef = Some(ScriptRef(alwaysOkScript))
+          )
+        )
+
+        // Alice has ADA for fees - this will be selected by complete
+        val provider = SimpleMockProvider(
+          Map(
+            input(0) -> scriptUtxo.output,
+            input(1) -> adaOutput(Alice.address, 100),
+            input(2) -> adaOutput(Alice.address, 50) // Extra UTXO for collateral
+          )
+        )
+
+        // RedeemerBuilder that captures input count at build time
+        val redeemerBuilder: Transaction => Data = tx => {
+            tx.body.value.inputs.toSeq.size.toData // Number of inputs
+        }
+
+        val completedBuilder = TxBuilder(testEnv)
+            .spend(scriptUtxo, redeemerBuilder) // Uses ScriptSource.PlutusScriptAttached
+            .payTo(Bob.address, Value.ada(2)) // 2 ADA - leaves only 1 ADA for fees/change
+            .complete(provider, Alice.address)
+
+        val tx = completedBuilder.transaction
+
+        // complete added Alice's input for fees, so now there are 2 inputs
+        // But the redeemer was computed when there was only 1 input (the script UTXO)
+        val actualInputCount = tx.body.value.inputs.toSeq.size
+        val redeemerData = tx.witnessSet.redeemers.get.value.toSeq.head.data
+
+        // This assertion FAILS - demonstrating the bug
+        // The redeemer says 1 input, but there are actually 2
+        assert(
+          redeemerData == actualInputCount.toData,
+          s"Redeemer should have input count $actualInputCount but has $redeemerData"
         )
     }
 
