@@ -67,7 +67,9 @@ object RedeemerPurpose {
     }
 }
 
+@deprecated("use RedeemerPurpose instead", "0.13.0")
 object RedeemerPurposeUtils {
+    @deprecated("use purpose.redeemerTag instead", "0.13.0")
     def redeemerPurposeToRedeemerTag(purpose: RedeemerPurpose): RedeemerTag =
         purpose.redeemerTag
 }
@@ -78,6 +80,7 @@ object RedeemerPurposeUtils {
 
 /** Contains parts of a transaction that are needed for redeemer processing.
   */
+@deprecated("Use Transaction-based methods directly", "0.13.0")
 case class RedeemersContext(
     inputs: Vector[TransactionInput] = Vector.empty,
     mintingPolicyHashes: Vector[ScriptHash] = Vector.empty,
@@ -92,6 +95,7 @@ case class RedeemersContext(
 // ============================================================================
 
 object RedeemersContext {
+    @deprecated("Use Transaction-based methods directly", "0.13.0")
     def fromTransaction(tx: Transaction): RedeemersContext = {
         val body = tx.body.value
         RedeemersContext(
@@ -119,6 +123,7 @@ object RedeemersContext {
 // ============================================================================
 
 object RedeemerManagement {
+    @deprecated("Use detachRedeemer(Transaction, Redeemer) instead", "0.13.0")
     def detachRedeemer(ctx: RedeemersContext, redeemer: Redeemer): Option[DetachedRedeemer] = {
         val index = redeemer.index
         val purposeOpt = redeemer.tag match
@@ -138,6 +143,7 @@ object RedeemerManagement {
         purposeOpt.map(purpose => DetachedRedeemer(redeemer.data, purpose))
     }
 
+    @deprecated("Use attachRedeemer(Transaction, DetachedRedeemer) instead", "0.13.0")
     def attachRedeemer(ctx: RedeemersContext, detached: DetachedRedeemer): Option[Redeemer] = {
         val tag = detached.purpose.redeemerTag
         val indexOpt = detached.purpose match {
@@ -164,11 +170,92 @@ object RedeemerManagement {
         }
     }
 
+    @deprecated("Use attachRedeemers(Transaction, Vector[DetachedRedeemer]) instead", "0.13.0")
     def attachRedeemers(
         ctx: RedeemersContext,
         detached: Vector[DetachedRedeemer]
     ): Either[DetachedRedeemer, Vector[Redeemer]] = {
         detached.traverse(redeemer => attachRedeemer(ctx, redeemer).toRight(redeemer))
+    }
+
+    /** Detach a redeemer from a transaction, converting index-based reference to value-based.
+      */
+    def detachRedeemer(tx: Transaction, redeemer: Redeemer): Option[DetachedRedeemer] = {
+        val body = tx.body.value
+        val index = redeemer.index
+        val purposeOpt = redeemer.tag match
+            case RedeemerTag.Spend =>
+                body.inputs.toSeq.lift(index).map(RedeemerPurpose.ForSpend.apply)
+            case RedeemerTag.Mint =>
+                body.mint
+                    .map(_.assets.keys.toVector)
+                    .getOrElse(Vector.empty)
+                    .lift(index)
+                    .map(RedeemerPurpose.ForMint.apply)
+            case RedeemerTag.Reward =>
+                body.withdrawals
+                    .getOrElse(Withdrawals.empty)
+                    .withdrawals
+                    .keys
+                    .toVector
+                    .lift(index)
+                    .map(RedeemerPurpose.ForReward.apply)
+            case RedeemerTag.Cert =>
+                body.certificates.toSeq.lift(index).map(RedeemerPurpose.ForCert.apply)
+            case RedeemerTag.Proposing =>
+                body.proposalProcedures.toSeq.lift(index).map(RedeemerPurpose.ForPropose.apply)
+            case RedeemerTag.Voting =>
+                body.votingProcedures
+                    .map(_.procedures.keys.toVector)
+                    .getOrElse(Vector.empty)
+                    .lift(index)
+                    .map(RedeemerPurpose.ForVote.apply)
+
+        purposeOpt.map(purpose => DetachedRedeemer(redeemer.data, purpose))
+    }
+
+    /** Attach a detached redeemer to a transaction, converting value-based reference to
+      * index-based.
+      */
+    def attachRedeemer(tx: Transaction, detached: DetachedRedeemer): Option[Redeemer] = {
+        val body = tx.body.value
+        val tag = detached.purpose.redeemerTag
+        val indexOpt = detached.purpose match {
+            case RedeemerPurpose.ForSpend(input) => body.inputs.toSeq.indexOf(input)
+            case RedeemerPurpose.ForMint(scriptHash) =>
+                body.mint.map(_.assets.keys.toVector).getOrElse(Vector.empty).indexOf(scriptHash)
+            case RedeemerPurpose.ForReward(rewardAddress) =>
+                body.withdrawals
+                    .getOrElse(Withdrawals.empty)
+                    .withdrawals
+                    .keys
+                    .toVector
+                    .indexOf(rewardAddress)
+            case RedeemerPurpose.ForCert(certificate) =>
+                body.certificates.toSeq.indexOf(certificate)
+            case RedeemerPurpose.ForPropose(proposal) =>
+                body.proposalProcedures.toSeq.indexOf(proposal)
+            case RedeemerPurpose.ForVote(voter) =>
+                body.votingProcedures
+                    .map(_.procedures.keys.toVector)
+                    .getOrElse(Vector.empty)
+                    .indexOf(voter)
+        }
+
+        if indexOpt >= 0 then
+            Some(
+              Redeemer(tag = tag, index = indexOpt, data = detached.datum, exUnits = ExUnits.zero)
+            )
+        else None
+    }
+
+    /** Attach multiple detached redeemers to a transaction.
+      */
+    def attachRedeemers(
+        tx: Transaction,
+        detached: Vector[DetachedRedeemer]
+    ): Either[DetachedRedeemer, Vector[Redeemer]] = {
+        detached.traverse(redeemer => attachRedeemer(tx, redeemer).toRight(redeemer))
     }
 }
 
@@ -193,7 +280,6 @@ object TransactionConversion {
       * places the valid ones alongside the transaction.
       */
     def toEditableTransaction(tx: Transaction): EditableTransaction = {
-        val ctx = RedeemersContext.fromTransaction(tx)
         val witnessSet = tx.witnessSet
 
         val (validRedeemers, invalidRedeemers) = {
@@ -201,12 +287,12 @@ object TransactionConversion {
                 case None => (Seq.empty, Seq.empty)
                 case Some(rs) =>
                     rs.toSeq.partition(redeemer =>
-                        RedeemerManagement.detachRedeemer(ctx, redeemer).isDefined
+                        RedeemerManagement.detachRedeemer(tx, redeemer).isDefined
                     )
             }
         }
 
-        val redeemers = validRedeemers.flatMap(RedeemerManagement.detachRedeemer(ctx, _)).toVector
+        val redeemers = validRedeemers.flatMap(RedeemerManagement.detachRedeemer(tx, _)).toVector
         val updatedWitnessSet = witnessSet.copy(redeemers =
             if invalidRedeemers.isEmpty then None
             else Some(KeepRaw(Redeemers(invalidRedeemers*)))
@@ -224,15 +310,13 @@ object TransactionConversion {
     def toEditableTransactionSafe(
         tx: Transaction
     ): Either[Redeemer, EditableTransaction] = {
-        val ctx = RedeemersContext.fromTransaction(tx)
-
         for {
             redeemers <- tx.witnessSet.redeemers match {
                 case None => Right(Vector.empty)
                 case Some(rs) =>
                     rs.value.toSeq
                         .traverse { redeemer =>
-                            RedeemerManagement.detachRedeemer(ctx, redeemer).toRight(redeemer)
+                            RedeemerManagement.detachRedeemer(tx, redeemer).toRight(redeemer)
                         }
             }
 
@@ -249,9 +333,7 @@ object TransactionConversion {
     def fromEditableTransactionSafe(
         editable: EditableTransaction
     ): Either[DetachedRedeemer, Transaction] = {
-        val ctx = RedeemersContext.fromTransaction(editable.transaction)
-
-        RedeemerManagement.attachRedeemers(ctx, editable.redeemers) match {
+        RedeemerManagement.attachRedeemers(editable.transaction, editable.redeemers) match {
             case Left(problematicRedeemer) => Left(problematicRedeemer)
             case Right(attachedRedeemers) =>
                 val currentWitnessSet = editable.transaction.witnessSet
@@ -273,9 +355,8 @@ object TransactionConversion {
     /** Re-attach transaction redeemers. Silently drops detached redeemers that are not valid.
       */
     def fromEditableTransaction(editable: EditableTransaction): Transaction = {
-        val ctx = RedeemersContext.fromTransaction(editable.transaction)
         val attachedRedeemers =
-            editable.redeemers.flatMap(RedeemerManagement.attachRedeemer(ctx, _))
+            editable.redeemers.flatMap(RedeemerManagement.attachRedeemer(editable.transaction, _))
 
         val currentWitnessSet = editable.transaction.witnessSet
         val invalidRedeemers =
