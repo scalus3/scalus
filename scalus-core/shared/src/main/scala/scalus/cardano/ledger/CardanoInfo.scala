@@ -28,6 +28,26 @@ object CardanoInfo {
           SlotConfig.Mainnet
         )
 
+    /** Cardano info for Preprod testnet */
+    @threadUnsafe lazy val preprod: CardanoInfo =
+        CardanoInfo(
+          ProtocolParams.fromBlockfrostJson(
+            inlineResource("blockfrost-params-preprod-258.json")
+          ),
+          Network.Testnet,
+          SlotConfig.Preprod
+        )
+
+    /** Cardano info for Preview testnet */
+    @threadUnsafe lazy val preview: CardanoInfo =
+        CardanoInfo(
+          ProtocolParams.fromBlockfrostJson(
+            inlineResource("blockfrost-params-preview-1145.json")
+          ),
+          Network.Testnet,
+          SlotConfig.Preview
+        )
+
     private inline def inlineResource(name: String): String =
         ${ Macros.inlineResource('name) }
 }
