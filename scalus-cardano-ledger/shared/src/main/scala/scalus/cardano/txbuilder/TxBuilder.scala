@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
-import scalus.cardano.node.{AsyncProvider, Provider}
+import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
 import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
 
 import java.time.Instant
@@ -717,163 +717,17 @@ case class TxBuilder(
       *   if insufficient UTXOs are available to cover the transaction requirements
       */
     def complete(provider: Provider, sponsor: Address): TxBuilder = {
-        // Pre-build the context to get initial UTXOs
-        val initialContext = TransactionBuilder
-            .build(env.network, steps)
-            .getOrElse(throw new RuntimeException("Failed to build initial context"))
-            .ensureMinAdaAll(env.protocolParams)
-
-        // Keep track of all known UTXOs (initial + selected during balancing)
-        val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
-
-        // Count expected signers: initial context + 1 for sponsor (if pubkey address)
-        val sponsorExpectedSigner = sponsor match {
-            case sa: ShelleyAddress =>
-                sa.payment match {
-                    case ShelleyPaymentPart.Key(hash) => Some(ExpectedSigner(hash))
-                    case _                            => None
-                }
-            case _ => None
-        }
-        val allExpectedSigners = initialContext.expectedSigners ++ sponsorExpectedSigner.toSet
-        val expectedSignerCount = allExpectedSigners.size
-
-        // The entire diff handler is launched in a loop, and every return Right() is just an end of an iteration,
-        // not necessarily the end of the algorithm.
-        def handleDiffByQueryingMore(
-            diff: Value,
-            tx: Transaction
-        ): Either[TxBalancingError, Transaction] = {
-            // First, ensure collateral is balanced (happens every iteration since fee changes)
-            ensureCollateralBalanced(
-              tx,
-              provider,
-              sponsor,
-              selectedUtxos
-            ) match {
-                case Right(balancedTx) if balancedTx != tx =>
-                    // Collateral was adjusted, iterate further
-                    return Right(balancedTx)
-                case Left(error) =>
-                    return Left(error)
-                case Right(_) => // Collateral is balanced, continue with value diff handling
-            }
-
-            // Collateral balanced -- now we can compute and process the Value diff
-            val Value(adaDiff, tokenDiff) = diff
-            (adaDiff, tokenDiff) match {
-                // We don't have enough ADA
-                case (NegativeAda(_), _) =>
-                    // We don't have enough ADA, but we may have added a change output on past iterations.
-                    // If so, try to take ADA from it to achieve balance.
-                    val changeIndex = Change.findChangeOutput(tx, sponsor)
-                    if changeIndex >= 0 then {
-                        Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
-                            case Right(updatedTx) =>
-                                // Successfully took from change
-                                Right(updatedTx)
-                            case Left(_) =>
-                                // Can't take from change (would go below minAda), need to query for more UTXOs
-                                val additionalUtxos = selectAdditionalUtxos(
-                                  provider,
-                                  sponsor,
-                                  diff,
-                                  excludeInputs = selectedUtxos.inputSet
-                                )
-                                selectedUtxos.addAll(additionalUtxos)
-                                val withMoreInputs = addInputs(tx, additionalUtxos)
-                                Right(withMoreInputs)
-                        }
-                    } else {
-                        // There's no change output, the only way to get more ADA is to query the provider.
-                        val additionalUtxos = selectAdditionalUtxos(
-                          provider,
-                          sponsor,
-                          diff,
-                          excludeInputs = selectedUtxos.inputSet
-                        )
-                        // Remember the utxos to not select them again on further iterations.
-                        selectedUtxos.addAll(additionalUtxos)
-                        val withMoreInputs = addInputs(tx, additionalUtxos)
-                        Right(withMoreInputs)
-                    }
-
-                case (ZeroAda(), ZeroTokens()) =>
-                    // Balanced perfectly, we're done
-                    Right(tx)
-
-                case (ZeroAda(), MissingTokens()) =>
-                    // We are missing tokens -- need to query more
-                    val additionalUtxos = selectAdditionalUtxos(
-                      provider,
-                      sponsor,
-                      diff,
-                      excludeInputs = selectedUtxos.inputSet
-                    )
-                    // Remember the utxos to not select them again on further iterations.
-                    selectedUtxos.addAll(additionalUtxos)
-                    val withMoreInputs = addInputs(tx, additionalUtxos)
-                    Right(withMoreInputs)
-
-                case (ZeroAda(), _) =>
-                    // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
-
-                case (PositiveAda(_), MissingTokens()) =>
-                    // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
-                    // on further iterations
-                    val additionalUtxos = selectAdditionalUtxos(
-                      provider,
-                      sponsor,
-                      diff,
-                      excludeInputs = selectedUtxos.inputSet
-                    )
-                    // Remember the utxos to not select them again on further iterations.
-                    selectedUtxos.addAll(additionalUtxos)
-                    val withMoreInputs = addInputs(tx, additionalUtxos)
-                    Right(withMoreInputs)
-
-                case (PositiveAda(_), _) =>
-                    // We either have more tokens than necessary, or exactly the right amount of tokens.
-                    // In any case -- send the ADA and potentially some tokens back as change.
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
-            }
-        }
-
-        // Build the transaction with balancing, then update context with all selected UTXOs
-        // Add dummy signatures for fee calculation (similar to finalizeContext)
-        val txWithDummySigs = addDummySignatures(
-          expectedSignerCount,
-          addAttachmentsToContext(initialContext).transaction
-        )
-        val balancedTx = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
-          txWithDummySigs,
-          handleDiffByQueryingMore,
-          env.protocolParams,
-          selectedUtxos.utxos,
-          evaluator
-        )
-
-        balancedTx match {
-            case Right(tx) =>
-                // Remove dummy signatures before returning
-                val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
-                // Update context with the balanced transaction and all selected UTXOs
-                val updatedContext = initialContext.copy(
-                  transaction = txWithoutDummySigs,
-                  resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
-                  expectedSigners = allExpectedSigners
-                )
-                copy(context = updatedContext)
-            case Left(error) =>
-                throw new RuntimeException(s"Failed to balance transaction: $error")
-        }
+        import scala.concurrent.ExecutionContext.Implicits.global
+        Await.result(completeAsync(provider.toAsync, sponsor), Duration.Inf)
     }
 
-    // FIXME: this is a copy of `async`. Only difference: usage of future based APIs.
-    //  Reason: when ensuring ScalaJS support, it turned out that we cannot use methods that synchronously block.
-    //  Either only 1 complete should exist, or at the very least, the common parts must be refactored.
-    def asyncComplete(provider: AsyncProvider, sponsor: Address)(using
+    /** Asynchronously completes the transaction by selecting UTXOs, adding collateral, and
+      * balancing.
+      *
+      * This is the async version of [[complete]]. Use this when working with async providers or
+      * when you need non-blocking behavior.
+      */
+    def completeAsync(provider: AsyncProvider, sponsor: Address)(using
         ExecutionContext
     ): Future[TxBuilder] = {
         // Pre-build the context to get initial UTXOs
@@ -1048,7 +902,7 @@ case class TxBuilder(
         }
     }
 
-    // FIXME: see `asyncComplete`
+    // FIXME: see `completeAsync`
     private def asyncEnsureCollateralBalanced(
         tx: Transaction,
         provider: AsyncProvider,
@@ -1105,7 +959,7 @@ case class TxBuilder(
         }
     }
 
-    // FIXME: see `asyncComplete`
+    // FIXME: see `completeAsync`
     private def asyncSelectAdditionalUtxos(
         provider: AsyncProvider,
         address: Address,
@@ -1176,7 +1030,7 @@ case class TxBuilder(
         }
     }
 
-    // FIXME: see `asyncComplete`
+    // FIXME: see `completeAsync`
     private def asyncSelectUtxosWithTokens(
         provider: AsyncProvider,
         address: Address,
@@ -1235,7 +1089,7 @@ case class TxBuilder(
             }
     }
 
-    // FIXME: see `asyncComplete`
+    // FIXME: see `completeAsync`
     private def asyncSelectCollateral(
         provider: AsyncProvider,
         address: Address,
