@@ -555,11 +555,14 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
         )
 
-    testBuilderStepsFail(
-      label = "Mint 0 directly",
-      steps = List(mintScript1(0)),
-      error = CannotMintZero(scriptHash1, AssetName.empty, mintScript1(0))
-    )
+    {
+        val mint0Step = mintScript1(0)
+        testBuilderStepsFail(
+          label = "Mint 0 directly",
+          steps = List(mint0Step),
+          error = CannotMintZero(scriptHash1, AssetName.empty, mint0Step)
+        )
+    }
 
     testBuilderSteps(
       label = "Mint 0 via reciprocal mint/burn",
@@ -665,6 +668,55 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             List(DetachedRedeemer(datum = Data.List(PList.Nil), purpose = ForMint(scriptHash1)))
           )
     )
+
+    test("Mint with delayed redeemer sees transaction inputs") {
+        val redeemerBuilder: Transaction => Data = { tx =>
+            tx.body.value.inputs.toSeq.size.toData
+        }
+
+        val steps = Seq(
+          Spend(pkhUtxo, PubKeyWitness),
+          Mint(
+            scriptHash = scriptHash1,
+            assetName = AssetName.fromHex("deadbeef"),
+            amount = 1,
+            witness = TwoArgumentPlutusScriptWitness(
+              PlutusScriptValue(script1),
+              redeemerBuilder = redeemerBuilder,
+              additionalSigners = Set.empty
+            )
+          ),
+          Send(TransactionOutput(pkhOutput.address, Value.ada(1))
+        )
+
+        val result = TransactionBuilder.build(Mainnet, steps)
+        val context = result.toOption.get
+        val mintRedeemer = context.redeemers.collectFirst {
+            case DetachedRedeemer(datum, RedeemerPurpose.ForMint(hash)) if hash == scriptHash1 =>
+                datum
+        }
+        assert(mintRedeemer.contains(1.toData)) // 1 input from pkhUtxo
+    }
+
+    test("Mint with static redeemer (backwards compatible)") {
+        val staticRedeemer = Data.List(PList.Nil)
+
+        val steps = Seq(
+          Mint(
+            scriptHash = scriptHash1,
+            assetName = AssetName.fromHex("deadbeef"),
+            amount = 1,
+            witness = TwoArgumentPlutusScriptWitness(
+              PlutusScriptValue(script1),
+              redeemer = staticRedeemer, // Uses backwards compatible apply
+              additionalSigners = Set.empty
+            )
+          )
+        )
+
+        val result = TransactionBuilder.build(Mainnet, steps)
+        assert(result.isRight)
+    }
 
     // ================================================================
     // Subgroup: reference utxos
@@ -778,10 +830,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       )
     )
 
-    testBuilderStepsFail(
-      label = "deregistering stake credential with wrong witness fails",
-      steps = List(
-        IssueCertificate(
+    {
+        val wrongWitnessStep = IssueCertificate(
           cert = UnregCert(Credential.ScriptHash(script2.scriptHash), coin = None),
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
@@ -789,20 +839,12 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             Set.empty
           )
         )
-      ),
-      error = IncorrectScriptHash(
-        script1,
-        script2.scriptHash,
-        IssueCertificate(
-          cert = UnregCert(Credential.ScriptHash(script2.scriptHash), coin = None),
-          witness = TwoArgumentPlutusScriptWitness(
-            PlutusScriptValue(script1),
-            Data.List(PList.Nil),
-            Set.empty
-          )
+        testBuilderStepsFail(
+          label = "deregistering stake credential with wrong witness fails",
+          steps = List(wrongWitnessStep),
+          error = IncorrectScriptHash(script1, script2.scriptHash, wrongWitnessStep)
         )
-      )
-    )
+    }
 
     // =======================================================================
     // Group: "Modify Aux Data"

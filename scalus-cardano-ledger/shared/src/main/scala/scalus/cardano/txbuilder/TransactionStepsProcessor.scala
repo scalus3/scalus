@@ -215,7 +215,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 // defer to witness handling
                 case plutus: ThreeArgumentPlutusScriptWitness =>
                     val spec = DelayedRedeemerSpec(
-                      utxo = utxo,
+                      purpose = RedeemerPurpose.ForSpend(utxo.input),
                       redeemerBuilder = plutus.redeemerBuilder,
                       step = spend
                     )
@@ -941,25 +941,32 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         )
                     } yield {
                         usePlutusScript(witness.scriptSource, witness.additionalSigners)
+                        val purpose = credAction match {
+                            case Operation.Withdraw(stakeAddress) =>
+                                RedeemerPurpose.ForReward(RewardAccount(stakeAddress))
+                            case Operation.CertificateOperation(cert) =>
+                                RedeemerPurpose.ForCert(cert)
+                            case Operation.Minting(scriptHash) =>
+                                RedeemerPurpose.ForMint(scriptHash)
+                            case Operation.Voting(voter) =>
+                                RedeemerPurpose.ForVote(voter)
+                            case Operation.Proposing(proposal) =>
+                                RedeemerPurpose.ForPropose(proposal)
+                        }
+                        val spec = DelayedRedeemerSpec(
+                          purpose = purpose,
+                          redeemerBuilder = witness.redeemerBuilder,
+                          step = step
+                        )
                         val detachedRedeemer = DetachedRedeemer(
-                          datum = witness.redeemer,
-                          purpose = credAction match {
-                              case Operation.Withdraw(stakeAddress) =>
-                                  RedeemerPurpose.ForReward(RewardAccount(stakeAddress))
-                              case Operation.CertificateOperation(cert) =>
-                                  RedeemerPurpose.ForCert(cert)
-                              case Operation.Minting(scriptHash) =>
-                                  RedeemerPurpose.ForMint(scriptHash)
-                              case Operation.Voting(voter) =>
-                                  RedeemerPurpose.ForVote(voter)
-                              case Operation.Proposing(proposal) =>
-                                  RedeemerPurpose.ForPropose(proposal)
-                          }
+                          datum = DelayedRedeemerPlaceholder,
+                          purpose = purpose
                         )
                         modify0(ctx =>
                             ctx.focus(_.redeemers)
                                 .modify(redeemers => appendDistinct(detachedRedeemer, redeemers))
                         )
+                        modify0(_.addDelayedRedeemer(spec))
                     }
             }
         } yield ()

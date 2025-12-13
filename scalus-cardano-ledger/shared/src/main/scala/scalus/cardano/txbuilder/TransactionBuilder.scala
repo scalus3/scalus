@@ -26,7 +26,7 @@ import scalus.|>
 type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
 
 case class DelayedRedeemerSpec(
-    utxo: Utxo,
+    purpose: RedeemerPurpose,
     redeemerBuilder: Transaction => Data,
     step: TransactionBuilderStep
 )
@@ -64,9 +64,18 @@ case class NativeScriptWitness(
 // For operations that only take a redeemer and script context
 case class TwoArgumentPlutusScriptWitness(
     scriptSource: ScriptSource[PlutusScript],
-    redeemer: Data,
+    redeemerBuilder: Transaction => Data,
     additionalSigners: Set[ExpectedSigner]
 ) extends Witness
+
+object TwoArgumentPlutusScriptWitness {
+    def apply(
+        scriptSource: ScriptSource[PlutusScript],
+        redeemer: Data,
+        additionalSigners: Set[ExpectedSigner]
+    ): TwoArgumentPlutusScriptWitness =
+        apply(scriptSource, _ => redeemer, additionalSigners)
+}
 
 // For operations that take a datum, redeemer, and script context
 case class ThreeArgumentPlutusScriptWitness(
@@ -453,8 +462,7 @@ object TransactionBuilder:
                 try {
                     val realRedeemerData = spec.redeemerBuilder(sortedTx)
                     val updated = currentRedeemers.map {
-                        case dr @ DetachedRedeemer(_, RedeemerPurpose.ForSpend(input))
-                            if input == spec.utxo.input =>
+                        case dr @ DetachedRedeemer(_, purpose) if purpose == spec.purpose =>
                             dr.copy(datum = realRedeemerData)
                         case other => other
                     }
