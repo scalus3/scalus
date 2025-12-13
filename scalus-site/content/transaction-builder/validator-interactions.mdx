@@ -63,12 +63,10 @@ def lock(
     timeout
   )
 
-  TxBuilder
-    .withCustomEvaluator(env, evaluator)
+  TxBuilder(env, evaluator)
     .spend(utxos)
     .payTo(scriptAddress, value, datum)  // Lock funds with config
-    .changeTo(changeAddress)
-    .build()
+    .build(changeAddress)
     .sign(signer)
     .transaction
 }
@@ -93,15 +91,13 @@ def reveal(
 ): Transaction = {
   val redeemer = Action.Reveal(preimage)
 
-  TxBuilder
-    .withCustomEvaluator(env, evaluator)
+  TxBuilder(env, evaluator)
     .spend(utxos)
     .collaterals(collateralUtxos)
     .spend(lockedUtxo, redeemer, script, Set(receiverPkh))  // Spend with redeemer
     .payTo(payeeAddress, lockedUtxo.output.value)
     .validFrom(java.time.Instant.ofEpochMilli(time))
-    .changeTo(changeAddress)
-    .build()
+    .build(changeAddress)
     .sign(signer)
     .transaction
 }
@@ -128,15 +124,13 @@ def timeout(
 ): Transaction = {
   val redeemer = Action.Timeout
 
-  TxBuilder
-    .withCustomEvaluator(env, evaluator)
+  TxBuilder(env, evaluator)
     .spend(utxos)
     .collaterals(collateralUtxos)
     .spend(lockedUtxo, redeemer, script, Set(committerPkh))
     .payTo(payeeAddress, lockedUtxo.output.value)
     .validFrom(java.time.Instant.ofEpochMilli(time))  // Must be after timeout
-    .changeTo(changeAddress)
-    .build()
+    .build(changeAddress)
     .sign(signer)
     .transaction
 }
@@ -153,15 +147,14 @@ TxBuilder automatically evaluates the validator during `build()`:
 
 ```scala copy
 val evaluator = PlutusScriptEvaluator(
-  CardanoInfo(env.protocolParams, env.network, env.slotConfig),
+  env,
   EvaluatorMode.EvaluateAndComputeCost
 )
 
-TxBuilder
-  .withCustomEvaluator(env, evaluator)
+TxBuilder(env, evaluator)
   .spend(lockedUtxo, redeemer, script)
   // ... rest of transaction
-  .build()  // Validator is evaluated here
+  .build(changeAddress)  // Validator is evaluated here
 ```
 
 If the validator fails (wrong preimage, wrong signer, wrong time, etc.), `build()` throws an exception with the error message from the validator.

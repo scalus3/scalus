@@ -20,8 +20,7 @@ val utxo: Utxo = // ... UTxO from a regular address
 TxBuilder(env)
   .spend(utxo)  // Add as input
   .payTo(recipient, Value.ada(10))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
   .sign(signer)  // Must be signed by the address owner
 ```
 
@@ -36,8 +35,7 @@ val utxos: Utxos = Map(
 TxBuilder(env)
   .spend(utxos)  // Spend all UTxOs
   .payTo(recipient, Value.ada(20))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 ## Spending from Script Address
@@ -55,8 +53,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script)
   .collaterals(collateralUtxo)  // Required for script execution
   .payTo(recipient, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 <Callout type="warning">
@@ -74,8 +71,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script, requiredSigners)
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
   .sign(signer1)
   .sign(signer2)  // Must provide all required signatures
 ```
@@ -93,15 +89,15 @@ TxBuilder(env)
   .spend(scriptUtxo2, redeemer2)  // Can reuse for multiple inputs
   .collaterals(collateralUtxo)
   .payTo(recipient, totalValue)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 TxBuilder will automatically find the script in the attached scripts map and use it for validation.
 
 ## Delayed Redeemers
 
-For advanced cases where the redeemer depends on the final transaction structure:
+For advanced cases where the redeemer depends on the final transaction structure,
+you can provide a function that computes the redeemer from the assembled transaction:
 
 ```scala copy
 def buildRedeemer(tx: Transaction): Data = {
@@ -111,15 +107,39 @@ def buildRedeemer(tx: Transaction): Data = {
 }
 
 TxBuilder(env)
-  .attach(script)  // Must attach script first
-  .spend(scriptUtxo, buildRedeemer)  // Redeemer computed after assembly
+  .spend(scriptUtxo, buildRedeemer, script)  // Redeemer computed after assembly
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 The redeemer function is called after the transaction is assembled but before script evaluation, allowing self-referential validation logic.
+
+### Use Cases for Delayed Redeemers
+
+Delayed redeemers are useful when:
+
+1. **Input index validation**: Your validator needs to verify its position in the transaction inputs
+2. **Output verification**: The redeemer contains indices of outputs to validate
+3. **Self-referencing logic**: The script needs to know properties of the final transaction
+
+```scala copy
+// Example: Validator that checks its input index
+val buildIndexRedeemer: Transaction => Data = { tx =>
+  val myInputIndex = tx.body.value.inputs.indexWhere(_.transactionId == scriptUtxo.input.transactionId)
+  Data.I(myInputIndex)
+}
+
+TxBuilder(env)
+  .spend(scriptUtxo, buildIndexRedeemer, script)
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeAddress)
+```
+
+<Callout type="info">
+  When using `complete()`, delayed redeemers are automatically recomputed after inputs are selected and the transaction is balanced.
+</Callout>
 
 ## Reference Inputs
 
@@ -132,8 +152,7 @@ TxBuilder(env)
   .spend(myUtxo)
   .references(referenceUtxo)  // Add as reference input
   .payTo(recipient, Value.ada(10))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 Multiple reference inputs can be added:
@@ -143,8 +162,7 @@ TxBuilder(env)
   .spend(myUtxo)
   .references(refUtxo1, refUtxo2, refUtxo3)
   .payTo(recipient, Value.ada(10))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 Reference inputs are visible in the script context but are not spent.
@@ -160,8 +178,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script)
   .collaterals(collateral)  // Add single collateral
   .payTo(recipient, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 Multiple collateral inputs:
@@ -171,12 +188,59 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script)
   .collaterals(collateral1, collateral2)
   .payTo(recipient, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 <Callout type="info">
-  When using `complete()`, collateral inputs are automatically selected and added if the transaction includes script execution. TxBuilder also automatically creates collateral return outputs when needed and respects the protocol's collateral requirements.
+  When using `complete()`, collateral inputs are automatically selected and added if the transaction includes script execution.
+  TxBuilder also automatically creates collateral return outputs when needed and respects the protocol's collateral requirements.
+</Callout>
+
+## Reference Scripts
+
+CIP-33 reference scripts allow you to store a script in a UTxO and reference it in transactions, reducing transaction size and fees.
+
+### Using a Reference Script
+
+When spending a script UTxO, you can reference a script stored in another UTxO instead of including it in the transaction:
+
+```scala copy
+// UTxO containing the reference script
+val refScriptUtxo: Utxo = // ... UTxO with scriptRef field
+
+// UTxO locked by the script
+val scriptUtxo: Utxo = // ... UTxO to spend
+
+TxBuilder(env)
+  .references(refScriptUtxo)  // Add as reference input
+  .spend(scriptUtxo, redeemer)  // Script resolved from reference
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeAddress)
+```
+
+### Creating Outputs with Reference Scripts
+
+You can attach a script to an output for others to reference:
+
+```scala copy
+import scalus.cardano.ledger.{TransactionOutput, Script}
+
+val outputWithScript = TransactionOutput(
+  address = scriptAddress,
+  value = Value.ada(10),
+  datumOption = None,
+  scriptRef = Some(Script.PlutusV3(myScript))  // Attach reference script
+)
+
+TxBuilder(env)
+  .spend(utxo)
+  .output(outputWithScript)
+  .build(changeAddress)
+```
+
+<Callout type="info">
+  Reference scripts are particularly useful for complex validators, as they significantly reduce transaction fees by not including the full script in each transaction.
 </Callout>
 
 ## Next Steps

@@ -38,8 +38,7 @@ TxBuilder(env)
   .spend(utxo)
   .mintAndAttach(redeemer, assets, mintingPolicy)
   .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 This mints 1000 tokens and sends them to the recipient along with 2 ADA.
@@ -72,8 +71,7 @@ TxBuilder(env)
       ))
     )
   )
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 ## Burning Native Tokens
@@ -89,8 +87,7 @@ TxBuilder(env)
   .spend(utxoWithTokens)  // Must contain the tokens being burned
   .mintAndAttach(redeemer, assets, mintingPolicy)
   .payTo(recipient, Value.ada(5))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 The tokens are removed from circulation and the UTxO containing them is consumed.
@@ -107,8 +104,7 @@ TxBuilder(env)
   .attach(mintingPolicy)
   .mint(redeemer, policyId, assets)
   .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 This is useful when minting under multiple policies in the same transaction.
@@ -126,8 +122,7 @@ TxBuilder(env)
   .spend(utxo)
   .mintAndAttach(redeemer, assets, mintingPolicy, requiredSigners)
   .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
   .sign(signer)  // Must provide required signature
 ```
 
@@ -146,8 +141,7 @@ TxBuilder(env)
     recipient,
     Value.asset(mintingPolicy.scriptHash, nftName, 1L, Coin.ada(2))
   )
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 The minting policy typically ensures uniqueness by checking for a specific UTxO or enforcing a one-time mint.
@@ -169,8 +163,7 @@ TxBuilder(env)
     recipient,
     Value.asset(mintingPolicy.scriptHash, tokenA, 500L, Coin.ada(2))
   )
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 ## Multiple Policies
@@ -183,8 +176,7 @@ TxBuilder(env)
   .mintAndAttach(redeemer1, assets1, policy1)
   .mintAndAttach(redeemer2, assets2, policy2)
   .payTo(recipient, combinedValue)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 Each policy is evaluated independently with its own redeemer.

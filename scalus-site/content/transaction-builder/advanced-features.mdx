@@ -28,8 +28,7 @@ val invalidRedeemer = Data(...)
 val tx = TxBuilder(env)
   .spend(scriptUtxo, invalidRedeemer, validator)
   .payTo(attacker, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()  // Throws `PlutusScriptEvaluationError` by default
+  .build(changeTo = changeAddress)  // Throws `PlutusScriptEvaluationError` by default
 ```
 
 The validator correctly rejects the invalid redeemer during local evaluation, but this means `build()` throws an exception and you never get a transaction to test.
@@ -42,8 +41,7 @@ You can't submit it to verify the on-chain behavior.
 val tx = TxBuilder.withConstMaxBudgetEvaluator(env)
   .spend(scriptUtxo, invalidRedeemer, validator)
   .payTo(attacker, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()  // The previous exception is gone, as the scripts were never actually evaluated
+  .build(changeTo = changeAddress)  // The previous exception is gone, as the scripts were never actually evaluated
   .sign(signer)
   .transaction
 
@@ -75,12 +73,11 @@ class ValidatorIntegrationTest extends AnyFunSuite {
     val validRedeemer = Action.Reveal(correctPreimage)
 
     // Use default evaluator - should pass locally
-    val tx = TxBuilder.withCustomEvaluator(env, defaultEvaluator)
+    val tx = TxBuilder(env, defaultEvaluator)
       .spend(collateralUtxos)
       .spend(scriptUtxo, validRedeemer, validator, Set(receiverPkh))
       .payTo(receiver, scriptUtxo.output.value)
-      .changeTo(changeAddress)
-      .build()
+      .build(changeTo = changeAddress)
       .sign(signer)
       .transaction
 
@@ -101,8 +98,7 @@ class ValidatorIntegrationTest extends AnyFunSuite {
       .spend(collateralUtxos)
       .spend(scriptUtxo, invalidRedeemer, validator, Set(receiverPkh))
       .payTo(attacker, scriptUtxo.output.value)
-      .changeTo(changeAddress)
-      .build()
+      .build(changeTo = changeAddress)
       .sign(signer)
       .transaction
 

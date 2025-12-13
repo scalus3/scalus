@@ -24,7 +24,7 @@ import scalus.cardano.txbuilder.*
 val cardanoInfo = CardanoInfo.mainnet
 
 // For preview testnet
-val envPreview = Environment(
+val preview = CardanoInfo(
   protocolParams = previewParams, // queried from elsewhere
   network = Network.Testnet,
   slotConfig = SlotConfig.Preview
@@ -49,8 +49,7 @@ val changeAddress: Address = // ... your change address
 val builder = TxBuilder(env)
   .spend(myUtxo)                          // Add input
   .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA
-  .changeTo(changeAddress)                // Handle change
-  .build()                                // Finalize transaction
+  .build(changeAddress)                   // Finalize transaction with change
 ```
 
 The `build()` method:
@@ -124,7 +123,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.node.Provider
 
 // Setup
-val env = Environment.mainnet
+val env = CardanoInfo.mainnet
 val myUtxo: Utxo = // ...
 val recipientAddress: Address = // ...
 val changeAddress: Address = // ...
@@ -135,8 +134,7 @@ val provider: Provider = // ...
 val transaction = TxBuilder(env)
   .spend(myUtxo)
   .payTo(recipientAddress, Value.ada(10))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
   .sign(signer)
   .transaction
 
@@ -150,13 +148,32 @@ For simpler cases, use `complete()` to let TxBuilder handle input selection auto
 ```scala copy
 val transaction = TxBuilder(env)
   .payTo(recipientAddress, Value.ada(10))
-  .complete(provider, changeAddress)  // Automatic input selection
-  .build()
+  .complete(provider, sponsorAddress)  // Automatic input selection and balancing
   .sign(signer)
   .transaction
 ```
 
-The `complete()` method queries the provider for UTxOs at your address and selects inputs to cover the payment and fees.
+The `complete()` method:
+- Queries the provider for UTxOs at the sponsor address
+- Selects inputs to cover the payment and fees
+- Adds collateral if the transaction includes script execution
+- Creates change outputs to return excess value
+- Balances the transaction (no need to call `.build()` afterward)
+
+## Async Completion
+
+For non-blocking workflows, use `completeAsync()` which returns a `Future[TxBuilder]`:
+
+```scala copy
+import scala.concurrent.ExecutionContext.Implicits.global
+
+val futureTransaction: Future[Transaction] = TxBuilder(env)
+  .payTo(recipientAddress, Value.ada(10))
+  .completeAsync(asyncProvider, sponsorAddress)
+  .map(_.sign(signer).transaction)
+```
+
+This is useful when working with async providers or when you need to avoid blocking the main thread.
 
 ## Next Steps
 

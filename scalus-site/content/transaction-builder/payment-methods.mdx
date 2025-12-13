@@ -18,8 +18,7 @@ The most basic payment sends ADA to an address without any datum:
 TxBuilder(env)
   .spend(utxo)
   .payTo(recipientAddress, Value.ada(10))  // Send 10 ADA
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 ## Sending Native Tokens on Cardano
@@ -44,8 +43,7 @@ val tokenValue = Value.asset(
 TxBuilder(env)
   .spend(utxo)
   .payTo(recipientAddress, tokenValue)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 <Callout type="info">
@@ -67,8 +65,7 @@ val datum = MyDatum(ownerPubKeyHash, 1000)
 TxBuilder(env)
   .spend(utxo)
   .payTo(scriptAddress, Value.ada(10), datum)  // Datum is inlined
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 The datum is automatically serialized to `Data` and included inline in the output.
@@ -86,8 +83,7 @@ TxBuilder(env)
   .spend(utxo)
   .attach(datum)  // Add datum to witness set
   .payTo(scriptAddress, Value.ada(10), datumHash)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 The `attach()` method computes the datum hash and stores the datum for inclusion in the witness set.
@@ -109,8 +105,7 @@ TxBuilder(env)
   .spend(utxo)
   .attach(datum)
   .payTo(scriptAddress, Value.ada(10), datumHash)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 </Tabs.Tab>
 </Tabs>
@@ -125,8 +120,7 @@ TxBuilder(env)
   .payTo(recipient1, Value.ada(5))
   .payTo(recipient2, Value.ada(3))
   .payTo(recipient3, Value.ada(2))
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 Each call creates a separate UTxO at the recipient address.
@@ -148,8 +142,7 @@ val customOutput = TransactionOutput(
 TxBuilder(env)
   .spend(utxo)
   .output(customOutput)
-  .changeTo(changeAddress)
-  .build()
+  .build(changeAddress)
 ```
 
 This gives you complete control over all output fields, including attaching reference scripts.

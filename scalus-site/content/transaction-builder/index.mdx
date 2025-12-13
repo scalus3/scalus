@@ -27,8 +27,7 @@ Here's a simple example of building a transaction:
 val tx = TxBuilder(env)
   .spend(utxo)                           // Add UTxO as input
   .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA to recipient
-  .changeTo(changeAddress)                // Send excess value as change
-  .build()                                // Finalize: calculate fees, evaluate scripts
+  .build(changeAddress)                   // Finalize: calculate fees, handle change
   .sign(signer)                           // Add signature
   .transaction                            // Get the final transaction
 ```
@@ -64,15 +63,14 @@ TxBuilder evaluates Plutus scripts during the build process to ensure they will 
 
 ```scala copy
 val evaluator = PlutusScriptEvaluator(
-  CardanoInfo(env.protocolParams, env.network, env.slotConfig),
+  env,
   EvaluatorMode.EvaluateAndComputeCost
 )
 
-TxBuilder.withCustomEvaluator(env, evaluator)
+TxBuilder(env, evaluator)
   .spend(scriptUtxo, redeemer, script)
   .payTo(recipient, scriptUtxo.output.value)
-  .changeTo(changeAddress)
-  .build()  // Scripts are evaluated here
+  .build(changeAddress)  // Scripts are evaluated here
 ```
 
 ## Next Steps

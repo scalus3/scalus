@@ -24,7 +24,6 @@ val drep = DRep.KeyHash(drepKeyHash)
 val tx = TxBuilder(env)
   .delegateVoteToDRep(stakeAddress, drep)
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 ### DRep Types
@@ -51,7 +50,6 @@ val deposit = Coin.ada(2)
 val tx = TxBuilder(env)
   .registerAndDelegateVoteToDRep(stakeAddress, drep, deposit)
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 <Callout type="info">
@@ -69,7 +67,6 @@ val drep = DRep.KeyHash(drepKeyHash)
 val tx = TxBuilder(env)
   .delegateToPoolAndDRep(stakeAddress, poolId, drep)
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 <Callout type="warning">
@@ -88,7 +85,6 @@ val deposit = Coin.ada(2)
 val tx = TxBuilder(env)
   .registerAndDelegateToPoolAndDRep(stakeAddress, poolId, drep, deposit)
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 <Callout type="info">
@@ -112,7 +108,6 @@ val anchor = Some(Anchor(
 val tx = TxBuilder(env)
   .registerDRep(drepCredential, deposit, anchor)
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 <Callout type="warning">
@@ -134,7 +129,6 @@ val newAnchor = Some(Anchor(
 val tx = TxBuilder(env)
   .updateDRep(drepCredential, newAnchor)
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 ### Unregistering as DRep
@@ -145,7 +139,6 @@ Unregister your DRep credential and reclaim your 500 ADA deposit:
 val tx = TxBuilder(env)
   .unregisterDRep(drepCredential, Coin.ada(500))
   .complete(provider, sponsorAddress)
-  .build()
 ```
 
 ## See Also
