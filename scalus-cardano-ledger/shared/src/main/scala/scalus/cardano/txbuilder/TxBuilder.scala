@@ -15,7 +15,8 @@ import java.time.Instant
 import scala.annotation.experimental
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 /** A high-level, fluent API for building Cardano transactions.
   *
@@ -874,14 +875,14 @@ case class TxBuilder(
             tx: Transaction
         ): Either[TxBalancingError, Transaction] = {
             // First, ensure collateral is balanced (happens every iteration since fee changes)
-            val collateralResult = scala.concurrent.Await.result(
+            val collateralResult = Await.result(
               asyncEnsureCollateralBalanced(
                 tx,
                 provider,
                 sponsor,
                 selectedUtxos
               ),
-              scala.concurrent.duration.Duration.Inf
+              Duration.Inf
             )
 
             collateralResult match {
@@ -908,14 +909,14 @@ case class TxBuilder(
                                 Right(updatedTx)
                             case Left(_) =>
                                 // Can't take from change (would go below minAda), need to query for more UTXOs
-                                val additionalUtxos = scala.concurrent.Await.result(
+                                val additionalUtxos = Await.result(
                                   asyncSelectAdditionalUtxos(
                                     provider,
                                     sponsor,
                                     diff,
                                     excludeInputs = selectedUtxos.inputSet
                                   ),
-                                  scala.concurrent.duration.Duration.Inf
+                                  Duration.Inf
                                 )
                                 selectedUtxos.addAll(additionalUtxos)
                                 val withMoreInputs = addInputs(tx, additionalUtxos)
@@ -923,14 +924,14 @@ case class TxBuilder(
                         }
                     } else {
                         // There's no change output, the only way to get more ADA is to query the provider.
-                        val additionalUtxos = scala.concurrent.Await.result(
+                        val additionalUtxos = Await.result(
                           asyncSelectAdditionalUtxos(
                             provider,
                             sponsor,
                             diff,
                             excludeInputs = selectedUtxos.inputSet
                           ),
-                          scala.concurrent.duration.Duration.Inf
+                          Duration.Inf
                         )
                         // Remember the utxos to not select them again on further iterations.
                         selectedUtxos.addAll(additionalUtxos)
@@ -944,14 +945,14 @@ case class TxBuilder(
 
                 case (ZeroAda(), MissingTokens()) =>
                     // We are missing tokens -- need to query more
-                    val additionalUtxos = scala.concurrent.Await.result(
+                    val additionalUtxos = Await.result(
                       asyncSelectAdditionalUtxos(
                         provider,
                         sponsor,
                         diff,
                         excludeInputs = selectedUtxos.inputSet
                       ),
-                      scala.concurrent.duration.Duration.Inf
+                      Duration.Inf
                     )
                     // Remember the utxos to not select them again on further iterations.
                     selectedUtxos.addAll(additionalUtxos)
@@ -965,14 +966,14 @@ case class TxBuilder(
                 case (PositiveAda(_), MissingTokens()) =>
                     // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
                     // on further iterations
-                    val additionalUtxos = scala.concurrent.Await.result(
+                    val additionalUtxos = Await.result(
                       asyncSelectAdditionalUtxos(
                         provider,
                         sponsor,
                         diff,
                         excludeInputs = selectedUtxos.inputSet
                       ),
-                      scala.concurrent.duration.Duration.Inf
+                      Duration.Inf
                     )
                     // Remember the utxos to not select them again on further iterations.
                     selectedUtxos.addAll(additionalUtxos)
