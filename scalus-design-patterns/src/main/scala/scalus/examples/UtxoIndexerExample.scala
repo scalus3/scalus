@@ -62,7 +62,6 @@ object Offchain:
         val plutusScript = PlutusV3(IndexerValidatorContract.script.cborByteString)
 
         TxBuilder(env)
-            .attach(plutusScript)
             .spend(
               scriptUtxo,
               redeemerBuilder = (tx: Transaction) => {
@@ -72,7 +71,8 @@ object Offchain:
                   }
 
                   IndexerRedeemer(BigInt(inputIdx), BigInt(outputIdx)).toData
-              }
+              },
+              plutusScript
             )
             .payTo(recipientAddress, scriptUtxo.output.value)
         // Caller should call .build(changeTo = address)

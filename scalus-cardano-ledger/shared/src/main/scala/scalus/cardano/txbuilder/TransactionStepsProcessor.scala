@@ -28,6 +28,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
     // Helpers to cut down on type signature noise
     private val unit: Result[Unit] = Right(())
+    // Placeholder redeemer for delayed redeemer specs, replaced before finalization
+    private val DelayedRedeemerPlaceholder = Data.I(0)
 
     private def ctx: Context = _ctx
 
@@ -37,6 +39,25 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     def applySteps(steps: Seq[TransactionBuilderStep]): (Context, Result[Unit]) = {
         val result = for {
             _ <- processSteps(steps)
+
+            // Replace delayed redeemers BEFORE finalizing (ctx.transaction body is complete)
+            _ <-
+                if ctx.delayedRedeemerSpecs.nonEmpty then
+                    replaceDelayedRedeemers(
+                      ctx.redeemers,
+                      ctx.delayedRedeemerSpecs,
+                      ctx.transaction
+                    ).map { updatedRedeemers =>
+                        modify0(ctx =>
+                            ctx.copy(
+                              redeemers = updatedRedeemers,
+                              delayedRedeemerSpecs = Seq.empty
+                            )
+                        )
+                    }
+                else unit
+
+            // Now finalize with correct redeemers
             res <- TransactionConversion
                 .fromEditableTransactionSafe(
                   EditableTransaction(
@@ -46,20 +67,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 )
                 .left
                 .map(detachedRedeemer => RedeemerIndexingInternalError(detachedRedeemer, steps))
-            // Replace the transaction in the context, keeping the rest
-            _ = modify0(Focus[Context](_.transaction).replace(res))
 
-            // Replace delayed redeemers if any exist
-            _ <-
-                if ctx.delayedRedeemerSpecs.nonEmpty then
-                    replaceDelayedRedeemers(
-                      ctx.redeemers,
-                      ctx.delayedRedeemerSpecs,
-                      ctx.transaction
-                    ).map { updatedRedeemers =>
-                        modify0(_.replaceRedeemers(updatedRedeemers))
-                    }
-                else unit
+            _ = modify0(Focus[Context](_.transaction).replace(res))
         } yield ()
         _ctx -> result
     }
@@ -205,6 +214,11 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 // Ensure the hash matches the witness, handle the output components,
                 // defer to witness handling
                 case plutus: ThreeArgumentPlutusScriptWitness =>
+                    val spec = DelayedRedeemerSpec(
+                      utxo = utxo,
+                      redeemerBuilder = plutus.redeemerBuilder,
+                      step = spend
+                    )
                     for {
                         scriptHash <- getPaymentScriptHash(utxo.output.address)
                         _ <- assertScriptHashMatchesSource(
@@ -215,7 +229,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         _ = usePlutusScript(plutus.scriptSource, plutus.additionalSigners)
 
                         detachedRedeemer = DetachedRedeemer(
-                          plutus.redeemer,
+                          DelayedRedeemerPlaceholder,
                           RedeemerPurpose.ForSpend(utxo.input)
                         )
                         _ = modify0(ctx =>
@@ -223,7 +237,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                 .modify(r => appendDistinct(detachedRedeemer, r))
                         )
                         _ <- useDatum(utxo, plutus.datum, spend)
-                    } yield ()
+                    } yield modify0(_.addDelayedRedeemer(spec))
             }
         } yield ()
     }
@@ -453,26 +467,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         val utxo = delayedSpend.utxo
         val validator = delayedSpend.validator
         val datum = delayedSpend.datum
-
-        val dummyRedeemerData = Data.I(0)
-
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(validator),
-          redeemer = dummyRedeemerData,
+          redeemerBuilder = delayedSpend.redeemerBuilder,
           datum = datum.map(Datum.DatumValue.apply).getOrElse(Datum.DatumInlined),
           additionalSigners = Set.empty
         )
-
-        val spec = DelayedRedeemerSpec(
-          utxo = utxo,
-          redeemerBuilder = delayedSpend.redeemerBuilder,
-          validator = validator,
-          datum = datum,
-          step = delayedSpend
-        )
-
-        for _ <- useSpend(Spend(utxo, witness))
-        yield modify0(_.addDelayedRedeemer(spec))
+        useSpend(Spend(utxo, witness))
     }
 
     // -------------------------------------------------------------------------

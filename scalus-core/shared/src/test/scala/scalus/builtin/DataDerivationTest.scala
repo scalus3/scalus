@@ -7,8 +7,6 @@ import scalus.builtin.Data.*
 import scalus.ledger.api.v1.*
 import scalus.prelude.List as PList
 
-import scala.collection.immutable
-
 class DataDerivationTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances:
     test("Simple derivation") {
         assert(TxId(hex"deadbeef").toData == Constr(0, PList(B(hex"deadbeef"))))

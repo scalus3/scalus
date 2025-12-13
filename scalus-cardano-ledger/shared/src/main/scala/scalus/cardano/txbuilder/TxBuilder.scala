@@ -46,8 +46,6 @@ import scala.concurrent.{ExecutionContext, Future}
   *   optional handler for managing transaction balance differences (change)
   * @param steps
   *   accumulated transaction building steps
-  * @param attachedScripts
-  *   scripts to be included in the transaction witness set
   * @param attachedData
   *   datum values to be included in the transaction witness set
   * @param validators
@@ -58,10 +56,24 @@ case class TxBuilder(
     context: TransactionBuilder.Context,
     evaluator: PlutusScriptEvaluator,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
-    attachedScripts: Map[ScriptHash, Script] = Map.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
     validators: Seq[Validator] = Seq.empty
 ) {
+
+    /** Spends a UTXO with an explicit witness.
+      *
+      * This is the most flexible spend method, allowing full control over the witness
+      * configuration. Use this when you need custom witness settings not covered by the convenience
+      * overloads.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param witness
+      *   the witness specifying how to authorize the spend (PubKeyWitness, NativeScriptWitness, or
+      *   ThreeArgumentPlutusScriptWitness)
+      */
+    def spend(utxo: Utxo, witness: SpendWitness): TxBuilder =
+        addSteps(TransactionBuilderStep.Spend(utxo, witness))
 
     /** Adds the specified pubkey utxo to the list of inputs, thus spending it.
       *
@@ -93,8 +105,9 @@ case class TxBuilder(
     /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
       * the witness set.
       *
-      * Make sure to also call [[attach]] with the script that locks these utxos. If the script that
-      * protects the `utxo` fails with the specified `redeemer`, [[build]] is going to throw.
+      * The script must be present as a reference input (via [[references]]) for this to work. If
+      * the script that protects the `utxo` fails with the specified `redeemer`, [[build]] is going
+      * to throw.
       *
       * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
       * according to the `changeTo` or `diffHandler` parameter of [[build]].
@@ -110,23 +123,15 @@ case class TxBuilder(
         redeemer: T,
         requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
-        val scriptHash = utxo.output.address.scriptHashOption.getOrElse(
-          throw new IllegalArgumentException(s"UTxO is not script-locked: $utxo")
-        )
         val datum = buildDatumWitness(utxo)
 
-        val scriptSource = attachedScripts.get(scriptHash) match {
-            case Some(ps: PlutusScript) => ScriptSource.PlutusScriptValue(ps)
-            case _                      => ScriptSource.PlutusScriptAttached
-        }
-
         val witness = ThreeArgumentPlutusScriptWitness(
-          scriptSource = scriptSource,
+          scriptSource = ScriptSource.PlutusScriptAttached,
           redeemer = redeemer.toData,
           datum = datum,
           additionalSigners = requiredSigners.map(ExpectedSigner.apply)
         )
-        addSteps(TransactionBuilderStep.Spend(utxo, witness))
+        spend(utxo, witness)
     }
 
     /** Adds the specified script-protected utxo with a delayed redeemer that is computed from the
@@ -136,44 +141,55 @@ case class TxBuilder(
       * self-referential scripts). The redeemer is computed after the transaction is assembled but
       * before script evaluation.
       *
-      * The script must be attached via [[attach]] or references via [[references]] before calling
-      * this method.
+      * The script must be present as a reference input (via [[references]]) for this to work.
       *
       * @param utxo
       *   utxo to spend
       * @param redeemerBuilder
       *   function that computes the redeemer from the assembled transaction
-      * @throws IllegalArgumentException
-      *   if the script for the utxo is not found in attachedScripts
       */
     def spend(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data
     ): TxBuilder = {
-        val scriptHash = utxo.output.address.scriptHashOption.getOrElse(
-          throw new IllegalArgumentException(s"UTxO is not script-locked: $utxo")
-        )
         val datum = buildDatumWitness(utxo)
 
-        val validator = attachedScripts.get(scriptHash) match {
-            case Some(ps: PlutusScript) => ps
-            case _ =>
-                throw new IllegalArgumentException(
-                  s"Validator not found in attachedScripts for script hash: $scriptHash"
-                )
-        }
-
-        addSteps(
-          TransactionBuilderStep.SpendWithDelayedRedeemer(
-            utxo,
-            redeemerBuilder,
-            validator,
-            datum match {
-                case Datum.DatumInlined     => None
-                case Datum.DatumValue(data) => Some(data)
-            }
-          )
+        val witness = ThreeArgumentPlutusScriptWitness(
+          scriptSource = ScriptSource.PlutusScriptAttached,
+          redeemerBuilder = redeemerBuilder,
+          datum = datum,
+          additionalSigners = Set.empty
         )
+        spend(utxo, witness)
+    }
+
+    /** Spends a script-protected UTXO with a delayed redeemer computed from the built transaction.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts that need to know input/output indices). The redeemer is computed
+      * after the transaction is assembled but before script evaluation.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      * @param script
+      *   the Plutus script that protects the UTXO
+      */
+    def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data,
+        script: PlutusScript
+    ): TxBuilder = {
+        val datum = buildDatumWitness(utxo)
+
+        val witness = ThreeArgumentPlutusScriptWitness(
+          scriptSource = ScriptSource.PlutusScriptValue(script),
+          redeemerBuilder = redeemerBuilder,
+          datum = datum,
+          additionalSigners = Set.empty
+        )
+        spend(utxo, witness)
     }
 
     /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
@@ -321,17 +337,6 @@ case class TxBuilder(
           )
         )
 
-    /** Attaches a script to the transaction witness set.
-      *
-      * Use this method to make scripts available for spending script-locked UTXOs or minting
-      * tokens. The script will be included in the transaction's witness set.
-      *
-      * @param script
-      *   the script to attach
-      */
-    def attach(script: Script): TxBuilder =
-        copy(attachedScripts = attachedScripts + (script.scriptHash -> script))
-
     /** Attaches a datum to the transaction witness set.
       *
       * Use this method when spending UTXOs that have datum hashes instead of inline datums. The
@@ -355,15 +360,12 @@ case class TxBuilder(
       *   the auxiliary data to attach
       */
     def metadata(auxiliaryData: AuxiliaryData): TxBuilder =
-        addSteps(
-          TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData))
-        )
+        addSteps(TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData)))
 
     /** Mints or burns native tokens under a minting policy.
       *
       * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
-      * script should be attached via [[attach]] before calling this method, or it must be present
-      * as a reference input.
+      * script must be present as a reference input (via [[references]]) for this to work.
       *
       * @param redeemer
       *   redeemer to pass to the minting policy script
@@ -382,19 +384,13 @@ case class TxBuilder(
         assets: collection.Map[AssetName, Long],
         requiredSigners: Set[AddrKeyHash] = Set.empty
     ): TxBuilder = {
-
-        val scriptSource = attachedScripts.get(policyId) match {
-            case Some(ps: PlutusScript) => ScriptSource.PlutusScriptValue(ps)
-            case _                      => ScriptSource.PlutusScriptAttached
-        }
-
         val mintSteps = assets.map { case (assetName, amount) =>
             TransactionBuilderStep.Mint(
               scriptHash = policyId,
               assetName = assetName,
               amount = amount,
               witness = TwoArgumentPlutusScriptWitness(
-                scriptSource = scriptSource,
+                scriptSource = ScriptSource.PlutusScriptAttached,
                 redeemer = redeemer.toData,
                 additionalSigners = requiredSigners.map(ExpectedSigner.apply)
               )
@@ -404,10 +400,9 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
-    /** Mints or burns native tokens and attaches the minting policy script in one call.
+    /** Mints or burns native tokens with the script provided inline.
       *
-      * This is a convenience method that combines [[mint]] and [[attach]] for the common case where
-      * you have the script available directly.
+      * This is a convenience method for when you have the minting policy script available directly.
       *
       * Use positive amounts to mint tokens and negative amounts to burn tokens.
       *
@@ -1047,7 +1042,7 @@ case class TxBuilder(
         // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
         // We also need to make sure that we don't have more than 3 collateral inputs.
 
-        val minAda = MinCoinSizedTransactionOutput.ensureMinAda(
+        val minAda = MinCoinSizedTransactionOutput.computeMinAda(
           Sized(TransactionOutput(sponsor, gap)),
           env.protocolParams
         )
@@ -1522,53 +1517,28 @@ case class TxBuilder(
     private def addAttachmentsToContext(
         ctx: TransactionBuilder.Context
     ): TransactionBuilder.Context = {
+        if attachedData.isEmpty then return ctx
+
         var updatedTx = ctx.transaction
-
-        attachedScripts.values.foreach {
-            case ns: Script.Native =>
-                val currentScripts = updatedTx.witnessSet.nativeScripts.toMap.values.toSeq
-                updatedTx = updatedTx.copy(
-                  witnessSet = updatedTx.witnessSet.copy(
-                    nativeScripts = TaggedSortedMap.from(currentScripts :+ ns)
-                  )
-                )
-            case v1: Script.PlutusV1 =>
-                val currentScripts = updatedTx.witnessSet.plutusV1Scripts.toMap.values.toSeq
-                updatedTx = updatedTx.copy(
-                  witnessSet = updatedTx.witnessSet.copy(
-                    plutusV1Scripts = TaggedSortedStrictMap.from(currentScripts :+ v1)
-                  )
-                )
-            case v2: Script.PlutusV2 =>
-                val currentScripts = updatedTx.witnessSet.plutusV2Scripts.toMap.values.toSeq
-                updatedTx = updatedTx.copy(
-                  witnessSet = updatedTx.witnessSet.copy(
-                    plutusV2Scripts = TaggedSortedStrictMap.from(currentScripts :+ v2)
-                  )
-                )
-            case v3: Script.PlutusV3 =>
-                val currentScripts = updatedTx.witnessSet.plutusV3Scripts.toMap.values.toSeq
-                updatedTx = updatedTx.copy(
-                  witnessSet = updatedTx.witnessSet.copy(
-                    plutusV3Scripts = TaggedSortedStrictMap.from(currentScripts :+ v3)
-                  )
-                )
-        }
-
-        if attachedData.nonEmpty then {
-            val currentData = updatedTx.witnessSet.plutusData.value.toMap.values.toSeq
-            val allData = currentData ++ attachedData.values.map(KeepRaw(_))
-            updatedTx = updatedTx.copy(
-              witnessSet = updatedTx.witnessSet.copy(
-                plutusData = KeepRaw(TaggedSortedMap(allData*))
-              )
-            )
-        }
-
+        val currentData = updatedTx.witnessSet.plutusData.value.toMap.values.toSeq
+        val allData = currentData ++ attachedData.values.map(KeepRaw(_))
+        updatedTx = updatedTx.copy(
+          witnessSet = updatedTx.witnessSet.copy(
+            plutusData = KeepRaw(TaggedSortedMap(allData*))
+          )
+        )
         ctx.copy(transaction = updatedTx)
     }
 
-    private def addSteps(s: TransactionBuilderStep*) = copy(steps = steps ++ s)
+    /** Appends transaction building steps to this builder.
+      *
+      * This is the low-level method for adding steps. Prefer using the high-level methods like
+      * [[spend]], [[payTo]], [[mint]], etc. unless you need direct step control.
+      *
+      * @param s
+      *   the steps to append
+      */
+    def addSteps(s: TransactionBuilderStep*): TxBuilder = copy(steps = steps ++ s)
 
     private def stakeAddressToCredential(stakeAddress: StakeAddress): Credential = {
         stakeAddress.payload match {

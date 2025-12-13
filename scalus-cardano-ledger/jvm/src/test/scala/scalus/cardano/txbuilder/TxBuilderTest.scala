@@ -12,7 +12,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
-import scalus.{plutusV2, plutusV3, toUplc, Compiler}
+import scalus.{plutusV3, toUplc, Compiler}
 
 import scala.collection.immutable.SortedMap
 
@@ -267,15 +267,8 @@ class TxBuilderTest extends AnyFunSuite {
         assert(plutusData.exists(_ == datum))
     }
 
-    test("TxBuilder attach preserves multiple scripts and data in witness set") {
+    test("TxBuilder attach preserves multiple data in witness set") {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
-
-        val script2 = Script.PlutusV3(
-          Compiler.compile((sc: Data) => ()).toUplc().plutusV3.cborByteString
-        )
-        val script3 = Script.PlutusV2(
-          Compiler.compile((sc: Data) => ()).toUplc().plutusV2.cborByteString
-        )
 
         val datum1 = 111.toData
         val datum2 = hex"aabbcc".toData
@@ -283,22 +276,12 @@ class TxBuilderTest extends AnyFunSuite {
 
         val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
-            .attach(script1)
-            .attach(script2)
-            .attach(script3)
             .attach(datum1)
             .attach(datum2)
             .attach(datum3)
             .payTo(Bob.address, Value.ada(1))
             .build(changeTo = Alice.address)
             .transaction
-
-        val v3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values.toSeq
-        assert(v3Scripts.exists(_.scriptHash == script1.scriptHash))
-        assert(v3Scripts.exists(_.scriptHash == script2.scriptHash))
-
-        val v2Scripts = tx.witnessSet.plutusV2Scripts.toMap.values.toSeq
-        assert(v2Scripts.exists(_.scriptHash == script3.scriptHash))
 
         val plutusData = tx.witnessSet.plutusData.value.toMap.values.map(_.value).toSeq
         assert(plutusData.contains(datum1))

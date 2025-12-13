@@ -8,11 +8,8 @@ import scalus.builtin.ByteString.*
 import scalus.builtin.Data.*
 import scalus.prelude.List as PList
 import scalus.uplc.test.ArbitraryInstances
-import scalus.utils.Hex.toHex
-import scalus.utils.Hex.hexToBytes
+import scalus.utils.Hex.{hexToBytes, toHex}
 import scalus.utils.Utils
-
-import scala.collection.immutable
 
 class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances:
     private def encodeHex(d: Data) = Utils.bytesToHex(Cbor.encode(d).toByteArray)

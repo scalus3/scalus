@@ -43,8 +43,7 @@ object TransactionBuilderStep {
       */
     case class Spend(
         utxo: Utxo,
-        witness: PubKeyWitness.type | NativeScriptWitness | ThreeArgumentPlutusScriptWitness =
-            PubKeyWitness
+        witness: SpendWitness = PubKeyWitness
     ) extends TransactionBuilderStep
 
     /** Spend a utxo guarded by plutus script.
@@ -56,6 +55,7 @@ object TransactionBuilderStep {
       * Use this instead of [[Spend]] when assembling the redeemer requires the knowledge of the
       * transaction contents, e.g. to include the indices of inputs or outputs.
       */
+    @deprecated("Use Spend directly", "0.13.0")
     case class SpendWithDelayedRedeemer(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data,
@@ -145,8 +145,6 @@ object TransactionBuilderStep {
 case class DelayedRedeemerSpec(
     utxo: Utxo,
     redeemerBuilder: Transaction => Data,
-    validator: PlutusScript,
-    datum: Option[Data],
     step: TransactionBuilderStep
 )
 
@@ -166,17 +164,19 @@ case class DelayedRedeemerSpec(
   */
 sealed trait Witness
 
+trait SpendWitness extends Witness
+
 /** Use this value to indicate there will be a signature. The corresponding verification key hash
   * will be tracked automatically in the context.
   */
-case object PubKeyWitness extends Witness
+case object PubKeyWitness extends SpendWitness
 
 /** Witnesses for native scripts. Can appear several times, but with the same [[additionalSigners]].
   */
 case class NativeScriptWitness(
     scriptSource: ScriptSource[Script.Native],
     additionalSigners: Set[ExpectedSigner]
-) extends Witness
+) extends SpendWitness
 
 // For operations that only take a redeemer and script context
 case class TwoArgumentPlutusScriptWitness(
@@ -188,10 +188,20 @@ case class TwoArgumentPlutusScriptWitness(
 // For operations that take a datum, redeemer, and script context
 case class ThreeArgumentPlutusScriptWitness(
     scriptSource: ScriptSource[PlutusScript],
-    redeemer: Data,
+    redeemerBuilder: Transaction => Data,
     datum: Datum,
     additionalSigners: Set[ExpectedSigner]
-) extends Witness
+) extends SpendWitness
+
+object ThreeArgumentPlutusScriptWitness {
+    def apply(
+        scriptSource: ScriptSource[PlutusScript],
+        redeemer: Data,
+        datum: Datum,
+        additionalSigners: Set[ExpectedSigner]
+    ): ThreeArgumentPlutusScriptWitness =
+        apply(scriptSource, tx => redeemer, datum, additionalSigners)
+}
 
 // -----------------------------------------------------------------------------
 // ScriptSource
