@@ -971,16 +971,14 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             }
         } yield ()
 
-    def assertCredentialMatchesWitness[
-        A <: PubKeyWitness.type | NativeScriptWitness | TwoArgumentPlutusScriptWitness
-    ](
+    def assertCredentialMatchesWitness(
         action: Operation,
-        witness: A,
+        witness: PubKeyWitness.type | NativeScriptWitness | TwoArgumentPlutusScriptWitness,
         cred: Credential,
         step: TransactionBuilderStep
-    )(using hwk: HasWitnessKind[A]): Result[Unit] = {
+    ): Result[Unit] = {
 
-        val wrongCredErr = WrongCredentialType(action, hwk.witnessKind, cred, step)
+        val wrongCredErr = WrongCredentialType(action, witness.witnessKind, cred, step)
 
         witness match {
             case PubKeyWitness =>

@@ -47,28 +47,39 @@ case class DelayedRedeemerSpec(
   *
   * The types include all additional data required to authorize the operation.
   */
-sealed trait Witness
+enum WitnessKind:
+    case KeyBased
+    case ScriptBased
+
+sealed trait Witness:
+    def witnessKind: WitnessKind
 
 trait SpendWitness extends Witness
 
 /** Use this value to indicate there will be a signature. The corresponding verification key hash
   * will be tracked automatically in the context.
   */
-case object PubKeyWitness extends SpendWitness
+case object PubKeyWitness extends SpendWitness {
+    def witnessKind: WitnessKind = WitnessKind.KeyBased
+}
 
 /** Witnesses for native scripts. Can appear several times, but with the same [[additionalSigners]].
   */
 case class NativeScriptWitness(
     scriptSource: ScriptSource[Script.Native],
     additionalSigners: Set[ExpectedSigner]
-) extends SpendWitness
+) extends SpendWitness {
+    def witnessKind: WitnessKind = WitnessKind.ScriptBased
+}
 
 // For operations that only take a redeemer and script context
 case class TwoArgumentPlutusScriptWitness(
     scriptSource: ScriptSource[PlutusScript],
     redeemerBuilder: Transaction => Data,
     additionalSigners: Set[ExpectedSigner]
-) extends Witness
+) extends Witness {
+    def witnessKind: WitnessKind = WitnessKind.ScriptBased
+}
 
 object TwoArgumentPlutusScriptWitness {
     def apply(
@@ -85,7 +96,9 @@ case class ThreeArgumentPlutusScriptWitness(
     redeemerBuilder: Transaction => Data,
     datum: Datum,
     additionalSigners: Set[ExpectedSigner]
-) extends SpendWitness
+) extends SpendWitness {
+    def witnessKind: WitnessKind = WitnessKind.ScriptBased
+}
 
 object ThreeArgumentPlutusScriptWitness {
     def apply(
@@ -176,29 +189,6 @@ object TransactionBuilder {
         case class Voting(voter: Voter) extends Operation:
             override def explain: String = "Voting procedure"
     }
-
-    /** TODO: this is a good candidate to be removed, we use it only in
-      * `assertCredentialMatchesWitness`.
-      */
-    trait HasWitnessKind[A]:
-        def witnessKind: WitnessKind
-
-    enum WitnessKind:
-        case KeyBased
-        case ScriptBased
-
-    object HasWitnessKind:
-        given HasWitnessKind[PubKeyWitness.type] with
-            override def witnessKind: WitnessKind = WitnessKind.KeyBased
-
-        given HasWitnessKind[NativeScriptWitness] with
-            override def witnessKind: WitnessKind = WitnessKind.ScriptBased
-
-        given HasWitnessKind[TwoArgumentPlutusScriptWitness] with
-            override def witnessKind: WitnessKind = WitnessKind.ScriptBased
-
-        given HasWitnessKind[ThreeArgumentPlutusScriptWitness] with
-            override def witnessKind: WitnessKind = WitnessKind.ScriptBased
 
     /** A wrapper around a UTxO set that prevents adding conflicting pairs */
     case class ResolvedUtxos private (utxos: Utxos) {

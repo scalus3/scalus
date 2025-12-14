@@ -4,7 +4,7 @@ import io.bullet.borer.Cbor
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.TransactionBuilder.{Operation, WitnessKind}
+import scalus.cardano.txbuilder.TransactionBuilder.Operation
 
 /** Internal error indicating a redeemer could not be attached to any transaction component.
   *

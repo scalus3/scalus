@@ -27,7 +27,7 @@ import scalus.cardano.txbuilder.ScriptSource.*
 import scalus.cardano.txbuilder.SomeBuildError.SomeStepError
 import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TestPeer.Alice
-import scalus.cardano.txbuilder.TransactionBuilder.{build, Context, ResolvedUtxos, WitnessKind}
+import scalus.cardano.txbuilder.TransactionBuilder.{build, Context, ResolvedUtxos}
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint, *}
 import scalus.|>
 
