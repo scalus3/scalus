@@ -46,7 +46,6 @@ The `complete()` method handles everything that can be determined programmatical
 TxBuilder(env)
   .payTo(recipient, Value.ada(10))
   .complete(provider, sponsorAddress)  // Automatically complete the transaction using the funds from `sponsorAddress`
-  .build()
 ```
 
 The `complete()` method automatically:
