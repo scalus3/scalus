@@ -27,7 +27,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         Either[StepError | RedeemerIndexingInternalError, A]
 
     // Helpers to cut down on type signature noise
-    private val unit: Result[Unit] = Right(())
+    private val Ok: Result[Unit] = Right(())
     // Placeholder redeemer for delayed redeemer specs, replaced before finalization
     private val DelayedRedeemerPlaceholder = Data.I(0)
 
@@ -55,7 +55,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                             )
                         )
                     }
-                else unit
+                else Ok
 
             // Now finalize with correct redeemers
             res <- TransactionConversion
@@ -92,7 +92,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 )
             case Some(utxos) =>
                 modify0(_.copy(resolvedUtxos = utxos))
-                unit
+                Ok
         }
     }
 
@@ -254,7 +254,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     Left(DatumIsMissing(utxo, step))
                 case Some(DatumOption.Inline(_)) =>
                     datum match {
-                        case Datum.DatumInlined => unit
+                        case Datum.DatumInlined => Ok
                         case Datum.DatumValue(_) =>
                             Left(DatumValueForUtxoWithInlineDatum(utxo, datum, step))
                     }
@@ -279,7 +279,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                           )
                                       )
                                 )
-                                unit
+                                Ok
                             else Left(IncorrectDatumHash(utxo, providedDatum, datumHash, step))
                     }
             }
@@ -315,7 +315,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             _ <-
                 if amount == 0
                 then Left(CannotMintZero(scriptHash, assetName, mint))
-                else unit
+                else Ok
 
             // Since we allow monoidal mints, only the final redeemer is kept. We have to remove the old redeemer
             // before adding the new one, as well as if the monoidal sum of the amounts of this mint
@@ -371,7 +371,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     // Above, we check that the amount != 0. Thus:
                     // Case (1, a) -- create an entirely new, non-empty map
                     replaceMint(Some(Mint(thisMint)))
-                    unit
+                    Ok
 
                 // If this is "Some", we know we have a non-empty mint map -- at least one policyId with at least 1
                 // asset.
@@ -391,7 +391,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                 )
                               )
                             )
-                            unit
+                            Ok
 
                         // There is a current entry for the script hash; thus, we need to look at the inner
                         // map to decide what to do.
@@ -406,7 +406,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                     val newOuterMap =
                                         existing.assets.updated(scriptHash, newInnerMap)
                                     replaceMint(Some(Mint(MultiAsset(newOuterMap))))
-                                    unit
+                                    Ok
                                 }
                                 case Some(currentAmount) =>
                                     val newAmount: Long = currentAmount + amount
@@ -437,14 +437,14 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                             // The new outerMap is empty. Thus, we have to set the TxBody Mint field to None
                                             // and remove the redeemer from the context
                                             replaceMint(None)
-                                            unit
+                                            Ok
                                         } else {
                                             // The new outer map is NOT empty. Thus we must only replace the current
                                             // outer map with OUR outer map, and remove our redeemer
                                             replaceMint(
                                               Some(Mint(MultiAsset(newOuterMap)))
                                             )
-                                            unit
+                                            Ok
                                         }
                                     }
                                     // In this case, the new inner map is NOT empty. Thus, we only must replace
@@ -453,7 +453,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                                         val newOuterMap =
                                             existing.assets.updated(scriptHash, newInnerMap)
                                         replaceMint(Some(Mint(MultiAsset(newOuterMap))))
-                                        unit
+                                        Ok
                                     }
                             }
                     }
@@ -508,7 +508,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         currentFee match {
             case 0 =>
                 modify0(unsafeCtxBodyL.refocus(_.fee).replace(step.fee))
-                unit
+                Ok
             case nonZero => Left(FeeAlreadySet(nonZero, step))
         }
     }
@@ -524,7 +524,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 Left(ValidityStartSlotAlreadySet(existingSlot, step))
             case None =>
                 modify0(unsafeCtxBodyL.refocus(_.validityStartSlot).replace(Some(step.slot)))
-                unit
+                Ok
         }
     }
 
@@ -539,7 +539,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 Left(ValidityEndSlotAlreadySet(existingSlot, step))
             case None =>
                 modify0(unsafeCtxBodyL.refocus(_.ttl).replace(Some(step.slot)))
-                unit
+                Ok
         }
     }
 
@@ -569,14 +569,14 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             _ <-
                 if !utxo.output.value.assets.isEmpty
                 then Left(CollateralWithTokens(utxo, step))
-                else unit
+                else Ok
             addr: ShelleyAddress <- utxo.output.address match {
                 case sa: ShelleyAddress  => Right(sa)
                 case by: ByronAddress    => Left(ByronAddressesNotSupported(by, step))
                 case stake: StakeAddress => Left(CollateralNotPubKey(utxo, step))
             }
             _ <- addr.payment match {
-                case ShelleyPaymentPart.Key(_: AddrKeyHash) => unit
+                case ShelleyPaymentPart.Key(_: AddrKeyHash) => Ok
                 case _                                      => Left(CollateralNotPubKey(utxo, step))
             }
         } yield ()
@@ -633,7 +633,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             for {
                 _ <- (credential, witness) match {
                     // Credential.KeyHash
-                    case (Credential.KeyHash(_), PubKeyWitness) => unit
+                    case (Credential.KeyHash(_), PubKeyWitness) => Ok
                     case (Credential.KeyHash(_), witness: TwoArgumentPlutusScriptWitness) =>
                         Left(
                           UnneededDeregisterWitness(
@@ -683,9 +683,9 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               step
             )
         // FIXME: verify
-        case Certificate.RegCert(_, _)                               => unit
-        case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) => unit
-        case Certificate.PoolRetirement(_, _)                        => unit
+        case Certificate.RegCert(_, _)                               => Ok
+        case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) => Ok
+        case Certificate.PoolRetirement(_, _)                        => Ok
         case Certificate.VoteDelegCert(credential, _) =>
             useNonSpendingWitness(
               Operation.CertificateOperation(cert),
@@ -721,8 +721,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               witness,
               step
             )
-        case Certificate.AuthCommitteeHotCert(_, _)    => unit // not supported
-        case Certificate.ResignCommitteeColdCert(_, _) => unit // not supported
+        case Certificate.AuthCommitteeHotCert(_, _)    => Ok // not supported
+        case Certificate.ResignCommitteeColdCert(_, _) => Ok // not supported
         case Certificate.RegDRepCert(credential, _, _) =>
             useNonSpendingWitness(
               Operation.CertificateOperation(cert),
@@ -811,7 +811,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         }
 
         getPolicyHash(submitProposal.proposal.govAction) match {
-            case None => unit
+            case None => Ok
             case Some(policyHash) =>
                 useNonSpendingWitness(
                   Operation.Proposing(submitProposal.proposal),
@@ -1034,7 +1034,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         step: TransactionBuilderStep
     ): Result[Unit] = {
         if scriptHash != script.scriptHash then Left(IncorrectScriptHash(script, scriptHash, step))
-        else unit
+        else Ok
 
     }
 
@@ -1055,7 +1055,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 .map(_ => ScriptResolutionError(step))
             _ <-
                 if resolvedScripts.map(_.scriptHash).contains(scriptHash)
-                then unit
+                then Ok
                 else Left(AttachedScriptNotFound(scriptHash, step))
         } yield ()
 
@@ -1094,7 +1094,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         if (ctx.transaction.body.value.inputs.toSet ++ ctx.transaction.body.value.referenceInputs.toSet)
                 .contains(input)
         then Left(InputAlreadyExists(input, step))
-        else unit
+        else Ok
 
     private def usePlutusScript(
         plutusScript: ScriptSource[PlutusScript],
@@ -1153,6 +1153,6 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
             _ <-
                 if ctx.network != addrNetwork
                 then Left(WrongNetworkId(addr, step))
-                else unit
+                else Ok
         } yield ()
 }
