@@ -177,8 +177,6 @@ object TxBuilderException {
   *   the current transaction builder context
   * @param evaluator
   *   the Plutus script evaluator used for script validation
-  * @param diffHandlerOpt
-  *   optional handler for managing transaction balance differences (change)
   * @param steps
   *   accumulated transaction building steps
   * @param attachedData

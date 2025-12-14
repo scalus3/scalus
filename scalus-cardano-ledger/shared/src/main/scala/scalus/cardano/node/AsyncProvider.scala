@@ -3,7 +3,8 @@ package scalus.cardano.node
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.{blocking, Await, ExecutionContext, Future}
 
 trait AsyncProvider {
 
@@ -78,3 +79,35 @@ trait AsyncProvider {
         }
     }
 }
+
+extension (provider: AsyncProvider)
+    def toSync(using executionContext: ExecutionContext): Provider = new Provider {
+        def submit(transaction: Transaction): Either[SubmitError, TransactionHash] =
+            Await.result(provider.submit(transaction), 30.seconds)
+
+        def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] =
+            Await.result(provider.findUtxo(input), 30.seconds)
+
+        def findUtxos(inputs: Set[TransactionInput]): Either[RuntimeException, Utxos] =
+            Await.result(provider.findUtxos(inputs), 30.seconds)
+
+        def findUtxo(
+            address: Address,
+            transactionId: Option[TransactionHash],
+            datum: Option[DatumOption],
+            minAmount: Option[Coin]
+        ): Either[RuntimeException, Utxo] =
+            Await.result(provider.findUtxo(address, transactionId, datum, minAmount), 30.seconds)
+
+        def findUtxos(
+            address: Address,
+            transactionId: Option[TransactionHash],
+            datum: Option[DatumOption],
+            minAmount: Option[Coin],
+            minRequiredTotalAmount: Option[Coin]
+        ): Either[RuntimeException, Utxos] =
+            Await.result(
+              provider.findUtxos(address, transactionId, datum, minAmount, minRequiredTotalAmount),
+              30.seconds
+            )
+    }

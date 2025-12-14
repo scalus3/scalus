@@ -3,7 +3,6 @@ package scalus.cardano.node
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.SubmitError
 import scalus.utils.Hex.hexToBytes
 import sttp.client3.*
 import sttp.model.StatusCode

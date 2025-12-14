@@ -11,6 +11,7 @@ import scalus.cardano.txbuilder.*
 import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
 import scalus.ledger.api.v1.PubKeyHash
 import sttp.client3.*
+import scalus.cardano.node.toSync
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -141,13 +142,13 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
             )
 
             signedLockTx = txCreator.lock(
-              Map(utxoToSpend.input -> utxoToSpend.output),
               Value.lovelace(lockAmount),
               senderAddr,
               AddrKeyHash(senderPkh.hash),
               AddrKeyHash(senderPkh.hash),
               image,
-              timeout.toLong
+              timeout.toLong,
+              ctx.client.toSync // won't work in JavaScript
             )
 
             submitResult <- ctx.client.submit(signedLockTx)(using executionContext)

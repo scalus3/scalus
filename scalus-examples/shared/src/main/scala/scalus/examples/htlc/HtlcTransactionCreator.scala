@@ -3,6 +3,7 @@ package scalus.examples.htlc
 import scalus.cardano.address.Address
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
+import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
 
@@ -30,6 +31,28 @@ case class HtlcTransactionCreator(
             .spend(utxos)
             .payTo(scriptAddress, value, datum)
             .build(changeTo = changeAddress)
+            .sign(signer)
+            .transaction
+    }
+
+    /** A version of [[lock]] that uses [[TxBuilder.complete]] for simplicity of assembly.
+      *
+      * Returns the change to the sponsor.
+      */
+    def lock(
+        value: Value,
+        sponsor: Address,
+        committer: AddrKeyHash,
+        receiver: AddrKeyHash,
+        image: Image,
+        timeout: Long,
+        provider: Provider
+    ) = {
+        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
+
+        TxBuilder(env)
+            .payTo(scriptAddress, value, datum)
+            .complete(provider, sponsor)
             .sign(signer)
             .transaction
     }
