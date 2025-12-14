@@ -815,8 +815,13 @@ def txBodyL: Lens[Transaction, TransactionBody] = {
 
 /** add at most 256 keys */
 def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
-    tx.focus(_.witnessSet.vkeyWitnesses)
-        .modify(s => TaggedSortedSet.from(s.toSet ++ generateUniqueKeys(numberOfKeys)))
+    modifyWs(
+      tx,
+      ws =>
+          ws.copy(vkeyWitnesses =
+              TaggedSortedSet.from(ws.vkeyWitnesses.toSet ++ generateUniqueKeys(numberOfKeys))
+          )
+    )
 }
 
 /** remove at most 256 keys, must be used in conjunction with addDummyVKeys */

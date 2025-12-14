@@ -1,7 +1,5 @@
 package scalus.cardano.txbuilder
 
-import monocle.Focus.focus
-import monocle.Lens
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
@@ -32,11 +30,12 @@ class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: I
             )
         }
 
-        val tb = tx.body.value
-            .focus(_.outputs.index(changeOutputIdx))
-            .replace(newChangeOut)
-        val t = tx.copy(body = KeepRaw(tb))
-        Right(t)
+        Right(
+          modifyBody(
+            tx,
+            _.copy(outputs = tx.body.value.outputs.updated(changeOutputIdx, newChangeOut))
+          )
+        )
     }
 }
 

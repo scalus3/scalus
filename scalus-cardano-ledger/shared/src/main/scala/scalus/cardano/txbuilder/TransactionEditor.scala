@@ -18,8 +18,6 @@ package scalus.cardano.txbuilder
   */
 
 import cats.implicits.*
-import monocle.Lens
-import monocle.Monocle.focus
 import scalus.builtin.Data
 import scalus.cardano.ledger.*
 
@@ -298,8 +296,7 @@ object TransactionConversion {
             else Some(KeepRaw(Redeemers(invalidRedeemers*)))
         )
 
-        val updatedTx =
-            tx.focus(_.witnessSet).replace(updatedWitnessSet)
+        val updatedTx = modifyWs(tx, _ => updatedWitnessSet)
 
         EditableTransaction(updatedTx, redeemers)
     }
@@ -320,9 +317,7 @@ object TransactionConversion {
                         }
             }
 
-            updatedTx = tx
-                .focus(_.witnessSet)
-                .replace(TransactionWitnessSet.empty)
+            updatedTx = modifyWs(tx, _ => TransactionWitnessSet.empty)
         } yield EditableTransaction(updatedTx, redeemers.toVector)
     }
 
@@ -345,9 +340,7 @@ object TransactionConversion {
                         if allRedeemers.isEmpty then None
                         else Some(KeepRaw(Redeemers(allRedeemers*)))
                     )
-                val updatedTx = editable.transaction
-                    .focus(_.witnessSet)
-                    .replace(updatedWitnessSet)
+                val updatedTx = modifyWs(editable.transaction, _ => updatedWitnessSet)
                 Right(updatedTx)
         }
     }
@@ -368,10 +361,7 @@ object TransactionConversion {
                 if allRedeemers.isEmpty then None
                 else Some(KeepRaw(Redeemers(allRedeemers*)))
             )
-        val updatedTx = editable.transaction
-            .focus(_.witnessSet)
-            .replace(updatedWitnessSet)
-        updatedTx
+        modifyWs(editable.transaction, _ => updatedWitnessSet)
     }
 }
 
