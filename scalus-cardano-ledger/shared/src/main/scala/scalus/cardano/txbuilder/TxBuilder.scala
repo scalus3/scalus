@@ -940,7 +940,11 @@ case class TxBuilder(
                                   Duration.Inf
                                 )
                                 selectedUtxos.addAll(additionalUtxos)
-                                val withMoreInputs = addInputs(tx, additionalUtxos)
+                                val withMoreInputs = addInputsAndReattachRedeemers(
+                                  tx,
+                                  additionalUtxos,
+                                  initialContext.redeemers
+                                )
                                 Right(withMoreInputs)
                         }
                     } else {
@@ -956,7 +960,11 @@ case class TxBuilder(
                         )
                         // Remember the utxos to not select them again on further iterations.
                         selectedUtxos.addAll(additionalUtxos)
-                        val withMoreInputs = addInputs(tx, additionalUtxos)
+                        val withMoreInputs = addInputsAndReattachRedeemers(
+                          tx,
+                          additionalUtxos,
+                          initialContext.redeemers
+                        )
                         Right(withMoreInputs)
                     }
 
@@ -977,7 +985,11 @@ case class TxBuilder(
                     )
                     // Remember the utxos to not select them again on further iterations.
                     selectedUtxos.addAll(additionalUtxos)
-                    val withMoreInputs = addInputs(tx, additionalUtxos)
+                    val withMoreInputs = addInputsAndReattachRedeemers(
+                      tx,
+                      additionalUtxos,
+                      initialContext.redeemers
+                    )
                     Right(withMoreInputs)
 
                 case (ZeroAda(), _) =>
@@ -998,7 +1010,11 @@ case class TxBuilder(
                     )
                     // Remember the utxos to not select them again on further iterations.
                     selectedUtxos.addAll(additionalUtxos)
-                    val withMoreInputs = addInputs(tx, additionalUtxos)
+                    val withMoreInputs = addInputsAndReattachRedeemers(
+                      tx,
+                      additionalUtxos,
+                      initialContext.redeemers
+                    )
                     Right(withMoreInputs)
 
                 case (PositiveAda(_), _) =>
@@ -1597,6 +1613,32 @@ case class TxBuilder(
           tx,
           _.copy(inputs = TaggedSortedSet.from(newInputs))
         )
+    }
+
+    /** Adds inputs to a transaction and re-attaches redeemers with correct indexes.
+      *
+      * When new inputs are added, the sorted input list changes, which can shift the position of
+      * existing script inputs. This method re-indexes redeemers to point to the correct input
+      * positions after adding new inputs.
+      */
+    private def addInputsAndReattachRedeemers(
+        tx: Transaction,
+        inputs: Utxos,
+        detachedRedeemers: Seq[DetachedRedeemer]
+    ): Transaction = {
+        val txWithNewInputs = addInputs(tx, inputs)
+
+        // If there are no redeemers, just return the transaction with new inputs
+        if detachedRedeemers.isEmpty then txWithNewInputs
+        else {
+            // Re-attach redeemers with correct indexes based on new input positions
+            TransactionConversion.fromEditableTransactionSafe(
+              EditableTransaction(txWithNewInputs, detachedRedeemers.toVector)
+            ) match {
+                case Right(reattachedTx) => reattachedTx
+                case Left(_)             => txWithNewInputs // Fallback if re-attachment fails
+            }
+        }
     }
 
     private def buildDatumWitness(utxo: Utxo): Datum = {

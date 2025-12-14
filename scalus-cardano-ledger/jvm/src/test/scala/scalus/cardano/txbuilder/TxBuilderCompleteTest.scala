@@ -933,15 +933,15 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should recalculate redeemer indexes after adding inputs") {
-        // BUG: When complete() adds inputs during balancing, the redeemer indexes become stale.
-        // Inputs are re-sorted (via TaggedSortedSet), but redeemers retain their original indexes.
+        // This test verifies that redeemer indexes are correctly recalculated when
+        // complete() adds inputs during balancing that sort before existing script inputs.
         //
-        // This test creates a scenario where:
+        // Scenario:
         // 1. Script UTXO has txhash starting with "b" (sorts second)
         // 2. Sponsor UTXO has txhash starting with "0" (sorts first)
         // 3. Initially script input is at index 0 with redeemer index 0
         // 4. After balancing adds sponsor input, script moves to index 1
-        // 5. Redeemer still has index 0, causing evaluation to fail
+        // 5. Redeemer index should be updated to 1
 
         // Script UTXO with transaction hash starting with "b" (sorts AFTER sponsor)
         val scriptTxHash = TransactionHash.fromByteString(ByteString.fromHex("b" + "0" * 63))
@@ -971,21 +971,27 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
 
-        // BUG: This fails because redeemer index is stale after sponsor input is added
-        // The redeemer was created with index 0 (script input was the only input),
-        // but after adding sponsor inputs during balancing, script input moved to position 1.
-        // The evaluator looks for redeemer at (Spend, 1) but only finds (Spend, 0).
-        val exception = intercept[TxBuilderException.BalancingException] {
-            TxBuilder(testEnv)
-                .spend(sUtxo, emptyRedeemer, alwaysOkScript)
-                .payTo(Bob.address, Value.ada(2))
-                .complete(provider, Alice.address)
-        }
+        // After the fix, this should succeed because redeemer indexes are re-calculated
+        val tx = TxBuilder(testEnv)
+            .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+            .payTo(Bob.address, Value.ada(2))
+            .complete(provider, Alice.address)
+            .transaction
 
-        // Verify the error is exactly what we expect: wrong redeemer index
+        // Verify the script input's position changed (sponsor input added before it)
+        val sortedInputs = tx.body.value.inputs.toSeq.sorted
         assert(
-          exception.getMessage.contains("Redeemer not found for tag Spend and index 1"),
-          s"Expected redeemer index mismatch error, got: ${exception.getMessage}"
+          sortedInputs.indexOf(sUtxo.input) == 1,
+          s"Script input should be at index 1 after sponsor input added, got: ${sortedInputs.indexOf(sUtxo.input)}"
+        )
+
+        // Verify redeemer has correct index (should be 1, not 0)
+        val spendRedeemer = tx.witnessSet.redeemers.get.value.toSeq
+            .find(_.tag == RedeemerTag.Spend)
+            .get
+        assert(
+          spendRedeemer.index == 1,
+          s"Redeemer index should be 1 but was ${spendRedeemer.index}"
         )
     }
 
