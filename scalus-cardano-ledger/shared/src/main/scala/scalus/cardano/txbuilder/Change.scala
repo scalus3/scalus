@@ -3,7 +3,7 @@ package scalus.cardano.txbuilder
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
-import scalus.cardano.txbuilder.TransactionBuilder.modifyBody
+import scalus.cardano.txbuilder.TransactionBuilder.{ensureMinAda, modifyBody}
 
 class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int) {
     def changeOutputDiffHandler(
@@ -103,36 +103,12 @@ object Change {
         val newAssets = currentValue.assets + additionalValue.assets
         val newValue = Value(Coin(newCoinValue), newAssets)
 
-        val updatedOutput = currentOutput match {
-            case s: TransactionOutput.Shelley => s.copy(value = newValue)
-            case b: TransactionOutput.Babbage => b.copy(value = newValue)
-        }
+        val updatedOutput = currentOutput.withValue(newValue)
+        val finalOutput = Sized(ensureMinAda(updatedOutput, protocolParams))
 
-        // Ensure minAda
-        val sizedOutput = Sized(updatedOutput)
-        val minAda = MinCoinSizedTransactionOutput.ensureMinAda(sizedOutput, protocolParams)
-
-        if newCoinValue < minAda.value then {
-            // Bump to minAda if needed
-            val bumpedValue = newValue.copy(coin = minAda)
-            val bumpedOutput = updatedOutput match {
-                case s: TransactionOutput.Shelley => s.copy(value = bumpedValue)
-                case b: TransactionOutput.Babbage => b.copy(value = bumpedValue)
-            }
-            Right(
-              modifyBody(
-                tx,
-                b => b.copy(outputs = b.outputs.updated(changeOutputIdx, Sized(bumpedOutput)))
-              )
-            )
-        } else {
-            Right(
-              modifyBody(
-                tx,
-                b => b.copy(outputs = b.outputs.updated(changeOutputIdx, sizedOutput))
-              )
-            )
-        }
+        Right(
+          modifyBody(tx, b => b.copy(outputs = b.outputs.updated(changeOutputIdx, finalOutput)))
+        )
     }
 
     private def createChangeOutput(
@@ -141,38 +117,9 @@ object Change {
         value: Value,
         protocolParams: ProtocolParams
     ): Either[TxBalancingError, Transaction] = {
-        val changeOutput: TransactionOutput = TransactionOutput.Babbage(
-          address = changeAddress,
-          value = value,
-          datumOption = None,
-          scriptRef = None
-        )
-
-        // Ensure min ADA
-        val sizedOutput = Sized(changeOutput)
-        val minAda = MinCoinSizedTransactionOutput.ensureMinAda(sizedOutput, protocolParams)
-
-        if value.coin.value < minAda.value then {
-            // Bump to min ADA
-            val bumpedValue = value.copy(coin = minAda)
-            val bumpedOutput = changeOutput match {
-                case b: TransactionOutput.Babbage => b.copy(value = bumpedValue)
-                case s: TransactionOutput.Shelley => s.copy(value = bumpedValue)
-            }
-            Right(
-              modifyBody(
-                tx,
-                b => b.copy(outputs = b.outputs.toSeq :+ Sized(bumpedOutput))
-              )
-            )
-        } else {
-            Right(
-              modifyBody(
-                tx,
-                b => b.copy(outputs = b.outputs.toSeq :+ sizedOutput)
-              )
-            )
-        }
+        val changeOutput = TransactionOutput(changeAddress, value)
+        val finalOutput = Sized(ensureMinAda(changeOutput, protocolParams))
+        Right(modifyBody(tx, b => b.copy(outputs = b.outputs.toSeq :+ finalOutput)))
     }
 
     private def removeFromChangeOutput(
@@ -187,10 +134,7 @@ object Change {
         val adaToRemove = -valueToRemove.coin.value // Negative, so negate it
         val tokensToRemove = valueToRemove.assets
 
-        val newCoinValue = currentValue.coin.value + valueToRemove.coin.value
-
         // Check if we have enough tokens
-        // For each token type to remove, check if we have it
         val insufficientTokens = tokensToRemove.assets.exists { case (policyId, assets) =>
             assets.exists { case (assetName, amountToRemove) =>
                 val currentAmount = currentValue.assets.assets
@@ -207,26 +151,20 @@ object Change {
         } else {
             // Subtract tokens (valueToRemove has negative amounts for subtraction)
             val newAssets = currentValue.assets + tokensToRemove
+            val newCoinValue = currentValue.coin.value + valueToRemove.coin.value
             val newValue = Value(Coin(newCoinValue), newAssets)
+            val updatedOutput = currentOutput.withValue(newValue)
 
-            // Check if output would still meet minAda requirement
-            val updatedOutput = currentOutput match {
-                case s: TransactionOutput.Shelley => s.copy(value = newValue)
-                case b: TransactionOutput.Babbage => b.copy(value = newValue)
-            }
-
-            val sizedOutput = Sized(updatedOutput)
-            val minAda =
-                MinCoinSizedTransactionOutput.ensureMinAda(sizedOutput, protocolParams).value
-
-            if newCoinValue < minAda then {
-                // Can't satisfy - change output would be below min ADA
+            // Use ensureMinAda to check if output meets minAda requirement
+            val finalOutput = ensureMinAda(updatedOutput, protocolParams)
+            if finalOutput.value.coin > updatedOutput.value.coin then {
+                // ensureMinAda had to bump the coin, meaning we're below minAda
                 Left(TxBalancingError.CantBalance(valueToRemove.coin.value))
             } else {
                 Right(
                   modifyBody(
                     tx,
-                    b => b.copy(outputs = b.outputs.updated(changeOutputIdx, sizedOutput))
+                    b => b.copy(outputs = b.outputs.updated(changeOutputIdx, Sized(finalOutput)))
                   )
                 )
             }
