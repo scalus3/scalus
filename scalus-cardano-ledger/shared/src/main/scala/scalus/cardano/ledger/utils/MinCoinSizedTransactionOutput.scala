@@ -42,7 +42,7 @@ object MinCoinSizedTransactionOutput {
         if minAda <= coin then minAda
         else
             val nextCandidateOutput = coinLens.replace(minAda)(sizedTransactionOutput)
-            MinCoinSizedTransactionOutput.ensureMinAda(nextCandidateOutput, protocolParams)
+            ensureMinAda(nextCandidateOutput, protocolParams)
     }
 
     private val constantOverhead = 160

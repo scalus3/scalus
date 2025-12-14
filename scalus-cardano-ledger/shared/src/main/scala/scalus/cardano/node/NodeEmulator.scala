@@ -1,10 +1,8 @@
-package scalus.testing.kit
+package scalus.cardano.node
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.Provider
-import scalus.cardano.node.SubmitError
 import scalus.cardano.node.SubmitError.NodeError
 
 import java.util.concurrent.atomic.AtomicReference

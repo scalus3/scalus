@@ -9,7 +9,7 @@ import scalus.builtin.Data.toData
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.MinTransactionFee
-import scalus.cardano.node.{Provider, SubmitError}
+import scalus.cardano.node.NodeEmulator
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.prelude.List as PList
 import scalus.{plutusV3, toUplc, Compiler}
@@ -17,75 +17,6 @@ import scalus.{plutusV3, toUplc, Compiler}
 import java.time.Instant
 import scala.collection.immutable.SortedMap
 
-// TODO: can't depend `testkit`, since it'd introduce circular dependency. /
-class SimpleMockProvider(initialUtxos: Utxos) extends Provider {
-    override def submit(transaction: Transaction): Either[SubmitError, TransactionHash] =
-        Right(transaction.id)
-
-    override def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] =
-        initialUtxos
-            .get(input)
-            .map(output => Utxo(input, output))
-            .toRight(new RuntimeException(s"UTXO not found: $input"))
-
-    override def findUtxos(inputs: Set[TransactionInput]): Either[RuntimeException, Utxos] = {
-        val found = inputs.flatMap(input => initialUtxos.get(input).map(input -> _)).toMap
-        if found.size == inputs.size then Right(found)
-        else Left(new RuntimeException(s"Some UTXOs not found"))
-    }
-
-    override def findUtxo(
-        address: Address,
-        transactionId: Option[TransactionHash],
-        datum: Option[DatumOption],
-        minAmount: Option[Coin]
-    ): Either[RuntimeException, Utxo] = {
-        initialUtxos
-            .find { case (input, output) =>
-                output.address == address &&
-                transactionId.forall(_ == input.transactionId) &&
-                minAmount.forall(min => output.value.coin.value >= min.value)
-            }
-            .map { case (input, output) => Utxo(input, output) }
-            .toRight(new RuntimeException(s"No UTXO found for address $address"))
-    }
-
-    override def findUtxos(
-        address: Address,
-        transactionId: Option[TransactionHash],
-        datum: Option[DatumOption],
-        minAmount: Option[Coin],
-        minRequiredTotalAmount: Option[Coin]
-    ): Either[RuntimeException, Utxos] = {
-        val filtered = initialUtxos.filter { case (input, output) =>
-            output.address == address &&
-            transactionId.forall(_ == input.transactionId) &&
-            minAmount.forall(min => output.value.coin.value >= min.value)
-        }
-
-        minRequiredTotalAmount match {
-            case Some(required) =>
-                val (selected, total) = filtered.foldLeft(
-                  (Map.empty[TransactionInput, TransactionOutput], 0L)
-                ) { case ((acc, sum), (input, output)) =>
-                    if sum < required.value then
-                        (acc + (input -> output), sum + output.value.coin.value)
-                    else (acc, sum)
-                }
-                if total >= required.value then Right(selected)
-                else
-                    Left(
-                      new RuntimeException(
-                        s"Insufficient funds: need ${required.value}, found $total"
-                      )
-                    )
-            case None =>
-                Right(filtered)
-        }
-    }
-}
-
-// until we refactor the complete & completeAsync
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
@@ -157,7 +88,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should automatically add inputs for simple ADA payment") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             input(1) -> adaOutput(Alice.address, 50)
@@ -179,7 +110,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete inputs should be signable with sign()") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -196,7 +127,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete followed by sign() should produce a valid transaction") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 50),
             input(1) -> adaOutput(Alice.address, 50)
@@ -222,7 +153,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should handle multi-asset transactions") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
             input(1) -> adaOutput(Alice.address, 50)
@@ -246,7 +177,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle multiple different tokens from separate UTXOs") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(Alice.address, 50, policyId -> Map(co2 -> 100L)),
             input(1) -> tokenOutput(Alice.address, 50, policyId2 -> Map(h2so4 -> 200L)),
@@ -276,7 +207,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should add ADA-only UTXO when token UTXO has insufficient ADA for fees") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(Alice.address, 1, policyId -> Map(co2 -> 100L)),
             input(1) -> adaOutput(Alice.address, 50)
@@ -304,7 +235,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle multiple token types in single UTXO efficiently") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(
               Alice.address,
@@ -343,7 +274,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should send tokens acquired from additional input querying back as change") {
         val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
             explicitUtxo._1 -> explicitUtxo._2
@@ -374,7 +305,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should auto-detect and add collateral for script spending") {
         val sUtxo = scriptUtxo(2, 20)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             input(1) -> adaOutput(Alice.address, 10),
@@ -395,7 +326,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should auto-detect and add collateral for minting") {
         val assets = Map(co2 -> 100L)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             input(1) -> adaOutput(Alice.address, 10)
@@ -416,7 +347,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should not add collateral for pubkey-only transactions") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -433,7 +364,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should set collateral return output for script transactions") {
         val sUtxo = scriptUtxo(2, 20)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             sUtxo.input -> sUtxo.output
@@ -459,7 +390,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should set totalCollateral field for script transactions") {
         val sUtxo = scriptUtxo(2, 20)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             sUtxo.input -> sUtxo.output
@@ -487,7 +418,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should calculate collateral based on fee estimate") {
         val sUtxo = scriptUtxo(2, 20)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             sUtxo.input -> sUtxo.output
@@ -516,7 +447,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should handle mixed script and pubkey inputs") {
         val sUtxo = scriptUtxo(2, 10)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             input(1) -> adaOutput(Alice.address, 50),
@@ -539,7 +470,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should select inputs for fees when only minting (no explicit inputs)") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             input(1) -> adaOutput(Alice.address, 50)
@@ -564,7 +495,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete should exclude already-spent inputs from selection") {
         val explicitInput = input(0)
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             explicitInput -> adaOutput(Alice.address, 10),
             input(1) -> adaOutput(Alice.address, 100)
@@ -584,7 +515,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("complete with explicit spend should only add necessary additional inputs") {
         val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 3_000_000).sample.get
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             explicitUtxo._1 -> explicitUtxo._2
@@ -610,7 +541,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should handle sending all tokens from a UTXO") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(Alice.address, 50, policyId -> Map(co2 -> 100L)),
             input(1) -> adaOutput(Alice.address, 50)
@@ -635,7 +566,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("complete should fail when required tokens are not available") {
         val nonexistent = AssetName.fromString("nonexistent")
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -659,7 +590,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle tokens from same UTXO under different policies") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> tokenOutput(
               Alice.address,
@@ -694,7 +625,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should ensure change output meets minimum ADA") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -712,7 +643,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should correctly place change output at sponsor address") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -734,7 +665,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should preserve validity interval settings") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -754,7 +685,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should fail with insufficient funds") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 5))
         )
 
@@ -771,7 +702,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should handle empty UTXO set from provider") {
-        val provider = SimpleMockProvider(Map.empty)
+        val provider = NodeEmulator(Map.empty)
 
         val exception = intercept[TxBuilderException.InsufficientAdaException] {
             TxBuilder(testEnv)
@@ -786,7 +717,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should fail when outputs exceed possible input value") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 10))
         )
 
@@ -807,7 +738,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // ============================================================================
 
     test("complete should produce deterministic results") {
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
             input(1) -> adaOutput(Alice.address, 50)
@@ -839,7 +770,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // before balancing. This means the fee is calculated without accounting for the
         // size of signatures that will be added when signing.
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
         )
 
@@ -895,7 +826,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         // Alice has ADA for fees - this will be selected by complete
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             input(0) -> scriptUtxo.output,
             input(1) -> adaOutput(Alice.address, 100),
@@ -963,7 +894,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
 
-        val provider = SimpleMockProvider(
+        val provider = NodeEmulator(
           Map(
             sUtxo.input -> sUtxo.output,
             sponsorInput1 -> adaOutput(Alice.address, 100), // For fees

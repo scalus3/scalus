@@ -7,7 +7,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.testing.kit.{NodeEmulator, ScalusTest, TestUtil}
+import scalus.cardano.node.NodeEmulator
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 import scalus.examples.vault.State

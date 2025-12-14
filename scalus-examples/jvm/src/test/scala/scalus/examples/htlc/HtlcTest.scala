@@ -10,7 +10,8 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.SubmitError
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.testing.kit.{NodeEmulator, ScalusTest, TestUtil}
+import scalus.cardano.node.NodeEmulator
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
 
