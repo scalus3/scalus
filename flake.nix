@@ -191,8 +191,8 @@
               ciSbtJvmOpts = ciCommonJvmOpts ++ [
                 # For CI single-run builds, TieredStopAtLevel=1 is acceptable since there's
                 # no warm JVM benefit. For builds > 15 min, consider removing this flag.
-                "-XX:TieredStopAtLevel=1"           # Stop at C1 compiler (faster CI startup)
-                "-XX:CompileThreshold=1500"         # Higher threshold for native compilation
+#                "-XX:TieredStopAtLevel=1"           # Stop at C1 compiler (faster CI startup)
+#                "-XX:CompileThreshold=1500"         # Higher threshold for native compilation
 
                 # CI-specific optimizations
                 "-Dsbt.boot.lock=false"             # Disable boot lock (faster in containerized CI)
