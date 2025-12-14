@@ -846,6 +846,16 @@ object StepError {
     }
 }
 
+/** Transaction balancing error types */
+enum TxBalancingError {
+    // Now it's only Plutus, but may become `Plutus... | SthElse...` in the future
+    case EvaluationFailed(cause: PlutusScriptEvaluationException)
+    // TODO: this constructor gets all other errors - rename?
+    case Failed(cause: Throwable)
+    case CantBalance(lastDiff: Long)
+    case InsufficientFunds(diff: Long, minRequired: Long)
+}
+
 // -------------------------------------------------------------------------
 // auxiliary types, extensions, helpers
 // -------------------------------------------------------------------------
