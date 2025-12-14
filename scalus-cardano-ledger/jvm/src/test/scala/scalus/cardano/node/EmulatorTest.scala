@@ -6,11 +6,11 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.cardano.txbuilder.TxBuilder
 
-class NodeEmulatorTest extends AnyFunSuite {
+class EmulatorTest extends AnyFunSuite {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
 
-    test("NodeEmulator.utxos returns all UTXOs") {
+    test("Emulator.utxos returns all UTXOs") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         val initialUtxos = Map(
@@ -18,14 +18,14 @@ class NodeEmulatorTest extends AnyFunSuite {
           TransactionInput(genesisHash, 1) -> TransactionOutput(Bob.address, Value.ada(50))
         )
 
-        val provider = NodeEmulator(
+        val provider = Emulator(
           initialUtxos = initialUtxos,
           validators = Set.empty,
-          mutators = NodeEmulator.defaultMutators
+          mutators = Emulator.defaultMutators
         )
 
         // utxos should return all current UTXOs
-        assert(provider.utxos == initialUtxos, "NodeEmulator.utxos should return all UTXOs")
+        assert(provider.utxos == initialUtxos, "Emulator.utxos should return all UTXOs")
 
         // Build and submit tx1
         val tx1 = TxBuilder(testEnv)

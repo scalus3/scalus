@@ -145,12 +145,12 @@ emulator.submit(lockTx)
 emulator.submit(unlockTx)
 ```
 
-### NodeEmulator for Testing
+### Emulator for Testing
 
-The `NodeEmulator` supports transaction chaining naturally by tracking UTXOs across submissions:
+The `Emulator` supports transaction chaining naturally by tracking UTXOs across submissions:
 
 ```scala copy
-val emulator = NodeEmulator(initialUtxos)
+val emulator = Emulator(initialUtxos)
 
 // Submit first transaction
 emulator.submit(lockTx)

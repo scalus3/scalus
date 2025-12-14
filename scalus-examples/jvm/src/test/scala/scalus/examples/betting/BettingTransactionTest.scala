@@ -1,16 +1,15 @@
 package scalus.examples.betting
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data.toData
-import scalus.builtin.platform
+import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
+import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.cardano.node.NodeEmulator
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
@@ -72,10 +71,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private val afterTime: Long = env.slotConfig.slotToTime(afterSlot)
 
     // Provider factory
-    private def createProvider(): NodeEmulator = {
+    private def createProvider(): Emulator = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-        NodeEmulator(
+        Emulator(
           initialUtxos = Map(
             TransactionInput(genesisHash, 0) ->
                 TransactionOutput.Babbage(
@@ -104,7 +103,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     }
 
     private def runValidator(
-        provider: NodeEmulator,
+        provider: Emulator,
         tx: Transaction,
         scriptInput: TransactionInput
     ): Result = {

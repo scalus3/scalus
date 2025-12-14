@@ -17,11 +17,11 @@ import scala.annotation.tailrec
   * @see
   *   [[scalus.cardano.ledger.rules]] for the ledger rules
   */
-class NodeEmulator(
+class Emulator(
     initialUtxos: Utxos = Map.empty,
     initialContext: Context = Context.testMainnet(),
-    val validators: Iterable[STS.Validator] = NodeEmulator.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = NodeEmulator.defaultMutators
+    val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
 ) extends Provider {
     private val stateRef = new AtomicReference[State](State(initialUtxos))
     private val contextRef = new AtomicReference[Context](initialContext)
@@ -136,7 +136,7 @@ class NodeEmulator(
         if !contextRef.compareAndSet(currentContext, newContext) then setSlot(slot)
     }
 
-    def snapshot(): NodeEmulator = NodeEmulator(
+    def snapshot(): Emulator = Emulator(
       initialUtxos = this.utxos,
       initialContext = this.contextRef.get(),
       validators = this.validators,
@@ -154,7 +154,7 @@ class NodeEmulator(
     }
 }
 
-object NodeEmulator {
+object Emulator {
     val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
     val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
 }

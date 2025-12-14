@@ -2,18 +2,17 @@ package scalus.cardano.txbuilder
 
 import monocle.syntax.all.*
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.{hex, utf8}
-import scalus.builtin.Data
+import scalus.builtin.{ByteString, Data}
 import scalus.builtin.Data.toData
-import scalus.prelude.List as PList
 import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
-import scalus.cardano.node.NodeEmulator
+import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
+import scalus.prelude.List as PList
 import scalus.{plutusV3, toUplc, Compiler}
 
 import scala.collection.immutable.SortedMap
@@ -461,14 +460,14 @@ class TxBuilderTest extends AnyFunSuite {
     test("transaction chaining - use outputs from tx1 as inputs in tx2") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-        // Use NodeEmulator to build transactions - disable validators for simplicity
+        // Use Emulator to build transactions - disable validators for simplicity
         // (signature verification is tested elsewhere in TransactionSignerTest)
-        val provider = NodeEmulator(
+        val provider = Emulator(
           initialUtxos = Map(
             TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100))
           ),
           validators = Set.empty,
-          mutators = NodeEmulator.defaultMutators
+          mutators = Emulator.defaultMutators
         )
 
         // Build tx1: send ADA to Bob
