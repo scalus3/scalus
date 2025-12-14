@@ -928,4 +928,65 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
     }
 
+    // ============================================================================
+    // Redeemer Index Bug Test
+    // ============================================================================
+
+    test("complete should recalculate redeemer indexes after adding inputs") {
+        // BUG: When complete() adds inputs during balancing, the redeemer indexes become stale.
+        // Inputs are re-sorted (via TaggedSortedSet), but redeemers retain their original indexes.
+        //
+        // This test creates a scenario where:
+        // 1. Script UTXO has txhash starting with "b" (sorts second)
+        // 2. Sponsor UTXO has txhash starting with "0" (sorts first)
+        // 3. Initially script input is at index 0 with redeemer index 0
+        // 4. After balancing adds sponsor input, script moves to index 1
+        // 5. Redeemer still has index 0, causing evaluation to fail
+
+        // Script UTXO with transaction hash starting with "b" (sorts AFTER sponsor)
+        val scriptTxHash = TransactionHash.fromByteString(ByteString.fromHex("b" + "0" * 63))
+        val scriptUtxoInput = TransactionInput(scriptTxHash, 0)
+
+        // Sponsor UTXOs with transaction hashes starting with "0" (sorts BEFORE script "b...")
+        // Need multiple UTXOs: one for collateral, one for fees
+        val sponsorTxHash1 = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val sponsorInput1 = TransactionInput(sponsorTxHash1, 0)
+        val sponsorInput2 = TransactionInput(sponsorTxHash1, 1) // Same txhash, different index
+
+        // TxBuilder requires a datum for script outputs
+        val sUtxo = Utxo(
+          scriptUtxoInput,
+          TransactionOutput(
+            scriptAddress,
+            Value.ada(3), // Minimal ADA, forces balancing to add sponsor input
+            Some(inlineDatum42)
+          )
+        )
+
+        val provider = SimpleMockProvider(
+          Map(
+            sUtxo.input -> sUtxo.output,
+            sponsorInput1 -> adaOutput(Alice.address, 100), // For fees
+            sponsorInput2 -> adaOutput(Alice.address, 50) // For collateral
+          )
+        )
+
+        // BUG: This fails because redeemer index is stale after sponsor input is added
+        // The redeemer was created with index 0 (script input was the only input),
+        // but after adding sponsor inputs during balancing, script input moved to position 1.
+        // The evaluator looks for redeemer at (Spend, 1) but only finds (Spend, 0).
+        val exception = intercept[TxBuilderException.BalancingException] {
+            TxBuilder(testEnv)
+                .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+                .payTo(Bob.address, Value.ada(2))
+                .complete(provider, Alice.address)
+        }
+
+        // Verify the error is exactly what we expect: wrong redeemer index
+        assert(
+          exception.getMessage.contains("Redeemer not found for tag Spend and index 1"),
+          s"Expected redeemer index mismatch error, got: ${exception.getMessage}"
+        )
+    }
+
 }
