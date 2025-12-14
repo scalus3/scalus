@@ -94,6 +94,10 @@ object MemoryUsage {
             var acc: CostingInteger = CostingInteger(0L)
             for d <- l do acc = acc + memoryUsage(d)
             acc
+        case Constant.Array(tpe, a) =>
+            var acc: CostingInteger = CostingInteger(0L)
+            for d <- a do acc = acc + memoryUsage(d)
+            acc
         case Constant.Pair(a, b) =>
             CostingInteger(1L) + memoryUsage(a) + memoryUsage(b)
         case Constant.BLS12_381_G1_Element(_) => CostingInteger(18L)

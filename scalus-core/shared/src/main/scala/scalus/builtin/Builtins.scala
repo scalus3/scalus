@@ -161,6 +161,11 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def fstPair[A, B](p: BuiltinPair[A, B]): A = p.fst
     def sndPair[A, B](p: BuiltinPair[A, B]): B = p.snd
 
+    // Arrays
+    def lengthOfArray[A](a: BuiltinArray[A]): BigInt = a.length
+    def listToArray[A](a: BuiltinList[A]): BuiltinArray[A] = BuiltinArray.fromList(a)
+    def indexArray[A](a: BuiltinArray[A], n: BigInt): A = a(n)
+
     // Lists
     def chooseList[A, B](l: BuiltinList[A], e: B, ne: B): B =
         if l.isEmpty then e else ne

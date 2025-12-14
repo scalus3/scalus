@@ -36,6 +36,9 @@ object DefaultUni:
     case object ProtoPair extends DefaultUni:
         type Unlifted = Nothing // [A, B] =>> (A, B)
 
+    case object ProtoArray extends DefaultUni:
+        type Unlifted = Nothing // [A] =>> Vector[A]
+
     case class Apply(f: DefaultUni, arg: DefaultUni) extends DefaultUni:
         type Unlifted = f.Unlifted => arg.Unlifted
 
@@ -61,16 +64,20 @@ object DefaultUni:
 
     def Pair(a: DefaultUni, b: DefaultUni): DefaultUni = Apply(Apply(ProtoPair, a), b)
     def List(a: DefaultUni): DefaultUni = Apply(ProtoList, a)
+    def Array(a: DefaultUni): DefaultUni = Apply(ProtoArray, a)
 
     def flatForUni(uni: DefaultUni)(using Flat[builtin.Data]): Flat[Any] =
         uni match
-            case Integer             => summon[Flat[BigInt]].asInstanceOf[Flat[Any]]
-            case ByteString          => summon[Flat[builtin.ByteString]].asInstanceOf[Flat[Any]]
-            case String              => summon[Flat[String]].asInstanceOf[Flat[Any]]
-            case Unit                => summon[Flat[Unit]].asInstanceOf[Flat[Any]]
-            case Bool                => summon[Flat[Boolean]].asInstanceOf[Flat[Any]]
-            case Data                => summon[Flat[builtin.Data]].asInstanceOf[Flat[Any]]
-            case Apply(ProtoList, a) => listFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
+            case Integer              => summon[Flat[BigInt]].asInstanceOf[Flat[Any]]
+            case ByteString           => summon[Flat[builtin.ByteString]].asInstanceOf[Flat[Any]]
+            case String               => summon[Flat[String]].asInstanceOf[Flat[Any]]
+            case Unit                 => summon[Flat[Unit]].asInstanceOf[Flat[Any]]
+            case Bool                 => summon[Flat[Boolean]].asInstanceOf[Flat[Any]]
+            case Data                 => summon[Flat[builtin.Data]].asInstanceOf[Flat[Any]]
+            case Apply(ProtoList, a)  => listFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
+            case Apply(ProtoArray, a) =>
+                // Arrays use the same flat encoding as lists, converted to/from Vector
+                vectorFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
             case Apply(Apply(ProtoPair, a), b) =>
                 pairFlat(using flatForUni(a), flatForUni(b)).asInstanceOf[Flat[Any]]
             case _ => throw new Exception(s"Unsupported uni: $uni")
@@ -89,6 +96,7 @@ object DefaultUni:
             case DefaultUni.BLS12_381_G1_Element => scala.List(9)
             case DefaultUni.BLS12_381_G2_Element => scala.List(10)
             case DefaultUni.BLS12_381_MlResult   => scala.List(11)
+            case DefaultUni.ProtoArray           => scala.List(12)
 
     def decodeUni(state: List[Int]): (DefaultUni, List[Int]) =
         state match
@@ -107,4 +115,5 @@ object DefaultUni:
             case 9 :: tail  => (DefaultUni.BLS12_381_G1_Element, tail)
             case 10 :: tail => (DefaultUni.BLS12_381_G2_Element, tail)
             case 11 :: tail => (DefaultUni.BLS12_381_MlResult, tail)
+            case 12 :: tail => (DefaultUni.ProtoArray, tail)
             case _          => throw new Exception(s"Invalid uni: $state")

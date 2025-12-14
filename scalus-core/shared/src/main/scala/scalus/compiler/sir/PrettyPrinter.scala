@@ -54,6 +54,11 @@ object PrettyPrinter:
                   text(", ") + space,
                   values.map(v => prettyValue(v))
                 ) + text("]")
+            case Constant.Array(tpe, values) =>
+                text("[") + intercalate(
+                  text(", ") + space,
+                  values.map(v => prettyValue(v))
+                ) + text("]")
             case BLS12_381_G1_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_G2_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_MlResult(_) =>

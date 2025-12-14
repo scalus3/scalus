@@ -195,7 +195,7 @@ trait ArbitraryInstances:
                 throw new IllegalArgumentException(
                   s"Unexpected DefaultUni type for constant generation $t"
                 )
-            case DefaultUni.ProtoList | DefaultUni.ProtoPair =>
+            case DefaultUni.ProtoList | DefaultUni.ProtoPair | DefaultUni.ProtoArray =>
                 throw new IllegalArgumentException(
                   s"Unexpected DefaultUni type for constant generation $t"
                 )
@@ -217,6 +217,9 @@ trait ArbitraryInstances:
         case Constant.Bool(b)   => Stream.empty
         case Constant.List(t, elems) =>
             val elemsShrunk = Shrink.shrink(elems).map(Constant.List(t, _))
+            elemsShrunk
+        case Constant.Array(t, elems) =>
+            val elemsShrunk = Shrink.shrink(elems).map(Constant.Array(t, _))
             elemsShrunk
         case Constant.Pair(a, b) =>
             val aShrunk = Shrink.shrink(a).map(Constant.Pair(_, b))

@@ -1127,6 +1127,52 @@ class BuiltinsMeaning(
           builtinCostModel.dropList
         )
 
+    // Array builtins
+
+    // [ forall a, array(a) ] -> integer
+    val LengthOfArray: BuiltinRuntime =
+        mkMeaning(
+          All("a", (DefaultUni.ProtoArray $ "a") ->: Type(Integer)),
+          (_: Logger, args: Seq[CekValue]) =>
+              args(0) match
+                  case VCon(Constant.Array(_, arr)) =>
+                      VCon(asConstant(BigInt(arr.length)))
+                  case _ => throw new DeserializationError(DefaultFun.LengthOfArray, args(0))
+          ,
+          builtinCostModel.lengthOfArray
+        )
+
+    // [ forall a, list(a) ] -> array(a)
+    val ListToArray: BuiltinRuntime =
+        mkMeaning(
+          All("a", (DefaultUni.ProtoList $ "a") ->: (DefaultUni.ProtoArray $ "a")),
+          (_: Logger, args: Seq[CekValue]) =>
+              args(0) match
+                  case VCon(Constant.List(tpe, ls)) =>
+                      VCon(Constant.Array(tpe, ls.toVector))
+                  case _ => throw new DeserializationError(DefaultFun.ListToArray, args(0))
+          ,
+          builtinCostModel.listToArray
+        )
+
+    // [ forall a, array(a), integer ] -> a
+    val IndexArray: BuiltinRuntime =
+        mkMeaning(
+          All("a", (DefaultUni.ProtoArray $ "a") ->: Integer ->: TVar("a")),
+          (_: Logger, args: Seq[CekValue]) =>
+              args(0) match
+                  case VCon(Constant.Array(_, arr)) =>
+                      val idx = args(1).asInteger
+                      if idx < 0 || idx >= arr.length then
+                          throw new BuiltinException(
+                            s"indexArray: index $idx out of bounds for array of length ${arr.length}"
+                          )
+                      VCon(arr(idx.toInt))
+                  case _ => throw new DeserializationError(DefaultFun.IndexArray, args(0))
+          ,
+          builtinCostModel.indexArray
+        )
+
     private inline def mkGetBuiltinRuntime: DefaultFun => BuiltinRuntime = ${
         Macros.mkGetBuiltinRuntime('this)
     }
