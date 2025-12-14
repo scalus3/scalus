@@ -92,16 +92,20 @@
                 "-XX:CompileThreshold=1000"         # Compile methods to native code after 1000 invocations
               ];
 
-              # SBT-specific JVM options (optimized for faster startup)
+              # SBT-specific JVM options (optimized for long-running sbtn server)
               sbtJvmOpts = commonJvmOpts ++ [
-                # Startup optimization - prioritize fast startup over peak performance
-                "-XX:TieredStopAtLevel=1"           # Stop at C1 compiler (faster startup, less optimization)
-                "-XX:CompileThreshold=1500"         # Higher threshold for native compilation (faster startup)
+                # NOTE: Do NOT use -XX:TieredStopAtLevel=1 here!
+                # While it speeds up initial startup, it prevents C2 JIT optimization
+                # which makes subsequent compilations 30-50% slower in long-running sbtn server
+
+                # JIT settings optimized for compilation workloads
+                "-XX:CompileThreshold=1000"         # Compile hot methods after 1000 invocations
+                "-XX:+AlwaysPreTouch"               # Pre-touch heap pages to avoid GC pauses during compilation
 
                 # SBT-specific optimizations
                 "-Dsbt.boot.lock=false"             # Disable boot lock file (faster concurrent sbt instances)
-                "-Dsbt.cached.resolution.cache.limit=50"  # Limit dependency resolution cache size
-#                "-Dsbt.task.timings=true"          # Enable task timing reports for performance insights
+                "-Dsbt.turbo=true"                  # Enable turbo mode for faster task execution
+                "-Dsbt.supershell=false"            # Disable supershell for cleaner output and slight speedup
               ];
             in
             pkgs.mkShell {
@@ -172,25 +176,27 @@
                 # Memory optimizations (Java 11 compatible)
                 "-XX:+UseStringDeduplication"       # Deduplicate identical strings to save memory
 
-                # Code cache settings
-#                "-XX:ReservedCodeCacheSize=512m"    # Reserve space for compiled native code
-#                "-XX:InitialCodeCacheSize=64m"      # Start with larger initial code cache
+                # Code cache settings - enabled for better JIT performance
+                "-XX:ReservedCodeCacheSize=512m"    # Reserve space for compiled native code
+                "-XX:InitialCodeCacheSize=64m"      # Start with larger initial code cache
 
                 # Compilation settings
-#                "-XX:+TieredCompilation"            # Use tiered compilation (C1 + C2 compilers)
+                "-XX:+TieredCompilation"            # Use tiered compilation (C1 + C2 compilers)
 
                 # Memory efficiency
                 "-XX:+UseCompressedOops"            # Use 32-bit pointers on 64-bit JVM (saves memory)
               ];
 
-              # CI SBT-specific options (prioritize build speed and reliability)
+              # CI SBT-specific options (prioritize build speed for single-run builds)
               ciSbtJvmOpts = ciCommonJvmOpts ++ [
-                # Fast startup for CI builds
+                # For CI single-run builds, TieredStopAtLevel=1 is acceptable since there's
+                # no warm JVM benefit. For builds > 15 min, consider removing this flag.
                 "-XX:TieredStopAtLevel=1"           # Stop at C1 compiler (faster CI startup)
                 "-XX:CompileThreshold=1500"         # Higher threshold for native compilation
 
                 # CI-specific optimizations
                 "-Dsbt.boot.lock=false"             # Disable boot lock (faster in containerized CI)
+                "-Dsbt.supershell=false"            # Disable supershell for cleaner CI logs
               ];
             in
             pkgs.mkShell {

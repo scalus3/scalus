@@ -16,11 +16,18 @@
 -XX:ReservedCodeCacheSize=512m
 -XX:InitialCodeCacheSize=64m
 
-# Compilation settings
+# Compilation settings - allow full tiered compilation for sbtn server performance
 -XX:+TieredCompilation
+-XX:CompileThreshold=1000
 
-# Startup optimization
--XX:TieredStopAtLevel=1
+# NOTE: Do NOT use -XX:TieredStopAtLevel=1 here!
+# While it speeds up initial startup, it prevents C2 JIT optimization
+# which makes subsequent compilations 30-50% slower in long-running sbtn server
+
+# Pre-touch heap to avoid GC pauses during compilation
+-XX:+AlwaysPreTouch
 
 # SBT-specific optimizations
 -Dsbt.boot.lock=false
+-Dsbt.turbo=true
+-Dsbt.supershell=false
