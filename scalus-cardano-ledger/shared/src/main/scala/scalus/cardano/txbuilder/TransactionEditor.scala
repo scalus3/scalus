@@ -20,6 +20,7 @@ package scalus.cardano.txbuilder
 import cats.implicits.*
 import scalus.builtin.Data
 import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.TransactionBuilder.modifyWs
 
 // ============================================================================
 // DetachedRedeemer

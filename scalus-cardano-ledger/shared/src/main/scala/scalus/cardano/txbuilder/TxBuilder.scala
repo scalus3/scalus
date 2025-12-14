@@ -9,7 +9,7 @@ import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
 import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
-import scalus.cardano.txbuilder.TransactionBuilder.ResolvedUtxos
+import scalus.cardano.txbuilder.TransactionBuilder.{balanceFeeAndChangeWithTokens, modifyBody, ResolvedUtxos}
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
@@ -1014,7 +1014,7 @@ case class TxBuilder(
           expectedSignerCount,
           addAttachmentsToContext(initialContext).transaction
         )
-        val balancedTx = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
+        val balancedTx = balanceFeeAndChangeWithTokens(
           txWithDummySigs,
           handleDiffByQueryingMore,
           env.protocolParams,

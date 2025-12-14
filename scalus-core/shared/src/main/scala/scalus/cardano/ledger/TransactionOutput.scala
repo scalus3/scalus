@@ -43,6 +43,15 @@ object TransactionOutput:
         Lens(get)(set)
     }
 
+    extension (txo: TransactionOutput) {
+
+        /** Creates a copy of this TransactionOutput with a new value */
+        def withValue(amount: Value): TransactionOutput = txo match {
+            case shelley: Shelley => shelley.copy(value = amount)
+            case babbage: Babbage => babbage.copy(value = amount)
+        }
+    }
+
     def unapply(
         transactionOutput: TransactionOutput
     ): (Address, Value, Option[DatumOption], Option[ScriptRef]) = (

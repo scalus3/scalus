@@ -1,198 +1,77 @@
 package scalus.cardano.txbuilder
 
-import monocle.Lens
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.utils.{MinTransactionFee, TxBalance}
-import scalus.cardano.txbuilder
-import scalus.cardano.txbuilder.TxBalancingError.Failed
 
-import scala.annotation.tailrec
-import scala.util.Try
-
+/** @deprecated
+  *   This object is deprecated. Use the functions and types from their new locations:
+  *   - `balanceFeeAndChange` and `balanceFeeAndChangeWithTokens` are now in `TransactionBuilder`
+  *     object
+  *   - `TxBalancingError` is now in its own file `scalus.cardano.txbuilder.TxBalancingError`
+  *   - `modifyBody`, `modifyWs`, `setFee`, `calculateChangeValue` are now in `TransactionBuilder`
+  *     object
+  *   - `withValue` extension is now in `TransactionOutput` companion object in
+  *     `scalus.cardano.ledger`
+  */
+@deprecated("Use TransactionBuilder methods instead", "scalus 0.13.0")
 object LowLevelTxBuilder {
     @deprecated("Use scalus.cardano.txbuilder.ChangeOutputDiffHandler instead", "scalus 0.13.0")
     class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int)
-        extends txbuilder.ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
+        extends scalus.cardano.txbuilder.ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
 
     @deprecated(
-      "Use `balanceFeeAndChange` with diffHandler: (Value, Transaction) instead.",
-      "scalus 0.13.0"
+      "Use TransactionBuilder.balanceFeeAndChange instead",
+      "0.13.0"
     )
-    def balanceFeeAndChange(
-        initial: Transaction,
-        diffHandler: (Long, Transaction) => Either[TxBalancingError, Transaction],
-        protocolParams: ProtocolParams,
-        resolvedUtxo: Utxos,
-        evaluator: PlutusScriptEvaluator,
-    ): Either[TxBalancingError, Transaction] = {
-        val originalDiffHandler = diffHandler
-        val adaptedDiffHandler = (diff: Value, tx: Transaction) =>
-            originalDiffHandler(diff.coin.value, tx)
-        balanceFeeAndChangeWithTokens(
-          initial,
-          adaptedDiffHandler,
-          protocolParams,
-          resolvedUtxo,
-          evaluator
-        )
-    }
-
-    /** Balances the transaction using a diff handler to adjust the transaction.
-      *
-      * Invariants:
-      *   - both ADA and native tokens are adjusted by the diff handler
-      *   - fees never go below the initial fee
-      */
     def balanceFeeAndChange(
         initial: Transaction,
         changeOutputIdx: Int,
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
-    ): Either[TxBalancingError, Transaction] = {
-        balanceFeeAndChangeWithTokens(
+    ): Either[TxBalancingError, Transaction] =
+        TransactionBuilder.balanceFeeAndChange(
           initial,
-          txbuilder
-              .ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
-              .changeOutputDiffHandler,
+          changeOutputIdx,
           protocolParams,
           resolvedUtxo,
           evaluator
         )
-    }
 
-    /** Balances the transaction using a diff handler to adjust the transaction.
-      *
-      * Invariants:
-      *   - both ADA and native tokens are adjusted by the diff handler
-      *   - fees never go below the initial fee
-      *
-      * @param resolvedUtxo
-      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
-      *   to dynamically add UTXOs that will be visible in subsequent iterations.
-      */
+    @deprecated(
+      "Use TransactionBuilder.balanceFeeAndChangeWithTokens instead",
+      "0.13.0"
+    )
     def balanceFeeAndChangeWithTokens(
         initial: Transaction,
         diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
         resolvedUtxo: => Utxos,
         evaluator: PlutusScriptEvaluator,
-    ): Either[TxBalancingError, Transaction] = {
-        var iteration = 0
-
-        @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
-            iteration += 1
-            if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
-
-            val eTrialTx = for {
-                txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
-                minFee <- MinTransactionFee
-                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
-                    .left
-                    .map(
-                      TxBalancingError.Failed(_)
-                    )
-                // Don't go below initial fee
-                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
-                txWithFees = setFee(fee)(txWithExUnits)
-                diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
-                // try to balance it
-                balanced <- diffHandler(diff, txWithFees)
-            } yield balanced
-            eTrialTx match {
-                case Left(e)                         => Left(e)
-                case Right(trialTx) if tx == trialTx => Right(tx)
-                case Right(trialTx)                  => loop(trialTx)
-            }
-        }
-        loop(initial)
-    }
-
-    private def computeScriptsWitness(
-        utxos: Utxos,
-        evaluator: PlutusScriptEvaluator,
-        protocolParams: ProtocolParams
-    )(tx: Transaction): Either[TxBalancingError, Transaction] = Try {
-        val redeemers = evaluator.evalPlutusScripts(tx, utxos)
-        setupRedeemers(protocolParams, tx, utxos, redeemers)
-    }.toEither.left.map {
-        case psee: PlutusScriptEvaluationException => TxBalancingError.EvaluationFailed(psee)
-        case other                                 => TxBalancingError.Failed(other)
-    }
-
-    private def setupRedeemers(
-        protocolParams: ProtocolParams,
-        tx: Transaction,
-        utxos: Utxos,
-        redeemers: Seq[Redeemer]
-    ) = {
-        val txWithRedeemers =
-            if redeemers.nonEmpty then
-                val rawRedeemers = KeepRaw(Redeemers.from(redeemers))
-                tx.copy(witnessSet = tx.witnessSet.copy(redeemers = Some(rawRedeemers)))
-            else tx
-
-        val scriptDataHash =
-            ScriptDataHashGenerator
-                .computeScriptDataHash(
-                  txWithRedeemers,
-                  utxos,
-                  protocolParams,
-                )
-                .toOption
-                .get
-
-        if scriptDataHash.nonEmpty then
-            txWithRedeemers.copy(body =
-                KeepRaw(tx.body.value.copy(scriptDataHash = scriptDataHash))
-            )
-        else txWithRedeemers
-    }
+    ): Either[TxBalancingError, Transaction] =
+        TransactionBuilder.balanceFeeAndChangeWithTokens(
+          initial,
+          diffHandler,
+          protocolParams,
+          resolvedUtxo,
+          evaluator
+        )
 }
 
-// Transaction balancing error types
-enum TxBalancingError {
-    // Now it's only Plutus, but may become `Plutus... | SthElse...` in the future
-    case EvaluationFailed(cause: PlutusScriptEvaluationException)
-    // TODO: this constructor gets all other errors - rename?
-    case Failed(cause: Throwable)
-    case CantBalance(lastDiff: Long)
-    case InsufficientFunds(diff: Long, minRequired: Long)
-}
+@deprecated("Use TransactionBuilder.modifyBody instead", "scalus 0.13.0")
+def modifyBody(tx: Transaction, f: TransactionBody => TransactionBody): Transaction =
+    TransactionBuilder.modifyBody(tx, f)
 
-extension (t: TransactionOutput) {
-    def valueLens: Lens[TransactionOutput, Value] =
-        Lens[TransactionOutput, Value](_.value)(v => txout => txout.withValue(v))
+@deprecated("Use TransactionBuilder.modifyWs instead", "scalus 0.13.0")
+def modifyWs(
+    tx: Transaction,
+    f: TransactionWitnessSet => TransactionWitnessSet
+): Transaction =
+    TransactionBuilder.modifyWs(tx, f)
 
-    def withValue(amount: Value): TransactionOutput = t match {
-        case shelley: TransactionOutput.Shelley =>
-            shelley.copy(value = amount)
-        case babbage: TransactionOutput.Babbage =>
-            babbage.copy(value = amount)
-    }
-}
+@deprecated("Use TransactionBuilder.setFee instead", "scalus 0.13.0")
+def setFee(amount: Coin)(tx: Transaction): Transaction =
+    TransactionBuilder.setFee(amount)(tx)
 
-def modifyBody(tx: Transaction, f: TransactionBody => TransactionBody): Transaction = {
-    val newBody = f(tx.body.value)
-    tx.copy(body = KeepRaw(newBody))
-}
-
-def modifyWs(tx: Transaction, f: TransactionWitnessSet => TransactionWitnessSet): Transaction = {
-    val newWs = f(tx.witnessSet)
-    tx.copy(witnessSet = newWs)
-}
-
-def setFee(amount: Coin)(tx: Transaction) = modifyBody(tx, _.copy(fee = amount))
-
-@deprecated("Use calculateChangeValue() instead to handle both ADA and tokens", "scalus 0.13.0")
-def calculateChangeLovelace(tx: Transaction, utxo: Utxos, params: ProtocolParams): Long = {
-    val produced = TxBalance.produced(tx, params)
-    val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
-    consumed.coin.value - produced.coin.value
-}
-
-def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
-    val produced = TxBalance.produced(tx, params)
-    val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
-    consumed - produced
-}
+@deprecated("Use TransactionBuilder.calculateChangeValue instead", "scalus 0.13.0")
+def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value =
+    TransactionBuilder.calculateChangeValue(tx, utxo, params)

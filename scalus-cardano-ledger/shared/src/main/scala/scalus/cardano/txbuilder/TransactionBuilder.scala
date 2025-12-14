@@ -14,13 +14,15 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.rules.{Context as SContext, State as SState, UtxoEnv}
-import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
+import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee, TxBalance}
 import scalus.cardano.txbuilder.Datum.DatumValue
 import scalus.cardano.txbuilder.SomeBuildError.{BalancingError, SomeRedeemerIndexingError, SomeStepError, ValidationError}
 import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TransactionBuilder.{Context, Operation, WitnessKind}
-import scalus.cardano.txbuilder.modifyWs
 import scalus.|>
+
+import scala.annotation.tailrec
+import scala.util.Try
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
@@ -150,7 +152,7 @@ case class ExpectedSigner(hash: AddrKeyHash)
 // Transaction Builder
 // -----------------------------------------------------------------------------
 
-object TransactionBuilder:
+object TransactionBuilder {
 
     /** Represents different types of authorized operations (except the spending, which goes
       * separately).
@@ -312,7 +314,7 @@ object TransactionBuilder:
             // println(s"txWithDummySignatures=${HexUtil.encodeHexString(txWithDummySignatures.toCbor)}")
 
             for {
-                balanced <- LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
+                balanced <- balanceFeeAndChangeWithTokens(
                   initial = this.transaction,
                   diffHandler = diffHandler,
                   protocolParams = protocolParams,
@@ -475,6 +477,143 @@ object TransactionBuilder:
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Transaction Modification Helpers
+    // -------------------------------------------------------------------------
+
+    def modifyBody(tx: Transaction, f: TransactionBody => TransactionBody): Transaction = {
+        val newBody = f(tx.body.value)
+        tx.copy(body = KeepRaw(newBody))
+    }
+
+    def modifyWs(
+        tx: Transaction,
+        f: TransactionWitnessSet => TransactionWitnessSet
+    ): Transaction = {
+        val newWs = f(tx.witnessSet)
+        tx.copy(witnessSet = newWs)
+    }
+
+    def setFee(amount: Coin)(tx: Transaction): Transaction = modifyBody(tx, _.copy(fee = amount))
+
+    def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
+        val produced = TxBalance.produced(tx, params)
+        val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
+        consumed - produced
+    }
+
+    // -------------------------------------------------------------------------
+    // Transaction Balancing
+    // -------------------------------------------------------------------------
+
+    /** Balances the transaction using a diff handler to adjust the transaction.
+      *
+      * Invariants:
+      *   - both ADA and native tokens are adjusted by the diff handler
+      *   - fees never go below the initial fee
+      */
+    def balanceFeeAndChange(
+        initial: Transaction,
+        changeOutputIdx: Int,
+        protocolParams: ProtocolParams,
+        resolvedUtxo: Utxos,
+        evaluator: PlutusScriptEvaluator,
+    ): Either[TxBalancingError, Transaction] = {
+        balanceFeeAndChangeWithTokens(
+          initial,
+          ChangeOutputDiffHandler(protocolParams, changeOutputIdx).changeOutputDiffHandler,
+          protocolParams,
+          resolvedUtxo,
+          evaluator
+        )
+    }
+
+    /** Balances the transaction using a diff handler to adjust the transaction.
+      *
+      * Invariants:
+      *   - both ADA and native tokens are adjusted by the diff handler
+      *   - fees never go below the initial fee
+      *
+      * @param resolvedUtxo
+      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
+      *   to dynamically add UTXOs that will be visible in subsequent iterations.
+      */
+    def balanceFeeAndChangeWithTokens(
+        initial: Transaction,
+        diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
+        protocolParams: ProtocolParams,
+        resolvedUtxo: => Utxos,
+        evaluator: PlutusScriptEvaluator,
+    ): Either[TxBalancingError, Transaction] = {
+        var iteration = 0
+
+        @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
+            iteration += 1
+            if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
+
+            val eTrialTx = for {
+                txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
+                minFee <- MinTransactionFee
+                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
+                    .left
+                    .map(TxBalancingError.Failed(_))
+                // Don't go below initial fee
+                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
+                txWithFees = setFee(fee)(txWithExUnits)
+                diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
+                // try to balance it
+                balanced <- diffHandler(diff, txWithFees)
+            } yield balanced
+            eTrialTx match {
+                case Left(e)                         => Left(e)
+                case Right(trialTx) if tx == trialTx => Right(tx)
+                case Right(trialTx)                  => loop(trialTx)
+            }
+        }
+        loop(initial)
+    }
+
+    private def computeScriptsWitness(
+        utxos: Utxos,
+        evaluator: PlutusScriptEvaluator,
+        protocolParams: ProtocolParams
+    )(tx: Transaction): Either[TxBalancingError, Transaction] = Try {
+        val redeemers = evaluator.evalPlutusScripts(tx, utxos)
+        setupRedeemers(protocolParams, tx, utxos, redeemers)
+    }.toEither.left.map {
+        case psee: PlutusScriptEvaluationException => TxBalancingError.EvaluationFailed(psee)
+        case other                                 => TxBalancingError.Failed(other)
+    }
+
+    private def setupRedeemers(
+        protocolParams: ProtocolParams,
+        tx: Transaction,
+        utxos: Utxos,
+        redeemers: Seq[Redeemer]
+    ): Transaction = {
+        val txWithRedeemers =
+            if redeemers.nonEmpty then
+                val rawRedeemers = KeepRaw(Redeemers.from(redeemers))
+                tx.copy(witnessSet = tx.witnessSet.copy(redeemers = Some(rawRedeemers)))
+            else tx
+
+        val scriptDataHash =
+            ScriptDataHashGenerator
+                .computeScriptDataHash(
+                  txWithRedeemers,
+                  utxos,
+                  protocolParams,
+                )
+                .toOption
+                .get
+
+        if scriptDataHash.nonEmpty then
+            txWithRedeemers.copy(body =
+                KeepRaw(tx.body.value.copy(scriptDataHash = scriptDataHash))
+            )
+        else txWithRedeemers
+    }
+}
 // ===================================
 // Step processing errors
 // ===================================
@@ -815,7 +954,7 @@ def txBodyL: Lens[Transaction, TransactionBody] = {
 
 /** add at most 256 keys */
 def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
-    modifyWs(
+    TransactionBuilder.modifyWs(
       tx,
       ws =>
           ws.copy(vkeyWitnesses =
@@ -826,7 +965,7 @@ def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
 
 /** remove at most 256 keys, must be used in conjunction with addDummyVKeys */
 def removeDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
-    modifyWs(
+    TransactionBuilder.modifyWs(
       tx,
       ws =>
           ws.copy(vkeyWitnesses =

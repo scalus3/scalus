@@ -3,6 +3,7 @@ package scalus.cardano.txbuilder
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
+import scalus.cardano.txbuilder.TransactionBuilder.modifyBody
 
 class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int) {
     def changeOutputDiffHandler(

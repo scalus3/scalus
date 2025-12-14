@@ -223,7 +223,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         val handler = ChangeOutputDiffHandler(params, 5) // Invalid index > outputs.size
 
         try
-            LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
+            TransactionBuilder.balanceFeeAndChangeWithTokens(
               tx,
               handler.changeOutputDiffHandler,
               params,
@@ -354,7 +354,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         val (utxo, tx) = mkTx(in, output, Coin(fee))
 
         val handler = ChangeOutputDiffHandler(params, 0)
-        val r = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
+        val r = TransactionBuilder.balanceFeeAndChangeWithTokens(
           tx,
           handler.changeOutputDiffHandler,
           params,
@@ -382,7 +382,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     private def checkFeeOk(in: Value, out: Value, feeAda: Long): Unit = {
         val (utxo, tx) = mkTx(in, out, Coin(feeAda))
         val handler = ChangeOutputDiffHandler(params, 0)
-        val result = LowLevelTxBuilder.balanceFeeAndChangeWithTokens(
+        val result = TransactionBuilder.balanceFeeAndChangeWithTokens(
           tx,
           handler.changeOutputDiffHandler,
           params,
