@@ -35,11 +35,12 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def subtractInteger(i1: BigInt, i2: BigInt): BigInt = i1 - i2
     def multiplyInteger(i1: BigInt, i2: BigInt): BigInt = i1 * i2
     def divideInteger(i1: BigInt, i2: BigInt): BigInt =
-        import java.math.{BigDecimal, RoundingMode}
-        val r = new BigDecimal(i1.bigInteger)
-            .divide(new BigDecimal(i2.bigInteger), RoundingMode.FLOOR)
-            .toBigInteger()
-        BigInt(r)
+        // Floor division: truncate toward negative infinity
+        // Standard BigInt `/` truncates toward zero
+        // Adjust by -1 when signs differ and there's a non-zero remainder
+        val q = i1 / i2
+        val r = i1 % i2
+        if r != 0 && (i1 < 0) != (i2 < 0) then q - 1 else q
     def quotientInteger(i1: BigInt, i2: BigInt): BigInt = i1 / i2
     def remainderInteger(i1: BigInt, i2: BigInt): BigInt = i1 % i2
     def modInteger(i1: BigInt, i2: BigInt): BigInt =

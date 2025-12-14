@@ -72,6 +72,16 @@ open class CekBuiltinsTest
         assertEvalThrows[BuiltinError](DivideInteger $ 1 $ 0)
     }
 
+    test("DivideInteger Long.MinValue / -1") {
+        val minValue = BigInt("-9223372036854775808") // Long.MinValue
+        // Floor division of Long.MinValue by -1 should give positive result
+        // (div x y)*y + (mod x y) == x must hold
+        val q = DivideInteger $ minValue $ BigInt(-1)
+        val r = ModInteger $ minValue $ BigInt(-1)
+        val x1 = AddInteger $ (MultiplyInteger $ q $ BigInt(-1)) $ r
+        assertEvalEq(x1, Const(Constant.Integer(minValue)))
+    }
+
     test("QuotientInteger") {
         assertEvalEq(QuotientInteger $ -20 $ 3, Const(Constant.Integer(-6)))
         assertEvalThrows[BuiltinError](QuotientInteger $ 20 $ 0)
