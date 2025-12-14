@@ -1,51 +1,20 @@
 package scalus.cardano.txbuilder
 
 import scalus.builtin.ByteString
-import scalus.cardano.ledger.ProtocolVersion
 
-// Wrapper types for cryptographic keys and signatures
-case class VerificationKeyBytes(bytes: ByteString)
-case class Ed25519Signature(bytes: IArray[Byte])
-import co.nstant.in.cbor.model.{Array as CborArray, ByteString as CborByteString, Map, UnsignedInteger}
-import com.bloxbean.cardano.client.common.cbor.CborSerializationUtil
 import com.bloxbean.cardano.client.crypto.Blake2bUtil
 import com.bloxbean.cardano.client.crypto.bip32.key.{HdPrivateKey, HdPublicKey}
 import com.bloxbean.cardano.client.crypto.config.CryptoConfiguration
 import com.bloxbean.cardano.client.transaction.util.TransactionBytes
-import io.bullet.borer.Cbor
-import scalus.cardano.ledger.{OriginalCborByteArray, Transaction, VKeyWitness}
+import scalus.cardano.ledger.{Transaction, VKeyWitness}
 
 import scala.language.implicitConversions
 
+// Wrapper types for cryptographic keys and signatures
+case class VerificationKeyBytes(bytes: ByteString)
+case class Ed25519Signature(bytes: IArray[Byte])
+
 case class WalletId(name: String)
-
-// Pure function to add a key witness to a transaction.
-def addWitness(tx: Transaction, wit: VKeyWitness)(using
-    pv: ProtocolVersion = ProtocolVersion.conwayPV
-): Transaction =
-    val txBytes = TransactionBytes(Cbor.encode(tx).toByteArray)
-    val witnessSetDI = CborSerializationUtil.deserialize(txBytes.getTxWitnessBytes)
-    val witnessSetMap = witnessSetDI.asInstanceOf[Map]
-
-    val vkWitnessArrayDI = witnessSetMap.get(UnsignedInteger(0))
-
-    val vkWitnessArray: CborArray =
-        if vkWitnessArrayDI != null then vkWitnessArrayDI.asInstanceOf[CborArray]
-        else new CborArray
-
-    if vkWitnessArrayDI == null then witnessSetMap.put(new UnsignedInteger(0), vkWitnessArray): Unit
-
-    val vkeyWitness = new CborArray
-    vkeyWitness.add(CborByteString(wit.vkey.bytes))
-    vkeyWitness.add(CborByteString(wit.signature.bytes))
-
-    vkWitnessArray.add(vkeyWitness)
-
-    val txWitnessBytes = CborSerializationUtil.serialize(witnessSetMap, false)
-    val txBytesSigned = txBytes.withNewWitnessSetBytes(txWitnessBytes).getTxBytes
-    given OriginalCborByteArray = OriginalCborByteArray(txBytesSigned)
-
-    Cbor.decode(txBytesSigned).to[Transaction].value
 
 trait WalletModule:
 
