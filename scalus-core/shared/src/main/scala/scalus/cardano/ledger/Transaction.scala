@@ -28,6 +28,16 @@ case class Transaction(
     def validityInterval: ValidityInterval =
         ValidityInterval(body.value.validityStartSlot, body.value.ttl)
 
+    /** Returns UTXOs that would be created by this transaction.
+      *
+      * Returns a map of TransactionInput -> TransactionOutput for all outputs, allowing them to be
+      * used as inputs in subsequent chained transactions.
+      */
+    def utxos: Utxos =
+        body.value.outputs.view.zipWithIndex.map { case (output, idx) =>
+            TransactionInput(id, idx) -> output.value
+        }.toMap
+
     def toCbor: Array[Byte] = {
         Cbor.encode(this)
     }

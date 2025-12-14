@@ -2,6 +2,7 @@ package scalus.cardano.txbuilder
 
 import monocle.syntax.all.*
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.builtin.ByteString
 import scalus.builtin.ByteString.{hex, utf8}
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
@@ -11,6 +12,7 @@ import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
+import scalus.cardano.node.NodeEmulator
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.{plutusV3, toUplc, Compiler}
 
@@ -417,4 +419,110 @@ class TxBuilderTest extends AnyFunSuite {
 
     private def outputsOf(peer: TestPeer, tx: Transaction) =
         tx.body.value.outputs.toSeq.filter(_.value.address == peer.address)
+
+    // ============================================================================
+    // Transaction Chaining Tests
+    // ============================================================================
+
+    test("Transaction.utxos returns outputs with correct transaction inputs") {
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .payTo(Bob.address, Value.ada(2))
+            .payTo(Alice.address, Value.ada(3))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        val txUtxos = tx.utxos
+
+        // Should have outputs for Bob, Alice explicit, and change
+        assert(txUtxos.nonEmpty, "Transaction should create UTXOs")
+
+        // Check that all UTXOs reference this transaction's ID
+        txUtxos.foreach { case (input, _) =>
+            assert(input.transactionId == tx.id, "UTXO input should reference transaction ID")
+        }
+
+        // Check that indices are sequential starting from 0
+        val indices = txUtxos.keys.map(_.index).toSeq.sorted
+        assert(
+          indices == (0 until tx.body.value.outputs.size).toSeq,
+          "Indices should be sequential"
+        )
+
+        // Check that outputs match transaction body outputs
+        txUtxos.foreach { case (input, output) =>
+            val bodyOutput = tx.body.value.outputs(input.index.toInt)
+            assert(output == bodyOutput.value, "UTXO output should match transaction body output")
+        }
+    }
+
+    test("transaction chaining - use outputs from tx1 as inputs in tx2") {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
+        // Use NodeEmulator to build transactions - disable validators for simplicity
+        // (signature verification is tested elsewhere in TransactionSignerTest)
+        val provider = NodeEmulator(
+          initialUtxos = Map(
+            TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100))
+          ),
+          validators = Set.empty,
+          mutators = NodeEmulator.defaultMutators
+        )
+
+        // Build tx1: send ADA to Bob
+        val tx1 = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(provider, Alice.address)
+            .transaction
+
+        // Get UTXOs from tx1 directly using Transaction.utxos
+        val bobUtxoFromTx1 = Utxo(tx1.utxos.find(_._2.address == Bob.address).get)
+        assert(
+          bobUtxoFromTx1.output.value.coin == Coin.ada(10),
+          "Bob's UTXO should have 10 ADA"
+        )
+
+        // Verify the UTXO references tx1's hash
+        assert(
+          bobUtxoFromTx1.input.transactionId == tx1.id,
+          "UTXO should reference tx1's transaction ID"
+        )
+
+        // Submit tx1 to provider - now Bob's UTXO exists in the chain
+        val tx1Result = provider.submit(tx1)
+        assert(tx1Result.isRight, s"tx1 should be submitted successfully: $tx1Result")
+
+        // Now use the UTXO from tx1 to build tx2
+        // Alice uses tx1.utxos to find her change output
+        val aliceChangeFromTx1 = Utxo(tx1.utxos.find(_._2.address == Alice.address).get)
+
+        // Build tx2 using UTXOs derived from tx1.utxos
+        val tx2 = TxBuilder(testEnv)
+            .spend(bobUtxoFromTx1) // Spend the UTXO from tx1 that we got via Transaction.utxos
+            .spend(aliceChangeFromTx1) // Alice's change for fees
+            .payTo(Alice.address, Value.ada(10))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // The key assertion: Transaction.utxos produces valid references that can be used in tx2
+        val tx2Inputs = tx2.body.value.inputs.toSeq
+        assert(
+          tx2Inputs.contains(bobUtxoFromTx1.input),
+          "tx2 should contain Bob's UTXO from tx1 as input"
+        )
+        assert(
+          tx2Inputs.contains(aliceChangeFromTx1.input),
+          "tx2 should contain Alice's change from tx1 as input"
+        )
+
+        // Submit tx2 to provider
+        val tx2Result = provider.submit(tx2)
+        assert(tx2Result.isRight, s"tx2 should be submitted successfully: $tx2Result")
+
+        // Verify Alice received the ADA back
+        val aliceUtxo = provider.findUtxo(address = Alice.address, transactionId = Some(tx2.id))
+        assert(aliceUtxo.isRight, "Alice should have received the UTXO from tx2")
+    }
 }

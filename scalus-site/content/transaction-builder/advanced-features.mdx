@@ -112,3 +112,59 @@ class ValidatorIntegrationTest extends AnyFunSuite {
   }
 }
 ```
+
+## Transaction Chaining
+
+Transaction chaining allows building multiple transactions where each uses outputs from previous ones without waiting for on-chain confirmation. This is useful for complex workflows that require multiple sequential transactions.
+
+### Using Transaction.utxos
+
+Every `Transaction` has a `utxos` method that returns the UTXOs it would create:
+
+```scala copy
+// Build the first transaction
+val lockTx = TxBuilder(env)
+    .payTo(scriptAddress, Value.ada(10), lockDatum)
+    .complete(emulator, sponsorAddress)
+    .sign(signer)
+    .transaction
+
+// Get UTXOs from lockTx directly (no provider query needed)
+val scriptUtxo = Utxo(lockTx.utxos.find(_._2.address == scriptAddress).get)
+
+// Build second transaction using the output from first
+val unlockTx = TxBuilder(env)
+    .spend(scriptUtxo, unlockRedeemer, validator)
+    .payTo(recipientAddress, scriptUtxo.output.value)
+    .complete(emulator, sponsorAddress)
+    .sign(signer)
+    .transaction
+
+// Submit both transactions
+emulator.submit(lockTx)
+emulator.submit(unlockTx)
+```
+
+### NodeEmulator for Testing
+
+The `NodeEmulator` supports transaction chaining naturally by tracking UTXOs across submissions:
+
+```scala copy
+val emulator = NodeEmulator(initialUtxos)
+
+// Submit first transaction
+emulator.submit(lockTx)
+
+// Can also query UTXOs from emulator
+val utxo = emulator.findUtxo(
+    address = scriptAddress,
+    transactionId = Some(lockTx.id)
+).toOption.get
+
+// Submit second transaction
+emulator.submit(unlockTx)
+```
+
+<Callout type="info">
+  The `Transaction.utxos` method is particularly useful when you need to reference specific outputs immediately after building a transaction, without querying a provider.
+</Callout>

@@ -6,6 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.SubmitError.NodeError
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.tailrec
 
 /** An in-memory bare-bones node implementation.
   *
@@ -25,7 +26,7 @@ class NodeEmulator(
     private val stateRef = new AtomicReference[State](State(initialUtxos))
     private val contextRef = new AtomicReference[Context](initialContext)
 
-    @scala.annotation.tailrec
+    @tailrec
     final def submit(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         val currentState = stateRef.get()
         val currentContext = contextRef.get()
@@ -124,7 +125,7 @@ class NodeEmulator(
             )
     }
 
-    @scala.annotation.tailrec
+    @tailrec
     final def setSlot(slot: SlotNo): Unit = {
         val currentContext = contextRef.get()
         val newContext = Context(
@@ -142,7 +143,7 @@ class NodeEmulator(
       mutators = this.mutators
     )
 
-    private def utxos: Utxos = stateRef.get().utxos
+    def utxos: Utxos = stateRef.get().utxos
 
     private def processTransaction(
         context: Context,
