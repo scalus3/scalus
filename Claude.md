@@ -43,32 +43,63 @@ in to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 ### Build and Development
 
 ```bash
-# Format, compile on JVM, testQuick
+# Format, compile on JVM, testQuick (fast iteration)
 sbtn quick
 
 # Clean compile and test everything (recommended before commits)
 sbtn precommit
 
-# Full Continuous integration build and testing (includes formatting checks)
+# Full CI build (includes formatting checks)
 sbtn ci
 
 # Format all code
 sbtn scalafmtAll scalafmtSbt
 ```
 
+### Compilation
+
+```bash
+# Compile all JVM projects
+sbtn jvm/compile
+sbtn jvm/Test/compile
+
+# Compile specific cross-platform module
+sbtn scalusJVM/compile
+sbtn scalusCardanoLedgerJVM/compile
+
+# Compile integration tests
+sbtn scalusCardanoLedgerIt/Test/compile
+
+# Clean and compile
+sbtn cleanpile
+```
+
 ### Testing
 
 ```bash
-# Run all tests
-sbtn test
+# Run all tests on JVM (most common)
+sbtn jvm/test
 
-# Run tests for specific module
-sbtn scalus/test
-sbtn scalusExamples/test
-sbtn scalusTestkit/test
-sbtn jvm/test # all projects for JVM platform
-sbtn js/test  # all projects for JS platform
-sbtn native/test # all projects for Native platform
+# Run tests for specific cross-platform module (use JVM/JS suffix)
+sbtn scalusJVM/test              # scalus-core JVM tests
+sbtn scalusJS/test               # scalus-core JS tests
+sbtn scalusExamplesJVM/test      # examples JVM tests
+sbtn scalusTestkitJVM/test       # testkit JVM tests
+sbtn scalusCardanoLedgerJVM/test # cardano-ledger JVM tests
+
+# Run tests for JVM-only modules
+sbtn scalusPlugin/test                      # compiler plugin tests
+sbtn scalusPluginTests/test                 # plugin integration tests
+sbtn scalus-bloxbean-cardano-client-lib/test # bloxbean integration tests
+
+# Platform aggregate tests
+sbtn jvm/test    # all JVM projects
+sbtn js/test     # all JS projects
+sbtn native/test # all Native projects
+
+# Integration tests
+sbtn it                          # clean and run integration tests
+sbtn scalusCardanoLedgerIt/test  # cardano-ledger integration tests
 ```
 
 ### Documentation
@@ -78,31 +109,60 @@ sbtn native/test # all projects for Native platform
 sbtn docs/mdoc
 ```
 
+### Benchmarks
+
+```bash
+# Run all JMH benchmarks
+sbtn benchmark
+
+# Run JIT-specific benchmarks
+sbtn benchmark-jit
+
+# Run specific benchmark class
+sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
+```
+
 ## Architecture Overview
 
 ### Module Structure
 
-- **`scalus-core/`** - Core platform with cross-compilation support (JVM/JS/Native)
+**Cross-platform modules** (JVM/JS, some with Native):
+- **`scalus-core/`** (`scalusJVM`, `scalusJS`, `scalusNative`) - Core platform
     - Contains the Plutus VM implementation, UPLC evaluation, and standard library
     - Shared sources in `shared/` directory
     - Platform-specific implementations in `jvm/`, `js/`, `native/`
 
-- **`scalus-plugin/`** - Scala 3 compiler plugin
+- **`scalus-cardano-ledger/`** (`scalusCardanoLedgerJVM`, `scalusCardanoLedgerJS`) - Cardano ledger
+    - Low-level transaction building: `TransactionBuilder`, `LowLevelTxBuilder`
+    - High-level API: `TxBuilder`
+
+- **`scalus-testkit/`** (`scalusTestkitJVM`, `scalusTestkitJS`) - Testing utilities
+
+- **`scalus-examples/`** (`scalusExamplesJVM`, `scalusExamplesJS`) - Smart contract examples
+
+**JVM-only modules**:
+- **`scalus-plugin/`** (`scalusPlugin`) - Scala 3 compiler plugin
     - Handles `@Compile` annotations and `Compiler.compile()` transformations
     - Compiles Scala code to Scalus Intermediate Representation (SIR)
-    - Two-phase compilation: preparation and transformation
 
-- **`scalus-examples/`** - Comprehensive smart contract examples
-    - Multi-platform examples (JVM and JavaScript)
-    - Integration examples with Cardano Client Lib
+- **`scalus-plugin-tests/`** (`scalusPluginTests`) - Plugin test suite
 
-- **`scalus-testkit/`** - Testing utilities and property-based testing support
+- **`scalus-uplc-jit-compiler/`** (`scalusUplcJitCompiler`) - Experimental JIT compiler for UPLC
 
-- **`scalus-cardano-ledger/`** - Cardano ledger rules and transaction builder
-    - Low-level transaction building capabilities split between `TransactionBuilder` -- a step-based deterministic library that assembles valid transaction, and `LowLeveTxBuiler` -- a couple of functions that handle leftover ADA (change)
-    - High level transaction building API in `TxBuilder`, which heavily utilizes the `TransactionBuilder` and aims to provide an easy-to-use API, while maintaining validity and correctness
+- **`scalus-design-patterns/`** (`scalusDesignPatterns`) - Design pattern examples
 
-- **`bloxbean-cardano-client-lib/`** - Integration with Bloxbean Cardano Client Library
+- **`bloxbean-cardano-client-lib/`** (`scalus-bloxbean-cardano-client-lib`) - Bloxbean integration
+
+- **`scalus-cardano-ledger-it/`** (`scalusCardanoLedgerIt`) - Integration tests
+
+- **`bench/`** (`bench`) - JMH benchmarks
+
+- **`scalus-docs/`** (`docs`) - Documentation (mdoc)
+
+**Aggregate projects** (for convenience):
+- `jvm` - All JVM projects
+- `js` - All JS projects
+- `native` - All Native projects
 
 ### Compilation Pipeline
 
@@ -112,11 +172,13 @@ sbtn docs/mdoc
 
 ### Key Source Locations
 
-- **Core SIR definitions**: `scalus-core/shared/src/main/scala/scalus/sir/`
+- **SIR compiler**: `scalus-core/shared/src/main/scala/scalus/compiler/sir/`
+- **SIR to UPLC lowering**: `scalus-core/shared/src/main/scala/scalus/compiler/sir/lowering/`
 - **UPLC implementation**: `scalus-core/shared/src/main/scala/scalus/uplc/`
-- **Plutus VM**: `scalus-core/shared/src/main/scala/scalus/uplc/eval/`
+- **Plutus VM (CEK machine)**: `scalus-core/shared/src/main/scala/scalus/uplc/eval/`
 - **Compiler plugin**: `scalus-plugin/src/main/scala/scalus/plugin/`
-- **Standard library**: `scalus-core/shared/src/main/scala/scalus/prelude/`
+- **Standard library (Prelude)**: `scalus-core/shared/src/main/scala/scalus/prelude/`
+- **Transaction builder**: `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/`
 - **Examples**: `scalus-examples/shared/src/main/scala/scalus/examples/`
 
 ## Development Guidelines
@@ -156,12 +218,28 @@ sbtn docs/mdoc
 
 ## Useful Aliases
 
-The build defines several useful command aliases:
+The build defines these command aliases:
 
-- `quick` - format, compile, and test everything on JVM
-- `precommit` - Clean, format, compile, and test everything
-- `ci` - Full CI build with formatting checks
-- `mima` - Check binary compatibility
+**Development workflow:**
+- `quick` - Format, compile JVM, run `testQuick` (fast iteration)
+- `cleanpile` - Clean and compile JVM + integration tests
+- `precommit` - Full clean, format, compile, test, docs (before commits)
+
+**CI builds:**
+- `ci` - Full CI: clean, format check, compile all platforms, test, docs, mima
+- `ci-jvm` - JVM-only CI build
+- `ci-js` - JS-only CI build
+- `ci-native` - Native-only CI build
+
+**Testing:**
+- `it` - Clean and run integration tests (`scalusCardanoLedgerIt`)
+
+**Benchmarks:**
+- `benchmark` - Run all JMH benchmarks
+- `benchmark-jit` - Run JIT-specific benchmarks
+
+**Compatibility:**
+- `mima` - Check binary compatibility for `scalus-bloxbean-cardano-client-lib`
 
 ## Environment Setup
 
@@ -191,8 +269,9 @@ nix develop
 
 - Core logic is in `scalus-core/shared/src/main/scala/`
 - Platform-specific implementations go in respective `jvm/`, `js/`, `native/` directories
-- SIR (Scalus Intermediate Representation) code is in `scalus/sir/`
-- UPLC implementation is in `scalus/uplc/`
+- SIR compiler and lowering: `scalus/compiler/sir/`
+- UPLC implementation: `scalus/uplc/`
+- Plutus VM (CEK machine): `scalus/uplc/eval/`
 
 ### File Organization Patterns
 
@@ -207,6 +286,8 @@ nix develop
 - **Modifying UPLC evaluation**: Edit files in `scalus-core/shared/src/main/scala/scalus/uplc/eval/`
 - **Adding standard library functions**: Add to `scalus-core/shared/src/main/scala/scalus/prelude/`
 - **Plugin modifications**: Work in `scalus-plugin/`, test with `scalus-plugin-tests/`
+- **Transaction builder changes**: Edit files in `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/`
+- **Running benchmarks**: Use `sbtn benchmark` or `sbtn "bench/Jmh/run ..."`
 
 ### Before Submitting Changes
 
