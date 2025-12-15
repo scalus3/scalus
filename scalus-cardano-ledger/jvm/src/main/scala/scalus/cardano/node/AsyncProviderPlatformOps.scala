@@ -3,13 +3,15 @@ package scalus.cardano.node
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
+import scalus.utils.await
+
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{blocking, Await, ExecutionContext, Future}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 /** JVM platform-specific operations for AsyncProvider.
   *
-  * These operations use blocking calls like `Await.result` and `Thread.sleep` which are only
-  * available on the JVM platform.
+  * These operations use blocking calls like `await` and `Thread.sleep` which are only available on
+  * the JVM platform.
   */
 private trait AsyncProviderPlatformOps { self: AsyncProvider =>
 
@@ -20,13 +22,13 @@ private trait AsyncProviderPlatformOps { self: AsyncProvider =>
       */
     def toSync(using executionContext: ExecutionContext): Provider = new Provider {
         def submit(transaction: Transaction): Either[SubmitError, TransactionHash] =
-            Await.result(self.submit(transaction), 30.seconds)
+            self.submit(transaction).await(30.seconds)
 
         def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] =
-            Await.result(self.findUtxo(input), 30.seconds)
+            self.findUtxo(input).await(30.seconds)
 
         def findUtxos(inputs: Set[TransactionInput]): Either[RuntimeException, Utxos] =
-            Await.result(self.findUtxos(inputs), 30.seconds)
+            self.findUtxos(inputs).await(30.seconds)
 
         def findUtxo(
             address: Address,
@@ -34,10 +36,7 @@ private trait AsyncProviderPlatformOps { self: AsyncProvider =>
             datum: Option[DatumOption],
             minAmount: Option[Coin]
         ): Either[RuntimeException, Utxo] =
-            Await.result(
-              self.findUtxo(address, transactionId, datum, minAmount),
-              30.seconds
-            )
+            self.findUtxo(address, transactionId, datum, minAmount).await(30.seconds)
 
         def findUtxos(
             address: Address,
@@ -46,10 +45,9 @@ private trait AsyncProviderPlatformOps { self: AsyncProvider =>
             minAmount: Option[Coin],
             minRequiredTotalAmount: Option[Coin]
         ): Either[RuntimeException, Utxos] =
-            Await.result(
-              self.findUtxos(address, transactionId, datum, minAmount, minRequiredTotalAmount),
-              30.seconds
-            )
+            self
+                .findUtxos(address, transactionId, datum, minAmount, minRequiredTotalAmount)
+                .await(30.seconds)
     }
 
     /** Waits for a transaction to be confirmed on-chain by polling for its first output.

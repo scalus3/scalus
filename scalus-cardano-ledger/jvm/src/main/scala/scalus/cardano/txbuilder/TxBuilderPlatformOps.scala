@@ -2,14 +2,13 @@ package scalus.cardano.txbuilder
 
 import scalus.cardano.address.Address
 import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
+import scalus.utils.await
 
-import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 /** JVM platform-specific operations for TxBuilder.
   *
-  * These operations use blocking calls like `Await.result` which are only available on the JVM
-  * platform.
+  * These operations use blocking calls like `await` which are only available on the JVM platform.
   */
 private trait TxBuilderPlatformOps { self: TxBuilder =>
 
@@ -42,7 +41,7 @@ private trait TxBuilderPlatformOps { self: TxBuilder =>
         timeout: Duration = Duration.Inf
     ): TxBuilder = {
         import scala.concurrent.ExecutionContext.Implicits.global
-        Await.result(complete(provider.toAsync, sponsor), timeout)
+        complete(provider.toAsync, sponsor).await(timeout)
     }
 
     /** Automatically completes the transaction using an async provider (blocking).
@@ -66,6 +65,6 @@ private trait TxBuilderPlatformOps { self: TxBuilder =>
         timeout: Duration
     ): TxBuilder = {
         import scala.concurrent.ExecutionContext.Implicits.global
-        Await.result(self.complete(provider, sponsor), timeout)
+        self.complete(provider, sponsor).await(timeout)
     }
 }

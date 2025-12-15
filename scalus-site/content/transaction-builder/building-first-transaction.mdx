@@ -189,18 +189,18 @@ val transaction = TxBuilder(env)
   .transaction
 ```
 
-You can also use `Await.result` to block on the async version:
+You can also use the `await` extension to block on any `Future`:
 
 ```scala copy
-import scala.concurrent.Await
+import scalus.utils.await
 import scala.concurrent.duration.*
 
-val transaction = Await.result(
-  TxBuilder(env)
-    .payTo(recipientAddress, Value.ada(10))
-    .complete(asyncProvider, sponsorAddress),
-  30.seconds
-).sign(signer).transaction
+val transaction = TxBuilder(env)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(asyncProvider, sponsorAddress)
+  .await(30.seconds)  // Block with timeout (JVM only)
+  .sign(signer)
+  .transaction
 ```
 
 ## Next Steps
