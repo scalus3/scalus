@@ -575,32 +575,29 @@ case class TxBuilder(
 
     /** Registers a stake key with the network.
       *
-      * Note that the deposit is still going to be deducted, and it's going to be calculated
-      * according to the protocol parameters from [[env]]/
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
       */
     def registerStake(stakeAddress: StakeAddress): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
-        // Use None for Shelley-era registration (deposit from protocol params)
         val cert = Certificate.RegCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers a stake key with an explicit deposit amount. */
-    def registerStake(stakeAddress: StakeAddress, deposit: Coin): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
-        val cert = Certificate.RegCert(credential, Some(deposit))
-        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
-    }
-
-    /** Deregisters a stake key from the network. */
+    /** Deregisters a stake key from the network.
+      *
+      * The refund amount is taken from protocol parameters (stakeAddressDeposit).
+      */
     def deregisterStake(stakeAddress: StakeAddress): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
-        // Use None for Shelley-era deregistration
         val cert = Certificate.UnregCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Deregisters a stake key with an explicit deposit refund amount. */
+    /** Deregisters a stake key with an explicit refund amount.
+      *
+      * @param refund
+      *   the amount originally deposited during registration (must match ledger state)
+      */
     def deregisterStake(stakeAddress: StakeAddress, refund: Coin): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
         val cert = Certificate.UnregCert(credential, Some(refund))
@@ -614,13 +611,13 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers a stake key and delegates to a stake pool in a single transaction. */
-    def stakeAndDelegate(
-        stakeAddress: StakeAddress,
-        poolId: PoolKeyHash,
-        deposit: Coin
-    ): TxBuilder = {
+    /** Registers a stake key and delegates to a stake pool in a single transaction.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      */
+    def stakeAndDelegate(stakeAddress: StakeAddress, poolId: PoolKeyHash): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeRegDelegCert(credential, poolId, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -644,13 +641,13 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers stake address and delegates voting power to a DRep in one transaction. */
-    def registerAndDelegateVoteToDRep(
-        stakeAddress: StakeAddress,
-        drep: DRep,
-        deposit: Coin
-    ): TxBuilder = {
+    /** Registers stake address and delegates voting power to a DRep in one transaction.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      */
+    def registerAndDelegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.VoteRegDelegCert(credential, drep, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -666,31 +663,38 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers stake address and delegates to both stake pool and DRep in one transaction. */
+    /** Registers stake address and delegates to both stake pool and DRep in one transaction.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      */
     def registerAndDelegateToPoolAndDRep(
         stakeAddress: StakeAddress,
         poolId: PoolKeyHash,
-        drep: DRep,
-        deposit: Coin
+        drep: DRep
     ): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeVoteRegDelegCert(credential, poolId, drep, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers as a DRep. */
-    def registerDRep(
-        drepCredential: Credential,
-        deposit: Coin,
-        anchor: Option[Anchor]
-    ): TxBuilder = {
+    /** Registers as a DRep.
+      *
+      * The deposit amount is taken from protocol parameters (dRepDeposit).
+      */
+    def registerDRep(drepCredential: Credential, anchor: Option[Anchor]): TxBuilder = {
+        val deposit = Coin(env.protocolParams.dRepDeposit)
         val cert = Certificate.RegDRepCert(drepCredential, deposit, anchor)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Unregisters as a DRep. */
-    def unregisterDRep(drepCredential: Credential, deposit: Coin): TxBuilder = {
-        val cert = Certificate.UnregDRepCert(drepCredential, deposit)
+    /** Unregisters as a DRep.
+      *
+      * @param refund
+      *   the amount originally deposited during registration (must match ledger state)
+      */
+    def unregisterDRep(drepCredential: Credential, refund: Coin): TxBuilder = {
+        val cert = Certificate.UnregDRepCert(drepCredential, refund)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
