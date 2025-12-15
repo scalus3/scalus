@@ -61,6 +61,7 @@ trait KeyPair {
 
 /** A key pair backed by a standard 32-byte signing key. */
 trait StandardKeyPair extends KeyPair {
+
     /** The signing (private) key - 32 bytes. */
     def signingKey: SigningKey
 
@@ -70,6 +71,7 @@ trait StandardKeyPair extends KeyPair {
 
 /** A key pair backed by an extended 64-byte signing key (SLIP-001/HD wallets). */
 trait ExtendedKeyPair extends KeyPair {
+
     /** The extended signing key - 64 bytes. */
     def extendedSigningKey: ExtendedSigningKey
 
