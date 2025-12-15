@@ -342,4 +342,57 @@ class CardanoAddressTest extends AnyFunSuite {
         val unknownShelley = ShelleyAddress(Network.Other(0x05), payment, delegation)
         assert(unknownShelley.hrp.isFailure)
     }
+
+    test("addr string interpolator should parse addresses correctly") {
+        import scalus.cardano.address.Address.addr
+
+        // Test mainnet Shelley address
+        val mainnetAddress =
+            addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+        assert(mainnetAddress.isInstanceOf[ShelleyAddress])
+        assert(mainnetAddress.asInstanceOf[ShelleyAddress].network == Network.Mainnet)
+
+        // Test enterprise address (payment key only)
+        val enterpriseAddr = addr"addr1vx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzers66hrl8"
+        assert(enterpriseAddr.isInstanceOf[ShelleyAddress])
+        assert(enterpriseAddr.asInstanceOf[ShelleyAddress].isEnterprise)
+
+        // Test stake address via addr interpolator
+        val stakeAddr = addr"stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw"
+        assert(stakeAddr.isInstanceOf[StakeAddress])
+
+        // Test invalid address throws
+        intercept[Exception] {
+            addr"invalid_address"
+        }
+    }
+
+    test("stake string interpolator should parse stake addresses correctly") {
+        import scalus.cardano.address.Address.stake
+
+        // Test mainnet stake address
+        val mainnetStake = stake"stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw"
+        assert(mainnetStake.network == Network.Mainnet)
+        assert(!mainnetStake.hasScript)
+
+        // Test stake script address
+        val stakeScript = stake"stake178phkx6acpnf78fuvxn0mkew3l0fd058hzquvz7w36x4gtcccycj5"
+        assert(stakeScript.hasScript)
+
+        // Test that non-stake address throws
+        intercept[IllegalArgumentException] {
+            stake"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+        }
+    }
+
+    test("addr interpolator should support string interpolation") {
+        import scalus.cardano.address.Address.addr
+
+        val prefix = "addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer"
+        val suffix = "3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+        val interpolated = addr"$prefix$suffix"
+
+        assert(interpolated.isInstanceOf[ShelleyAddress])
+        assert(interpolated.asInstanceOf[ShelleyAddress].network == Network.Mainnet)
+    }
 }

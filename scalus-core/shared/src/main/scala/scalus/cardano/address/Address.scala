@@ -900,4 +900,38 @@ object Address {
         val stakePayload = StakePayload.Script(scriptHash)
         StakeAddress(network, stakePayload)
     }
+
+    /** String interpolator for parsing bech32 Cardano addresses.
+      *
+      * @example
+      *   {{{
+      * import scalus.cardano.address.Address.addr
+      *
+      * val mainnetAddr = addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+      * val testnetAddr = addr"addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+      * val stakeAddr = addr"stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw"
+      *   }}}
+      */
+    extension (sc: StringContext)
+        def addr(args: Any*): Address =
+            Address.fromBech32(sc.s(args*))
+
+    /** String interpolator for parsing bech32 Cardano stake addresses.
+      *
+      * @example
+      *   {{{
+      * import scalus.cardano.address.Address.stake
+      *
+      * val mainnetStake = stake"stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw"
+      * val testnetStake = stake"stake_test1uqfu74w3wh4gfzu8m6e7j987h4lq9r3t7ef5gaw497uu85qsqfy27"
+      *   }}}
+      */
+    extension (sc: StringContext)
+        def stake(args: Any*): StakeAddress =
+            Address.fromBech32(sc.s(args*)) match
+                case sa: StakeAddress => sa
+                case other =>
+                    throw new IllegalArgumentException(
+                      s"Expected stake address but got ${other.getClass.getSimpleName}"
+                    )
 }

@@ -7,6 +7,7 @@ import scalus.bloxbean.Interop.??
 import scalus.builtin.ByteString.*
 import scalus.builtin.{platform, ByteString, Data}
 import scalus.cardano.address.{Address, Network}
+import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.*
 import scalus.examples.PubKeyValidator
 
@@ -38,8 +39,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val datum = Data.unit
         val dataHash: DataHash = Hash(platform.blake2b_256(datum.toCborByteString))
-        val addr =
-            "addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
+        val outputAddress =
+            addr"addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
         val utxo = Map(
           input -> TransactionOutput(
             address = Address(Network.Mainnet, Credential.ScriptHash(s.scriptHash)),
@@ -54,7 +55,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
             outputs = Vector(
               Sized(
                 TransactionOutput(
-                  address = Address.fromBech32(addr),
+                  address = outputAddress,
                   value = Value.lovelace(2)
                 )
               )
@@ -93,8 +94,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val datum = Data.unit
         val dataHash: DataHash = Hash(platform.blake2b_256(datum.toCborByteString))
-        val addr =
-            "addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
+        val outputAddress =
+            addr"addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
         val utxo = Map(
           input -> TransactionOutput(
             address = Address(Network.Mainnet, Credential.ScriptHash(s.scriptHash)),
@@ -109,7 +110,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
             outputs = Vector(
               Sized(
                 TransactionOutput(
-                  address = Address.fromBech32(addr),
+                  address = outputAddress,
                   value = Value.lovelace(2)
                 )
               )
