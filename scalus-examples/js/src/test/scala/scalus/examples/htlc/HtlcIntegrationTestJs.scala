@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.examples.htlc
 
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner

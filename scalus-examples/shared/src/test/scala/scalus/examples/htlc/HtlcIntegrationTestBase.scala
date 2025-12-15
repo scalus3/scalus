@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.examples.htlc
 
 import org.scalatest.Assertion
 import org.scalatest.funsuite.AsyncFunSuite
@@ -7,16 +7,60 @@ import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.AsyncBlockfrostProvider
-import scalus.cardano.txbuilder.*
-import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
-import scalus.ledger.api.v1.PubKeyHash
-import sttp.client4.*
 import scalus.cardano.node.toSync
+import scalus.cardano.txbuilder.*
+import scalus.ledger.api.v1.PubKeyHash
+import scalus.testing.IntegrationTest
+import sttp.client4.*
 
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class HtlcIntegrationTestBase(using backend: Backend[Future])
-    extends AsyncFunSuite {
+/** Base class for HTLC integration tests that interact with real Cardano testnets.
+  *
+  * These tests are tagged with [[IntegrationTest]] and are excluded from regular test runs. They
+  * require external infrastructure (YaciDevKit for local tests, Blockfrost API for Preprod tests).
+  *
+  * ==Running the tests==
+  *
+  * To run these integration tests, use:
+  * {{{
+  * # JVM tests only
+  * sbtn "scalusExamplesJVM/testOnly -- -n scalus.testing.IntegrationTest"
+  *
+  * # JS tests only
+  * sbtn "scalusExamplesJS/testOnly -- -n scalus.testing.IntegrationTest"
+  * }}}
+  *
+  * ==Required Environment Variables==
+  *
+  * ===For Local tests (YaciDevKit)===
+  *   - `WALLET_MNEMONIC_LOCAL`: 24-word mnemonic phrase for the test wallet
+  *   - `SENDER_ADDRESS_LOCAL`: Bech32 address derived from the mnemonic (e.g., `addr_test1qz...`)
+  *
+  * ===For Preprod tests===
+  *   - `WALLET_MNEMONIC_PREPROD`: 24-word mnemonic phrase for the test wallet
+  *   - `SENDER_ADDRESS_PREPROD`: Bech32 address derived from the mnemonic
+  *   - `BLOCKFROST_API_KEY`: Blockfrost API key for Preprod network
+  *
+  * ==Prerequisites==
+  *
+  * ===Local tests===
+  * Require YaciDevKit running locally. Start it with:
+  * {{{
+  * yaci-cli:devnet start
+  * }}}
+  *
+  * ===Preprod tests===
+  * Require:
+  *   - A Blockfrost account with Preprod API access
+  *   - A funded wallet on Preprod testnet (get test ADA from the faucet)
+  *
+  * @see
+  *   [[https://yaci-devkit.cardano.org/ YaciDevKit documentation]]
+  * @see
+  *   [[https://blockfrost.io/ Blockfrost API]]
+  */
+abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends AsyncFunSuite {
 
     implicit override def executionContext: ExecutionContext =
         scala.concurrent.ExecutionContext.global
@@ -242,19 +286,19 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future])
         }
     }
 
-    test("lock HTLC - local") {
+    test("lock HTLC - local", IntegrationTest) {
         runLockTest(TestEnv.Local)
     }
 
-    test("reveal HTLC - local") {
+    test("reveal HTLC - local", IntegrationTest) {
         runRevealTest(TestEnv.Local)
     }
 
-    test("lock HTLC - preprod") {
+    test("lock HTLC - preprod", IntegrationTest) {
         runLockTest(TestEnv.Preprod)
     }
 
-    test("reveal HTLC - preprod") {
+    test("reveal HTLC - preprod", IntegrationTest) {
         runRevealTest(TestEnv.Preprod)
     }
 }

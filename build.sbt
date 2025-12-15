@@ -452,7 +452,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test"
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
+      // Exclude integration tests from default test runs (require external services)
+      Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest")
     )
     .configurePlatform(JVMPlatform)(_.dependsOn(`scalus-bloxbean-cardano-client-lib`))
     .jvmSettings(
@@ -461,6 +463,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.4.2",
+      Test / envVars := sys.env.toMap, // for HTLC integration tests
       scalaJSUseMainModuleInitializer := false,
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
@@ -650,31 +653,6 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
       inConfig(Test)(PluginDependency)
     )
-
-lazy val scalusCardanoLedgerXplatformIt = crossProject(JSPlatform, JVMPlatform)
-    .in(file("scalus-cardano-ledger-xplatform-it"))
-    .dependsOn(scalusCardanoLedger, scalusExamples)
-    .settings(
-      name := "scalus-cardano-ledger-xplatform-it",
-      scalacOptions ++= commonScalacOptions,
-      publish / skip := true,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
-      inConfig(Test)(PluginDependency)
-    )
-    .jvmSettings(
-      Test / fork := true,
-      Test / testOptions += Tests.Argument("-oF"),
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test"
-    )
-    .jsSettings(
-      Test / scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-      Compile / npmDependencies ++= Seq(
-        "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3"
-      ),
-      Test / envVars := sys.env.toMap
-    )
-    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
 
 // =============================================================================
 // UTILS
