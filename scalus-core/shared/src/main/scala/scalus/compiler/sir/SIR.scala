@@ -39,11 +39,16 @@ case class SIRPosition(
     startColumn: Int,
     endLine: Int,
     endColumn: Int,
+    inlinedFrom: List[SIRPosition] = Nil
 ) {
 
     def show: String = {
-        s"$file:${startLine + 1}:${startColumn} - ${endLine + 1}:${endColumn}"
+        val basePos = s"$file:${startLine + 1}:${startColumn} - ${endLine + 1}:${endColumn}"
+        if inlinedFrom.isEmpty then basePos
+        else s"$basePos\n  inlined from: ${inlinedFrom.map(_.showSingle).mkString(" -> ")}"
     }
+
+    def showSingle: String = s"$file:${startLine + 1}:${startColumn}"
 
     def isEmpty: Boolean = file.isEmpty && startLine == 0 && startColumn == 0 &&
         endLine == 0 && endColumn == 0
@@ -52,7 +57,7 @@ case class SIRPosition(
 
 object SIRPosition {
 
-    val empty: SIRPosition = SIRPosition("", 0, 0, 0, 0)
+    val empty: SIRPosition = SIRPosition("", 0, 0, 0, 0, Nil)
 
 }
 

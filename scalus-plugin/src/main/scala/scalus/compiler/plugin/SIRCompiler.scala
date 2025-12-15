@@ -146,6 +146,35 @@ final class SIRCompiler(
     extension (t: Tree) def isLiteral: Boolean = compileConstant.isDefinedAt(t)
     extension (t: Tree) def isData: Boolean = t.tpe <:< DataClassSymbol.typeRef
 
+    // Helper methods for creating annotations with inline call stack
+    private[plugin] def mkAnns(pos: SrcPos, env: Env): AnnotationsDecl =
+        AnnotationsDecl(
+          SIRPosition.fromSrcPos(pos).copy(inlinedFrom = env.inlineCallStack)
+        )
+
+    private[plugin] def mkAnnsFromSourcePosition(pos: SourcePosition, env: Env): AnnotationsDecl =
+        AnnotationsDecl(
+          SIRPosition.fromSourcePosition(pos).copy(inlinedFrom = env.inlineCallStack)
+        )
+
+    private[plugin] def mkAnnsFromSymIn(
+        sym: Symbol,
+        inPos: SourcePosition,
+        env: Env
+    ): AnnotationsDecl = {
+        val optComment = sym.defTree match
+            case memberDef: MemberDef => memberDef.rawComment.map(_.raw)
+            case _                    => None
+        val pos =
+            if sym.sourcePos == NoSourcePosition then inPos
+            else if inPos == NoSourcePosition then sym.sourcePos
+            else inPos
+        AnnotationsDecl(
+          SIRPosition.fromSourcePosition(pos).copy(inlinedFrom = env.inlineCallStack),
+          optComment
+        )
+    }
+
     opaque type LocalBingingFlags = Int
     object LocalBindingFlags {
         val None: LocalBingingFlags = 0
@@ -2626,8 +2655,11 @@ final class SIRCompiler(
                           s"Typed: ${expr.show} with type ${expr.tpe.show} to ${tpTree.tpe.show} (${tp.show})"
                         )
                     SIR.Cast(term, tp, AnnotationsDecl.fromSrcPos(tree.srcPos))
-            case Inlined(_, bindings, expr) =>
-                val r = compileBlock(env, bindings, expr)
+            case Inlined(call, bindings, expr) =>
+                val newEnv =
+                    if call.isEmpty then env
+                    else env.pushInlineCall(SIRPosition.fromSrcPos(call.srcPos))
+                val r = compileBlock(newEnv, bindings, expr)
                 // val t = r.asTerm.show
                 // report.info(s"Inlined: ${bindings}, ${expr.show}\n${t}", Position(SourceFile.current, globalPosition, 0))
                 r
@@ -3415,7 +3447,9 @@ object SIRCompiler {
         //  during deifnition of inline method, this is variable,
         //  which contains binding of 'this' object.
         thisVal: Symbol = Symbols.NoSymbol,
-        createEx: RuntimeException = new RuntimeException("Env.create.stacktrace")
+        createEx: RuntimeException = new RuntimeException("Env.create.stacktrace"),
+        // Stack of inline call sites (most recent first)
+        inlineCallStack: List[SIRPosition] = Nil
     ) {
 
         def ++(bindings: Iterable[(VariableKey, SIRType)]): Env = {
@@ -3429,6 +3463,10 @@ object SIRCompiler {
         def withDebug: Env = copy(debug = true)
 
         def withoutDebug: Env = copy(debug = false)
+
+        def pushInlineCall(pos: SIRPosition): Env =
+            if pos.isEmpty then this
+            else copy(inlineCallStack = pos :: inlineCallStack)
 
     }
 

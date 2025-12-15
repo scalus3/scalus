@@ -15,7 +15,8 @@ object SIRMacro {
                 startLine = ${ Expr(scalaPosition.startLine) },
                 startColumn = ${ Expr(scalaPosition.startColumn) },
                 endLine = ${ Expr(scalaPosition.endLine) },
-                endColumn = ${ Expr(scalaPosition.endColumn) }
+                endColumn = ${ Expr(scalaPosition.endColumn) },
+                inlinedFrom = Nil
               ),
               comment = None,
               data = Map.empty
