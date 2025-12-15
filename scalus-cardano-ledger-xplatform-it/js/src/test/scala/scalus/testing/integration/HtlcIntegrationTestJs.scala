@@ -3,7 +3,7 @@ package scalus.testing.integration
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.LucidEvolutionAccount
-import sttp.client3.*
+import sttp.client4.*
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSGlobal
@@ -14,7 +14,7 @@ object Process extends js.Object {
     def env: js.Dictionary[String] = js.native
 }
 
-class HtlcIntegrationTestJs extends HtlcIntegrationTestBase(using FetchBackend()) {
+class HtlcIntegrationTestJs extends HtlcIntegrationTestBase(using DefaultFutureBackend()) {
     override protected def makeTransactionSigner(
         derivation: String,
         mnemonic: String

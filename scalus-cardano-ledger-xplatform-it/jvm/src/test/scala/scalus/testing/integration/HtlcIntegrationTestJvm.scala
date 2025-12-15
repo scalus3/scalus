@@ -3,9 +3,9 @@ package scalus.testing.integration
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
-import sttp.client3.*
+import sttp.client4.*
 
-class HtlcIntegrationTestJvm extends HtlcIntegrationTestBase(using HttpClientFutureBackend()) {
+class HtlcIntegrationTestJvm extends HtlcIntegrationTestBase(using DefaultFutureBackend()) {
     override protected def makeTransactionSigner(
         derivation: String,
         mnemonic: String

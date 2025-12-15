@@ -10,12 +10,12 @@ import scalus.cardano.node.AsyncBlockfrostProvider
 import scalus.cardano.txbuilder.*
 import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
 import scalus.ledger.api.v1.PubKeyHash
-import sttp.client3.*
+import sttp.client4.*
 import scalus.cardano.node.toSync
 
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
+abstract class HtlcIntegrationTestBase(using backend: Backend[Future])
     extends AsyncFunSuite {
 
     implicit override def executionContext: ExecutionContext =
