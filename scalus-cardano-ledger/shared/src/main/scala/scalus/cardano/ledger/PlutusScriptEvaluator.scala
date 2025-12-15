@@ -423,14 +423,30 @@ object PlutusScriptEvaluator {
             lookupTable: LookupTable
         ): Option[Data] = {
             output match
-                case TransactionOutput.Shelley(_, _, Some(datumHash)) =>
-                    lookupTable.datums.get(datumHash)
+                case TransactionOutput.Shelley(_, _, datumHashOption) =>
+                    datumHashOption.flatMap { lookupTable.datums.get }
                 case TransactionOutput.Babbage(_, _, datumOption, _) =>
                     datumOption match
-                        case Some(DatumOption.Hash(hash))   => lookupTable.datums.get(hash)
-                        case Some(DatumOption.Inline(data)) => Some(data)
-                        case None                           => None
-                case _ => None
+                        case Some(DatumOption.Hash(hash)) => lookupTable.datums.get(hash)
+
+                        case Some(DatumOption.Inline(data)) =>
+                            val isPlutusV1 = output.address.scriptHashOption.flatMap {
+                                lookupTable.scripts.get
+                            } match
+                                case None =>
+                                    throw IllegalStateException(
+                                      s"Output script not found for address: ${output.address}"
+                                    )
+                                case Some(_: Script.PlutusV1) => true
+                                case _                        => false
+
+                            if !isPlutusV1 then Some(data)
+                            else
+                                throw IllegalStateException(
+                                  s"Inline datum for Plutus V1 script not supported: ${output.address}"
+                                )
+
+                        case None => None
         }
 
         /** Evaluate a Plutus V1 script with the V1 script context.

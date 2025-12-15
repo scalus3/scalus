@@ -577,6 +577,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v1.TxInfo = {
         guardConwayFeaturesForPlutusV1V2(tx)
+
         val body = tx.body.value
 
         v1.TxInfo(
