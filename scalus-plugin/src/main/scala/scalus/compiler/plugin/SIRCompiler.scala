@@ -1916,7 +1916,7 @@ final class SIRCompiler(
                         )
                     case other =>
                         throw new Exception("expected that exprA.tp is List")
-                        error(
+            /*                        error(
                           TypeMismatch(
                             fun.toString,
                             SIRType.List(SIRType.TypeVar("A", None, false)),
@@ -1924,7 +1924,7 @@ final class SIRCompiler(
                             tree.srcPos
                           ),
                           SIR.Error("", posAnns)
-                        )
+                        ) */
             case "tail" =>
                 val exprArg = compileExpr(env, lst)
                 SIR.Apply(
@@ -1943,22 +1943,23 @@ final class SIRCompiler(
             case _ =>
                 error(UnsupportedListFunction(fun.toString, lst.srcPos), SIR.Error("", posAnns))
 
-    private def compileBuiltinListConstructor(
+    /** Builds a BuiltinList from a sequence of elements. This is the shared implementation used by
+      * both compileBuiltinListConstructor and compileBuiltinArrayConstructor.
+      */
+    private def builtinSeq(
         env: Env,
         ex: Tree,
-        list: Tree,
         tpe: Tree,
-        tree: Tree
+        tree: Tree,
+        debugName: String
     ): AnnotatedSIR =
-        if env.debug then
-            println(s"compileBuiltinListConstructor: ${ex.show}, list: $list, tpe: $tpe")
-        val tpeE = typeReprToDefaultUni(tpe.tpe, list)
+        val tpeE = typeReprToDefaultUni(tpe.tpe, tree)
         val tpeTp = sirTypeInEnv(tpe.tpe, tree.srcPos, env)
         val builtinListTp = SIRType.BuiltinList(tpeTp)
         val anns = AnnotationsDecl.fromSrcPos(tree.srcPos)
         if env.debug then
             println(
-              s"compileBuiltinListConstructor: tpeE: $tpeE, tpeTp: $tpeTp,  builtinListTp.show=${builtinListTp.show}"
+              s"$debugName: tpeE: $tpeE, tpeTp: $tpeTp, builtinListTp.show=${builtinListTp.show}"
             )
         ex match
             case SeqLiteral(args, _) =>
@@ -1968,7 +1969,7 @@ final class SIRCompiler(
                     SIR.Const(
                       scalus.uplc.Constant.List(tpeE, lits),
                       builtinListTp,
-                      AnnotationsDecl.fromSrcPos(list.srcPos)
+                      AnnotationsDecl.fromSrcPos(tree.srcPos)
                     )
                 else
                     val nil: AnnotatedSIR = SIR.Const(
@@ -1990,11 +1991,22 @@ final class SIRCompiler(
                         )
                     }
                     if env.debug then
-                        println(s"compileBuiltinListConstructor: retval: $retval")
-                        println(s"compileBuiltinListConstructor: retval.tp: ${retval.tp.show}")
+                        println(s"$debugName: retval: $retval")
+                        println(s"$debugName: retval.tp: ${retval.tp.show}")
                     retval
             case _ =>
                 error(UnsupportedListApplyInvocation(tree, tpe, tree.srcPos), SIR.Error("", anns))
+
+    private def compileBuiltinListConstructor(
+        env: Env,
+        ex: Tree,
+        list: Tree,
+        tpe: Tree,
+        tree: Tree
+    ): AnnotatedSIR =
+        if env.debug then
+            println(s"compileBuiltinListConstructor: ${ex.show}, list: $list, tpe: $tpe")
+        builtinSeq(env, ex, tpe, tree, "compileBuiltinListConstructor")
 
     // Compiles BuiltinArray(args*) as listToArray(BuiltinList(args*))
     private def compileBuiltinArrayConstructor(
@@ -2008,43 +2020,10 @@ final class SIRCompiler(
             println(s"compileBuiltinArrayConstructor: ${ex.show}, array: $array, tpe: $tpe")
         val tpeTp = sirTypeInEnv(tpe.tpe, tree.srcPos, env)
         val builtinArrayTp = SIRType.BuiltinArray(tpeTp)
-        val builtinListTp = SIRType.BuiltinList(tpeTp)
         val anns = AnnotationsDecl.fromSrcPos(tree.srcPos)
 
-        // First build the list using the same logic as compileBuiltinListConstructor
-        val listExpr: AnnotatedSIR = ex match
-            case SeqLiteral(args, _) =>
-                val allLiterals = args.forall(arg => compileConstant.isDefinedAt(arg))
-                if allLiterals then
-                    val lits = args.map(compileConstant)
-                    val tpeE = typeReprToDefaultUni(tpe.tpe, array)
-                    SIR.Const(
-                      scalus.uplc.Constant.List(tpeE, lits),
-                      builtinListTp,
-                      AnnotationsDecl.fromSrcPos(array.srcPos)
-                    )
-                else
-                    val tpeE = typeReprToDefaultUni(tpe.tpe, array)
-                    val nil: AnnotatedSIR = SIR.Const(
-                      scalus.uplc.Constant.List(tpeE, Nil),
-                      SIRType.BuiltinList.Nil(),
-                      AnnotationsDecl.fromSrcPos(ex.srcPos)
-                    )
-                    args.foldRight(nil) { (arg, acc) =>
-                        SIR.Apply(
-                          SIR.Apply(
-                            SIRBuiltins.mkCons,
-                            compileExpr(env, arg),
-                            SIRType.Fun(builtinListTp, builtinListTp),
-                            anns
-                          ),
-                          acc,
-                          builtinListTp,
-                          anns
-                        )
-                    }
-            case _ =>
-                error(UnsupportedListApplyInvocation(tree, tpe, tree.srcPos), SIR.Error("", anns))
+        // Build the list using the shared helper
+        val listExpr = builtinSeq(env, ex, tpe, tree, "compileBuiltinArrayConstructor")
 
         // Then wrap with listToArray
         SIR.Apply(
