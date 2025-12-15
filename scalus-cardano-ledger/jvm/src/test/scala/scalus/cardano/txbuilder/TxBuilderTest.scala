@@ -13,9 +13,11 @@ import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.prelude.List as PList
+import scalus.utils.await
 import scalus.{plutusV3, toUplc, Compiler}
 
 import scala.collection.immutable.SortedMap
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class TxBuilderTest extends AnyFunSuite {
 
@@ -474,6 +476,7 @@ class TxBuilderTest extends AnyFunSuite {
         val tx1 = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         // Get UTXOs from tx1 directly using Transaction.utxos
@@ -490,7 +493,7 @@ class TxBuilderTest extends AnyFunSuite {
         )
 
         // Submit tx1 to provider - now Bob's UTXO exists in the chain
-        val tx1Result = provider.submit(tx1)
+        val tx1Result = provider.submit(tx1).await()
         assert(tx1Result.isRight, s"tx1 should be submitted successfully: $tx1Result")
 
         // Now use the UTXO from tx1 to build tx2
@@ -517,11 +520,12 @@ class TxBuilderTest extends AnyFunSuite {
         )
 
         // Submit tx2 to provider
-        val tx2Result = provider.submit(tx2)
+        val tx2Result = provider.submit(tx2).await()
         assert(tx2Result.isRight, s"tx2 should be submitted successfully: $tx2Result")
 
         // Verify Alice received the ADA back
-        val aliceUtxo = provider.findUtxo(address = Alice.address, transactionId = Some(tx2.id))
+        val aliceUtxo =
+            provider.findUtxo(address = Alice.address, transactionId = Some(tx2.id)).await()
         assert(aliceUtxo.isRight, "Alice should have received the UTXO from tx2")
     }
 }

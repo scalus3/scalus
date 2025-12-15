@@ -5,6 +5,9 @@ import scalus.builtin.ByteString
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.utils.await
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class EmulatorTest extends AnyFunSuite {
 
@@ -31,9 +34,10 @@ class EmulatorTest extends AnyFunSuite {
         val tx1 = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
-        provider.submit(tx1)
+        provider.submit(tx1).await()
 
         // After tx1, utxos should be updated
         val utxosAfterTx1 = provider.utxos

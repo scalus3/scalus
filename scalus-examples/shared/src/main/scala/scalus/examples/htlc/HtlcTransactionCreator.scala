@@ -3,7 +3,7 @@ package scalus.examples.htlc
 import scalus.cardano.address.Address
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
-import scalus.cardano.node.AsyncProvider
+import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
 
@@ -48,7 +48,7 @@ case class HtlcTransactionCreator(
         receiver: AddrKeyHash,
         image: Image,
         timeout: Long,
-        provider: AsyncProvider
+        provider: Provider
     )(using ExecutionContext): Future[Transaction] = {
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 

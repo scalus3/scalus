@@ -7,6 +7,7 @@ import scalus.cardano.node.SubmitError.NodeError
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
+import scala.concurrent.{ExecutionContext, Future}
 
 /** An in-memory bare-bones node implementation.
   *
@@ -27,35 +28,48 @@ class Emulator(
     private val contextRef = new AtomicReference[Context](initialContext)
 
     @tailrec
-    final def submit(transaction: Transaction): Either[SubmitError, TransactionHash] = {
+    private final def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         val currentState = stateRef.get()
         val currentContext = contextRef.get()
 
         processTransaction(currentContext, currentState, transaction) match {
             case Right(newState) =>
                 if stateRef.compareAndSet(currentState, newState) then Right(transaction.id)
-                else submit(transaction)
+                else submitSync(transaction)
             case Left(t: TransactionException) =>
                 Left(NodeError(s"Ledger rule violation: ${t.explain}", Some(t)))
         }
     }
 
-    def findUtxo(input: TransactionInput): Either[RuntimeException, Utxo] = {
-        utxos.get(input) match {
+    def submit(transaction: Transaction)(using
+        ExecutionContext
+    ): Future[Either[SubmitError, TransactionHash]] =
+        Future.successful(submitSync(transaction))
+
+    def findUtxo(input: TransactionInput)(using
+        ExecutionContext
+    ): Future[Either[RuntimeException, Utxo]] = {
+        val result = utxos.get(input) match {
             case Some(output) => Right(Utxo(input, output))
             case None         => Left(new RuntimeException(s"Utxo not found for input: $input"))
         }
+        Future.successful(result)
     }
 
-    def findUtxos(inputs: Set[TransactionInput]): Either[RuntimeException, Utxos] = {
+    def findUtxos(inputs: Set[TransactionInput])(using
+        ExecutionContext
+    ): Future[Either[RuntimeException, Utxos]] = {
         val foundUtxos = inputs.view.flatMap { input =>
             utxos.get(input).map(output => input -> output)
         }.toMap
 
-        if foundUtxos.size == inputs.size then Right(foundUtxos)
-        else
-            val missingInputs = inputs.filterNot(foundUtxos.contains)
-            Left(new RuntimeException(s"Utxos not found for inputs: $missingInputs"))
+        val result =
+            if foundUtxos.size == inputs.size then Right(foundUtxos)
+            else
+                val missingInputs = inputs.filterNot(foundUtxos.contains)
+                Left(new RuntimeException(s"Utxos not found for inputs: $missingInputs"))
+
+        Future.successful(result)
     }
 
     def findUtxo(
@@ -63,8 +77,8 @@ class Emulator(
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None
-    ): Either[RuntimeException, Utxo] = {
-        utxos.find { case (input, output) =>
+    )(using ExecutionContext): Future[Either[RuntimeException, Utxo]] = {
+        val result = utxos.find { case (input, output) =>
             (address == output.address) &&
             transactionId.forall(_ == input.transactionId) &&
             (
@@ -82,6 +96,7 @@ class Emulator(
                     s"Utxo not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount"
                   )
                 )
+        Future.successful(result)
     }
 
     def findUtxos(
@@ -90,8 +105,9 @@ class Emulator(
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
         minRequiredTotalAmount: Option[Coin] = None
-    ): Either[RuntimeException, Utxos] = {
-        if minRequiredTotalAmount.exists(_ <= Coin(0)) then return Right(Map.empty)
+    )(using ExecutionContext): Future[Either[RuntimeException, Utxos]] = {
+        if minRequiredTotalAmount.exists(_ <= Coin(0)) then
+            return Future.successful(Right(Map.empty))
 
         val (foundUtxos, totalAmount) = utxos.view
             .filter { case (input, output) =>
@@ -115,14 +131,16 @@ class Emulator(
                         )
             }
 
-        if foundUtxos.nonEmpty && minRequiredTotalAmount.forall(totalAmount >= _) then
-            Right(foundUtxos)
-        else
-            Left(
-              new RuntimeException(
-                s"Utxos not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount, minRequiredTotalAmount: $minRequiredTotalAmount"
-              )
-            )
+        val result =
+            if foundUtxos.nonEmpty && minRequiredTotalAmount.forall(totalAmount >= _) then
+                Right(foundUtxos)
+            else
+                Left(
+                  new RuntimeException(
+                    s"Utxos not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount, minRequiredTotalAmount: $minRequiredTotalAmount"
+                  )
+                )
+        Future.successful(result)
     }
 
     @tailrec

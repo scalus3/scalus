@@ -6,7 +6,7 @@ import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.AsyncBlockfrostProvider
+import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.testing.IntegrationTest
@@ -69,7 +69,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
         case Preprod
 
     case class TestContext(
-        client: AsyncBlockfrostProvider,
+        client: BlockfrostProvider,
         cardanoInfo: CardanoInfo,
         evaluator: PlutusScriptEvaluator
     )
@@ -96,7 +96,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
 
     private def createTestContext(testEnv: TestEnv): Future[TestContext] = testEnv match {
         case TestEnv.Local =>
-            val client = AsyncBlockfrostProvider.localYaci
+            val client = BlockfrostProvider.localYaci
             client
                 .fetchLatestParams()
                 .map { protocolParams =>
@@ -122,7 +122,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             val apiKey = getEnv("BLOCKFROST_API_KEY").getOrElse(
               throw new IllegalStateException("BLOCKFROST_API_KEY environment variable not set")
             )
-            val client = AsyncBlockfrostProvider(apiKey, AsyncBlockfrostProvider.PreprodUrl)
+            val client = BlockfrostProvider(apiKey, BlockfrostProvider.PreprodUrl)
             client
                 .fetchLatestParams()
                 .map { protocolParams =>

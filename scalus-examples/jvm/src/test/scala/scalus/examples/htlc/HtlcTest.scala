@@ -13,6 +13,9 @@ import scalus.ledger.api.v1.PubKeyHash
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
+import scalus.utils.await
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class HtlcTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment
@@ -106,7 +109,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
             val body = tx.body.value
             val allInputs =
                 (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
-            provider.findUtxos(allInputs).toOption.get
+            provider.findUtxos(allInputs).await().toOption.get
         }
 
         val scriptContext =
@@ -130,6 +133,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -145,7 +149,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -154,6 +158,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -165,6 +170,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = receiverAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -186,7 +192,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
-        assert(provider.submit(revealTx).isRight)
+        assert(provider.submit(revealTx).await().isRight)
 
         val unlockedUtxo = provider
             .findUtxo(
@@ -194,6 +200,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(revealTx.id),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -209,6 +216,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -224,7 +232,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -233,6 +241,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -244,6 +253,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = receiverAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -266,7 +276,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
-        provider.submit(revealTx) match
+        provider.submit(revealTx).await() match
             case Left(nodeError: SubmitError.NodeError) =>
                 assert(nodeError.message.endsWith(HtlcValidator.InvalidReceiverPreimage))
             case _ =>
@@ -284,6 +294,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -299,7 +310,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -308,6 +319,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -319,6 +331,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = receiverAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -343,7 +356,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
-        provider.submit(revealTx) match
+        provider.submit(revealTx).await() match
             case Left(nodeError: SubmitError.NodeError) =>
                 assert(nodeError.message.endsWith(HtlcValidator.UnsignedReceiverTransaction))
             case _ =>
@@ -361,6 +374,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -376,7 +390,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -385,6 +399,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -396,6 +411,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = receiverAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -418,7 +434,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
-        provider.submit(revealTx) match
+        provider.submit(revealTx).await() match
             case Left(nodeError: SubmitError.NodeError) =>
                 assert(nodeError.message.endsWith(HtlcValidator.InvalidReceiverTimePoint))
             case _ =>
@@ -436,6 +452,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -451,7 +468,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -460,6 +477,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -471,6 +489,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -491,7 +510,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
-        assert(provider.submit(timeoutTx).isRight)
+        assert(provider.submit(timeoutTx).await().isRight)
 
         val unlockedUtxo = provider
             .findUtxo(
@@ -499,6 +518,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(timeoutTx.id),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -514,6 +534,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -529,7 +550,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -538,6 +559,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -549,6 +571,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -572,7 +595,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
 
-        provider.submit(timeoutTx) match
+        provider.submit(timeoutTx).await() match
             case Left(nodeError: SubmitError.NodeError) =>
                 assert(nodeError.message.endsWith(HtlcValidator.UnsignedCommitterTransaction))
             case _ =>
@@ -590,6 +613,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(lockAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -605,7 +629,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val lockedUtxo = provider
             .findUtxo(
@@ -614,6 +638,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(datum)),
               minAmount = Some(lockAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -625,6 +650,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   address = committerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -646,7 +672,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
-        provider.submit(timeoutTx) match
+        provider.submit(timeoutTx).await() match
             case Left(nodeError: SubmitError.NodeError) =>
                 assert(nodeError.message.endsWith(HtlcValidator.InvalidCommitterTimePoint))
             case _ =>

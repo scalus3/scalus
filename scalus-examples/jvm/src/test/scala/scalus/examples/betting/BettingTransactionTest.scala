@@ -13,6 +13,9 @@ import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
+import scalus.utils.await
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment
@@ -111,7 +114,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             val body = tx.body.value
             val allInputs =
                 (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
-            provider.findUtxos(allInputs).toOption.get
+            provider.findUtxos(allInputs).await().toOption.get
         }
 
         val scriptContext =
@@ -135,6 +138,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = deploymentAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -142,7 +146,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).isRight)
+        assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxo = provider
             .findUtxo(
@@ -151,6 +155,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
               datum = None,
               minAmount = None
             )
+            .await()
             .toOption
             .get
 
@@ -166,6 +171,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = deploymentAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -173,13 +179,14 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).isRight)
+        assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxo = provider
             .findUtxo(
               address = deploymentAddress,
               transactionId = Some(deployTx.id)
             )
+            .await()
             .toOption
             .get
 
@@ -189,6 +196,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player1Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -206,7 +214,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(initTx).isRight)
+        assert(provider.submit(initTx).await().isRight)
 
         val initConfig = Config(
           PubKeyHash(player1Pkh),
@@ -222,6 +230,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(initConfig.toData)),
               minAmount = Some(betAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -237,6 +246,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = deploymentAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -244,10 +254,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).isRight)
+        assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxo = provider
             .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
+            .await()
             .toOption
             .get
 
@@ -257,6 +268,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player1Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -274,7 +286,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(initTx).isRight)
+        assert(provider.submit(initTx).await().isRight)
 
         val initConfig = Config(
           PubKeyHash(player1Pkh),
@@ -290,6 +302,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(initConfig.toData)),
               minAmount = Some(betAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -299,6 +312,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player2Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -323,7 +337,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         assert(result.isSuccess)
 
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).isRight)
+        assert(provider.submit(joinTx).await().isRight)
 
         val joinConfig = Config(
           PubKeyHash(player1Pkh),
@@ -339,6 +353,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(joinConfig.toData)),
               minAmount = Some(betAmount + betAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -354,6 +369,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = deploymentAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -361,10 +377,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).isRight)
+        assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxo = provider
             .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
+            .await()
             .toOption
             .get
 
@@ -374,6 +391,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player1Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -391,7 +409,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(initTx).isRight)
+        assert(provider.submit(initTx).await().isRight)
 
         val initConfig = Config(
           PubKeyHash(player1Pkh),
@@ -407,6 +425,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
               datum = Some(DatumOption.Inline(initConfig.toData)),
               minAmount = Some(betAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -418,6 +437,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player2Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -438,7 +458,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        provider.submit(joinTx) match
+        provider.submit(joinTx).await() match
             case Left(err) => succeed // Expected to fail
             case Right(_)  => fail("Transaction should have failed after expiration")
     }
@@ -452,6 +472,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = deploymentAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -459,10 +480,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).isRight)
+        assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxo = provider
             .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
+            .await()
             .toOption
             .get
 
@@ -472,6 +494,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player1Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -489,10 +512,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(initTx).isRight)
+        assert(provider.submit(initTx).await().isRight)
 
         val betUtxo = provider
             .findUtxo(address = scriptAddress, transactionId = Some(initTx.id))
+            .await()
             .toOption
             .get
 
@@ -502,6 +526,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player2Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -523,16 +548,18 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).isRight)
+        assert(provider.submit(joinTx).await().isRight)
 
         val joinedBetUtxo = provider
             .findUtxo(address = scriptAddress, transactionId = Some(joinTx.id))
+            .await()
             .toOption
             .get
 
         val winTx = {
             val utxos = provider
                 .findUtxos(address = oracleAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .await()
                 .toOption
                 .get
 
@@ -557,7 +584,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
 
-        assert(provider.submit(winTx).isRight)
+        assert(provider.submit(winTx).await().isRight)
 
         val winnerUtxo = provider
             .findUtxo(
@@ -565,6 +592,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(winTx.id),
               minAmount = Some(betAmount + betAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -580,6 +608,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = deploymentAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -587,10 +616,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 .deploy(utxos, deploymentAddress, deploymentAddress)
         }
 
-        assert(provider.submit(deployTx).isRight)
+        assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxo = provider
             .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
+            .await()
             .toOption
             .get
 
@@ -600,6 +630,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player1Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -617,10 +648,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        assert(provider.submit(initTx).isRight)
+        assert(provider.submit(initTx).await().isRight)
 
         val betUtxo = provider
             .findUtxo(address = scriptAddress, transactionId = Some(initTx.id))
+            .await()
             .toOption
             .get
 
@@ -630,6 +662,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                   address = player2Address,
                   minRequiredTotalAmount = Some(betAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -651,16 +684,18 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         }
 
         provider.setSlot(beforeSlot - 1)
-        assert(provider.submit(joinTx).isRight)
+        assert(provider.submit(joinTx).await().isRight)
 
         val joinedBetUtxo = provider
             .findUtxo(address = scriptAddress, transactionId = Some(joinTx.id))
+            .await()
             .toOption
             .get
 
         val winTx = {
             val utxos = provider
                 .findUtxos(address = oracleAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .await()
                 .toOption
                 .get
 
@@ -683,7 +718,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, winTx, joinedBetUtxo._1)
         assert(result.isFailure)
 
-        provider.submit(winTx) match
+        provider.submit(winTx).await() match
             case Left(err) => succeed // Expected to fail
             case Right(_)  => fail("Transaction should have failed before expiration")
     }

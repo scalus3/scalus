@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee}
-import scalus.cardano.node.AsyncProvider
+import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.{modifyBody, ResolvedUtxos}
 
 import java.time.Instant
@@ -208,7 +208,7 @@ case class TxBuilder(
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
     validators: Seq[Validator] = Seq.empty
-) extends TxBuilderPlatformOps {
+) {
 
     /** Spends a UTXO with an explicit witness.
       *
@@ -875,7 +875,7 @@ case class TxBuilder(
       * @return
       *   a Future containing a new TxBuilder with the transaction completed
       */
-    def complete(provider: AsyncProvider, sponsor: Address)(using
+    def complete(provider: Provider, sponsor: Address)(using
         ExecutionContext
     ): Future[TxBuilder] = {
         // Pre-build the context to get initial UTXOs
@@ -1000,7 +1000,7 @@ case class TxBuilder(
     private def handleValueDiff(
         diff: Value,
         tx: Transaction,
-        provider: AsyncProvider,
+        provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
         initialContext: TransactionBuilder.Context
@@ -1084,7 +1084,7 @@ case class TxBuilder(
     private def selectAndAddInputs(
         tx: Transaction,
         diff: Value,
-        provider: AsyncProvider,
+        provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
         redeemers: Seq[DetachedRedeemer]
@@ -1102,7 +1102,7 @@ case class TxBuilder(
 
     private def ensureCollateralBalanced(
         tx: Transaction,
-        provider: AsyncProvider,
+        provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
     )(using ExecutionContext): Future[Either[Nothing, Transaction]] = {
@@ -1157,7 +1157,7 @@ case class TxBuilder(
     }
 
     private def selectAdditionalUtxos(
-        provider: AsyncProvider,
+        provider: Provider,
         address: Address,
         gap: Value,
         excludeInputs: Set[TransactionInput]
@@ -1229,7 +1229,7 @@ case class TxBuilder(
     }
 
     private def selectUtxosWithTokens(
-        provider: AsyncProvider,
+        provider: Provider,
         address: Address,
         requiredAssets: MultiAsset,
         excludeInputs: Set[TransactionInput]
@@ -1291,7 +1291,7 @@ case class TxBuilder(
     }
 
     private def selectCollateral(
-        provider: AsyncProvider,
+        provider: Provider,
         address: Address,
         requiredAmount: Coin,
         excludeUtxos: Set[TransactionInput]

@@ -3,7 +3,6 @@ package scalus.testing.kit
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.{PubKeyWitness, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v3
 import scalus.testing.kit.ScalusTest
@@ -62,31 +61,6 @@ object TestUtil extends ScalusTest {
             }
         }
     }
-
-    @deprecated("Will be removed", "0.13.0")
-    def createTestWallet(provider: Provider, address: Address): WalletTrait =
-        new WalletTrait {
-            override val owner: Address = address
-            override lazy val utxo: Utxos = provider.findUtxos(address).toOption.get
-            override val collateralInputs: Seq[(Utxo, Witness)] = Seq(
-              (provider.findUtxo(address).toOption.get, PubKeyWitness)
-            )
-
-            override def selectInputs(
-                required: Value
-            ): Option[Seq[(Utxo, Witness)]] = {
-                val available =
-                    provider.findUtxos(address, minRequiredTotalAmount = Some(required.coin))
-                available match
-                    case Left(_) => None
-                    case Right(utxos) =>
-                        Some(
-                          utxos.view.map { entry =>
-                              (Utxo(entry), PubKeyWitness)
-                          }.toSeq
-                        )
-            }
-        }
 
     def getScriptUtxo(tx: Transaction): (TransactionInput, TransactionOutput) = {
         val (transactionOutput, index) = tx.body.value.outputs.view
