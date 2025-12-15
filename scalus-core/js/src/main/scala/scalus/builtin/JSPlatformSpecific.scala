@@ -116,7 +116,10 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
         require(sig.size == 64, s"Invalid signature length ${sig.size}")
         Ed25519Curves.ed25519.verify(sig.toUint8Array, msg.toUint8Array, pk.toUint8Array)
 
-    override def signEd25519(privateKey: ByteString, msg: ByteString): ByteString = ???
+    override def signEd25519(privateKey: ByteString, msg: ByteString): ByteString =
+        require(privateKey.size == 32, s"Invalid private key length ${privateKey.size}")
+        val signingKey = scalus.crypto.ed25519.SigningKey.unsafeFromByteString(privateKey)
+        scalus.crypto.ed25519.JsEd25519Signer.sign(signingKey, msg)
 
     private def isValidPublicKey(pubKey: ByteString): Boolean =
         try

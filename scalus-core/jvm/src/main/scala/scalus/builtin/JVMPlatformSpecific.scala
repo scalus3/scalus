@@ -2,13 +2,12 @@ package scalus.builtin
 
 import org.bitcoin.NativeSecp256k1
 import org.bouncycastle.crypto.digests.Blake2bDigest
-import org.bouncycastle.crypto.params.{Ed25519PrivateKeyParameters, Ed25519PublicKeyParameters}
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.bouncycastle.jcajce.provider.digest.{Keccak, RIPEMD160, SHA3}
+import scalus.crypto.ed25519.{JvmEd25519Signer, SigningKey}
 import scalus.utils.Utils
-import supranational.blst.P1
-import supranational.blst.P2
-import supranational.blst.PT
+import supranational.blst.{P1, P2, PT}
 
 import java.math.BigInteger
 import java.nio.file.{Files, Paths}
@@ -64,14 +63,10 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         verifier.update(msg.bytes, 0, msg.size)
         verifier.verifySignature(sig.bytes)
 
-    override def signEd25519(privateKey: ByteString, message: ByteString): ByteString = {
+    override def signEd25519(privateKey: ByteString, message: ByteString): ByteString =
         require(privateKey.size == 32, s"Invalid private key length ${privateKey.size}")
-        val privateKeyParams = Ed25519PrivateKeyParameters(privateKey.bytes, 0)
-        val signer = new Ed25519Signer();
-        signer.init(true, privateKeyParams);
-        signer.update(message.bytes, 0, message.size)
-        ByteString.unsafeFromArray(signer.generateSignature())
-    }
+        val signingKey = SigningKey.unsafeFromByteString(privateKey)
+        JvmEd25519Signer.sign(signingKey, message)
 
     override def verifyEcdsaSecp256k1Signature(
         pk: ByteString,
