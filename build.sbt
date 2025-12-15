@@ -299,8 +299,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
       libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.1",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.4",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.4" % "compile",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.6",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.6" % "compile",
       libraryDependencies ++= Seq(
         "io.bullet" %%% "borer-core" % "1.16.2",
         "io.bullet" %%% "borer-derivation" % "1.16.2"
