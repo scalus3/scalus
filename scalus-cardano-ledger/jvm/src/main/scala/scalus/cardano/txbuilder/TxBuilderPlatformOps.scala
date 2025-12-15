@@ -13,40 +13,59 @@ import scala.concurrent.duration.Duration
   */
 private trait TxBuilderPlatformOps { self: TxBuilder =>
 
-    /** Automatically completes the transaction by selecting UTXOs and collateral.
+    /** Automatically completes the transaction by selecting UTXOs and collateral (blocking).
       *
-      * This is a blocking version of `completeAsync`. It queries the provider for available UTXOs
-      * at the sponsor address, selects inputs to cover all outputs and fees, selects collateral if
-      * needed (for script transactions), and sets up change handling to the sponsor address.
+      * This is a blocking version of the async `complete` method. It queries the provider for
+      * available UTXOs at the sponsor address, selects inputs to cover all outputs and fees,
+      * selects collateral if needed (for script transactions), and sets up change handling to the
+      * sponsor address.
       *
       * This method blocks the calling thread while waiting for provider responses. Not available on
-      * JavaScript platform - use `completeAsync` instead.
+      * JavaScript platform - use the async `complete` method instead.
       *
       * @param provider
       *   the provider to query for UTXOs
       * @param sponsor
       *   the address to use for input selection, collateral, and change
+      * @param timeout
+      *   maximum duration to wait for completion (default: infinite)
       * @return
       *   a new TxBuilder with additional spend and collateral steps
       * @throws RuntimeException
       *   if insufficient UTXOs are available to cover the transaction requirements
+      * @throws java.util.concurrent.TimeoutException
+      *   if the operation times out
       */
-    def complete(provider: Provider, sponsor: Address): TxBuilder = {
+    def complete(
+        provider: Provider,
+        sponsor: Address,
+        timeout: Duration = Duration.Inf
+    ): TxBuilder = {
         import scala.concurrent.ExecutionContext.Implicits.global
-        Await.result(completeAsync(provider.toAsync, sponsor), Duration.Inf)
+        Await.result(complete(provider.toAsync, sponsor), timeout)
     }
 
-    /** Automatically completes the transaction using an async provider.
+    /** Automatically completes the transaction using an async provider (blocking).
       *
-      * This is a blocking version that wraps the async provider.
+      * This is a blocking version that wraps the async `complete` method.
       *
       * @param provider
       *   the async provider to query for UTXOs
       * @param sponsor
       *   the address to use for input selection, collateral, and change
+      * @param timeout
+      *   maximum duration to wait for completion
+      * @return
+      *   a new TxBuilder with additional spend and collateral steps
+      * @throws java.util.concurrent.TimeoutException
+      *   if the operation times out
       */
-    def complete(provider: AsyncProvider, sponsor: Address): TxBuilder = {
+    def complete(
+        provider: AsyncProvider,
+        sponsor: Address,
+        timeout: Duration
+    ): TxBuilder = {
         import scala.concurrent.ExecutionContext.Implicits.global
-        Await.result(completeAsync(provider, sponsor), Duration.Inf)
+        Await.result(self.complete(provider, sponsor), timeout)
     }
 }

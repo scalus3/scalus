@@ -37,7 +37,7 @@ case class HtlcTransactionCreator(
             .transaction
     }
 
-    /** Async version of lock that uses [[TxBuilder.completeAsync]] for cross-platform support.
+    /** Async version of lock that uses [[TxBuilder.complete]] for cross-platform support.
       *
       * This method works on both JVM and JavaScript platforms. Returns the change to the sponsor.
       */
@@ -54,7 +54,7 @@ case class HtlcTransactionCreator(
 
         TxBuilder(env)
             .payTo(scriptAddress, value, datum)
-            .completeAsync(provider, sponsor)
+            .complete(provider, sponsor)
             .map(_.sign(signer).transaction)
     }
 
