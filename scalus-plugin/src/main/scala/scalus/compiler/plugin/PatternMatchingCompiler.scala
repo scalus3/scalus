@@ -2025,15 +2025,35 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                     SIR.Case(pattern, caseBody, AnnotationsDecl.fromSrcPos(entry.pos))
                 }.toList
                 val scrutinee = SIR.Var(columnName, scrutineeTp, mkAnns(pos, ctx))
-                val optDefaultCase = optNext map { nextTree =>
-                    val defaultBody =
-                        compileDecisions(ctx, nextTree, parsedMatch, actions, guards, dcRefs)
-                    SIR.Case(
-                      SIR.Pattern.Wildcard,
-                      defaultBody,
-                      mkAnns(pos, ctx) + ("sir.DefaultCase" -> SIR.Const
-                          .bool(true, AnnotationsDecl.empty))
-                    )
+                // Check if this is a product type (single constructor) that's already matched
+                // CaseClass is always a product type (single constructor)
+                // SumCaseClass with 1 constructor is also a product type
+                val isProductTypeFullyMatched = scrutineeTp match {
+                    case _: SIRType.CaseClass =>
+                        // CaseClass is always a single constructor, check if we have one entry
+                        constructorEntries.size == 1
+                    case _ =>
+                        SIRType.collectSumCaseClass(scrutineeTp) match {
+                            case Some((_, sumCaseClass)) =>
+                                sumCaseClass.decl.constructors.length == 1 && constructorEntries.size == 1
+                            case None => false
+                        }
+                }
+                val optDefaultCase = optNext.flatMap { nextTree =>
+                    // Skip default case for product types - the single constructor always matches
+                    if isProductTypeFullyMatched then None
+                    else {
+                        val defaultBody =
+                            compileDecisions(ctx, nextTree, parsedMatch, actions, guards, dcRefs)
+                        Some(
+                          SIR.Case(
+                            SIR.Pattern.Wildcard,
+                            defaultBody,
+                            mkAnns(pos, ctx) + ("sir.DefaultCase" -> SIR.Const
+                                .bool(true, AnnotationsDecl.empty))
+                          )
+                        )
+                    }
                 } orElse {
                     SIRType.collectSumCaseClass(scrutineeTp) match {
                         case Some((typeParams, sumCaseClass)) =>
