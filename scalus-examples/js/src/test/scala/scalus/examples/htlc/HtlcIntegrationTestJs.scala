@@ -2,7 +2,7 @@ package scalus.examples.htlc
 
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.LucidEvolutionAccount
+import scalus.cardano.wallet.LucidAccount
 import sttp.client4.*
 
 import scala.scalajs.js
@@ -19,7 +19,7 @@ class HtlcIntegrationTestJs extends HtlcIntegrationTestBase(using DefaultFutureB
         derivation: String,
         mnemonic: String
     ): TransactionSigner = {
-        val account = LucidEvolutionAccount(Network.Testnet, mnemonic, derivation)
+        val account = LucidAccount(Network.Testnet, mnemonic, derivation)
         new TransactionSigner(Set(account.paymentKeyPair))
     }
 
