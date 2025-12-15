@@ -194,7 +194,9 @@ lazy val scalusPlugin = project
       // as sbt-ci-release plugin increments the version on every commit
       // thus recompiling the plugin and all dependent projects
       // COMMENT THIS LINE TO ENABLE VERSION INCREMENT during Scalus plugin development
-//      version := "0.13.0+233-494259c4-SNAPSHOT",
+      // COMMENT THIS LINE when doing plugin development
+      // UPDATE VERSION after changes to the plugin
+      version := "0.13.0+576-719d2681-SNAPSHOT",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
