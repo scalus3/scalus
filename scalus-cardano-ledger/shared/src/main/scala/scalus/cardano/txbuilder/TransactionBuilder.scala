@@ -563,7 +563,7 @@ object TransactionBuilder {
         loop(initial)
     }
 
-    private def computeScriptsWitness(
+    private[txbuilder] def computeScriptsWitness(
         utxos: Utxos,
         evaluator: PlutusScriptEvaluator,
         protocolParams: ProtocolParams
@@ -592,7 +592,7 @@ object TransactionBuilder {
                 .computeScriptDataHash(
                   txWithRedeemers,
                   utxos,
-                  protocolParams,
+                  protocolParams
                 )
                 .toOption
                 .get

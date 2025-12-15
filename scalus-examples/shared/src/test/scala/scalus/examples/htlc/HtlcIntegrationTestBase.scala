@@ -7,7 +7,6 @@ import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.AsyncBlockfrostProvider
-import scalus.cardano.node.toSync
 import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.testing.IntegrationTest
@@ -97,7 +96,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
 
     private def createTestContext(testEnv: TestEnv): Future[TestContext] = testEnv match {
         case TestEnv.Local =>
-            val client = AsyncBlockfrostProvider.localYaci(using backend, executionContext)
+            val client = AsyncBlockfrostProvider.localYaci
             client
                 .fetchLatestParams()
                 .map { protocolParams =>
@@ -117,16 +116,13 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
                       EvaluatorMode.EvaluateAndComputeCost
                     )
                     TestContext(client, cardanoInfo, evaluator)
-                }(executionContext)
+                }
 
         case TestEnv.Preprod =>
             val apiKey = getEnv("BLOCKFROST_API_KEY").getOrElse(
               throw new IllegalStateException("BLOCKFROST_API_KEY environment variable not set")
             )
-            val client = AsyncBlockfrostProvider(apiKey, AsyncBlockfrostProvider.PreprodUrl)(using
-              backend,
-              executionContext
-            )
+            val client = AsyncBlockfrostProvider(apiKey, AsyncBlockfrostProvider.PreprodUrl)
             client
                 .fetchLatestParams()
                 .map { protocolParams =>
@@ -140,7 +136,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
                       EvaluatorMode.EvaluateAndComputeCost
                     )
                     TestContext(client, cardanoInfo, evaluator)
-                }(executionContext)
+                }
     }
 
     protected def runLockTest(testEnv: TestEnv): Future[Assertion] = {
@@ -151,12 +147,8 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
 
         for {
             ctx <- createTestContext(testEnv)
-            senderUtxosResult <- ctx.client.findUtxos(senderAddr)(using executionContext)
-            senderUtxos = senderUtxosResult.toOption.get
-            _ = assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
             signer = makeTransactionSigner("m/1852'/1815'/0'/0/0", mnemonic)
-            signers = Map(senderAddr -> signer)
 
             preimage = utf8"secret_preimage_54321"
             image = scalus.builtin.Builtins.sha3_256(preimage)
@@ -174,10 +166,6 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
 
             compiledContract = HtlcContract.defaultCompiledContract
 
-            utxoToSpend = Utxo(
-              senderUtxos.find(_._2.value.coin.value >= lockAmount).get
-            )
-
             txCreator = HtlcTransactionCreator(
               ctx.cardanoInfo,
               ctx.evaluator,
@@ -185,17 +173,18 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               compiledContract
             )
 
-            signedLockTx = txCreator.lock(
+            // Use lockAsync for cross-platform support (works on both JVM and JS)
+            signedLockTx <- txCreator.lockAsync(
               Value.lovelace(lockAmount),
               senderAddr,
               AddrKeyHash(senderPkh.hash),
               AddrKeyHash(senderPkh.hash),
               image,
               timeout.toLong,
-              ctx.client.toSync // won't work in JavaScript
+              ctx.client
             )
 
-            submitResult <- ctx.client.submit(signedLockTx)(using executionContext)
+            submitResult <- ctx.client.submit(signedLockTx)
         } yield {
             submitResult match {
                 case Right(_) =>
@@ -228,13 +217,13 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             )
 
             // Fetch the locked UTXO from script address
-            scriptUtxosResult <- ctx.client.findUtxos(scriptAddress)(using executionContext)
+            scriptUtxosResult <- ctx.client.findUtxos(scriptAddress)
             scriptUtxos = scriptUtxosResult.toOption.get
             _ = assert(scriptUtxos.nonEmpty, s"No UTXOs found at script address")
             lockedUtxo = Utxo(scriptUtxos.find(_._2.value.coin.value > 7_000_000L).get)
 
             // Fetch sender UTXOs for collateral
-            senderUtxosResult <- ctx.client.findUtxos(senderAddr)(using executionContext)
+            senderUtxosResult <- ctx.client.findUtxos(senderAddr)
             senderUtxos = senderUtxosResult.toOption.get
             _ = assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
@@ -274,7 +263,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               revealTime
             )
 
-            submitResult <- ctx.client.submit(signedRevealTx)(using executionContext)
+            submitResult <- ctx.client.submit(signedRevealTx)
         } yield {
             submitResult match {
                 case Right(_) =>

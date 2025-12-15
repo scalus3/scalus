@@ -7,16 +7,17 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
-import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
-import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
-import scalus.cardano.txbuilder.TransactionBuilder.{balanceFeeAndChangeWithTokens, modifyBody, ResolvedUtxos}
+import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee}
+import scalus.cardano.node.AsyncProvider
+import scalus.cardano.txbuilder.TransactionBuilder.{modifyBody, ResolvedUtxos}
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.Try
+import scala.concurrent.{ExecutionContext, Future}
+
+// Async version of DiffHandler for non-blocking transaction balancing
+type AsyncDiffHandler = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
 
 // -----------------------------------------------------------------------------
 // TxBuilderException Hierarchy
@@ -159,16 +160,30 @@ object TxBuilderException {
   * finalization including fee calculation and change handling.
   *
   * TxBuilder is purely functional; each method returns a new instance with the updated state. The
-  * only methods that do effects are `complete` and `completeAsync`, others are pure.
+  * only methods that do effects are `complete` (JVM-only) and `completeAsync`, others are pure.
+  *
+  * ==Platform Support==
+  *
+  * TxBuilder supports both JVM and JavaScript platforms:
+  *   - `completeAsync`: Available on all platforms. Returns a `Future[TxBuilder]`.
+  *   - `complete`: JVM-only blocking method. Uses `Await.result` internally.
+  *
+  * On JavaScript, use `completeAsync` with proper Future handling.
   *
   * ==Usage==
   * {{{
+  * // JVM - blocking
   * val tx = TxBuilder(env)
-  *   .spend(utxo)
   *   .payTo(recipientAddress, Value.ada(10))
-  *   .build(changeTo = changeAddress)
+  *   .complete(provider, sponsorAddress)
   *   .sign(signer)
   *   .transaction
+  *
+  * // Cross-platform - async
+  * val txFuture = TxBuilder(env)
+  *   .payTo(recipientAddress, Value.ada(10))
+  *   .completeAsync(provider, sponsorAddress)
+  *   .map(_.sign(signer).transaction)
   * }}}
   *
   * @param env
@@ -191,7 +206,7 @@ case class TxBuilder(
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
     validators: Seq[Validator] = Seq.empty
-) {
+) extends TxBuilderPlatformOps {
 
     /** Spends a UTXO with an explicit witness.
       *
@@ -836,33 +851,22 @@ case class TxBuilder(
       */
     def transaction: Transaction = context.transaction
 
-    /** Automatically completes the transaction by selecting UTXOs and collateral.
+    /** Asynchronously completes the transaction by selecting UTXOs, adding collateral, and
+      * balancing.
       *
       * This method queries the provider for available UTXOs at the sponsor address, selects inputs
       * to cover all outputs and fees, selects collateral if needed (for script transactions), and
       * sets up change handling to the sponsor address.
       *
-      * After calling this method, you should call [[build]] to finalize the transaction.
+      * This is the cross-platform method available on both JVM and JavaScript. On JVM, you can also
+      * use the blocking `complete()` method for simpler synchronous code.
       *
       * @param provider
-      *   the provider to query for UTXOs
+      *   the async provider to query for UTXOs
       * @param sponsor
       *   the address to use for input selection, collateral, and change
       * @return
-      *   a new TxBuilder with additional spend and collateral steps
-      * @throws RuntimeException
-      *   if insufficient UTXOs are available to cover the transaction requirements
-      */
-    def complete(provider: Provider, sponsor: Address): TxBuilder = {
-        import scala.concurrent.ExecutionContext.Implicits.global
-        Await.result(completeAsync(provider.toAsync, sponsor), Duration.Inf)
-    }
-
-    /** Asynchronously completes the transaction by selecting UTXOs, adding collateral, and
-      * balancing.
-      *
-      * This is the async version of [[complete]]. Use this when working with async providers or
-      * when you need non-blocking behavior.
+      *   a Future containing a new TxBuilder with the transaction completed
       */
     def completeAsync(provider: AsyncProvider, sponsor: Address)(using
         ExecutionContext
@@ -872,9 +876,11 @@ case class TxBuilder(
             .build(env.network, steps) match {
             case Right(ctx) => ctx.ensureMinAdaAll(env.protocolParams)
             case Left(error) =>
-                throw TxBuilderException.ContextInitializationException(
-                  "initial context build failed",
-                  Some(error)
+                return Future.failed(
+                  TxBuilderException.ContextInitializationException(
+                    "initial context build failed",
+                    Some(error)
+                  )
                 )
         }
 
@@ -893,111 +899,22 @@ case class TxBuilder(
         val allExpectedSigners = initialContext.expectedSigners ++ sponsorExpectedSigner.toSet
         val expectedSignerCount = allExpectedSigners.size
 
-        // The entire diff handler is launched in a loop, and every return Right() is just an end of an iteration,
-        // not necessarily the end of the algorithm.
-        def handleDiffByQueryingMore(
+        // The async diff handler is called in a loop by balanceFeeAndChangeWithTokensAsync.
+        // Every Right() return is just an end of an iteration, not necessarily the end of the algorithm.
+        def handleDiffByQueryingMoreAsync(
             diff: Value,
             tx: Transaction
-        ): Either[TxBalancingError, Transaction] = {
+        ): Future[Either[TxBalancingError, Transaction]] = {
             // First, ensure collateral is balanced (happens every iteration since fee changes)
-            val collateralResult = Await.result(
-              asyncEnsureCollateralBalanced(
-                tx,
-                provider,
-                sponsor,
-                selectedUtxos
-              ),
-              Duration.Inf
-            )
-
-            collateralResult match {
+            asyncEnsureCollateralBalanced(tx, provider, sponsor, selectedUtxos).flatMap {
                 case Right(balancedTx) if balancedTx != tx =>
                     // Collateral was adjusted, iterate further
-                    return Right(balancedTx)
+                    Future.successful(Right(balancedTx))
                 case Left(error) =>
-                    return Left(error)
-                case Right(_) => // Collateral is balanced, continue with value diff handling
-            }
-
-            // Collateral balanced -- now we can compute and process the Value diff
-            val Value(adaDiff, tokenDiff) = diff
-            (adaDiff, tokenDiff) match {
-                // We don't have enough ADA
-                case (NegativeAda(_), _) =>
-                    // We don't have enough ADA, but we may have added a change output on past iterations.
-                    // If so, try to take ADA from it to achieve balance.
-                    val changeIndex = Change.findChangeOutput(tx, sponsor)
-                    if changeIndex >= 0 then {
-                        Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
-                            case Right(updatedTx) =>
-                                // Successfully took from change
-                                Right(updatedTx)
-                            case Left(_) =>
-                                // Can't take from change (would go below minAda), need to query for more UTXOs
-                                Right(
-                                  selectAndAddInputs(
-                                    tx,
-                                    diff,
-                                    provider,
-                                    sponsor,
-                                    selectedUtxos,
-                                    initialContext.redeemers
-                                  )
-                                )
-                        }
-                    } else {
-                        // There's no change output, the only way to get more ADA is to query the provider.
-                        Right(
-                          selectAndAddInputs(
-                            tx,
-                            diff,
-                            provider,
-                            sponsor,
-                            selectedUtxos,
-                            initialContext.redeemers
-                          )
-                        )
-                    }
-
-                case (ZeroAda(), ZeroTokens()) =>
-                    // Balanced perfectly, we're done
-                    Right(tx)
-
-                case (ZeroAda(), MissingTokens()) =>
-                    // We are missing tokens -- need to query more
-                    Right(
-                      selectAndAddInputs(
-                        tx,
-                        diff,
-                        provider,
-                        sponsor,
-                        selectedUtxos,
-                        initialContext.redeemers
-                      )
-                    )
-
-                case (ZeroAda(), _) =>
-                    // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
-
-                case (PositiveAda(_), MissingTokens()) =>
-                    // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
-                    // on further iterations
-                    Right(
-                      selectAndAddInputs(
-                        tx,
-                        diff,
-                        provider,
-                        sponsor,
-                        selectedUtxos,
-                        initialContext.redeemers
-                      )
-                    )
-
-                case (PositiveAda(_), _) =>
-                    // We either have more tokens than necessary, or exactly the right amount of tokens.
-                    // In any case -- send the ADA and potentially some tokens back as change.
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
+                    Future.successful(Left(error))
+                case Right(_) =>
+                    // Collateral is balanced, continue with value diff handling
+                    handleValueDiff(diff, tx, provider, sponsor, selectedUtxos, initialContext)
             }
         }
 
@@ -1007,22 +924,22 @@ case class TxBuilder(
           expectedSignerCount,
           addAttachmentsToContext(initialContext).transaction
         )
-        val balancedTx = balanceFeeAndChangeWithTokens(
-          txWithDummySigs,
-          handleDiffByQueryingMore,
-          env.protocolParams,
-          selectedUtxos.utxos,
-          evaluator
-        )
 
-        Future.fromTry(Try {
-            balancedTx match {
+        TxBuilder
+            .balanceFeeAndChangeWithTokensAsync(
+              txWithDummySigs,
+              handleDiffByQueryingMoreAsync,
+              env.protocolParams,
+              selectedUtxos.utxos,
+              evaluator
+            )
+            .map {
                 case Right(tx) =>
                     // Remove dummy signatures before returning
                     val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
 
                     // Recompute delayed redeemers with the final balanced transaction
-                    // This is needed because complete() may have added inputs, changing the tx structure
+                    // This is needed because completeAsync() may have added inputs, changing the tx structure
                     val finalTx =
                         if initialContext.delayedRedeemerSpecs.nonEmpty then {
                             TransactionBuilder
@@ -1068,31 +985,112 @@ case class TxBuilder(
                 case Left(error) =>
                     throw TxBuilderException.BalancingException(error, initialContext)
             }
-        })
+    }
+
+    /** Handles the value diff by querying for more UTXOs or handling change. Returns a Future with
+      * the modified transaction.
+      */
+    private def handleValueDiff(
+        diff: Value,
+        tx: Transaction,
+        provider: AsyncProvider,
+        sponsor: Address,
+        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
+        initialContext: TransactionBuilder.Context
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
+        val Value(adaDiff, tokenDiff) = diff
+        (adaDiff, tokenDiff) match {
+            // We don't have enough ADA
+            case (NegativeAda(_), _) =>
+                // We don't have enough ADA, but we may have added a change output on past iterations.
+                // If so, try to take ADA from it to achieve balance.
+                val changeIndex = Change.findChangeOutput(tx, sponsor)
+                if changeIndex >= 0 then {
+                    Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
+                        case Right(updatedTx) =>
+                            // Successfully took from change
+                            Future.successful(Right(updatedTx))
+                        case Left(_) =>
+                            // Can't take from change (would go below minAda), need to query for more UTXOs
+                            selectAndAddInputsAsync(
+                              tx,
+                              diff,
+                              provider,
+                              sponsor,
+                              selectedUtxos,
+                              initialContext.redeemers
+                            ).map(Right(_))
+                    }
+                } else {
+                    // There's no change output, the only way to get more ADA is to query the provider.
+                    selectAndAddInputsAsync(
+                      tx,
+                      diff,
+                      provider,
+                      sponsor,
+                      selectedUtxos,
+                      initialContext.redeemers
+                    ).map(Right(_))
+                }
+
+            case (ZeroAda(), ZeroTokens()) =>
+                // Balanced perfectly, we're done
+                Future.successful(Right(tx))
+
+            case (ZeroAda(), MissingTokens()) =>
+                // We are missing tokens -- need to query more
+                selectAndAddInputsAsync(
+                  tx,
+                  diff,
+                  provider,
+                  sponsor,
+                  selectedUtxos,
+                  initialContext.redeemers
+                ).map(Right(_))
+
+            case (ZeroAda(), _) =>
+                // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
+                Future.successful(Change.handleChange(diff, tx, sponsor, env.protocolParams))
+
+            case (PositiveAda(_), MissingTokens()) =>
+                // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
+                // on further iterations
+                selectAndAddInputsAsync(
+                  tx,
+                  diff,
+                  provider,
+                  sponsor,
+                  selectedUtxos,
+                  initialContext.redeemers
+                ).map(Right(_))
+
+            case (PositiveAda(_), _) =>
+                // We either have more tokens than necessary, or exactly the right amount of tokens.
+                // In any case -- send the ADA and potentially some tokens back as change.
+                Future.successful(Change.handleChange(diff, tx, sponsor, env.protocolParams))
+        }
     }
 
     /** Selects additional UTXOs for the given diff, adds them to selectedUtxos, and re-attaches
-      * redeemers.
+      * redeemers. This is the async version that returns a Future.
       */
-    private def selectAndAddInputs(
+    private def selectAndAddInputsAsync(
         tx: Transaction,
         diff: Value,
         provider: AsyncProvider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
         redeemers: Seq[DetachedRedeemer]
-    )(using ExecutionContext): Transaction = {
-        val additionalUtxos = Await.result(
-          asyncSelectAdditionalUtxos(
-            provider,
-            sponsor,
-            diff,
-            excludeInputs = selectedUtxos.inputSet
-          ),
-          Duration.Inf
-        )
-        selectedUtxos.addAll(additionalUtxos)
-        addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers)
+    )(using ExecutionContext): Future[Transaction] = {
+        asyncSelectAdditionalUtxos(
+          provider,
+          sponsor,
+          diff,
+          excludeInputs = selectedUtxos.inputSet
+        ).map { additionalUtxos =>
+            selectedUtxos.addAll(additionalUtxos)
+            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers)
+        }
     }
 
     private def asyncEnsureCollateralBalanced(
@@ -1476,6 +1474,61 @@ case class TxBuilder(
 
 /** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
+
+    // -------------------------------------------------------------------------
+    // Private async balancing helpers
+    // -------------------------------------------------------------------------
+
+    /** Async version of balanceFeeAndChangeWithTokens that uses an async diff handler.
+      *
+      * This is used by `completeAsync` to balance transactions without blocking. The diff handler
+      * is called asynchronously to handle value differences (add inputs, set change, etc.).
+      */
+    private[txbuilder] def balanceFeeAndChangeWithTokensAsync(
+        initial: Transaction,
+        diffHandler: AsyncDiffHandler,
+        protocolParams: ProtocolParams,
+        resolvedUtxo: => Utxos,
+        evaluator: PlutusScriptEvaluator
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
+        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
+            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
+
+            val eTrialTxSync = for {
+                txWithExUnits <- TransactionBuilder.computeScriptsWitness(
+                  resolvedUtxo,
+                  evaluator,
+                  protocolParams
+                )(tx)
+                minFee <- MinTransactionFee
+                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
+                    .left
+                    .map(TxBalancingError.Failed(_))
+                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
+                txWithFees = TransactionBuilder.setFee(fee)(txWithExUnits)
+                diff = TransactionBuilder.calculateChangeValue(
+                  txWithFees,
+                  resolvedUtxo,
+                  protocolParams
+                )
+            } yield (diff, txWithFees)
+
+            eTrialTxSync match {
+                case Left(e) => Future.successful(Left(e))
+                case Right((diff, txWithFees)) =>
+                    diffHandler(diff, txWithFees).flatMap {
+                        case Left(e)                         => Future.successful(Left(e))
+                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
+                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
+                    }
+            }
+        }
+        loop(initial, 1)
+    }
+
+    // -------------------------------------------------------------------------
+    // Factory methods
+    // -------------------------------------------------------------------------
 
     /** Creates a TxBuilder with a custom Plutus script evaluator.
       *

@@ -3,9 +3,11 @@ package scalus.examples.htlc
 import scalus.cardano.address.Address
 import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
-import scalus.cardano.node.Provider
+import scalus.cardano.node.AsyncProvider
 import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
+
+import scala.concurrent.{ExecutionContext, Future}
 
 case class HtlcTransactionCreator(
     env: CardanoInfo,
@@ -35,26 +37,25 @@ case class HtlcTransactionCreator(
             .transaction
     }
 
-    /** A version of [[lock]] that uses [[TxBuilder.complete]] for simplicity of assembly.
+    /** Async version of lock that uses [[TxBuilder.completeAsync]] for cross-platform support.
       *
-      * Returns the change to the sponsor.
+      * This method works on both JVM and JavaScript platforms. Returns the change to the sponsor.
       */
-    def lock(
+    def lockAsync(
         value: Value,
         sponsor: Address,
         committer: AddrKeyHash,
         receiver: AddrKeyHash,
         image: Image,
         timeout: Long,
-        provider: Provider
-    ) = {
+        provider: AsyncProvider
+    )(using ExecutionContext): Future[Transaction] = {
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 
         TxBuilder(env)
             .payTo(scriptAddress, value, datum)
-            .complete(provider, sponsor)
-            .sign(signer)
-            .transaction
+            .completeAsync(provider, sponsor)
+            .map(_.sign(signer).transaction)
     }
 
     def reveal(
