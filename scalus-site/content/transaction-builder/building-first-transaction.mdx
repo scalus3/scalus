@@ -160,20 +160,48 @@ The `complete()` method:
 - Creates change outputs to return excess value
 - Balances the transaction (no need to call `.build()` afterward)
 
-## Async Completion
+## Cross-Platform Async Completion
 
-For non-blocking workflows, use `completeAsync()` which returns a `Future[TxBuilder]`:
+The `complete()` method returns a `Future[TxBuilder]` and works on both JVM and JavaScript platforms:
 
 ```scala copy
 import scala.concurrent.ExecutionContext.Implicits.global
 
 val futureTransaction: Future[Transaction] = TxBuilder(env)
   .payTo(recipientAddress, Value.ada(10))
-  .completeAsync(asyncProvider, sponsorAddress)
+  .complete(asyncProvider, sponsorAddress)
   .map(_.sign(signer).transaction)
 ```
 
-This is useful when working with async providers or when you need to avoid blocking the main thread.
+This is the recommended approach for cross-platform code and async workflows.
+
+### JVM-Only Blocking Completion
+
+On the JVM, there's a blocking overload that takes a `Provider` directly and returns `TxBuilder` synchronously:
+
+```scala copy
+import scala.concurrent.duration.*
+
+val transaction = TxBuilder(env)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(provider, sponsorAddress, timeout = 30.seconds)  // Blocking (JVM only)
+  .sign(signer)
+  .transaction
+```
+
+You can also use `Await.result` to block on the async version:
+
+```scala copy
+import scala.concurrent.Await
+import scala.concurrent.duration.*
+
+val transaction = Await.result(
+  TxBuilder(env)
+    .payTo(recipientAddress, Value.ada(10))
+    .complete(asyncProvider, sponsorAddress),
+  30.seconds
+).sign(signer).transaction
+```
 
 ## Next Steps
 
