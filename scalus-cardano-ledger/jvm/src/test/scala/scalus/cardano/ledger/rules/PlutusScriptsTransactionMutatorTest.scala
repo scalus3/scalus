@@ -7,9 +7,11 @@ import scalus.builtin.Data
 import scalus.cardano.address.*
 import scalus.cardano.address.Network.Testnet
 
+import scala.collection.immutable.SortedMap
+
 class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("PlutusScriptsTransactionMutator success with isValid = true and valid scripts") {
-        val script = validScript
+        val script = validPlutusV3Script
 
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
@@ -87,7 +89,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     }
 
     test("PlutusScriptsTransactionMutator success with isValid = false and invalid scripts") {
-        val script = invalidScript
+        val script = invalidPlutusV3Script
 
         val input = arbitrary[TransactionInput].sample.get
         val collateralInput = arbitrary[TransactionInput].sample.get
@@ -193,7 +195,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     }
 
     test("PlutusScriptsTransactionMutator failure with isValid = false and valid scripts") {
-        val script = validScript
+        val script = validPlutusV3Script
 
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
@@ -242,7 +244,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     }
 
     test("PlutusScriptsTransactionMutator failure with isValid = true and invalid scripts") {
-        val script = invalidScript
+        val script = invalidPlutusV3Script
 
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
@@ -290,13 +292,449 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         assert(result.isLeft, result)
     }
 
-    private def validScript = {
+    // ============ Conway Features Guard Tests for Plutus V1 ============
+
+    test("PlutusV1 rejects transaction with voting procedures") {
+        val script = validPlutusV1Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            votingProcedures = Some(
+              VotingProcedures(
+                arbitrary[SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]].sample.get
+              )
+            )
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    test("PlutusV1 rejects transaction with proposal procedures") {
+        val script = validPlutusV1Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            proposalProcedures = TaggedOrderedSet(arbitrary[ProposalProcedure].sample.get)
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    test("PlutusV1 rejects transaction with non-zero donation") {
+        val script = validPlutusV1Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            donation = Some(Coin(500000)),
+            currentTreasuryValue = Some(Coin.zero)
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    test("PlutusV1 rejects transaction with current treasury value") {
+        val script = validPlutusV1Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            donation = Some(Coin.zero),
+            currentTreasuryValue = Some(Coin(1000000000))
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    // ============ Conway Features Guard Tests for Plutus V2 ============
+
+    test("PlutusV2 rejects transaction with voting procedures") {
+        val script = validPlutusV2Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            votingProcedures = Some(
+              VotingProcedures(
+                arbitrary[SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]].sample.get
+              )
+            )
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    test("PlutusV2 rejects transaction with proposal procedures") {
+        val script = validPlutusV2Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            proposalProcedures = TaggedOrderedSet(arbitrary[ProposalProcedure].sample.get)
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    test("PlutusV2 rejects transaction with non-zero donation") {
+        val script = validPlutusV2Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            donation = Some(Coin(500000)),
+            currentTreasuryValue = Some(Coin.zero)
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    test("PlutusV2 rejects transaction with current treasury value") {
+        val script = validPlutusV2Script
+
+        val input = arbitrary[TransactionInput].sample.get
+        val datum = arbitrary[Data].sample.get
+
+        val output = TransactionOutput(
+          address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+          value = Value.lovelace(100000),
+        )
+
+        val tx = Transaction(
+          body = TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            donation = Some(Coin.zero),
+            currentTreasuryValue = Some(Coin(1000000000))
+          ),
+          witnessSet = TransactionWitnessSet(
+            scripts = Seq(script),
+            redeemers = Some(
+              Redeemers.Array(
+                IndexedSeq(
+                  Redeemer(
+                    tag = RedeemerTag.Spend,
+                    index = 0,
+                    data = scalus.builtin.Data.unit,
+                    exUnits = ExUnits(100000000, 100000000)
+                  )
+                )
+              )
+            ),
+            vkeyWitnesses = Set.empty,
+            plutusData = Seq(datum)
+          )
+        )
+
+        val state = State(
+          utxos = Map(
+            input -> TransactionOutput(
+              address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
+              value = Value.zero,
+              datumHash = DataHash.fromByteString(datum.dataHash)
+            )
+          )
+        )
+
+        val result = PlutusScriptsTransactionMutator.transit(Context(), state, tx)
+        assert(result.isLeft)
+    }
+
+    private def validPlutusV1Script = {
+        import scalus.*
+        val program = scalus.Compiler.compile((data: Data) => ()).toUplc(true).plutusV1
+        Script.PlutusV1(program.cborByteString)
+    }
+
+    private def validPlutusV2Script = {
+        import scalus.*
+        val program = scalus.Compiler.compile((data: Data) => ()).toUplc(true).plutusV2
+        Script.PlutusV2(program.cborByteString)
+    }
+
+    private def validPlutusV3Script = {
         import scalus.*
         val program = scalus.Compiler.compile((data: Data) => ()).toUplc(true).plutusV3
         Script.PlutusV3(program.cborByteString)
     }
 
-    private def invalidScript = {
+    private def invalidPlutusV3Script = {
         import scalus.*
         val program =
             scalus.Compiler.compile((data: Data) => scalus.prelude.fail()).toUplc(true).plutusV3
