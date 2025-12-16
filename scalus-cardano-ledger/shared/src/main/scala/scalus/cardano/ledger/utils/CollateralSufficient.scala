@@ -29,8 +29,6 @@ object CollateralSufficient {
     /** Calculates the required collateral amount based on the transaction fee and collateral
       * percentage from protocol parameters.
       *
-      * The required collateral is calculated as: (fee * collateralPercentage) / 100
-      *
       * @param fee
       *   the transaction fee
       * @param collateralPercentage
