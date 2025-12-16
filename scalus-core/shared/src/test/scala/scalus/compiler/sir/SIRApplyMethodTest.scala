@@ -145,7 +145,7 @@ class SIRApplyMethodTest extends AnyFunSuite:
 
     test("apply preserves annotations from function term") {
         val customAnns = AnnotationsDecl(
-          pos = SIRPosition("test.scala", 10, 5, 10, 15),
+          pos = SIRPosition("test.scala", 10, 5, 10, 15, Nil),
           comment = Some("test annotation")
         )
 

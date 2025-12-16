@@ -1,5 +1,7 @@
 package scalus.builtin
 
+import scalus.crypto.ed25519.{NativeEd25519Signer, SigningKey}
+
 import java.nio.file.{Files, Paths}
 import scala.scalanative.unsafe.*
 import scala.scalanative.unsigned.*
@@ -302,7 +304,10 @@ trait NativePlatformSpecific extends PlatformSpecific {
         require(sig.size == 64, s"Invalid signature length ${sig.size}")
         Sodium.verifyEd25519Signature(pk.bytes, msg.bytes, sig.bytes)
 
-    override def signEd25519(privateKey: ByteString, msg: ByteString): ByteString = ???
+    override def signEd25519(privateKey: ByteString, msg: ByteString): ByteString =
+        require(privateKey.size == 32, s"Invalid private key length ${privateKey.size}")
+        val signingKey = SigningKey.unsafeFromByteString(privateKey)
+        NativeEd25519Signer.sign(signingKey, msg)
 
     override def verifyEcdsaSecp256k1Signature(
         pk: ByteString,

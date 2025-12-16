@@ -25,8 +25,8 @@ import scala.collection.mutable
 abstract class BaseSimpleLowering(
     sir: SIR,
     generateErrorTraces: Boolean = false,
-    targetLanguage: Language = Language.PlutusV3
-):
+    protected val targetLanguage: Language = Language.PlutusV3
+) extends DataLowering:
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
 

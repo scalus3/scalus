@@ -12,9 +12,11 @@ import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
 import scalus.prelude.List as PList
+import scalus.utils.await
 import scalus.{plutusV3, toUplc, Compiler}
 
 import java.time.Instant
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.immutable.SortedMap
 
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
@@ -98,6 +100,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.size == 1, "Transaction must have exactly 1 input")
@@ -117,6 +120,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val signedTx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .sign(aliceSigner)
             .transaction
 
@@ -137,13 +141,14 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val signedTx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(20))
             .complete(provider, Alice.address)
+            .await()
             .sign(aliceSigner)
             .transaction
 
         assert(signedTx.witnessSet.vkeyWitnesses.toSeq.nonEmpty, "Should have vkey witnesses")
 
         val aliceInputs = signedTx.body.value.inputs.toSeq.filter { i =>
-            provider.findUtxo(i).toOption.exists(_.output.address == Alice.address)
+            provider.findUtxo(i).await().toOption.exists(_.output.address == Alice.address)
         }
         assert(aliceInputs.nonEmpty, "Should have inputs from Alice that were added by complete")
     }
@@ -163,6 +168,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(co2 -> 100L), Coin.ada(5)))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val bobTokens = outputsOf(Bob, tx).head.value.value.assets.assets
@@ -193,6 +199,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, paymentValue)
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.size >= 2, "Should select at least 2 inputs")
@@ -217,6 +224,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(co2 -> 50L)))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.size == 2, "Should select both UTXOs")
@@ -252,6 +260,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
               Value.fromPolicy(policyId, Map(co2 -> 30L, h2so4 -> 100L), Coin.ada(5))
             )
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val bobAssets = outputsOf(Bob, tx).head.value.value.assets.assets.head._2
@@ -285,6 +294,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(Utxo(explicitUtxo))
             .payTo(Bob.address, explicitUtxo._2.value)
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val bobOutValue = outputsOf(Bob, tx).head.value
@@ -317,6 +327,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.collateralInputs.toSeq.nonEmpty, "Should have collateral inputs")
@@ -337,6 +348,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .mintAndAttach(emptyRedeemer, assets, alwaysOkScript)
             .payTo(Bob.address, Value.fromPolicy(policyId, assets, Coin.ada(5)))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.collateralInputs.toSeq.nonEmpty, "Should have collateral inputs")
@@ -354,6 +366,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.collateralInputs.toSeq.isEmpty, "Should not have collateral inputs")
@@ -375,6 +388,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(
@@ -401,6 +415,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.totalCollateral.isDefined, "Should have totalCollateral set")
@@ -429,13 +444,14 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val fee = tx.body.value.fee
         val minRequiredCollateral = (fee.value * testEnv.protocolParams.collateralPercentage) / 100
 
         val collateralValue = tx.body.value.collateralInputs.toSeq
-            .flatMap(i => provider.findUtxo(i).toOption.map(_.output.value.coin.value))
+            .flatMap(i => provider.findUtxo(i).await().toOption.map(_.output.value.coin.value))
             .sum
 
         assert(
@@ -459,6 +475,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.contains(sUtxo.input))
@@ -481,6 +498,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .mintAndAttach(emptyRedeemer, Map(token -> 100L), alwaysOkScript)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(token -> 100L), Coin.ada(5)))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.nonEmpty, "Should select inputs for fees")
@@ -506,6 +524,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(Utxo(explicitInput, adaOutput(Alice.address, 10)))
             .payTo(Bob.address, Value.ada(50))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.contains(explicitInput))
@@ -526,6 +545,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(Utxo(explicitUtxo))
             .payTo(Bob.address, explicitUtxo._2.value)
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.inputs.toSeq.contains(explicitUtxo._1))
@@ -551,6 +571,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(co2 -> 100L), Coin.ada(5)))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val bobTokens = outputsOf(Bob, tx).head.value.value.assets.assets
@@ -577,6 +598,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
                   Value.fromPolicy(policyId, Map(nonexistent -> 100L), Coin.ada(5))
                 )
                 .complete(provider, Alice.address)
+                .await()
         }
 
         assert(
@@ -604,6 +626,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(token -> 50L), Coin.ada(5)))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val bobPolicy1Tokens = outputsOf(Bob, tx).head.value.value.assets.assets
@@ -632,6 +655,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(98))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val aliceOutputs = outputsOf(Alice, tx)
@@ -650,6 +674,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val nonBobOutputs = tx.body.value.outputs.toSeq.filterNot(_.value.address == Bob.address)
@@ -674,6 +699,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .validTo(Instant.ofEpochSecond(2000))
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx.body.value.validityStartSlot.isDefined, "Should preserve validFrom")
@@ -693,6 +719,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             TxBuilder(testEnv)
                 .payTo(Bob.address, Value.ada(100))
                 .complete(provider, Alice.address)
+                .await()
         }
 
         assert(
@@ -708,6 +735,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             TxBuilder(testEnv)
                 .payTo(Bob.address, Value.ada(10))
                 .complete(provider, Alice.address)
+                .await()
         }
 
         assert(
@@ -725,6 +753,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             TxBuilder(testEnv)
                 .payTo(Bob.address, Value.ada(1000))
                 .complete(provider, Alice.address)
+                .await()
         }
 
         assert(
@@ -748,11 +777,13 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx1 = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         val tx2 = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         assert(tx1.body.value.inputs == tx2.body.value.inputs, "Inputs should be deterministic")
@@ -777,6 +808,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val completedBuilder = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
+            .await()
 
         val unsignedTx = completedBuilder.transaction
         val signedTx = completedBuilder.sign(aliceSigner).transaction
@@ -784,7 +816,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // Calculate the minimum fee required for the signed transaction
         // For simple pubkey transactions without reference scripts, pass the input UTXOs
         val resolvedUtxos: Utxos = signedTx.body.value.inputs.toSeq.flatMap { input =>
-            provider.findUtxo(input).toOption.map(u => input -> u.output)
+            provider.findUtxo(input).await().toOption.map(u => input -> u.output)
         }.toMap
         val signedTxMinFee = MinTransactionFee
             .computeMinFee(signedTx, resolvedUtxos, testEnv.protocolParams)
@@ -843,6 +875,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(scriptUtxo, redeemerBuilder) // Uses ScriptSource.PlutusScriptAttached
             .payTo(Bob.address, Value.ada(2)) // 2 ADA - leaves only 1 ADA for fees/change
             .complete(provider, Alice.address)
+            .await()
 
         val tx = completedBuilder.transaction
 
@@ -907,6 +940,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(2))
             .complete(provider, Alice.address)
+            .await()
             .transaction
 
         // Verify the script input's position changed (sponsor input added before it)

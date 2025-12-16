@@ -34,41 +34,46 @@ class ScottEncodingLowering(
         tp: SIRType,
         anns: AnnotationsDecl
     ): Term =
-        /* data List a = Nil | Cons a (List a)
-            Nil is represented as \Nil Cons -> force Nil
-            Cons is represented as (\head tail Nil Cons -> Cons head tail) h tl
-         */
-        val constrs = data.constructors.map(_.name)
-        val ctorParams = data.constructors.find(_.name == name) match
-            case None =>
-                throw new IllegalArgumentException(s"Constructor $name not found in $data")
-            case Some(value) => value.params
+        // Check if this is a Data type constructor
+        if isDataConstructor(name) then lowerDataConstr(name, args, anns)
+        else
+            /* data List a = Nil | Cons a (List a)
+                Nil is represented as \Nil Cons -> force Nil
+                Cons is represented as (\head tail Nil Cons -> Cons head tail) h tl
+             */
+            val constrs = data.constructors.map(_.name)
+            val ctorParams = data.constructors.find(_.name == name) match
+                case None =>
+                    throw new IllegalArgumentException(s"Constructor $name not found in $data")
+                case Some(value) => value.params
 
-        // force Nil | Cons head tail
-        val appInner = ctorParams match
-            case Nil => Term.Force(Term.Var(NamedDeBruijn(name)))
-            case _ =>
-                ctorParams.foldLeft(Term.Var(NamedDeBruijn(name)))((acc, param) =>
-                    acc $ Term.Var(NamedDeBruijn(param.name))
-                )
-        // \Nil Cons -> ...
-        val ctor = constrs.foldRight(appInner) { (constr, acc) =>
-            Term.LamAbs(constr, acc)
-        }
-        // \head tail Nil Cons -> ...
-        val ctorParamsLambda = ctorParams.foldRight(ctor) { (param, acc) =>
-            Term.LamAbs(param.name, acc)
-        }
-        // (\Nil Cons -> force Nil) | (\head tail Nil Cons -> ...) h tl
-        args.foldLeft(ctorParamsLambda) { (acc, arg) =>
-            Term.Apply(acc, lowerInner(arg))
-        }
+            // force Nil | Cons head tail
+            val appInner = ctorParams match
+                case Nil => Term.Force(Term.Var(NamedDeBruijn(name)))
+                case _ =>
+                    ctorParams.foldLeft(Term.Var(NamedDeBruijn(name)))((acc, param) =>
+                        acc $ Term.Var(NamedDeBruijn(param.name))
+                    )
+            // \Nil Cons -> ...
+            val ctor = constrs.foldRight(appInner) { (constr, acc) =>
+                Term.LamAbs(constr, acc)
+            }
+            // \head tail Nil Cons -> ...
+            val ctorParamsLambda = ctorParams.foldRight(ctor) { (param, acc) =>
+                Term.LamAbs(param.name, acc)
+            }
+            // (\Nil Cons -> force Nil) | (\head tail Nil Cons -> ...) h tl
+            args.foldLeft(ctorParamsLambda) { (acc, arg) =>
+                Term.Apply(acc, lowerInner(arg))
+            }
 
     override protected def lowerMatch(matchExpr: SIR.Match): Term =
         val scrutinee = matchExpr.scrutinee
 
         // Check if this is a primitive type match
         if isPrimitiveType(scrutinee.tp) then lowerPrimitiveMatch(matchExpr)
+        // Check if this is a Data type match
+        else if isDataType(scrutinee.tp) then lowerDataMatch(matchExpr)
         else {
             /* list match
                 case Nil -> 1
@@ -111,16 +116,19 @@ class ScottEncodingLowering(
         tp: SIRType,
         anns: AnnotationsDecl
     ): Term =
-        val constrDecl = findConstructorDecl(scrutinee.tp, anns)
-        val fieldIndex = constrDecl.params.indexWhere(_.name == field)
-        if fieldIndex == -1 then
-            val pos = anns.pos
-            throw new IllegalArgumentException(
-              s"Field $field not found in constructor ${constrDecl} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
-            )
-        val instance = lowerInner(scrutinee)
-        val s0 = Term.Var(NamedDeBruijn(field))
-        val lam = constrDecl.params.foldRight(s0) { case (f, acc) =>
-            Term.LamAbs(f.name, acc)
-        }
-        Term.Apply(instance, lam)
+        // Check if this is a Data variant type
+        if isDataVariantType(scrutinee.tp) then lowerDataSelect(scrutinee, field, tp, anns)
+        else
+            val constrDecl = findConstructorDecl(scrutinee.tp, anns)
+            val fieldIndex = constrDecl.params.indexWhere(_.name == field)
+            if fieldIndex == -1 then
+                val pos = anns.pos
+                throw new IllegalArgumentException(
+                  s"Field $field not found in constructor ${constrDecl} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                )
+            val instance = lowerInner(scrutinee)
+            val s0 = Term.Var(NamedDeBruijn(field))
+            val lam = constrDecl.params.foldRight(s0) { case (f, acc) =>
+                Term.LamAbs(f.name, acc)
+            }
+            Term.Apply(instance, lam)

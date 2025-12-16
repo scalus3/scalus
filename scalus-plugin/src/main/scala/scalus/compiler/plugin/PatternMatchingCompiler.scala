@@ -615,6 +615,10 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
 
     private val trueConst = SIR.Const.bool(true, AnnotationsDecl.empty)
 
+    // Helper to create annotations with inline stack from context
+    private def mkAnns(pos: SrcPos, ctx: PatternMatchingContext): AnnotationsDecl =
+        compiler.mkAnns(pos, ctx.env)
+
     def compileMatch(
         tree: Match,
         env: SIRCompiler.Env,
@@ -1992,9 +1996,10 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                           .bool(true, AnnotationsDecl.empty))
                     )
                 }
-                val scrutinee = SIR.Var(columnName, scrutineeTp, AnnotationsDecl.fromSrcPos(pos))
-                val matchAnns = AnnotationsDecl.fromSrcPos(
-                  pos
+                val scrutinee = SIR.Var(columnName, scrutineeTp, mkAnns(pos, ctx))
+                val matchAnns = mkAnns(
+                  pos,
+                  ctx
                 ) ++ (if ctx.isUnchecked then Map("unchecked" -> trueConst) else Map.empty)
                 SIR.Match(
                   scrutinee,
@@ -2019,16 +2024,36 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                         compileDecisions(ctx, entry.tree, parsedMatch, actions, guards, dcRefs)
                     SIR.Case(pattern, caseBody, AnnotationsDecl.fromSrcPos(entry.pos))
                 }.toList
-                val scrutinee = SIR.Var(columnName, scrutineeTp, AnnotationsDecl.fromSrcPos(pos))
-                val optDefaultCase = optNext map { nextTree =>
-                    val defaultBody =
-                        compileDecisions(ctx, nextTree, parsedMatch, actions, guards, dcRefs)
-                    SIR.Case(
-                      SIR.Pattern.Wildcard,
-                      defaultBody,
-                      AnnotationsDecl.fromSrcPos(pos) + ("sir.DefaultCase" -> SIR.Const
-                          .bool(true, AnnotationsDecl.empty))
-                    )
+                val scrutinee = SIR.Var(columnName, scrutineeTp, mkAnns(pos, ctx))
+                // Check if this is a product type (single constructor) that's already matched
+                // CaseClass is always a product type (single constructor)
+                // SumCaseClass with 1 constructor is also a product type
+                val isProductTypeFullyMatched = scrutineeTp match {
+                    case _: SIRType.CaseClass =>
+                        // CaseClass is always a single constructor, check if we have one entry
+                        constructorEntries.size == 1
+                    case _ =>
+                        SIRType.collectSumCaseClass(scrutineeTp) match {
+                            case Some((_, sumCaseClass)) =>
+                                sumCaseClass.decl.constructors.length == 1 && constructorEntries.size == 1
+                            case None => false
+                        }
+                }
+                val optDefaultCase = optNext.flatMap { nextTree =>
+                    // Skip default case for product types - the single constructor always matches
+                    if isProductTypeFullyMatched then None
+                    else {
+                        val defaultBody =
+                            compileDecisions(ctx, nextTree, parsedMatch, actions, guards, dcRefs)
+                        Some(
+                          SIR.Case(
+                            SIR.Pattern.Wildcard,
+                            defaultBody,
+                            mkAnns(pos, ctx) + ("sir.DefaultCase" -> SIR.Const
+                                .bool(true, AnnotationsDecl.empty))
+                          )
+                        )
+                    }
                 } orElse {
                     SIRType.collectSumCaseClass(scrutineeTp) match {
                         case Some((typeParams, sumCaseClass)) =>
@@ -2050,8 +2075,9 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                                       guards,
                                       dcRefs
                                     ),
-                                    AnnotationsDecl.fromSrcPos(
-                                      pos
+                                    mkAnns(
+                                      pos,
+                                      ctx
                                     ) + ("sir.DefaultCase" -> SIR.Const
                                         .bool(true, AnnotationsDecl.empty))
                                   )
@@ -2060,8 +2086,9 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                         case None => None
                     }
                 }
-                val matchAnns = AnnotationsDecl.fromSrcPos(
-                  pos
+                val matchAnns = mkAnns(
+                  pos,
+                  ctx
                 ) ++ (if ctx.isUnchecked then Map("unchecked" -> trueConst) else Map.empty)
                 SIR.Match(
                   scrutinee,

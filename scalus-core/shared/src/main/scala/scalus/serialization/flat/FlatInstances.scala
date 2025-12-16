@@ -148,12 +148,15 @@ object FlatInstances:
 
     object SIRPositionFlat extends Flat[SIRPosition]:
 
+        private lazy val listFlat: Flat[List[SIRPosition]] = summon[Flat[List[SIRPosition]]]
+
         override def bitSize(a: SIRPosition): Int = {
             summon[Flat[String]].bitSize(a.file) +
                 summon[Flat[Int]].bitSize(a.startLine) +
                 summon[Flat[Int]].bitSize(a.startColumn) +
                 summon[Flat[Int]].bitSize(a.endLine) +
-                summon[Flat[Int]].bitSize(a.endColumn)
+                summon[Flat[Int]].bitSize(a.endColumn) +
+                listFlat.bitSize(a.inlinedFrom)
         }
 
         override def encode(a: SIRPosition, encode: EncoderState): Unit = {
@@ -162,6 +165,7 @@ object FlatInstances:
             summon[Flat[Int]].encode(a.startColumn, encode)
             summon[Flat[Int]].encode(a.endLine, encode)
             summon[Flat[Int]].encode(a.endColumn, encode)
+            listFlat.encode(a.inlinedFrom, encode)
         }
 
         override def decode(decode: DecoderState): SIRPosition = {
@@ -170,7 +174,8 @@ object FlatInstances:
             val startColumn = summon[Flat[Int]].decode(decode)
             val endLine = summon[Flat[Int]].decode(decode)
             val endColumn = summon[Flat[Int]].decode(decode)
-            SIRPosition(fname, startLine, startColumn, endLine, endColumn)
+            val inlinedFrom = listFlat.decode(decode)
+            SIRPosition(fname, startLine, startColumn, endLine, endColumn, inlinedFrom)
         }
 
     end SIRPositionFlat

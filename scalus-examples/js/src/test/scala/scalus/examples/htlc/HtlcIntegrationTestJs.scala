@@ -1,9 +1,9 @@
-package scalus.testing.integration
+package scalus.examples.htlc
 
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.LucidEvolutionAccount
-import sttp.client3.*
+import scalus.cardano.wallet.LucidAccount
+import sttp.client4.*
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSGlobal
@@ -14,12 +14,12 @@ object Process extends js.Object {
     def env: js.Dictionary[String] = js.native
 }
 
-class HtlcIntegrationTestJs extends HtlcIntegrationTestBase(using FetchBackend()) {
+class HtlcIntegrationTestJs extends HtlcIntegrationTestBase(using DefaultFutureBackend()) {
     override protected def makeTransactionSigner(
         derivation: String,
         mnemonic: String
     ): TransactionSigner = {
-        val account = LucidEvolutionAccount(Network.Testnet, mnemonic, derivation)
+        val account = LucidAccount(Network.Testnet, mnemonic, derivation)
         new TransactionSigner(Set(account.paymentKeyPair))
     }
 

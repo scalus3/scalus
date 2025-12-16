@@ -8,16 +8,16 @@ import scala.util.boundary.break
 object AllNeededScriptHashes {
     def allNeededScriptHashes(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadInputsUTxOException, Set[ScriptHash]] = {
-        allNeededScriptHashesView(transaction, utxo).map(_.toSet)
+        allNeededScriptHashesView(transaction, utxos).map(_.toSet)
     }
 
     def allNeededScriptHashesView(
         transaction: Transaction,
-        utxo: Utxos
+        utxos: Utxos
     ): Either[TransactionException.BadInputsUTxOException, View[ScriptHash]] = {
-        for allNeededInputsScriptHashes <- allNeededInputsScriptHashes(transaction, utxo)
+        for allNeededInputsScriptHashes <- allNeededInputsScriptHashes(transaction, utxos)
         yield allNeededInputsScriptHashes.view ++
             allNeededMintScriptHashesView(transaction) ++
             allNeededVotingProceduresScriptHashesView(transaction) ++
@@ -28,9 +28,9 @@ object AllNeededScriptHashes {
 
     def allNeededInputsScriptHashes(
         transaction: Transaction,
-        utxo: Utxos,
+        utxos: Utxos,
     ): Either[TransactionException.BadInputsUTxOException, Set[ScriptHash]] = {
-        allNeededInputsScriptIndexHashesAndOutputs(transaction, utxo).map {
+        allNeededInputsScriptIndexHashesAndOutputs(transaction, utxos).map {
             indexedHashesAndOutputs =>
                 indexedHashesAndOutputs.map { case (_, scriptHash, _) => scriptHash }
         }
@@ -38,7 +38,7 @@ object AllNeededScriptHashes {
 
     def allNeededInputsScriptIndexHashesAndOutputs(
         transaction: Transaction,
-        utxo: Utxos,
+        utxos: Utxos,
     ): Either[TransactionException.BadInputsUTxOException, Set[
       (Int, ScriptHash, TransactionOutput)
     ]] = boundary {
@@ -47,7 +47,7 @@ object AllNeededScriptHashes {
 
         val result = for
             (input, index) <- inputs.zipWithIndex
-            output <- utxo.get(input) match
+            output <- utxos.get(input) match
                 case someOutput @ Some(_) => someOutput
                 // This check allows to be an order independent in the sequence of validation rules
                 case None =>
@@ -110,7 +110,6 @@ object AllNeededScriptHashes {
     def allNeededVotingProceduresScriptIndexHashesView(
         transaction: Transaction
     ): View[(Int, ScriptHash)] = {
-        // FIXME: consider using SortedMap
         val voters = transaction.body.value.votingProcedures
             .map(_.procedures)
             .getOrElse(Map.empty)
@@ -207,7 +206,6 @@ object AllNeededScriptHashes {
     def allNeededCertificatesScriptIndexHashesView(
         transaction: Transaction
     ): View[(Int, ScriptHash)] = {
-        // FIXME: should be sorted
         val certificates = transaction.body.value.certificates.toSeq.view
 
         for

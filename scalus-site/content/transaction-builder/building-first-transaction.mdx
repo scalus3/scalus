@@ -33,18 +33,40 @@ val preview = CardanoInfo(
 
 TxBuilder depends on the general Cardano Info to construct valid transactions.
 
+## Working with Addresses
+
+Scalus provides convenient string interpolators for parsing Cardano bech32 addresses:
+
+```scala copy
+import scalus.cardano.address.Address.{addr, stake}
+import scalus.cardano.address.StakeAddress
+
+// Parse any Cardano address (Shelley, Stake, or Byron)
+val recipient = addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgse35a3x"
+val testnet = addr"addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer3n0d3vllmyqwsx5wktcd8cc3sq835lu7drv2xwl2wywfgs3xyj0d"
+
+// Parse stake addresses specifically (returns StakeAddress type)
+val stakeAddr: StakeAddress = stake"stake1uyehkck0lajq8gr28t9uxnuvgcqrc6070x3k9r8048z8y5gh6ffgw"
+```
+
+These interpolators validate the address format at runtime and throw an exception for invalid addresses.
+
+<Callout type="info">
+    The `addr` interpolator returns `Address` (the base trait), while `stake` returns `StakeAddress` specifically. Use `stake` when you need the more specific type.
+</Callout>
+
 ## Build the Transaction
 
 Use TxBuilder's fluent API to specify inputs, outputs, and change handling:
 
 ```scala copy
-import scalus.cardano.address.Address
+import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.Value
 
 // Your UTxOs and addresses
 val myUtxo: Utxo = // ... UTxO to spend
-val recipientAddress: Address = // ... recipient's address
-val changeAddress: Address = // ... your change address
+val recipientAddress = addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+val changeAddress = addr"addr1qy..."
 
 val builder = TxBuilder(env)
   .spend(myUtxo)                          // Add input
@@ -160,20 +182,48 @@ The `complete()` method:
 - Creates change outputs to return excess value
 - Balances the transaction (no need to call `.build()` afterward)
 
-## Async Completion
+## Cross-Platform Async Completion
 
-For non-blocking workflows, use `completeAsync()` which returns a `Future[TxBuilder]`:
+The `complete()` method returns a `Future[TxBuilder]` and works on both JVM and JavaScript platforms:
 
 ```scala copy
 import scala.concurrent.ExecutionContext.Implicits.global
 
 val futureTransaction: Future[Transaction] = TxBuilder(env)
   .payTo(recipientAddress, Value.ada(10))
-  .completeAsync(asyncProvider, sponsorAddress)
+  .complete(asyncProvider, sponsorAddress)
   .map(_.sign(signer).transaction)
 ```
 
-This is useful when working with async providers or when you need to avoid blocking the main thread.
+This is the recommended approach for cross-platform code and async workflows.
+
+### JVM-Only Blocking Completion
+
+On the JVM, there's a blocking overload that takes a `Provider` directly and returns `TxBuilder` synchronously:
+
+```scala copy
+import scala.concurrent.duration.*
+
+val transaction = TxBuilder(env)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(provider, sponsorAddress, timeout = 30.seconds)  // Blocking (JVM only)
+  .sign(signer)
+  .transaction
+```
+
+You can also use the `await` extension to block on any `Future`:
+
+```scala copy
+import scalus.utils.await
+import scala.concurrent.duration.*
+
+val transaction = TxBuilder(env)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(asyncProvider, sponsorAddress)
+  .await(30.seconds)  // Block with timeout (JVM only)
+  .sign(signer)
+  .transaction
+```
 
 ## Next Steps
 

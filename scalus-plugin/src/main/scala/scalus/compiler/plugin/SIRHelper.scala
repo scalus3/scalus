@@ -124,7 +124,8 @@ extension (singleton: SIRPosition.type)
               pos.startPos.startLine,
               pos.startPos.startColumn,
               pos.endPos.endLine,
-              pos.endPos.endColumn
+              pos.endPos.endColumn,
+              Nil
             )
         else SIRPosition.empty
 
@@ -137,7 +138,8 @@ extension (singleton: SIRPosition.type)
               pos.startLine,
               pos.startColumn,
               pos.endLine,
-              pos.endColumn
+              pos.endColumn,
+              Nil
             )
         else SIRPosition.empty
 
@@ -183,13 +185,19 @@ extension (pos: SourcePosition)
 def createSIRPositionTree(pos: SIRPosition, span: Span)(using Context): Tree = {
     val posModule = Symbols.requiredModule("scalus.compiler.sir.SIRPosition")
     val posTree = ref(posModule).select(posModule.requiredMethod("apply"))
+
+    // Create the inlinedFrom list tree - for now always Nil since inline tracking
+    // happens during compilation, not in the generated runtime code
+    val inlinedFromListTree = ref(defn.NilModule).withSpan(span)
+
     posTree
         .appliedTo(
           Literal(Constant(pos.file)),
           Literal(Constant(pos.startLine)),
           Literal(Constant(pos.startColumn)),
           Literal(Constant(pos.endLine)),
-          Literal(Constant(pos.endColumn))
+          Literal(Constant(pos.endColumn)),
+          inlinedFromListTree
         )
         .withSpan(span)
 }

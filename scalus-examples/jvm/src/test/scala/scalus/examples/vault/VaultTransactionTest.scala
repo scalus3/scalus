@@ -11,6 +11,9 @@ import scalus.examples.vault.State
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
+import scalus.utils.await
+
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
@@ -77,7 +80,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
             val body = tx.body.value
             val allInputs =
                 (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
-            provider.findUtxos(allInputs).toOption.get
+            provider.findUtxos(allInputs).await().toOption.get
         }
 
         val scriptContext =
@@ -101,6 +104,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -108,7 +112,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val vaultUtxo = provider
             .findUtxo(
@@ -116,6 +120,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(lockTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -130,6 +135,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -142,7 +148,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(currentSlot)
 
-        assert(provider.submit(withdrawTx).isRight)
+        assert(provider.submit(withdrawTx).await().isRight)
 
         val newVaultUtxo = provider
             .findUtxo(
@@ -150,6 +156,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(withdrawTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -181,6 +188,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -188,7 +196,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val vaultUtxo = provider
             .findUtxo(
@@ -196,6 +204,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(lockTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -207,6 +216,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(depositAmount.coin + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -219,7 +229,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(result.budget.steps <= 197_512436L)
         assert(result.budget.memory <= 744520)
 
-        assert(provider.submit(depositTx).isRight)
+        assert(provider.submit(depositTx).await().isRight)
 
         val newVaultUtxo = provider
             .findUtxo(
@@ -227,6 +237,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(depositTx.id),
               minAmount = Some(defaultInitialAmount + depositAmount.coin)
             )
+            .await()
             .toOption
             .get
 
@@ -258,6 +269,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -265,7 +277,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val vaultUtxo = provider
             .findUtxo(
@@ -273,6 +285,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(lockTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -284,6 +297,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -306,6 +320,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -313,7 +328,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val vaultUtxo = provider
             .findUtxo(
@@ -321,6 +336,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(lockTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -333,6 +349,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -344,7 +361,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
 
         provider.setSlot(withdrawSlot)
-        assert(provider.submit(withdrawTx).isRight)
+        assert(provider.submit(withdrawTx).await().isRight)
 
         val pendingVaultUtxo = provider
             .findUtxo(
@@ -352,6 +369,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(withdrawTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -365,6 +383,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -383,7 +402,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
 
         provider.setSlot(finalizeSlot)
-        assert(provider.submit(finalizeTx).isRight)
+        assert(provider.submit(finalizeTx).await().isRight)
 
         val scriptOutputs = finalizeTx.body.value.outputs.filter(_.value.address.hasScript)
         assert(scriptOutputs.isEmpty, "Finalize should close vault (no script outputs)")
@@ -409,6 +428,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -416,7 +436,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
         }
 
-        assert(provider.submit(lockTx).isRight)
+        assert(provider.submit(lockTx).await().isRight)
 
         val vaultUtxo = provider
             .findUtxo(
@@ -424,6 +444,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(lockTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -436,6 +457,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 
@@ -447,7 +469,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
 
         provider.setSlot(withdrawSlot)
-        assert(provider.submit(withdrawTx).isRight)
+        assert(provider.submit(withdrawTx).await().isRight)
 
         val pendingVaultUtxo = provider
             .findUtxo(
@@ -455,6 +477,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               transactionId = Some(withdrawTx.id),
               minAmount = Some(defaultInitialAmount)
             )
+            .await()
             .toOption
             .get
 
@@ -468,6 +491,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                   address = ownerAddress,
                   minRequiredTotalAmount = Some(commissionAmount)
                 )
+                .await()
                 .toOption
                 .get
 

@@ -9,6 +9,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString.utf8
 import scalus.builtin.{platform, ByteString}
 import scalus.cardano.address.Address
+import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.{Context, State, ValueNotConservedUTxOValidator}
@@ -75,11 +76,11 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     }
 
     test("MinCoinSizedTransactionOutput should ceil the output up to an actual min coin value") {
-        val zeroOut = Babbage(address = addr, value = Value.zero)
+        val zeroOut = Babbage(address = testAddress, value = Value.zero)
         val zeroOutAfterMinCoin =
             MinCoinSizedTransactionOutput.ensureMinAda(Sized(zeroOut), protocolParams = params)
 
-        val minOut = Babbage(address = addr, value = Value(zeroOutAfterMinCoin))
+        val minOut = Babbage(address = testAddress, value = Value(zeroOutAfterMinCoin))
         val minOutValueCoin =
             MinCoinSizedTransactionOutput.ensureMinAda(Sized(minOut), protocolParams = params)
 
@@ -297,10 +298,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         })
     }
 
-    private val addr: Address =
-        Address.fromBech32(
-          "addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
-        )
+    private val testAddress: Address =
+        addr"addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
 
     private lazy val policyId: PolicyId = Hash(ByteString.fromString("a".repeat(28)))
 
@@ -311,7 +310,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val utxo = Map(
           input -> TransactionOutput(
-            address = addr,
+            address = testAddress,
             value = in,
             None
           )
@@ -322,7 +321,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
             outputs = Vector(
               Sized(
                 TransactionOutput(
-                  address = addr,
+                  address = testAddress,
                   value = output,
                   None
                 )

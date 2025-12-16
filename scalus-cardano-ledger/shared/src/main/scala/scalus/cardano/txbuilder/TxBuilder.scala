@@ -7,16 +7,14 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
-import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput}
-import scalus.cardano.node.{toAsync, AsyncProvider, Provider}
-import scalus.cardano.txbuilder.TransactionBuilder.{balanceFeeAndChangeWithTokens, modifyBody, ResolvedUtxos}
+import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee}
+import scalus.cardano.node.Provider
+import scalus.cardano.txbuilder.TransactionBuilder.{modifyBody, ResolvedUtxos}
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
 import scala.collection.mutable
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.Try
+import scala.concurrent.{ExecutionContext, Future}
 
 // -----------------------------------------------------------------------------
 // TxBuilderException Hierarchy
@@ -159,14 +157,33 @@ object TxBuilderException {
   * finalization including fee calculation and change handling.
   *
   * TxBuilder is purely functional; each method returns a new instance with the updated state. The
-  * only methods that do effects are `complete` and `completeAsync`, others are pure.
+  * `complete` method is the only one that performs effects (querying UTXOs from a provider).
+  *
+  * ==Platform Support==
+  *
+  * TxBuilder supports both JVM and JavaScript platforms:
+  *   - `complete(provider, sponsor)`: Returns `Future[TxBuilder]`. Available on all platforms.
+  *   - `complete(provider, sponsor, timeout)`: JVM-only blocking version with timeout parameter.
+  *
+  * On JVM, you can also use the `await` extension method on Future:
+  * {{{
+  * import scalus.cardano.txbuilder.await
+  * builder.complete(provider, sponsor).await()
+  * }}}
   *
   * ==Usage==
   * {{{
-  * val tx = TxBuilder(env)
-  *   .spend(utxo)
+  * // Cross-platform - async (returns Future)
+  * val txFuture = TxBuilder(env)
   *   .payTo(recipientAddress, Value.ada(10))
-  *   .build(changeTo = changeAddress)
+  *   .complete(provider, sponsorAddress)
+  *   .map(_.sign(signer).transaction)
+  *
+  * // JVM-only - blocking with timeout
+  * import scala.concurrent.duration.*
+  * val tx = TxBuilder(env)
+  *   .payTo(recipientAddress, Value.ada(10))
+  *   .complete(provider, sponsorAddress, 30.seconds)
   *   .sign(signer)
   *   .transaction
   * }}}
@@ -575,32 +592,29 @@ case class TxBuilder(
 
     /** Registers a stake key with the network.
       *
-      * Note that the deposit is still going to be deducted, and it's going to be calculated
-      * according to the protocol parameters from [[env]]/
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
       */
     def registerStake(stakeAddress: StakeAddress): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
-        // Use None for Shelley-era registration (deposit from protocol params)
         val cert = Certificate.RegCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers a stake key with an explicit deposit amount. */
-    def registerStake(stakeAddress: StakeAddress, deposit: Coin): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
-        val cert = Certificate.RegCert(credential, Some(deposit))
-        addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
-    }
-
-    /** Deregisters a stake key from the network. */
+    /** Deregisters a stake key from the network.
+      *
+      * The refund amount is taken from protocol parameters (stakeAddressDeposit).
+      */
     def deregisterStake(stakeAddress: StakeAddress): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
-        // Use None for Shelley-era deregistration
         val cert = Certificate.UnregCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Deregisters a stake key with an explicit deposit refund amount. */
+    /** Deregisters a stake key with an explicit refund amount.
+      *
+      * @param refund
+      *   the amount originally deposited during registration (must match ledger state)
+      */
     def deregisterStake(stakeAddress: StakeAddress, refund: Coin): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
         val cert = Certificate.UnregCert(credential, Some(refund))
@@ -614,13 +628,13 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers a stake key and delegates to a stake pool in a single transaction. */
-    def stakeAndDelegate(
-        stakeAddress: StakeAddress,
-        poolId: PoolKeyHash,
-        deposit: Coin
-    ): TxBuilder = {
+    /** Registers a stake key and delegates to a stake pool in a single transaction.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      */
+    def stakeAndDelegate(stakeAddress: StakeAddress, poolId: PoolKeyHash): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeRegDelegCert(credential, poolId, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -644,13 +658,13 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers stake address and delegates voting power to a DRep in one transaction. */
-    def registerAndDelegateVoteToDRep(
-        stakeAddress: StakeAddress,
-        drep: DRep,
-        deposit: Coin
-    ): TxBuilder = {
+    /** Registers stake address and delegates voting power to a DRep in one transaction.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      */
+    def registerAndDelegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.VoteRegDelegCert(credential, drep, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -666,31 +680,38 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers stake address and delegates to both stake pool and DRep in one transaction. */
+    /** Registers stake address and delegates to both stake pool and DRep in one transaction.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      */
     def registerAndDelegateToPoolAndDRep(
         stakeAddress: StakeAddress,
         poolId: PoolKeyHash,
-        drep: DRep,
-        deposit: Coin
+        drep: DRep
     ): TxBuilder = {
         val credential = stakeAddressToCredential(stakeAddress)
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeVoteRegDelegCert(credential, poolId, drep, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Registers as a DRep. */
-    def registerDRep(
-        drepCredential: Credential,
-        deposit: Coin,
-        anchor: Option[Anchor]
-    ): TxBuilder = {
+    /** Registers as a DRep.
+      *
+      * The deposit amount is taken from protocol parameters (dRepDeposit).
+      */
+    def registerDRep(drepCredential: Credential, anchor: Option[Anchor]): TxBuilder = {
+        val deposit = Coin(env.protocolParams.dRepDeposit)
         val cert = Certificate.RegDRepCert(drepCredential, deposit, anchor)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
-    /** Unregisters as a DRep. */
-    def unregisterDRep(drepCredential: Credential, deposit: Coin): TxBuilder = {
-        val cert = Certificate.UnregDRepCert(drepCredential, deposit)
+    /** Unregisters as a DRep.
+      *
+      * @param refund
+      *   the amount originally deposited during registration (must match ledger state)
+      */
+    def unregisterDRep(drepCredential: Credential, refund: Coin): TxBuilder = {
+        val cert = Certificate.UnregDRepCert(drepCredential, refund)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
@@ -832,35 +853,29 @@ case class TxBuilder(
       */
     def transaction: Transaction = context.transaction
 
-    /** Automatically completes the transaction by selecting UTXOs and collateral.
+    /** Completes the transaction by selecting UTXOs, adding collateral, and balancing.
       *
       * This method queries the provider for available UTXOs at the sponsor address, selects inputs
       * to cover all outputs and fees, selects collateral if needed (for script transactions), and
       * sets up change handling to the sponsor address.
       *
-      * After calling this method, you should call [[build]] to finalize the transaction.
+      * This is the primary cross-platform method available on both JVM and JavaScript platforms.
+      *
+      * On JVM, you can use the blocking overload with a `timeout` parameter, or use the `await`
+      * extension method:
+      * {{{
+      * import scalus.cardano.txbuilder.await
+      * builder.complete(provider, sponsor).await(30.seconds)
+      * }}}
       *
       * @param provider
-      *   the provider to query for UTXOs
+      *   the async provider to query for UTXOs
       * @param sponsor
       *   the address to use for input selection, collateral, and change
       * @return
-      *   a new TxBuilder with additional spend and collateral steps
-      * @throws RuntimeException
-      *   if insufficient UTXOs are available to cover the transaction requirements
+      *   a Future containing a new TxBuilder with the transaction completed
       */
-    def complete(provider: Provider, sponsor: Address): TxBuilder = {
-        import scala.concurrent.ExecutionContext.Implicits.global
-        Await.result(completeAsync(provider.toAsync, sponsor), Duration.Inf)
-    }
-
-    /** Asynchronously completes the transaction by selecting UTXOs, adding collateral, and
-      * balancing.
-      *
-      * This is the async version of [[complete]]. Use this when working with async providers or
-      * when you need non-blocking behavior.
-      */
-    def completeAsync(provider: AsyncProvider, sponsor: Address)(using
+    def complete(provider: Provider, sponsor: Address)(using
         ExecutionContext
     ): Future[TxBuilder] = {
         // Pre-build the context to get initial UTXOs
@@ -868,9 +883,11 @@ case class TxBuilder(
             .build(env.network, steps) match {
             case Right(ctx) => ctx.ensureMinAdaAll(env.protocolParams)
             case Left(error) =>
-                throw TxBuilderException.ContextInitializationException(
-                  "initial context build failed",
-                  Some(error)
+                return Future.failed(
+                  TxBuilderException.ContextInitializationException(
+                    "initial context build failed",
+                    Some(error)
+                  )
                 )
         }
 
@@ -889,111 +906,22 @@ case class TxBuilder(
         val allExpectedSigners = initialContext.expectedSigners ++ sponsorExpectedSigner.toSet
         val expectedSignerCount = allExpectedSigners.size
 
-        // The entire diff handler is launched in a loop, and every return Right() is just an end of an iteration,
-        // not necessarily the end of the algorithm.
+        // The async diff handler is called in a loop by balanceFeeAndChangeWithTokens.
+        // Every Right() return is just an end of an iteration, not necessarily the end of the algorithm.
         def handleDiffByQueryingMore(
             diff: Value,
             tx: Transaction
-        ): Either[TxBalancingError, Transaction] = {
+        ): Future[Either[TxBalancingError, Transaction]] = {
             // First, ensure collateral is balanced (happens every iteration since fee changes)
-            val collateralResult = Await.result(
-              asyncEnsureCollateralBalanced(
-                tx,
-                provider,
-                sponsor,
-                selectedUtxos
-              ),
-              Duration.Inf
-            )
-
-            collateralResult match {
+            ensureCollateralBalanced(tx, provider, sponsor, selectedUtxos).flatMap {
                 case Right(balancedTx) if balancedTx != tx =>
                     // Collateral was adjusted, iterate further
-                    return Right(balancedTx)
+                    Future.successful(Right(balancedTx))
                 case Left(error) =>
-                    return Left(error)
-                case Right(_) => // Collateral is balanced, continue with value diff handling
-            }
-
-            // Collateral balanced -- now we can compute and process the Value diff
-            val Value(adaDiff, tokenDiff) = diff
-            (adaDiff, tokenDiff) match {
-                // We don't have enough ADA
-                case (NegativeAda(_), _) =>
-                    // We don't have enough ADA, but we may have added a change output on past iterations.
-                    // If so, try to take ADA from it to achieve balance.
-                    val changeIndex = Change.findChangeOutput(tx, sponsor)
-                    if changeIndex >= 0 then {
-                        Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
-                            case Right(updatedTx) =>
-                                // Successfully took from change
-                                Right(updatedTx)
-                            case Left(_) =>
-                                // Can't take from change (would go below minAda), need to query for more UTXOs
-                                Right(
-                                  selectAndAddInputs(
-                                    tx,
-                                    diff,
-                                    provider,
-                                    sponsor,
-                                    selectedUtxos,
-                                    initialContext.redeemers
-                                  )
-                                )
-                        }
-                    } else {
-                        // There's no change output, the only way to get more ADA is to query the provider.
-                        Right(
-                          selectAndAddInputs(
-                            tx,
-                            diff,
-                            provider,
-                            sponsor,
-                            selectedUtxos,
-                            initialContext.redeemers
-                          )
-                        )
-                    }
-
-                case (ZeroAda(), ZeroTokens()) =>
-                    // Balanced perfectly, we're done
-                    Right(tx)
-
-                case (ZeroAda(), MissingTokens()) =>
-                    // We are missing tokens -- need to query more
-                    Right(
-                      selectAndAddInputs(
-                        tx,
-                        diff,
-                        provider,
-                        sponsor,
-                        selectedUtxos,
-                        initialContext.redeemers
-                      )
-                    )
-
-                case (ZeroAda(), _) =>
-                    // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
-
-                case (PositiveAda(_), MissingTokens()) =>
-                    // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
-                    // on further iterations
-                    Right(
-                      selectAndAddInputs(
-                        tx,
-                        diff,
-                        provider,
-                        sponsor,
-                        selectedUtxos,
-                        initialContext.redeemers
-                      )
-                    )
-
-                case (PositiveAda(_), _) =>
-                    // We either have more tokens than necessary, or exactly the right amount of tokens.
-                    // In any case -- send the ADA and potentially some tokens back as change.
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
+                    Future.successful(Left(error))
+                case Right(_) =>
+                    // Collateral is balanced, continue with value diff handling
+                    handleValueDiff(diff, tx, provider, sponsor, selectedUtxos, initialContext)
             }
         }
 
@@ -1003,16 +931,16 @@ case class TxBuilder(
           expectedSignerCount,
           addAttachmentsToContext(initialContext).transaction
         )
-        val balancedTx = balanceFeeAndChangeWithTokens(
-          txWithDummySigs,
-          handleDiffByQueryingMore,
-          env.protocolParams,
-          selectedUtxos.utxos,
-          evaluator
-        )
 
-        Future.fromTry(Try {
-            balancedTx match {
+        TxBuilder
+            .balanceFeeAndChangeWithTokens(
+              txWithDummySigs,
+              handleDiffByQueryingMore,
+              env.protocolParams,
+              selectedUtxos.utxos,
+              evaluator
+            )
+            .map {
                 case Right(tx) =>
                     // Remove dummy signatures before returning
                     val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
@@ -1064,36 +992,117 @@ case class TxBuilder(
                 case Left(error) =>
                     throw TxBuilderException.BalancingException(error, initialContext)
             }
-        })
+    }
+
+    /** Handles the value diff by querying for more UTXOs or handling change. Returns a Future with
+      * the modified transaction.
+      */
+    private def handleValueDiff(
+        diff: Value,
+        tx: Transaction,
+        provider: Provider,
+        sponsor: Address,
+        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
+        initialContext: TransactionBuilder.Context
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
+        val Value(adaDiff, tokenDiff) = diff
+        (adaDiff, tokenDiff) match {
+            // We don't have enough ADA
+            case (NegativeAda(_), _) =>
+                // We don't have enough ADA, but we may have added a change output on past iterations.
+                // If so, try to take ADA from it to achieve balance.
+                val changeIndex = Change.findChangeOutput(tx, sponsor)
+                if changeIndex >= 0 then {
+                    Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
+                        case Right(updatedTx) =>
+                            // Successfully took from change
+                            Future.successful(Right(updatedTx))
+                        case Left(_) =>
+                            // Can't take from change (would go below minAda), need to query for more UTXOs
+                            selectAndAddInputs(
+                              tx,
+                              diff,
+                              provider,
+                              sponsor,
+                              selectedUtxos,
+                              initialContext.redeemers
+                            ).map(Right(_))
+                    }
+                } else {
+                    // There's no change output, the only way to get more ADA is to query the provider.
+                    selectAndAddInputs(
+                      tx,
+                      diff,
+                      provider,
+                      sponsor,
+                      selectedUtxos,
+                      initialContext.redeemers
+                    ).map(Right(_))
+                }
+
+            case (ZeroAda(), ZeroTokens()) =>
+                // Balanced perfectly, we're done
+                Future.successful(Right(tx))
+
+            case (ZeroAda(), MissingTokens()) =>
+                // We are missing tokens -- need to query more
+                selectAndAddInputs(
+                  tx,
+                  diff,
+                  provider,
+                  sponsor,
+                  selectedUtxos,
+                  initialContext.redeemers
+                ).map(Right(_))
+
+            case (ZeroAda(), _) =>
+                // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
+                Future.successful(Change.handleChange(diff, tx, sponsor, env.protocolParams))
+
+            case (PositiveAda(_), MissingTokens()) =>
+                // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
+                // on further iterations
+                selectAndAddInputs(
+                  tx,
+                  diff,
+                  provider,
+                  sponsor,
+                  selectedUtxos,
+                  initialContext.redeemers
+                ).map(Right(_))
+
+            case (PositiveAda(_), _) =>
+                // We either have more tokens than necessary, or exactly the right amount of tokens.
+                // In any case -- send the ADA and potentially some tokens back as change.
+                Future.successful(Change.handleChange(diff, tx, sponsor, env.protocolParams))
+        }
     }
 
     /** Selects additional UTXOs for the given diff, adds them to selectedUtxos, and re-attaches
-      * redeemers.
+      * redeemers. This is the async version that returns a Future.
       */
     private def selectAndAddInputs(
         tx: Transaction,
         diff: Value,
-        provider: AsyncProvider,
+        provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
         redeemers: Seq[DetachedRedeemer]
-    )(using ExecutionContext): Transaction = {
-        val additionalUtxos = Await.result(
-          asyncSelectAdditionalUtxos(
-            provider,
-            sponsor,
-            diff,
-            excludeInputs = selectedUtxos.inputSet
-          ),
-          Duration.Inf
-        )
-        selectedUtxos.addAll(additionalUtxos)
-        addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers)
+    )(using ExecutionContext): Future[Transaction] = {
+        selectAdditionalUtxos(
+          provider,
+          sponsor,
+          diff,
+          excludeInputs = selectedUtxos.inputSet
+        ).map { additionalUtxos =>
+            selectedUtxos.addAll(additionalUtxos)
+            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers)
+        }
     }
 
-    private def asyncEnsureCollateralBalanced(
+    private def ensureCollateralBalanced(
         tx: Transaction,
-        provider: AsyncProvider,
+        provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
     )(using ExecutionContext): Future[Either[Nothing, Transaction]] = {
@@ -1129,7 +1138,7 @@ case class TxBuilder(
         if adaGap < minAda then {
             // Need more collateral to meet minAda requirement for return output
             val additionalNeeded = minAda - adaGap
-            asyncSelectCollateral(
+            selectCollateral(
               provider,
               sponsor,
               additionalNeeded,
@@ -1147,8 +1156,8 @@ case class TxBuilder(
         }
     }
 
-    private def asyncSelectAdditionalUtxos(
-        provider: AsyncProvider,
+    private def selectAdditionalUtxos(
+        provider: Provider,
         address: Address,
         gap: Value,
         excludeInputs: Set[TransactionInput]
@@ -1164,7 +1173,7 @@ case class TxBuilder(
                   })
               }
             )
-            asyncSelectUtxosWithTokens(
+            selectUtxosWithTokens(
               provider,
               address,
               requiredTokens,
@@ -1219,8 +1228,8 @@ case class TxBuilder(
         }
     }
 
-    private def asyncSelectUtxosWithTokens(
-        provider: AsyncProvider,
+    private def selectUtxosWithTokens(
+        provider: Provider,
         address: Address,
         requiredAssets: MultiAsset,
         excludeInputs: Set[TransactionInput]
@@ -1281,8 +1290,8 @@ case class TxBuilder(
             }
     }
 
-    private def asyncSelectCollateral(
-        provider: AsyncProvider,
+    private def selectCollateral(
+        provider: Provider,
         address: Address,
         requiredAmount: Coin,
         excludeUtxos: Set[TransactionInput]
@@ -1472,6 +1481,64 @@ case class TxBuilder(
 
 /** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
+
+    // -------------------------------------------------------------------------
+    // Private async balancing helpers
+    // -------------------------------------------------------------------------
+
+    /** Diff handler type for async transaction balancing. */
+    private type DiffHandler = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
+
+    /** Balances the transaction using an async diff handler.
+      *
+      * This is used by `complete` to balance transactions without blocking. The diff handler is
+      * called asynchronously to handle value differences (add inputs, set change, etc.).
+      */
+    private[txbuilder] def balanceFeeAndChangeWithTokens(
+        initial: Transaction,
+        diffHandler: DiffHandler,
+        protocolParams: ProtocolParams,
+        resolvedUtxo: => Utxos,
+        evaluator: PlutusScriptEvaluator
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
+        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
+            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
+
+            val eTrialTxSync = for {
+                txWithExUnits <- TransactionBuilder.computeScriptsWitness(
+                  resolvedUtxo,
+                  evaluator,
+                  protocolParams
+                )(tx)
+                minFee <- MinTransactionFee
+                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
+                    .left
+                    .map(TxBalancingError.Failed(_))
+                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
+                txWithFees = TransactionBuilder.setFee(fee)(txWithExUnits)
+                diff = TransactionBuilder.calculateChangeValue(
+                  txWithFees,
+                  resolvedUtxo,
+                  protocolParams
+                )
+            } yield (diff, txWithFees)
+
+            eTrialTxSync match {
+                case Left(e) => Future.successful(Left(e))
+                case Right((diff, txWithFees)) =>
+                    diffHandler(diff, txWithFees).flatMap {
+                        case Left(e)                         => Future.successful(Left(e))
+                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
+                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
+                    }
+            }
+        }
+        loop(initial, 1)
+    }
+
+    // -------------------------------------------------------------------------
+    // Factory methods
+    // -------------------------------------------------------------------------
 
     /** Creates a TxBuilder with a custom Plutus script evaluator.
       *

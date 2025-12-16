@@ -1,8 +1,6 @@
 package scalus.compiler.sir.lowering
 package simple
 
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
 import scalus.builtin.ByteString.*
 import scalus.compiler.sir.*
@@ -10,22 +8,26 @@ import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeNothing, TypeVar}
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Constant.asConstant
+import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
-import scalus.uplc.test.ArbitraryInstances
 
 import scala.language.implicitConversions
 
-class ScottEncodingLoweringTest
-    extends AnyFunSuite
-    with ScalaCheckPropertyChecks
-    with ArbitraryInstances:
+class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
+
+    // Implement lower method for Scott encoding
+    override def lower(sir: SIR): Term =
+        ScottEncodingLowering(sir, generateErrorTraces = false).lower()
+
+    // Provide PlutusVM for evaluation
+    override given vm: PlutusVM = PlutusVM.makePlutusV3VM()
+
+    // Extension for structural comparison tests
     extension (sir: SIR)
         infix def lowersTo(r: Term): Unit =
             assert(ScottEncodingLowering(sir, generateErrorTraces = false).lower() == r)
-
-    private val ae = AnnotationsDecl.empty
 
     test("lower constant") {
         forAll { (c: Constant) =>
@@ -412,3 +414,100 @@ class ScottEncodingLoweringTest
           EqualsString $ vr"x" $ "world"
         ) $ ~asConstant(2) $ ~asConstant(3))))
     }
+
+    test("lower Data.I constructor") {
+        /* Data.I(42)
+           lowers to iData 42
+           Note: iData is not polymorphic, so no Force needed
+         */
+        val dataDecl = SIRType.Data.dataDecl
+        val dataDeclSIR = SIR.Decl(dataDecl, _: SIR)
+        dataDeclSIR(
+          SIR.Constr(
+            SIRType.Data.I.name,
+            dataDecl,
+            List(SIR.Const(asConstant(42), SIRType.Integer, ae)),
+            dataDecl.constrType(SIRType.Data.I.name),
+            ae
+          )
+        ) lowersTo (IData $ asConstant(42))
+    }
+
+    test("lower Data.B constructor") {
+        /* Data.B(#deadbeef)
+           lowers to bData #deadbeef
+         */
+        val dataDecl = SIRType.Data.dataDecl
+        val dataDeclSIR = SIR.Decl(dataDecl, _: SIR)
+        dataDeclSIR(
+          SIR.Constr(
+            SIRType.Data.B.name,
+            dataDecl,
+            List(SIR.Const(asConstant(hex"DEADBEEF"), SIRType.ByteString, ae)),
+            dataDecl.constrType(SIRType.Data.B.name),
+            ae
+          )
+        ) lowersTo (BData $ asConstant(hex"DEADBEEF"))
+    }
+
+    test("lower Data.List constructor") {
+        /* Data.List(emptyList)
+           lowers to listData emptyList
+         */
+        val dataDecl = SIRType.Data.dataDecl
+        val dataDeclSIR = SIR.Decl(dataDecl, _: SIR)
+        val emptyListType = SIRType.BuiltinList(SIRType.Data.tp)
+        val emptyListVar = SIR.Var("list", emptyListType, ae)
+        dataDeclSIR(
+          SIR.Constr(
+            SIRType.Data.List.name,
+            dataDecl,
+            List(emptyListVar),
+            dataDecl.constrType(SIRType.Data.List.name),
+            ae
+          )
+        ) lowersTo (ListData $ vr"list")
+    }
+
+    test("lower Data.Map constructor") {
+        /* Data.Map(pairs)
+           lowers to mapData pairs
+         */
+        val dataDecl = SIRType.Data.dataDecl
+        val dataDeclSIR = SIR.Decl(dataDecl, _: SIR)
+        val pairsType = SIRType.BuiltinList(SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp))
+        val pairsVar = SIR.Var("pairs", pairsType, ae)
+        dataDeclSIR(
+          SIR.Constr(
+            SIRType.Data.Map.name,
+            dataDecl,
+            List(pairsVar),
+            dataDecl.constrType(SIRType.Data.Map.name),
+            ae
+          )
+        ) lowersTo (MapData $ vr"pairs")
+    }
+
+    test("lower Data.Constr constructor") {
+        /* Data.Constr(tag, dataArgs)
+           lowers to constrData tag dataArgs
+         */
+        val dataDecl = SIRType.Data.dataDecl
+        val dataDeclSIR = SIR.Decl(dataDecl, _: SIR)
+        val tagVar = SIR.Var("tag", SIRType.Integer, ae)
+        val argsType = SIRType.BuiltinList(SIRType.Data.tp)
+        val argsVar = SIR.Var("dataArgs", argsType, ae)
+        dataDeclSIR(
+          SIR.Constr(
+            SIRType.Data.Constr.name,
+            dataDecl,
+            List(tagVar, argsVar),
+            dataDecl.constrType(SIRType.Data.Constr.name),
+            ae
+          )
+        ) lowersTo (ConstrData $ vr"tag" $ vr"dataArgs")
+    }
+
+    // TODO: Add evaluation-based tests for Data match that can be reused across backends
+    // The exact UPLC structure differs between Scott encoding and other backends,
+    // so structural comparison tests are not suitable here.

@@ -4,17 +4,16 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.utils.Hex.hexToBytes
-import sttp.client3.*
+import sttp.client4.*
 import sttp.model.StatusCode
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
 
-class AsyncBlockfrostProvider(apiKey: String, baseUrl: String = AsyncBlockfrostProvider.PreviewUrl)(
-    using
-    backend: SttpBackend[Future, Any],
+class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.PreviewUrl)(using
+    backend: Backend[Future],
     ec: ExecutionContext
-) extends AsyncProvider {
+) extends Provider {
 
     private def headers = Map("project_id" -> apiKey)
 
@@ -84,7 +83,7 @@ class AsyncBlockfrostProvider(apiKey: String, baseUrl: String = AsyncBlockfrostP
                 if response.code.isSuccess then {
                     response.body match {
                         case Right(body) =>
-                            val utxos = AsyncBlockfrostProvider.parseUtxos(body)
+                            val utxos = BlockfrostProvider.parseUtxos(body)
                             // Apply filters
                             val filtered = utxos.filter { case (input, output) =>
                                 val txIdMatch =
@@ -299,26 +298,26 @@ class AsyncBlockfrostProvider(apiKey: String, baseUrl: String = AsyncBlockfrostP
     }
 }
 
-object AsyncBlockfrostProvider {
+object BlockfrostProvider {
     val MainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
     val PreviewUrl = "https://cardano-preview.blockfrost.io/api/v0"
     val PreprodUrl = "https://cardano-preprod.blockfrost.io/api/v0"
     val LocalUrl = "http://localhost:8080/api/v1"
 
-    def localYaci(using backend: SttpBackend[Future, Any], ec: ExecutionContext) =
-        AsyncBlockfrostProvider("", LocalUrl)
+    def localYaci(using backend: Backend[Future], ec: ExecutionContext) =
+        BlockfrostProvider("", LocalUrl)
 
     /** Create a Blockfrost client for mainnet */
-    def mainnet(apiKey: String)(using backend: SttpBackend[Future, Any], ec: ExecutionContext) =
-        new AsyncBlockfrostProvider(apiKey, MainnetUrl)
+    def mainnet(apiKey: String)(using backend: Backend[Future], ec: ExecutionContext) =
+        new BlockfrostProvider(apiKey, MainnetUrl)
 
     /** Create a Blockfrost client for preview testnet */
-    def preview(apiKey: String)(using backend: SttpBackend[Future, Any], ec: ExecutionContext) =
-        new AsyncBlockfrostProvider(apiKey, PreviewUrl)
+    def preview(apiKey: String)(using backend: Backend[Future], ec: ExecutionContext) =
+        new BlockfrostProvider(apiKey, PreviewUrl)
 
     /** Create a Blockfrost client for preprod testnet */
-    def preprod(apiKey: String)(using backend: SttpBackend[Future, Any], ec: ExecutionContext) =
-        new AsyncBlockfrostProvider(apiKey, PreprodUrl)
+    def preprod(apiKey: String)(using backend: Backend[Future], ec: ExecutionContext) =
+        new BlockfrostProvider(apiKey, PreprodUrl)
 
     enum BlockfrostError:
         case NetworkError(underlying: Throwable)

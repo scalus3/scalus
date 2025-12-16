@@ -1,4 +1,4 @@
-package scalus.testing.integration
+package scalus.examples.htlc
 
 import org.scalatest.Assertion
 import org.scalatest.funsuite.AsyncFunSuite
@@ -6,17 +6,60 @@ import scalus.builtin.ByteString
 import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.AsyncBlockfrostProvider
+import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.*
-import scalus.examples.htlc.{HtlcContract, HtlcTransactionCreator}
 import scalus.ledger.api.v1.PubKeyHash
-import sttp.client3.*
-import scalus.cardano.node.toSync
+import scalus.testing.IntegrationTest
+import sttp.client4.*
 
 import scala.concurrent.{ExecutionContext, Future}
 
-abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
-    extends AsyncFunSuite {
+/** Base class for HTLC integration tests that interact with real Cardano testnets.
+  *
+  * These tests are tagged with [[IntegrationTest]] and are excluded from regular test runs. They
+  * require external infrastructure (YaciDevKit for local tests, Blockfrost API for Preprod tests).
+  *
+  * ==Running the tests==
+  *
+  * To run these integration tests, use:
+  * {{{
+  * # JVM tests only
+  * sbtn "scalusExamplesJVM/testOnly -- -n scalus.testing.IntegrationTest"
+  *
+  * # JS tests only
+  * sbtn "scalusExamplesJS/testOnly -- -n scalus.testing.IntegrationTest"
+  * }}}
+  *
+  * ==Required Environment Variables==
+  *
+  * ===For Local tests (YaciDevKit)===
+  *   - `WALLET_MNEMONIC_LOCAL`: 24-word mnemonic phrase for the test wallet
+  *   - `SENDER_ADDRESS_LOCAL`: Bech32 address derived from the mnemonic (e.g., `addr_test1qz...`)
+  *
+  * ===For Preprod tests===
+  *   - `WALLET_MNEMONIC_PREPROD`: 24-word mnemonic phrase for the test wallet
+  *   - `SENDER_ADDRESS_PREPROD`: Bech32 address derived from the mnemonic
+  *   - `BLOCKFROST_API_KEY`: Blockfrost API key for Preprod network
+  *
+  * ==Prerequisites==
+  *
+  * ===Local tests===
+  * Require YaciDevKit running locally. Start it with:
+  * {{{
+  * yaci-cli:devnet start
+  * }}}
+  *
+  * ===Preprod tests===
+  * Require:
+  *   - A Blockfrost account with Preprod API access
+  *   - A funded wallet on Preprod testnet (get test ADA from the faucet)
+  *
+  * @see
+  *   [[https://yaci-devkit.cardano.org/ YaciDevKit documentation]]
+  * @see
+  *   [[https://blockfrost.io/ Blockfrost API]]
+  */
+abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends AsyncFunSuite {
 
     implicit override def executionContext: ExecutionContext =
         scala.concurrent.ExecutionContext.global
@@ -26,7 +69,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
         case Preprod
 
     case class TestContext(
-        client: AsyncBlockfrostProvider,
+        client: BlockfrostProvider,
         cardanoInfo: CardanoInfo,
         evaluator: PlutusScriptEvaluator
     )
@@ -53,7 +96,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
 
     private def createTestContext(testEnv: TestEnv): Future[TestContext] = testEnv match {
         case TestEnv.Local =>
-            val client = AsyncBlockfrostProvider.localYaci(using backend, executionContext)
+            val client = BlockfrostProvider.localYaci
             client
                 .fetchLatestParams()
                 .map { protocolParams =>
@@ -73,16 +116,13 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
                       EvaluatorMode.EvaluateAndComputeCost
                     )
                     TestContext(client, cardanoInfo, evaluator)
-                }(executionContext)
+                }
 
         case TestEnv.Preprod =>
             val apiKey = getEnv("BLOCKFROST_API_KEY").getOrElse(
               throw new IllegalStateException("BLOCKFROST_API_KEY environment variable not set")
             )
-            val client = AsyncBlockfrostProvider(apiKey, AsyncBlockfrostProvider.PreprodUrl)(using
-              backend,
-              executionContext
-            )
+            val client = BlockfrostProvider(apiKey, BlockfrostProvider.PreprodUrl)
             client
                 .fetchLatestParams()
                 .map { protocolParams =>
@@ -96,7 +136,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
                       EvaluatorMode.EvaluateAndComputeCost
                     )
                     TestContext(client, cardanoInfo, evaluator)
-                }(executionContext)
+                }
     }
 
     protected def runLockTest(testEnv: TestEnv): Future[Assertion] = {
@@ -107,12 +147,8 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
 
         for {
             ctx <- createTestContext(testEnv)
-            senderUtxosResult <- ctx.client.findUtxos(senderAddr)(using executionContext)
-            senderUtxos = senderUtxosResult.toOption.get
-            _ = assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
             signer = makeTransactionSigner("m/1852'/1815'/0'/0/0", mnemonic)
-            signers = Map(senderAddr -> signer)
 
             preimage = utf8"secret_preimage_54321"
             image = scalus.builtin.Builtins.sha3_256(preimage)
@@ -130,10 +166,6 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
 
             compiledContract = HtlcContract.defaultCompiledContract
 
-            utxoToSpend = Utxo(
-              senderUtxos.find(_._2.value.coin.value >= lockAmount).get
-            )
-
             txCreator = HtlcTransactionCreator(
               ctx.cardanoInfo,
               ctx.evaluator,
@@ -141,17 +173,18 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
               compiledContract
             )
 
-            signedLockTx = txCreator.lock(
+            // Use lockAsync for cross-platform support (works on both JVM and JS)
+            signedLockTx <- txCreator.lockAsync(
               Value.lovelace(lockAmount),
               senderAddr,
               AddrKeyHash(senderPkh.hash),
               AddrKeyHash(senderPkh.hash),
               image,
               timeout.toLong,
-              ctx.client.toSync // won't work in JavaScript
+              ctx.client
             )
 
-            submitResult <- ctx.client.submit(signedLockTx)(using executionContext)
+            submitResult <- ctx.client.submit(signedLockTx)
         } yield {
             submitResult match {
                 case Right(_) =>
@@ -184,13 +217,13 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
             )
 
             // Fetch the locked UTXO from script address
-            scriptUtxosResult <- ctx.client.findUtxos(scriptAddress)(using executionContext)
+            scriptUtxosResult <- ctx.client.findUtxos(scriptAddress)
             scriptUtxos = scriptUtxosResult.toOption.get
             _ = assert(scriptUtxos.nonEmpty, s"No UTXOs found at script address")
             lockedUtxo = Utxo(scriptUtxos.find(_._2.value.coin.value > 7_000_000L).get)
 
             // Fetch sender UTXOs for collateral
-            senderUtxosResult <- ctx.client.findUtxos(senderAddr)(using executionContext)
+            senderUtxosResult <- ctx.client.findUtxos(senderAddr)
             senderUtxos = senderUtxosResult.toOption.get
             _ = assert(senderUtxos.nonEmpty, "No UTXOs found for sender")
 
@@ -230,7 +263,7 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
               revealTime
             )
 
-            submitResult <- ctx.client.submit(signedRevealTx)(using executionContext)
+            submitResult <- ctx.client.submit(signedRevealTx)
         } yield {
             submitResult match {
                 case Right(_) =>
@@ -242,19 +275,19 @@ abstract class HtlcIntegrationTestBase(using backend: SttpBackend[Future, Any])
         }
     }
 
-    test("lock HTLC - local") {
+    test("lock HTLC - local", IntegrationTest) {
         runLockTest(TestEnv.Local)
     }
 
-    test("reveal HTLC - local") {
+    test("reveal HTLC - local", IntegrationTest) {
         runRevealTest(TestEnv.Local)
     }
 
-    test("lock HTLC - preprod") {
+    test("lock HTLC - preprod", IntegrationTest) {
         runLockTest(TestEnv.Preprod)
     }
 
-    test("reveal HTLC - preprod") {
+    test("reveal HTLC - preprod", IntegrationTest) {
         runRevealTest(TestEnv.Preprod)
     }
 }
