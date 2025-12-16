@@ -2043,8 +2043,8 @@ final class SIRCompiler(
     ): AnnotatedSIR =
         if env.debug then println(s"compileBuiltinArrayMethods: ${arr.show}, fun: $fun, idx: $idx")
         val posAnns = AnnotationsDecl.fromSrcPos(tree.srcPos)
-        fun.show match
-            case "length" =>
+        fun match
+            case nme.length =>
                 val exprA = compileExpr(env, arr)
                 SIR.Apply(
                   SIRBuiltins.lengthOfArray,
@@ -2052,7 +2052,7 @@ final class SIRCompiler(
                   SIRType.Integer,
                   posAnns
                 )
-            case "apply" =>
+            case nme.apply =>
                 idx match
                     case Some(idxTree) =>
                         val exprA = compileExpr(env, arr)
