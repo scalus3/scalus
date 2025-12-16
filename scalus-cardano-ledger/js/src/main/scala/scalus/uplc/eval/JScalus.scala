@@ -109,13 +109,21 @@ object JScalus {
     def evalPlutusScripts(
         txCborBytes: js.Array[Byte],
         utxoCborBytes: js.Array[Byte],
-        slotConfig: SlotConfig
+        network: "mainnet" | "preprod" | "preview"
     ): js.Array[Redeemer] = {
         val tx = Transaction.fromCbor(txCborBytes.toArray)
         val utxo =
             Cbor.decode(utxoCborBytes.toArray).to[Map[TransactionInput, TransactionOutput]].value
-        val params: ProtocolParams = CardanoInfo.mainnet.protocolParams
-        val costModels = params.costModels
+        val cardanoInfo = if network == "preprod" then {
+            CardanoInfo.preprod
+        } else if network == "preview" then {
+            CardanoInfo.preview
+        } else {
+            CardanoInfo.mainnet
+        }
+
+        val costModels = cardanoInfo.protocolParams.costModels
+        val slotConfig = cardanoInfo.slotConfig
         val evaluator = PlutusScriptEvaluator(
           slotConfig = slotConfig,
           initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
