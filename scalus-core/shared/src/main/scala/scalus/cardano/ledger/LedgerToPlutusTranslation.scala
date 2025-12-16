@@ -577,6 +577,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v1.TxInfo = {
         guardConwayFeaturesForPlutusV1V2(tx)
+        validatePlutusV1OnInlineDatumsAndByronAddresses(tx, utxos)
 
         val body = tx.body.value
 
@@ -1008,28 +1009,82 @@ object LedgerToPlutusTranslation {
         val body = tx.body.value
         body.votingProcedures match
             case Some(vp) if vp.procedures.nonEmpty =>
-                throw IllegalArgumentException(
+                throw new IllegalArgumentException(
                   s"VotingProcedures field not supported in Plutus V1/V2: ${vp.procedures}"
                 )
             case _ =>
 
         if body.proposalProcedures.toSeq.nonEmpty then
-            throw IllegalArgumentException(
+            throw new IllegalArgumentException(
               s"ProposalProcedures field not supported in Plutus V1/V2: ${body.proposalProcedures}"
             )
 
         body.donation match
             case Some(coin) if coin.value != 0 =>
-                throw IllegalArgumentException(
+                throw new IllegalArgumentException(
                   s"Donation field not supported in Plutus V1/V2: $coin"
                 )
             case _ =>
 
         body.currentTreasuryValue match
             case Some(treasury) =>
-                throw IllegalArgumentException(
+                throw new IllegalArgumentException(
                   s"CurrentTreasuryValue field not supported in Plutus V1/V2: $treasury"
                 )
             case None =>
+    }
+
+    /** Validate that no inline datums or Byron addresses are used in Plutus V1 contexts.
+      *
+      * Plutus V1 does not support inline datums or Byron addresses. This function checks all
+      * inputs, reference inputs, and outputs of the transaction to ensure compliance with this
+      * rule, throwing an exception if any violations are found.
+      */
+    private def validatePlutusV1OnInlineDatumsAndByronAddresses(
+        tx: Transaction,
+        utxos: Utxos
+    ): Unit = {
+        val body = tx.body.value
+
+        val inputs =
+            for
+                input <- body.inputs.toSet.view
+                output <- utxos.get(input) match
+                    case someOutput @ Some(_) => someOutput
+                    // This check allows to be an order independent in the sequence of validation rules
+                    case None =>
+                        throw new IllegalStateException(
+                          s"Input UTxO not found for TxInfo V1 construction: $input"
+                        )
+            yield output
+
+        val referenceInputs =
+            for
+                referenceInput <- body.referenceInputs.toSet.view
+                output <- utxos.get(referenceInput) match
+                    case someOutput @ Some(_) => someOutput
+                    // This check allows to be an order independent in the sequence of validation rules
+                    case None =>
+                        throw new IllegalStateException(
+                          s"Reference Input UTxO not found for TxInfo V1 construction: $referenceInput"
+                        )
+            yield output
+
+        val outputs = body.outputs.view.map(_.value)
+
+        val allOutputs = (inputs ++ referenceInputs ++ outputs).toSeq
+
+        val outputsWithInlineDatum =
+            allOutputs.filter(_.datumOption.exists(_.isInstanceOf[DatumOption.Inline]))
+
+        val outputsWithByronAddress =
+            allOutputs.filter(_.address.isInstanceOf[ByronAddress])
+
+        if outputsWithInlineDatum.nonEmpty || outputsWithByronAddress.nonEmpty then
+            throw new IllegalStateException(
+              s"Plutus V1 does not support inline datums or Byron addresses for input Utxos, reference input Utxos and outputs. " +
+                  s"Utxos/Outputs with inline datums: $outputsWithInlineDatum, " +
+                  s"Utxos/Outputs with Byron addresses: $outputsWithByronAddress"
+            )
     }
 }

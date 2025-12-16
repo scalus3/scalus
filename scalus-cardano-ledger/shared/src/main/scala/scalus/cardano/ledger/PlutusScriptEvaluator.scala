@@ -317,7 +317,11 @@ object PlutusScriptEvaluator {
                     if redeemerTag == RedeemerTag.Spend then {
                         // V1 and V2 scripts require datums
                         plutusScript match
-                            case _: Script.PlutusV1 | _: Script.PlutusV2 =>
+                            case script @ (_: Script.PlutusV1 | _: Script.PlutusV2) =>
+                                if script.isInstanceOf[Script.PlutusV1] then
+                                    val _ =
+                                        txInfoV1 // force initialization to catch issues early for inline datums and Byron address
+
                                 if datum.isEmpty then
                                     throw new IllegalStateException(
                                       s"Missing required datum for plutus script: $plutusScript"
@@ -422,31 +426,10 @@ object PlutusScriptEvaluator {
             output: TransactionOutput,
             lookupTable: LookupTable
         ): Option[Data] = {
-            output match
-                case TransactionOutput.Shelley(_, _, datumHashOption) =>
-                    datumHashOption.flatMap { lookupTable.datums.get }
-                case TransactionOutput.Babbage(_, _, datumOption, _) =>
-                    datumOption match
-                        case Some(DatumOption.Hash(hash)) => lookupTable.datums.get(hash)
-
-                        case Some(DatumOption.Inline(data)) =>
-                            val isPlutusV1 = output.address.scriptHashOption.flatMap {
-                                lookupTable.scripts.get
-                            } match
-                                case None =>
-                                    throw IllegalStateException(
-                                      s"Output script not found for address: ${output.address}"
-                                    )
-                                case Some(_: Script.PlutusV1) => true
-                                case _                        => false
-
-                            if !isPlutusV1 then Some(data)
-                            else
-                                throw IllegalStateException(
-                                  s"Inline datum for Plutus V1 script not supported: ${output.address}"
-                                )
-
-                        case None => None
+            output.datumOption match
+                case Some(DatumOption.Hash(hash))   => lookupTable.datums.get(hash)
+                case Some(DatumOption.Inline(data)) => Some(data)
+                case None                           => None
         }
 
         /** Evaluate a Plutus V1 script with the V1 script context.
