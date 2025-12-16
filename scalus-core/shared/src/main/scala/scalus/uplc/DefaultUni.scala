@@ -76,8 +76,8 @@ object DefaultUni:
             case Data                 => summon[Flat[builtin.Data]].asInstanceOf[Flat[Any]]
             case Apply(ProtoList, a)  => listFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
             case Apply(ProtoArray, a) =>
-                // Arrays use the same flat encoding as lists, converted to/from Vector
-                vectorFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
+                // Arrays use the same flat encoding as lists, converted to/from IndexedSeq
+                indexedSeqFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
             case Apply(Apply(ProtoPair, a), b) =>
                 pairFlat(using flatForUni(a), flatForUni(b)).asInstanceOf[Flat[Any]]
             case _ => throw new Exception(s"Unsupported uni: $uni")
