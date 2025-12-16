@@ -44,27 +44,32 @@ class SumOfProductsLowering(
         tp: SIRType,
         anns: AnnotationsDecl
     ): Term =
-        /*
-          data Newtype(a) is represented as a
-
-          data List a = Nil | Cons a (List a)
-            Nil is represented as (constr 0 [])
-            Cons is represented as (constr 1 [h, tl])
-         */
-        if data.constructors.size == 1 && data.constructors.head.params.size == 1 then
-            assert(args.size == 1)
-            lowerInner(args.head)
+        // Check if this is a Data type constructor
+        if isDataConstructor(name) then lowerDataConstr(name, args, anns)
         else
-            val tag = data.constructors.indexWhere(_.name == name)
-            if tag == -1 then
-                throw new IllegalArgumentException(s"Constructor $name not found in $data")
-            Term.Constr(Word64(tag), args.map(lowerInner))
+            /*
+              data Newtype(a) is represented as a
+
+              data List a = Nil | Cons a (List a)
+                Nil is represented as (constr 0 [])
+                Cons is represented as (constr 1 [h, tl])
+             */
+            if data.constructors.size == 1 && data.constructors.head.params.size == 1 then
+                assert(args.size == 1)
+                lowerInner(args.head)
+            else
+                val tag = data.constructors.indexWhere(_.name == name)
+                if tag == -1 then
+                    throw new IllegalArgumentException(s"Constructor $name not found in $data")
+                Term.Constr(Word64(tag), args.map(lowerInner))
 
     override protected def lowerMatch(matchExpr: SIR.Match): Term =
         val scrutinee = matchExpr.scrutinee
 
         // Check if this is a primitive type match
         if isPrimitiveType(scrutinee.tp) then lowerPrimitiveMatch(matchExpr)
+        // Check if this is a Data type match
+        else if isDataType(scrutinee.tp) then lowerDataMatch(matchExpr)
         else {
             /* list match
                 case Nil -> error
@@ -130,27 +135,30 @@ class SumOfProductsLowering(
         tp: SIRType,
         anns: AnnotationsDecl
     ): Term =
-        /*  x.field2
-            lowers to
-            (case x [\f1 f2 ... -> f2])
-
-            newtype.field1
-            lowers to
-            newtype
-         */
-        val constrDecl = findConstructorDecl(scrutinee.tp, anns)
-        val fieldIndex = constrDecl.params.indexWhere(_.name == field)
-        if fieldIndex == -1 then
-            val pos = anns.pos
-            throw new IllegalArgumentException(
-              s"Field $field not found in constructor ${constrDecl} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
-            )
-        val instance = lowerInner(scrutinee)
-
-        if constrDecl.params.size == 1 then instance
+        // Check if this is a Data variant type
+        if isDataVariantType(scrutinee.tp) then lowerDataSelect(scrutinee, field, tp, anns)
         else
-            val s0 = Term.Var(NamedDeBruijn(field))
-            val lam = constrDecl.params.foldRight(s0) { case (f, acc) =>
-                Term.LamAbs(f.name, acc)
-            }
-            Term.Case(instance, List(lam))
+            /*  x.field2
+                lowers to
+                (case x [\f1 f2 ... -> f2])
+
+                newtype.field1
+                lowers to
+                newtype
+             */
+            val constrDecl = findConstructorDecl(scrutinee.tp, anns)
+            val fieldIndex = constrDecl.params.indexWhere(_.name == field)
+            if fieldIndex == -1 then
+                val pos = anns.pos
+                throw new IllegalArgumentException(
+                  s"Field $field not found in constructor ${constrDecl} at ${pos.file}:${pos.startLine}, ${pos.startColumn}"
+                )
+            val instance = lowerInner(scrutinee)
+
+            if constrDecl.params.size == 1 then instance
+            else
+                val s0 = Term.Var(NamedDeBruijn(field))
+                val lam = constrDecl.params.foldRight(s0) { case (f, acc) =>
+                    Term.LamAbs(f.name, acc)
+                }
+                Term.Case(instance, List(lam))

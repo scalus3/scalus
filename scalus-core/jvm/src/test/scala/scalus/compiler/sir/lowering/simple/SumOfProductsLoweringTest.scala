@@ -6,28 +6,41 @@ import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.cardano.ledger.Word64
+import scalus.compiler.sir.lowering.simple.SimpleLoweringTestBase
 import scalus.ledger.api.v3.TxId
 import scalus.compiler.sir.*
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
+import scalus.uplc.eval.PlutusVM
 import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.{Constant, DeBruijn, Term}
 
 import scala.language.implicitConversions
 
-class SumOfProductsLoweringTest extends AnyFunSuite, ScalaCheckPropertyChecks, ArbitraryInstances {
-    extension (sir: SIR)
+/** Tests for SumOfProductsLowering backend.
+  *
+  * Extends SimpleLoweringTestBase to inherit evaluation-based Data tests. Uses PlutusV4 which
+  * supports Constr/Case instructions and Case on Data.
+  */
+class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
 
+    // Implement lower method for Sum of Products encoding
+    override def lower(sir: SIR): Term =
+        SumOfProductsLowering(sir, generateErrorTraces = false).lower()
+
+    // Provide PlutusVM for evaluation (V4 for Constr/Case support)
+    override given vm: PlutusVM = PlutusVM.makePlutusV4VM()
+
+    // Extension for structural comparison tests (uses alpha-equivalence)
+    extension (sir: SIR)
         infix def lowersTo(r: Term): Unit = {
             val r1 = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
             val deBruijnR1 = DeBruijn.deBruijnTerm(r1)
             val deBruijnR = DeBruijn.deBruijnTerm(r)
             assert(deBruijnR1 α_== deBruijnR)
         }
-
-    private val ae = AnnotationsDecl.empty
 
     test("lower constant") {
         forAll { (c: Constant) =>
