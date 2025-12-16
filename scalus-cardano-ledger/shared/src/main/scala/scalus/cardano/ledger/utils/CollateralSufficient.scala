@@ -39,7 +39,9 @@ object CollateralSufficient {
       *   the required collateral amount
       */
     def calculateRequiredCollateral(fee: Coin, collateralPercentage: Long): Coin = {
-        // TODO: precision handling
-        Coin((fee.value * collateralPercentage) / 100)
+        val feeValue = BigDecimal(fee.value)
+        val percentage = BigDecimal(collateralPercentage)
+        val result = (feeValue * percentage / 100).setScale(0, BigDecimal.RoundingMode.UP)
+        Coin(result.toLong)
     }
 }

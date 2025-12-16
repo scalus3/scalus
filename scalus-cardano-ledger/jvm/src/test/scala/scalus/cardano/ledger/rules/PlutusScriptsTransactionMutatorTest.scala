@@ -1116,6 +1116,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
     }
 
     test("PlutusV1 rejects transaction with Byron address in output") {
+
         val script = validPlutusV1Script
 
         val input = arbitrary[TransactionInput].sample.get
