@@ -123,7 +123,8 @@ object JScalus {
           initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
           protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
           costModels = cms,
-          mode = EvaluatorMode.EvaluateAndComputeCost)
+          mode = EvaluatorMode.EvaluateAndComputeCost
+        )
         val results =
             for r <- evaluator.evalPlutusScripts(tx, utxo)
             yield new Redeemer(
