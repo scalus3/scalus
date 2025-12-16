@@ -166,6 +166,38 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def listToArray[A](a: BuiltinList[A]): BuiltinArray[A] = BuiltinArray.fromList(a)
     def indexArray[A](a: BuiltinArray[A], n: BigInt): A = a(n)
 
+    /** Multi-index array access from CIP-0156.
+      *
+      * Retrieves elements from an array at the specified indices.
+      *
+      * @param indices
+      *   A list of zero-based indices, in the order elements should be retrieved. In case of
+      *   repeated indices, the same element is returned multiple times.
+      * @param arr
+      *   The array to index.
+      * @return
+      *   A list containing the elements at the specified indices, in the same order.
+      * @throws scalus.uplc.eval.BuiltinException
+      *   If any index is out of bounds (< 0 or >= lengthOfArray).
+      *
+      * @example
+      *   {{{
+      *   val arr = listToArray(mkCons(iData(10), mkCons(iData(20), mkCons(iData(30), mkNilData()))))
+      *   multiIndexArray(BuiltinList[BigInt](0, 2), arr)
+      *   // returns BuiltinList(iData(10), iData(30))
+      *   }}}
+      */
+    def multiIndexArray[A](indices: BuiltinList[BigInt], arr: BuiltinArray[A]): BuiltinList[A] =
+        val len = arr.length
+        val result = indices.toList.map { idx =>
+            if idx < 0 || idx >= len then
+                throw new BuiltinException(
+                  s"multiIndexArray: index $idx out of bounds for array of length $len"
+                )
+            arr(idx)
+        }
+        BuiltinList.from(result)
+
     // Lists
     def chooseList[A, B](l: BuiltinList[A], e: B, ne: B): B =
         if l.isEmpty then e else ne

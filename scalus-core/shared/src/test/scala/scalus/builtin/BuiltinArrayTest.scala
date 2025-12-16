@@ -4,8 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
-import scalus.uplc.{Constant, DeBruijnedProgram, Term}
-import scalus.uplc.eval.{CountingBudgetSpender, PlutusVM, Result, TallyingBudgetSpenderLogger}
+import scalus.uplc.{Constant, DeBruijnedProgram, DefaultUni, Term}
+import scalus.uplc.eval.{PlutusVM, Result}
 
 class BuiltinArrayTest extends AnyFunSuite {
 
@@ -194,5 +194,173 @@ class BuiltinArrayTest extends AnyFunSuite {
 
         val result = summon[PlutusVM].evaluateDeBruijnedTerm(decoded.term)
         assert(result == Term.Const(Constant.Integer(2)))
+    }
+
+    // multiIndexArray tests (CIP-0156)
+    // Note: multiIndexArray takes List[Integer] as the first argument (per CIP-0156).
+    // Since Scalus compiles BuiltinList[BigInt] to List[Data], we test the CEK
+    // implementation directly using UPLC Term construction.
+
+    test("multiIndexArray returns elements at specified indices") {
+        // Build: multiIndexArray [0, 2] (listToArray [Data(10), Data(20), Data(30)])
+        val indices = Term.Const(
+          Constant.List(DefaultUni.Integer, List(Constant.Integer(0), Constant.Integer(2)))
+        )
+        val array = Term.Const(
+          Constant.Array(
+            DefaultUni.Data,
+            Vector(Constant.Data(Data.I(10)), Constant.Data(Data.I(20)), Constant.Data(Data.I(30)))
+          )
+        )
+        val term = Term.Apply(
+          Term.Apply(Term.Force(Term.Builtin(scalus.uplc.DefaultFun.MultiIndexArray)), indices),
+          array
+        )
+        val result = term.evaluateDebug
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                // Should return List(Data(10), Data(30))
+                val expected = Term.Const(
+                  Constant.List(
+                    DefaultUni.Data,
+                    List(Constant.Data(Data.I(10)), Constant.Data(Data.I(30)))
+                  )
+                )
+                assert(evaled == expected)
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    test("multiIndexArray with repeated indices returns duplicates") {
+        val indices = Term.Const(
+          Constant.List(
+            DefaultUni.Integer,
+            List(Constant.Integer(0), Constant.Integer(0), Constant.Integer(1))
+          )
+        )
+        val array = Term.Const(
+          Constant.Array(
+            DefaultUni.Data,
+            Vector(Constant.Data(Data.I(100)), Constant.Data(Data.I(200)))
+          )
+        )
+        val term = Term.Apply(
+          Term.Apply(Term.Force(Term.Builtin(scalus.uplc.DefaultFun.MultiIndexArray)), indices),
+          array
+        )
+        val result = term.evaluateDebug
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                // Should return List(Data(100), Data(100), Data(200))
+                val expected = Term.Const(
+                  Constant.List(
+                    DefaultUni.Data,
+                    List(
+                      Constant.Data(Data.I(100)),
+                      Constant.Data(Data.I(100)),
+                      Constant.Data(Data.I(200))
+                    )
+                  )
+                )
+                assert(evaled == expected)
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    test("multiIndexArray with empty indices returns empty list") {
+        val indices = Term.Const(Constant.List(DefaultUni.Integer, List.empty))
+        val array = Term.Const(
+          Constant.Array(
+            DefaultUni.Data,
+            Vector(Constant.Data(Data.I(1)), Constant.Data(Data.I(2)))
+          )
+        )
+        val term = Term.Apply(
+          Term.Apply(Term.Force(Term.Builtin(scalus.uplc.DefaultFun.MultiIndexArray)), indices),
+          array
+        )
+        val result = term.evaluateDebug
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                // Should return empty list
+                val expected = Term.Const(Constant.List(DefaultUni.Data, List.empty))
+                assert(evaled == expected)
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    test("multiIndexArray with out of bounds index fails") {
+        val indices = Term.Const(
+          Constant.List(DefaultUni.Integer, List(Constant.Integer(0), Constant.Integer(5)))
+        )
+        val array = Term.Const(
+          Constant.Array(
+            DefaultUni.Data,
+            Vector(Constant.Data(Data.I(1)), Constant.Data(Data.I(2)))
+          )
+        )
+        val term = Term.Apply(
+          Term.Apply(Term.Force(Term.Builtin(scalus.uplc.DefaultFun.MultiIndexArray)), indices),
+          array
+        )
+        val result = term.evaluateDebug
+        assert(result.isFailure, s"Expected failure but got: $result")
+    }
+
+    test("multiIndexArray with negative index fails") {
+        val indices = Term.Const(Constant.List(DefaultUni.Integer, List(Constant.Integer(-1))))
+        val array = Term.Const(
+          Constant.Array(
+            DefaultUni.Data,
+            Vector(Constant.Data(Data.I(1)), Constant.Data(Data.I(2)))
+          )
+        )
+        val term = Term.Apply(
+          Term.Apply(Term.Force(Term.Builtin(scalus.uplc.DefaultFun.MultiIndexArray)), indices),
+          array
+        )
+        val result = term.evaluateDebug
+        assert(result.isFailure, s"Expected failure but got: $result")
+    }
+
+    test("multiIndexArray preserves order from index list") {
+        // Request indices in reverse order: [2, 1, 0]
+        val indices = Term.Const(
+          Constant.List(
+            DefaultUni.Integer,
+            List(Constant.Integer(2), Constant.Integer(1), Constant.Integer(0))
+          )
+        )
+        val array = Term.Const(
+          Constant.Array(
+            DefaultUni.Data,
+            Vector(Constant.Data(Data.I(10)), Constant.Data(Data.I(20)), Constant.Data(Data.I(30)))
+          )
+        )
+        val term = Term.Apply(
+          Term.Apply(Term.Force(Term.Builtin(scalus.uplc.DefaultFun.MultiIndexArray)), indices),
+          array
+        )
+        val result = term.evaluateDebug
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                // Should return List(Data(30), Data(20), Data(10))
+                val expected = Term.Const(
+                  Constant.List(
+                    DefaultUni.Data,
+                    List(
+                      Constant.Data(Data.I(30)),
+                      Constant.Data(Data.I(20)),
+                      Constant.Data(Data.I(10))
+                    )
+                  )
+                )
+                assert(evaled == expected)
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
     }
 }

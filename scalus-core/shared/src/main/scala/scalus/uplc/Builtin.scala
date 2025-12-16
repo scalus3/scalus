@@ -1173,6 +1173,36 @@ class BuiltinsMeaning(
           builtinCostModel.indexArray
         )
 
+    // [ forall a, list(integer), array(a) ] -> list(a)
+    val MultiIndexArray: BuiltinRuntime =
+        mkMeaning(
+          All(
+            "a",
+            DefaultUni.List(
+              Integer
+            ) ->: (DefaultUni.ProtoArray $ "a") ->: (DefaultUni.ProtoList $ "a")
+          ),
+          (_: Logger, args: Seq[CekValue]) =>
+              val indices = args(0).asList.map {
+                  case Constant.Integer(i) => i
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.Integer, args(0))
+              }
+              args(1) match
+                  case VCon(Constant.Array(tpe, arr)) =>
+                      val len = arr.length
+                      val result = indices.map { idx =>
+                          if idx < 0 || idx >= len then
+                              throw new BuiltinException(
+                                s"multiIndexArray: index $idx out of bounds for array of length $len"
+                              )
+                          arr(idx.toInt)
+                      }
+                      VCon(Constant.List(tpe, result))
+                  case _ => throw new DeserializationError(DefaultFun.MultiIndexArray, args(1))
+          ,
+          builtinCostModel.multiIndexArray
+        )
+
     private inline def mkGetBuiltinRuntime: DefaultFun => BuiltinRuntime = ${
         Macros.mkGetBuiltinRuntime('this)
     }

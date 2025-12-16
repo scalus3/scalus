@@ -112,7 +112,8 @@ case class BuiltinCostModel(
     // Array builtins
     lengthOfArray: DefaultCostingFun[OneArgument],
     listToArray: DefaultCostingFun[OneArgument],
-    indexArray: DefaultCostingFun[TwoArguments]
+    indexArray: DefaultCostingFun[TwoArguments],
+    multiIndexArray: DefaultCostingFun[TwoArguments]
 ) {
 
     /** Convert a [[BuiltinCostModel]] to a flat map of cost parameters
@@ -284,7 +285,8 @@ object BuiltinCostModel {
             // Array builtins
             "lengthOfArray" -> writeJs(model.lengthOfArray),
             "listToArray" -> writeJs(model.listToArray),
-            "indexArray" -> writeJs(model.indexArray)
+            "indexArray" -> writeJs(model.indexArray),
+            "multiIndexArray" -> writeJs(model.multiIndexArray)
           ),
       json =>
           BuiltinCostModel(
@@ -483,6 +485,10 @@ object BuiltinCostModel {
             indexArray =
                 if json.obj.keySet.contains("indexArray") then
                     read[DefaultCostingFun[TwoArguments]](json("indexArray"))
+                else null,
+            multiIndexArray =
+                if json.obj.keySet.contains("multiIndexArray") then
+                    read[DefaultCostingFun[TwoArguments]](json("multiIndexArray"))
                 else null
           )
     )
@@ -1440,6 +1446,21 @@ object BuiltinCostModel {
           indexArray = DefaultCostingFun(
             cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
             memory = TwoArguments.ConstantCost(CostingInteger(4L))
+          ),
+          // multiIndexArray - cost is linear in the length of the index list
+          multiIndexArray = DefaultCostingFun(
+            cpu = TwoArguments.LinearInX(
+              OneVariableLinearFunction(
+                intercept = CostingInteger(100000L),
+                slope = CostingInteger(10000L)
+              )
+            ),
+            memory = TwoArguments.LinearInX(
+              OneVariableLinearFunction(
+                intercept = CostingInteger(4L),
+                slope = CostingInteger(1L)
+              )
+            )
           )
         )
 
