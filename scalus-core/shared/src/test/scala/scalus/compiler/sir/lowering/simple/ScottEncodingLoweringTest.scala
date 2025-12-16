@@ -1,8 +1,6 @@
 package scalus.compiler.sir.lowering
 package simple
 
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
 import scalus.builtin.ByteString.*
 import scalus.compiler.sir.*
@@ -14,7 +12,6 @@ import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
-import scalus.uplc.test.ArbitraryInstances
 
 import scala.language.implicitConversions
 

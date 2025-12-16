@@ -1,12 +1,9 @@
 package scalus.compiler.sir.lowering.simple
 
-import org.scalatest.funsuite.AnyFunSuite
-import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.cardano.ledger.Word64
-import scalus.compiler.sir.lowering.simple.SimpleLoweringTestBase
 import scalus.ledger.api.v3.TxId
 import scalus.compiler.sir.*
 import scalus.uplc.DefaultFun.*
@@ -14,7 +11,6 @@ import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
-import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.{Constant, DeBruijn, Term}
 
 import scala.language.implicitConversions

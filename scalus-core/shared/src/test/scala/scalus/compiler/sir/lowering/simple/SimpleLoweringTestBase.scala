@@ -7,7 +7,6 @@ import scalus.*
 import scalus.builtin.ByteString.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
-import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeNothing, TypeVar}
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.{Constant, DeBruijn, Term}
