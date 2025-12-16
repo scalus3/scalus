@@ -87,7 +87,7 @@ object Constant {
     case class Pair(a: Constant, b: Constant) extends Constant:
         def tpe = DefaultUni.Apply(DefaultUni.Apply(DefaultUni.ProtoPair, a.tpe), b.tpe)
 
-    case class Array(elemType: DefaultUni, value: Vector[Constant]) extends Constant:
+    case class Array(elemType: DefaultUni, value: IndexedSeq[Constant]) extends Constant:
         def tpe = DefaultUni.Apply(DefaultUni.ProtoArray, elemType)
 
     case class BLS12_381_G1_Element(value: builtin.BLS12_381_G1_Element) extends Constant:
@@ -160,7 +160,7 @@ object Constant {
         case DefaultUni.Apply(DefaultUni.ProtoArray, elemType) =>
             Array(
               elemType,
-              a.asInstanceOf[IndexedSeq[Any]].view.map(fromValue(elemType, _)).toVector
+              a.asInstanceOf[IndexedSeq[Any]].view.map(fromValue(elemType, _)).toIndexedSeq
             )
         case DefaultUni.BLS12_381_G1_Element =>
             BLS12_381_G1_Element(a.asInstanceOf[builtin.BLS12_381_G1_Element])
