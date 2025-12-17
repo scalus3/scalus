@@ -7,7 +7,6 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
-import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.{modifyBody, ResolvedUtxos}
 
@@ -1061,20 +1060,31 @@ case class TxBuilder(
 
         // The async diff handler is called in a loop by balanceFeeAndChangeWithTokens.
         // Every Right() return is just an end of an iteration, not necessarily the end of the algorithm.
+        // ensureCollateralBalanced uses ensureCollateralReturn internally and handles querying
+        // for more collateral if needed.
         def handleDiffByQueryingMore(
             diff: Value,
             tx: Transaction
         ): Future[Either[TxBalancingError, Transaction]] = {
             // First, ensure collateral is balanced (happens every iteration since fee changes)
+            // ensureCollateralBalanced sets the collateral return output via ensureCollateralReturn
             ensureCollateralBalanced(tx, provider, sponsor, selectedUtxos).flatMap {
                 case Right(balancedTx) if balancedTx != tx =>
-                    // Collateral was adjusted, iterate further
+                    // Collateral was adjusted (inputs added or return output set), iterate further
                     Future.successful(Right(balancedTx))
                 case Left(error) =>
                     Future.successful(Left(error))
-                case Right(_) =>
+                case Right(balancedTx) =>
                     // Collateral is balanced, continue with value diff handling
-                    handleValueDiff(diff, tx, provider, sponsor, selectedUtxos, initialContext)
+                    // Use balancedTx which has the collateral return output set
+                    handleValueDiff(
+                      diff,
+                      balancedTx,
+                      provider,
+                      sponsor,
+                      selectedUtxos,
+                      initialContext
+                    )
             }
         }
 
@@ -1085,8 +1095,8 @@ case class TxBuilder(
           addAttachmentsToContext(initialContext).transaction
         )
 
-        TxBuilder
-            .balanceFeeAndChangeWithTokens(
+        TransactionBuilder
+            .balanceFeeAndChangeWithTokensAsync(
               txWithDummySigs,
               handleDiffByQueryingMore,
               env.protocolParams,
@@ -1107,7 +1117,17 @@ case class TxBuilder(
                       resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
                       expectedSigners = allExpectedSigners
                     )
-                    copy(context = updatedContext)
+
+                    // Validate the transaction
+                    updatedContext.validate(validators, env.protocolParams) match {
+                        case Right(validatedCtx) =>
+                            copy(context = validatedCtx)
+                        case Left(error) =>
+                            throw TxBuilderException.LedgerValidationException(
+                              error,
+                              updatedContext
+                            )
+                    }
                 case Left(error) =>
                     throw TxBuilderException.BalancingException(error, initialContext)
             }
@@ -1224,59 +1244,76 @@ case class TxBuilder(
         }
     }
 
+    /** Ensures sufficient collateral inputs are present for the transaction.
+      *
+      * This method uses TransactionBuilder.ensureCollateralReturn to check if collateral is
+      * sufficient. If it returns InsufficientCollateralForReturn, we query for additional
+      * collateral inputs and retry.
+      *
+      * @return
+      *   Right(tx) with collateral return output set if successful, or queries for more collateral
+      *   inputs if insufficient
+      */
     private def ensureCollateralBalanced(
         tx: Transaction,
         provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
-    )(using ExecutionContext): Future[Either[Nothing, Transaction]] = {
-        val resolvedUtxos = selectedUtxos.utxos
-        val utxosToExclude = selectedUtxos.utxos
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
         // For transactions that don't need collateral -- return early
         val needsCollat = tx.witnessSet.redeemers.fold(false)(_.value.toSeq.nonEmpty)
         if !needsCollat then return Future.successful(Right(tx))
 
-        // If we need collateral, first calculate how much we need vs how much is present
-        val currentCollateralAmount = totalCollateralValue(tx, resolvedUtxos)
-        val requiredCollateralAmount = CollateralSufficient.calculateRequiredCollateral(
-          tx.body.value.fee,
-          env.protocolParams.collateralPercentage
-        )
-        val gap = currentCollateralAmount - Value(requiredCollateralAmount)
+        val collateralInputs = tx.body.value.collateralInputs.toSeq
 
-        // Zero means no ADA _and_ no tokens -- balanced, we're done
-        if gap.isZero then return Future.successful(Right(tx))
-
-        // Note that token gap is always positive -- collateral tokens must always be returned
-        val Value(adaGap, tokenGap) = gap
-
-        // If adaGap > min ADA, meaning the amount we need to return is greater than min ADA, we can
-        // create a single output = Value(adaGap, tokenGap).
-        // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
-        // We also need to make sure that we don't have more than 3 collateral inputs.
-
-        val minAda = MinCoinSizedTransactionOutput.computeMinAda(
-          Sized(TransactionOutput(sponsor, gap)),
-          env.protocolParams
-        )
-        if adaGap < minAda then {
-            // Need more collateral to meet minAda requirement for return output
-            val additionalNeeded = minAda - adaGap
-            selectCollateral(
+        // If no collateral inputs exist, we need to query for initial collateral
+        if collateralInputs.isEmpty then {
+            // Start with a reasonable initial amount based on typical fees
+            val initialCollateralNeeded = Coin.ada(5) // 5 ADA as initial estimate
+            return selectCollateral(
               provider,
               sponsor,
-              additionalNeeded,
-              excludeUtxos = utxosToExclude.keySet
-            ).map { additionalCollateral =>
-                // Remember the utxos to not select them again in the `complete`.
-                selectedUtxos.addAll(additionalCollateral)
-                val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
-                Right(txWithMoreCollateral)
+              initialCollateralNeeded,
+              excludeUtxos = selectedUtxos.utxos.keySet
+            ).flatMap { initialCollateral =>
+                selectedUtxos.addAll(initialCollateral)
+                val txWithCollateral = addCollaterals(tx, initialCollateral.keySet)
+                // Recurse to set collateral return and verify sufficiency
+                ensureCollateralBalanced(txWithCollateral, provider, sponsor, selectedUtxos)
             }
-        } else {
-            val returnOutput = TransactionOutput(sponsor, gap)
-            val withReturnOutput = addCollateralReturnOutput(tx, returnOutput, resolvedUtxos)
-            Future.successful(Right(withReturnOutput))
+        }
+
+        // Try to create collateral return output with current collateral inputs
+        TransactionBuilder.ensureCollateralReturn(
+          tx,
+          selectedUtxos.utxos,
+          Some(sponsor),
+          env.protocolParams
+        ) match {
+            case Right(txWithReturn) =>
+                // Collateral is sufficient, return output has been set
+                Future.successful(Right(txWithReturn))
+
+            case Left(
+                  TxBalancingError.InsufficientCollateralForReturn(_, required, minAdaForReturn)
+                ) =>
+                // Need more collateral to meet minAda requirement for return output
+                val additionalNeeded = required + minAdaForReturn
+                selectCollateral(
+                  provider,
+                  sponsor,
+                  additionalNeeded,
+                  excludeUtxos = selectedUtxos.utxos.keySet
+                ).flatMap { additionalCollateral =>
+                    // Remember the utxos to not select them again in the `complete`.
+                    selectedUtxos.addAll(additionalCollateral)
+                    val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
+                    // Retry with additional collateral
+                    ensureCollateralBalanced(txWithMoreCollateral, provider, sponsor, selectedUtxos)
+                }
+
+            case Left(otherError) =>
+                Future.successful(Left(otherError))
         }
     }
 
@@ -1444,41 +1481,6 @@ case class TxBuilder(
             }
     }
 
-    private def totalCollateralValue(tx: Transaction, utxos: Utxos): Value = {
-        tx.body.value.collateralInputs.toSet.foldLeft(Value.zero) { case (acc, input) =>
-            utxos.get(input).fold(acc)(output => acc + output.value)
-        }
-    }
-
-    /** Adds a collateral return output to the transaction and sets the totalCollateral field.
-      *
-      * @param tx
-      *   the transaction to modify
-      * @param returnOutput
-      *   the collateral return output to add
-      * @param resolvedUtxos
-      *   resolved UTXOs to calculate total collateral amount
-      * @return
-      *   modified transaction with collateral return output and totalCollateral set
-      */
-    private def addCollateralReturnOutput(
-        tx: Transaction,
-        returnOutput: TransactionOutput,
-        resolvedUtxos: Utxos
-    ): Transaction = {
-        // Calculate total collateral = sum of collateral inputs - return output value
-        val totalInputValue = totalCollateralValue(tx, resolvedUtxos)
-        val totalCollateralAmount = totalInputValue.coin - returnOutput.value.coin
-
-        modifyBody(
-          tx,
-          _.copy(
-            collateralReturnOutput = Some(Sized(returnOutput)),
-            totalCollateral = Some(totalCollateralAmount)
-          )
-        )
-    }
-
     private object ZeroAda {
         def unapply(coin: Coin): Boolean = coin == Coin.zero
     }
@@ -1622,60 +1624,6 @@ case class TxBuilder(
 
 /** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
-
-    // -------------------------------------------------------------------------
-    // Private async balancing helpers
-    // -------------------------------------------------------------------------
-
-    /** Diff handler type for async transaction balancing. */
-    private type DiffHandler = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
-
-    /** Balances the transaction using an async diff handler.
-      *
-      * This is used by `complete` to balance transactions without blocking. The diff handler is
-      * called asynchronously to handle value differences (add inputs, set change, etc.).
-      */
-    private[txbuilder] def balanceFeeAndChangeWithTokens(
-        initial: Transaction,
-        diffHandler: DiffHandler,
-        protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
-        evaluator: PlutusScriptEvaluator
-    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
-        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
-            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
-
-            val eTrialTxSync = for {
-                txWithExUnits <- TransactionBuilder.computeScriptsWitness(
-                  resolvedUtxo,
-                  evaluator,
-                  protocolParams
-                )(tx)
-                minFee <- MinTransactionFee
-                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
-                    .left
-                    .map(TxBalancingError.Failed(_))
-                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
-                txWithFees = TransactionBuilder.setFee(fee)(txWithExUnits)
-                diff = TransactionBuilder.calculateChangeValue(
-                  txWithFees,
-                  resolvedUtxo,
-                  protocolParams
-                )
-            } yield (diff, txWithFees)
-
-            eTrialTxSync match {
-                case Left(e) => Future.successful(Left(e))
-                case Right((diff, txWithFees)) =>
-                    diffHandler(diff, txWithFees).flatMap {
-                        case Left(e)                         => Future.successful(Left(e))
-                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
-                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
-                    }
-            }
-        }
-        loop(initial, 1)
-    }
 
     // -------------------------------------------------------------------------
     // Factory methods

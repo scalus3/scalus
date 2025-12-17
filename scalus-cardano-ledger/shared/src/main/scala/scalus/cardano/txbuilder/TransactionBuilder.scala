@@ -22,10 +22,14 @@ import scalus.cardano.txbuilder.TransactionBuilder.Context
 import scalus.|>
 
 import scala.annotation.tailrec
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
+
+// Async variant of DiffHandler for use with async UTXO selection (e.g., provider queries)
+type DiffHandlerAsync = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
 
 case class DelayedRedeemerSpec(
     purpose: RedeemerPurpose,
@@ -190,6 +194,23 @@ object TransactionBuilder {
             override def explain: String = "Voting procedure"
     }
 
+    /** Calculates the total value of all collateral inputs.
+      *
+      * This helper is shared between TransactionBuilder and TxBuilder to avoid code duplication.
+      *
+      * @param tx
+      *   the transaction containing collateral inputs
+      * @param utxos
+      *   resolved UTXOs to look up collateral input values
+      * @return
+      *   the sum of all collateral input values
+      */
+    def totalCollateralValue(tx: Transaction, utxos: Utxos): Value = {
+        tx.body.value.collateralInputs.toSeq.foldLeft(Value.zero) { case (acc, input) =>
+            utxos.get(input).fold(acc)(output => acc + output.value)
+        }
+    }
+
     /** A wrapper around a UTxO set that prevents adding conflicting pairs */
     case class ResolvedUtxos private (utxos: Utxos) {
 
@@ -320,6 +341,25 @@ object TransactionBuilder {
             } yield copy(transaction = balanced)
         }
 
+        /** Async variant of balance for use with async diff handlers.
+          *
+          * This method allows the diff handler to perform async operations (e.g., querying a
+          * provider for additional UTXOs) during each balancing iteration.
+          */
+        def balanceAsync(
+            diffHandler: DiffHandlerAsync,
+            protocolParams: ProtocolParams,
+            evaluator: PlutusScriptEvaluator
+        )(using ExecutionContext): Future[Either[TxBalancingError, Context]] = {
+            balanceFeeAndChangeWithTokensAsync(
+              initial = this.transaction,
+              diffHandler = diffHandler,
+              protocolParams = protocolParams,
+              resolvedUtxo = this.getUtxos,
+              evaluator = evaluator
+            ).map(_.map(balanced => copy(transaction = balanced)))
+        }
+
         /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */
         def getUtxos: Utxos = this.resolvedUtxos.utxos
 
@@ -359,7 +399,7 @@ object TransactionBuilder {
             val combinedDiffHandler: DiffHandler = (diff, tx) => {
                 for {
                     afterDiff <- diffHandler(diff, tx)
-                    afterCollateral <- TransactionBuilder.ensureCollateralReturnTx(
+                    afterCollateral <- TransactionBuilder.ensureCollateralReturn(
                       afterDiff,
                       this.resolvedUtxos.utxos,
                       this.collateralReturnAddress,
@@ -386,6 +426,69 @@ object TransactionBuilder {
                 )
 
             } yield validatedCtxWithoutSignatures
+        }
+
+        /** Async variant of finalizeContext for use with async diff handlers.
+          *
+          * This method allows the diff handler to perform async operations (e.g., querying a
+          * provider for additional UTXOs) during each balancing iteration. The core logic is the
+          * same as finalizeContext: adds dummy signatures, balances with collateral return
+          * handling, validates, and removes dummy signatures.
+          *
+          * @param protocolParams
+          *   protocol parameters for fee calculation and validation
+          * @param diffHandler
+          *   async handler for managing transaction balance differences (change, UTXO selection)
+          * @param evaluator
+          *   Plutus script evaluator
+          * @param validators
+          *   ledger validators to run against the balanced transaction
+          * @return
+          *   Future containing either an error or the finalized context
+          */
+        def finalizeContextAsync(
+            protocolParams: ProtocolParams,
+            diffHandler: DiffHandlerAsync,
+            evaluator: PlutusScriptEvaluator,
+            validators: Seq[Validator]
+        )(using ExecutionContext): Future[Either[SomeBuildError, Context]] = {
+            val txWithDummySignatures: Transaction =
+                addDummySignatures(this.expectedSigners.size, this.transaction)
+            val contextWithSignatures = this.copy(transaction = txWithDummySignatures)
+
+            // Create a combined async diff handler that also handles collateral return
+            // This ensures collateral return is set within the balancing loop,
+            // so any size increase is accounted for in fee calculation
+            val combinedDiffHandler: DiffHandlerAsync = (diff, tx) => {
+                diffHandler(diff, tx).map(_.flatMap { afterDiff =>
+                    TransactionBuilder.ensureCollateralReturn(
+                      afterDiff,
+                      this.resolvedUtxos.utxos,
+                      this.collateralReturnAddress,
+                      protocolParams
+                    )
+                })
+            }
+
+            contextWithSignatures
+                .ensureMinAdaAll(protocolParams)
+                .balanceAsync(combinedDiffHandler, protocolParams, evaluator)
+                .map {
+                    case Left(e) => Left(BalancingError(e, this))
+                    case Right(balancedCtx) =>
+                        balancedCtx
+                            .validate(validators, protocolParams)
+                            .left
+                            .map(ValidationError(_, this))
+                            .map(validatedCtx =>
+                                validatedCtx.copy(
+                                  transaction = removeDummySignatures(
+                                    this.expectedSigners.size,
+                                    validatedCtx.transaction
+                                  )
+                                )
+                            )
+                }
         }
     }
 
@@ -517,7 +620,7 @@ object TransactionBuilder {
       *
       * This is the transaction-level version used within the balancing loop.
       */
-    def ensureCollateralReturnTx(
+    def ensureCollateralReturn(
         tx: Transaction,
         resolvedUtxos: Utxos,
         collateralReturnAddress: Option[Address],
@@ -537,9 +640,7 @@ object TransactionBuilder {
         )
 
         // Calculate total collateral value
-        val totalCollateralValue = collateralInputs.foldLeft(Value.zero) { case (acc, input) =>
-            resolvedUtxos.get(input).fold(acc)(output => acc + output.value)
-        }
+        val totalCollateralVal = TransactionBuilder.totalCollateralValue(tx, resolvedUtxos)
 
         // Calculate required collateral
         val requiredCollateral = CollateralSufficient.calculateRequiredCollateral(
@@ -551,11 +652,11 @@ object TransactionBuilder {
         val returnAddr: Address = collateralReturnAddress.getOrElse(firstCollateralUtxo.address)
 
         // Check if tokens are present (MUST have return output)
-        val hasTokens = totalCollateralValue.assets.nonEmpty
+        val hasTokens = totalCollateralVal.assets.nonEmpty
 
         // Calculate potential return value
-        val potentialReturnAda = totalCollateralValue.coin.value - requiredCollateral.value
-        val potentialReturnValue = Value(Coin(potentialReturnAda), totalCollateralValue.assets)
+        val potentialReturnAda = totalCollateralVal.coin.value - requiredCollateral.value
+        val potentialReturnValue = Value(Coin(potentialReturnAda), totalCollateralVal.assets)
         val minAdaForReturn = MinCoinSizedTransactionOutput
             .computeMinAda(
               Sized(TransactionOutput(returnAddr, potentialReturnValue)),
@@ -570,7 +671,7 @@ object TransactionBuilder {
             // Tokens present but not enough ADA for valid return output
             return Left(
               TxBalancingError.InsufficientCollateralForReturn(
-                totalCollateralAda = totalCollateralValue.coin,
+                totalCollateralAda = totalCollateralVal.coin,
                 requiredCollateral = requiredCollateral,
                 minAdaForReturn = Coin(minAdaForReturn)
               )
@@ -582,9 +683,9 @@ object TransactionBuilder {
 
         // Create return output with the available ADA (already validated sufficient if tokens present)
         val returnAda = potentialReturnAda
-        val actualTotalCollateral = Coin(totalCollateralValue.coin.value - returnAda)
+        val actualTotalCollateral = Coin(totalCollateralVal.coin.value - returnAda)
 
-        val returnValue = Value(Coin(returnAda), totalCollateralValue.assets)
+        val returnValue = Value(Coin(returnAda), totalCollateralVal.assets)
         val returnOutput = TransactionOutput(returnAddr, returnValue)
 
         val newTx = modifyBody(
@@ -674,6 +775,74 @@ object TransactionBuilder {
             }
         }
         loop(initial)
+    }
+
+    /** Computes a single iteration step of the balancing loop.
+      *
+      * This helper is shared between sync and async balancing to avoid code duplication. It
+      * performs script evaluation, fee calculation, and computes the diff that needs to be
+      * balanced.
+      *
+      * @return
+      *   Either an error or a tuple of (diff value to balance, transaction with updated fees)
+      */
+    private[txbuilder] def computeIterationStep(
+        tx: Transaction,
+        initialFee: Coin,
+        protocolParams: ProtocolParams,
+        resolvedUtxo: Utxos,
+        evaluator: PlutusScriptEvaluator
+    ): Either[TxBalancingError, (Value, Transaction)] = {
+        for {
+            txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
+            minFee <- MinTransactionFee
+                .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
+                .left
+                .map(TxBalancingError.Failed(_))
+            // Don't go below initial fee
+            fee = Coin(math.max(minFee.value, initialFee.value))
+            txWithFees = setFee(fee)(txWithExUnits)
+            diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
+        } yield (diff, txWithFees)
+    }
+
+    /** Async variant of balanceFeeAndChangeWithTokens for use with async UTXO selection.
+      *
+      * This method allows the diff handler to perform async operations (e.g., querying a provider
+      * for additional UTXOs) during each balancing iteration. The core iteration logic is shared
+      * with the sync variant.
+      *
+      * @param resolvedUtxo
+      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
+      *   to dynamically add UTXOs that will be visible in subsequent iterations.
+      */
+    def balanceFeeAndChangeWithTokensAsync(
+        initial: Transaction,
+        diffHandler: DiffHandlerAsync,
+        protocolParams: ProtocolParams,
+        resolvedUtxo: => Utxos,
+        evaluator: PlutusScriptEvaluator
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
+        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
+            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
+
+            computeIterationStep(
+              tx,
+              initial.body.value.fee,
+              protocolParams,
+              resolvedUtxo,
+              evaluator
+            ) match {
+                case Left(e) => Future.successful(Left(e))
+                case Right((diff, txWithFees)) =>
+                    diffHandler(diff, txWithFees).flatMap {
+                        case Left(e)                         => Future.successful(Left(e))
+                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
+                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
+                    }
+            }
+        }
+        loop(initial, 1)
     }
 
     private[txbuilder] def computeScriptsWitness(

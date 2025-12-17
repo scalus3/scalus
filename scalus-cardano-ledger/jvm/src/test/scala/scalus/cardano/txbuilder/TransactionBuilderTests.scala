@@ -835,7 +835,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     )
 
     // Test that collateral with tokens but insufficient ADA returns error
-    test("ensureCollateralReturnTx fails when collateral has tokens but insufficient ADA") {
+    test("ensureCollateralReturn fails when collateral has tokens but insufficient ADA") {
         // Create a UTxO with tokens but minimal ADA (just 1 ADA which is not enough for collateral + return)
         val pkhUtxoWithTokensLowAda = Utxo(
           input = input1,
@@ -857,10 +857,10 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           _.copy(fee = Coin(500_000L)) // 0.5 ADA fee -> requires ~0.75 ADA collateral (150%)
         )
 
-        // Call ensureCollateralReturnTx - should fail because:
+        // Call ensureCollateralReturn - should fail because:
         // - Collateral has tokens (must return them)
         // - But 1 ADA - 0.75 ADA = 0.25 ADA left for return, which is less than minAda (~1 ADA)
-        val result = TransactionBuilder.ensureCollateralReturnTx(
+        val result = TransactionBuilder.ensureCollateralReturn(
           txWithFee,
           ctx.resolvedUtxos.utxos,
           None,
