@@ -1430,37 +1430,16 @@ object BuiltinCostModel {
             memory = OneArgument.ConstantCost(CostingInteger(4L))
           ),
           listToArray = DefaultCostingFun(
-            cpu = OneArgument.LinearInX(
-              OneVariableLinearFunction(
-                intercept = CostingInteger(100000L),
-                slope = CostingInteger(1000L)
-              )
-            ),
-            memory = OneArgument.LinearInX(
-              OneVariableLinearFunction(
-                intercept = CostingInteger(4L),
-                slope = CostingInteger(1L)
-              )
-            )
+            cpu = OneArgument.ConstantCost(CostingInteger(100000L)),
+            memory = OneArgument.ConstantCost(CostingInteger(4L))
           ),
           indexArray = DefaultCostingFun(
             cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
             memory = TwoArguments.ConstantCost(CostingInteger(4L))
           ),
-          // multiIndexArray - cost is linear in the length of the index list
           multiIndexArray = DefaultCostingFun(
-            cpu = TwoArguments.LinearInX(
-              OneVariableLinearFunction(
-                intercept = CostingInteger(100000L),
-                slope = CostingInteger(10000L)
-              )
-            ),
-            memory = TwoArguments.LinearInX(
-              OneVariableLinearFunction(
-                intercept = CostingInteger(4L),
-                slope = CostingInteger(1L)
-              )
-            )
+            cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
+            memory = TwoArguments.ConstantCost(CostingInteger(4L))
           )
         )
 

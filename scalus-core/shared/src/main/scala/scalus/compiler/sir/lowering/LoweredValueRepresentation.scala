@@ -510,6 +510,16 @@ object LoweredValueRepresentation {
                       s"Only BuiltinList[Data] and BuiltinList[BuiltinPair[Data,Data]] can be constants.",
                   SIRPosition.empty
                 )
+            // BuiltinArray[Data] -> use Constant representation (native UPLC array)
+            case SIRType.BuiltinArray(SIRType.Data()) =>
+                PrimitiveRepresentation.Constant
+            // BuiltinArray with non-Data element type - not supported as constant
+            case SIRType.BuiltinArray(elemType) =>
+                throw LoweringException(
+                  s"BuiltinArray constant with non-Data element type ${elemType.show} is not supported. " +
+                      s"Only BuiltinArray[Data] can be a constant.",
+                  SIRPosition.empty
+                )
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 // Data type uses DataData representation, not DataConstr
                 if decl.name == SIRType.Data.name then SumCaseClassRepresentation.DataData

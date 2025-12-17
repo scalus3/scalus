@@ -235,7 +235,7 @@ object Lowering {
                 }
                 retval
             case sirConst @ SIR.Const(const, tp, anns) =>
-                // Handle BuiltinList constants - transform elements to Data if needed
+                // Handle BuiltinList and BuiltinArray constants - transform elements to Data if needed
                 // TODO: In the future, we may want to add SumConstBuiltinList representation
                 // to avoid this transformation and keep native UPLC list types
                 val (transformedConst, transformedTp, repr) = tp match {
@@ -246,6 +246,20 @@ object Lowering {
                                 val newConst = Constant.List(DefaultUni.Data, dataElements)
                                 val newTp = SIRType.BuiltinList(SIRType.Data.tp)
                                 (newConst, newTp, SumCaseClassRepresentation.SumDataList)
+                            case _ =>
+                                (const, tp, LoweredValueRepresentation.constRepresentation(tp))
+                        }
+                    case SIRType.BuiltinArray(elemType) if !SIRType.Data.unapply(elemType) =>
+                        const match {
+                            case Constant.Array(_, elements) =>
+                                val dataElements = elements.map(constantToData)
+                                val newConst = Constant.Array(DefaultUni.Data, dataElements)
+                                val newTp = SIRType.BuiltinArray(SIRType.Data.tp)
+                                (
+                                  newConst,
+                                  newTp,
+                                  LoweredValueRepresentation.constRepresentation(newTp)
+                                )
                             case _ =>
                                 (const, tp, LoweredValueRepresentation.constRepresentation(tp))
                         }

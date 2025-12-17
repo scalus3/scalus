@@ -55,6 +55,14 @@ object Constant {
             )
     }
 
+    given indexedSeqLiftValue[A: LiftValue: DefaultUni.Lift]: LiftValue[IndexedSeq[A]] with {
+        def lift(a: IndexedSeq[A]): Constant =
+            Array(
+              summon[DefaultUni.Lift[A]].defaultUni,
+              a.view.map(summon[LiftValue[A]].lift).toIndexedSeq
+            )
+    }
+
     given tupleLiftValue[A: LiftValue: DefaultUni.Lift, B: LiftValue: DefaultUni.Lift]
         : LiftValue[(A, B)] = new LiftValue[(A, B)] {
         def lift(a: (A, B)): Constant = Pair(
