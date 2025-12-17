@@ -11,7 +11,37 @@ class BuiltinArrayTest extends AnyFunSuite {
 
     given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    test("BuiltinArray constructor compile") {
+    test("BuiltinList constructor compile BigInt") {
+        val sir = compile {
+            val list = BuiltinList(BigInt(1), BigInt(2), BigInt(3))
+            lengthOfArray(listToArray(list))
+        }
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(scalus.uplc.Constant.Integer(3)))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    test("BuiltinArray constructor compile BigInt") {
+        val sir = compile {
+            val array = BuiltinArray(BigInt(1), BigInt(2), BigInt(3))
+            lengthOfArray(array)
+        }
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(scalus.uplc.Constant.Integer(3)))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    test("BuiltinArray constructor compile iData") {
         val sir = compile {
             val array = BuiltinArray(iData(1), iData(2), iData(3))
             lengthOfArray(array)
