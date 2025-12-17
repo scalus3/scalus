@@ -62,6 +62,9 @@ object TxBuilderException {
                   s"Cannot balance transaction, last diff: $lastDiff lovelace"
               case TxBalancingError.InsufficientFunds(diff, minRequired) =>
                   s"Insufficient funds: need $minRequired more lovelace, diff is $diff"
+              case TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda) =>
+                  s"Collateral contains tokens but insufficient ADA for return output. " +
+                      s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
           },
           error match {
               case TxBalancingError.EvaluationFailed(cause) => cause
@@ -123,6 +126,18 @@ object TxBuilderException {
           cause.orNull
         )
 
+    /** Collateral contains tokens but insufficient ADA for valid return output. */
+    final case class InsufficientCollateralForReturnException(
+        totalCollateralAda: Coin,
+        requiredCollateral: Coin,
+        minAdaForReturn: Coin
+    ) extends TxBuilderException(
+          s"Collateral contains tokens but insufficient ADA for return output. " +
+              s"Total: ${totalCollateralAda.value}, required for fees: ${requiredCollateral.value}, " +
+              s"minAda for return: ${minAdaForReturn.value}. " +
+              s"Need at least ${requiredCollateral.value + minAdaForReturn.value} lovelace in collateral."
+        )
+
     /** Context initialization failed. */
     final case class ContextInitializationException(
         msg: String,
@@ -147,6 +162,8 @@ object TxBuilderException {
         case SomeBuildError.SomeRedeemerIndexingError(e, ctx) => RedeemerIndexingException(e, ctx)
         case SomeBuildError.BalancingError(e, ctx)            => BalancingException(e, ctx)
         case SomeBuildError.ValidationError(e, ctx)           => LedgerValidationException(e, ctx)
+        case SomeBuildError.InsufficientCollateralForReturn(totalAda, required, minAda, _) =>
+            InsufficientCollateralForReturnException(totalAda, required, minAda)
     }
 }
 

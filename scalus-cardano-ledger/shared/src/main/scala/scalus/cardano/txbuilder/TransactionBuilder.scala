@@ -14,7 +14,7 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.rules.{Context as SContext, State as SState, UtxoEnv}
-import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee, TxBalance}
+import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee, TxBalance}
 import scalus.cardano.txbuilder.Datum.DatumValue
 import scalus.cardano.txbuilder.SomeBuildError.{BalancingError, SomeRedeemerIndexingError, SomeStepError, ValidationError}
 import scalus.cardano.txbuilder.StepError.*
@@ -241,7 +241,11 @@ object TransactionBuilder {
           *     and transaction.body.value.collateralInputs must exactly match resolvedUtxos.inputs
           */
         resolvedUtxos: ResolvedUtxos,
-        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec] = Seq.empty
+        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec] = Seq.empty,
+        /** Optional address for collateral return output. If not set, defaults to first collateral
+          * input's address when collateral return is needed.
+          */
+        collateralReturnAddress: Option[Address] = None
     ) {
 
         /** Extract tupled information from a Context. This method is provided to avoid breaking
@@ -348,11 +352,26 @@ object TransactionBuilder {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
             val contextWithSignatures = this.copy(transaction = txWithDummySignatures)
-            for {
 
+            // Create a combined diff handler that also handles collateral return
+            // This ensures collateral return is set within the balancing loop,
+            // so any size increase is accounted for in fee calculation
+            val combinedDiffHandler: DiffHandler = (diff, tx) => {
+                for {
+                    afterDiff <- diffHandler(diff, tx)
+                    afterCollateral <- TransactionBuilder.ensureCollateralReturnTx(
+                      afterDiff,
+                      this.resolvedUtxos.utxos,
+                      this.collateralReturnAddress,
+                      protocolParams
+                    )
+                } yield afterCollateral
+            }
+
+            for {
                 balancedCtx <- contextWithSignatures
                     .ensureMinAdaAll(protocolParams)
-                    .balance(diffHandler, protocolParams, evaluator)
+                    .balance(combinedDiffHandler, protocolParams, evaluator)
                     .left
                     .map(BalancingError(_, this))
 
@@ -484,6 +503,100 @@ object TransactionBuilder {
         tx.copy(witnessSet = newWs)
     }
 
+    /** Ensure collateral return output is set when beneficial.
+      *
+      * Per Babbage spec (Figure 4), if script validation FAILS without collateralReturnOutput, ALL
+      * collateral ADA is taken as fees. With collateralReturnOutput set, only the difference
+      * (inputs - return) is taken as fees, and the return output is created.
+      *
+      * This method creates a collateral return output when:
+      *   1. Collateral contains tokens (MUST be returned per protocol)
+      *   2. Excess ADA above required collateral can cover min ADA for return output
+      *
+      * This prevents users from losing their entire collateral UTXO if a script fails.
+      *
+      * This is the transaction-level version used within the balancing loop.
+      */
+    def ensureCollateralReturnTx(
+        tx: Transaction,
+        resolvedUtxos: Utxos,
+        collateralReturnAddress: Option[Address],
+        protocolParams: ProtocolParams
+    ): Either[TxBalancingError, Transaction] = {
+        val collateralInputs = tx.body.value.collateralInputs.toSeq
+        if collateralInputs.isEmpty then return Right(tx)
+
+        // Get first collateral input and its UTXO (invariant: all collateral inputs are in resolvedUtxos)
+        val firstCollateralInput = collateralInputs.head
+        val firstCollateralUtxo = resolvedUtxos.getOrElse(
+          firstCollateralInput,
+          throw new IllegalStateException(
+            s"Collateral input $firstCollateralInput not found in resolvedUtxos. " +
+                "This indicates a bug in transaction building - all collateral inputs should be resolved."
+          )
+        )
+
+        // Calculate total collateral value
+        val totalCollateralValue = collateralInputs.foldLeft(Value.zero) { case (acc, input) =>
+            resolvedUtxos.get(input).fold(acc)(output => acc + output.value)
+        }
+
+        // Calculate required collateral
+        val requiredCollateral = CollateralSufficient.calculateRequiredCollateral(
+          tx.body.value.fee,
+          protocolParams.collateralPercentage
+        )
+
+        // Determine return address - use explicit setting or default to first collateral's address
+        val returnAddr: Address = collateralReturnAddress.getOrElse(firstCollateralUtxo.address)
+
+        // Check if tokens are present (MUST have return output)
+        val hasTokens = totalCollateralValue.assets.nonEmpty
+
+        // Calculate potential return value
+        val potentialReturnAda = totalCollateralValue.coin.value - requiredCollateral.value
+        val potentialReturnValue = Value(Coin(potentialReturnAda), totalCollateralValue.assets)
+        val minAdaForReturn = MinCoinSizedTransactionOutput
+            .computeMinAda(
+              Sized(TransactionOutput(returnAddr, potentialReturnValue)),
+              protocolParams
+            )
+            .value
+
+        // Decide whether to create return output:
+        // 1. If tokens present: MUST create return output (error if insufficient ADA)
+        // 2. If ADA-only: create return output only if excess ADA >= minAda for return
+        if hasTokens && potentialReturnAda < minAdaForReturn then
+            // Tokens present but not enough ADA for valid return output
+            return Left(
+              TxBalancingError.InsufficientCollateralForReturn(
+                totalCollateralAda = totalCollateralValue.coin,
+                requiredCollateral = requiredCollateral,
+                minAdaForReturn = Coin(minAdaForReturn)
+              )
+            )
+
+        val shouldCreateReturn = hasTokens || potentialReturnAda >= minAdaForReturn
+
+        if !shouldCreateReturn then return Right(tx)
+
+        // Create return output with the available ADA (already validated sufficient if tokens present)
+        val returnAda = potentialReturnAda
+        val actualTotalCollateral = Coin(totalCollateralValue.coin.value - returnAda)
+
+        val returnValue = Value(Coin(returnAda), totalCollateralValue.assets)
+        val returnOutput = TransactionOutput(returnAddr, returnValue)
+
+        val newTx = modifyBody(
+          tx,
+          _.copy(
+            collateralReturnOutput = Some(Sized(returnOutput)),
+            totalCollateral = Some(actualTotalCollateral)
+          )
+        )
+        Right(newTx)
+    }
+
     def setFee(amount: Coin)(tx: Transaction): Transaction = modifyBody(tx, _.copy(fee = amount))
 
     def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
@@ -613,6 +726,16 @@ enum TxBalancingError {
     case Failed(cause: Throwable)
     case CantBalance(lastDiff: Long)
     case InsufficientFunds(diff: Long, minRequired: Long)
+
+    /** Error when collateral contains tokens but there's insufficient ADA to create a valid
+      * collateral return output. Per Babbage spec, tokens in collateral MUST be returned via
+      * collateralReturnOutput, which requires meeting the minAda requirement.
+      */
+    case InsufficientCollateralForReturn(
+        totalCollateralAda: Coin,
+        requiredCollateral: Coin,
+        minAdaForReturn: Coin
+    )
 }
 
 // -------------------------------------------------------------------------
@@ -656,6 +779,17 @@ enum SomeBuildError:
     case BalancingError(e: TxBalancingError, context: Context)
     case ValidationError(e: TransactionException, context: Context)
 
+    /** Error when collateral contains tokens but there's insufficient ADA to create a valid
+      * collateral return output. Per Babbage spec, tokens in collateral MUST be returned via
+      * collateralReturnOutput, which requires meeting the minAda requirement.
+      */
+    case InsufficientCollateralForReturn(
+        totalCollateralAda: Coin,
+        requiredCollateral: Coin,
+        minAdaForReturn: Coin,
+        context: Context
+    )
+
     def reason: Throwable =
         this match {
             case SomeBuildError.SomeStepError(e, context) =>
@@ -683,8 +817,28 @@ enum SomeBuildError:
                         new RuntimeException(
                           s"Balancing failure: insufficient funds: diff=$diff, minRequired=$minRequired"
                         )
+                    case TxBalancingError.InsufficientCollateralForReturn(
+                          totalAda,
+                          required,
+                          minAda
+                        ) =>
+                        new RuntimeException(
+                          s"Collateral contains tokens but insufficient ADA for return output. " +
+                              s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
+                        )
                 }
             case SomeBuildError.ValidationError(e, context) => e
+            case SomeBuildError.InsufficientCollateralForReturn(
+                  totalAda,
+                  required,
+                  minAda,
+                  _
+                ) =>
+                new RuntimeException(
+                  s"Collateral contains tokens but insufficient ADA for return output. " +
+                      s"Total collateral ADA: ${totalAda.value}, required collateral: ${required.value}, " +
+                      s"min ADA for return: ${minAda.value}. Need at least ${required.value + minAda.value} lovelace."
+                )
         }
 
     override def toString: String = this match {
@@ -701,8 +855,17 @@ enum SomeBuildError:
             s"Can't balance: last diff $lastDiff"
         case BalancingError(TxBalancingError.InsufficientFunds(diff, required), _) =>
             s"Insufficient funds: need $required more"
+        case BalancingError(
+              TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda),
+              _
+            ) =>
+            s"Collateral contains tokens but insufficient ADA for return output. " +
+                s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
         case ValidationError(e, _) =>
             s"Transaction validation failed: ${e.getClass.getSimpleName} - ${e.getMessage}"
+        case InsufficientCollateralForReturn(totalAda, required, minAda, _) =>
+            s"Collateral contains tokens but insufficient ADA for return output. " +
+                s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
     }
 
 def keepRawL[A: Encoder](): Lens[KeepRaw[A], A] = {

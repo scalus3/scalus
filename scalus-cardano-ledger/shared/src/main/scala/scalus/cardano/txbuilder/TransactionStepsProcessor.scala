@@ -123,6 +123,9 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         case addCollateral: AddCollateral =>
             useAddCollateral(addCollateral)
 
+        case setCollateralReturn: SetCollateralReturn =>
+            useSetCollateralReturn(setCollateralReturn)
+
         case modifyAuxiliaryData: ModifyAuxiliaryData =>
             Right(useModifyAuxiliaryData(modifyAuxiliaryData))
 
@@ -550,7 +553,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     private def useAddCollateral(addCollateral: AddCollateral): Result[Unit] =
         for
             _ <- assertNetworkId(addCollateral.utxo.output.address, addCollateral)
-            _ <- assertAdaOnlyPubkeyUtxo(addCollateral.utxo, addCollateral)
+            _ <- assertPubkeyUtxo(addCollateral.utxo, addCollateral)
             _ <- addResolvedUtxo(addCollateral.utxo, addCollateral)
         yield modify0(
           // Add the collateral utxo to the tx body
@@ -563,13 +566,24 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               )
         )
 
-    /** Ensure that the output is a pubkey output containing only ada. */
-    private def assertAdaOnlyPubkeyUtxo(utxo: Utxo, step: TransactionBuilderStep): Result[Unit] =
+    // -------------------------------------------------------------------------
+    // SetCollateralReturn step
+    // -------------------------------------------------------------------------
+
+    private def useSetCollateralReturn(step: SetCollateralReturn): Result[Unit] =
         for {
-            _ <-
-                if !utxo.output.value.assets.isEmpty
-                then Left(CollateralWithTokens(utxo, step))
-                else Ok
+            _ <- assertNetworkId(step.returnAddress, step)
+        } yield modify0(Focus[Context](_.collateralReturnAddress).replace(Some(step.returnAddress)))
+
+    /** Ensure that the output is controlled by a pubkey (not a script).
+      *
+      * Per Babbage era specification (CIP-40), collateral inputs can contain native tokens as long
+      * as all tokens are returned via the collateral return output.
+      */
+    private def assertPubkeyUtxo(utxo: Utxo, step: TransactionBuilderStep): Result[Unit] =
+        for {
+            // No token check - collateral CAN have tokens per Babbage spec
+            // The adaOnly check applies to NET balance (inputs - return), not individual inputs
             addr: ShelleyAddress <- utxo.output.address match {
                 case sa: ShelleyAddress  => Right(sa)
                 case by: ByronAddress    => Left(ByronAddressesNotSupported(by, step))

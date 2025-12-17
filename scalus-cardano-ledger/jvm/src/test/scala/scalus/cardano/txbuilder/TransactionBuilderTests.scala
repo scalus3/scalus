@@ -768,6 +768,124 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       error = CollateralNotPubKey(script1Utxo, AddCollateral(script1Utxo))
     )
 
+    // Test that collateral with tokens is now allowed (per Babbage spec CIP-40)
+    test("Adding a utxo with tokens as collateral succeeds") {
+        // Create a pubkey UTxO with tokens
+        val pkhUtxoWithTokens = Utxo(
+          input = input1,
+          output = pkhOutput.copy(
+            value = Value(
+              Coin(5_000_000L),
+              MultiAsset.asset(script1.scriptHash, AssetName.fromString("TestToken"), 100L)
+            )
+          )
+        )
+        val steps = List(AddCollateral(utxo = pkhUtxoWithTokens))
+        val built = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // Verify the UTXO was added to resolvedUtxos
+        assert(built.resolvedUtxos.utxos.contains(pkhUtxoWithTokens.input))
+
+        // Verify the collateral input was added to the transaction body
+        assert(
+          built.transaction.body.value.collateralInputs.toSet.contains(pkhUtxoWithTokens.input)
+        )
+    }
+
+    // Test that SetCollateralReturn step sets the return address in context
+    test("SetCollateralReturn step sets the return address in context") {
+        val returnAddress = pkhOutput.address
+        val steps = List(
+          AddCollateral(utxo = pkhUtxo),
+          SetCollateralReturn(returnAddress = returnAddress)
+        )
+        val built = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // Verify the collateral return address was set
+        assert(built.collateralReturnAddress == Some(returnAddress))
+    }
+
+    // Test that SetCollateralReturn with wrong network fails
+    testBuilderStepsFail(
+      label = "SetCollateralReturn with wrong network fails",
+      steps = List(
+        AddCollateral(utxo = pkhUtxo),
+        SetCollateralReturn(
+          returnAddress = ShelleyAddress(
+            network = Testnet, // Wrong network
+            payment = pkhOutputPaymentPart,
+            delegation = Null
+          )
+        )
+      ),
+      error = WrongNetworkId(
+        ShelleyAddress(
+          network = Testnet,
+          payment = pkhOutputPaymentPart,
+          delegation = Null
+        ),
+        SetCollateralReturn(
+          ShelleyAddress(
+            network = Testnet,
+            payment = pkhOutputPaymentPart,
+            delegation = Null
+          )
+        )
+      )
+    )
+
+    // Test that collateral with tokens but insufficient ADA returns error
+    test("ensureCollateralReturnTx fails when collateral has tokens but insufficient ADA") {
+        // Create a UTxO with tokens but minimal ADA (just 1 ADA which is not enough for collateral + return)
+        val pkhUtxoWithTokensLowAda = Utxo(
+          input = input1,
+          output = pkhOutput.copy(
+            value = Value(
+              Coin(1_000_000L), // 1 ADA - not enough for both collateral and minAda return
+              MultiAsset.asset(script1.scriptHash, AssetName.fromString("TestToken"), 100L)
+            )
+          )
+        )
+
+        // Build a context with this collateral
+        val steps = List(AddCollateral(utxo = pkhUtxoWithTokensLowAda))
+        val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // Set a fee that requires significant collateral
+        val txWithFee = TransactionBuilder.modifyBody(
+          ctx.transaction,
+          _.copy(fee = Coin(500_000L)) // 0.5 ADA fee -> requires ~0.75 ADA collateral (150%)
+        )
+
+        // Call ensureCollateralReturnTx - should fail because:
+        // - Collateral has tokens (must return them)
+        // - But 1 ADA - 0.75 ADA = 0.25 ADA left for return, which is less than minAda (~1 ADA)
+        val result = TransactionBuilder.ensureCollateralReturnTx(
+          txWithFee,
+          ctx.resolvedUtxos.utxos,
+          None,
+          blockfrost544Params
+        )
+
+        result match {
+            case Left(
+                  TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda)
+                ) =>
+                // Verify error details make sense
+                assert(totalAda.value == 1_000_000L, s"Expected 1 ADA total, got ${totalAda.value}")
+                assert(required.value > 0, "Required collateral should be positive")
+                assert(minAda.value > 0, "MinAda for return should be positive")
+                assert(
+                  totalAda.value < required.value + minAda.value,
+                  s"Total ADA (${totalAda.value}) should be < required (${required.value}) + minAda (${minAda.value})"
+                )
+            case Left(other) =>
+                fail(s"Expected InsufficientCollateralForReturn, got $other")
+            case Right(_) =>
+                fail("Expected error but got success")
+        }
+    }
+
     // =======================================================================
     // Group: "Deregister"
     // =======================================================================

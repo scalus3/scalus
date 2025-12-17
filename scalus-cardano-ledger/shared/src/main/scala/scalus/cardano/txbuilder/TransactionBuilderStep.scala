@@ -1,6 +1,7 @@
 package scalus.cardano.txbuilder
 
 import scalus.builtin.Data
+import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
 sealed trait TransactionBuilderStep
@@ -78,13 +79,27 @@ object TransactionBuilderStep {
     /** Set transaction validity end slot (aka TTL), can be used once. */
     case class ValidityEndSlot(slot: Long) extends TransactionBuilderStep
 
-    /** Add a utxo as a collateral input. Utxo should contain ada only and be controlled by a key,
-      * not a script. If you need set collateral outputs at `totalCollateral` field, please use
-      * optics.
+    /** Add a utxo as a collateral input. The utxo must be controlled by a key (not a script).
+      *
+      * Per Babbage era specification (CIP-40), native tokens in collateral inputs are allowed. All
+      * tokens will be returned via the collateral return output. Use [[SetCollateralReturn]] to
+      * specify the return address, or it will default to the address of the first collateral input.
       */
     case class AddCollateral(
         utxo: Utxo
     ) extends TransactionBuilderStep
+
+    /** Set the address where collateral return output should be sent.
+      *
+      * This is optional - if not set, the first collateral input's address will be used. Use this
+      * when you want the collateral return to go to a different address than where the collateral
+      * came from.
+      *
+      * The collateral return output is automatically created during transaction finalization when
+      * collateral contains native tokens (required by protocol) or when excess ADA above the
+      * required collateral can cover the min ADA for a return output.
+      */
+    case class SetCollateralReturn(returnAddress: Address) extends TransactionBuilderStep
 
     case class ModifyAuxiliaryData(f: Option[AuxiliaryData] => Option[AuxiliaryData])
         extends TransactionBuilderStep
