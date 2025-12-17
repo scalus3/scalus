@@ -827,7 +827,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val script = validPlutusV1Script
 
         val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val datum = Data.unit
 
         val output = TransactionOutput.Babbage(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -880,7 +880,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val input = arbitrary[TransactionInput].sample.get
         val referenceInput = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val datum = Data.unit
 
         val output = TransactionOutput.Babbage(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -941,7 +941,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val script = validPlutusV1Script
 
         val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val datum = Data.unit
 
         val outputWithInlineDatum = TransactionOutput.Babbage(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
@@ -994,7 +994,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val input1 = arbitrary[TransactionInput].sample.get
         val input2 = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val datum = Data.unit
         val byronAddress = arbitrary[ByronAddress].sample.get
 
         val output = TransactionOutput.Babbage(
@@ -1031,17 +1031,15 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input1 -> TransactionOutput.Babbage(
+            tx.body.value.inputs.toSet.head -> TransactionOutput.Babbage(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumOption = Some(DatumOption.Hash(DataHash.fromByteString(datum.dataHash))),
               scriptRef = None
             ),
-            input2 -> TransactionOutput.Babbage(
+            tx.body.value.inputs.toSet.tail.head -> TransactionOutput.Babbage(
               address = byronAddress,
-              value = Value.zero,
-              datumOption = Some(DatumOption.Hash(DataHash.fromByteString(datum.dataHash))),
-              scriptRef = None
+              value = Value.zero
             )
           )
         )
@@ -1055,7 +1053,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val input = arbitrary[TransactionInput].sample.get
         val referenceInput = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val datum = Data.unit
         val byronAddress = arbitrary[ByronAddress].sample.get
 
         val output = TransactionOutput.Babbage(
@@ -1120,7 +1118,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val script = validPlutusV1Script
 
         val input = arbitrary[TransactionInput].sample.get
-        val datum = arbitrary[Data].sample.get
+        val datum = Data.unit
         val byronAddress = arbitrary[ByronAddress].sample.get
 
         val outputWithByronAddress = TransactionOutput.Babbage(
