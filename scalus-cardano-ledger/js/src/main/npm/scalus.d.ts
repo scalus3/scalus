@@ -48,12 +48,14 @@ export namespace Scalus {
    * @param txCborBytes The CBOR bytes of the transaction containing the Plutus scripts.
    * @param utxoCborBytes The CBOR bytes of the UTxO map (Map[TransactionInput, TransactionOutput]).
    * @param slotConfig The slot configuration for time conversions.
+   * @param costModels Array of cost models for each Plutus language version [V1, V2, V3]. Each cost model is an array of cost values.
    * @returns An array of Redeemers with computed execution budgets.
    */
   export function evalPlutusScripts(
     txCborBytes: number[],
     utxoCborBytes: number[],
     slotConfig: SlotConfig,
+    costModels: number[][],
   ): Redeemer[];
 }
 
