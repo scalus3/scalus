@@ -20,13 +20,14 @@ A minting policy is a Plutus script that controls when tokens can be created or 
 
 ## Minting Native Tokens
 
-To mint tokens, use the `mintAndAttach()` method which combines minting with script attachment:
+To mint tokens, use the `mint()` method with your minting policy script:
 
 ```scala copy
 import scalus.builtin.ByteString.hex
 import scalus.cardano.ledger.{AssetName, PolicyId}
 
 val mintingPolicy: Script.PlutusV3 = // ... your minting policy script
+val policyId = mintingPolicy.scriptHash
 val assetName = AssetName(hex"4d795368696e79546f6b656e")  // "MyShinyToken" in hex
 val redeemer = MintRedeemer(...)
 
@@ -36,8 +37,8 @@ val assets = Map(
 
 TxBuilder(env)
   .spend(utxo)
-  .mintAndAttach(redeemer, assets, mintingPolicy)
-  .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
+  .mint(mintingPolicy, assets, redeemer)
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
   .build(changeAddress)
 ```
 
@@ -51,24 +52,19 @@ Mint different tokens under the same policy:
 val tokenA = AssetName(hex"546f6b656e41")  // "TokenA"
 val tokenB = AssetName(hex"546f6b656e42")  // "TokenB"
 
-val assets = Map(
+val assets = SortedMap(
   tokenA -> 500L,
   tokenB -> 300L
 )
 
 TxBuilder(env)
   .spend(utxo)
-  .mintAndAttach(redeemer, assets, mintingPolicy)
+  .mint(mintingPolicy, assets, redeemer)
   .payTo(
     recipient,
     Value(
       Coin.ada(2),
-      MultiAsset(SortedMap(
-        mintingPolicy.scriptHash -> SortedMap(
-          tokenA -> 500L,
-          tokenB -> 300L
-        )
-      ))
+      MultiAsset(SortedMap(policyId -> assets))
     )
   )
   .build(changeAddress)
@@ -85,7 +81,7 @@ val assets = Map(
 
 TxBuilder(env)
   .spend(utxoWithTokens)  // Must contain the tokens being burned
-  .mintAndAttach(redeemer, assets, mintingPolicy)
+  .mint(mintingPolicy, assets, redeemer)
   .payTo(recipient, Value.ada(5))
   .build(changeAddress)
 ```
@@ -94,7 +90,7 @@ The tokens are removed from circulation and the UTxO containing them is consumed
 
 ## Using Reference Scripts
 
-If you've already attached the minting policy with a reference input, use `mint()` instead:
+If your minting policy is stored as a reference script, use `mint()` with the policy ID:
 
 ```scala copy
 val policyId = mintingPolicy.scriptHash
@@ -102,12 +98,12 @@ val policyId = mintingPolicy.scriptHash
 TxBuilder(env)
   .spend(utxo)
   .references(mintingPolicyReferenceUtxo)
-  .mint(redeemer, policyId, assets)
+  .mint(policyId, assets, redeemer)
   .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
   .build(changeAddress)
 ```
 
-This is useful when minting under multiple policies in the same transaction.
+This avoids including the script in the transaction, reducing transaction size.
 
 ## Minting with Required Signers
 
@@ -120,7 +116,7 @@ val assets = Map(assetName -> 1000L)
 
 TxBuilder(env)
   .spend(utxo)
-  .mintAndAttach(redeemer, assets, mintingPolicy, requiredSigners)
+  .mint(mintingPolicy, assets, redeemer, requiredSigners)
   .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
   .build(changeAddress)
   .sign(signer)  // Must provide required signature
@@ -136,10 +132,10 @@ val nftAssets = Map(nftName -> 1L)
 
 TxBuilder(env)
   .spend(utxo)
-  .mintAndAttach(redeemer, nftAssets, mintingPolicy)
+  .mint(mintingPolicy, nftAssets, redeemer)
   .payTo(
     recipient,
-    Value.asset(mintingPolicy.scriptHash, nftName, 1L, Coin.ada(2))
+    Value.assetd(mintingPolicy.scriptHash, nftName, 1L, Coin.ada(2))
   )
   .build(changeAddress)
 ```
@@ -158,7 +154,7 @@ val assets = Map(
 
 TxBuilder(env)
   .spend(utxoWithTokenB)  // Must contain tokenB for burning
-  .mintAndAttach(redeemer, assets, mintingPolicy)
+  .mint(mintingPolicy, assets, redeemer)
   .payTo(
     recipient,
     Value.asset(mintingPolicy.scriptHash, tokenA, 500L, Coin.ada(2))
@@ -168,18 +164,32 @@ TxBuilder(env)
 
 ## Multiple Policies
 
-Mint tokens under different policies by chaining multiple `mintAndAttach()` calls:
+Mint tokens under different policies by chaining multiple `mint()` calls:
 
 ```scala copy
 TxBuilder(env)
   .spend(utxo)
-  .mintAndAttach(redeemer1, assets1, policy1)
-  .mintAndAttach(redeemer2, assets2, policy2)
+  .mint(policy1, assets1, redeemer1)
+  .mint(policy2, assets2, redeemer2)
   .payTo(recipient, combinedValue)
   .build(changeAddress)
 ```
 
 Each policy is evaluated independently with its own redeemer.
+
+## Delayed Redeemers for Minting
+
+When the redeemer depends on the final transaction structure (e.g., for self-referential scripts), use a delayed redeemer:
+
+```scala copy
+TxBuilder(env)
+  .spend(utxo)
+  .mint(mintingPolicy, assets, (tx: Transaction) => computeRedeemer(tx))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeAddress)
+```
+
+The redeemer function receives the assembled transaction and computes the appropriate redeemer data.
 
 ## Next Steps
 

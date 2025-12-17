@@ -345,7 +345,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val tx = TxBuilder(testEnv)
-            .mintAndAttach(emptyRedeemer, assets, alwaysOkScript)
+            .mint(alwaysOkScript, assets, emptyRedeemer)
             .payTo(Bob.address, Value.fromPolicy(policyId, assets, Coin.ada(5)))
             .complete(provider, Alice.address)
             .await()
@@ -495,7 +495,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val tx = TxBuilder(testEnv)
-            .mintAndAttach(emptyRedeemer, Map(token -> 100L), alwaysOkScript)
+            .mint(alwaysOkScript, Map(token -> 100L), emptyRedeemer)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(token -> 100L), Coin.ada(5)))
             .complete(provider, Alice.address)
             .await()

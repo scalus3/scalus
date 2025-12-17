@@ -512,27 +512,48 @@ case class TxBuilder(
     def metadata(auxiliaryData: AuxiliaryData): TxBuilder =
         addSteps(TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData)))
 
-    /** Mints or burns native tokens under a minting policy.
+    /** Mints or burns native tokens under a minting policy (reference script).
       *
       * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
       * script must be present as a reference input (via [[references]]) for this to work.
       *
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
       * @param policyId
       *   the policy ID (script hash) of the minting policy
       * @param assets
       *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @tparam T
+      *   type of the redeemer (must have a ToData instance)
+      */
+    def mint[T: ToData](
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        redeemer: T
+    ): TxBuilder = mint(policyId, assets, redeemer, Set.empty[AddrKeyHash])
+
+    /** Mints or burns native tokens under a minting policy with required signers (reference
+      * script).
+      *
+      * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
+      * script must be present as a reference input (via [[references]]) for this to work.
+      *
+      * @param policyId
+      *   the policy ID (script hash) of the minting policy
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
       * @param requiredSigners
       *   set of public key hashes that must sign the transaction
       * @tparam T
       *   type of the redeemer (must have a ToData instance)
       */
     def mint[T: ToData](
-        redeemer: T,
         policyId: PolicyId,
         assets: collection.Map[AssetName, Long],
-        requiredSigners: Set[AddrKeyHash] = Set.empty
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val mintSteps = assets.map { case (assetName, amount) =>
             TransactionBuilderStep.Mint(
@@ -550,30 +571,50 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
+    // -------------------------------------------------------------------------
+    // Minting API - Attached script variants (script first, policyId derived)
+    // -------------------------------------------------------------------------
+
     /** Mints or burns native tokens with the script provided inline.
-      *
-      * This is a convenience method for when you have the minting policy script available directly.
       *
       * Use positive amounts to mint tokens and negative amounts to burn tokens.
       *
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
       * @param script
       *   the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @tparam T
+      *   type of the redeemer (must have a ToData instance)
+      */
+    def mint[T: ToData](
+        script: PlutusScript,
+        assets: collection.Map[AssetName, Long],
+        redeemer: T
+    ): TxBuilder = mint(script, assets, redeemer, Set.empty[AddrKeyHash])
+
+    /** Mints or burns native tokens with the script provided inline and required signers.
+      *
+      * Use positive amounts to mint tokens and negative amounts to burn tokens.
+      *
+      * @param script
+      *   the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
       * @param requiredSigners
       *   set of public key hashes that must sign the transaction
       * @tparam T
       *   type of the redeemer (must have a ToData instance)
       */
-    def mintAndAttach[T: ToData](
-        redeemer: T,
-        assets: collection.Map[AssetName, Long],
+    def mint[T: ToData](
         script: PlutusScript,
-        requiredSigners: Set[AddrKeyHash] = Set.empty
+        assets: collection.Map[AssetName, Long],
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
-
         val mintSteps = assets.map { case (assetName, amount) =>
             TransactionBuilderStep.Mint(
               scriptHash = script.scriptHash,
@@ -589,6 +630,101 @@ case class TxBuilder(
 
         addSteps(mintSteps*)
     }
+
+    /** Mints or burns native tokens with a delayed redeemer and attached script.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts). The redeemer is computed after the transaction is assembled but
+      * before script evaluation.
+      *
+      * @param script
+      *   the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      */
+    def mint(
+        script: PlutusScript,
+        assets: collection.Map[AssetName, Long],
+        redeemerBuilder: Transaction => Data
+    ): TxBuilder = {
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = script.scriptHash,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = ScriptSource.PlutusScriptValue(script),
+                redeemerBuilder = redeemerBuilder,
+                additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
+    // -------------------------------------------------------------------------
+    // Minting API - Reference script variants (delayed redeemer)
+    // -------------------------------------------------------------------------
+
+    /** Mints or burns native tokens with a delayed redeemer computed from the built transaction.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts). The redeemer is computed after the transaction is assembled but
+      * before script evaluation.
+      *
+      * The minting policy script must be present as a reference input (via [[references]]).
+      *
+      * @param policyId
+      *   the policy ID (script hash) of the minting policy
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      */
+    def mint(
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        redeemerBuilder: Transaction => Data
+    ): TxBuilder = {
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = policyId,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = ScriptSource.PlutusScriptAttached,
+                redeemerBuilder = redeemerBuilder,
+                additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
+    // -------------------------------------------------------------------------
+    // Deprecated Minting API
+    // -------------------------------------------------------------------------
+
+    /** @deprecated Use mint(script, assets, redeemer) instead */
+    @deprecated("Use mint(script, assets, redeemer) instead", "0.13.0")
+    def mintAndAttach[T: ToData](
+        redeemer: T,
+        assets: collection.Map[AssetName, Long],
+        script: PlutusScript
+    ): TxBuilder = mint(script, assets, redeemer, Set.empty[AddrKeyHash])
+
+    /** @deprecated Use mint(script, assets, redeemer, requiredSigners) instead */
+    @deprecated("Use mint(script, assets, redeemer, requiredSigners) instead", "0.13.0")
+    def mintAndAttach[T: ToData](
+        redeemer: T,
+        assets: collection.Map[AssetName, Long],
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = mint(script, assets, redeemer, requiredSigners)
 
     /** Registers a stake key with the network.
       *
