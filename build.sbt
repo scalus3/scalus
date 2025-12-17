@@ -196,7 +196,7 @@ lazy val scalusPlugin = project
       // COMMENT THIS LINE TO ENABLE VERSION INCREMENT during Scalus plugin development
       // COMMENT THIS LINE when doing plugin development
       // UPDATE VERSION after changes to the plugin
-      version := "0.13.0+586-2d9aee44-SNAPSHOT",
+      version := "0.13.0+597-4eafe96f+20251217-1256-SNAPSHOT",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
