@@ -341,25 +341,6 @@ object TransactionBuilder {
             } yield copy(transaction = balanced)
         }
 
-        /** Async variant of balance for use with async diff handlers.
-          *
-          * This method allows the diff handler to perform async operations (e.g., querying a
-          * provider for additional UTXOs) during each balancing iteration.
-          */
-        def balanceAsync(
-            diffHandler: DiffHandlerAsync,
-            protocolParams: ProtocolParams,
-            evaluator: PlutusScriptEvaluator
-        )(using ExecutionContext): Future[Either[TxBalancingError, Context]] = {
-            balanceFeeAndChangeWithTokensAsync(
-              initial = this.transaction,
-              diffHandler = diffHandler,
-              protocolParams = protocolParams,
-              resolvedUtxo = this.getUtxos,
-              evaluator = evaluator
-            ).map(_.map(balanced => copy(transaction = balanced)))
-        }
-
         /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */
         def getUtxos: Utxos = this.resolvedUtxos.utxos
 
@@ -428,68 +409,6 @@ object TransactionBuilder {
             } yield validatedCtxWithoutSignatures
         }
 
-        /** Async variant of finalizeContext for use with async diff handlers.
-          *
-          * This method allows the diff handler to perform async operations (e.g., querying a
-          * provider for additional UTXOs) during each balancing iteration. The core logic is the
-          * same as finalizeContext: adds dummy signatures, balances with collateral return
-          * handling, validates, and removes dummy signatures.
-          *
-          * @param protocolParams
-          *   protocol parameters for fee calculation and validation
-          * @param diffHandler
-          *   async handler for managing transaction balance differences (change, UTXO selection)
-          * @param evaluator
-          *   Plutus script evaluator
-          * @param validators
-          *   ledger validators to run against the balanced transaction
-          * @return
-          *   Future containing either an error or the finalized context
-          */
-        def finalizeContextAsync(
-            protocolParams: ProtocolParams,
-            diffHandler: DiffHandlerAsync,
-            evaluator: PlutusScriptEvaluator,
-            validators: Seq[Validator]
-        )(using ExecutionContext): Future[Either[SomeBuildError, Context]] = {
-            val txWithDummySignatures: Transaction =
-                addDummySignatures(this.expectedSigners.size, this.transaction)
-            val contextWithSignatures = this.copy(transaction = txWithDummySignatures)
-
-            // Create a combined async diff handler that also handles collateral return
-            // This ensures collateral return is set within the balancing loop,
-            // so any size increase is accounted for in fee calculation
-            val combinedDiffHandler: DiffHandlerAsync = (diff, tx) => {
-                diffHandler(diff, tx).map(_.flatMap { afterDiff =>
-                    TransactionBuilder.ensureCollateralReturn(
-                      afterDiff,
-                      this.resolvedUtxos.utxos,
-                      this.collateralReturnAddress,
-                      protocolParams
-                    )
-                })
-            }
-
-            contextWithSignatures
-                .ensureMinAdaAll(protocolParams)
-                .balanceAsync(combinedDiffHandler, protocolParams, evaluator)
-                .map {
-                    case Left(e) => Left(BalancingError(e, this))
-                    case Right(balancedCtx) =>
-                        balancedCtx
-                            .validate(validators, protocolParams)
-                            .left
-                            .map(ValidationError(_, this))
-                            .map(validatedCtx =>
-                                validatedCtx.copy(
-                                  transaction = removeDummySignatures(
-                                    this.expectedSigners.size,
-                                    validatedCtx.transaction
-                                  )
-                                )
-                            )
-                }
-        }
     }
 
     object Context {
