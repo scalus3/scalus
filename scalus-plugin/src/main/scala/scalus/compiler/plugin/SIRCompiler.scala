@@ -730,7 +730,7 @@ final class SIRCompiler(
         symbol.flags.isAllOf(Flags.EnumCase)
 
     // Check if the object is an instance of a case class (for copy method support)
-    private def isCopyOnCaseClass(obj: Tree): Boolean = {
+    private def isCaseClassInstance(obj: Tree): Boolean = {
         val ts = obj.tpe.widen.dealias.typeSymbol
         ts.isClass && ts.caseFields.nonEmpty
     }
@@ -2572,7 +2572,7 @@ final class SIRCompiler(
                 lazy val fieldIdx = ts.caseFields.indexOf(sel.symbol)
                 // Handle copy$default$N: compile as field select
                 // user.copy$default$1 becomes user.name (for the first field)
-                if ident.is(DefaultGetterName) && isCopyOnCaseClass(obj) then
+                if ident.is(DefaultGetterName) && isCaseClassInstance(obj) then
                     ident match
                         case DefaultGetterName(nme.copy, idx) =>
                             val fields = ts.caseFields
@@ -2635,9 +2635,9 @@ final class SIRCompiler(
             // case class copy method: obj.copy(field = value)
             // The Scala compiler desugars copy to pass all arguments (explicit and defaulted)
             // We compile it as a Constr call
-            case Apply(TypeApply(Select(obj, nme.copy), targs), args) if isCopyOnCaseClass(obj) =>
+            case Apply(TypeApply(Select(obj, nme.copy), targs), args) if isCaseClassInstance(obj) =>
                 compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
-            case Apply(Select(obj, nme.copy), args) if isCopyOnCaseClass(obj) =>
+            case Apply(Select(obj, nme.copy), args) if isCaseClassInstance(obj) =>
                 compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>
