@@ -25,6 +25,12 @@ export namespace Scalus {
     budget: ExBudget;
   }
 
+  /** Exception thrown when Plutus script evaluation fails. Includes logs from the failing script. */
+  export class PlutusScriptEvaluationException extends Error {
+    constructor(message: string, logs: string[]);
+    logs: string[];
+  }
+
   /**
    * Applies a data argument to a Plutus script given its double-CBOR-encoded hex.
    * @param doubleCborHex The double-CBOR-encoded hex of the script.
