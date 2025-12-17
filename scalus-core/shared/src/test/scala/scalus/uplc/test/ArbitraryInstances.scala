@@ -240,8 +240,15 @@ trait ArbitraryInstances:
         yield s"$alpha$rest"
 
         def varGen(env: immutable.List[String]) = Gen.oneOf(env).map(n => Var(NamedDeBruijn(n)))
+        // Exclude Array builtins that are not yet supported by the uplc tool
+        val supportedBuiltins = DefaultFun.values.filterNot(b =>
+            b == DefaultFun.ListToArray ||
+                b == DefaultFun.IndexArray ||
+                b == DefaultFun.MultiIndexArray ||
+                b == DefaultFun.LengthOfArray
+        )
         val builtinGen: Gen[Term] =
-            for b <- Gen.oneOf(DefaultFun.values.toSeq) yield Term.Builtin(b)
+            for b <- Gen.oneOf(supportedBuiltins.toSeq) yield Term.Builtin(b)
         val constGen: Gen[Term] = for c <- Arbitrary.arbitrary[Constant] yield Term.Const(c)
 
         def sizedTermGen(sz: Int, env: immutable.List[String]): Gen[Term] =
