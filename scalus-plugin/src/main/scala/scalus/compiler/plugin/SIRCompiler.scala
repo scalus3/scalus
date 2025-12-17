@@ -7,6 +7,7 @@ import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Constants.Constant
 import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.Decorators.toTermName
+import dotty.tools.dotc.core.NameKinds.DefaultGetterName
 import dotty.tools.dotc.core.Names.*
 import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
@@ -727,6 +728,12 @@ final class SIRCompiler(
         s"isConstructorVal: ${symbol.flags.isAllOf(Flags.EnumCase)} $symbol: ${tpe.show} <: ${tpe.widen.show}, ${symbol.flagsString}"
       )  */
         symbol.flags.isAllOf(Flags.EnumCase)
+
+    // Check if the object is an instance of a case class (for copy method support)
+    private def isCopyOnCaseClass(obj: Tree): Boolean = {
+        val ts = obj.tpe.widen.dealias.typeSymbol
+        ts.isClass && ts.caseFields.nonEmpty
+    }
 
     def error[A](error: CompilationError, defaultValue: A): A = {
         report.error(error.message, error.srcPos)
@@ -2561,13 +2568,39 @@ final class SIRCompiler(
             // val user = User("John", 42) => \u - u "John" 42
             // user.name => \u name age -> name
             case sel @ Select(obj, ident) =>
-                /* report.echo(
-            s"select: Select: ${sel.show}: ${obj.tpe.widen.show} . ${ident}, isList: ${obj.isList}",
-            sel.srcPos
-          ) */
                 val ts = obj.tpe.widen.dealias.typeSymbol
                 lazy val fieldIdx = ts.caseFields.indexOf(sel.symbol)
-                if ts.isClass && fieldIdx >= 0 then
+                // Handle copy$default$N: compile as field select
+                // user.copy$default$1 becomes user.name (for the first field)
+                if ident.is(DefaultGetterName) && isCopyOnCaseClass(obj) then
+                    ident match
+                        case DefaultGetterName(nme.copy, idx) =>
+                            val fields = ts.caseFields
+                            if idx < fields.length then
+                                val fieldName = fields(idx).name.show
+                                val objSir = compileExpr(env, obj)
+                                val fieldType = sirTypeInEnv(sel.tpe.widen.dealias, sel, env)
+                                SIR.Select(
+                                  objSir,
+                                  fieldName,
+                                  fieldType,
+                                  AnnotationsDecl.fromSrcPos(sel.srcPos)
+                                )
+                            else
+                                error(
+                                  GenericError(
+                                    s"copy$$default$$$idx index out of bounds for ${ts.name.show}",
+                                    sel.srcPos
+                                  ),
+                                  SIR.Error(
+                                    "Invalid copy default getter",
+                                    AnnotationsDecl.fromSrcPos(sel.srcPos)
+                                  )
+                                )
+                        case _ =>
+                            // Not a copy default getter, fall through to normal handling
+                            compileIdentOrQualifiedSelect(env, tree, tree, Nil)
+                else if ts.isClass && fieldIdx >= 0 then
                     val lhs = compileExpr(env, obj)
                     val selType = sirTypeInEnv(sel.tpe.widen.dealias, sel, env)
                     SIR.Select(lhs, ident.show, selType, AnnotationsDecl.fromSrcPos(sel.srcPos))
@@ -2599,6 +2632,13 @@ final class SIRCompiler(
             case TypeApply(f, targs) =>
                 val nEnv = fillTypeParamInTypeApply(f.symbol, targs, env)
                 compileExpr(nEnv, f)
+            // case class copy method: obj.copy(field = value)
+            // The Scala compiler desugars copy to pass all arguments (explicit and defaulted)
+            // We compile it as a Constr call
+            case Apply(TypeApply(Select(obj, nme.copy), targs), args) if isCopyOnCaseClass(obj) =>
+                compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
+            case Apply(Select(obj, nme.copy), args) if isCopyOnCaseClass(obj) =>
+                compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>
                 compileApply(env, f, targs, args, tree.tpe, a)
