@@ -943,44 +943,10 @@ case class TxBuilder(
             .map {
                 case Right(tx) =>
                     // Remove dummy signatures before returning
-                    val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
-
-                    // Recompute delayed redeemers with the final balanced transaction
-                    // This is needed because complete() may have added inputs, changing the tx structure
-                    val finalTx =
-                        if initialContext.delayedRedeemerSpecs.nonEmpty then {
-                            TransactionBuilder
-                                .replaceDelayedRedeemers(
-                                  initialContext.redeemers,
-                                  initialContext.delayedRedeemerSpecs,
-                                  txWithoutDummySigs
-                                )
-                                .flatMap { updatedRedeemers =>
-                                    TransactionConversion
-                                        .fromEditableTransactionSafe(
-                                          EditableTransaction(
-                                            txWithoutDummySigs,
-                                            updatedRedeemers.toVector
-                                          )
-                                        )
-                                        .left
-                                        .map(_ =>
-                                            new RuntimeException("Failed to update redeemers")
-                                        )
-                                } match {
-                                case Right(tx) => tx
-                                case Left(error) =>
-                                    val cause: Throwable = error match {
-                                        case stepError: StepError =>
-                                            new RuntimeException(stepError.explain)
-                                        case t: Throwable => t
-                                    }
-                                    throw TxBuilderException.DelayedRedeemerException(
-                                      error.toString,
-                                      Some(cause)
-                                    )
-                            }
-                        } else txWithoutDummySigs
+                    val finalTx = removeDummySignatures(expectedSignerCount, tx)
+                    // Note: Delayed redeemers are now recomputed in selectAndAddInputs when inputs
+                    // are added, so we no longer need post-balancing redeemer replacement.
+                    // This preserves the ExUnits computed by computeScriptsWitness during balancing.
 
                     // Update context with the balanced transaction and all selected UTXOs
                     val updatedContext = initialContext.copy(
@@ -1025,7 +991,8 @@ case class TxBuilder(
                               provider,
                               sponsor,
                               selectedUtxos,
-                              initialContext.redeemers
+                              initialContext.redeemers,
+                              initialContext.delayedRedeemerSpecs
                             ).map(Right(_))
                     }
                 } else {
@@ -1036,7 +1003,8 @@ case class TxBuilder(
                       provider,
                       sponsor,
                       selectedUtxos,
-                      initialContext.redeemers
+                      initialContext.redeemers,
+                      initialContext.delayedRedeemerSpecs
                     ).map(Right(_))
                 }
 
@@ -1052,7 +1020,8 @@ case class TxBuilder(
                   provider,
                   sponsor,
                   selectedUtxos,
-                  initialContext.redeemers
+                  initialContext.redeemers,
+                  initialContext.delayedRedeemerSpecs
                 ).map(Right(_))
 
             case (ZeroAda(), _) =>
@@ -1068,7 +1037,8 @@ case class TxBuilder(
                   provider,
                   sponsor,
                   selectedUtxos,
-                  initialContext.redeemers
+                  initialContext.redeemers,
+                  initialContext.delayedRedeemerSpecs
                 ).map(Right(_))
 
             case (PositiveAda(_), _) =>
@@ -1087,7 +1057,8 @@ case class TxBuilder(
         provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
-        redeemers: Seq[DetachedRedeemer]
+        redeemers: Seq[DetachedRedeemer],
+        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec]
     )(using ExecutionContext): Future[Transaction] = {
         selectAdditionalUtxos(
           provider,
@@ -1096,7 +1067,7 @@ case class TxBuilder(
           excludeInputs = selectedUtxos.inputSet
         ).map { additionalUtxos =>
             selectedUtxos.addAll(additionalUtxos)
-            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers)
+            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers, delayedRedeemerSpecs)
         }
     }
 
@@ -1411,20 +1382,37 @@ case class TxBuilder(
       * When new inputs are added, the sorted input list changes, which can shift the position of
       * existing script inputs. This method re-indexes redeemers to point to the correct input
       * positions after adding new inputs.
+      *
+      * When delayed redeemer specs are provided, this method will also recompute delayed redeemer
+      * data based on the updated transaction structure (with new inputs), ensuring that
+      * self-referential validators receive correct data when ExUnits are computed.
       */
     private def addInputsAndReattachRedeemers(
         tx: Transaction,
         inputs: Utxos,
-        detachedRedeemers: Seq[DetachedRedeemer]
+        detachedRedeemers: Seq[DetachedRedeemer],
+        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec]
     ): Transaction = {
         val txWithNewInputs = addInputs(tx, inputs)
 
         // If there are no redeemers, just return the transaction with new inputs
         if detachedRedeemers.isEmpty then txWithNewInputs
         else {
+            // Update delayed redeemer data based on the new transaction structure
+            val updatedRedeemers =
+                if delayedRedeemerSpecs.nonEmpty then
+                    TransactionBuilder
+                        .replaceDelayedRedeemers(
+                          detachedRedeemers,
+                          delayedRedeemerSpecs,
+                          txWithNewInputs
+                        )
+                        .getOrElse(detachedRedeemers)
+                else detachedRedeemers
+
             // Re-attach redeemers with correct indexes based on new input positions
             TransactionConversion.fromEditableTransactionSafe(
-              EditableTransaction(txWithNewInputs, detachedRedeemers.toVector)
+              EditableTransaction(txWithNewInputs, updatedRedeemers.toVector)
             ) match {
                 case Right(reattachedTx) => reattachedTx
                 case Left(_)             => txWithNewInputs // Fallback if re-attachment fails
