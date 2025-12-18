@@ -32,13 +32,13 @@ trait KeyPair {
 
     // Deprecated methods for backward compatibility
 
-    @deprecated("Use verificationKey.bytes instead", "0.9.0")
+    @deprecated("Use verificationKey.bytes instead", "0.13.0")
     def publicKeyBytes: Array[Byte] = verificationKey.bytes
 
-    @deprecated("Use the signing key directly", "0.9.0")
+    @deprecated("Use the signing key directly", "0.13.0")
     def privateKeyBytes: Array[Byte]
 
-    @deprecated("Use sign(ByteString) instead", "0.9.0")
+    @deprecated("Use sign(ByteString) instead", "0.13.0")
     def sign(message: Array[Byte]): Array[Byte] =
         platform
             .signEd25519(
@@ -47,7 +47,7 @@ trait KeyPair {
             )
             .bytes
 
-    @deprecated("Use verify(ByteString, Signature) instead", "0.9.0")
+    @deprecated("Use verify(ByteString, Signature) instead", "0.13.0")
     def verify(message: Array[Byte], signature: Array[Byte]): Boolean =
         platform.verifyEd25519Signature(
           ByteString.fromArray(publicKeyBytes),
@@ -55,7 +55,7 @@ trait KeyPair {
           ByteString.fromArray(signature)
         )
 
-    @deprecated("Use verificationKey and signing key directly", "0.9.0")
+    @deprecated("Use verificationKey and signing key directly", "0.13.0")
     def toTuple: (Array[Byte], Array[Byte]) = (publicKeyBytes, privateKeyBytes)
 }
 
@@ -65,7 +65,7 @@ trait StandardKeyPair extends KeyPair {
     /** The signing (private) key - 32 bytes. */
     def signingKey: SigningKey
 
-    @deprecated("Use signingKey.bytes instead", "0.9.0")
+    @deprecated("Use signingKey.bytes instead", "0.13.0")
     override def privateKeyBytes: Array[Byte] = signingKey.bytes
 }
 
@@ -75,7 +75,7 @@ trait ExtendedKeyPair extends KeyPair {
     /** The extended signing key - 64 bytes. */
     def extendedSigningKey: ExtendedSigningKey
 
-    @deprecated("Use extendedSigningKey.bytes instead", "0.9.0")
+    @deprecated("Use extendedSigningKey.bytes instead", "0.13.0")
     override def privateKeyBytes: Array[Byte] = extendedSigningKey.bytes
 }
 

@@ -10,7 +10,7 @@ import scalus.cardano.txbuilder.TransactionBuilder.{ensureMinAda, modifyBody}
   * @deprecated
   *   Use [[Change.changeOutputDiffHandler]] instead
   */
-@deprecated("Use Change.changeOutputDiffHandler instead", "0.14.0")
+@deprecated("Use Change.changeOutputDiffHandler instead", "0.13.0")
 class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int) {
 
     /** Handles the diff by adjusting the change output at the specified index.
