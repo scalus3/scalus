@@ -14,7 +14,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.{Context, State, ValueNotConservedUTxOValidator}
 import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee}
-import scalus.cardano.txbuilder.ChangeOutputDiffHandler
+import scalus.cardano.txbuilder.Change
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
 import scalus.|>
 
@@ -225,12 +225,11 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     test("should fail on invalid change output index") {
         val (utxo, tx) = mkTx(Coin(2_000_000), Coin(1_000_000), Coin(200_000))
-        val handler = ChangeOutputDiffHandler(params, 5) // Invalid index > outputs.size
 
         try
             TransactionBuilder.balanceFeeAndChangeWithTokens(
               tx,
-              handler.changeOutputDiffHandler,
+              Change.changeOutputDiffHandler(_, _, params, 5), // Invalid index > outputs.size
               params,
               utxo,
               evaluator
@@ -356,10 +355,9 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     ): Assertion = {
         val (utxo, tx) = mkTx(in, output, Coin(fee))
 
-        val handler = ChangeOutputDiffHandler(params, 0)
         val r = TransactionBuilder.balanceFeeAndChangeWithTokens(
           tx,
-          handler.changeOutputDiffHandler,
+          Change.changeOutputDiffHandler(_, _, params, 0),
           params,
           utxo,
           evaluator
@@ -384,10 +382,9 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     private def checkFeeOk(in: Value, out: Value, feeAda: Long): Unit = {
         val (utxo, tx) = mkTx(in, out, Coin(feeAda))
-        val handler = ChangeOutputDiffHandler(params, 0)
         val result = TransactionBuilder.balanceFeeAndChangeWithTokens(
           tx,
-          handler.changeOutputDiffHandler,
+          Change.changeOutputDiffHandler(_, _, params, 0),
           params,
           utxo,
           evaluator

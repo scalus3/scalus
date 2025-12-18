@@ -22,14 +22,10 @@ import scalus.cardano.txbuilder.TransactionBuilder.Context
 import scalus.|>
 
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
-
-// Async variant of DiffHandler for use with async UTXO selection (e.g., provider queries)
-type DiffHandlerAsync = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
 
 case class DelayedRedeemerSpec(
     purpose: RedeemerPurpose,

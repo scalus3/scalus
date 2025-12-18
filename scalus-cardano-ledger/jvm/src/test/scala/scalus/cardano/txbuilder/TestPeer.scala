@@ -11,7 +11,7 @@ import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.ledger.{Hash, ProtocolVersion, Transaction as STransaction}
+import scalus.cardano.ledger.Hash
 import scalus.cardano.wallet.BloxbeanAccount
 
 import scala.collection.mutable
