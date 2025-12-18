@@ -198,21 +198,24 @@ class TxBuilderDemo extends AnyFunSuite {
 //        println(fully.evaluateDebug)
     }
 
-    ignore("Blueprint usage examples") {
+    test("Blueprint usage examples") {
         import scalus.builtin.Data.toData
         import scalus.cardano.blueprint.Blueprint
         import scalus.cardano.ledger.Script
         import scalus.uplc.Program
-        import java.nio.file.{Files, Path}
-        // read Blueprint from plutus.json file
-        val blueprint = Blueprint.fromJson(Files.readString(Path.of("plutus.json")))
+
+        // read Blueprint from plutus.json resource file
+        val resourcePath = "/scalus/examples/PaymentSplitterAikenData/plutus.json"
+        val inputStream = getClass.getResourceAsStream(resourcePath)
+        require(inputStream != null, s"Resource not found: $resourcePath")
+        val blueprint = Blueprint.fromJson(inputStream)
+
         // get UPLC program
         val program = blueprint.validators.head.compiledCode.map(Program.fromCborHex).get
         // apply arguments to the program
         val applied = program $ 42.toData
         val script = Script.PlutusV3(applied.cborByteString)
         // use the script in a transaction
-        val provider = emulator
         val tx = TxBuilder(env)
             .output(
               TransactionOutput(

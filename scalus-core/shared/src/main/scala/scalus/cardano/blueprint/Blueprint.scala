@@ -6,7 +6,7 @@ import scalus.cardano.ledger.{Language, PlutusScript, Script}
 import scalus.utils.BuildInfo
 import scalus.utils.Hex.toHex
 
-import java.io.File
+import java.io.{File, InputStream}
 import java.nio.file.Files
 
 /** A CIP-57 compliant description of a set of validators.
@@ -64,7 +64,27 @@ object Blueprint {
         Blueprint(preamble, Seq(blueprintValidator))
     }
 
-    def fromJson(s: String): Blueprint = readFromString(s)
+    /** Parses a CIP-57 compliant [[Blueprint]] from a JSON string.
+      *
+      * @param json
+      *   the JSON string representing a blueprint
+      * @return
+      *   the parsed [[Blueprint]]
+      * @throws com.github.plokhotnyuk.jsoniter_scala.core.JsonReaderException
+      *   if the JSON is invalid or doesn't conform to the CIP-57 schema
+      */
+    def fromJson(json: String): Blueprint = readFromString(json)
+
+    /** Parses a CIP-57 compliant [[Blueprint]] from an [[InputStream]].
+      *
+      * @param inputStream
+      *   the input stream containing JSON data representing a blueprint
+      * @return
+      *   the parsed [[Blueprint]]
+      * @throws com.github.plokhotnyuk.jsoniter_scala.core.JsonReaderException
+      *   if the JSON is invalid or doesn't conform to the CIP-57 schema
+      */
+    def fromJson(inputStream: InputStream): Blueprint = readFromStream(inputStream)
 
     private def mkValidator(validatorScript: Script) = {
         val cbor = validatorScript match {

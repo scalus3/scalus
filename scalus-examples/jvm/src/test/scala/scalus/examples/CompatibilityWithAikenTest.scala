@@ -1,17 +1,16 @@
 package scalus.examples
 
-import scalus.*
-import scalus.prelude.*
-import scalus.builtin.ByteString
-import scalus.builtin.ToData
-import scalus.builtin.FromData
-import scalus.builtin.Data.toData
-import scalus.cardano.ledger.ExUnits
-import scalus.uplc.DeBruijnedProgram
-import scalus.uplc.eval.Result
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.builtin.Data.toData
+import scalus.builtin.{ByteString, FromData, ToData}
+import scalus.cardano.blueprint.Blueprint
+import scalus.cardano.ledger.ExUnits
 import scalus.ledger.api.v3.*
+import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
+import scalus.uplc.Program
+import scalus.uplc.eval.Result
 
 /** Aiken require that redeemer is ADT with constructor with arguments.
   * @param message
@@ -106,17 +105,13 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
             )
 
     private lazy val aikenScript = {
-        import upickle.default.*
         val fname = "/scalus/examples/PaymentSplitterAikenData/plutus.json"
         val inputStream = this.getClass.getResourceAsStream(fname)
         if inputStream == null then {
-            println(s"Can't load script from $fname")
             throw new RuntimeException(s"Resource not found: $fname")
         }
-        val obj = read[ujson.Obj](inputStream)
-        val cborHex = obj("validators").arr(0)("compiledCode").str
-        val program = DeBruijnedProgram.fromCborHex(cborHex).toProgram
-        program
+        val blueprint = Blueprint.fromJson(inputStream)
+        blueprint.validators.head.compiledCode.map(Program.fromCborHex).get
     }
 
     private val lockTxId = random[TxId]
