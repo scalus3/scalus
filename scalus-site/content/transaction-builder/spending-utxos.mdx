@@ -20,7 +20,7 @@ val utxo: Utxo = // ... UTxO from a regular address
 TxBuilder(env)
   .spend(utxo)  // Add as input
   .payTo(recipient, Value.ada(10))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
   .sign(signer)  // Must be signed by the address owner
 ```
 
@@ -35,7 +35,7 @@ val utxos: Utxos = Map(
 TxBuilder(env)
   .spend(utxos)  // Spend all UTxOs
   .payTo(recipient, Value.ada(20))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 ## Spending from Script Address
@@ -53,7 +53,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script)
   .collaterals(collateralUtxo)  // Required for script execution
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 <Callout type="warning">
@@ -71,7 +71,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script, requiredSigners)
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
   .sign(signer1)
   .sign(signer2)  // Must provide all required signatures
 ```
@@ -88,7 +88,7 @@ TxBuilder(env)
   .spend(scriptUtxo2, redeemer2, script)  // Can reuse for multiple inputs
   .collaterals(collateralUtxo)
   .payTo(recipient, totalValue)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 TxBuilder will automatically find the script in the attached scripts map and use it for validation.
@@ -109,7 +109,7 @@ TxBuilder(env)
   .spend(scriptUtxo, buildRedeemer, script)  // Redeemer computed after assembly
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 The redeemer function is called after the transaction is assembled but before script evaluation, allowing self-referential validation logic.
@@ -133,7 +133,7 @@ TxBuilder(env)
   .spend(scriptUtxo, buildIndexRedeemer, script)
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 <Callout type="info">
@@ -151,7 +151,7 @@ TxBuilder(env)
   .spend(myUtxo)
   .references(referenceUtxo)  // Add as reference input
   .payTo(recipient, Value.ada(10))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 Multiple reference inputs can be added:
@@ -161,7 +161,7 @@ TxBuilder(env)
   .spend(myUtxo)
   .references(refUtxo1, refUtxo2, refUtxo3)
   .payTo(recipient, Value.ada(10))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 Reference inputs are visible in the script context but are not spent.
@@ -177,7 +177,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script)
   .collaterals(collateral)  // Add single collateral
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 Multiple collateral inputs:
@@ -187,7 +187,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer, script)
   .collaterals(collateral1, collateral2)
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 <Callout type="info">
@@ -215,7 +215,7 @@ TxBuilder(env)
   .spend(scriptUtxo, redeemer)  // Script resolved from reference
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 ### Creating Outputs with Reference Scripts
@@ -235,7 +235,7 @@ val outputWithScript = TransactionOutput(
 TxBuilder(env)
   .spend(utxo)
   .output(outputWithScript)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 <Callout type="info">

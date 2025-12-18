@@ -39,12 +39,12 @@ TxBuilder(env)
   .spend(utxo)
   .mint(mintingPolicy, assets, redeemer)
   .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 This mints 1000 tokens and sends them to the recipient along with 2 ADA.
 
-## Minting Multiple NativeToken Types
+## Minting Multiple Native Token Types
 
 Mint different tokens under the same policy:
 
@@ -67,7 +67,7 @@ TxBuilder(env)
       MultiAsset(SortedMap(policyId -> assets))
     )
   )
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 ## Burning Native Tokens
@@ -83,7 +83,7 @@ TxBuilder(env)
   .spend(utxoWithTokens)  // Must contain the tokens being burned
   .mint(mintingPolicy, assets, redeemer)
   .payTo(recipient, Value.ada(5))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 The tokens are removed from circulation and the UTxO containing them is consumed.
@@ -100,7 +100,7 @@ TxBuilder(env)
   .references(mintingPolicyReferenceUtxo)
   .mint(policyId, assets, redeemer)
   .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 This avoids including the script in the transaction, reducing transaction size.
@@ -118,7 +118,7 @@ TxBuilder(env)
   .spend(utxo)
   .mint(mintingPolicy, assets, redeemer, requiredSigners)
   .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
   .sign(signer)  // Must provide required signature
 ```
 
@@ -135,9 +135,9 @@ TxBuilder(env)
   .mint(mintingPolicy, nftAssets, redeemer)
   .payTo(
     recipient,
-    Value.assetd(mintingPolicy.scriptHash, nftName, 1L, Coin.ada(2))
+    Value.asset(mintingPolicy.scriptHash, nftName, 1L, Coin.ada(2))
   )
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 The minting policy typically ensures uniqueness by checking for a specific UTxO or enforcing a one-time mint.
@@ -159,7 +159,7 @@ TxBuilder(env)
     recipient,
     Value.asset(mintingPolicy.scriptHash, tokenA, 500L, Coin.ada(2))
   )
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 ## Multiple Policies
@@ -172,7 +172,7 @@ TxBuilder(env)
   .mint(policy1, assets1, redeemer1)
   .mint(policy2, assets2, redeemer2)
   .payTo(recipient, combinedValue)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 Each policy is evaluated independently with its own redeemer.
@@ -186,7 +186,7 @@ TxBuilder(env)
   .spend(utxo)
   .mint(mintingPolicy, assets, (tx: Transaction) => computeRedeemer(tx))
   .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 The redeemer function receives the assembled transaction and computes the appropriate redeemer data.

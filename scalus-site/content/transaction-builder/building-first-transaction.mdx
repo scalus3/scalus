@@ -68,10 +68,10 @@ val myUtxo: Utxo = // ... UTxO to spend
 val recipientAddress = addr"addr1qx2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
 val changeAddress = addr"addr1qy..."
 
-val builder = TxBuilder(env)
+val builder = TxBuilder(cardanoInfo)
   .spend(myUtxo)                          // Add input
   .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA
-  .build(changeAddress)                   // Finalize transaction with change
+  .build(changeTo = changeAddress)        // Finalize transaction with change
 ```
 
 The `build()` method:
@@ -81,7 +81,7 @@ The `build()` method:
 - Returns a new builder with the finalized transaction
 
 <Callout type="info">
-    Note that `Value.ada(100)` creates a Value with ten million lovelace and no extra tokens.
+    `Value.ada(10)` creates a Value with 10 million lovelace (10 ADA) and no extra tokens.
 </Callout>
 
 ## Sign the Transaction
@@ -145,7 +145,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.node.Provider
 
 // Setup
-val env = CardanoInfo.mainnet
+val cardanoInfo = CardanoInfo.mainnet
 val myUtxo: Utxo = // ...
 val recipientAddress: Address = // ...
 val changeAddress: Address = // ...
@@ -153,10 +153,10 @@ val signer: TransactionSigner = // ...
 val provider: Provider = // ...
 
 // Build, sign, and submit
-val transaction = TxBuilder(env)
+val transaction = TxBuilder(cardanoInfo)
   .spend(myUtxo)
   .payTo(recipientAddress, Value.ada(10))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
   .sign(signer)
   .transaction
 
@@ -168,7 +168,7 @@ provider.submitTransaction(transaction)
 For simpler cases, use `complete()` to let TxBuilder handle input selection automatically:
 
 ```scala copy
-val transaction = TxBuilder(env)
+val transaction = TxBuilder(cardanoInfo)
   .payTo(recipientAddress, Value.ada(10))
   .complete(provider, sponsorAddress)  // Automatic input selection and balancing
   .sign(signer)
@@ -189,7 +189,7 @@ The `complete()` method returns a `Future[TxBuilder]` and works on both JVM and 
 ```scala copy
 import scala.concurrent.ExecutionContext.Implicits.global
 
-val futureTransaction: Future[Transaction] = TxBuilder(env)
+val futureTransaction: Future[Transaction] = TxBuilder(cardanoInfo)
   .payTo(recipientAddress, Value.ada(10))
   .complete(asyncProvider, sponsorAddress)
   .map(_.sign(signer).transaction)
@@ -204,7 +204,7 @@ On the JVM, there's a blocking overload that takes a `Provider` directly and ret
 ```scala copy
 import scala.concurrent.duration.*
 
-val transaction = TxBuilder(env)
+val transaction = TxBuilder(cardanoInfo)
   .payTo(recipientAddress, Value.ada(10))
   .complete(provider, sponsorAddress, timeout = 30.seconds)  // Blocking (JVM only)
   .sign(signer)
@@ -217,7 +217,7 @@ You can also use the `await` extension to block on any `Future`:
 import scalus.utils.await
 import scala.concurrent.duration.*
 
-val transaction = TxBuilder(env)
+val transaction = TxBuilder(cardanoInfo)
   .payTo(recipientAddress, Value.ada(10))
   .complete(asyncProvider, sponsorAddress)
   .await(30.seconds)  // Block with timeout (JVM only)

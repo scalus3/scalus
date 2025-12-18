@@ -45,10 +45,9 @@ Combine stake registration and DRep delegation in a single transaction:
 
 ```scala copy
 val drep = DRep.KeyHash(drepKeyHash)
-val deposit = Coin.ada(2)
 
 val tx = TxBuilder(env)
-  .registerAndDelegateVoteToDRep(stakeAddress, drep, deposit)
+  .registerAndDelegateVoteToDRep(stakeAddress, drep)
   .complete(provider, sponsorAddress)
 ```
 
@@ -70,7 +69,7 @@ val tx = TxBuilder(env)
 ```
 
 <Callout type="warning">
-  **Post-Chang Era**: Delegating to a DRep is required to withdraw staking rewards. See [Staking Operations](/docs/transaction-builder/staking-operations) for more details.
+  **Post-Chang Era**: Delegating to a DRep is required to withdraw staking rewards. See [Staking & Rewards](/docs/transaction-builder/staking-rewards) for more details.
 </Callout>
 
 ## Registering and Delegating to Both
@@ -80,10 +79,9 @@ Register your stake key and delegate to both a stake pool and DRep in one effici
 ```scala copy
 val poolId = PoolKeyHash.fromHex("pool1...")
 val drep = DRep.KeyHash(drepKeyHash)
-val deposit = Coin.ada(2)
 
 val tx = TxBuilder(env)
-  .registerAndDelegateToPoolAndDRep(stakeAddress, poolId, drep, deposit)
+  .registerAndDelegateToPoolAndDRep(stakeAddress, poolId, drep)
   .complete(provider, sponsorAddress)
 ```
 
@@ -95,23 +93,22 @@ val tx = TxBuilder(env)
 
 ### Registering as a DRep
 
-To become a DRep and accept voting delegation, you need to register with a stake address:
+To become a DRep and accept voting delegation, you need to register with a credential:
 
 ```scala copy
 val drepCredential = Credential.KeyHash(yourKeyHash)
-val deposit = Coin.ada(500)
 val anchor = Some(Anchor(
   url = "https://example.com/drep-metadata.json",
   dataHash = metadataHash
 ))
 
 val tx = TxBuilder(env)
-  .registerDRep(drepCredential, deposit, anchor)
+  .registerDRep(drepCredential, anchor)
   .complete(provider, sponsorAddress)
 ```
 
 <Callout type="warning">
-  DRep registration requires a **500 ADA deposit**, which is significantly higher than the stake registration deposit. This deposit is refundable upon deregistration.
+  DRep registration requires a deposit (currently 500 ADA), which is automatically taken from protocol parameters. This deposit is refundable upon deregistration.
 </Callout>
 
 The `anchor` parameter is optional but recommended. It should point to metadata describing your governance positions, credentials, and voting philosophy.
