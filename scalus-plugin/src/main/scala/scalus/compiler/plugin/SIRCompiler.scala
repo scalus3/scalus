@@ -109,6 +109,7 @@ final class SIRCompiler(
     private val DataClassSymbol = requiredClass("scalus.builtin.Data")
     private val PairSymbol = requiredClass("scalus.builtin.BuiltinPair")
     private val ScalusBuiltinListClassSymbol = requiredClass("scalus.builtin.BuiltinList")
+    private val ScalusBuiltinArrayClassSymbol = requiredClass("scalus.builtin.BuiltinArray")
     private val StringContextSymbol = requiredModule("scala.StringContext")
     private val StringContextApplySymbol = StringContextSymbol.requiredMethod("apply")
     private val Tuple2Symbol = requiredClass("scala.Tuple2")
@@ -130,6 +131,7 @@ final class SIRCompiler(
     extension (t: Type)
         def isPair: Boolean = t.typeConstructor.classSymbol == PairSymbol
         def isList: Boolean = t.typeConstructor.classSymbol == ScalusBuiltinListClassSymbol
+        def isArray: Boolean = t.typeConstructor.classSymbol == ScalusBuiltinArrayClassSymbol
         def isMethodType: Boolean = t.isInstanceOf[MethodType]
 
     extension (self: Symbol)
@@ -141,6 +143,8 @@ final class SIRCompiler(
                 }
 
     extension (t: Tree) def isList: Boolean = t.tpe.isList
+
+    extension (t: Tree) def isArray: Boolean = t.tpe.isArray
 
     extension (t: Tree) def isPair: Boolean = t.tpe.isPair
 
@@ -1948,7 +1952,7 @@ final class SIRCompiler(
                         )
                     case other =>
                         throw new Exception("expected that exprA.tp is List")
-                        error(
+            /*                        error(
                           TypeMismatch(
                             fun.toString,
                             SIRType.List(SIRType.TypeVar("A", None, false)),
@@ -1956,7 +1960,7 @@ final class SIRCompiler(
                             tree.srcPos
                           ),
                           SIR.Error("", posAnns)
-                        )
+                        ) */
             case "tail" =>
                 val exprArg = compileExpr(env, lst)
                 SIR.Apply(
@@ -1975,22 +1979,23 @@ final class SIRCompiler(
             case _ =>
                 error(UnsupportedListFunction(fun.toString, lst.srcPos), SIR.Error("", posAnns))
 
-    private def compileBuiltinListConstructor(
+    /** Builds a BuiltinList from a sequence of elements. This is the shared implementation used by
+      * both compileBuiltinListConstructor and compileBuiltinArrayConstructor.
+      */
+    private def builtinSeq(
         env: Env,
         ex: Tree,
-        list: Tree,
         tpe: Tree,
-        tree: Tree
+        tree: Tree,
+        debugName: String
     ): AnnotatedSIR =
-        if env.debug then
-            println(s"compileBuiltinListConstructor: ${ex.show}, list: $list, tpe: $tpe")
-        val tpeE = typeReprToDefaultUni(tpe.tpe, list)
+        val tpeE = typeReprToDefaultUni(tpe.tpe, tree)
         val tpeTp = sirTypeInEnv(tpe.tpe, tree.srcPos, env)
         val builtinListTp = SIRType.BuiltinList(tpeTp)
         val anns = AnnotationsDecl.fromSrcPos(tree.srcPos)
         if env.debug then
             println(
-              s"compileBuiltinListConstructor: tpeE: $tpeE, tpeTp: $tpeTp,  builtinListTp.show=${builtinListTp.show}"
+              s"$debugName: tpeE: $tpeE, tpeTp: $tpeTp, builtinListTp.show=${builtinListTp.show}"
             )
         ex match
             case SeqLiteral(args, _) =>
@@ -2000,7 +2005,7 @@ final class SIRCompiler(
                     SIR.Const(
                       scalus.uplc.Constant.List(tpeE, lits),
                       builtinListTp,
-                      AnnotationsDecl.fromSrcPos(list.srcPos)
+                      AnnotationsDecl.fromSrcPos(tree.srcPos)
                     )
                 else
                     val nil: AnnotatedSIR = SIR.Const(
@@ -2022,11 +2027,106 @@ final class SIRCompiler(
                         )
                     }
                     if env.debug then
-                        println(s"compileBuiltinListConstructor: retval: $retval")
-                        println(s"compileBuiltinListConstructor: retval.tp: ${retval.tp.show}")
+                        println(s"$debugName: retval: $retval")
+                        println(s"$debugName: retval.tp: ${retval.tp.show}")
                     retval
             case _ =>
                 error(UnsupportedListApplyInvocation(tree, tpe, tree.srcPos), SIR.Error("", anns))
+
+    private def compileBuiltinListConstructor(
+        env: Env,
+        ex: Tree,
+        list: Tree,
+        tpe: Tree,
+        tree: Tree
+    ): AnnotatedSIR =
+        if env.debug then
+            println(s"compileBuiltinListConstructor: ${ex.show}, list: $list, tpe: $tpe")
+        builtinSeq(env, ex, tpe, tree, "compileBuiltinListConstructor")
+
+    // Compiles BuiltinArray(args*) as listToArray(BuiltinList(args*))
+    private def compileBuiltinArrayConstructor(
+        env: Env,
+        ex: Tree,
+        array: Tree,
+        tpe: Tree,
+        tree: Tree
+    ): AnnotatedSIR =
+        if env.debug then
+            println(s"compileBuiltinArrayConstructor: ${ex.show}, array: $array, tpe: $tpe")
+        val tpeTp = sirTypeInEnv(tpe.tpe, tree.srcPos, env)
+        val builtinArrayTp = SIRType.BuiltinArray(tpeTp)
+        val anns = AnnotationsDecl.fromSrcPos(tree.srcPos)
+
+        // Build the list using the shared helper
+        val listExpr = builtinSeq(env, ex, tpe, tree, "compileBuiltinArrayConstructor")
+
+        // Then wrap with listToArray
+        SIR.Apply(
+          SIRBuiltins.listToArray,
+          listExpr,
+          builtinArrayTp,
+          anns
+        )
+
+    // Compiles array methods: length, apply(idx)
+    private def compileBuiltinArrayMethods(
+        env: Env,
+        arr: Tree,
+        fun: Name,
+        tree: Tree,
+        idx: Option[Tree] = None
+    ): AnnotatedSIR =
+        if env.debug then println(s"compileBuiltinArrayMethods: ${arr.show}, fun: $fun, idx: $idx")
+        val posAnns = AnnotationsDecl.fromSrcPos(tree.srcPos)
+        fun match
+            case nme.length =>
+                val exprA = compileExpr(env, arr)
+                SIR.Apply(
+                  SIRBuiltins.lengthOfArray,
+                  exprA,
+                  SIRType.Integer,
+                  posAnns
+                )
+            case nme.apply =>
+                idx match
+                    case Some(idxTree) =>
+                        val exprA = compileExpr(env, arr)
+                        val exprIdx = compileExpr(env, idxTree)
+                        val elemType = exprA.tp match
+                            case SIRType.BuiltinArray(t) => t
+                            case _ =>
+                                error(
+                                  GenericError(
+                                    s"Expected array type, got ${exprA.tp.show}",
+                                    tree.srcPos
+                                  ),
+                                  SIRType.TypeNothing
+                                )
+                        SIR.Apply(
+                          SIR.Apply(
+                            SIRBuiltins.indexArray,
+                            exprA,
+                            SIRType.Fun(SIRType.Integer, elemType),
+                            posAnns
+                          ),
+                          exprIdx,
+                          elemType,
+                          posAnns
+                        )
+                    case None =>
+                        error(
+                          GenericError(
+                            s"array.apply requires an index argument",
+                            tree.srcPos
+                          ),
+                          SIR.Error("", posAnns)
+                        )
+            case _ =>
+                error(
+                  GenericError(s"Unsupported array function: $fun", arr.srcPos),
+                  SIR.Error("", posAnns)
+                )
 
     private def compileApply(
         env0: Env,
@@ -2453,6 +2553,18 @@ final class SIRCompiler(
                   immutable.List(ex)
                 ) if list.tpe =:= requiredModule("scalus.builtin.BuiltinList").typeRef =>
                 compileBuiltinListConstructor(env, ex, list, ltpe, tree)
+            // Array BUILTINS
+            // array.length, array(idx)
+            case Select(arr, fun) if arr.isArray =>
+                compileBuiltinArrayMethods(env, arr, fun, tree)
+            case Apply(Select(arr, fun), immutable.List(idx)) if arr.isArray =>
+                compileBuiltinArrayMethods(env, arr, fun, tree, Some(idx))
+            // BuiltinArray(args*) => listToArray(BuiltinList(args*))
+            case tree @ Apply(
+                  TypeApply(Select(array, nme.apply), immutable.List(atpe)),
+                  immutable.List(ex)
+                ) if array.tpe =:= requiredModule("scalus.builtin.BuiltinArray").typeRef =>
+                compileBuiltinArrayConstructor(env, ex, array, atpe, tree)
             // Pair BUILTINS
             // PAIR
             case Select(pair, fun) if pair.isPair =>

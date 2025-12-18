@@ -505,6 +505,16 @@
             "type": "constant_cost"
         }
     },
+    "indexArray": {
+        "cpu": {
+            "arguments": 232010,
+            "type": "constant_cost"
+        },
+        "memory": {
+            "arguments": 32,
+            "type": "constant_cost"
+        }
+    },
     "indexByteString": {
         "cpu": {
             "arguments": 13169,
@@ -542,6 +552,16 @@
         },
         "memory": {
             "arguments": 4,
+            "type": "constant_cost"
+        }
+    },
+    "lengthOfArray": {
+        "cpu": {
+            "arguments": 231883,
+            "type": "constant_cost"
+        },
+        "memory": {
+            "arguments": 10,
             "type": "constant_cost"
         }
     },
@@ -615,6 +635,22 @@
         "memory": {
             "arguments": 32,
             "type": "constant_cost"
+        }
+    },
+    "listToArray": {
+        "cpu": {
+            "arguments": {
+                "intercept": 1000,
+                "slope": 24838
+            },
+            "type": "linear_in_x"
+        },
+        "memory": {
+            "arguments": {
+                "intercept": 7,
+                "slope": 1
+            },
+            "type": "linear_in_x"
         }
     },
     "mapData": {

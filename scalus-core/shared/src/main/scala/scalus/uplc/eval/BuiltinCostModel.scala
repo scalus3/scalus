@@ -108,7 +108,12 @@ case class BuiltinCostModel(
     findFirstSetBit: DefaultCostingFun[OneArgument],
     ripemd_160: DefaultCostingFun[OneArgument],
     // Plutus 1.53 new builtins
-    dropList: DropListCostingFun
+    dropList: DropListCostingFun,
+    // Array builtins
+    lengthOfArray: DefaultCostingFun[OneArgument],
+    listToArray: DefaultCostingFun[OneArgument],
+    indexArray: DefaultCostingFun[TwoArguments],
+    multiIndexArray: DefaultCostingFun[TwoArguments]
 ) {
 
     /** Convert a [[BuiltinCostModel]] to a flat map of cost parameters
@@ -276,7 +281,12 @@ object BuiltinCostModel {
             "findFirstSetBit" -> writeJs(model.findFirstSetBit),
             "ripemd_160" -> writeJs(model.ripemd_160),
             // Plutus 1.53 new builtins
-            "dropList" -> writeJs(model.dropList)
+            "dropList" -> writeJs(model.dropList),
+            // Array builtins
+            "lengthOfArray" -> writeJs(model.lengthOfArray),
+            "listToArray" -> writeJs(model.listToArray),
+            "indexArray" -> writeJs(model.indexArray),
+            "multiIndexArray" -> writeJs(model.multiIndexArray)
           ),
       json =>
           BuiltinCostModel(
@@ -462,6 +472,23 @@ object BuiltinCostModel {
             dropList =
                 if json.obj.keySet.contains("dropList") then
                     read[DropListCostingFun](json("dropList"))
+                else null,
+            // Array builtins
+            lengthOfArray =
+                if json.obj.keySet.contains("lengthOfArray") then
+                    read[DefaultCostingFun[OneArgument]](json("lengthOfArray"))
+                else null,
+            listToArray =
+                if json.obj.keySet.contains("listToArray") then
+                    read[DefaultCostingFun[OneArgument]](json("listToArray"))
+                else null,
+            indexArray =
+                if json.obj.keySet.contains("indexArray") then
+                    read[DefaultCostingFun[TwoArguments]](json("indexArray"))
+                else null,
+            multiIndexArray =
+                if json.obj.keySet.contains("multiIndexArray") then
+                    read[DefaultCostingFun[TwoArguments]](json("multiIndexArray"))
                 else null
           )
     )
@@ -1395,6 +1422,23 @@ object BuiltinCostModel {
                 slope = CostingInteger(1957L)
               )
             ),
+            memory = TwoArguments.ConstantCost(CostingInteger(4L))
+          ),
+          // Array builtins - placeholder cost model, will be updated with proper values
+          lengthOfArray = DefaultCostingFun(
+            cpu = OneArgument.ConstantCost(CostingInteger(100000L)),
+            memory = OneArgument.ConstantCost(CostingInteger(4L))
+          ),
+          listToArray = DefaultCostingFun(
+            cpu = OneArgument.ConstantCost(CostingInteger(100000L)),
+            memory = OneArgument.ConstantCost(CostingInteger(4L))
+          ),
+          indexArray = DefaultCostingFun(
+            cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
+            memory = TwoArguments.ConstantCost(CostingInteger(4L))
+          ),
+          multiIndexArray = DefaultCostingFun(
+            cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
             memory = TwoArguments.ConstantCost(CostingInteger(4L))
           )
         )

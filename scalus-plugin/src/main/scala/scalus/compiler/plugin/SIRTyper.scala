@@ -291,6 +291,15 @@ class SIRTyper(using Context) {
         env: SIRTypeEnv
     ): Option[SIRType] = {
         if symbol == Symbols.requiredClass("scalus.builtin.Data") then Some(SIRType.Data.tp)
+        else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinArray") then
+            tpArgs match
+                case List(elemType) => Some(SIRType.BuiltinArray(elemType))
+                case _ =>
+                    throw TypingException(
+                      symbol.info,
+                      env.pos,
+                      s"Array type should have one type argument, found ${tpArgs.length}"
+                    )
         else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinList") then
             tpArgs match
                 case List(elemType) => Some(SIRType.BuiltinList(elemType))

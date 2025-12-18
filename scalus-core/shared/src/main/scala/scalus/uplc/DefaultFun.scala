@@ -131,8 +131,11 @@ enum DefaultFun extends Enum[DefaultFun]:
     // Plutus 1.53 new builtins
     case DropList
 
-    //
-    // case CaseList
+    // Array builtins
+    case LengthOfArray
+    case ListToArray
+    case IndexArray
+    case MultiIndexArray
 
 object DefaultFun {
     given Flat[DefaultFun] with
@@ -242,6 +245,12 @@ object DefaultFun {
                 // Plutus 1.53 new builtins
                 case DropList => 88
 
+                // Array builtins
+                case LengthOfArray   => 89
+                case ListToArray     => 90
+                case IndexArray      => 91
+                case MultiIndexArray => 92
+
             encode.bits(7, code.toByte)
 
         def decode(decode: DecoderState): DefaultFun =
@@ -335,6 +344,11 @@ object DefaultFun {
                 case 86 => Ripemd_160
                 // Plutus 1.53 new builtins
                 case 88 => DropList
+                // Array builtins
+                case 89 => LengthOfArray
+                case 90 => ListToArray
+                case 91 => IndexArray
+                case 92 => MultiIndexArray
                 case c  => throw new Exception(s"Invalid builtin function code: $c")
 
 }

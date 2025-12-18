@@ -54,6 +54,11 @@ object PrettyPrinter:
                   text(", ") + space,
                   values.map(v => prettyValue(v))
                 ) + text("]")
+            case Constant.Array(tpe, values) =>
+                text("[") + intercalate(
+                  text(", ") + space,
+                  values.map(v => prettyValue(v))
+                ) + text("]")
             case BLS12_381_G1_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_G2_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_MlResult(_) =>
@@ -300,6 +305,34 @@ object PrettyPrinter:
         bracketColorIndex = (bracketColorIndex + 1) % 15 + 1
         color
 
+    /** Bracket a document for UPLC syntax where the opening bracket and keyword must stay together.
+      * Uses a different approach than tightBracketBy: keeps `(keyword` as a single unit, then uses
+      * bracketBy to handle line breaks for the body.
+      */
+    private def uplcBracket(
+        keyword: Doc,
+        body: Doc,
+        openParen: Doc = text("("),
+        closeParen: Doc = text(")")
+    ): Doc =
+        // Keep "(keyword" together as a single unit that never breaks
+        val prefix = openParen + keyword
+        // The body can break after the keyword
+        (prefix & body).grouped + closeParen
+
+    /** Bracket with multiple arguments that can break between them */
+    private def uplcBracketArgs(
+        keyword: Doc,
+        args: List[Doc],
+        openParen: Doc = text("("),
+        closeParen: Doc = text(")")
+    ): Doc =
+        if args.isEmpty then openParen + keyword + closeParen
+        else
+            val prefix = openParen + keyword
+            val body = intercalate(lineOrSpace, args)
+            ((prefix & body).nested(2).grouped + closeParen).grouped
+
     def pretty(term: Term, style: Style): Doc =
         // Sanitize variable names to ensure they conform to UPLC text format
         val sanitizedTerm = TermSanitizer.sanitizeNames(term)
@@ -312,40 +345,43 @@ object PrettyPrinter:
             case Var(name) => text(name.name)
             case LamAbs(name, term) =>
                 val color = nextBracketColor()
-                char('(').styled(Fg.colorCode(color))
-                    + kw("lam") & text(name) / pretty(term, style).indent(2)
-                    + char(')').styled(Fg.colorCode(color))
+                val openP = char('(').styled(Fg.colorCode(color))
+                val closeP = char(')').styled(Fg.colorCode(color))
+                // (lam name body) - keyword and name should stay with opening paren
+                val prefix = openP + kw("lam") & text(name)
+                ((prefix / pretty(term, style)).nested(2).grouped + closeP).grouped
             case a @ Apply(f, arg) =>
                 val (t, args) = a.applyToList
                 val color = nextBracketColor()
-                intercalate(lineOrSpace, (t :: args).map(pretty(_, style)))
-                    .tightBracketBy(
-                      text("[").styled(Fg.colorCode(color)),
-                      text("]").styled(Fg.colorCode(color))
-                    )
+                // [f arg1 arg2 ...] - square brackets, can break between args
+                val openB = text("[").styled(Fg.colorCode(color))
+                val closeB = text("]").styled(Fg.colorCode(color))
+                val allTerms = (t :: args).map(pretty(_, style))
+                val body = intercalate(lineOrSpace, allTerms)
+                ((openB + body).nested(2).grouped + closeB).grouped
             case Force(term) =>
-                inParens(kw("force") & pretty(term, style))
+                // (force term)
+                uplcBracket(kw("force"), pretty(term, style))
             case Delay(term) =>
-                inParens(kw("delay") & pretty(term, style))
+                // (delay term)
+                uplcBracket(kw("delay"), pretty(term, style))
             case Const(const) =>
+                // (con type value) - should not break
                 inParens(kw("con") & const.pretty.styled(Fg.colorCode(64)))
             case Builtin(bn) =>
                 inParens(kw("builtin") & pretty(bn).styled(Fg.colorCode(176)))
-            case Error => kw("(error)")
+            case Error             => kw("(error)")
             case Constr(tag, args) =>
-                val prettyArgs = intercalate(
-                  lineOrSpace,
-                  args.map(pretty(_, style))
-                )
-                inParens(kw("constr") & str(tag.value) & prettyArgs)
+                // (constr tag arg1 arg2 ...)
+                uplcBracketArgs(kw("constr") & str(tag.value), args.map(pretty(_, style)))
             case Case(arg, cases) =>
-                val prettyCases = stack(cases.map(pretty(_, style)))
-                inParens(kw("case") & pretty(arg, style) / prettyCases.indent(2))
+                // (case scrutinee branch1 branch2 ...)
+                uplcBracketArgs(kw("case"), pretty(arg, style) :: cases.map(pretty(_, style)))
 
     def pretty(program: uplc.Program, style: Style): Doc =
         val (major, minor, patch) = program.version
-        (text("program") / text(s"$major.$minor.$patch") / pretty(program.term, style))
-            .tightBracketBy(
-              text("("),
-              text(")")
-            )
+        // (program version term) - keep (program together
+        val prefix = text("(program")
+        val version = text(s"$major.$minor.$patch")
+        val term = pretty(program.term, style)
+        ((prefix & version & term).nested(2).grouped + text(")")).grouped

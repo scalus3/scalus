@@ -609,6 +609,30 @@ object SIRType {
 
     }
 
+    object BuiltinArray {
+        val name = "scalus.builtin.BuiltinArray"
+
+        val constrDecl = {
+            val A = TypeVar("A", None, true)
+            ConstrDecl(
+              name,
+              scala.List(TypeBinding("A", A)),
+              scala.List(A),
+              scala.Nil,
+              AnnotationsDecl.empty
+            )
+        }
+
+        def apply(a: SIRType): SIRType =
+            CaseClass(constrDecl, scala.List(a), None)
+
+        def unapply(x: SIRType): Option[SIRType] = x match {
+            case CaseClass(`constrDecl`, scala.List(a), None) => Some(a)
+            case _                                            => None
+        }
+
+    }
+
     object BuiltinList {
         val name = "scalus.builtin.BuiltinList"
 
@@ -1054,10 +1078,15 @@ object SIRType {
                 val a = TypeVar("A", Some(DefaultUni.ProtoPair.hashCode()), true)
                 val b = TypeVar("B", Some(DefaultUni.ProtoPair.hashCode() + 1), true)
                 TypeLambda(scala.List(a, b), BuiltinPair(a, b))
+            case DefaultUni.ProtoArray =>
+                val a = TypeVar("A", Some(DefaultUni.ProtoArray.hashCode()), true)
+                TypeLambda(scala.List(a), BuiltinArray(a))
             case DefaultUni.Apply(f, arg) =>
                 f match
                     case DefaultUni.ProtoList =>
                         BuiltinList(fromDefaultUni(arg))
+                    case DefaultUni.ProtoArray =>
+                        BuiltinArray(fromDefaultUni(arg))
                     case DefaultUni.Apply(DefaultUni.ProtoPair, a) =>
                         BuiltinPair(fromDefaultUni(a), fromDefaultUni(arg))
                     case DefaultUni.ProtoPair =>

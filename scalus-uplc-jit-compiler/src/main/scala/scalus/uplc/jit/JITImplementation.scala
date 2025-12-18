@@ -108,10 +108,10 @@ enum JITImplementation:
       */
     def compile(term: Term): (Logger, BudgetSpender, MachineParams) => Any = this match
         case Mincont =>
-            mincont.JIT.jitUplc(term)
+            scalus.uplc.jit.mincont.JIT.jitUplc(term)
 
         case NativeStack =>
-            nativestack.JIT.jitUplc(term)
+            scalus.uplc.jit.nativestack.JIT.jitUplc(term)
 
         case Hybrid(threshold, useStatic, useDynamic) =>
             hybrid.HybridJIT.jitUplc(term)

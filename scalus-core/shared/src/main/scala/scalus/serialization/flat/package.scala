@@ -1,7 +1,5 @@
 package scalus.serialization
 
-import scala.collection.mutable.ListBuffer
-
 package object flat:
     case class Natural(n: BigInt)
 
@@ -193,27 +191,32 @@ package object flat:
             val bytes = baDecoder.decode(decode)
             new String(bytes, "UTF-8")
 
-    given listFlat[A: Flat]: Flat[List[A]] with
-        def bitSize(a: List[A]): Int =
-            val flat = summon[Flat[A]]
-            a.foldLeft(1)((acc, elem) => acc + flat.bitSize(elem) + 1)
+    def iterableFlat[A: Flat, C <: Iterable[A]](factory: scala.collection.Factory[A, C]): Flat[C] =
+        new Flat[C]:
+            def bitSize(a: C): Int =
+                val flat = summon[Flat[A]]
+                a.foldLeft(1)((acc, elem) => acc + flat.bitSize(elem) + 1)
 
-        def encode(a: List[A], encode: EncoderState): Unit =
-            val flat = summon[Flat[A]]
-            a.foreach { elem =>
-                encode.bits(1, 1)
-                flat.encode(elem, encode)
-            }
-            encode.bits(1, 0)
+            def encode(a: C, encode: EncoderState): Unit =
+                val flat = summon[Flat[A]]
+                a.foreach { elem =>
+                    encode.bits(1, 1)
+                    flat.encode(elem, encode)
+                }
+                encode.bits(1, 0)
 
-        def decode(decode: DecoderState): List[A] =
-            val flat = summon[Flat[A]]
-            val result = ListBuffer.empty[A]
-            while decode.bits8(1) == 1 do {
-                val a = flat.decode(decode)
-                result.addOne(a)
-            }
-            result.toList
+            def decode(decode: DecoderState): C =
+                val flat = summon[Flat[A]]
+                val builder = factory.newBuilder
+                while decode.bits8(1) == 1 do {
+                    val a = flat.decode(decode)
+                    builder.addOne(a)
+                }
+                builder.result()
+
+    given listFlat[A: Flat]: Flat[List[A]] = iterableFlat[A, List[A]](List)
+    // Arrays use the same flat encoding as lists (per CIP-0138)
+    given indexedSeqFlat[A: Flat]: Flat[IndexedSeq[A]] = iterableFlat[A, IndexedSeq[A]](IndexedSeq)
 
     given pairFlat[A: Flat, B: Flat]: Flat[(A, B)] with
         def bitSize(a: (A, B)): Int =

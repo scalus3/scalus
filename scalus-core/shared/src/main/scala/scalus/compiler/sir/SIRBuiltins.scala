@@ -531,6 +531,43 @@ object SIRBuiltins {
       AnnotationsDecl.empty
     )
 
+    // Array builtins
+    val lengthOfArray: SIR.Builtin = SIR.Builtin(
+      DefaultFun.LengthOfArray,
+      SIRType.TypeLambda("lengthOfArray_A", a => SIRType.BuiltinArray(a) ->: SIRType.Integer, true),
+      AnnotationsDecl.empty
+    )
+
+    val listToArray: SIR.Builtin = SIR.Builtin(
+      DefaultFun.ListToArray,
+      SIRType.TypeLambda(
+        "listToArray_A",
+        a => SIRType.BuiltinList(a) ->: SIRType.BuiltinArray(a),
+        true
+      ),
+      AnnotationsDecl.empty
+    )
+
+    val indexArray: SIR.Builtin = SIR.Builtin(
+      DefaultFun.IndexArray,
+      SIRType
+          .TypeLambda("indexArray_A", a => SIRType.BuiltinArray(a) ->: SIRType.Integer ->: a, true),
+      AnnotationsDecl.empty
+    )
+
+    // multiIndexArray :: forall a. List Integer -> Array a -> List a
+    val multiIndexArray: SIR.Builtin = SIR.Builtin(
+      DefaultFun.MultiIndexArray,
+      SIRType.TypeLambda(
+        "multiIndexArray_A",
+        a =>
+            SIRType.BuiltinList(SIRType.Integer) ->: SIRType.BuiltinArray(a) ->: SIRType
+                .BuiltinList(a),
+        true
+      ),
+      AnnotationsDecl.empty
+    )
+
     def fromUplc(uplcFun: DefaultFun): SIR.Builtin =
         uplcFun match
             case DefaultFun.AddInteger                      => addInteger
@@ -622,4 +659,9 @@ object SIRBuiltins {
             case DefaultFun.Ripemd_160                      => ripemd_160
             // Plutus 1.53 new builtins
             case DefaultFun.DropList => dropList
+            // Array builtins
+            case DefaultFun.LengthOfArray   => lengthOfArray
+            case DefaultFun.ListToArray     => listToArray
+            case DefaultFun.IndexArray      => indexArray
+            case DefaultFun.MultiIndexArray => multiIndexArray
 }

@@ -57,6 +57,10 @@ object ConstantGenerator {
                 // Lists are represented as plain Scala List[Any] at runtime
                 // No need to track element type - only used for serialization
                 Expr.ofList(value.map(constantToExpr))
+            case Constant.Array(elemType, value) =>
+                // Arrays are represented as Vector[Any] at runtime
+                val elements = value.map(constantToExpr)
+                '{ Vector(${ Varargs(elements) }*) }
             case Constant.Pair(a, b) =>
                 '{ BuiltinPair(${ constantToExpr(a) }, ${ constantToExpr(b) }) }
             case Constant.BLS12_381_G1_Element(value) =>

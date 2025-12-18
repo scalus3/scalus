@@ -159,10 +159,14 @@ object UplcParser:
         }
         def list =
             inParens(symbol("list") *> self) `map` (in => DefaultUni.Apply(ProtoList, in))
+        def array =
+            inParens(symbol("array") *> self) `map` (in =>
+                DefaultUni.Apply(DefaultUni.ProtoArray, in)
+            )
         def pair = inParens(symbol("pair") *> self ~ self) map { case (a, b) =>
             DefaultUni.Apply(DefaultUni.Apply(ProtoPair, a), b)
         }
-        star.backtrack | list.backtrack | pair
+        star.backtrack | list.backtrack | array.backtrack | pair
     }
 
     val hexByte: P[Byte] = hexdig ~ hexdig map { case (a, b) =>
@@ -223,6 +227,11 @@ object UplcParser:
             Constant.List(t, ls)
         }
 
+    def conArrayOf(t: DefaultUni): P[Constant] =
+        symbol("[") *> constantOf(t).repSep0(symbol(",")) <* symbol("]") map { ls =>
+            Constant.Array(t, ls.toVector)
+        }
+
     def conPairOf(a: DefaultUni, b: DefaultUni): P[Constant] =
         inParens((constantOf(a) <* symbol(",")) ~ constantOf(b)) map { p =>
             Constant.Pair(p._1, p._2)
@@ -259,6 +268,7 @@ object UplcParser:
         case DefaultUni.Data =>
             (if expectDataParens then inParens(dataTerm) else dataTerm).map(asConstant)
         case DefaultUni.Apply(ProtoList, t)                      => conListOf(t)
+        case DefaultUni.Apply(DefaultUni.ProtoArray, t)          => conArrayOf(t)
         case DefaultUni.Apply(DefaultUni.Apply(ProtoPair, a), b) => conPairOf(a, b)
         case DefaultUni.BLS12_381_G1_Element =>
             lexeme(conBLS12_381_G1_Element.map(bs => Constant.BLS12_381_G1_Element(bs)))

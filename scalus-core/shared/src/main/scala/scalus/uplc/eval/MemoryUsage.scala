@@ -90,10 +90,10 @@ object MemoryUsage {
         case Constant.Unit           => CostingInteger(1L)
         case _: Constant.Bool        => CostingInteger(1L)
         case Constant.Data(d)        => memoryUsageData(d)
-        case Constant.List(tpe, l) =>
-            var acc: CostingInteger = CostingInteger(0L)
-            for d <- l do acc = acc + memoryUsage(d)
-            acc
+        // Lists use length for memory usage (like Plutus), not sum of element memory
+        case Constant.List(_, l) => CostingInteger(l.size.toLong)
+        // Arrays use length for memory usage (like Plutus)
+        case Constant.Array(_, a) => CostingInteger(a.size.toLong)
         case Constant.Pair(a, b) =>
             CostingInteger(1L) + memoryUsage(a) + memoryUsage(b)
         case Constant.BLS12_381_G1_Element(_) => CostingInteger(18L)
