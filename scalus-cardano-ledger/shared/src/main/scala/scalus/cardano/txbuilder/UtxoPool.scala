@@ -1,6 +1,7 @@
 package scalus.cardano.txbuilder
 
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
 
 /** Encapsulates UTXO selection state during transaction balancing.
   *
@@ -48,9 +49,11 @@ private[txbuilder] class UtxoPool(
             .flatMap(_.value.assets.assets.get(policyId).flatMap(_.get(assetName)))
             .sum
 
-    /** Select UTXOs greedily to cover the required value.
+    /** Select UTXOs to cover the required value.
       *
-      * First covers tokens (since they're constrained), then ADA.
+      * Selection strategy:
+      *   - First selects UTXOs containing required tokens (these are mandatory)
+      *   - Then for remaining ADA: finds smallest sufficient single UTxO, or multiple largest-first
       *
       * @param required
       *   the value to cover
@@ -63,7 +66,7 @@ private[txbuilder] class UtxoPool(
         var remainingAda = required.coin.value
         var remainingTokens = required.assets
 
-        // First, select UTXOs that have required tokens
+        // First, select UTXOs that have required tokens (mandatory - tokens are constrained)
         remaining.foreach { case (input, output) =>
             if !selected.contains(input) then {
                 val hasNeededTokens = remainingTokens.assets.exists { case (policy, assets) =>
@@ -83,11 +86,30 @@ private[txbuilder] class UtxoPool(
 
         // Then, select UTXOs for ADA if still needed
         if remainingAda > 0 then {
-            remaining.foreach { case (input, output) =>
-                if !selected.contains(input) && remainingAda > 0 then {
+            // Get unselected UTXOs sorted by ADA ascending
+            val unselectedSorted = remaining
+                .filterNot { case (input, _) => selected.contains(input) }
+                .toSeq
+                .sortBy { case (_, output) => output.value.coin.value }
+
+            // Try to find smallest sufficient single UTxO
+            val smallestSufficient = unselectedSorted.find { case (_, output) =>
+                output.value.coin.value >= remainingAda
+            }
+
+            smallestSufficient match {
+                case Some((input, output)) =>
+                    // Found a single UTxO that covers the requirement
                     selected = selected + (input -> output)
-                    remainingAda -= output.value.coin.value
-                }
+
+                case None =>
+                    // No single UTxO covers it, select multiple starting with largest
+                    unselectedSorted.reverse.foreach { case (input, output) =>
+                        if remainingAda > 0 then {
+                            selected = selected + (input -> output)
+                            remainingAda -= output.value.coin.value
+                        }
+                    }
             }
         }
 
@@ -99,38 +121,100 @@ private[txbuilder] class UtxoPool(
       * Can reuse UTXOs already selected for inputs - same UTXO can be in both inputs and
       * collateralInputs (collateral only consumed if scripts fail).
       *
+      * Selection strategy:
+      *   1. First tries to find an "optimal" ADA-only UTxO where the excess is below minAda
+      *      threshold, so no collateralReturn output is needed
+      *   2. Otherwise finds smallest sufficient single UTxO
+      *   3. If no single UTxO covers it, selects multiple starting with largest
+      *   4. Falls back to UTxOs with tokens if ADA-only UTxOs are insufficient
+      *
       * @param requiredAmount
       *   the amount of ADA required for collateral
+      * @param protocolParams
+      *   protocol parameters for computing minAda
       * @return
       *   selected UTXOs for collateral
       */
-    def selectForCollateral(requiredAmount: Coin): Utxos = {
-        // Combine remaining and already-selected for inputs (can reuse for collateral)
-        val allCandidates = remainingForInputs ++ selectedForInputs
+    def selectForCollateral(requiredAmount: Coin, protocolParams: ProtocolParams): Utxos = {
+        val required = requiredAmount.value
 
-        // Prefer ADA-only UTXOs (simpler, no tokens to return)
-        val adaOnlyUtxos = allCandidates.filter { case (_, output) =>
+        // All UTxOs are candidates (can reuse inputs for collateral)
+        val adaOnlyUtxos = available.filter { case (_, output) =>
             output.value.assets.isEmpty
         }
 
+        // Sort ADA-only UTxOs by ADA amount ascending
+        val adaOnlySorted = adaOnlyUtxos.toSeq.sortBy { case (_, output) =>
+            output.value.coin.value
+        }
+
+        // Strategy 1: Try to find an optimal UTxO (covers requirement, excess < minAda for return)
+        // The minAda for return depends on the UTxO's address (collateral return goes to same address)
+        val optimalUtxo = adaOnlySorted.find { case (_, output) =>
+            val ada = output.value.coin.value
+            // Compute minAda for a potential return output to this address
+            val minimalReturnOutput = TransactionOutput(output.address, Value.zero)
+            val minAdaForReturn =
+                MinCoinSizedTransactionOutput.ensureMinAda(
+                  Sized(minimalReturnOutput),
+                  protocolParams
+                )
+            ada >= required && (ada - required) < minAdaForReturn.value
+        }
+
+        if optimalUtxo.isDefined then {
+            return Map(optimalUtxo.get)
+        }
+
+        // Strategy 2: Find smallest sufficient single UTxO
+        val smallestSufficient = adaOnlySorted.find { case (_, output) =>
+            output.value.coin.value >= required
+        }
+
+        if smallestSufficient.isDefined then {
+            return Map(smallestSufficient.get)
+        }
+
+        // Strategy 3: No single ADA-only UTxO covers it, select multiple starting with largest
         var selected = Map.empty[TransactionInput, TransactionOutput]
         var accumulated = 0L
 
-        // First try ADA-only
-        adaOnlyUtxos.foreach { case (input, output) =>
-            if accumulated < requiredAmount.value then {
+        adaOnlySorted.reverse.foreach { case (input, output) =>
+            if accumulated < required then {
                 selected = selected + (input -> output)
                 accumulated += output.value.coin.value
             }
         }
 
-        // If not enough, use any UTXOs (tokens will be returned via collateral return output)
-        if accumulated < requiredAmount.value then {
-            allCandidates.foreach { case (input, output) =>
-                if !selected.contains(input) && accumulated < requiredAmount.value then {
-                    selected = selected + (input -> output)
-                    accumulated += output.value.coin.value
-                }
+        // If ADA-only UTxOs are sufficient, return them
+        if accumulated >= required then {
+            return selected
+        }
+
+        // Strategy 4: Need to use UTxOs with tokens as well
+        // Sort token UTxOs by ADA ascending to find smallest sufficient first
+        val tokenUtxosSorted = available
+            .filter { case (_, output) => output.value.assets.nonEmpty }
+            .toSeq
+            .sortBy { case (_, output) => output.value.coin.value } // ascending
+
+        // Compute remaining needed after ADA-only selection
+        val remainingRequired = required - accumulated
+
+        // Try to find smallest sufficient single token UTxO
+        val smallestSufficientToken = tokenUtxosSorted.find { case (_, output) =>
+            output.value.coin.value >= remainingRequired
+        }
+
+        if smallestSufficientToken.isDefined then {
+            return selected + smallestSufficientToken.get
+        }
+
+        // Otherwise, select multiple starting with largest
+        tokenUtxosSorted.reverse.foreach { case (input, output) =>
+            if accumulated < required then {
+                selected = selected + (input -> output)
+                accumulated += output.value.coin.value
             }
         }
 

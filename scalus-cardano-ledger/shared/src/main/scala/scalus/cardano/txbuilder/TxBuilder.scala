@@ -1056,7 +1056,7 @@ case class TxBuilder(
                     val pool =
                         if needsCollateral then {
                             val initialCollateral =
-                                emptyPool.selectForCollateral(Coin.ada(5)) // Initial estimate
+                                emptyPool.selectForCollateral(Coin.ada(5), env.protocolParams)
                             emptyPool.withCollateral(initialCollateral)
                         } else emptyPool
 
@@ -1198,7 +1198,7 @@ case class TxBuilder(
             case TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda) =>
                 // Need more collateral ADA
                 val neededMore = Coin(required.value - totalAda.value + minAda.value)
-                val additionalCollateral = pool.selectForCollateral(neededMore)
+                val additionalCollateral = pool.selectForCollateral(neededMore, env.protocolParams)
 
                 if additionalCollateral.isEmpty || additionalCollateral == pool.collateral then {
                     throw TxBuilderException.BalancingException(error, errorCtx)
