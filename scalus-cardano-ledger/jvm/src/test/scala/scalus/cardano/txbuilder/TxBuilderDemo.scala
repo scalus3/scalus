@@ -197,4 +197,36 @@ class TxBuilderDemo extends AnyFunSuite {
         val fully = applied $ ().toData
 //        println(fully.evaluateDebug)
     }
+
+    ignore("Blueprint usage examples") {
+        import scalus.builtin.Data.toData
+        import scalus.cardano.blueprint.Blueprint
+        import scalus.cardano.ledger.Script
+        import scalus.uplc.Program
+        import java.nio.file.{Files, Path}
+        // read Blueprint from plutus.json file
+        val blueprint = Blueprint.fromJson(Files.readString(Path.of("plutus.json")))
+        // get UPLC program
+        val program = blueprint.validators.head.compiledCode.map(Program.fromCborHex).get
+        // apply arguments to the program
+        val applied = program $ 42.toData
+        val script = Script.PlutusV3(applied.cborByteString)
+        // use the script in a transaction
+        val provider = emulator
+        val tx = TxBuilder(env)
+            .output(
+              TransactionOutput(
+                Alice.address,
+                Value.ada(10),
+                datumOption = None,
+                scriptRef = Some(ScriptRef(script))
+              )
+            )
+            .complete(provider = emulator, sponsor = Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+        emulator.submit(tx).await()
+    }
+
 }
