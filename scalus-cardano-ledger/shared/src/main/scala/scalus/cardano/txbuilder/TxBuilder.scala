@@ -7,12 +7,11 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
+import scalus.cardano.ledger.utils.TxBalance
 import scalus.cardano.node.Provider
-import scalus.cardano.txbuilder.TransactionBuilder.{modifyBody, ResolvedUtxos}
+import scalus.cardano.txbuilder.SomeBuildError
 
 import java.time.Instant
-import scala.collection.immutable.SortedMap
-import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 
 // -----------------------------------------------------------------------------
@@ -1030,548 +1029,377 @@ case class TxBuilder(
     def complete(provider: Provider, sponsor: Address)(using
         ExecutionContext
     ): Future[TxBuilder] = {
-        // Pre-build the context to get initial UTXOs
-        val initialContext = TransactionBuilder
-            .build(env.network, steps) match {
-            case Right(ctx) => ctx.ensureMinAdaAll(env.protocolParams)
+        // Step 1: Build initial context to understand requirements
+        val initialBuildResult = TransactionBuilder.build(env.network, steps)
+
+        initialBuildResult match {
             case Left(error) =>
-                return Future.failed(
-                  TxBuilderException.ContextInitializationException(
-                    "initial context build failed",
-                    Some(error)
-                  )
-                )
+                Future.failed(TxBuilderException.fromBuildError(error))
+
+            case Right(initialCtx) =>
+                // Step 2: Query ALL available UTXOs at sponsor address ONCE
+                provider.findUtxos(address = sponsor).map { utxosResult =>
+                    val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
+
+                    // Exclude UTXOs already used in initial context (from user's steps)
+                    val alreadyUsedInputs = initialCtx.resolvedUtxos.utxos.keySet
+                    val availableUtxos = allAvailableUtxos.filterNot { case (input, _) =>
+                        alreadyUsedInputs.contains(input)
+                    }
+
+                    // Step 3: Check if we need specific tokens and validate they exist
+                    val neededTokens = estimateRequiredTokens(initialCtx)
+                    validateTokensAvailable(neededTokens, availableUtxos, sponsor) match {
+                        case Some(error) => throw error
+                        case None        => // continue
+                    }
+
+                    // Step 4: Select UTXOs for required tokens upfront
+                    val tokenValue = Value(Coin.zero, neededTokens)
+                    val initialInputs = selectUtxosForValue(availableUtxos, tokenValue)
+
+                    // Step 5: Determine if we need collateral (transaction has scripts)
+                    val needsCollateral = initialCtx.redeemers.nonEmpty
+
+                    // Step 6: Select initial collateral if needed
+                    val initialCollateral =
+                        if needsCollateral then
+                            selectCollateralUtxos(
+                              availableUtxos,
+                              initialInputs,
+                              Coin.ada(5) // Initial estimate for collateral
+                            )
+                        else Map.empty
+
+                    // Step 7: Iteratively build and finalize until balanced
+                    completeLoop(
+                      availableUtxos = availableUtxos,
+                      selectedInputs = initialInputs,
+                      selectedCollateral = initialCollateral,
+                      needsCollateral = needsCollateral,
+                      sponsor = sponsor,
+                      maxIterations = 10
+                    )
+                }
+        }
+    }
+
+    /** Iterative loop that adds UTXOs until finalizeContext succeeds. */
+    private def completeLoop(
+        availableUtxos: Utxos,
+        selectedInputs: Utxos,
+        selectedCollateral: Utxos,
+        needsCollateral: Boolean,
+        sponsor: Address,
+        maxIterations: Int
+    ): TxBuilder = {
+        if maxIterations <= 0 then {
+            throw new RuntimeException(
+              "Max iterations exceeded while trying to balance transaction"
+            )
         }
 
-        // Keep track of all known UTXOs (initial + selected during balancing)
-        val selectedUtxos = mutable.Map.from(initialContext.resolvedUtxos.utxos)
+        // Build steps: base steps + selected inputs + selected collateral
+        val spendSteps = selectedInputs.map { case (input, output) =>
+            TransactionBuilderStep.Spend(Utxo(input, output), PubKeyWitness)
+        }.toSeq
 
-        // Count expected signers: initial context + 1 for sponsor (if pubkey address)
-        val sponsorExpectedSigner = sponsor match {
+        val collateralSteps = selectedCollateral.map { case (input, output) =>
+            TransactionBuilderStep.AddCollateral(Utxo(input, output))
+        }.toSeq
+
+        val allSteps = steps ++ spendSteps ++ collateralSteps
+
+        TransactionBuilder.build(env.network, allSteps) match {
+            case Left(error) =>
+                throw TxBuilderException.fromBuildError(error)
+
+            case Right(ctx) =>
+                val ctxWithAttachments = addAttachmentsToContext(ctx)
+                val diffHandler: DiffHandler = (diff, tx) =>
+                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
+
+                ctxWithAttachments.finalizeContext(
+                  env.protocolParams,
+                  diffHandler,
+                  evaluator,
+                  validators
+                ) match {
+                    case Right(finalizedCtx) =>
+                        // Success! Add sponsor to expected signers
+                        val sponsorSigner = extractSponsorSigner(sponsor)
+                        val ctxWithSigner = finalizedCtx.copy(
+                          expectedSigners = finalizedCtx.expectedSigners ++ sponsorSigner.toSet
+                        )
+                        copy(context = ctxWithSigner)
+
+                    case Left(SomeBuildError.BalancingError(balancingError, errorCtx)) =>
+                        // Handle balancing errors by adding more UTXOs
+                        handleBalancingError(
+                          balancingError,
+                          errorCtx,
+                          availableUtxos,
+                          selectedInputs,
+                          selectedCollateral,
+                          needsCollateral,
+                          sponsor,
+                          maxIterations
+                        )
+
+                    case Left(error) =>
+                        throw TxBuilderException.fromBuildError(error)
+                }
+        }
+    }
+
+    /** Handle balancing errors by selecting more UTXOs and retrying. */
+    private def handleBalancingError(
+        error: TxBalancingError,
+        errorCtx: TransactionBuilder.Context,
+        availableUtxos: Utxos,
+        selectedInputs: Utxos,
+        selectedCollateral: Utxos,
+        needsCollateral: Boolean,
+        sponsor: Address,
+        maxIterations: Int
+    ): TxBuilder = {
+        val remainingUtxos = availableUtxos -- selectedInputs.keySet
+
+        error match {
+            case TxBalancingError.InsufficientFunds(diff, minRequired) =>
+                // Need more ADA - select additional UTXOs
+                val additionalNeeded = Value(Coin(minRequired), MultiAsset.empty)
+                val additionalUtxos = selectUtxosForValue(remainingUtxos, additionalNeeded)
+
+                if additionalUtxos.isEmpty then {
+                    // No more UTXOs available - truly insufficient
+                    val availableAda =
+                        availableUtxos.values.foldLeft(0L)((acc, o) => acc + o.value.coin.value)
+                    throw TxBuilderException.InsufficientAdaException(
+                      Coin(minRequired),
+                      Coin(availableAda),
+                      sponsor
+                    )
+                }
+
+                completeLoop(
+                  availableUtxos,
+                  selectedInputs ++ additionalUtxos,
+                  selectedCollateral,
+                  needsCollateral,
+                  sponsor,
+                  maxIterations - 1
+                )
+
+            case TxBalancingError.CantBalance(lastDiff) if lastDiff < 0 =>
+                // Negative diff means outputs > inputs, need more inputs
+                val additionalNeeded = Value(Coin(-lastDiff + 1000000), MultiAsset.empty)
+                val additionalUtxos = selectUtxosForValue(remainingUtxos, additionalNeeded)
+
+                if additionalUtxos.isEmpty then {
+                    val availableAda =
+                        availableUtxos.values.foldLeft(0L)((acc, o) => acc + o.value.coin.value)
+                    throw TxBuilderException.InsufficientAdaException(
+                      Coin(-lastDiff),
+                      Coin(availableAda),
+                      sponsor
+                    )
+                }
+
+                completeLoop(
+                  availableUtxos,
+                  selectedInputs ++ additionalUtxos,
+                  selectedCollateral,
+                  needsCollateral,
+                  sponsor,
+                  maxIterations - 1
+                )
+
+            case TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda) =>
+                // Need more collateral ADA
+                val neededMore = Coin(required.value - totalAda.value + minAda.value)
+                val additionalCollateral =
+                    selectCollateralUtxos(remainingUtxos, selectedCollateral, neededMore)
+
+                if additionalCollateral.isEmpty || additionalCollateral == selectedCollateral then {
+                    throw TxBuilderException.BalancingException(error, errorCtx)
+                }
+
+                completeLoop(
+                  availableUtxos,
+                  selectedInputs,
+                  selectedCollateral ++ additionalCollateral,
+                  needsCollateral,
+                  sponsor,
+                  maxIterations - 1
+                )
+
+            case _ =>
+                // Other balancing errors - cannot recover
+                throw TxBuilderException.BalancingException(error, errorCtx)
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // UTXO Selection Helpers for complete()
+    // -------------------------------------------------------------------------
+
+    /** Estimate which tokens are required based on transaction outputs.
+      *
+      * Returns tokens that are in outputs but not in consumed inputs. ADA is handled by the loop.
+      */
+    private def estimateRequiredTokens(ctx: TransactionBuilder.Context): MultiAsset = {
+        val produced = TxBalance.produced(ctx.transaction, env.protocolParams)
+        val consumed = TxBalance
+            .consumed(
+              ctx.transaction,
+              CertState.empty,
+              ctx.resolvedUtxos.utxos,
+              env.protocolParams
+            )
+            .getOrElse(Value.zero)
+
+        // deficit = produced - consumed (positive tokens means we need more)
+        val deficit = produced - consumed
+        onlyPositiveTokens(deficit.assets)
+    }
+
+    /** Validate that required tokens are available in the UTXOs.
+      *
+      * Returns Some(exception) if tokens are missing, None if all tokens available.
+      */
+    private def validateTokensAvailable(
+        requiredTokens: MultiAsset,
+        available: Utxos,
+        sponsor: Address
+    ): Option[TxBuilderException] = {
+        val availableValue = available.values.foldLeft(Value.zero) { (acc, output) =>
+            acc + output.value
+        }
+
+        requiredTokens.assets.flatMap { case (policyId, assets) =>
+            assets.flatMap { case (assetName, requiredAmount) =>
+                if requiredAmount > 0 then {
+                    val availableAmount = availableValue.assets.assets
+                        .get(policyId)
+                        .flatMap(_.get(assetName))
+                        .getOrElse(0L)
+                    if availableAmount < requiredAmount then {
+                        Some(
+                          TxBuilderException.InsufficientTokensException(
+                            policyId,
+                            assetName,
+                            requiredAmount,
+                            availableAmount,
+                            sponsor
+                          )
+                        )
+                    } else None
+                } else None
+            }
+        }.headOption
+    }
+
+    /** Extract only positive token amounts from a MultiAsset. */
+    private def onlyPositiveTokens(ma: MultiAsset): MultiAsset = {
+        val positiveOnly = ma.assets.flatMap { case (policyId, assets) =>
+            val positiveAssets = assets.filter { case (_, amount) => amount > 0 }
+            if positiveAssets.nonEmpty then Some(policyId -> positiveAssets) else None
+        }
+        MultiAsset(positiveOnly)
+    }
+
+    /** Select UTXOs greedily to cover the required value.
+      *
+      * First covers tokens (since they're constrained), then ADA.
+      */
+    private def selectUtxosForValue(available: Utxos, required: Value): Utxos = {
+        var selected = Map.empty[TransactionInput, TransactionOutput]
+        var remainingAda = required.coin.value
+        var remainingTokens = required.assets
+
+        // First, select UTXOs that have required tokens
+        available.foreach { case (input, output) =>
+            if !selected.contains(input) then {
+                val hasNeededTokens = remainingTokens.assets.exists { case (policy, assets) =>
+                    output.value.assets.assets.get(policy).exists { outputAssets =>
+                        assets.exists { case (name, amount) =>
+                            amount > 0 && outputAssets.getOrElse(name, 0L) > 0
+                        }
+                    }
+                }
+                if hasNeededTokens then {
+                    selected = selected + (input -> output)
+                    remainingAda -= output.value.coin.value
+                    remainingTokens = remainingTokens - output.value.assets
+                }
+            }
+        }
+
+        // Then, select UTXOs for ADA if still needed
+        if remainingAda > 0 then {
+            available.foreach { case (input, output) =>
+                if !selected.contains(input) && remainingAda > 0 then {
+                    selected = selected + (input -> output)
+                    remainingAda -= output.value.coin.value
+                }
+            }
+        }
+
+        selected
+    }
+
+    /** Select UTXOs for collateral, preferring ADA-only UTXOs.
+      *
+      * Can reuse UTXOs already selected for inputs - same UTXO can be in both inputs and
+      * collateralInputs (collateral only consumed if scripts fail).
+      */
+    private def selectCollateralUtxos(
+        available: Utxos,
+        alreadySelectedForInputs: Utxos,
+        requiredAmount: Coin
+    ): Utxos = {
+        // Combine available and already-selected (can reuse for collateral)
+        val allCandidates = available ++ alreadySelectedForInputs
+
+        // Prefer ADA-only UTXOs (simpler, no tokens to return)
+        val adaOnlyUtxos = allCandidates.filter { case (_, output) =>
+            output.value.assets.isEmpty
+        }
+
+        var selected = Map.empty[TransactionInput, TransactionOutput]
+        var accumulated = 0L
+
+        // First try ADA-only
+        adaOnlyUtxos.foreach { case (input, output) =>
+            if accumulated < requiredAmount.value then {
+                selected = selected + (input -> output)
+                accumulated += output.value.coin.value
+            }
+        }
+
+        // If not enough, use any UTXOs (tokens will be returned via collateral return output)
+        if accumulated < requiredAmount.value then {
+            allCandidates.foreach { case (input, output) =>
+                if !selected.contains(input) && accumulated < requiredAmount.value then {
+                    selected = selected + (input -> output)
+                    accumulated += output.value.coin.value
+                }
+            }
+        }
+
+        selected
+    }
+
+    /** Extract sponsor's expected signer from address if it's a pubkey address. */
+    private def extractSponsorSigner(sponsor: Address): Option[ExpectedSigner] = {
+        sponsor match {
             case sa: ShelleyAddress =>
                 sa.payment match {
                     case ShelleyPaymentPart.Key(hash) => Some(ExpectedSigner(hash))
                     case _                            => None
                 }
             case _ => None
-        }
-        val allExpectedSigners = initialContext.expectedSigners ++ sponsorExpectedSigner.toSet
-        val expectedSignerCount = allExpectedSigners.size
-
-        // The async diff handler is called in a loop by balanceFeeAndChangeWithTokens.
-        // Every Right() return is just an end of an iteration, not necessarily the end of the algorithm.
-        // ensureCollateralBalanced uses ensureCollateralReturn internally and handles querying
-        // for more collateral if needed.
-        def handleDiffByQueryingMore(
-            diff: Value,
-            tx: Transaction
-        ): Future[Either[TxBalancingError, Transaction]] = {
-            // First, ensure collateral is balanced (happens every iteration since fee changes)
-            // ensureCollateralBalanced sets the collateral return output via ensureCollateralReturn
-            ensureCollateralBalanced(tx, provider, sponsor, selectedUtxos).flatMap {
-                case Right(balancedTx) if balancedTx != tx =>
-                    // Collateral was adjusted (inputs added or return output set), iterate further
-                    Future.successful(Right(balancedTx))
-                case Left(error) =>
-                    Future.successful(Left(error))
-                case Right(balancedTx) =>
-                    // Collateral is balanced, continue with value diff handling
-                    // Use balancedTx which has the collateral return output set
-                    handleValueDiff(
-                      diff,
-                      balancedTx,
-                      provider,
-                      sponsor,
-                      selectedUtxos,
-                      initialContext
-                    )
-            }
-        }
-
-        // Build the transaction with balancing, then update context with all selected UTXOs
-        // Add dummy signatures for fee calculation (similar to finalizeContext)
-        val txWithDummySigs = addDummySignatures(
-          expectedSignerCount,
-          addAttachmentsToContext(initialContext).transaction
-        )
-
-        TransactionBuilder
-            .balanceFeeAndChangeWithTokensAsync(
-              txWithDummySigs,
-              handleDiffByQueryingMore,
-              env.protocolParams,
-              selectedUtxos.utxos,
-              evaluator
-            )
-            .map {
-                case Right(tx) =>
-                    // Remove dummy signatures before returning
-                    val finalTx = removeDummySignatures(expectedSignerCount, tx)
-                    // Note: Delayed redeemers are now recomputed in selectAndAddInputs when inputs
-                    // are added, so we no longer need post-balancing redeemer replacement.
-                    // This preserves the ExUnits computed by computeScriptsWitness during balancing.
-
-                    // Update context with the balanced transaction and all selected UTXOs
-                    val updatedContext = initialContext.copy(
-                      transaction = finalTx,
-                      resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
-                      expectedSigners = allExpectedSigners
-                    )
-
-                    // Validate the transaction
-                    updatedContext.validate(validators, env.protocolParams) match {
-                        case Right(validatedCtx) =>
-                            copy(context = validatedCtx)
-                        case Left(error) =>
-                            throw TxBuilderException.LedgerValidationException(
-                              error,
-                              updatedContext
-                            )
-                    }
-                case Left(error) =>
-                    throw TxBuilderException.BalancingException(error, initialContext)
-            }
-    }
-
-    /** Handles the value diff by querying for more UTXOs or handling change. Returns a Future with
-      * the modified transaction.
-      */
-    private def handleValueDiff(
-        diff: Value,
-        tx: Transaction,
-        provider: Provider,
-        sponsor: Address,
-        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
-        initialContext: TransactionBuilder.Context
-    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
-        val Value(adaDiff, tokenDiff) = diff
-        (adaDiff, tokenDiff) match {
-            // We don't have enough ADA
-            case (NegativeAda(_), _) =>
-                // We don't have enough ADA, but we may have added a change output on past iterations.
-                // If so, try to take ADA from it to achieve balance.
-                val changeIndex = Change.findChangeOutput(tx, sponsor)
-                if changeIndex >= 0 then {
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams) match {
-                        case Right(updatedTx) =>
-                            // Successfully took from change
-                            Future.successful(Right(updatedTx))
-                        case Left(_) =>
-                            // Can't take from change (would go below minAda), need to query for more UTXOs
-                            selectAndAddInputs(
-                              tx,
-                              diff,
-                              provider,
-                              sponsor,
-                              selectedUtxos,
-                              initialContext.redeemers,
-                              initialContext.delayedRedeemerSpecs
-                            ).map(Right(_))
-                    }
-                } else {
-                    // There's no change output, the only way to get more ADA is to query the provider.
-                    selectAndAddInputs(
-                      tx,
-                      diff,
-                      provider,
-                      sponsor,
-                      selectedUtxos,
-                      initialContext.redeemers,
-                      initialContext.delayedRedeemerSpecs
-                    ).map(Right(_))
-                }
-
-            case (ZeroAda(), ZeroTokens()) =>
-                // Balanced perfectly, we're done
-                Future.successful(Right(tx))
-
-            case (ZeroAda(), MissingTokens()) =>
-                // We are missing tokens -- need to query more
-                selectAndAddInputs(
-                  tx,
-                  diff,
-                  provider,
-                  sponsor,
-                  selectedUtxos,
-                  initialContext.redeemers,
-                  initialContext.delayedRedeemerSpecs
-                ).map(Right(_))
-
-            case (ZeroAda(), _) =>
-                // We are not missing any ADA and we have a token surplus -- send the surplus tokens back as change.
-                Future.successful(Change.handleChange(diff, tx, sponsor, env.protocolParams))
-
-            case (PositiveAda(_), MissingTokens()) =>
-                // Despite having surplus ADA, we still need to query for more tokens, and handle the surplus as change
-                // on further iterations
-                selectAndAddInputs(
-                  tx,
-                  diff,
-                  provider,
-                  sponsor,
-                  selectedUtxos,
-                  initialContext.redeemers,
-                  initialContext.delayedRedeemerSpecs
-                ).map(Right(_))
-
-            case (PositiveAda(_), _) =>
-                // We either have more tokens than necessary, or exactly the right amount of tokens.
-                // In any case -- send the ADA and potentially some tokens back as change.
-                Future.successful(Change.handleChange(diff, tx, sponsor, env.protocolParams))
-        }
-    }
-
-    /** Selects additional UTXOs for the given diff, adds them to selectedUtxos, and re-attaches
-      * redeemers. This is the async version that returns a Future.
-      */
-    private def selectAndAddInputs(
-        tx: Transaction,
-        diff: Value,
-        provider: Provider,
-        sponsor: Address,
-        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
-        redeemers: Seq[DetachedRedeemer],
-        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec]
-    )(using ExecutionContext): Future[Transaction] = {
-        selectAdditionalUtxos(
-          provider,
-          sponsor,
-          diff,
-          excludeInputs = selectedUtxos.inputSet
-        ).map { additionalUtxos =>
-            selectedUtxos.addAll(additionalUtxos)
-            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers, delayedRedeemerSpecs)
-        }
-    }
-
-    /** Ensures sufficient collateral inputs are present for the transaction.
-      *
-      * This method uses TransactionBuilder.ensureCollateralReturn to check if collateral is
-      * sufficient. If it returns InsufficientCollateralForReturn, we query for additional
-      * collateral inputs and retry.
-      *
-      * @return
-      *   Right(tx) with collateral return output set if successful, or queries for more collateral
-      *   inputs if insufficient
-      */
-    private def ensureCollateralBalanced(
-        tx: Transaction,
-        provider: Provider,
-        sponsor: Address,
-        selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
-    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
-        // For transactions that don't need collateral -- return early
-        val needsCollat = tx.witnessSet.redeemers.fold(false)(_.value.toSeq.nonEmpty)
-        if !needsCollat then return Future.successful(Right(tx))
-
-        val collateralInputs = tx.body.value.collateralInputs.toSeq
-
-        // If no collateral inputs exist, we need to query for initial collateral
-        if collateralInputs.isEmpty then {
-            // Start with a reasonable initial amount based on typical fees
-            val initialCollateralNeeded = Coin.ada(5) // 5 ADA as initial estimate
-            return selectCollateral(
-              provider,
-              sponsor,
-              initialCollateralNeeded,
-              excludeUtxos = selectedUtxos.utxos.keySet
-            ).flatMap { initialCollateral =>
-                selectedUtxos.addAll(initialCollateral)
-                val txWithCollateral = addCollaterals(tx, initialCollateral.keySet)
-                // Recurse to set collateral return and verify sufficiency
-                ensureCollateralBalanced(txWithCollateral, provider, sponsor, selectedUtxos)
-            }
-        }
-
-        // Try to create collateral return output with current collateral inputs
-        TransactionBuilder.ensureCollateralReturn(
-          tx,
-          selectedUtxos.utxos,
-          Some(sponsor),
-          env.protocolParams
-        ) match {
-            case Right(txWithReturn) =>
-                // Collateral is sufficient, return output has been set
-                Future.successful(Right(txWithReturn))
-
-            case Left(
-                  TxBalancingError.InsufficientCollateralForReturn(_, required, minAdaForReturn)
-                ) =>
-                // Need more collateral to meet minAda requirement for return output
-                val additionalNeeded = required + minAdaForReturn
-                selectCollateral(
-                  provider,
-                  sponsor,
-                  additionalNeeded,
-                  excludeUtxos = selectedUtxos.utxos.keySet
-                ).flatMap { additionalCollateral =>
-                    // Remember the utxos to not select them again in the `complete`.
-                    selectedUtxos.addAll(additionalCollateral)
-                    val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
-                    // Retry with additional collateral
-                    ensureCollateralBalanced(txWithMoreCollateral, provider, sponsor, selectedUtxos)
-                }
-
-            case Left(otherError) =>
-                Future.successful(Left(otherError))
-        }
-    }
-
-    private def selectAdditionalUtxos(
-        provider: Provider,
-        address: Address,
-        gap: Value,
-        excludeInputs: Set[TransactionInput]
-    )(using ExecutionContext): Future[Utxos] = {
-        val selectedUtxos = mutable.Map.empty[TransactionInput, TransactionOutput]
-
-        // Fulfill the token requirement first
-        val tokensFuture: Future[Unit] = if gap.assets.assets.nonEmpty then {
-            val requiredTokens = MultiAsset(
-              gap.assets.assets.map { case (policyId, assets) =>
-                  policyId -> SortedMap.from(assets.map { case (assetName, amount) =>
-                      assetName -> Math.abs(amount)
-                  })
-              }
-            )
-            selectUtxosWithTokens(
-              provider,
-              address,
-              requiredTokens,
-              excludeInputs ++ selectedUtxos.keySet
-            ).map { tokenUtxos =>
-                selectedUtxos.addAll(tokenUtxos)
-            }
-        } else {
-            Future.successful(())
-        }
-
-        // Then cover the insufficient ADA
-        tokensFuture.flatMap { _ =>
-            if gap.coin.value < 0 then {
-                val alreadySelectedAda = selectedUtxos.values.map(_.value.coin.value).sum
-                val totalAdaNeeded = -gap.coin.value
-                val remainingAdaNeeded = totalAdaNeeded - alreadySelectedAda
-
-                if remainingAdaNeeded > 0 then {
-                    provider
-                        .findUtxos(address = address)
-                        .map { result =>
-                            val allUtxos = result
-                                .getOrElse(Map.empty)
-                                .filterNot { case (input, _) =>
-                                    excludeInputs.contains(input) || selectedUtxos.contains(input)
-                                }
-
-                            var accumulatedAda = 0L
-                            val adaUtxos = allUtxos.takeWhile { case (_, output) =>
-                                val shouldTake = accumulatedAda < remainingAdaNeeded
-                                if shouldTake then accumulatedAda += output.value.coin.value
-                                shouldTake
-                            }
-
-                            if accumulatedAda < remainingAdaNeeded then
-                                throw TxBuilderException.InsufficientAdaException(
-                                  required = Coin(remainingAdaNeeded),
-                                  available = Coin(accumulatedAda),
-                                  sponsorAddress = address
-                                )
-
-                            selectedUtxos.addAll(adaUtxos)
-                            selectedUtxos.toMap
-                        }
-                } else {
-                    Future.successful(selectedUtxos.toMap)
-                }
-            } else {
-                Future.successful(selectedUtxos.toMap)
-            }
-        }
-    }
-
-    private def selectUtxosWithTokens(
-        provider: Provider,
-        address: Address,
-        requiredAssets: MultiAsset,
-        excludeInputs: Set[TransactionInput]
-    )(using ExecutionContext): Future[Map[TransactionInput, TransactionOutput]] = {
-        provider
-            .findUtxos(address = address)
-            .map { result =>
-                val allUtxos = result
-                    .getOrElse(Map.empty)
-                    .filterNot { case (input, _) => excludeInputs.contains(input) }
-
-                var selectedUtxos = Map.empty[TransactionInput, TransactionOutput]
-
-                // For each required token, find UTXOs that contain it
-                requiredAssets.assets.foreach { case (policyId, assets) =>
-                    assets.foreach { case (assetName, requiredAmount) =>
-                        if requiredAmount > 0 then {
-                            var collected = 0L
-
-                            // First, count tokens from already-selected UTXOs
-                            selectedUtxos.foreach { case (_, output) =>
-                                output.value.assets.assets
-                                    .get(policyId)
-                                    .flatMap(_.get(assetName))
-                                    .foreach { amount => collected += amount }
-                            }
-
-                            // Then select additional UTXOs if needed
-                            if collected < requiredAmount then {
-                                allUtxos.foreach { case (input, output) =>
-                                    if collected < requiredAmount && !selectedUtxos.contains(input)
-                                    then {
-                                        output.value.assets.assets
-                                            .get(policyId)
-                                            .flatMap(_.get(assetName))
-                                            .foreach { amount =>
-                                                selectedUtxos = selectedUtxos + (input -> output)
-                                                collected += amount
-                                            }
-                                    }
-                                }
-                            }
-
-                            if collected < requiredAmount then {
-                                throw TxBuilderException.InsufficientTokensException(
-                                  policyId = policyId,
-                                  assetName = assetName,
-                                  required = requiredAmount,
-                                  available = collected,
-                                  sponsorAddress = address
-                                )
-                            }
-                        }
-                    }
-                }
-
-                selectedUtxos
-            }
-    }
-
-    private def selectCollateral(
-        provider: Provider,
-        address: Address,
-        requiredAmount: Coin,
-        excludeUtxos: Set[TransactionInput]
-    )(using ExecutionContext): Future[Utxos] = {
-        provider
-            .findUtxos(
-              address = address,
-              minRequiredTotalAmount = Some(requiredAmount)
-            )
-            .map { result =>
-                val utxos = result.map(_ -- excludeUtxos)
-                utxos match {
-                    case Right(u) if u.nonEmpty => u
-                    case Right(_) =>
-                        throw TxBuilderException.CollateralSelectionException(
-                          requiredAmount = requiredAmount,
-                          sponsorAddress = address
-                        )
-                    case Left(e) =>
-                        throw TxBuilderException.CollateralSelectionException(
-                          requiredAmount = requiredAmount,
-                          sponsorAddress = address,
-                          cause = Some(e)
-                        )
-                }
-            }
-    }
-
-    private object ZeroAda {
-        def unapply(coin: Coin): Boolean = coin == Coin.zero
-    }
-
-    private object NegativeAda {
-        def unapply(coin: Coin): Option[Coin] = Option.when(coin < Coin.zero)(coin)
-    }
-
-    private object PositiveAda {
-        def unapply(coin: Coin): Option[Coin] = Option.when(coin > Coin.zero)(coin)
-    }
-
-    private object ZeroTokens {
-        def unapply(ma: MultiAsset): Boolean = ma.isEmpty
-    }
-
-    private object MissingTokens {
-        def unapply(ma: MultiAsset): Boolean = ma.exists((_, amount) => amount < 0)
-    }
-
-    extension (mutableMap: mutable.Map[TransactionInput, TransactionOutput]) {
-        def utxos: Utxos = mutableMap.toMap
-        private def inputSet: Set[TransactionInput] = mutableMap.toMap.keySet
-    }
-
-    extension (ma: MultiAsset) {
-        def exists(f: ((AssetName, Long)) => Boolean): Boolean = {
-            ma.assets.values.exists(_.exists(f))
-        }
-    }
-
-    /** Adds collateral inputs to a transaction. */
-    private def addCollaterals(tx: Transaction, collaterals: Set[TransactionInput]): Transaction = {
-        val currentCollaterals = tx.body.value.collateralInputs.toSet
-        val newCollaterals = currentCollaterals ++ collaterals
-        modifyBody(
-          tx,
-          _.copy(collateralInputs = TaggedSortedSet.from(newCollaterals))
-        )
-    }
-
-    /** Adds inputs to a transaction. */
-    private def addInputs(tx: Transaction, inputs: Utxos): Transaction = {
-        val currentInputs = tx.body.value.inputs.toSet
-        val newInputs = currentInputs ++ inputs.keySet
-        modifyBody(
-          tx,
-          _.copy(inputs = TaggedSortedSet.from(newInputs))
-        )
-    }
-
-    /** Adds inputs to a transaction and re-attaches redeemers with correct indexes.
-      *
-      * When new inputs are added, the sorted input list changes, which can shift the position of
-      * existing script inputs. This method re-indexes redeemers to point to the correct input
-      * positions after adding new inputs.
-      *
-      * When delayed redeemer specs are provided, this method will also recompute delayed redeemer
-      * data based on the updated transaction structure (with new inputs), ensuring that
-      * self-referential validators receive correct data when ExUnits are computed.
-      */
-    private def addInputsAndReattachRedeemers(
-        tx: Transaction,
-        inputs: Utxos,
-        detachedRedeemers: Seq[DetachedRedeemer],
-        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec]
-    ): Transaction = {
-        val txWithNewInputs = addInputs(tx, inputs)
-
-        // If there are no redeemers, just return the transaction with new inputs
-        if detachedRedeemers.isEmpty then txWithNewInputs
-        else {
-            // Update delayed redeemer data based on the new transaction structure
-            val updatedRedeemers =
-                if delayedRedeemerSpecs.nonEmpty then
-                    TransactionBuilder
-                        .replaceDelayedRedeemers(
-                          detachedRedeemers,
-                          delayedRedeemerSpecs,
-                          txWithNewInputs
-                        )
-                        .getOrElse(detachedRedeemers)
-                else detachedRedeemers
-
-            // Re-attach redeemers with correct indexes based on new input positions
-            TransactionConversion.fromEditableTransactionSafe(
-              EditableTransaction(txWithNewInputs, updatedRedeemers.toVector)
-            ) match {
-                case Right(reattachedTx) => reattachedTx
-                case Left(_)             => txWithNewInputs // Fallback if re-attachment fails
-            }
         }
     }
 

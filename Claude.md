@@ -34,8 +34,10 @@ in to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 - **Respect the multi-platform architecture** - Place shared code in `shared/` directories
 - **Test thoroughly** - Use the existing test infrastructure and patterns
 - **Follow Scalus Scala 3 formatting guideline** described on CONTRIBUTING.md
-- **Consider context bloat** - Before invoking output-heavy commands, consider asking the user to run them for you and
-  tell you the important output bits. Alternatively, when only the output code is important, redirect the standard
+- **Consider context bloat** - Before invoking output-heavy commands, consider asking the user to
+  run them for you and
+  tell you the important output bits. Alternatively, when only the output code is important,
+  redirect the standard
   output.
 
 ## Essential Commands
@@ -104,10 +106,8 @@ sbtn scalusCardanoLedgerIt/test  # cardano-ledger integration tests
 
 ### Documentation
 
-```bash
-# Generate documentation website
-sbtn docs/mdoc
-```
+Documentation and Scalus site is in `scalus-site` folder.
+Update the site documentation when changing APIs.
 
 ### Benchmarks
 
@@ -127,6 +127,7 @@ sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
 ### Module Structure
 
 **Cross-platform modules** (JVM/JS, some with Native):
+
 - **`scalus-core/`** (`scalusJVM`, `scalusJS`, `scalusNative`) - Core platform
     - Contains the Plutus VM implementation, UPLC evaluation, and standard library
     - Shared sources in `shared/` directory
@@ -141,6 +142,7 @@ sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
 - **`scalus-examples/`** (`scalusExamplesJVM`, `scalusExamplesJS`) - Smart contract examples
 
 **JVM-only modules**:
+
 - **`scalus-plugin/`** (`scalusPlugin`) - Scala 3 compiler plugin
     - Handles `@Compile` annotations and `Compiler.compile()` transformations
     - Compiles Scala code to Scalus Intermediate Representation (SIR)
@@ -160,6 +162,7 @@ sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
 - **`scalus-docs/`** (`docs`) - Documentation (mdoc)
 
 **Aggregate projects** (for convenience):
+
 - `jvm` - All JVM projects
 - `js` - All JS projects
 - `native` - All Native projects
@@ -182,6 +185,8 @@ sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
 - **Examples**: `scalus-examples/shared/src/main/scala/scalus/examples/`
 
 ## Development Guidelines
+
+- never use `sbt`, only use `sbtn`
 
 ### Smart Contract Development
 
@@ -221,24 +226,29 @@ sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
 The build defines these command aliases:
 
 **Development workflow:**
+
 - `quick` - Format, compile JVM, run `testQuick` (fast iteration)
 - `cleanpile` - Clean and compile JVM + integration tests
 - `precommit` - Full clean, format, compile, test, docs (before commits)
 
 **CI builds:**
+
 - `ci` - Full CI: clean, format check, compile all platforms, test, docs, mima
 - `ci-jvm` - JVM-only CI build
 - `ci-js` - JS-only CI build
 - `ci-native` - Native-only CI build
 
 **Testing:**
+
 - `it` - Clean and run integration tests (`scalusCardanoLedgerIt`)
 
 **Benchmarks:**
+
 - `benchmark` - Run all JMH benchmarks
 - `benchmark-jit` - Run JIT-specific benchmarks
 
 **Compatibility:**
+
 - `mima` - Check binary compatibility for `scalus-bloxbean-cardano-client-lib`
 
 ## Environment Setup
@@ -286,7 +296,8 @@ nix develop
 - **Modifying UPLC evaluation**: Edit files in `scalus-core/shared/src/main/scala/scalus/uplc/eval/`
 - **Adding standard library functions**: Add to `scalus-core/shared/src/main/scala/scalus/prelude/`
 - **Plugin modifications**: Work in `scalus-plugin/`, test with `scalus-plugin-tests/`
-- **Transaction builder changes**: Edit files in `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/`
+- **Transaction builder changes**: Edit files in
+  `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/`
 - **Running benchmarks**: Use `sbtn benchmark` or `sbtn "bench/Jmh/run ..."`
 
 ### Before Submitting Changes
@@ -305,13 +316,16 @@ Run `sbtn precommit` before considering work complete.
 - Commit messages should be short: 1 or 2 paragraphs
 
 ### Libraries (in tests)
+
 - Always use Scalus data types if it is appropriate and has meaning;
 - For JSON parsing use json-iter;
 - Always use com.lihaoyi.pprint to show result of complex data type
 
 ### Reference projects
+
 - Cardano Ledger https://github.com/IntersectMBO/cardano-ledger
 - Plutus https://github.com/IntersectMBO/plutus
 - Amaru https://github.com/pragma-org/amaru
 
-These projects are references of data model. They could be obtained in sibling directories (using ../) or directly on GitHub.
+These projects are references of data model. They could be obtained in sibling directories (
+using ../) or directly on GitHub.
