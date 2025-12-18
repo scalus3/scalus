@@ -45,7 +45,7 @@ object LowLevelTxBuilder {
         initial: Transaction,
         diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
+        resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
     ): Either[TxBalancingError, Transaction] =
         TransactionBuilder.balanceFeeAndChangeWithTokens(

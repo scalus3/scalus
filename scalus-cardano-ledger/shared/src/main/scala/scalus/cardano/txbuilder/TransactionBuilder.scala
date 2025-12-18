@@ -658,14 +658,13 @@ object TransactionBuilder {
       *   - fees never go below the initial fee
       *
       * @param resolvedUtxo
-      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
-      *   to dynamically add UTXOs that will be visible in subsequent iterations.
+      *   The resolved UTXOs for inputs in the transaction.
       */
     def balanceFeeAndChangeWithTokens(
         initial: Transaction,
         diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
+        resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0
@@ -694,75 +693,6 @@ object TransactionBuilder {
             }
         }
         loop(initial)
-    }
-
-    /** Computes a single iteration step of the balancing loop.
-      *
-      * This helper is shared between sync and async balancing to avoid code duplication. It
-      * performs script evaluation, fee calculation, and computes the diff that needs to be
-      * balanced.
-      *
-      * @return
-      *   Either an error or a tuple of (diff value to balance, transaction with updated fees)
-      */
-    private[txbuilder] def computeIterationStep(
-        tx: Transaction,
-        initialFee: Coin,
-        protocolParams: ProtocolParams,
-        resolvedUtxo: Utxos,
-        evaluator: PlutusScriptEvaluator
-    ): Either[TxBalancingError, (Value, Transaction)] = {
-        for {
-            txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
-            minFee <- MinTransactionFee
-                .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
-                .left
-                .map(TxBalancingError.Failed(_))
-            // Don't go below initial fee
-            fee = Coin(math.max(minFee.value, initialFee.value))
-            txWithFees = setFee(fee)(txWithExUnits)
-            diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
-        } yield (diff, txWithFees)
-    }
-
-    /** Async variant of balanceFeeAndChangeWithTokens for use with async UTXO selection.
-      *
-      * This method allows the diff handler to perform async operations (e.g., querying a provider
-      * for additional UTXOs) during each balancing iteration. The core iteration logic is shared
-      * with the sync variant.
-      *
-      * @param resolvedUtxo
-      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
-      *   to dynamically add UTXOs that will be visible in subsequent iterations.
-      */
-    def balanceFeeAndChangeWithTokensAsync(
-        initial: Transaction,
-        diffHandler: DiffHandlerAsync,
-        protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
-        evaluator: PlutusScriptEvaluator
-    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
-        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
-            if iteration > 20 then
-                return Future.successful(Left(TxBalancingError.BalanceDidNotConverge(iteration)))
-
-            computeIterationStep(
-              tx,
-              initial.body.value.fee,
-              protocolParams,
-              resolvedUtxo,
-              evaluator
-            ) match {
-                case Left(e) => Future.successful(Left(e))
-                case Right((diff, txWithFees)) =>
-                    diffHandler(diff, txWithFees).flatMap {
-                        case Left(e)                         => Future.successful(Left(e))
-                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
-                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
-                    }
-            }
-        }
-        loop(initial, 1)
     }
 
     private[txbuilder] def computeScriptsWitness(
