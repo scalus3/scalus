@@ -1,0 +1,189 @@
+package scalus.compiler.sir.lowering
+
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.Compiler.compile
+import scalus.builtin.{BuiltinArray, Data}
+import scalus.builtin.Builtins.*
+import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.uplc.{Constant, Term}
+
+/** Tests for lowering issues with BuiltinArray.
+  *
+  * These tests document issues with compiling BuiltinArray in certain contexts, particularly when
+  * BuiltinArray is used as a field in a case class or passed through functions.
+  *
+  * ROOT CAUSE: BuiltinArray doesn't have a dedicated type generator in SirTypeUplcGenerator.apply.
+  * It is defined as a CaseClass in SIRType, so it falls through to ProductCaseSirTypeGenerator
+  * which treats it like a regular product type. When the array value is stored in another case
+  * class, the lowering tries to use ConstrData to wrap it, but ConstrData expects a List
+  * (ProtoList), not an Array.
+  *
+  * ERROR OBSERVED: "Expected type ProtoList, got VCon(Array(...))" This happens because:
+  *   1. BuiltinArray gets ProdDataList representation from ProductCaseSirTypeGenerator
+  *   1. When wrapping in a case class, the system uses ConstrData(tag, fields_as_list)
+  *   1. But the array value cannot be converted to a list representation
+  *
+  * FIX NEEDED: Add a dedicated type generator for BuiltinArray (similar to how BuiltinList has
+  * SumDataListSirTypeGenerator) that handles the native UPLC array representation correctly.
+  */
+class BuiltinArrayLoweringTest extends AnyFunSuite {
+
+    private given PlutusVM = PlutusVM.makePlutusV3VM()
+
+    // Case class with BuiltinArray field for testing
+    case class ArrayWrapper(arr: BuiltinArray[Data])
+
+    // Test that BuiltinArray can be passed through a case class and extracted correctly
+    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
+    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
+    test("extract BuiltinArray from case class and access first element") {
+        pending
+        val sir = compile {
+            // Create an array
+            val arr = BuiltinArray(iData(42), iData(100), iData(200))
+            // Wrap it in a case class
+            val wrapper = new ArrayWrapper(arr)
+            // Extract and access first element
+            val extractedArr = wrapper.arr
+            indexArray(extractedArr, BigInt(0))
+        }
+
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(Constant.Data(Data.I(42))))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    // Test that BuiltinArray can be passed to a function and returned
+    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
+    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
+    test("pass BuiltinArray to function and return") {
+        pending
+        val sir = compile {
+            def extractArray(w: ArrayWrapper): BuiltinArray[Data] = w.arr
+
+            val arr = BuiltinArray(iData(10), iData(20), iData(30))
+            val wrapper = new ArrayWrapper(arr)
+            val extracted = extractArray(wrapper)
+            lengthOfArray(extracted)
+        }
+
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(Constant.Integer(3)))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    // Test accessing elements after extraction from case class
+    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
+    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
+    test("access multiple elements after extracting array from case class") {
+        pending
+        val sir = compile {
+            val arr = BuiltinArray(iData(100), iData(200), iData(300))
+            val wrapper = new ArrayWrapper(arr)
+            val extractedArr = wrapper.arr
+            // Access element at index 1
+            val elem = indexArray(extractedArr, BigInt(1))
+            unIData(elem)
+        }
+
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(Constant.Integer(200)))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    // Test that checks the default representation for BuiltinArray type
+    // This test documents what representation is currently assigned (incorrectly)
+    test("check default representation for BuiltinArray type") {
+        import scalus.compiler.sir.SIRType
+        import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
+
+        given LoweringContext = LoweringContext()
+
+        // BuiltinArray[Data]
+        val builtinArrayDataType = SIRType.BuiltinArray(SIRType.Data.tp)
+        val generator = SirTypeUplcGenerator(builtinArrayDataType)
+        val defaultRepr = generator.defaultRepresentation(builtinArrayDataType)
+
+        // Document the current (incorrect) state
+        info(s"BuiltinArray[Data] generator: ${generator.getClass.getSimpleName}")
+        info(s"BuiltinArray[Data] default representation: $defaultRepr")
+
+        // The generator falls through to ProductCaseSirTypeGenerator
+        // which gives ProdDataList representation - this is incorrect for arrays.
+        // A proper implementation would need a dedicated BuiltinArraySirTypeGenerator
+        // that uses a native array representation (similar to how BuiltinList uses SumDataList).
+    }
+
+    // Test nested case class with BuiltinArray
+    case class OuterWrapper(inner: ArrayWrapper, value: BigInt)
+
+    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
+    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
+    test("nested case class with BuiltinArray field") {
+        pending
+        val sir = compile {
+            val arr = BuiltinArray(iData(1), iData(2), iData(3))
+            val inner = new ArrayWrapper(arr)
+            val outer = new OuterWrapper(inner, BigInt(999))
+            // Extract nested array
+            val extractedArr = outer.inner.arr
+            lengthOfArray(extractedArr)
+        }
+
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(Constant.Integer(3)))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+
+    // Test BuiltinArray in function call
+    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
+    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
+    test("BuiltinArray passed through function") {
+        pending
+        val sir = compile {
+            def processWrapper(w: ArrayWrapper): BigInt = {
+                val arr = w.arr
+                lengthOfArray(arr)
+            }
+
+            val arr = BuiltinArray(iData(5), iData(6))
+            val wrapper = new ArrayWrapper(arr)
+            processWrapper(wrapper)
+        }
+
+        val term = sir.toUplc()
+        val result = term.evaluateDebug
+
+        result match {
+            case Result.Success(evaled, _, _, _) =>
+                assert(evaled == Term.Const(Constant.Integer(2)))
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Expected success but got failure: $err")
+        }
+    }
+}
