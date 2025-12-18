@@ -7,7 +7,6 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
-import scalus.cardano.ledger.utils.TxBalance
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.SomeBuildError
 
@@ -56,10 +55,12 @@ object TxBuilderException {
                   s"Plutus script evaluation failed: ${cause.getMessage}"
               case TxBalancingError.Failed(cause) =>
                   s"Balancing failed: ${cause.getMessage}"
-              case TxBalancingError.CantBalance(lastDiff) =>
-                  s"Cannot balance transaction, last diff: $lastDiff lovelace"
-              case TxBalancingError.InsufficientFunds(diff, minRequired) =>
-                  s"Insufficient funds: need $minRequired more lovelace, diff is $diff"
+              case TxBalancingError.BalanceDidNotConverge(iterations) =>
+                  s"Balancing did not converge after $iterations iterations"
+              case TxBalancingError.InsufficientFunds(valueDiff, minRequired) =>
+                  val tokenInfo =
+                      if valueDiff.assets.nonEmpty then s", tokens=${valueDiff.assets}" else ""
+                  s"Insufficient funds: need $minRequired more lovelace, adaDiff=${valueDiff.coin.value}$tokenInfo"
               case TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda) =>
                   s"Collateral contains tokens but insufficient ADA for return output. " +
                       s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
@@ -1047,34 +1048,24 @@ case class TxBuilder(
                         alreadyUsedInputs.contains(input)
                     }
 
-                    // Step 3: Check if we need specific tokens and validate they exist
-                    val neededTokens = estimateRequiredTokens(initialCtx)
-                    validateTokensAvailable(neededTokens, availableUtxos, sponsor) match {
-                        case Some(error) => throw error
-                        case None        => // continue
-                    }
-
-                    // Step 4: Select UTXOs for required tokens upfront
-                    val tokenValue = Value(Coin.zero, neededTokens)
-                    val initialInputs = selectUtxosForValue(availableUtxos, tokenValue)
-
-                    // Step 5: Determine if we need collateral (transaction has scripts)
+                    // Step 3: Determine if we need collateral (transaction has scripts)
                     val needsCollateral = initialCtx.redeemers.nonEmpty
 
-                    // Step 6: Select initial collateral if needed
+                    // Step 4: Select initial collateral if needed
                     val initialCollateral =
                         if needsCollateral then
                             selectCollateralUtxos(
                               availableUtxos,
-                              initialInputs,
+                              Map.empty,
                               Coin.ada(5) // Initial estimate for collateral
                             )
                         else Map.empty
 
-                    // Step 7: Iteratively build and finalize until balanced
+                    // Step 5: Iteratively build and finalize until balanced
+                    // Start with empty inputs - let the balancing loop select what's needed
                     completeLoop(
                       availableUtxos = availableUtxos,
-                      selectedInputs = initialInputs,
+                      selectedInputs = Map.empty,
                       selectedCollateral = initialCollateral,
                       needsCollateral = needsCollateral,
                       sponsor = sponsor,
@@ -1166,41 +1157,48 @@ case class TxBuilder(
         val remainingUtxos = availableUtxos -- selectedInputs.keySet
 
         error match {
-            case TxBalancingError.InsufficientFunds(diff, minRequired) =>
-                // Need more ADA - select additional UTXOs
-                val additionalNeeded = Value(Coin(minRequired), MultiAsset.empty)
+            case TxBalancingError.InsufficientFunds(valueDiff, minRequired) =>
+                // valueDiff contains both ADA and tokens - handle both uniformly
+                // When we need more (deficit), valueDiff is negative, so:
+                // - Positive values mean excess (change)
+                // - Negative values mean deficit (need more)
+                val tokensWeNeed =
+                    -valueDiff.assets.negativeAssets // Negate negatives to get positive amounts
+                val adaWeNeed =
+                    math.max(-valueDiff.coin.value, minRequired) // Negate to get positive amount
+                val additionalNeeded = Value(Coin(adaWeNeed), tokensWeNeed)
                 val additionalUtxos = selectUtxosForValue(remainingUtxos, additionalNeeded)
 
-                if additionalUtxos.isEmpty then {
-                    // No more UTXOs available - truly insufficient
-                    val availableAda =
-                        availableUtxos.values.foldLeft(0L)((acc, o) => acc + o.value.coin.value)
-                    throw TxBuilderException.InsufficientAdaException(
-                      Coin(minRequired),
-                      Coin(availableAda),
+                // Check if we found enough UTXOs - for tokens, check if all needed tokens are covered
+                val tokensCoveredBySelection = additionalUtxos.values
+                    .foldLeft(MultiAsset.zero)((acc, o) => acc + o.value.assets)
+                val remainingTokens = (tokensWeNeed - tokensCoveredBySelection).onlyPositive
+
+                if remainingTokens.nonEmpty then {
+                    // Found UTXOs but they don't cover required tokens - throw token error
+                    val (policyId, assets) = remainingTokens.assets.head
+                    val (assetName, requiredAmount) = assets.head
+                    val availableAmount = availableUtxos.values
+                        .flatMap(_.value.assets.assets.get(policyId).flatMap(_.get(assetName)))
+                        .sum
+                    throw TxBuilderException.InsufficientTokensException(
+                      policyId,
+                      assetName,
+                      requiredAmount + tokensCoveredBySelection.assets
+                          .get(policyId)
+                          .flatMap(_.get(assetName))
+                          .getOrElse(0L),
+                      availableAmount,
                       sponsor
                     )
                 }
 
-                completeLoop(
-                  availableUtxos,
-                  selectedInputs ++ additionalUtxos,
-                  selectedCollateral,
-                  needsCollateral,
-                  sponsor,
-                  maxIterations - 1
-                )
-
-            case TxBalancingError.CantBalance(lastDiff) if lastDiff < 0 =>
-                // Negative diff means outputs > inputs, need more inputs
-                val additionalNeeded = Value(Coin(-lastDiff + 1000000), MultiAsset.empty)
-                val additionalUtxos = selectUtxosForValue(remainingUtxos, additionalNeeded)
-
                 if additionalUtxos.isEmpty then {
+                    // No UTXOs at all - insufficient ADA
                     val availableAda =
                         availableUtxos.values.foldLeft(0L)((acc, o) => acc + o.value.coin.value)
                     throw TxBuilderException.InsufficientAdaException(
-                      Coin(-lastDiff),
+                      Coin(minRequired),
                       Coin(availableAda),
                       sponsor
                     )
@@ -1243,71 +1241,6 @@ case class TxBuilder(
     // -------------------------------------------------------------------------
     // UTXO Selection Helpers for complete()
     // -------------------------------------------------------------------------
-
-    /** Estimate which tokens are required based on transaction outputs.
-      *
-      * Returns tokens that are in outputs but not in consumed inputs. ADA is handled by the loop.
-      */
-    private def estimateRequiredTokens(ctx: TransactionBuilder.Context): MultiAsset = {
-        val produced = TxBalance.produced(ctx.transaction, env.protocolParams)
-        val consumed = TxBalance
-            .consumed(
-              ctx.transaction,
-              CertState.empty,
-              ctx.resolvedUtxos.utxos,
-              env.protocolParams
-            )
-            .getOrElse(Value.zero)
-
-        // deficit = produced - consumed (positive tokens means we need more)
-        val deficit = produced - consumed
-        onlyPositiveTokens(deficit.assets)
-    }
-
-    /** Validate that required tokens are available in the UTXOs.
-      *
-      * Returns Some(exception) if tokens are missing, None if all tokens available.
-      */
-    private def validateTokensAvailable(
-        requiredTokens: MultiAsset,
-        available: Utxos,
-        sponsor: Address
-    ): Option[TxBuilderException] = {
-        val availableValue = available.values.foldLeft(Value.zero) { (acc, output) =>
-            acc + output.value
-        }
-
-        requiredTokens.assets.flatMap { case (policyId, assets) =>
-            assets.flatMap { case (assetName, requiredAmount) =>
-                if requiredAmount > 0 then {
-                    val availableAmount = availableValue.assets.assets
-                        .get(policyId)
-                        .flatMap(_.get(assetName))
-                        .getOrElse(0L)
-                    if availableAmount < requiredAmount then {
-                        Some(
-                          TxBuilderException.InsufficientTokensException(
-                            policyId,
-                            assetName,
-                            requiredAmount,
-                            availableAmount,
-                            sponsor
-                          )
-                        )
-                    } else None
-                } else None
-            }
-        }.headOption
-    }
-
-    /** Extract only positive token amounts from a MultiAsset. */
-    private def onlyPositiveTokens(ma: MultiAsset): MultiAsset = {
-        val positiveOnly = ma.assets.flatMap { case (policyId, assets) =>
-            val positiveAssets = assets.filter { case (_, amount) => amount > 0 }
-            if positiveAssets.nonEmpty then Some(policyId -> positiveAssets) else None
-        }
-        MultiAsset(positiveOnly)
-    }
 
     /** Select UTXOs greedily to cover the required value.
       *

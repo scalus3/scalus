@@ -27,7 +27,7 @@ class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: I
 
         if updatedCoinValue < minAda.value then {
             return Left(
-              TxBalancingError.InsufficientFunds(diff.coin.value, minAda.value - updatedCoinValue)
+              TxBalancingError.InsufficientFunds(diff, minAda.value - updatedCoinValue)
             )
         }
 
@@ -81,7 +81,7 @@ object Change {
             if changeOutputIdx >= 0 then {
                 removeFromChangeOutput(tx, changeOutputIdx, diff, protocolParams)
             } else {
-                Left(TxBalancingError.InsufficientFunds(adaDiff, -adaDiff))
+                Left(TxBalancingError.InsufficientFunds(diff, -adaDiff))
             }
         }
     }
@@ -147,7 +147,7 @@ object Change {
         }
 
         if insufficientTokens then {
-            Left(TxBalancingError.InsufficientFunds(valueToRemove.coin.value, adaToRemove))
+            Left(TxBalancingError.InsufficientFunds(valueToRemove, adaToRemove))
         } else {
             // Subtract tokens (valueToRemove has negative amounts for subtraction)
             val newAssets = currentValue.assets + tokensToRemove
@@ -159,7 +159,8 @@ object Change {
             val finalOutput = ensureMinAda(updatedOutput, protocolParams)
             if finalOutput.value.coin > updatedOutput.value.coin then {
                 // ensureMinAda had to bump the coin, meaning we're below minAda
-                Left(TxBalancingError.CantBalance(valueToRemove.coin.value))
+                val minAdaNeeded = finalOutput.value.coin.value - updatedOutput.value.coin.value
+                Left(TxBalancingError.InsufficientFunds(valueToRemove, minAdaNeeded))
             } else {
                 Right(
                   modifyBody(

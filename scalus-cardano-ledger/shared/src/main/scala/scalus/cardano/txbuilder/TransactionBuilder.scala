@@ -672,7 +672,7 @@ object TransactionBuilder {
 
         @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
             iteration += 1
-            if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
+            if iteration > 20 then return Left(TxBalancingError.BalanceDidNotConverge(iteration))
 
             val eTrialTx = for {
                 txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
@@ -743,7 +743,8 @@ object TransactionBuilder {
         evaluator: PlutusScriptEvaluator
     )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
         def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
-            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
+            if iteration > 20 then
+                return Future.successful(Left(TxBalancingError.BalanceDidNotConverge(iteration)))
 
             computeIterationStep(
               tx,
@@ -806,18 +807,72 @@ object TransactionBuilder {
     }
 }
 
-/** Transaction balancing error types */
+/** Transaction balancing error types.
+  *
+  * These errors can occur during the transaction balancing process, which iteratively adjusts fees
+  * and change outputs until the transaction is balanced (consumed == produced).
+  */
 enum TxBalancingError {
-    // Now it's only Plutus, but may become `Plutus... | SthElse...` in the future
+
+    /** Plutus script evaluation failed during balancing.
+      *
+      * This occurs when a Plutus validator or minting policy fails execution. The cause contains
+      * detailed error information including execution logs.
+      *
+      * @param cause
+      *   the Plutus script evaluation exception with logs and error details
+      */
     case EvaluationFailed(cause: PlutusScriptEvaluationException)
-    // TODO: this constructor gets all other errors - rename?
+
+    /** Generic failure during balancing.
+      *
+      * Catches unexpected errors that don't fit other categories, such as CBOR encoding issues or
+      * internal errors.
+      *
+      * @param cause
+      *   the underlying exception
+      */
     case Failed(cause: Throwable)
-    case CantBalance(lastDiff: Long)
-    case InsufficientFunds(diff: Long, minRequired: Long)
+
+    /** Balancing loop exceeded maximum iterations without converging.
+      *
+      * This typically indicates a pathological case where fee adjustments and change calculations
+      * keep oscillating. The transaction structure may need to be simplified.
+      *
+      * @param iterations
+      *   the number of iterations attempted before giving up
+      */
+    case BalanceDidNotConverge(iterations: Int)
+
+    /** Insufficient funds to balance the transaction.
+      *
+      * This error indicates that the transaction outputs (including fees) exceed what the inputs
+      * can provide. The `valueDiff` contains the full deficit including both ADA and native tokens.
+      *
+      * When `valueDiff` has negative values, those represent the amounts needed:
+      *   - Negative ADA means more lovelace is needed
+      *   - Negative token amounts mean more of those tokens are needed
+      *
+      * @param valueDiff
+      *   the value difference (consumed - produced). Negative values indicate deficit.
+      * @param minRequired
+      *   minimum additional lovelace needed, accounting for minAda requirements on change outputs
+      */
+    case InsufficientFunds(valueDiff: Value, minRequired: Long)
 
     /** Error when collateral contains tokens but there's insufficient ADA to create a valid
-      * collateral return output. Per Babbage spec, tokens in collateral MUST be returned via
-      * collateralReturnOutput, which requires meeting the minAda requirement.
+      * collateral return output.
+      *
+      * Per Babbage spec, tokens in collateral MUST be returned via collateralReturnOutput, which
+      * requires meeting the minAda requirement. This error occurs when:
+      * `totalCollateralAda < requiredCollateral + minAdaForReturn`
+      *
+      * @param totalCollateralAda
+      *   total ADA in all collateral inputs
+      * @param requiredCollateral
+      *   ADA needed for collateral (percentage of fee)
+      * @param minAdaForReturn
+      *   minimum ADA needed for the collateral return output
       */
     case InsufficientCollateralForReturn(
         totalCollateralAda: Coin,
@@ -897,13 +952,16 @@ enum SomeBuildError:
                           cause
                         )
                     case TxBalancingError.Failed(cause) => cause
-                    case TxBalancingError.CantBalance(lastDiff) =>
+                    case TxBalancingError.BalanceDidNotConverge(iterations) =>
                         new RuntimeException(
-                          s"Balancing failure. Last seen diff (sum(outputs) - sum(inputs)) = $lastDiff"
+                          s"Balancing did not converge after $iterations iterations"
                         )
-                    case TxBalancingError.InsufficientFunds(diff, minRequired) =>
+                    case TxBalancingError.InsufficientFunds(valueDiff, minRequired) =>
+                        val tokenInfo =
+                            if valueDiff.assets.nonEmpty then s", tokens=${valueDiff.assets}"
+                            else ""
                         new RuntimeException(
-                          s"Balancing failure: insufficient funds: diff=$diff, minRequired=$minRequired"
+                          s"Balancing failure: insufficient funds: adaDiff=${valueDiff.coin.value}$tokenInfo, minRequired=$minRequired"
                         )
                     case TxBalancingError.InsufficientCollateralForReturn(
                           totalAda,
@@ -939,10 +997,12 @@ enum SomeBuildError:
             s"Plutus script evaluation failed: ${psee.getMessage}, execution trace: ${psee.logs.mkString(" <CR> ")}"
         case BalancingError(TxBalancingError.Failed(other), _) =>
             s"Exception during balancing: ${other.getMessage}"
-        case BalancingError(TxBalancingError.CantBalance(lastDiff), _) =>
-            s"Can't balance: last diff $lastDiff"
-        case BalancingError(TxBalancingError.InsufficientFunds(diff, required), _) =>
-            s"Insufficient funds: need $required more"
+        case BalancingError(TxBalancingError.BalanceDidNotConverge(iterations), _) =>
+            s"Balancing did not converge after $iterations iterations"
+        case BalancingError(TxBalancingError.InsufficientFunds(valueDiff, required), _) =>
+            val tokenInfo =
+                if valueDiff.assets.nonEmpty then s", tokens=${valueDiff.assets}" else ""
+            s"Insufficient funds: adaDiff=${valueDiff.coin.value}$tokenInfo, need $required more"
         case BalancingError(
               TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda),
               _

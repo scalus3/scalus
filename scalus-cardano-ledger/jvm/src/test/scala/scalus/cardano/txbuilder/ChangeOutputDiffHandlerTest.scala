@@ -44,7 +44,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_000_000,
           output = 800_000,
           fee = 200_000,
-          expected = Expected.Failure(InsufficientFunds(0, 178370))
+          expected = Expected.Failure(InsufficientFunds(Value.zero, 178370))
         )
     }
 
@@ -121,7 +121,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     }
 
     test("should fail when output would become below minimum ADA") {
-        val insufficientFunds: InsufficientFunds = InsufficientFunds(-160705, 139075)
+        val insufficientFunds: InsufficientFunds =
+            InsufficientFunds(Value.lovelace(-160705), 139075)
         check(
           in = 1_000_000,
           output = 1_000_000,
@@ -133,7 +134,10 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_000_000 + insufficientFunds.minRequired,
           output = 1_000_000,
           fee = 0,
-          expected = Expected.success(outputLovelace = 978_370, fee = -insufficientFunds.diff)
+          expected = Expected.success(
+            outputLovelace = 978_370,
+            fee = -insufficientFunds.valueDiff.coin.value
+          )
         )
     }
 

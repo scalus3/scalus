@@ -97,6 +97,19 @@ case class MultiAsset private (assets: SortedMap[PolicyId, SortedMap[AssetName, 
         if filtered.isEmpty then MultiAsset.zero else new MultiAsset(filtered)
     }
 
+    /** Returns a MultiAsset containing only assets with positive quantities. Policies with no
+      * positive tokens are dropped.
+      */
+    def onlyPositive: MultiAsset = {
+        val filtered = SortedMap.from(
+          assets.view.flatMap { case (policyId, tokens) =>
+              val posTokens = tokens.view.filter(_._2 > 0).to(SortedMap)
+              if posTokens.nonEmpty then Some(policyId -> posTokens) else None
+          }
+        )
+        if filtered.isEmpty then MultiAsset.zero else new MultiAsset(filtered)
+    }
+
     @targetName("plus")
     infix def +(other: MultiAsset): MultiAsset = MultiAsset.binOp(_ + _)(this, other)
 
