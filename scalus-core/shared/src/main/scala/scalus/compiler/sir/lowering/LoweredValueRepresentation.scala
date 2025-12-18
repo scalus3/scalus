@@ -445,7 +445,7 @@ sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentri
         tp match {
             case SIRType.Integer | SIRType.Data() | SIRType.ByteString | SIRType.String |
                 SIRType.Boolean | SIRType.Unit | SIRType.BLS12_381_G1_Element |
-                SIRType.BLS12_381_G2_Element | SIRType.BLS12_381_MlResult =>
+                SIRType.BLS12_381_G2_Element | SIRType.BLS12_381_MlResult | SIRType.BuiltinValue =>
                 true
             case _ => false
         }
@@ -538,7 +538,7 @@ object LoweredValueRepresentation {
                 constRepresentation(body)
             case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean |
                 SIRType.Unit | SIRType.BLS12_381_G1_Element | SIRType.BLS12_381_G2_Element |
-                SIRType.BLS12_381_MlResult =>
+                SIRType.BLS12_381_MlResult | SIRType.BuiltinValue =>
                 PrimitiveRepresentation.Constant
             case SIRType.Fun(in, out) =>
                 val inRepresentation = lc.typeGenerator(in).defaultRepresentation(in)

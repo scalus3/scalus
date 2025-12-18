@@ -568,6 +568,56 @@ object SIRBuiltins {
       AnnotationsDecl.empty
     )
 
+    // MaryEraValue builtins (CIP-0153)
+    // insertCoin :: ByteString -> ByteString -> Integer -> BuiltinValue -> BuiltinValue
+    val insertCoin: SIR.Builtin = SIR.Builtin(
+      DefaultFun.InsertCoin,
+      SIRType.ByteString ->: SIRType.ByteString ->: SIRType.Integer ->: SIRType.BuiltinValue ->: SIRType.BuiltinValue,
+      AnnotationsDecl.empty
+    )
+
+    // lookupCoin :: ByteString -> ByteString -> BuiltinValue -> Integer
+    val lookupCoin: SIR.Builtin = SIR.Builtin(
+      DefaultFun.LookupCoin,
+      SIRType.ByteString ->: SIRType.ByteString ->: SIRType.BuiltinValue ->: SIRType.Integer,
+      AnnotationsDecl.empty
+    )
+
+    // unionValue :: BuiltinValue -> BuiltinValue -> BuiltinValue
+    val unionValue: SIR.Builtin = SIR.Builtin(
+      DefaultFun.UnionValue,
+      SIRType.BuiltinValue ->: SIRType.BuiltinValue ->: SIRType.BuiltinValue,
+      AnnotationsDecl.empty
+    )
+
+    // valueContains :: BuiltinValue -> BuiltinValue -> Bool
+    val valueContains: SIR.Builtin = SIR.Builtin(
+      DefaultFun.ValueContains,
+      SIRType.BuiltinValue ->: SIRType.BuiltinValue ->: SIRType.Boolean,
+      AnnotationsDecl.empty
+    )
+
+    // valueData :: BuiltinValue -> Data
+    val valueData: SIR.Builtin = SIR.Builtin(
+      DefaultFun.ValueData,
+      SIRType.BuiltinValue ->: SIRType.Data(),
+      AnnotationsDecl.empty
+    )
+
+    // unValueData :: Data -> BuiltinValue
+    val unValueData: SIR.Builtin = SIR.Builtin(
+      DefaultFun.UnValueData,
+      SIRType.Data() ->: SIRType.BuiltinValue,
+      AnnotationsDecl.empty
+    )
+
+    // scaleValue :: Integer -> BuiltinValue -> BuiltinValue
+    val scaleValue: SIR.Builtin = SIR.Builtin(
+      DefaultFun.ScaleValue,
+      SIRType.Integer ->: SIRType.BuiltinValue ->: SIRType.BuiltinValue,
+      AnnotationsDecl.empty
+    )
+
     def fromUplc(uplcFun: DefaultFun): SIR.Builtin =
         uplcFun match
             case DefaultFun.AddInteger                      => addInteger
@@ -664,4 +714,12 @@ object SIRBuiltins {
             case DefaultFun.ListToArray     => listToArray
             case DefaultFun.IndexArray      => indexArray
             case DefaultFun.MultiIndexArray => multiIndexArray
+            // MaryEraValue builtins (CIP-0153)
+            case DefaultFun.InsertCoin    => insertCoin
+            case DefaultFun.LookupCoin    => lookupCoin
+            case DefaultFun.UnionValue    => unionValue
+            case DefaultFun.ValueContains => valueContains
+            case DefaultFun.ValueData     => valueData
+            case DefaultFun.UnValueData   => unValueData
+            case DefaultFun.ScaleValue    => scaleValue
 }

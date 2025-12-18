@@ -478,6 +478,7 @@ object FlatInstances:
         val tagBls12_381_G1_Element: Byte = 0x10
         val tagBls12_381_G2_Element: Byte = 0x11
         val tagBls12_381_MlResult: Byte = 0x12
+        val tagBuiltinValue: Byte = 0x13
 
         //
         def tag = hashConsTagSIRType
@@ -569,6 +570,8 @@ object FlatInstances:
                     encode.encode.bits(tagWidth, tagBls12_381_G2_Element)
                 case SIRType.BLS12_381_MlResult =>
                     encode.encode.bits(tagWidth, tagBls12_381_MlResult)
+                case SIRType.BuiltinValue =>
+                    encode.encode.bits(tagWidth, tagBuiltinValue)
                 // if !mute then
                 //    //val endPos = encode.encode.bitPosition()
                 //    //println(s"SIRTypeHashConsedFlat.encode ${a.hashCode()} $a,  size=${endPos-startPos}")
@@ -619,6 +622,8 @@ object FlatInstances:
                     SIRTypeHashConsedRef.fromData(SIRType.BLS12_381_G2_Element)
                 case `tagBls12_381_MlResult` =>
                     SIRTypeHashConsedRef.fromData(SIRType.BLS12_381_MlResult)
+                case `tagBuiltinValue` =>
+                    SIRTypeHashConsedRef.fromData(SIRType.BuiltinValue)
                 case _ => throw new IllegalStateException(s"Invalid SIRType tag: $tag")
 
     object TypeBindingFlat extends HashConsedReprFlat[TypeBinding, HashConsedRef[TypeBinding]]:

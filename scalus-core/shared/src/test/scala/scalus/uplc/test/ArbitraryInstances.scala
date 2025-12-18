@@ -190,6 +190,8 @@ trait ArbitraryInstances:
                 throw new IllegalArgumentException(
                   "BLS12_381_MlResult is not a valid constant type, it should be used in terms only"
                 )
+            case DefaultUni.BuiltinValue =>
+                Gen.const(Constant.BuiltinValue(builtin.BuiltinValue.empty))
             case DefaultUni.Apply(_, _) =>
                 // This case should not happen, as we only generate constants for the known types
                 throw new IllegalArgumentException(
@@ -225,9 +227,10 @@ trait ArbitraryInstances:
             val aShrunk = Shrink.shrink(a).map(Constant.Pair(_, b))
             val bShrunk = Shrink.shrink(b).map(Constant.Pair(a, _))
             aShrunk ++ bShrunk
-        case BLS12_381_G1_Element(value) => Stream.empty
-        case BLS12_381_G2_Element(value) => Stream.empty
-        case BLS12_381_MlResult(value)   => Stream.empty
+        case BLS12_381_G1_Element(value)  => Stream.empty
+        case BLS12_381_G2_Element(value)  => Stream.empty
+        case BLS12_381_MlResult(value)    => Stream.empty
+        case Constant.BuiltinValue(value) => Stream.empty
     }
 
     given arbitraryTerm: Arbitrary[Term] = Arbitrary {

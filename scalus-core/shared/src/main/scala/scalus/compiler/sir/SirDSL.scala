@@ -90,3 +90,5 @@ object SirDSL:
                     SIR.Const(c, SIRType.BLS12_381_G2_Element, AnnotationsDecl.empty)
                 case Constant.BLS12_381_MlResult(value) =>
                     SIR.Const(c, SIRType.BLS12_381_MlResult, AnnotationsDecl.empty)
+                case Constant.BuiltinValue(value) =>
+                    SIR.Const(c, SIRType.BuiltinValue, AnnotationsDecl.empty)

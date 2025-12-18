@@ -113,7 +113,31 @@ case class BuiltinCostModel(
     lengthOfArray: DefaultCostingFun[OneArgument],
     listToArray: DefaultCostingFun[OneArgument],
     indexArray: DefaultCostingFun[TwoArguments],
-    multiIndexArray: DefaultCostingFun[TwoArguments]
+    multiIndexArray: DefaultCostingFun[TwoArguments],
+    // MaryEraValue builtins (CIP-0153) - from Plutus builtinCostModelC.json
+    // insertCoin, unionValue, scaleValue use placeholder costing in Haskell (unimplementedCostingFun)
+    insertCoin: ConstCostingFun = ConstCostingFun(CostingInteger(300000000L), CostingInteger(1L)),
+    lookupCoin: DefaultCostingFun[ThreeArguments] = DefaultCostingFun(
+      ThreeArguments.LinearInZ(
+        OneVariableLinearFunction(CostingInteger(219951L), CostingInteger(9444L))
+      ),
+      ThreeArguments.ConstantCost(CostingInteger(1L))
+    ),
+    unionValue: ConstCostingFun = ConstCostingFun(CostingInteger(300000000L), CostingInteger(1L)),
+    valueContains: DefaultCostingFun[TwoArguments] = DefaultCostingFun(
+      TwoArguments.MultipliedSizes(
+        OneVariableLinearFunction(CostingInteger(1163050L), CostingInteger(1470L))
+      ),
+      TwoArguments.ConstantCost(CostingInteger(1L))
+    ),
+    valueData: ConstCostingFun = ConstCostingFun(CostingInteger(194713L), CostingInteger(1L)),
+    unValueData: DefaultCostingFun[OneArgument] = DefaultCostingFun(
+      OneArgument.LinearInX(
+        OneVariableLinearFunction(CostingInteger(1000L), CostingInteger(43200L))
+      ),
+      OneArgument.ConstantCost(CostingInteger(1L))
+    ),
+    scaleValue: ConstCostingFun = ConstCostingFun(CostingInteger(300000000L), CostingInteger(1L))
 ) {
 
     /** Convert a [[BuiltinCostModel]] to a flat map of cost parameters

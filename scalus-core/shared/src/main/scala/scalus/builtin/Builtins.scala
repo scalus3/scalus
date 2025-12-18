@@ -722,6 +722,99 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def ripemd_160(byteString: ByteString): ByteString =
         ps.ripemd_160(byteString)
 
+    // MaryEraValue builtins (CIP-0153)
+
+    /** Insert or update a token amount in a value.
+      *
+      * @param currency
+      *   The currency symbol (policy ID), max 32 bytes.
+      * @param token
+      *   The token name, max 32 bytes.
+      * @param amount
+      *   The amount to set. Use 0 to remove the token.
+      * @param value
+      *   The value to modify.
+      * @return
+      *   A new value with the token inserted/updated.
+      */
+    def insertCoin(
+        currency: ByteString,
+        token: ByteString,
+        amount: BigInt,
+        value: BuiltinValue
+    ): BuiltinValue =
+        scalus.uplc.eval.BuiltinValueOps.insertCoin(currency, token, amount, value)
+
+    /** Lookup a token amount in a value.
+      *
+      * @param currency
+      *   The currency symbol (policy ID).
+      * @param token
+      *   The token name.
+      * @param value
+      *   The value to search.
+      * @return
+      *   The amount of the token, or 0 if not found.
+      */
+    def lookupCoin(currency: ByteString, token: ByteString, value: BuiltinValue): BigInt =
+        scalus.uplc.eval.BuiltinValueOps.lookupCoin(currency, token, value)
+
+    /** Merge two values by adding corresponding token amounts.
+      *
+      * @param v1
+      *   The first value.
+      * @param v2
+      *   The second value.
+      * @return
+      *   A new value with merged amounts.
+      */
+    def unionValue(v1: BuiltinValue, v2: BuiltinValue): BuiltinValue =
+        scalus.uplc.eval.BuiltinValueOps.unionValue(v1, v2)
+
+    /** Check if v1 contains at least the amounts in v2.
+      *
+      * @param v1
+      *   The container value.
+      * @param v2
+      *   The value to check for containment.
+      * @return
+      *   true if v1 contains at least as much of every token as v2.
+      */
+    def valueContains(v1: BuiltinValue, v2: BuiltinValue): Boolean =
+        scalus.uplc.eval.BuiltinValueOps.valueContains(v1, v2)
+
+    /** Convert a BuiltinValue to Data representation.
+      *
+      * @param value
+      *   The value to convert.
+      * @return
+      *   The Data representation of the value.
+      */
+    def valueData(value: BuiltinValue): Data =
+        scalus.uplc.eval.BuiltinValueOps.toData(value)
+
+    /** Convert Data to a BuiltinValue.
+      *
+      * @param data
+      *   The data to convert. Must be in Map ByteString (Map ByteString Integer) format.
+      * @return
+      *   The BuiltinValue.
+      */
+    def unValueData(data: Data): BuiltinValue =
+        scalus.uplc.eval.BuiltinValueOps.fromData(data)
+
+    /** Multiply all token amounts in a value by a scalar.
+      *
+      * @param scalar
+      *   The multiplier.
+      * @param value
+      *   The value to scale.
+      * @return
+      *   A new value with all amounts multiplied.
+      */
+    def scaleValue(scalar: BigInt, value: BuiltinValue): BuiltinValue =
+        scalus.uplc.eval.BuiltinValueOps.scaleValue(scalar, value)
+
 private object UTF8Decoder {
     def decode(bytes: Array[Byte]): String = {
         val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()

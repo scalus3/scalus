@@ -69,5 +69,8 @@ object ConstantGenerator {
                 '{ BLS12_381_G2_Element(${ Expr(value.toCompressedByteString) }) }
             case Constant.BLS12_381_MlResult(value) =>
                 sys.error("BLS12_381_MlResult values cannot be serialized as constants in UPLC")
+            case Constant.BuiltinValue(value) =>
+                val dataExpr: Expr[Data] = Expr(BuiltinValue.toData(value))
+                '{ BuiltinValue.fromData($dataExpr) }
     }
 }
