@@ -54,7 +54,7 @@ object JScalus {
     class JSPlutusScriptEvaluationError(
         val message: String,
         val logs: js.Array[String]
-    ) extends js.Object(message)
+    ) extends js.Object
 
     /** Applies a data argument to a Plutus script given its CBOR hex representation.
       *
