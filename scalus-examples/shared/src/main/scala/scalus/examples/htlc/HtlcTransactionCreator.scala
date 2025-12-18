@@ -37,7 +37,8 @@ case class HtlcTransactionCreator(
             .transaction
     }
 
-    /** Async version of lock that uses [[scalus.cardano.txbuilder.TxBuilder.complete]] for cross-platform support.
+    /** Async version of lock that uses [[scalus.cardano.txbuilder.TxBuilder.complete]] for
+      * cross-platform support.
       *
       * This method works on both JVM and JavaScript platforms. Returns the change to the sponsor.
       */

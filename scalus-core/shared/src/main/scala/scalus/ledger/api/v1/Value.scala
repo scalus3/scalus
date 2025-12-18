@@ -617,8 +617,8 @@ object Value extends ValueOffchainOps {
             )
         }
 
-    /** Implementation of the [[scalus.builtin.FromData]] type class for `Value` with validation. Validates
-      * that:
+    /** Implementation of the [[scalus.builtin.FromData]] type class for `Value` with validation.
+      * Validates that:
       *   - All token amounts are non-zero
       *   - No currency symbol has an empty token list
       *

@@ -9,7 +9,8 @@ import scalus.uplc.*
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-/** Base class for simple lowering from Scalus Intermediate Representation [[SIR]] to UPLC [[scalus.uplc.Term]].
+/** Base class for simple lowering from Scalus Intermediate Representation [[SIR]] to UPLC
+  * [[scalus.uplc.Term]].
   *
   * This class contains common functionality shared between different lowering strategies.
   * Subclasses must implement the encoding-specific methods for constructors, pattern matching, and

@@ -55,10 +55,12 @@ object Macros {
             Exp(Trm.LamAbs($name, $f(vr($name)).term))
         }
 
-    /** Converts a lambda value of type [[scalus.uplc.Term]] => [[scalus.uplc.Term]] into a UPLC [[scalus.uplc.Term.LamAbs]] term expression.
+    /** Converts a lambda value of type [[scalus.uplc.Term]] => [[scalus.uplc.Term]] into a UPLC
+      * [[scalus.uplc.Term.LamAbs]] term expression.
       *
       * This macro extracts the parameter name from the provided lambda and creates a
-      * [[scalus.uplc.Term.LamAbs]] term wrapping the body. It expects a simple lambda value (e.g. lam(x => x)).
+      * [[scalus.uplc.Term.LamAbs]] term wrapping the body. It expects a simple lambda value (e.g.
+      * lam(x => x)).
       *
       * @param f
       *   quoted lambda expression
@@ -481,8 +483,8 @@ object Macros {
         '{ if $x then true else Builtins.trace(${ Expr(x.show + " ? False") })(false) }
     }
 
-    /** Generates `match` expression on [[scalus.uplc.DefaultFun]] ordinals that should be efficiently compiled
-      * to table switch (and it is).
+    /** Generates `match` expression on [[scalus.uplc.DefaultFun]] ordinals that should be
+      * efficiently compiled to table switch (and it is).
       *
       * {{{
       *   fun.ordinal() match {

@@ -230,13 +230,15 @@ object MachineParams {
         fromProtocolParams(pparams, plutus)
     }
 
-    /** Creates [[MachineParams]] from a [[scalus.cardano.ledger.ProtocolParams]] and a [[scalus.cardano.ledger.Language]]
+    /** Creates [[MachineParams]] from a [[scalus.cardano.ledger.ProtocolParams]] and a
+      * [[scalus.cardano.ledger.Language]]
       */
     def fromProtocolParams(pparams: ProtocolParams, language: Language): MachineParams = {
         fromCostModels(pparams.costModels, language, pparams.protocolVersion.toMajor)
     }
 
-    /** Creates MachineParams from [[scalus.cardano.ledger.CostModels]] and [[scalus.cardano.ledger.Language]].
+    /** Creates MachineParams from [[scalus.cardano.ledger.CostModels]] and
+      * [[scalus.cardano.ledger.Language]].
       *
       * This function configures the Plutus virtual machine with the appropriate cost models and
       * semantic variants based on the protocol version and Plutus language version. This is crucial
