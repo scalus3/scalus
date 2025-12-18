@@ -34,7 +34,7 @@ enum UnorderedNodeAction derives FromData, ToData:
       * Covering cell is expected to be the head of the linked list.
       *
       * @see
-      *   [[scalus.examples.UnorderedNodeAction.Insert]]
+      *   [[scalus.patterns.UnorderedLinkedList.insert]]
       */
     case Prepend(key: PubKeyHash, covering: Cons)
 
@@ -43,7 +43,7 @@ enum UnorderedNodeAction derives FromData, ToData:
       * Covering cell is expected to be the latest at the tail of the linked list.
       *
       * @see
-      *   [[scalus.examples.UnorderedNodeAction.Insert]]
+      *   [[scalus.patterns.UnorderedLinkedList.insert]]
       */
     case Append(key: PubKeyHash, covering: Cons)
 

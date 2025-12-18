@@ -8,7 +8,7 @@ import scalus.uplc.*
 @deprecated("Use ScottEncodingLowering instead", "0.13.0")
 type SimpleSirToUplcLowering = ScottEncodingLowering
 
-/** Scott encoding-based lowering from Scalus Intermediate Representation [[SIR]] to UPLC [[Term]].
+/** Scott encoding-based lowering from Scalus Intermediate Representation [[SIR]] to UPLC [[scalus.uplc.Term]].
   *
   * This implementation uses Scott encoding for data types:
   *   - `Nil` is represented as `\Nil Cons -> force Nil`

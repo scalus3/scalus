@@ -131,9 +131,9 @@ object Node:
   * @param mint
   *   value minted in current Tx, meant to contain a policy's node token.
   * @param inputs
-  *   current Tx inputs, the [[scalus.patterns.NodePair]] of [[scalus.ledger.api.v2.TxOut]].
+  *   current Tx inputs, list of [[scalus.patterns.Node]].
   * @param outputs
-  *   current Tx outputs, the [[scalus.patterns.NodePair]] of [[scalus.ledger.api.v3.TxInInfo]].
+  *   current Tx outputs, list of [[scalus.patterns.Node]].
   */
 case class Common(
     policy: PolicyId,

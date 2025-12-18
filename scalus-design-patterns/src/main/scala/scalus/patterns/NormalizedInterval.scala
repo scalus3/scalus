@@ -102,10 +102,10 @@ extension (self: Interval) {
       *   from = IntervalBound(IntervalBoundType.PosInf, false),
       *   to = IntervalBound(IntervalBoundType.Finite(100), true)
       * )
-      * invalidInterval.normalize // throws OnchainError: "Improper interval encountered"
+      * invalidInterval.normalize // throws scalus.prelude.OnchainError: "Improper interval encountered"
       *   }}}
       *
-      * @throws OnchainError
+      * @throws scalus.cardano.onchain.OnchainError
       *   if improper interval encountered i.e. Interval.never
       * @return
       *   NormalizedInterval

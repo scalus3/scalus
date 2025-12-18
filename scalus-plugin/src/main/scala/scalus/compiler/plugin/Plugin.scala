@@ -149,7 +149,7 @@ class ScalusPreparePhase(debugLevel: Int) extends PluginPhase with IdentityDenot
 /** A plugin phase that compiles Scala code to Scalus Intermediate Representation (SIR).
   *
   * It's a two-phase process:
-  *   1. Compile Scala code to [[SIR]] and store it in JARs
+  *   1. Compile Scala code to [[scalus.compiler.sir.SIR]] and store it in JARs
   *   1. Link SIR to the final code by replacing calls to `compile` and `compileDebug` with a string
   *      literal that contains the encoded SIR and a call to `decodeStringLatin1` that decodes it
   *      back.
@@ -195,7 +195,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
     }
 
     /** Replaces calls to `compile`, `compile2`, `compileDebug`, and `compile2Debug` with a fully
-      * linked Flat-encoded [[SIR]] representation.
+      * linked Flat-encoded [[scalus.compiler.sir.SIR]] representation.
       */
     override def transformApply(tree: tpd.Apply)(using Context): tpd.Tree =
         try

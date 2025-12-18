@@ -8,7 +8,7 @@ import scalus.uplc.DefaultFun
 object Macros {
     import scala.quoted.*
 
-    /** Generate a map of builtins from the [[DefaultFun]] enum
+    /** Generate a map of builtins from the [[scalus.uplc.DefaultFun]] enum
       *
       * {{{
       *   Map(

@@ -153,7 +153,7 @@ object Datum {
 // ExpectedSigner
 // -----------------------------------------------------------------------------
 
-/** An [[scalus.cardano.address.AddrKeyHash]] that is expected to sign some
+/** An [[scalus.cardano.ledger.AddrKeyHash]] that is expected to sign some
   * [[scalus.cardano.ledger.Transaction]].
   *
   * The purpose for signing is not presently tracked. For a sketch, see commit

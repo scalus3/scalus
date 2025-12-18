@@ -29,8 +29,8 @@ object Macros {
       *   quoted function value of type Exp[A] => Exp[B]
       * @return
       *   a quoted Exp representing a UPLC lambda of A => B
-      * @throws scala.quoted.Report.errorAndAbort
-      *   if the supplied expression does not match the expected lambda shape
+      * @note
+      *   aborts compilation if the supplied expression does not match the expected lambda shape
       */
     @nowarn
     def lamMacro[A: Type, B: Type](f: Expr[Exp[A] => Exp[B]])(using Quotes): Expr[Exp[A => B]] =
@@ -55,10 +55,10 @@ object Macros {
             Exp(Trm.LamAbs($name, $f(vr($name)).term))
         }
 
-    /** Converts a lambda value of type [[Term]] => [[Term]] into a UPLC [[LamAbs]] term expression.
+    /** Converts a lambda value of type [[scalus.uplc.Term]] => [[scalus.uplc.Term]] into a UPLC [[scalus.uplc.Term.LamAbs]] term expression.
       *
       * This macro extracts the parameter name from the provided lambda and creates a
-      * [[Term.LamAbs]] term wrapping the body. It expects a simple lambda value (e.g. lam(x => x)).
+      * [[scalus.uplc.Term.LamAbs]] term wrapping the body. It expects a simple lambda value (e.g. lam(x => x)).
       *
       * @param f
       *   quoted lambda expression
@@ -100,8 +100,8 @@ object Macros {
       *   the root type of the selection
       * @return
       *   quoted function Exp[Data] => Exp[Data] extracting the selected nested field
-      * @throws scala.quoted.Report.errorAndAbort
-      *   on unsupported shapes or missing fields
+      * @note
+      *   aborts compilation on unsupported shapes or missing fields
       */
     def fieldAsExprDataMacro[A: Type](e: Expr[A => Any])(using
         Quotes
@@ -184,8 +184,8 @@ object Macros {
       *   reflected term representing the selection
       * @return
       *   Expr[Data => Data] that extracts the nested field
-      * @throws scala.quoted.Report.errorAndAbort
-      *   on unsupported tree shapes or missing fields
+      * @note
+      *   aborts compilation on unsupported tree shapes or missing fields
       */
     def fieldAsDataMacroTerm(using q: Quotes)(e: q.reflect.Term): Expr[Data => Data] =
         import quotes.reflect.*
@@ -481,7 +481,7 @@ object Macros {
         '{ if $x then true else Builtins.trace(${ Expr(x.show + " ? False") })(false) }
     }
 
-    /** Generates `match` expression on [[DefaultFun]] ordinals that should be efficiently compiled
+    /** Generates `match` expression on [[scalus.uplc.DefaultFun]] ordinals that should be efficiently compiled
       * to table switch (and it is).
       *
       * {{{

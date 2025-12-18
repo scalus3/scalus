@@ -581,7 +581,7 @@ object Value extends ValueOffchainOps {
       */
     val valueOrd: Ord[Value] = (x: Value, y: Value) => x.toSortedMap <=> y.toSortedMap
 
-    /** Implementation of the [[prelude.ToData]] type class for `Value`.
+    /** Implementation of the [[scalus.builtin.ToData]] type class for `Value`.
       *
       * Converts a `Value` to a `Data` representation by converting its sorted map structure.
       *
@@ -599,7 +599,7 @@ object Value extends ValueOffchainOps {
       */
     given valueToData: ToData[Value] = _.toSortedMap.toData
 
-    /** Implementation of the [[prelude.FromData]] type class for `Value`.
+    /** Implementation of the [[scalus.builtin.FromData]] type class for `Value`.
       *
       * Converts a `Data` representation back into a `Value`. This method assumes that the input
       * data is well-formed and does not perform any validation on the token amounts or structure.
@@ -617,7 +617,7 @@ object Value extends ValueOffchainOps {
             )
         }
 
-    /** Implementation of the [[prelude.FromData]] type class for `Value` with validation. Validates
+    /** Implementation of the [[scalus.builtin.FromData]] type class for `Value` with validation. Validates
       * that:
       *   - All token amounts are non-zero
       *   - No currency symbol has an empty token list

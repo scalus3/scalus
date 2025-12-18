@@ -310,7 +310,7 @@ extension (self: BigInt)
       *   The other number to compute MAX with.
       *
       * @see
-      *   [[scalus.prelude.Math.maximum]]
+      *   [[scalus.prelude.Math.max]]
       */
     inline def maximum(other: BigInt): BigInt = Math.max(self, other)
 

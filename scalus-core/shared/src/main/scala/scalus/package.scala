@@ -134,7 +134,7 @@ package object scalus {
 
         /** Evaluates the program using the given VM according to the Plutus specification.
           * @return
-          *   [[Result]] with the evaluation result and the spent budget
+          *   [[scalus.uplc.eval.Result]] with the evaluation result and the spent budget
           */
         def evaluateDebug(using vm: PlutusVM): Result = vm.evaluateScriptDebug(p.deBruijnedProgram)
 
@@ -156,7 +156,7 @@ package object scalus {
 
         /** Evaluates the program using the given VM according to the Plutus specification.
           * @return
-          *   [[Result]] with the evaluation result and the spent budget
+          *   [[scalus.uplc.eval.Result]] with the evaluation result and the spent budget
           */
         def evaluateDebug(using vm: PlutusVM): Result = vm.evaluateScriptDebug(p)
 
@@ -187,7 +187,7 @@ package object scalus {
           *   specification like CIP-117
           *
           * @return
-          *   [[Result]] with the evaluation result and the spent budget
+          *   [[scalus.uplc.eval.Result]] with the evaluation result and the spent budget
           */
         def evaluateDebug(using vm: PlutusVM): Result =
             val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
