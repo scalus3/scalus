@@ -25,6 +25,12 @@ export namespace Scalus {
     budget: ExBudget;
   }
 
+  /** Exception thrown when Plutus script evaluation fails. Includes logs from the failing script. */
+  export class PlutusScriptEvaluationException extends Error {
+    constructor(message: string, logs: string[]);
+    logs: string[];
+  }
+
   /**
    * Applies a data argument to a Plutus script given its double-CBOR-encoded hex.
    * @param doubleCborHex The double-CBOR-encoded hex of the script.
@@ -48,12 +54,14 @@ export namespace Scalus {
    * @param txCborBytes The CBOR bytes of the transaction containing the Plutus scripts.
    * @param utxoCborBytes The CBOR bytes of the UTxO map (Map[TransactionInput, TransactionOutput]).
    * @param slotConfig The slot configuration for time conversions.
+   * @param costModels Array of cost models for each Plutus language version [V1, V2, V3]. Each cost model is an array of cost values.
    * @returns An array of Redeemers with computed execution budgets.
    */
   export function evalPlutusScripts(
     txCborBytes: number[],
     utxoCborBytes: number[],
     slotConfig: SlotConfig,
+    costModels: number[][],
   ): Redeemer[];
 }
 

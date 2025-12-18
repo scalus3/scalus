@@ -345,7 +345,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val tx = TxBuilder(testEnv)
-            .mintAndAttach(emptyRedeemer, assets, alwaysOkScript)
+            .mint(alwaysOkScript, assets, emptyRedeemer)
             .payTo(Bob.address, Value.fromPolicy(policyId, assets, Coin.ada(5)))
             .complete(provider, Alice.address)
             .await()
@@ -495,7 +495,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val tx = TxBuilder(testEnv)
-            .mintAndAttach(emptyRedeemer, Map(token -> 100L), alwaysOkScript)
+            .mint(alwaysOkScript, Map(token -> 100L), emptyRedeemer)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(token -> 100L), Coin.ada(5)))
             .complete(provider, Alice.address)
             .await()
@@ -951,12 +951,19 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         // Verify redeemer has correct index (should be 1, not 0)
-        val spendRedeemer = tx.witnessSet.redeemers.get.value.toSeq
+        val redeemer = tx.witnessSet.redeemers.get.value.toSeq
             .find(_.tag == RedeemerTag.Spend)
             .get
         assert(
-          spendRedeemer.index == 1,
-          s"Redeemer index should be 1 but was ${spendRedeemer.index}"
+          redeemer.index == 1,
+          s"Redeemer index should be 1 but was ${redeemer.index}"
+        )
+        // This test verifies that delayed redeemers have correct ExUnits computed.
+        // The bug: after replaceDelayedRedeemers, fromEditableTransactionSafe creates
+        // redeemers with ExUnits.zero, discarding the ExUnits computed during balancing.
+        assert(
+          redeemer.exUnits.memory > 0 && redeemer.exUnits.steps > 0,
+          s"ExUnits should be non-zero, got: ${redeemer.exUnits}"
         )
     }
 

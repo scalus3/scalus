@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "scalus": "file:../../scalus-core/js/dist"
+    "scalus": "file:../../scalus-cardano-ledger/js/src/main/npm"
   }
 }

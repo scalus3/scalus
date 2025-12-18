@@ -50,6 +50,12 @@ object JScalus {
         val budget: JSExBudget
     ) extends js.Object
 
+    @JSExportTopLevel("PlutusScriptEvaluationError")
+    class JSPlutusScriptEvaluationError(
+        val message: String,
+        val logs: js.Array[String]
+    ) extends js.Object
+
     /** Applies a data argument to a Plutus script given its CBOR hex representation.
       *
       * @param doubleCborHex
@@ -109,31 +115,41 @@ object JScalus {
     def evalPlutusScripts(
         txCborBytes: js.Array[Byte],
         utxoCborBytes: js.Array[Byte],
-        slotConfig: SlotConfig
+        slotConfig: SlotConfig,
+        costModels: js.Array[js.Array[Long]]
     ): js.Array[Redeemer] = {
-        val tx = Transaction.fromCbor(txCborBytes.toArray)
-        val utxo =
-            Cbor.decode(utxoCborBytes.toArray).to[Map[TransactionInput, TransactionOutput]].value
-        val params: ProtocolParams = CardanoInfo.mainnet.protocolParams
-        val costModels = params.costModels
-        val evaluator = PlutusScriptEvaluator(
-          slotConfig = slotConfig,
-          initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
-          protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
-          costModels = costModels,
-          mode = EvaluatorMode.EvaluateAndComputeCost,
-          debugDumpFilesForTesting = false
-        )
-        val results =
-            for r <- evaluator.evalPlutusScripts(tx, utxo)
-            yield new Redeemer(
-              tag = r.tag.toString,
-              index = r.index,
-              budget = JSExBudget(
-                cpu = js.BigInt(r.exUnits.steps.toString),
-                memory = js.BigInt(r.exUnits.memory.toString)
-              )
+        try
+            val tx = Transaction.fromCbor(txCborBytes.toArray)
+            val utxo =
+                Cbor.decode(utxoCborBytes.toArray)
+                    .to[Map[TransactionInput, TransactionOutput]]
+                    .value
+            val cms = CostModels(costModels.zipWithIndex.map { case (cm, lang) =>
+                lang -> cm.toIndexedSeq
+            }.toMap)
+            val evaluator = PlutusScriptEvaluator(
+              slotConfig = slotConfig,
+              initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
+              protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
+              costModels = cms,
+              mode = EvaluatorMode.EvaluateAndComputeCost
             )
-        results.toJSArray
+            val results =
+                for r <- evaluator.evalPlutusScripts(tx, utxo)
+                yield new Redeemer(
+                  tag = r.tag.toString,
+                  index = r.index,
+                  budget = JSExBudget(
+                    cpu = js.BigInt(r.exUnits.steps.toString),
+                    memory = js.BigInt(r.exUnits.memory.toString)
+                  )
+                )
+            results.toJSArray
+        catch
+            case e: PlutusScriptEvaluationException =>
+                throw js.JavaScriptException(
+                  JSPlutusScriptEvaluationError(e.getMessage, js.Array(e.logs*))
+                )
     }
+
 }

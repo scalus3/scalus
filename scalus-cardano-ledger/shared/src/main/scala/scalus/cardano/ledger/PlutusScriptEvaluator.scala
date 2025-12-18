@@ -317,11 +317,7 @@ object PlutusScriptEvaluator {
                     if redeemerTag == RedeemerTag.Spend then {
                         // V1 and V2 scripts require datums
                         plutusScript match
-                            case script @ (_: Script.PlutusV1 | _: Script.PlutusV2) =>
-                                if script.isInstanceOf[Script.PlutusV1] then
-                                    val _ =
-                                        txInfoV1 // force initialization to catch issues early for inline datums and Byron address
-
+                            case _: Script.PlutusV1 | _: Script.PlutusV2 =>
                                 if datum.isEmpty then
                                     throw new IllegalStateException(
                                       s"Missing required datum for plutus script: $plutusScript"

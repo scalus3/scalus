@@ -59,9 +59,9 @@ case class BettingTransactionCreator(
             .collaterals(collateralUtxo)
             .references(scriptUtxo)
             .mint(
-              Data.unit,
               script.scriptHash,
               scala.collection.Map(token -> amount),
+              Data.unit,
               Set(player1Pkh)
             )
             .payTo(

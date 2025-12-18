@@ -12,6 +12,7 @@ import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.{Hash, ProtocolVersion, Transaction as STransaction}
+import scalus.cardano.wallet.BloxbeanAccount
 
 import scala.collection.mutable
 
@@ -36,6 +37,10 @@ enum TestPeer(@annotation.unused ix: Int) derives CanEqual:
     def walletId: WalletId = TestPeer.mkWalletId(this)
 
     def address: ShelleyAddress = TestPeer.address(this)
+
+    def signer: TransactionSigner = {
+        new TransactionSigner(Set(new BloxbeanAccount(account).paymentKeyPair))
+    }
 
 object TestPeer:
     private val mnemonic: String =

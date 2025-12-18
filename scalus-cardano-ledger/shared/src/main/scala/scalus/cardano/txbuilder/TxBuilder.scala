@@ -7,7 +7,6 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.cardano.ledger.rules.STS.Validator
-import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionBuilder.{modifyBody, ResolvedUtxos}
 
@@ -62,6 +61,9 @@ object TxBuilderException {
                   s"Cannot balance transaction, last diff: $lastDiff lovelace"
               case TxBalancingError.InsufficientFunds(diff, minRequired) =>
                   s"Insufficient funds: need $minRequired more lovelace, diff is $diff"
+              case TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda) =>
+                  s"Collateral contains tokens but insufficient ADA for return output. " +
+                      s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
           },
           error match {
               case TxBalancingError.EvaluationFailed(cause) => cause
@@ -123,6 +125,18 @@ object TxBuilderException {
           cause.orNull
         )
 
+    /** Collateral contains tokens but insufficient ADA for valid return output. */
+    final case class InsufficientCollateralForReturnException(
+        totalCollateralAda: Coin,
+        requiredCollateral: Coin,
+        minAdaForReturn: Coin
+    ) extends TxBuilderException(
+          s"Collateral contains tokens but insufficient ADA for return output. " +
+              s"Total: ${totalCollateralAda.value}, required for fees: ${requiredCollateral.value}, " +
+              s"minAda for return: ${minAdaForReturn.value}. " +
+              s"Need at least ${requiredCollateral.value + minAdaForReturn.value} lovelace in collateral."
+        )
+
     /** Context initialization failed. */
     final case class ContextInitializationException(
         msg: String,
@@ -147,6 +161,8 @@ object TxBuilderException {
         case SomeBuildError.SomeRedeemerIndexingError(e, ctx) => RedeemerIndexingException(e, ctx)
         case SomeBuildError.BalancingError(e, ctx)            => BalancingException(e, ctx)
         case SomeBuildError.ValidationError(e, ctx)           => LedgerValidationException(e, ctx)
+        case SomeBuildError.InsufficientCollateralForReturn(totalAda, required, minAda, _) =>
+            InsufficientCollateralForReturnException(totalAda, required, minAda)
     }
 }
 
@@ -512,27 +528,48 @@ case class TxBuilder(
     def metadata(auxiliaryData: AuxiliaryData): TxBuilder =
         addSteps(TransactionBuilderStep.ModifyAuxiliaryData(_ => Some(auxiliaryData)))
 
-    /** Mints or burns native tokens under a minting policy.
+    /** Mints or burns native tokens under a minting policy (reference script).
       *
       * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
       * script must be present as a reference input (via [[references]]) for this to work.
       *
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
       * @param policyId
       *   the policy ID (script hash) of the minting policy
       * @param assets
       *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @tparam T
+      *   type of the redeemer (must have a ToData instance)
+      */
+    def mint[T: ToData](
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        redeemer: T
+    ): TxBuilder = mint(policyId, assets, redeemer, Set.empty[AddrKeyHash])
+
+    /** Mints or burns native tokens under a minting policy with required signers (reference
+      * script).
+      *
+      * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
+      * script must be present as a reference input (via [[references]]) for this to work.
+      *
+      * @param policyId
+      *   the policy ID (script hash) of the minting policy
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
       * @param requiredSigners
       *   set of public key hashes that must sign the transaction
       * @tparam T
       *   type of the redeemer (must have a ToData instance)
       */
     def mint[T: ToData](
-        redeemer: T,
         policyId: PolicyId,
         assets: collection.Map[AssetName, Long],
-        requiredSigners: Set[AddrKeyHash] = Set.empty
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val mintSteps = assets.map { case (assetName, amount) =>
             TransactionBuilderStep.Mint(
@@ -550,30 +587,50 @@ case class TxBuilder(
         addSteps(mintSteps*)
     }
 
+    // -------------------------------------------------------------------------
+    // Minting API - Attached script variants (script first, policyId derived)
+    // -------------------------------------------------------------------------
+
     /** Mints or burns native tokens with the script provided inline.
-      *
-      * This is a convenience method for when you have the minting policy script available directly.
       *
       * Use positive amounts to mint tokens and negative amounts to burn tokens.
       *
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
       * @param script
       *   the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @tparam T
+      *   type of the redeemer (must have a ToData instance)
+      */
+    def mint[T: ToData](
+        script: PlutusScript,
+        assets: collection.Map[AssetName, Long],
+        redeemer: T
+    ): TxBuilder = mint(script, assets, redeemer, Set.empty[AddrKeyHash])
+
+    /** Mints or burns native tokens with the script provided inline and required signers.
+      *
+      * Use positive amounts to mint tokens and negative amounts to burn tokens.
+      *
+      * @param script
+      *   the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
       * @param requiredSigners
       *   set of public key hashes that must sign the transaction
       * @tparam T
       *   type of the redeemer (must have a ToData instance)
       */
-    def mintAndAttach[T: ToData](
-        redeemer: T,
-        assets: collection.Map[AssetName, Long],
+    def mint[T: ToData](
         script: PlutusScript,
-        requiredSigners: Set[AddrKeyHash] = Set.empty
+        assets: collection.Map[AssetName, Long],
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
-
         val mintSteps = assets.map { case (assetName, amount) =>
             TransactionBuilderStep.Mint(
               scriptHash = script.scriptHash,
@@ -589,6 +646,101 @@ case class TxBuilder(
 
         addSteps(mintSteps*)
     }
+
+    /** Mints or burns native tokens with a delayed redeemer and attached script.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts). The redeemer is computed after the transaction is assembled but
+      * before script evaluation.
+      *
+      * @param script
+      *   the minting policy script
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      */
+    def mint(
+        script: PlutusScript,
+        assets: collection.Map[AssetName, Long],
+        redeemerBuilder: Transaction => Data
+    ): TxBuilder = {
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = script.scriptHash,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = ScriptSource.PlutusScriptValue(script),
+                redeemerBuilder = redeemerBuilder,
+                additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
+    // -------------------------------------------------------------------------
+    // Minting API - Reference script variants (delayed redeemer)
+    // -------------------------------------------------------------------------
+
+    /** Mints or burns native tokens with a delayed redeemer computed from the built transaction.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts). The redeemer is computed after the transaction is assembled but
+      * before script evaluation.
+      *
+      * The minting policy script must be present as a reference input (via [[references]]).
+      *
+      * @param policyId
+      *   the policy ID (script hash) of the minting policy
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      */
+    def mint(
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        redeemerBuilder: Transaction => Data
+    ): TxBuilder = {
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = policyId,
+              assetName = assetName,
+              amount = amount,
+              witness = TwoArgumentPlutusScriptWitness(
+                scriptSource = ScriptSource.PlutusScriptAttached,
+                redeemerBuilder = redeemerBuilder,
+                additionalSigners = Set.empty
+              )
+            )
+        }.toSeq
+
+        addSteps(mintSteps*)
+    }
+
+    // -------------------------------------------------------------------------
+    // Deprecated Minting API
+    // -------------------------------------------------------------------------
+
+    /** @deprecated Use mint(script, assets, redeemer) instead */
+    @deprecated("Use mint(script, assets, redeemer) instead", "0.13.0")
+    def mintAndAttach[T: ToData](
+        redeemer: T,
+        assets: collection.Map[AssetName, Long],
+        script: PlutusScript
+    ): TxBuilder = mint(script, assets, redeemer, Set.empty[AddrKeyHash])
+
+    /** @deprecated Use mint(script, assets, redeemer, requiredSigners) instead */
+    @deprecated("Use mint(script, assets, redeemer, requiredSigners) instead", "0.13.0")
+    def mintAndAttach[T: ToData](
+        redeemer: T,
+        assets: collection.Map[AssetName, Long],
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = mint(script, assets, redeemer, requiredSigners)
 
     /** Registers a stake key with the network.
       *
@@ -908,20 +1060,31 @@ case class TxBuilder(
 
         // The async diff handler is called in a loop by balanceFeeAndChangeWithTokens.
         // Every Right() return is just an end of an iteration, not necessarily the end of the algorithm.
+        // ensureCollateralBalanced uses ensureCollateralReturn internally and handles querying
+        // for more collateral if needed.
         def handleDiffByQueryingMore(
             diff: Value,
             tx: Transaction
         ): Future[Either[TxBalancingError, Transaction]] = {
             // First, ensure collateral is balanced (happens every iteration since fee changes)
+            // ensureCollateralBalanced sets the collateral return output via ensureCollateralReturn
             ensureCollateralBalanced(tx, provider, sponsor, selectedUtxos).flatMap {
                 case Right(balancedTx) if balancedTx != tx =>
-                    // Collateral was adjusted, iterate further
+                    // Collateral was adjusted (inputs added or return output set), iterate further
                     Future.successful(Right(balancedTx))
                 case Left(error) =>
                     Future.successful(Left(error))
-                case Right(_) =>
+                case Right(balancedTx) =>
                     // Collateral is balanced, continue with value diff handling
-                    handleValueDiff(diff, tx, provider, sponsor, selectedUtxos, initialContext)
+                    // Use balancedTx which has the collateral return output set
+                    handleValueDiff(
+                      diff,
+                      balancedTx,
+                      provider,
+                      sponsor,
+                      selectedUtxos,
+                      initialContext
+                    )
             }
         }
 
@@ -932,8 +1095,8 @@ case class TxBuilder(
           addAttachmentsToContext(initialContext).transaction
         )
 
-        TxBuilder
-            .balanceFeeAndChangeWithTokens(
+        TransactionBuilder
+            .balanceFeeAndChangeWithTokensAsync(
               txWithDummySigs,
               handleDiffByQueryingMore,
               env.protocolParams,
@@ -943,44 +1106,10 @@ case class TxBuilder(
             .map {
                 case Right(tx) =>
                     // Remove dummy signatures before returning
-                    val txWithoutDummySigs = removeDummySignatures(expectedSignerCount, tx)
-
-                    // Recompute delayed redeemers with the final balanced transaction
-                    // This is needed because complete() may have added inputs, changing the tx structure
-                    val finalTx =
-                        if initialContext.delayedRedeemerSpecs.nonEmpty then {
-                            TransactionBuilder
-                                .replaceDelayedRedeemers(
-                                  initialContext.redeemers,
-                                  initialContext.delayedRedeemerSpecs,
-                                  txWithoutDummySigs
-                                )
-                                .flatMap { updatedRedeemers =>
-                                    TransactionConversion
-                                        .fromEditableTransactionSafe(
-                                          EditableTransaction(
-                                            txWithoutDummySigs,
-                                            updatedRedeemers.toVector
-                                          )
-                                        )
-                                        .left
-                                        .map(_ =>
-                                            new RuntimeException("Failed to update redeemers")
-                                        )
-                                } match {
-                                case Right(tx) => tx
-                                case Left(error) =>
-                                    val cause: Throwable = error match {
-                                        case stepError: StepError =>
-                                            new RuntimeException(stepError.explain)
-                                        case t: Throwable => t
-                                    }
-                                    throw TxBuilderException.DelayedRedeemerException(
-                                      error.toString,
-                                      Some(cause)
-                                    )
-                            }
-                        } else txWithoutDummySigs
+                    val finalTx = removeDummySignatures(expectedSignerCount, tx)
+                    // Note: Delayed redeemers are now recomputed in selectAndAddInputs when inputs
+                    // are added, so we no longer need post-balancing redeemer replacement.
+                    // This preserves the ExUnits computed by computeScriptsWitness during balancing.
 
                     // Update context with the balanced transaction and all selected UTXOs
                     val updatedContext = initialContext.copy(
@@ -988,7 +1117,17 @@ case class TxBuilder(
                       resolvedUtxos = ResolvedUtxos(selectedUtxos.utxos),
                       expectedSigners = allExpectedSigners
                     )
-                    copy(context = updatedContext)
+
+                    // Validate the transaction
+                    updatedContext.validate(validators, env.protocolParams) match {
+                        case Right(validatedCtx) =>
+                            copy(context = validatedCtx)
+                        case Left(error) =>
+                            throw TxBuilderException.LedgerValidationException(
+                              error,
+                              updatedContext
+                            )
+                    }
                 case Left(error) =>
                     throw TxBuilderException.BalancingException(error, initialContext)
             }
@@ -1025,7 +1164,8 @@ case class TxBuilder(
                               provider,
                               sponsor,
                               selectedUtxos,
-                              initialContext.redeemers
+                              initialContext.redeemers,
+                              initialContext.delayedRedeemerSpecs
                             ).map(Right(_))
                     }
                 } else {
@@ -1036,7 +1176,8 @@ case class TxBuilder(
                       provider,
                       sponsor,
                       selectedUtxos,
-                      initialContext.redeemers
+                      initialContext.redeemers,
+                      initialContext.delayedRedeemerSpecs
                     ).map(Right(_))
                 }
 
@@ -1052,7 +1193,8 @@ case class TxBuilder(
                   provider,
                   sponsor,
                   selectedUtxos,
-                  initialContext.redeemers
+                  initialContext.redeemers,
+                  initialContext.delayedRedeemerSpecs
                 ).map(Right(_))
 
             case (ZeroAda(), _) =>
@@ -1068,7 +1210,8 @@ case class TxBuilder(
                   provider,
                   sponsor,
                   selectedUtxos,
-                  initialContext.redeemers
+                  initialContext.redeemers,
+                  initialContext.delayedRedeemerSpecs
                 ).map(Right(_))
 
             case (PositiveAda(_), _) =>
@@ -1087,7 +1230,8 @@ case class TxBuilder(
         provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput],
-        redeemers: Seq[DetachedRedeemer]
+        redeemers: Seq[DetachedRedeemer],
+        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec]
     )(using ExecutionContext): Future[Transaction] = {
         selectAdditionalUtxos(
           provider,
@@ -1096,63 +1240,80 @@ case class TxBuilder(
           excludeInputs = selectedUtxos.inputSet
         ).map { additionalUtxos =>
             selectedUtxos.addAll(additionalUtxos)
-            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers)
+            addInputsAndReattachRedeemers(tx, additionalUtxos, redeemers, delayedRedeemerSpecs)
         }
     }
 
+    /** Ensures sufficient collateral inputs are present for the transaction.
+      *
+      * This method uses TransactionBuilder.ensureCollateralReturn to check if collateral is
+      * sufficient. If it returns InsufficientCollateralForReturn, we query for additional
+      * collateral inputs and retry.
+      *
+      * @return
+      *   Right(tx) with collateral return output set if successful, or queries for more collateral
+      *   inputs if insufficient
+      */
     private def ensureCollateralBalanced(
         tx: Transaction,
         provider: Provider,
         sponsor: Address,
         selectedUtxos: mutable.Map[TransactionInput, TransactionOutput]
-    )(using ExecutionContext): Future[Either[Nothing, Transaction]] = {
-        val resolvedUtxos = selectedUtxos.utxos
-        val utxosToExclude = selectedUtxos.utxos
+    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
         // For transactions that don't need collateral -- return early
         val needsCollat = tx.witnessSet.redeemers.fold(false)(_.value.toSeq.nonEmpty)
         if !needsCollat then return Future.successful(Right(tx))
 
-        // If we need collateral, first calculate how much we need vs how much is present
-        val currentCollateralAmount = totalCollateralValue(tx, resolvedUtxos)
-        val requiredCollateralAmount = CollateralSufficient.calculateRequiredCollateral(
-          tx.body.value.fee,
-          env.protocolParams.collateralPercentage
-        )
-        val gap = currentCollateralAmount - Value(requiredCollateralAmount)
+        val collateralInputs = tx.body.value.collateralInputs.toSeq
 
-        // Zero means no ADA _and_ no tokens -- balanced, we're done
-        if gap.isZero then return Future.successful(Right(tx))
-
-        // Note that token gap is always positive -- collateral tokens must always be returned
-        val Value(adaGap, tokenGap) = gap
-
-        // If adaGap > min ADA, meaning the amount we need to return is greater than min ADA, we can
-        // create a single output = Value(adaGap, tokenGap).
-        // Otherwise, we need to query more ADA for collateral input to make sure that the return output is at least min ADA.
-        // We also need to make sure that we don't have more than 3 collateral inputs.
-
-        val minAda = MinCoinSizedTransactionOutput.computeMinAda(
-          Sized(TransactionOutput(sponsor, gap)),
-          env.protocolParams
-        )
-        if adaGap < minAda then {
-            // Need more collateral to meet minAda requirement for return output
-            val additionalNeeded = minAda - adaGap
-            selectCollateral(
+        // If no collateral inputs exist, we need to query for initial collateral
+        if collateralInputs.isEmpty then {
+            // Start with a reasonable initial amount based on typical fees
+            val initialCollateralNeeded = Coin.ada(5) // 5 ADA as initial estimate
+            return selectCollateral(
               provider,
               sponsor,
-              additionalNeeded,
-              excludeUtxos = utxosToExclude.keySet
-            ).map { additionalCollateral =>
-                // Remember the utxos to not select them again in the `complete`.
-                selectedUtxos.addAll(additionalCollateral)
-                val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
-                Right(txWithMoreCollateral)
+              initialCollateralNeeded,
+              excludeUtxos = selectedUtxos.utxos.keySet
+            ).flatMap { initialCollateral =>
+                selectedUtxos.addAll(initialCollateral)
+                val txWithCollateral = addCollaterals(tx, initialCollateral.keySet)
+                // Recurse to set collateral return and verify sufficiency
+                ensureCollateralBalanced(txWithCollateral, provider, sponsor, selectedUtxos)
             }
-        } else {
-            val returnOutput = TransactionOutput(sponsor, gap)
-            val withReturnOutput = addCollateralReturnOutput(tx, returnOutput, resolvedUtxos)
-            Future.successful(Right(withReturnOutput))
+        }
+
+        // Try to create collateral return output with current collateral inputs
+        TransactionBuilder.ensureCollateralReturn(
+          tx,
+          selectedUtxos.utxos,
+          Some(sponsor),
+          env.protocolParams
+        ) match {
+            case Right(txWithReturn) =>
+                // Collateral is sufficient, return output has been set
+                Future.successful(Right(txWithReturn))
+
+            case Left(
+                  TxBalancingError.InsufficientCollateralForReturn(_, required, minAdaForReturn)
+                ) =>
+                // Need more collateral to meet minAda requirement for return output
+                val additionalNeeded = required + minAdaForReturn
+                selectCollateral(
+                  provider,
+                  sponsor,
+                  additionalNeeded,
+                  excludeUtxos = selectedUtxos.utxos.keySet
+                ).flatMap { additionalCollateral =>
+                    // Remember the utxos to not select them again in the `complete`.
+                    selectedUtxos.addAll(additionalCollateral)
+                    val txWithMoreCollateral = addCollaterals(tx, additionalCollateral.keySet)
+                    // Retry with additional collateral
+                    ensureCollateralBalanced(txWithMoreCollateral, provider, sponsor, selectedUtxos)
+                }
+
+            case Left(otherError) =>
+                Future.successful(Left(otherError))
         }
     }
 
@@ -1320,41 +1481,6 @@ case class TxBuilder(
             }
     }
 
-    private def totalCollateralValue(tx: Transaction, utxos: Utxos): Value = {
-        tx.body.value.collateralInputs.toSet.foldLeft(Value.zero) { case (acc, input) =>
-            utxos.get(input).fold(acc)(output => acc + output.value)
-        }
-    }
-
-    /** Adds a collateral return output to the transaction and sets the totalCollateral field.
-      *
-      * @param tx
-      *   the transaction to modify
-      * @param returnOutput
-      *   the collateral return output to add
-      * @param resolvedUtxos
-      *   resolved UTXOs to calculate total collateral amount
-      * @return
-      *   modified transaction with collateral return output and totalCollateral set
-      */
-    private def addCollateralReturnOutput(
-        tx: Transaction,
-        returnOutput: TransactionOutput,
-        resolvedUtxos: Utxos
-    ): Transaction = {
-        // Calculate total collateral = sum of collateral inputs - return output value
-        val totalInputValue = totalCollateralValue(tx, resolvedUtxos)
-        val totalCollateralAmount = totalInputValue.coin - returnOutput.value.coin
-
-        modifyBody(
-          tx,
-          _.copy(
-            collateralReturnOutput = Some(Sized(returnOutput)),
-            totalCollateral = Some(totalCollateralAmount)
-          )
-        )
-    }
-
     private object ZeroAda {
         def unapply(coin: Coin): Boolean = coin == Coin.zero
     }
@@ -1411,20 +1537,37 @@ case class TxBuilder(
       * When new inputs are added, the sorted input list changes, which can shift the position of
       * existing script inputs. This method re-indexes redeemers to point to the correct input
       * positions after adding new inputs.
+      *
+      * When delayed redeemer specs are provided, this method will also recompute delayed redeemer
+      * data based on the updated transaction structure (with new inputs), ensuring that
+      * self-referential validators receive correct data when ExUnits are computed.
       */
     private def addInputsAndReattachRedeemers(
         tx: Transaction,
         inputs: Utxos,
-        detachedRedeemers: Seq[DetachedRedeemer]
+        detachedRedeemers: Seq[DetachedRedeemer],
+        delayedRedeemerSpecs: Seq[DelayedRedeemerSpec]
     ): Transaction = {
         val txWithNewInputs = addInputs(tx, inputs)
 
         // If there are no redeemers, just return the transaction with new inputs
         if detachedRedeemers.isEmpty then txWithNewInputs
         else {
+            // Update delayed redeemer data based on the new transaction structure
+            val updatedRedeemers =
+                if delayedRedeemerSpecs.nonEmpty then
+                    TransactionBuilder
+                        .replaceDelayedRedeemers(
+                          detachedRedeemers,
+                          delayedRedeemerSpecs,
+                          txWithNewInputs
+                        )
+                        .getOrElse(detachedRedeemers)
+                else detachedRedeemers
+
             // Re-attach redeemers with correct indexes based on new input positions
             TransactionConversion.fromEditableTransactionSafe(
-              EditableTransaction(txWithNewInputs, detachedRedeemers.toVector)
+              EditableTransaction(txWithNewInputs, updatedRedeemers.toVector)
             ) match {
                 case Right(reattachedTx) => reattachedTx
                 case Left(_)             => txWithNewInputs // Fallback if re-attachment fails
@@ -1481,60 +1624,6 @@ case class TxBuilder(
 
 /** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
-
-    // -------------------------------------------------------------------------
-    // Private async balancing helpers
-    // -------------------------------------------------------------------------
-
-    /** Diff handler type for async transaction balancing. */
-    private type DiffHandler = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
-
-    /** Balances the transaction using an async diff handler.
-      *
-      * This is used by `complete` to balance transactions without blocking. The diff handler is
-      * called asynchronously to handle value differences (add inputs, set change, etc.).
-      */
-    private[txbuilder] def balanceFeeAndChangeWithTokens(
-        initial: Transaction,
-        diffHandler: DiffHandler,
-        protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
-        evaluator: PlutusScriptEvaluator
-    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
-        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
-            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
-
-            val eTrialTxSync = for {
-                txWithExUnits <- TransactionBuilder.computeScriptsWitness(
-                  resolvedUtxo,
-                  evaluator,
-                  protocolParams
-                )(tx)
-                minFee <- MinTransactionFee
-                    .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
-                    .left
-                    .map(TxBalancingError.Failed(_))
-                fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
-                txWithFees = TransactionBuilder.setFee(fee)(txWithExUnits)
-                diff = TransactionBuilder.calculateChangeValue(
-                  txWithFees,
-                  resolvedUtxo,
-                  protocolParams
-                )
-            } yield (diff, txWithFees)
-
-            eTrialTxSync match {
-                case Left(e) => Future.successful(Left(e))
-                case Right((diff, txWithFees)) =>
-                    diffHandler(diff, txWithFees).flatMap {
-                        case Left(e)                         => Future.successful(Left(e))
-                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
-                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
-                    }
-            }
-        }
-        loop(initial, 1)
-    }
 
     // -------------------------------------------------------------------------
     // Factory methods

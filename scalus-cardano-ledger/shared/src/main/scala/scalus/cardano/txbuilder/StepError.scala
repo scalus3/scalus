@@ -214,15 +214,6 @@ object StepError {
                 s" different from the one `TransactionBody` has: $address"
     }
 
-    case class CollateralWithTokens(
-        utxo: Utxo,
-        step: TransactionBuilderStep
-    ) extends StepError {
-        override def explain: String =
-            "The UTxO you provided as a collateral must contain only ada. " +
-                s"UTxO: $utxo"
-    }
-
     case class AttachedScriptNotFound(scriptHash: ScriptHash, step: TransactionBuilderStep)
         extends StepError {
         override def explain: String =

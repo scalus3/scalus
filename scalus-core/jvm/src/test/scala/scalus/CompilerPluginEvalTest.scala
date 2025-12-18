@@ -15,6 +15,8 @@ import scalus.uplc.eval.{MachineParams, PlutusVM, Result}
 
 import scala.language.implicitConversions
 
+case class CopyTestUser(name: String, age: BigInt)
+
 class CompilerPluginEvalTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV2VM()
@@ -210,5 +212,15 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         assert(r2 == 0.asTerm)
         val r3 = (uplc $ arg3).evaluate
         assert(r3 == (-1).asTerm)
+    }
+
+    test("compile case class copy method") {
+        val compiled = compile {
+            val user = CopyTestUser("John", BigInt(30))
+            val updated = user.copy(age = BigInt(31))
+            updated.age
+        }
+        val evaled = compiled.toUplc().evaluate
+        assert(evaled == 31.asTerm)
     }
 }
