@@ -13,6 +13,8 @@ object ScalusRuntime {
     val DATA_LIST_TO_PAIRS_LIST_NAME = "$dataListToPairsList"
     val DATA_LIST_TO_TUPLES_LIST_NAME = "$dataListToTuplesList"
 
+    val ARRAY_TO_LIST_NAME = "$arrayToList"
+
     /** Add to context scope lazy val with runtime functions.
       * @param lctx
       * @return
@@ -20,6 +22,7 @@ object ScalusRuntime {
     def initContext(lctx: LoweringContext): Unit = {
         initPairDataListToDataList(using lctx)
         initDataListToPairDataList(using lctx)
+        initArrayToList(using lctx)
         lctx.zCombinatorNeeded = false
         // will set to true when some of initialized function will be used
     }
@@ -39,6 +42,10 @@ object ScalusRuntime {
         // TODO: output performance warning.
         // throw new RuntimeException("DATA_LIST_TO_TUPLES_LIST_NAME")
         retrieveRuntimeFunction(DATA_LIST_TO_TUPLES_LIST_NAME)
+    }
+
+    def arrayToList(using lctx: LoweringContext): LoweredValue = {
+        retrieveRuntimeFunction(ARRAY_TO_LIST_NAME)
     }
 
     private def retrieveRuntimeFunction(
@@ -590,6 +597,204 @@ object ScalusRuntime {
           optRhs = Some(tail)
         )
         acceptHeadTail(headVal, tailVal)
+    }
+
+    /** Initialize arrayToList runtime function.
+      *
+      * arrayToList converts a BuiltinArray[Data] to a BuiltinList[Data] by using multiIndexArray
+      * with indices [0, 1, 2, ..., length-1].
+      *
+      * Implementation: arrayToList arr = multiIndexArray (mkIndices (lengthOfArray arr)) arr where
+      * mkIndices builds a list [0, 1, 2, ..., n-1]
+      */
+    private def initArrayToList(using lctx: LoweringContext): Unit = {
+        val name = ARRAY_TO_LIST_NAME
+        val rhs = genArrayToList(name)
+        lvNewLazyNamedVar(name, rhs.sirType, rhs.representation, rhs, AnnotationsDecl.empty.pos)
+    }
+
+    private def genArrayToList(name: String)(using lctx: LoweringContext): LoweredValue = {
+        // Type: BuiltinArray[Data] -> BuiltinList[Data]
+        // Implementation: iterate from index (n-1) down to 0, building the list
+        // arrayToListFrom(arr, i) = if i < 0 then [] else mkCons(arr[i], arrayToListFrom(arr, i-1))
+        // arrayToList(arr) = arrayToListFrom(arr, lengthOfArray(arr) - 1)
+        //
+        // Actually, we need to build from front to back to preserve order:
+        // arrayToListFromTo(arr, i, n) = if i >= n then [] else mkCons(arr[i], arrayToListFromTo(arr, i+1, n))
+        // arrayToList(arr) = arrayToListFromTo(arr, 0, lengthOfArray(arr))
+
+        val helperName = name + "_helper"
+        // Helper type: BuiltinArray[Data] -> Integer -> Integer -> BuiltinList[Data]
+        val helperType =
+            SIRType.BuiltinArray(
+              SIRType.Data.tp
+            ) ->: SIRType.Integer ->: SIRType.Integer ->: SIRType
+                .BuiltinList(SIRType.Data.tp)
+
+        val innerFunType =
+            SIRType.Integer ->: SIRType.Integer ->: SIRType.BuiltinList(SIRType.Data.tp)
+        val innerInnerFunType = SIRType.Integer ->: SIRType.BuiltinList(SIRType.Data.tp)
+
+        val helperRepr = LambdaRepresentation(
+          helperType,
+          InOutRepresentationPair(
+            PrimitiveRepresentation.Constant,
+            LambdaRepresentation(
+              innerFunType,
+              InOutRepresentationPair(
+                PrimitiveRepresentation.Constant,
+                LambdaRepresentation(
+                  innerInnerFunType,
+                  InOutRepresentationPair(
+                    PrimitiveRepresentation.Constant,
+                    SumCaseClassRepresentation.SumDataList
+                  )
+                )
+              )
+            )
+          )
+        )
+
+        // Build helper using letRec
+        val helperDef = lvLetRec(
+          helperName,
+          helperType,
+          helperRepr,
+          rec =>
+              lvLamAbs(
+                "arr",
+                SIRType.BuiltinArray(SIRType.Data.tp),
+                PrimitiveRepresentation.Constant,
+                arr =>
+                    lvLamAbs(
+                      "i",
+                      SIRType.Integer,
+                      PrimitiveRepresentation.Constant,
+                      i =>
+                          lvLamAbs(
+                            "n",
+                            SIRType.Integer,
+                            PrimitiveRepresentation.Constant,
+                            n => {
+                                // if i >= n then [] else mkCons(arr[i], helper(arr, i+1, n))
+                                val iGeN = lvBuiltinApply2(
+                                  SIRBuiltins.lessThanEqualsInteger,
+                                  n,
+                                  i,
+                                  SIRType.Boolean,
+                                  PrimitiveRepresentation.Constant,
+                                  AnnotationsDecl.empty.pos
+                                )
+                                val nilCase = lvBuiltinApply0(
+                                  SIRBuiltins.mkNilData,
+                                  SIRType.BuiltinList(SIRType.Data.tp),
+                                  SumCaseClassRepresentation.SumDataList,
+                                  AnnotationsDecl.empty.pos
+                                )
+                                // arr[i]
+                                val elem = lvBuiltinApply2(
+                                  SIRBuiltins.indexArray,
+                                  arr,
+                                  i,
+                                  SIRType.Data.tp,
+                                  PrimitiveRepresentation.PackedData,
+                                  AnnotationsDecl.empty.pos
+                                )
+                                // i + 1
+                                val iPlus1 = lvBuiltinApply2(
+                                  SIRBuiltins.addInteger,
+                                  i,
+                                  lvIntConstant(1, AnnotationsDecl.empty.pos),
+                                  SIRType.Integer,
+                                  PrimitiveRepresentation.Constant,
+                                  AnnotationsDecl.empty.pos
+                                )
+                                // helper(arr, i+1, n)
+                                val recCall = lvApply(
+                                  lvApply(
+                                    lvApply(
+                                      rec,
+                                      arr,
+                                      AnnotationsDecl.empty.pos,
+                                      Some(innerFunType),
+                                      None
+                                    ),
+                                    iPlus1,
+                                    AnnotationsDecl.empty.pos,
+                                    Some(innerInnerFunType),
+                                    None
+                                  ),
+                                  n,
+                                  AnnotationsDecl.empty.pos,
+                                  Some(SIRType.BuiltinList(SIRType.Data.tp)),
+                                  Some(SumCaseClassRepresentation.SumDataList)
+                                )
+                                // mkCons(elem, recCall)
+                                val consCase = lvBuiltinApply2(
+                                  SIRBuiltins.mkCons,
+                                  elem,
+                                  recCall,
+                                  SIRType.BuiltinList(SIRType.Data.tp),
+                                  SumCaseClassRepresentation.SumDataList,
+                                  AnnotationsDecl.empty.pos
+                                )
+                                lvIfThenElse(
+                                  iGeN,
+                                  nilCase,
+                                  consCase,
+                                  AnnotationsDecl.empty.pos,
+                                  Some(SIRType.BuiltinList(SIRType.Data.tp))
+                                )
+                            },
+                            AnnotationsDecl.empty.pos
+                          ),
+                      AnnotationsDecl.empty.pos
+                    ),
+                AnnotationsDecl.empty.pos
+              ),
+          identity,
+          AnnotationsDecl.empty.pos
+        )
+
+        // Now build the main arrayToList function
+        val arrayToListBody = lvLamAbs(
+          "arr",
+          SIRType.BuiltinArray(SIRType.Data.tp),
+          PrimitiveRepresentation.Constant,
+          arr => {
+              // length = lengthOfArray arr
+              val length = lvBuiltinApply(
+                SIRBuiltins.lengthOfArray,
+                arr,
+                SIRType.Integer,
+                PrimitiveRepresentation.Constant,
+                AnnotationsDecl.empty.pos
+              )
+              // result = helper(arr, 0, length)
+              lvApply(
+                lvApply(
+                  lvApply(
+                    helperDef,
+                    arr,
+                    AnnotationsDecl.empty.pos,
+                    Some(innerFunType),
+                    None
+                  ),
+                  lvIntConstant(0, AnnotationsDecl.empty.pos),
+                  AnnotationsDecl.empty.pos,
+                  Some(innerInnerFunType),
+                  None
+                ),
+                length,
+                AnnotationsDecl.empty.pos,
+                Some(SIRType.BuiltinList(SIRType.Data.tp)),
+                Some(SumCaseClassRepresentation.SumDataList)
+              )
+          },
+          AnnotationsDecl.empty.pos
+        )
+
+        arrayToListBody
     }
 
 }

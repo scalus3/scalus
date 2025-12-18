@@ -100,6 +100,9 @@ object SirTypeUplcGenerator {
                     || constrDecl.name == SIRType.Data.I.name
                     || constrDecl.name == SIRType.Data.B.name
                 then SIRTypeUplcDataGenerator
+                // BuiltinArray has its own generator for proper Data conversion
+                else if constrDecl.name == SIRType.BuiltinArray.name
+                then BuiltinArraySirTypeGenerator
                 else if constrDecl.name == "scalus.ledger.api.v1.PubKeyHash"
                     || constrDecl.name == "scalus.ledger.api.v3.TxId"
                 then ProductCaseOneElementSirTypeGenerator(SIRTypeUplcByteStringGenerator)
