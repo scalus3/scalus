@@ -1319,22 +1319,6 @@ object LoweredValue {
         var printedIdentifiers: Set[String] = Set.empty
     )
 
-    /** Normalize BuiltinArray[A] to BuiltinArray[Data] since UPLC arrays can only hold Data. This
-      * is needed for type unification to succeed when comparing BuiltinArray[BigInt] with
-      * BuiltinArray[Data].
-      */
-    def normalizeArrayType(tp: SIRType): SIRType = tp match {
-        // Match BuiltinArray by name to handle different ConstrDecl instances
-        case SIRType.CaseClass(constrDecl, scala.List(elemType), optParent)
-            if constrDecl.name == SIRType.BuiltinArray.name && !SIRType.Data.unapply(elemType) =>
-            SIRType.BuiltinArray(SIRType.Data.tp)
-        case SIRType.TypeLambda(params, body) =>
-            SIRType.TypeLambda(params, normalizeArrayType(body))
-        case SIRType.Fun(in, out) =>
-            SIRType.Fun(normalizeArrayType(in), normalizeArrayType(out))
-        case _ => tp
-    }
-
     /** Builder for LoweredValue, to avoid boilerplate code. Import this object to make available
       */
     object Builder {
@@ -1925,12 +1909,9 @@ object LoweredValue {
                         lctx.log(s"  ctBody  = ${ctBody.show}")
                         lctx.log(s"  resBody = ${resBody.show}")
                     }
-                    // Normalize BuiltinArray types before unification since arrays can only hold Data
-                    val normalizedCtBody = normalizeArrayType(ctBody)
-                    val normalizedResBody = normalizeArrayType(resBody)
                     SIRUnify.topLevelUnifyType(
-                      normalizedCtBody,
-                      normalizedResBody,
+                      ctBody,
+                      resBody,
                       SIRUnify.Env.empty.withUpcasting // .setDebug(lctx.debug)
                     ) match {
                         case SIRUnify.UnificationSuccess(env, tp) =>

@@ -236,38 +236,39 @@ object Lowering {
                 retval
             case sirConst @ SIR.Const(const, tp, anns) =>
                 // Handle BuiltinList and BuiltinArray constants - transform elements to Data if needed
+                // The constant value is transformed to use Data elements at runtime,
+                // but the semantic type is preserved to maintain correct type checking.
                 // TODO: In the future, we may want to add SumConstBuiltinList representation
                 // to avoid this transformation and keep native UPLC list types
-                val (transformedConst, transformedTp, repr) = tp match {
+                val (transformedConst, repr) = tp match {
                     case SIRType.BuiltinList(elemType) if !SIRType.Data.unapply(elemType) =>
                         const match {
                             case Constant.List(_, elements) =>
                                 val dataElements = elements.map(constantToData)
                                 val newConst = Constant.List(DefaultUni.Data, dataElements)
-                                val newTp = SIRType.BuiltinList(SIRType.Data.tp)
-                                (newConst, newTp, SumCaseClassRepresentation.SumDataList)
+                                (newConst, SumCaseClassRepresentation.SumDataList)
                             case _ =>
-                                (const, tp, LoweredValueRepresentation.constRepresentation(tp))
+                                (const, LoweredValueRepresentation.constRepresentation(tp))
                         }
                     case SIRType.BuiltinArray(elemType) if !SIRType.Data.unapply(elemType) =>
                         const match {
                             case Constant.Array(_, elements) =>
                                 val dataElements = elements.map(constantToData)
                                 val newConst = Constant.Array(DefaultUni.Data, dataElements)
-                                val newTp = SIRType.BuiltinArray(SIRType.Data.tp)
                                 (
                                   newConst,
-                                  newTp,
-                                  LoweredValueRepresentation.constRepresentation(newTp)
+                                  LoweredValueRepresentation.constRepresentation(
+                                    SIRType.BuiltinArray(SIRType.Data.tp)
+                                  )
                                 )
                             case _ =>
-                                (const, tp, LoweredValueRepresentation.constRepresentation(tp))
+                                (const, LoweredValueRepresentation.constRepresentation(tp))
                         }
                     case _ =>
-                        (const, tp, LoweredValueRepresentation.constRepresentation(tp))
+                        (const, LoweredValueRepresentation.constRepresentation(tp))
                 }
                 StaticLoweredValue(
-                  SIR.Const(transformedConst, transformedTp, anns),
+                  SIR.Const(transformedConst, tp, anns),
                   Term.Const(transformedConst),
                   repr,
                   true
