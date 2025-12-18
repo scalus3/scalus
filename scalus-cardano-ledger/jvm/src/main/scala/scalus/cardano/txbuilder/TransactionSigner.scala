@@ -9,10 +9,9 @@ import scalus.crypto.ed25519.{JvmEd25519Signer, Signature, SigningKey, Verificat
 class TransactionSigner(keys: Set[KeyPair]) {
 
     def sign(unsignedTransaction: Transaction): Transaction = {
-        val transactionIdBS = ByteString.unsafeFromArray(unsignedTransaction.id.bytes)
-        val newWitnesses = keys.view.map(createWitness(_, transactionIdBS))
-        val existingWitnesses = unsignedTransaction.witnessSet.vkeyWitnesses.toSeq
-        val vkeyWitnesses = TaggedSortedSet.from(existingWitnesses ++ newWitnesses)
+        val newWitnesses = keys.view.map(createWitness(_, unsignedTransaction.id))
+        val existingWitnesses = unsignedTransaction.witnessSet.vkeyWitnesses.toSet
+        val vkeyWitnesses = TaggedSortedSet(existingWitnesses ++ newWitnesses)
         unsignedTransaction.copy(
           witnessSet = unsignedTransaction.witnessSet.copy(vkeyWitnesses = vkeyWitnesses)
         )
