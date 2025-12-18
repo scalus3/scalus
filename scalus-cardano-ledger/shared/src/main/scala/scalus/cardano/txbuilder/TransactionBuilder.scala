@@ -644,7 +644,7 @@ object TransactionBuilder {
     ): Either[TxBalancingError, Transaction] = {
         balanceFeeAndChangeWithTokens(
           initial,
-          ChangeOutputDiffHandler(protocolParams, changeOutputIdx).changeOutputDiffHandler,
+          Change.changeOutputDiffHandler(_, _, protocolParams, changeOutputIdx),
           protocolParams,
           resolvedUtxo,
           evaluator
