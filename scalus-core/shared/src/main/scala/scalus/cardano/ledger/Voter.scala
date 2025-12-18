@@ -87,11 +87,15 @@ enum Voter derives Codec.All {
 
 object Voter {
 
+    /** Ordering matches Haskell's derived Ord for Voter:
+      *   - Voter constructors ordered: CommitteeVoter < DRepVoter < StakePoolVoter
+      *   - Within each, Credential ordered: ScriptHashObj < KeyHashObj
+      */
     given Ordering[Voter] = Ordering.by {
-        case ConstitutionalCommitteeHotKey(keyHash)       => (0, keyHash: ByteString)
-        case ConstitutionalCommitteeHotScript(scriptHash) => (1, scriptHash: ByteString)
-        case DRepKey(keyHash)                             => (2, keyHash: ByteString)
-        case DRepScript(scriptHash)                       => (3, scriptHash: ByteString)
+        case ConstitutionalCommitteeHotScript(scriptHash) => (0, scriptHash: ByteString)
+        case ConstitutionalCommitteeHotKey(keyHash)       => (1, keyHash: ByteString)
+        case DRepScript(scriptHash)                       => (2, scriptHash: ByteString)
+        case DRepKey(keyHash)                             => (3, keyHash: ByteString)
         case StakingPoolKey(keyHash)                      => (4, keyHash: ByteString)
     }
 }

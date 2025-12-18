@@ -18,3 +18,7 @@ case class Anchor(url: String, dataHash: DataHash) derives Codec:
     require(url.length <= 128, s"Anchor URL must be at most 128 characters, got ${url.length}")
 
     override def toString: String = s"Anchor($url, ${dataHash.toHex})"
+
+object Anchor:
+    /** Ordering matches Haskell's derived Ord: compare url first, then dataHash */
+    given Ordering[Anchor] = Ordering.by(a => (a.url, a.dataHash))

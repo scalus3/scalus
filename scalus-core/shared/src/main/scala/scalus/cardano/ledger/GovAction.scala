@@ -105,6 +105,12 @@ enum GovAction {
 
 object GovAction {
 
+    /** Ordering matches Haskell's derived Ord constructor order. Note: This only compares by
+      * constructor tag (ordinal), not by fields. Full field comparison would require Ordering for
+      * many nested types.
+      */
+    given Ordering[GovAction] = Ordering.by(_.ordinal)
+
     /** CBOR Encoder for GovAction. Encodes as a tagged structure based on the action type.
       */
     given Encoder[GovAction] = new Encoder[GovAction] {

@@ -25,8 +25,10 @@ case class ProposalProcedure(
 ) derives Codec
 
 object ProposalProcedure {
-    given Ordering[ProposalProcedure] with
-        def compare(x: ProposalProcedure, y: ProposalProcedure): Int = {
-            Ordering[RewardAccount].compare(x.rewardAccount, y.rewardAccount)
-        }
+
+    /** Ordering matches Haskell's derived Ord: compare fields in declaration order (deposit,
+      * rewardAccount, govAction, anchor)
+      */
+    given Ordering[ProposalProcedure] =
+        Ordering.by(p => (p.deposit.value, p.rewardAccount, p.govAction, p.anchor))
 }

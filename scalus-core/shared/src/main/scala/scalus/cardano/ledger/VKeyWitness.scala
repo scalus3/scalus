@@ -20,5 +20,12 @@ case class VKeyWitness(
     )
 
 object VKeyWitness:
+
+    /** Ordering matches Haskell's Ord for WitVKey: compare by vkeyHash first, then signature.
+      * Haskell uses hash of signature for tie-breaking, but we use raw signature bytes since
+      * signature hash computation is expensive and tie-breaking is rare.
+      */
     given Ordering[VKeyWitness] =
-        Ordering.by[VKeyWitness, ByteString](_.vkey).orElseBy[ByteString](_.signature)
+        Ordering
+            .by[VKeyWitness, ByteString](_.vkeyHash)
+            .orElseBy[ByteString](_.signature)
