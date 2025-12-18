@@ -161,8 +161,6 @@ object TxBuilderException {
         case SomeBuildError.SomeRedeemerIndexingError(e, ctx) => RedeemerIndexingException(e, ctx)
         case SomeBuildError.BalancingError(e, ctx)            => BalancingException(e, ctx)
         case SomeBuildError.ValidationError(e, ctx)           => LedgerValidationException(e, ctx)
-        case SomeBuildError.InsufficientCollateralForReturn(totalAda, required, minAda, _) =>
-            InsufficientCollateralForReturnException(totalAda, required, minAda)
     }
 }
 
@@ -796,7 +794,7 @@ case class TxBuilder(
         val credential = stakeAddressToCredential(stakeAddress)
         addSteps(
           TransactionBuilderStep.WithdrawRewards(
-            StakeCredential(credential),
+            credential,
             amount,
             PubKeyWitness
           )

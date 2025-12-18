@@ -107,7 +107,7 @@ object StepError {
         override def explain
             : String = "You provided a `DatumWitness` with a datum that does not match the datum hash present in a transaction output.\n " +
             s" Datum: $datum (CBOR: ${ByteString.fromArray(Cbor.encode(datum).toByteArray).toHex})\n  " +
-            s" Datum hash: ${ByteString.fromArray(Cbor.encode(datumHash).toByteArray)}\n  " +
+            s" Datum hash: ${datumHash.toHex}\n  " +
             s"UTxO: $utxo"
     }
 
@@ -167,7 +167,7 @@ object StepError {
     }
 
     case class UnneededDeregisterWitness(
-        stakeCredential: StakeCredential,
+        stakeCredential: Credential,
         witness: PubKeyWitness.type | TwoArgumentPlutusScriptWitness | NativeScriptWitness,
         step: TransactionBuilderStep
     ) extends StepError {

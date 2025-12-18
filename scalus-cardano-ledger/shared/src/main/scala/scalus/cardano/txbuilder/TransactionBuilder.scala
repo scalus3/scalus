@@ -816,7 +816,7 @@ type TransactionUnspentOutput = Utxo
 @deprecated("Use scalus.cardano.ledger.Utxo instead", "0.13.0")
 val TransactionUnspentOutput = Utxo
 
-// NOTE (Peter, 2025-09-23): this comes from https://github.com/mlabs-haskell/purescript-cardano-types/blob/master/src/Cardano/Types/StakeCredential.purs
+@deprecated("Use Credential instead", "0.13.0")
 case class StakeCredential(credential: Credential)
 
 extension (network: Network)
@@ -847,17 +847,6 @@ enum SomeBuildError:
     // case EvaluationError(e: PlutusScriptEvaluationException)
     case BalancingError(e: TxBalancingError, context: Context)
     case ValidationError(e: TransactionException, context: Context)
-
-    /** Error when collateral contains tokens but there's insufficient ADA to create a valid
-      * collateral return output. Per Babbage spec, tokens in collateral MUST be returned via
-      * collateralReturnOutput, which requires meeting the minAda requirement.
-      */
-    case InsufficientCollateralForReturn(
-        totalCollateralAda: Coin,
-        requiredCollateral: Coin,
-        minAdaForReturn: Coin,
-        context: Context
-    )
 
     def reason: Throwable =
         this match {
@@ -900,17 +889,6 @@ enum SomeBuildError:
                         )
                 }
             case SomeBuildError.ValidationError(e, context) => e
-            case SomeBuildError.InsufficientCollateralForReturn(
-                  totalAda,
-                  required,
-                  minAda,
-                  _
-                ) =>
-                new RuntimeException(
-                  s"Collateral contains tokens but insufficient ADA for return output. " +
-                      s"Total collateral ADA: ${totalAda.value}, required collateral: ${required.value}, " +
-                      s"min ADA for return: ${minAda.value}. Need at least ${required.value + minAda.value} lovelace."
-                )
         }
 
     override def toString: String = this match {
@@ -937,9 +915,6 @@ enum SomeBuildError:
                 s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
         case ValidationError(e, _) =>
             s"Transaction validation failed: ${e.getClass.getSimpleName} - ${e.getMessage}"
-        case InsufficientCollateralForReturn(totalAda, required, minAda, _) =>
-            s"Collateral contains tokens but insufficient ADA for return output. " +
-                s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
     }
 
 def keepRawL[A: Encoder](): Lens[KeepRaw[A], A] = {

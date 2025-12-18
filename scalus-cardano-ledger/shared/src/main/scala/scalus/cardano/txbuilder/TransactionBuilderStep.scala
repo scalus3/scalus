@@ -111,7 +111,7 @@ object TransactionBuilderStep {
     ) extends TransactionBuilderStep
 
     case class WithdrawRewards(
-        stakeCredential: StakeCredential,
+        stakeCredential: Credential,
         amount: Coin,
         witness: PubKeyWitness.type | NativeScriptWitness | TwoArgumentPlutusScriptWitness =
             PubKeyWitness
