@@ -78,6 +78,9 @@ object JIT extends JitRunner {
                 throw JitEvaluationFailure(
                   "BLS12_381_MlResult values cannot be serialized as constants in UPLC"
                 )
+            case Constant.BuiltinValue(value) =>
+                val dataExpr: Expr[Data] = Expr(BuiltinValue.toData(value))
+                '{ BuiltinValue.fromData($dataExpr) }
     }
 
     enum FunType:

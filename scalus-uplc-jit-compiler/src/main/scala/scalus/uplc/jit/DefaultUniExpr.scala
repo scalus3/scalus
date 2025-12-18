@@ -14,6 +14,7 @@ given ToExpr[DefaultUni] with {
         case DefaultUni.BLS12_381_G1_Element => '{ DefaultUni.BLS12_381_G1_Element }
         case DefaultUni.BLS12_381_G2_Element => '{ DefaultUni.BLS12_381_G2_Element }
         case DefaultUni.BLS12_381_MlResult   => '{ DefaultUni.BLS12_381_MlResult }
+        case DefaultUni.BuiltinValue         => '{ DefaultUni.BuiltinValue }
         case DefaultUni.Data                 => '{ DefaultUni.Data }
         case DefaultUni.ProtoList            => '{ DefaultUni.ProtoList }
         case DefaultUni.ProtoPair            => '{ DefaultUni.ProtoPair }

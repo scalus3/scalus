@@ -107,6 +107,9 @@ object Constant {
     case class BLS12_381_MlResult(value: builtin.BLS12_381_MlResult) extends Constant:
         def tpe = DefaultUni.BLS12_381_MlResult
 
+    case class BuiltinValue(value: builtin.BuiltinValue) extends Constant:
+        def tpe = DefaultUni.BuiltinValue
+
     extension [A: LiftValue](c: A) {
 
         /** Extension method to convert a Scala value to a UPLC [[Constant]].
@@ -176,6 +179,8 @@ object Constant {
             BLS12_381_G2_Element(a.asInstanceOf[builtin.BLS12_381_G2_Element])
         case DefaultUni.BLS12_381_MlResult =>
             throw new IllegalArgumentException("Cannot convert to BLS12_381_MlResult")
+        case DefaultUni.BuiltinValue =>
+            BuiltinValue(a.asInstanceOf[builtin.BuiltinValue])
         case _ => throw new IllegalArgumentException(s"Cannot convert $a to $tpe")
     }
 
@@ -193,6 +198,7 @@ object Constant {
         case BLS12_381_G2_Element(value) => value
         case BLS12_381_MlResult(value) =>
             throw new IllegalArgumentException("Cannot convert BLS12_381_MlResult")
+        case BuiltinValue(value) => value
 
     given flatConstant(using Flat[builtin.Data]): Flat[Constant] = new Flat[Constant]:
         val constantWidth = 4

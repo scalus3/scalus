@@ -63,6 +63,7 @@ object PrettyPrinter:
             case BLS12_381_G2_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_MlResult(_) =>
                 throw new IllegalArgumentException("Cannot print to BLS12_381_MlResult")
+            case Constant.BuiltinValue(value) => text(s"BuiltinValue(${value.toString})")
 
     def pretty(d: Data): Doc =
         d match

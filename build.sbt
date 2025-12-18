@@ -215,6 +215,7 @@ lazy val scalusPlugin = project
       copySharedFiles := {
           val sharedFiles = Seq(
             "scalus/builtin/BuiltinList.scala",
+            "scalus/builtin/BuiltinValue.scala",
             "scalus/builtin/ByteStringFlatInstance.scala",
             "scalus/builtin/Data.scala",
             "scalus/compiler/sir/SIR.scala",

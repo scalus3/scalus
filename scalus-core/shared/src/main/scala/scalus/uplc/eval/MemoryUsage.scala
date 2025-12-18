@@ -99,4 +99,6 @@ object MemoryUsage {
         case Constant.BLS12_381_G1_Element(_) => CostingInteger(18L)
         case Constant.BLS12_381_G2_Element(_) => CostingInteger(36L)
         case Constant.BLS12_381_MlResult(_)   => CostingInteger(72L)
+        // BuiltinValue memory usage based on total number of tokens
+        case Constant.BuiltinValue(v) => CostingInteger(BuiltinValueOps.totalSize(v).toLong)
 }

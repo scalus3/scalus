@@ -137,6 +137,15 @@ enum DefaultFun extends Enum[DefaultFun]:
     case IndexArray
     case MultiIndexArray
 
+    // MaryEraValue builtins (CIP-0153)
+    case InsertCoin
+    case LookupCoin
+    case UnionValue
+    case ValueContains
+    case ValueData
+    case UnValueData
+    case ScaleValue
+
 object DefaultFun {
     given Flat[DefaultFun] with
         def bitSize(a: DefaultFun): Int = 7
@@ -251,6 +260,15 @@ object DefaultFun {
                 case IndexArray      => 91
                 case MultiIndexArray => 92
 
+                // MaryEraValue builtins (CIP-0153)
+                case InsertCoin    => 94
+                case LookupCoin    => 95
+                case UnionValue    => 96
+                case ValueContains => 97
+                case ValueData     => 98
+                case UnValueData   => 99
+                case ScaleValue    => 100
+
             encode.bits(7, code.toByte)
 
         def decode(decode: DecoderState): DefaultFun =
@@ -349,7 +367,15 @@ object DefaultFun {
                 case 90 => ListToArray
                 case 91 => IndexArray
                 case 92 => MultiIndexArray
-                case c  => throw new Exception(s"Invalid builtin function code: $c")
+                // MaryEraValue builtins (CIP-0153)
+                case 94  => InsertCoin
+                case 95  => LookupCoin
+                case 96  => UnionValue
+                case 97  => ValueContains
+                case 98  => ValueData
+                case 99  => UnValueData
+                case 100 => ScaleValue
+                case c   => throw new Exception(s"Invalid builtin function code: $c")
 
 }
 

@@ -206,6 +206,12 @@ object SIRType {
         override def show: String = "BLS12_381_MlResult"
     }
 
+    case object BuiltinValue extends Primitive {
+
+        override def uplcType: DefaultUni = DefaultUni.BuiltinValue
+        override def show: String = "BuiltinValue"
+    }
+
     case class CaseClass(
         constrDecl: ConstrDecl,
         typeArgs: scala.List[SIRType],
@@ -1071,6 +1077,7 @@ object SIRType {
             case DefaultUni.BLS12_381_G1_Element => BLS12_381_G1_Element
             case DefaultUni.BLS12_381_G2_Element => BLS12_381_G2_Element
             case DefaultUni.BLS12_381_MlResult   => BLS12_381_MlResult
+            case DefaultUni.BuiltinValue         => BuiltinValue
             case DefaultUni.ProtoList =>
                 val a = TypeVar("A", Some(DefaultUni.ProtoList.hashCode()), true)
                 TypeLambda(scala.List(a), SumCaseClass(BuiltinList.dataDecl, scala.List(a)))
@@ -1362,7 +1369,7 @@ object SIRType {
                     case TypeNonCaseModule(_) =>
                     case FreeUnificator | TypeNothing | Unit | Integer | String | Boolean |
                         ByteString | BLS12_381_G1_Element | BLS12_381_G2_Element |
-                        BLS12_381_MlResult =>
+                        BLS12_381_MlResult | BuiltinValue =>
                     // do nothing, these types are not type variables
                 }
             }

@@ -149,6 +149,8 @@ object SirTypeUplcGenerator {
                 BLS12_381_G2_SirTypeGenerator
             case SIRType.BLS12_381_MlResult =>
                 BLS12_381_MLResultSirTypeGenerator
+            case SIRType.BuiltinValue =>
+                BuiltinValueSirTypeGenerator
             case _ =>
                 // TODO: implement
                 ???

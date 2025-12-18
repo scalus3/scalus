@@ -1203,6 +1203,119 @@ class BuiltinsMeaning(
           builtinCostModel.multiIndexArray
         )
 
+    // MaryEraValue builtins (CIP-0153)
+
+    // ByteString -> ByteString -> Integer -> BuiltinValue -> BuiltinValue
+    val InsertCoin: BuiltinRuntime =
+        mkMeaning(
+          DefaultUni.ByteString ->: DefaultUni.ByteString ->: Integer ->: DefaultUni.BuiltinValue ->: DefaultUni.BuiltinValue,
+          (_: Logger, args: Seq[CekValue]) =>
+              val currency = args(0).asByteString
+              val token = args(1).asByteString
+              val amount = args(2).asInteger
+              val value = args(3) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(3))
+              }
+              VCon(
+                Constant.BuiltinValue(BuiltinValueOps.insertCoin(currency, token, amount, value))
+              )
+          ,
+          builtinCostModel.insertCoin
+        )
+
+    // ByteString -> ByteString -> BuiltinValue -> Integer
+    val LookupCoin: BuiltinRuntime =
+        mkMeaning(
+          DefaultUni.ByteString ->: DefaultUni.ByteString ->: DefaultUni.BuiltinValue ->: Integer,
+          (_: Logger, args: Seq[CekValue]) =>
+              val currency = args(0).asByteString
+              val token = args(1).asByteString
+              val value = args(2) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(2))
+              }
+              VCon(asConstant(BuiltinValueOps.lookupCoin(currency, token, value)))
+          ,
+          builtinCostModel.lookupCoin
+        )
+
+    // BuiltinValue -> BuiltinValue -> BuiltinValue
+    val UnionValue: BuiltinRuntime =
+        mkMeaning(
+          DefaultUni.BuiltinValue ->: DefaultUni.BuiltinValue ->: DefaultUni.BuiltinValue,
+          (_: Logger, args: Seq[CekValue]) =>
+              val v1 = args(0) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(0))
+              }
+              val v2 = args(1) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(1))
+              }
+              VCon(Constant.BuiltinValue(BuiltinValueOps.unionValue(v1, v2)))
+          ,
+          builtinCostModel.unionValue
+        )
+
+    // BuiltinValue -> BuiltinValue -> Bool
+    val ValueContains: BuiltinRuntime =
+        mkMeaning(
+          DefaultUni.BuiltinValue ->: DefaultUni.BuiltinValue ->: Bool,
+          (_: Logger, args: Seq[CekValue]) =>
+              val v1 = args(0) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(0))
+              }
+              val v2 = args(1) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(1))
+              }
+              VCon(asConstant(BuiltinValueOps.valueContains(v1, v2)))
+          ,
+          builtinCostModel.valueContains
+        )
+
+    // BuiltinValue -> Data
+    val ValueData: BuiltinRuntime =
+        mkMeaning(
+          DefaultUni.BuiltinValue ->: DefaultUni.Data,
+          (_: Logger, args: Seq[CekValue]) =>
+              val value = args(0) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(0))
+              }
+              VCon(Constant.Data(BuiltinValueOps.toData(value)))
+          ,
+          builtinCostModel.valueData
+        )
+
+    // Data -> BuiltinValue
+    val UnValueData: BuiltinRuntime =
+        mkMeaning(
+          DefaultUni.Data ->: DefaultUni.BuiltinValue,
+          (_: Logger, args: Seq[CekValue]) =>
+              val data = args(0).asData
+              VCon(Constant.BuiltinValue(BuiltinValueOps.fromData(data)))
+          ,
+          builtinCostModel.unValueData
+        )
+
+    // Integer -> BuiltinValue -> BuiltinValue
+    val ScaleValue: BuiltinRuntime =
+        mkMeaning(
+          Integer ->: DefaultUni.BuiltinValue ->: DefaultUni.BuiltinValue,
+          (_: Logger, args: Seq[CekValue]) =>
+              val scalar = args(0).asInteger
+              val value = args(1) match {
+                  case VCon(Constant.BuiltinValue(v)) => v
+                  case _ => throw new KnownTypeUnliftingError(DefaultUni.BuiltinValue, args(1))
+              }
+              VCon(Constant.BuiltinValue(BuiltinValueOps.scaleValue(scalar, value)))
+          ,
+          builtinCostModel.scaleValue
+        )
+
     private inline def mkGetBuiltinRuntime: DefaultFun => BuiltinRuntime = ${
         Macros.mkGetBuiltinRuntime('this)
     }

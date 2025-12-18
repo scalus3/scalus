@@ -845,3 +845,37 @@ object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
     }
 
 }
+
+/** Generator for BuiltinValue (CIP-0153 MaryEraValue).
+  *
+  * Unlike BLS12_381_MlResult, BuiltinValue supports Data conversion via valueData/unValueData.
+  */
+object BuiltinValueSirTypeGenerator extends PrimitiveSirTypeGenerator {
+
+    override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
+        LoweringContext
+    ): LoweredValue = {
+        // valueData :: BuiltinValue -> Data
+        lvBuiltinApply(
+          SIRBuiltins.valueData,
+          input,
+          SIRType.Data(),
+          PrimitiveRepresentation.PackedData,
+          pos
+        )
+    }
+
+    override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
+        LoweringContext
+    ): LoweredValue = {
+        // unValueData :: Data -> BuiltinValue
+        lvBuiltinApply(
+          SIRBuiltins.unValueData,
+          input,
+          SIRType.BuiltinValue,
+          PrimitiveRepresentation.Constant,
+          pos
+        )
+    }
+
+}

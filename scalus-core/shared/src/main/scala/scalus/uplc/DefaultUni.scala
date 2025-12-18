@@ -39,6 +39,9 @@ object DefaultUni:
     case object ProtoArray extends DefaultUni:
         type Unlifted = Nothing // [A] =>> Vector[A]
 
+    case object BuiltinValue extends DefaultUni:
+        type Unlifted = builtin.BuiltinValue
+
     case class Apply(f: DefaultUni, arg: DefaultUni) extends DefaultUni:
         type Unlifted = f.Unlifted => arg.Unlifted
 
@@ -80,7 +83,24 @@ object DefaultUni:
                 indexedSeqFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
             case Apply(Apply(ProtoPair, a), b) =>
                 pairFlat(using flatForUni(a), flatForUni(b)).asInstanceOf[Flat[Any]]
-            case _ => throw new Exception(s"Unsupported uni: $uni")
+            case BuiltinValue => builtinValueFlat.asInstanceOf[Flat[Any]]
+            case _            => throw new Exception(s"Unsupported uni: $uni")
+
+    // Flat instance for BuiltinValue - serializes through Data encoding
+    private def builtinValueFlat(using Flat[builtin.Data]): Flat[builtin.BuiltinValue] =
+        new Flat[builtin.BuiltinValue]:
+            import scalus.serialization.flat.{DecoderState, EncoderState}
+            val dataFlat = summon[Flat[builtin.Data]]
+
+            def bitSize(a: builtin.BuiltinValue): Int =
+                dataFlat.bitSize(builtin.BuiltinValue.toData(a))
+
+            def encode(a: builtin.BuiltinValue, encoder: EncoderState): Unit =
+                dataFlat.encode(builtin.BuiltinValue.toData(a), encoder)
+
+            def decode(decoder: DecoderState): builtin.BuiltinValue =
+                val data = dataFlat.decode(decoder)
+                builtin.BuiltinValue.fromData(data)
 
     def encodeUni(uni: DefaultUni): List[Int] =
         uni match
@@ -97,6 +117,7 @@ object DefaultUni:
             case DefaultUni.BLS12_381_G2_Element => scala.List(10)
             case DefaultUni.BLS12_381_MlResult   => scala.List(11)
             case DefaultUni.ProtoArray           => scala.List(12)
+            case DefaultUni.BuiltinValue         => scala.List(13)
 
     def decodeUni(state: List[Int]): (DefaultUni, List[Int]) =
         state match
@@ -116,4 +137,5 @@ object DefaultUni:
             case 10 :: tail => (DefaultUni.BLS12_381_G2_Element, tail)
             case 11 :: tail => (DefaultUni.BLS12_381_MlResult, tail)
             case 12 :: tail => (DefaultUni.ProtoArray, tail)
+            case 13 :: tail => (DefaultUni.BuiltinValue, tail)
             case _          => throw new Exception(s"Invalid uni: $state")
