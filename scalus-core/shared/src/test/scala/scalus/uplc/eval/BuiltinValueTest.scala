@@ -2,7 +2,7 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{BuiltinValue, ByteString, Data}
-import scalus.uplc.{Constant, DefaultFun, Term}
+import scalus.uplc.Constant
 
 /** Tests for CIP-0153 MaryEraValue (BuiltinValue) operations. */
 class BuiltinValueTest extends AnyFunSuite {
