@@ -63,7 +63,7 @@ case class Program(version: (Int, Int, Int), term: Term):
       */
     lazy val cborEncoded: Array[Byte] = Cbor.encode(flatEncoded).toByteArray
 
-    /** CBOR-encoded [[ByteString]] of the program.
+    /** CBOR-encoded [[scalus.builtin.ByteString]] of the program.
       *
       * The CBOR-encoded representation is a byte array that contains the program in a CBOR format.
       */
@@ -131,7 +131,7 @@ object Program:
     def fromCbor(cbor: Array[Byte]): Program =
         DeBruijnedProgram.fromCbor(cbor).toProgram
 
-    /** Deserializes a program from a CBOR-encoded [[ByteString]].
+    /** Deserializes a program from a CBOR-encoded [[scalus.builtin.ByteString]].
       * @param cbor
       *   the CBOR-encoded ByteString
       * @return
@@ -227,7 +227,7 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
 
     infix def $(arg: Term): DeBruijnedProgram = DeBruijnedProgram(version, Term.Apply(term, arg))
 
-    /** Applies a [[Data]] argument to the program.
+    /** Applies a [[scalus.builtin.Data]] argument to the program.
       *
       * @param arg
       *   the argument
@@ -246,7 +246,7 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
       */
     def applyArg(arg: Term): DeBruijnedProgram = this $ arg
 
-    /** Applies a [[Data]] argument to the program.
+    /** Applies a [[scalus.builtin.Data]] argument to the program.
       *
       * @param arg
       *   the argument

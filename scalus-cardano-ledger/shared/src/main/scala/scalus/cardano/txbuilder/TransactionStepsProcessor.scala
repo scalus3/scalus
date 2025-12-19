@@ -651,7 +651,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     case (Credential.KeyHash(_), witness: TwoArgumentPlutusScriptWitness) =>
                         Left(
                           UnneededDeregisterWitness(
-                            StakeCredential(credential),
+                            credential,
                             witness,
                             step
                           )
@@ -659,7 +659,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     case (Credential.KeyHash(_), witness: NativeScriptWitness) =>
                         Left(
                           UnneededDeregisterWitness(
-                            StakeCredential(credential),
+                            credential,
                             witness,
                             step
                           )
@@ -765,7 +765,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // -------------------------------------------------------------------------
 
     private def useWithdrawRewards(withdrawRewards: WithdrawRewards): Result[Unit] = {
-        val rewardAccount = withdrawRewards.stakeCredential.credential match {
+        val rewardAccount = withdrawRewards.stakeCredential match {
             case Credential.KeyHash(keyHash) =>
                 // Convert AddrKeyHash to StakeKeyHash - they're likely the same underlying type?
                 val stakeKeyHash = keyHash.asInstanceOf[StakeKeyHash]
@@ -797,7 +797,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         useNonSpendingWitness(
           Operation.Withdraw(rewardAccount.address),
-          withdrawRewards.stakeCredential.credential,
+          withdrawRewards.stakeCredential,
           withdrawRewards.witness,
           withdrawRewards
         )

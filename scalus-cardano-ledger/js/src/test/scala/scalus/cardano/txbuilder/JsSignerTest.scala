@@ -19,19 +19,19 @@ class JsSignerTest extends AnyFunSuite {
 
     test("produces expected signature for test mnemonic") {
         val account = LucidAccount(Network.Mainnet, mnemonic, derivationPath)
-        val signature = account.paymentKeyPair.sign(message.bytes)
+        val signature = account.paymentKeyPair.sign(message)
 
         assert(
-          ByteString.fromArray(signature).toHex == expectedSignature,
-          s"Signature mismatch: expected $expectedSignature, got ${ByteString.fromArray(signature).toHex}"
+          signature.toHex == expectedSignature,
+          s"Signature mismatch: expected $expectedSignature, got ${signature.toHex}"
         )
     }
 
     test("verifies own signature") {
         val account = LucidAccount(Network.Mainnet, mnemonic, derivationPath)
 
-        val signature = account.paymentKeyPair.sign(message.bytes)
-        val isValid = account.paymentKeyPair.verify(message.bytes, signature)
+        val signature = account.paymentKeyPair.sign(message)
+        val isValid = account.paymentKeyPair.verify(message, signature)
 
         assert(isValid, "Signature should be valid")
     }

@@ -8,24 +8,12 @@ import scalus.builtin.Builtins.*
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.{Constant, Term}
 
-/** Tests for lowering issues with BuiltinArray.
+/** Tests for BuiltinArray lowering in case classes.
   *
-  * These tests document issues with compiling BuiltinArray in certain contexts, particularly when
-  * BuiltinArray is used as a field in a case class or passed through functions.
-  *
-  * ROOT CAUSE: BuiltinArray doesn't have a dedicated type generator in SirTypeUplcGenerator.apply.
-  * It is defined as a CaseClass in SIRType, so it falls through to ProductCaseSirTypeGenerator
-  * which treats it like a regular product type. When the array value is stored in another case
-  * class, the lowering tries to use ConstrData to wrap it, but ConstrData expects a List
-  * (ProtoList), not an Array.
-  *
-  * ERROR OBSERVED: "Expected type ProtoList, got VCon(Array(...))" This happens because:
-  *   1. BuiltinArray gets ProdDataList representation from ProductCaseSirTypeGenerator
-  *   1. When wrapping in a case class, the system uses ConstrData(tag, fields_as_list)
-  *   1. But the array value cannot be converted to a list representation
-  *
-  * FIX NEEDED: Add a dedicated type generator for BuiltinArray (similar to how BuiltinList has
-  * SumDataListSirTypeGenerator) that handles the native UPLC array representation correctly.
+  * BuiltinArray now has a dedicated BuiltinArraySirTypeGenerator that handles conversion to/from
+  * Data representation. When stored in a case class, BuiltinArray is converted to Data.List by
+  * iterating through the array elements using indexArray. When extracted, it's converted back to
+  * BuiltinArray using listToArray.
   */
 class BuiltinArrayLoweringTest extends AnyFunSuite {
 
@@ -35,10 +23,7 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
     case class ArrayWrapper(arr: BuiltinArray[Data])
 
     // Test that BuiltinArray can be passed through a case class and extracted correctly
-    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
-    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
     test("extract BuiltinArray from case class and access first element") {
-        pending
         val sir = compile {
             // Create an array
             val arr = BuiltinArray(iData(42), iData(100), iData(200))
@@ -61,10 +46,7 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
     }
 
     // Test that BuiltinArray can be passed to a function and returned
-    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
-    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
     test("pass BuiltinArray to function and return") {
-        pending
         val sir = compile {
             def extractArray(w: ArrayWrapper): BuiltinArray[Data] = w.arr
 
@@ -86,10 +68,7 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
     }
 
     // Test accessing elements after extraction from case class
-    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
-    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
     test("access multiple elements after extracting array from case class") {
-        pending
         val sir = compile {
             val arr = BuiltinArray(iData(100), iData(200), iData(300))
             val wrapper = new ArrayWrapper(arr)
@@ -136,10 +115,7 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
     // Test nested case class with BuiltinArray
     case class OuterWrapper(inner: ArrayWrapper, value: BigInt)
 
-    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
-    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
     test("nested case class with BuiltinArray field") {
-        pending
         val sir = compile {
             val arr = BuiltinArray(iData(1), iData(2), iData(3))
             val inner = new ArrayWrapper(arr)
@@ -161,10 +137,7 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
     }
 
     // Test BuiltinArray in function call
-    // FAILS with: "Expected type ProtoList, got VCon(Array(...))"
-    // TODO: Fix BuiltinArray lowering - needs dedicated type generator
     test("BuiltinArray passed through function") {
-        pending
         val sir = compile {
             def processWrapper(w: ArrayWrapper): BigInt = {
                 val arr = w.arr

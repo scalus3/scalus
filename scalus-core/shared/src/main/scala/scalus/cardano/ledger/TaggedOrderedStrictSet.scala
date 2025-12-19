@@ -16,7 +16,7 @@ import scala.collection.immutable.ListSet
   *
   * `opaque type TaggedOrderedSet[+A] <: IndexedSeq[A] = IndexedSeq[A]`
   *
-  * because then `Encoder[TaggedOrderedSet[A]]` conflicts with [[Encoder.forIndexedSeq]]
+  * because then `Encoder[TaggedOrderedSet[A]]` conflicts with `Encoder.forIndexedSeq`
   *
   * Important: This implementation does not allow duplicates in input (i.e. throws exception) and
   * keeps order of data (does not sort).

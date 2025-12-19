@@ -12,7 +12,8 @@ object Cbor {
 
     /** Encodes a value to CBOR format.
       *
-      * This implementation allows [[KeepRaw]] to store original CBOR bytes when encoding.
+      * This implementation allows [[scalus.cardano.ledger.KeepRaw]] to store original CBOR bytes
+      * when encoding.
       * @note
       *   this method uses a workaround to enable storing original CBOR bytes described
       *   [here](https://github.com/sirthias/borer/issues/761#issuecomment-2939269119)

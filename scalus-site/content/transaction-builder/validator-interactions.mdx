@@ -66,7 +66,7 @@ def lock(
   TxBuilder(env, evaluator)
     .spend(utxos)
     .payTo(scriptAddress, value, datum)  // Lock funds with config
-    .build(changeAddress)
+    .build(changeTo = changeAddress)
     .sign(signer)
     .transaction
 }
@@ -97,7 +97,7 @@ def reveal(
     .spend(lockedUtxo, redeemer, script, Set(receiverPkh))  // Spend with redeemer
     .payTo(payeeAddress, lockedUtxo.output.value)
     .validFrom(java.time.Instant.ofEpochMilli(time))
-    .build(changeAddress)
+    .build(changeTo = changeAddress)
     .sign(signer)
     .transaction
 }
@@ -130,7 +130,7 @@ def timeout(
     .spend(lockedUtxo, redeemer, script, Set(committerPkh))
     .payTo(payeeAddress, lockedUtxo.output.value)
     .validFrom(java.time.Instant.ofEpochMilli(time))  // Must be after timeout
-    .build(changeAddress)
+    .build(changeTo = changeAddress)
     .sign(signer)
     .transaction
 }
@@ -154,7 +154,7 @@ val evaluator = PlutusScriptEvaluator(
 TxBuilder(env, evaluator)
   .spend(lockedUtxo, redeemer, script)
   // ... rest of transaction
-  .build(changeAddress)  // Validator is evaluated here
+  .build(changeTo = changeAddress)  // Validator is evaluated here
 ```
 
 If the validator fails (wrong preimage, wrong signer, wrong time, etc.), `build()` throws an exception with the error message from the validator.

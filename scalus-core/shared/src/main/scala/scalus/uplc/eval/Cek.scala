@@ -230,13 +230,15 @@ object MachineParams {
         fromProtocolParams(pparams, plutus)
     }
 
-    /** Creates [[MachineParams]] from a [[ProtocolParams]] and a [[Language]]
+    /** Creates [[MachineParams]] from a [[scalus.cardano.ledger.ProtocolParams]] and a
+      * [[scalus.cardano.ledger.Language]]
       */
     def fromProtocolParams(pparams: ProtocolParams, language: Language): MachineParams = {
         fromCostModels(pparams.costModels, language, pparams.protocolVersion.toMajor)
     }
 
-    /** Creates MachineParams from [[CostModels]] and [[Language]].
+    /** Creates MachineParams from [[scalus.cardano.ledger.CostModels]] and
+      * [[scalus.cardano.ledger.Language]].
       *
       * This function configures the Plutus virtual machine with the appropriate cost models and
       * semantic variants based on the protocol version and Plutus language version. This is crucial
@@ -505,39 +507,85 @@ enum Result:
 
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
 
-        def sumBudget(budgets: collection.Seq[ExUnits]): ExUnits =
-            budgets.foldLeft(ExUnits.zero)(_ |+| _)
-
-        def showCosts =
-            "kind, count, mem, cpu, fee\r\n" +
-                costs.toArray.view
-                    .map: (k, v) =>
-                        val budgetSum = sumBudget(v)
-                        (k, v.length, budgetSum, budgetSum.fee(prices))
-                    .sortBy(_._4.value)(using Ordering[Long].reverse)
-                    .map:
-                        case (ExBudgetCategory.Startup, length, v, fee) =>
-                            s"Startup, ${length}, ${v.memory}, ${v.steps}, ${fee.value}"
-                        case (ExBudgetCategory.Step(kind), length, v, fee) =>
-                            s"$kind, ${length}, ${v.memory}, ${v.steps}, ${fee.value}"
-                        case (ExBudgetCategory.BuiltinApp(bn), length, v, fee) =>
-                            s"$bn, ${length}, ${v.memory}, ${v.steps}, ${fee.value}"
-                    .mkString("\r\n")
-
         this match
             case Success(term, budget, costs, logs) =>
                 s"""Success executing script:
               | term: ${term.show}
               | budget: ${budget.showJson}
               | fee: ${budget.fee(prices).value} lovelace
-              | costs:\n${showCosts}
+              | costs:\n${Result.showCosts(costs, prices)}
               | logs: ${logs.mkString("\n")}""".stripMargin
             case Failure(exception, budget, costs, logs) =>
                 s"""Failure executing script:
               | exception: ${exception.getMessage}
               | budget: ${budget.showJson}
-              | costs:\n${showCosts}
+              | costs:\n${Result.showCosts(costs, prices)}
               | logs: ${logs.mkString("\n")}""".stripMargin
+
+object Result:
+
+    /** Formats execution costs as an aligned table string.
+      *
+      * Produces a human-readable table with columns for kind, count, memory, CPU, and fee, sorted
+      * by fee in descending order. Text columns are left-aligned, numeric columns are
+      * right-aligned.
+      *
+      * Example output:
+      * {{{
+      * kind                   count      mem         cpu     fee
+      * Apply                   1359   135900    21744000    9407
+      * EqualsInteger            354    35400     5664000    2451
+      * }}}
+      *
+      * @param costs
+      *   Map of budget categories to their execution unit sequences
+      * @param prices
+      *   Execution unit prices for fee calculation
+      * @return
+      *   Formatted table string, or "No costs recorded" if costs map is empty
+      */
+    def showCosts(
+        costs: collection.Map[ExBudgetCategory, collection.Seq[ExUnits]],
+        prices: ExUnitPrices
+    ): String =
+        def sumBudget(budgets: collection.Seq[ExUnits]): ExUnits =
+            budgets.foldLeft(ExUnits.zero)(_ |+| _)
+
+        val rows = costs.toArray.view
+            .map { (k, v) =>
+                val budgetSum = sumBudget(v)
+                val kind = k match
+                    case ExBudgetCategory.Startup        => "Startup"
+                    case ExBudgetCategory.Step(kind)     => kind.toString
+                    case ExBudgetCategory.BuiltinApp(bn) => bn.toString
+                (kind, v.length, budgetSum.memory, budgetSum.steps, budgetSum.fee(prices).value)
+            }
+            .sortBy(_._5)(using Ordering[Long].reverse)
+            .toSeq
+
+        if rows.isEmpty then "No costs recorded"
+        else
+            val kindWidth = math.max(4, rows.map(_._1.length).max)
+            val countWidth = math.max(5, rows.map(_._2.toString.length).max)
+            val memWidth = math.max(3, rows.map(_._3.toString.length).max)
+            val cpuWidth = math.max(3, rows.map(_._4.toString.length).max)
+            val feeWidth = math.max(3, rows.map(_._5.toString.length).max)
+
+            def formatRow(
+                kind: String,
+                count: String,
+                mem: String,
+                cpu: String,
+                fee: String
+            ): String =
+                s"${kind.padTo(kindWidth, ' ')}  ${count.reverse.padTo(countWidth, ' ').reverse}  ${mem.reverse.padTo(memWidth, ' ').reverse}  ${cpu.reverse.padTo(cpuWidth, ' ').reverse}  ${fee.reverse.padTo(feeWidth, ' ').reverse}"
+
+            val header = formatRow("kind", "count", "mem", "cpu", "fee")
+            val dataRows = rows.map { (kind, count, mem, cpu, fee) =>
+                formatRow(kind, count.toString, mem.toString, cpu.toString, fee.toString)
+            }
+
+            (header +: dataRows).mkString("\r\n")
 
 type ArgStack = Seq[CekValue]
 

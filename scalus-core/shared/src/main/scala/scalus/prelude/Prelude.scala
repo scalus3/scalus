@@ -97,10 +97,10 @@ object Prelude {
     }
 }
 
-/** Tests an expression, throwing an `RequirementError` if false.
+/** Tests an expression, throwing a [[scalus.cardano.onchain.RequirementError]] if false.
   * @param requirement
   *   the expression to test
-  * @throws RequirementError
+  * @throws scalus.cardano.onchain.RequirementError
   *   when invoked off-chain.
   * @note
   *   we do not use scala.Predef.require because it's not an `inline` method and it's not expanded
@@ -113,13 +113,13 @@ object Prelude {
 inline def require(inline requirement: Boolean, inline message: String): Unit =
     if requirement then () else throw new RequirementError(message)
 
-/** Tests an expression, throwing a `RequirementError` if false.
+/** Tests an expression, throwing a [[scalus.cardano.onchain.RequirementError]] if false.
   *
   * This is used to enforce preconditions in on-chain logic.
   *
   * @param requirement
   *   The boolean expression to test.
-  * @throws RequirementError
+  * @throws scalus.cardano.onchain.RequirementError
   *   when invoked off-chain.
   * @example
   *   {{{
@@ -135,7 +135,7 @@ inline def require(inline requirement: Boolean): Unit =
   *
   * @param message
   *   The error message to include in the failure.
-  * @throws OnchainError
+  * @throws scalus.cardano.onchain.OnchainError
   *   when invoked off-chain.
   */
 inline def fail(inline message: String): Nothing = throw new OnchainError(message)
@@ -145,7 +145,7 @@ inline def fail(inline message: String): Nothing = throw new OnchainError(messag
   * This is used to indicate a failure in the on-chain logic without providing a specific error
   * message.
   *
-  * @throws OnchainError
+  * @throws scalus.cardano.onchain.OnchainError
   *   when invoked off-chain.
   */
 inline def fail(): Nothing = throw new OnchainError()
@@ -154,7 +154,7 @@ inline def fail(): Nothing = throw new OnchainError()
   *
   * This is used to indicate an impossible situation in the on-chain logic.
   *
-  * @throws ImpossibleLedgerStateError
+  * @throws scalus.cardano.onchain.ImpossibleLedgerStateError
   *   when invoked off-chain.
   */
 inline def impossible(): Nothing = throw new ImpossibleLedgerStateError

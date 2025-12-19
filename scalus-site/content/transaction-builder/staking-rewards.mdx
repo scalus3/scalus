@@ -24,13 +24,7 @@ val tx = TxBuilder(env)
   .complete(provider, sponsorAddress)
 ```
 
-In the Conway era, you can specify the deposit amount explicitly:
-
-```scala copy
-val tx = TxBuilder(env)
-  .registerStake(stakeAddress, Coin.ada(2))
-  .complete(provider, sponsorAddress)
-```
+The deposit amount is automatically taken from protocol parameters (`env.protocolParams.stakeAddressDeposit`).
 
 <Callout type="warning">
   The 2 ADA deposit is held by the protocol and will be returned when you deregister your stake key.
@@ -54,12 +48,13 @@ For efficiency, you can combine registration and delegation into a single transa
 
 ```scala copy
 val poolId = PoolKeyHash.fromHex("pool1...")
-val deposit = Coin.ada(2)
 
 val tx = TxBuilder(env)
-  .stakeAndDelegate(stakeAddress, poolId, deposit)
+  .stakeAndDelegate(stakeAddress, poolId)
   .complete(provider, sponsorAddress)
 ```
+
+The deposit is automatically taken from protocol parameters.
 
 <Callout type="info">
   Combining operations saves transaction fees and reduces the number of blockchain interactions required.

@@ -8,7 +8,8 @@ import scalus.uplc.*
 @deprecated("Use SumOfProductsLowering instead", "0.13.0")
 type SirToUplc110Lowering = SumOfProductsLowering
 
-/** UPLC 1.1.0-based lowering from Scalus Intermediate Representation [[SIR]] to UPLC [[Term]].
+/** UPLC 1.1.0-based lowering from Scalus Intermediate Representation [[SIR]] to UPLC
+  * [[scalus.uplc.Term]].
   *
   * We use UPLC version 1.1.0 and generate Sums of Products (SoP) constructors `case` and `constr`
   * to represent data types. Also we optimize `newtype` kind of constructors to be represented as

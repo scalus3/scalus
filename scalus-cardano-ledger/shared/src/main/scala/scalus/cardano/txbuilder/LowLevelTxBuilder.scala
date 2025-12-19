@@ -14,7 +14,7 @@ import scalus.cardano.ledger.*
   */
 @deprecated("Use TransactionBuilder methods instead", "scalus 0.13.0")
 object LowLevelTxBuilder {
-    @deprecated("Use scalus.cardano.txbuilder.ChangeOutputDiffHandler instead", "scalus 0.13.0")
+    @deprecated("Use Change.changeOutputDiffHandler instead", "scalus 0.13.0")
     class ChangeOutputDiffHandler(protocolParams: ProtocolParams, changeOutputIdx: Int)
         extends scalus.cardano.txbuilder.ChangeOutputDiffHandler(protocolParams, changeOutputIdx)
 
@@ -45,7 +45,7 @@ object LowLevelTxBuilder {
         initial: Transaction,
         diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
+        resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
     ): Either[TxBalancingError, Transaction] =
         TransactionBuilder.balanceFeeAndChangeWithTokens(

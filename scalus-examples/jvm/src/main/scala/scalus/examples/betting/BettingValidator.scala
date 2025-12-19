@@ -58,7 +58,8 @@ object Action
 object BettingValidator extends Validator {
 
     /** Spending validator: Controls how the bet UTXO can be spent Handles both
-      * [[scalus.examples.Action.Join]] and [[scalus.examples.Action.AnnounceWinner]] actions
+      * [[scalus.examples.betting.Action.Join]] and
+      * [[scalus.examples.betting.Action.AnnounceWinner]] actions
       */
     inline override def spend(
         @annotation.unused datum: Option[Data],

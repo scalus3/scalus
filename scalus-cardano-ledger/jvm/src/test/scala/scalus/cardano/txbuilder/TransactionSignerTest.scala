@@ -22,7 +22,7 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
 
     private var accountIndex = 0
 
-    private def generateKeyPair(): KeyPair = {
+    private def generateKeyPair(): BloxbeanKeyPair = {
         val account = Account.createFromMnemonic(
           BBNetwork(0, 42),
           mnemonic,
@@ -48,7 +48,7 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         assert(witnesses.size == 1, "Should have exactly one witness")
 
         val witness = witnesses.head
-        val expectedVkey = ByteString.fromArray(keyPair.publicKeyBytes.take(32))
+        val expectedVkey: ByteString = keyPair.verificationKey
         assert(witness.vkey == expectedVkey, "VKey should match public key")
     }
 
@@ -57,7 +57,7 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         val keyPair2 = generateKeyPair()
         val keyPair3 = generateKeyPair()
 
-        val keyPairs = Set(keyPair1, keyPair2, keyPair3)
+        val keyPairs = Set[KeyPair](keyPair1, keyPair2, keyPair3)
         val signer = new TransactionSigner(keyPairs)
 
         val unsignedTx = createUnsignedTransaction
@@ -67,7 +67,7 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         assert(witnesses.size == 3, "Should have three witnesses")
 
         val witnessVkeys = witnesses.map(_.vkey).toSet
-        val expectedVkeys = keyPairs.map(kp => ByteString.fromArray(kp.publicKeyBytes.take(32)))
+        val expectedVkeys: Set[ByteString] = keyPairs.map(kp => kp.verificationKey)
         assert(witnessVkeys == expectedVkeys, "All public keys should be present in witnesses")
     }
 
@@ -80,7 +80,7 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
 
         val witness = signedTx.witnessSet.vkeyWitnesses.toSeq.head
         val txHash: ByteString = unsignedTx.id
-        val publicKey = ByteString.fromArray(keyPair.publicKeyBytes)
+        val publicKey: ByteString = keyPair.verificationKey
 
         val isValid = platform.verifyEd25519Signature(publicKey, txHash, witness.signature)
         assert(isValid, "Signature should be valid")
@@ -91,10 +91,10 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         val keyPair2 = generateKeyPair()
 
         // The companion object's KeyPair uses platform.signEd25519 which expects 32-byte private keys
-        val priv1 = ByteString.fromArray(keyPair1.privateKeyBytes.take(32))
-        val pub1 = ByteString.fromArray(keyPair1.publicKeyBytes)
-        val priv2 = ByteString.fromArray(keyPair2.privateKeyBytes.take(32))
-        val pub2 = ByteString.fromArray(keyPair2.publicKeyBytes)
+        val priv1: ByteString = keyPair1.extendedSigningKey.standardKey
+        val pub1: ByteString = keyPair1.verificationKey
+        val priv2: ByteString = keyPair2.extendedSigningKey.standardKey
+        val pub2: ByteString = keyPair2.verificationKey
 
         val signer = TransactionSigner(Set((priv1, pub1), (priv2, pub2)))
 
@@ -138,10 +138,10 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         val signedTx = signer.sign(unsignedTx)
 
         val witness = signedTx.witnessSet.vkeyWitnesses.toSeq.head
-        val expectedVkey = ByteString.fromArray(keyPair.publicKeyBytes.take(32))
+        val expectedVkey: ByteString = keyPair.verificationKey
 
         assert(witness.vkey.length == 32, "VKey should be 32 bytes")
-        assert(witness.vkey == expectedVkey, "VKey should be first 32 bytes of public key")
+        assert(witness.vkey == expectedVkey, "VKey should match verification key")
         assert(witness.signature.length == 64, "Ed25519 signature should be 64 bytes")
     }
 
@@ -160,8 +160,8 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
         assert(witnesses.size == 2, "Should have two witnesses after signing twice")
 
         val witnessVkeys = witnesses.map(_.vkey).toSet
-        val expectedVkey1 = ByteString.fromArray(keyPair1.publicKeyBytes.take(32))
-        val expectedVkey2 = ByteString.fromArray(keyPair2.publicKeyBytes.take(32))
+        val expectedVkey1: ByteString = keyPair1.verificationKey
+        val expectedVkey2: ByteString = keyPair2.verificationKey
 
         assert(witnessVkeys.contains(expectedVkey1), "First signer's witness should be preserved")
         assert(witnessVkeys.contains(expectedVkey2), "Second signer's witness should be present")

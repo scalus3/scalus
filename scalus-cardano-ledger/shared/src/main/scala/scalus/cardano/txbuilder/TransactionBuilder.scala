@@ -22,14 +22,10 @@ import scalus.cardano.txbuilder.TransactionBuilder.Context
 import scalus.|>
 
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
-
-// Async variant of DiffHandler for use with async UTXO selection (e.g., provider queries)
-type DiffHandlerAsync = (Value, Transaction) => Future[Either[TxBalancingError, Transaction]]
 
 case class DelayedRedeemerSpec(
     purpose: RedeemerPurpose,
@@ -157,7 +153,7 @@ object Datum {
 // ExpectedSigner
 // -----------------------------------------------------------------------------
 
-/** An [[scalus.cardano.address.AddrKeyHash]] that is expected to sign some
+/** An [[scalus.cardano.ledger.AddrKeyHash]] that is expected to sign some
   * [[scalus.cardano.ledger.Transaction]].
   *
   * The purpose for signing is not presently tracked. For a sketch, see commit
@@ -644,7 +640,7 @@ object TransactionBuilder {
     ): Either[TxBalancingError, Transaction] = {
         balanceFeeAndChangeWithTokens(
           initial,
-          ChangeOutputDiffHandler(protocolParams, changeOutputIdx).changeOutputDiffHandler,
+          Change.changeOutputDiffHandler(_, _, protocolParams, changeOutputIdx),
           protocolParams,
           resolvedUtxo,
           evaluator
@@ -658,21 +654,20 @@ object TransactionBuilder {
       *   - fees never go below the initial fee
       *
       * @param resolvedUtxo
-      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
-      *   to dynamically add UTXOs that will be visible in subsequent iterations.
+      *   The resolved UTXOs for inputs in the transaction.
       */
     def balanceFeeAndChangeWithTokens(
         initial: Transaction,
         diffHandler: (Value, Transaction) => Either[TxBalancingError, Transaction],
         protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
+        resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0
 
         @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
             iteration += 1
-            if iteration > 20 then return Left(TxBalancingError.CantBalance(0))
+            if iteration > 20 then return Left(TxBalancingError.BalanceDidNotConverge(iteration))
 
             val eTrialTx = for {
                 txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
@@ -694,74 +689,6 @@ object TransactionBuilder {
             }
         }
         loop(initial)
-    }
-
-    /** Computes a single iteration step of the balancing loop.
-      *
-      * This helper is shared between sync and async balancing to avoid code duplication. It
-      * performs script evaluation, fee calculation, and computes the diff that needs to be
-      * balanced.
-      *
-      * @return
-      *   Either an error or a tuple of (diff value to balance, transaction with updated fees)
-      */
-    private[txbuilder] def computeIterationStep(
-        tx: Transaction,
-        initialFee: Coin,
-        protocolParams: ProtocolParams,
-        resolvedUtxo: Utxos,
-        evaluator: PlutusScriptEvaluator
-    ): Either[TxBalancingError, (Value, Transaction)] = {
-        for {
-            txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
-            minFee <- MinTransactionFee
-                .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
-                .left
-                .map(TxBalancingError.Failed(_))
-            // Don't go below initial fee
-            fee = Coin(math.max(minFee.value, initialFee.value))
-            txWithFees = setFee(fee)(txWithExUnits)
-            diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
-        } yield (diff, txWithFees)
-    }
-
-    /** Async variant of balanceFeeAndChangeWithTokens for use with async UTXO selection.
-      *
-      * This method allows the diff handler to perform async operations (e.g., querying a provider
-      * for additional UTXOs) during each balancing iteration. The core iteration logic is shared
-      * with the sync variant.
-      *
-      * @param resolvedUtxo
-      *   By-name parameter that provides the current resolved UTXOs. This allows the diff handler
-      *   to dynamically add UTXOs that will be visible in subsequent iterations.
-      */
-    def balanceFeeAndChangeWithTokensAsync(
-        initial: Transaction,
-        diffHandler: DiffHandlerAsync,
-        protocolParams: ProtocolParams,
-        resolvedUtxo: => Utxos,
-        evaluator: PlutusScriptEvaluator
-    )(using ExecutionContext): Future[Either[TxBalancingError, Transaction]] = {
-        def loop(tx: Transaction, iteration: Int): Future[Either[TxBalancingError, Transaction]] = {
-            if iteration > 20 then return Future.successful(Left(TxBalancingError.CantBalance(0)))
-
-            computeIterationStep(
-              tx,
-              initial.body.value.fee,
-              protocolParams,
-              resolvedUtxo,
-              evaluator
-            ) match {
-                case Left(e) => Future.successful(Left(e))
-                case Right((diff, txWithFees)) =>
-                    diffHandler(diff, txWithFees).flatMap {
-                        case Left(e)                         => Future.successful(Left(e))
-                        case Right(trialTx) if tx == trialTx => Future.successful(Right(tx))
-                        case Right(trialTx)                  => loop(trialTx, iteration + 1)
-                    }
-            }
-        }
-        loop(initial, 1)
     }
 
     private[txbuilder] def computeScriptsWitness(
@@ -806,18 +733,72 @@ object TransactionBuilder {
     }
 }
 
-/** Transaction balancing error types */
+/** Transaction balancing error types.
+  *
+  * These errors can occur during the transaction balancing process, which iteratively adjusts fees
+  * and change outputs until the transaction is balanced (consumed == produced).
+  */
 enum TxBalancingError {
-    // Now it's only Plutus, but may become `Plutus... | SthElse...` in the future
+
+    /** Plutus script evaluation failed during balancing.
+      *
+      * This occurs when a Plutus validator or minting policy fails execution. The cause contains
+      * detailed error information including execution logs.
+      *
+      * @param cause
+      *   the Plutus script evaluation exception with logs and error details
+      */
     case EvaluationFailed(cause: PlutusScriptEvaluationException)
-    // TODO: this constructor gets all other errors - rename?
+
+    /** Generic failure during balancing.
+      *
+      * Catches unexpected errors that don't fit other categories, such as CBOR encoding issues or
+      * internal errors.
+      *
+      * @param cause
+      *   the underlying exception
+      */
     case Failed(cause: Throwable)
-    case CantBalance(lastDiff: Long)
-    case InsufficientFunds(diff: Long, minRequired: Long)
+
+    /** Balancing loop exceeded maximum iterations without converging.
+      *
+      * This typically indicates a pathological case where fee adjustments and change calculations
+      * keep oscillating. The transaction structure may need to be simplified.
+      *
+      * @param iterations
+      *   the number of iterations attempted before giving up
+      */
+    case BalanceDidNotConverge(iterations: Int)
+
+    /** Insufficient funds to balance the transaction.
+      *
+      * This error indicates that the transaction outputs (including fees) exceed what the inputs
+      * can provide. The `valueDiff` contains the full deficit including both ADA and native tokens.
+      *
+      * When `valueDiff` has negative values, those represent the amounts needed:
+      *   - Negative ADA means more lovelace is needed
+      *   - Negative token amounts mean more of those tokens are needed
+      *
+      * @param valueDiff
+      *   the value difference (consumed - produced). Negative values indicate deficit.
+      * @param minRequired
+      *   minimum additional lovelace needed, accounting for minAda requirements on change outputs
+      */
+    case InsufficientFunds(valueDiff: Value, minRequired: Long)
 
     /** Error when collateral contains tokens but there's insufficient ADA to create a valid
-      * collateral return output. Per Babbage spec, tokens in collateral MUST be returned via
-      * collateralReturnOutput, which requires meeting the minAda requirement.
+      * collateral return output.
+      *
+      * Per Babbage spec, tokens in collateral MUST be returned via collateralReturnOutput, which
+      * requires meeting the minAda requirement. This error occurs when:
+      * `totalCollateralAda < requiredCollateral + minAdaForReturn`
+      *
+      * @param totalCollateralAda
+      *   total ADA in all collateral inputs
+      * @param requiredCollateral
+      *   ADA needed for collateral (percentage of fee)
+      * @param minAdaForReturn
+      *   minimum ADA needed for the collateral return output
       */
     case InsufficientCollateralForReturn(
         totalCollateralAda: Coin,
@@ -835,7 +816,7 @@ type TransactionUnspentOutput = Utxo
 @deprecated("Use scalus.cardano.ledger.Utxo instead", "0.13.0")
 val TransactionUnspentOutput = Utxo
 
-// NOTE (Peter, 2025-09-23): this comes from https://github.com/mlabs-haskell/purescript-cardano-types/blob/master/src/Cardano/Types/StakeCredential.purs
+@deprecated("Use Credential instead", "0.13.0")
 case class StakeCredential(credential: Credential)
 
 extension (network: Network)
@@ -867,17 +848,6 @@ enum SomeBuildError:
     case BalancingError(e: TxBalancingError, context: Context)
     case ValidationError(e: TransactionException, context: Context)
 
-    /** Error when collateral contains tokens but there's insufficient ADA to create a valid
-      * collateral return output. Per Babbage spec, tokens in collateral MUST be returned via
-      * collateralReturnOutput, which requires meeting the minAda requirement.
-      */
-    case InsufficientCollateralForReturn(
-        totalCollateralAda: Coin,
-        requiredCollateral: Coin,
-        minAdaForReturn: Coin,
-        context: Context
-    )
-
     def reason: Throwable =
         this match {
             case SomeBuildError.SomeStepError(e, context) =>
@@ -897,13 +867,16 @@ enum SomeBuildError:
                           cause
                         )
                     case TxBalancingError.Failed(cause) => cause
-                    case TxBalancingError.CantBalance(lastDiff) =>
+                    case TxBalancingError.BalanceDidNotConverge(iterations) =>
                         new RuntimeException(
-                          s"Balancing failure. Last seen diff (sum(outputs) - sum(inputs)) = $lastDiff"
+                          s"Balancing did not converge after $iterations iterations"
                         )
-                    case TxBalancingError.InsufficientFunds(diff, minRequired) =>
+                    case TxBalancingError.InsufficientFunds(valueDiff, minRequired) =>
+                        val tokenInfo =
+                            if valueDiff.assets.nonEmpty then s", tokens=${valueDiff.assets}"
+                            else ""
                         new RuntimeException(
-                          s"Balancing failure: insufficient funds: diff=$diff, minRequired=$minRequired"
+                          s"Balancing failure: insufficient funds: adaDiff=${valueDiff.coin.value}$tokenInfo, minRequired=$minRequired"
                         )
                     case TxBalancingError.InsufficientCollateralForReturn(
                           totalAda,
@@ -916,17 +889,6 @@ enum SomeBuildError:
                         )
                 }
             case SomeBuildError.ValidationError(e, context) => e
-            case SomeBuildError.InsufficientCollateralForReturn(
-                  totalAda,
-                  required,
-                  minAda,
-                  _
-                ) =>
-                new RuntimeException(
-                  s"Collateral contains tokens but insufficient ADA for return output. " +
-                      s"Total collateral ADA: ${totalAda.value}, required collateral: ${required.value}, " +
-                      s"min ADA for return: ${minAda.value}. Need at least ${required.value + minAda.value} lovelace."
-                )
         }
 
     override def toString: String = this match {
@@ -939,10 +901,12 @@ enum SomeBuildError:
             s"Plutus script evaluation failed: ${psee.getMessage}, execution trace: ${psee.logs.mkString(" <CR> ")}"
         case BalancingError(TxBalancingError.Failed(other), _) =>
             s"Exception during balancing: ${other.getMessage}"
-        case BalancingError(TxBalancingError.CantBalance(lastDiff), _) =>
-            s"Can't balance: last diff $lastDiff"
-        case BalancingError(TxBalancingError.InsufficientFunds(diff, required), _) =>
-            s"Insufficient funds: need $required more"
+        case BalancingError(TxBalancingError.BalanceDidNotConverge(iterations), _) =>
+            s"Balancing did not converge after $iterations iterations"
+        case BalancingError(TxBalancingError.InsufficientFunds(valueDiff, required), _) =>
+            val tokenInfo =
+                if valueDiff.assets.nonEmpty then s", tokens=${valueDiff.assets}" else ""
+            s"Insufficient funds: adaDiff=${valueDiff.coin.value}$tokenInfo, need $required more"
         case BalancingError(
               TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda),
               _
@@ -951,9 +915,6 @@ enum SomeBuildError:
                 s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
         case ValidationError(e, _) =>
             s"Transaction validation failed: ${e.getClass.getSimpleName} - ${e.getMessage}"
-        case InsufficientCollateralForReturn(totalAda, required, minAda, _) =>
-            s"Collateral contains tokens but insufficient ADA for return output. " +
-                s"Total: ${totalAda.value}, required: ${required.value}, minAda: ${minAda.value}"
     }
 
 def keepRawL[A: Encoder](): Lens[KeepRaw[A], A] = {

@@ -49,7 +49,7 @@ object G2 {
         bls12_381_G2_uncompress(bs)
     }
 
-    /** Hashes a [[ByteString]] to a point in the G2 group.
+    /** Hashes a [[scalus.builtin.ByteString]] to a point in the G2 group.
       *
       * @param bs
       *   The byte string to hash.
@@ -98,7 +98,7 @@ object G2 {
         /** Compresses the point in the G2 group to its compressed form.
           *
           * @return
-          *   A [[ByteString]] representing the compressed point.
+          *   A [[scalus.builtin.ByteString]] representing the compressed point.
           */
         inline def compress: ByteString = bls12_381_G2_compress(self)
     }

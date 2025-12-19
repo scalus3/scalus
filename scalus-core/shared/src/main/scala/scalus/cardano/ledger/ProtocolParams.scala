@@ -3,7 +3,6 @@ package scalus.cardano.ledger
 import upickle.default.*
 
 import java.io.InputStream
-import scala.util.Try
 
 /** Protocol parameters for the Cardano blockchain of Babbage era Field names are taken from the
   * `cardano-cli query protocol-parameters` output
@@ -147,33 +146,30 @@ object ProtocolParams {
                   ),
                   hardForkInitiation =
                       UnitInterval.fromDouble(json("dvt_hard_fork_initiation").numOpt.getOrElse(0)),
-                  ppNetworkGroup = UnitInterval.fromDouble(
-                    Try(json("dvt_p_p_network_group"))
-                        .getOrElse(json("dvt_ppnetwork_group"))
-                        .numOpt
-                        .getOrElse(0)
-                  ),
-                  ppEconomicGroup = UnitInterval
-                      .fromDouble(
-                        Try(json("dvt_p_p_economic_group"))
-                            .getOrElse(json("dvt_ppeconomic_group"))
-                            .numOpt
-                            .getOrElse(0)
-                      ),
-                  ppTechnicalGroup = UnitInterval
-                      .fromDouble(
-                        Try(json("dvt_p_p_technical_group"))
-                            .getOrElse(json("dvt_pptechnical_group"))
-                            .numOpt
-                            .getOrElse(0)
-                      ),
-                  ppGovGroup = UnitInterval
-                      .fromDouble(
-                        Try(json("dvt_p_p_gov_group"))
-                            .getOrElse(json("dvt_ppgov_group"))
-                            .numOpt
-                            .getOrElse(0)
-                      ),
+                  ppNetworkGroup = json.obj
+                      .get("dvt_p_p_network_group")
+                      .orElse(json.obj.get("dvt_ppnetwork_group"))
+                      .flatMap(_.numOpt)
+                      .map(UnitInterval.fromDouble)
+                      .getOrElse(UnitInterval.zero),
+                  ppEconomicGroup = json.obj
+                      .get("dvt_p_p_economic_group")
+                      .orElse(json.obj.get("dvt_ppeconomic_group"))
+                      .flatMap(_.numOpt)
+                      .map(UnitInterval.fromDouble)
+                      .getOrElse(UnitInterval.zero),
+                  ppTechnicalGroup = json.obj
+                      .get("dvt_p_p_technical_group")
+                      .orElse(json.obj.get("dvt_pptechnical_group"))
+                      .flatMap(_.numOpt)
+                      .map(UnitInterval.fromDouble)
+                      .getOrElse(UnitInterval.zero),
+                  ppGovGroup = json.obj
+                      .get("dvt_p_p_gov_group")
+                      .orElse(json.obj.get("dvt_ppgov_group"))
+                      .flatMap(_.numOpt)
+                      .map(UnitInterval.fromDouble)
+                      .getOrElse(UnitInterval.zero),
                   treasuryWithdrawal =
                       UnitInterval.fromDouble(json("dvt_treasury_withdrawal").numOpt.getOrElse(0))
                 ),
@@ -215,12 +211,11 @@ object ProtocolParams {
                   hardForkInitiation = json("pvt_hard_fork_initiation").numOpt
                       .map(UnitInterval.fromDouble)
                       .getOrElse(UnitInterval.zero),
-                  ppSecurityGroup = Try(
-                    json("pvtpp_security_group").numOpt
-                        .map(UnitInterval.fromDouble)
-                        .getOrElse(UnitInterval.zero)
-                  ).toOption
-                      .orElse(json("pvt_p_p_security_group").numOpt.map(UnitInterval.fromDouble))
+                  ppSecurityGroup = json.obj
+                      .get("pvtpp_security_group")
+                      .orElse(json.obj.get("pvt_p_p_security_group"))
+                      .flatMap(_.numOpt)
+                      .map(UnitInterval.fromDouble)
                       .getOrElse(UnitInterval.zero)
                 ),
                 protocolVersion = ProtocolVersion(

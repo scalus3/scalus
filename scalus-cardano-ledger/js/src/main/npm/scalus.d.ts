@@ -2,27 +2,27 @@
 
 /** Main API exported by Scalus */
 export namespace Scalus {
-  /** Execution budget representation. */
-  export class ExBudget {
-    constructor(cpu: bigint, memory: bigint);
-    cpu: bigint;
+  /** Execution units representation. */
+  export class ExUnits {
+    constructor(memory: bigint, steps: bigint);
     memory: bigint;
+    steps: bigint;
   }
 
   /** Script evaluation result. */
   export class Result {
-    constructor(isSuccess: boolean, budget: ExBudget, logs: string[]);
+    constructor(isSuccess: boolean, budget: ExUnits, logs: string[]);
     isSuccess: boolean;
-    budget: ExBudget;
+    budget: ExUnits;
     logs: string[];
   }
 
   /** Redeemer with execution budget. */
   export class Redeemer {
-    constructor(tag: string, index: number, budget: ExBudget);
+    constructor(tag: string, index: number, budget: ExUnits);
     tag: string;
     index: number;
-    budget: ExBudget;
+    budget: ExUnits;
   }
 
   /** Exception thrown when Plutus script evaluation fails. Includes logs from the failing script. */

@@ -942,7 +942,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       label = "Deregistering stake credential with unneeded witness fails",
       steps = List(IssueCertificate(UnregCert(pubKeyHashCredential1, coin = None), witness)),
       error = UnneededDeregisterWitness(
-        StakeCredential(pubKeyHashCredential1),
+        pubKeyHashCredential1,
         witness,
         IssueCertificate(UnregCert(pubKeyHashCredential1, coin = None), witness)
       )

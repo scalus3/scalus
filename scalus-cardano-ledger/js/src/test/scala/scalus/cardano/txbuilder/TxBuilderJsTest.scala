@@ -5,6 +5,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.{CardanoInfo, TransactionHash, TransactionInput, TransactionOutput, Utxo, Value}
 import scalus.cardano.wallet.LucidAccount
+import scalus.crypto.ed25519.Signature
 
 class TxBuilderJsTest extends AnyFunSuite {
 
@@ -38,8 +39,8 @@ class TxBuilderJsTest extends AnyFunSuite {
 
         val witness = tx.witnessSet.vkeyWitnesses.toSeq.head
         val isValid = account.paymentKeyPair.verify(
-          tx.id.bytes,
-          witness.signature.bytes
+          tx.id,
+          Signature.unsafeFromByteString(witness.signature)
         )
         assert(isValid, "Signature must be cryptographically valid")
 

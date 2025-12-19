@@ -12,7 +12,7 @@ import { Callout } from 'nextra/components'
 The Scalus Transaction Builder (`TxBuilder`) is a fluent API for constructing Cardano transactions. It automatically handles
 script evaluation and budget calculation, balancing and automatic UTxO querying.
 
-TxBuilder is designed to work togther with the rest of the Scalus ecosystem.
+TxBuilder is designed to work together with the rest of the Scalus ecosystem.
 Since your validators are written in Scala, you can build app-specific transactions that share code with your smart contracts. This enables:
 
 - **Code Reuse** - Share data types, validation logic, and utilities between on-chain and off-chain code
@@ -25,11 +25,11 @@ Here's a simple example of building a transaction:
 
 ```scala copy
 val tx = TxBuilder(env)
-  .spend(utxo)                           // Add UTxO as input
-  .payTo(recipientAddress, Value.ada(10)) // Send 10 ADA to recipient
-  .build(changeAddress)                   // Finalize: calculate fees, handle change
-  .sign(signer)                           // Add signature
-  .transaction                            // Get the final transaction
+  .spend(utxo)                             // Add UTxO as input
+  .payTo(recipientAddress, Value.ada(10))  // Send 10 ADA to recipient
+  .build(changeTo = changeAddress)         // Finalize: calculate fees, handle change
+  .sign(signer)                            // Add signature
+  .transaction                             // Get the final transaction
 ```
 
 <Callout type="info">
@@ -71,7 +71,7 @@ val evaluator = PlutusScriptEvaluator(
 TxBuilder(env, evaluator)
   .spend(scriptUtxo, redeemer, script)
   .payTo(recipient, scriptUtxo.output.value)
-  .build(changeAddress)  // Scripts are evaluated here
+  .build(changeTo = changeAddress)  // Scripts are evaluated here
 ```
 
 ## Next Steps

@@ -341,7 +341,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     )
     .jsSettings(
       // Add JS-specific settings here
-      Compile / npmDependencies += "@noble/curves" -> "1.4.2",
+      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
           // Use .mjs extension.
@@ -434,7 +434,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
     )
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> "1.4.2",
+      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
       },
@@ -463,7 +463,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1"
     )
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> "1.4.2",
+      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       Test / envVars := sys.env.toMap, // for HTLC integration tests
       scalaJSUseMainModuleInitializer := false,
       scalaJSLinkerConfig ~= {
@@ -605,7 +605,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jvmSettings()
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> "1.4.2",
+      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       // Lucid Evolution and CML for transaction signing
       Compile / npmDependencies += "@lucid-evolution/wallet" -> "0.1.72",
       Compile / npmDependencies += "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3",

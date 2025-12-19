@@ -41,11 +41,11 @@ object Blueprint {
 
     given JsonValueCodec[Blueprint] = JsonCodecMaker.make
 
-    /** Returns a CIP-57 compliant [[Blueprint]] based on the provided [[validator]].
+    /** Returns a CIP-57 compliant [[Blueprint]] based on the provided validator script.
       *
       * The returned `Blueprint` always contains only 1 validator.
       *
-      * To specify the `redeemer` and `datum` schemas, use [[Blueprint.newBuilder()]].
+      * To specify the `redeemer` and `datum` schemas, use [[Application]] instead.
       *
       * @param contractTitle
       *   the title of the "blueprintee" contract
@@ -75,7 +75,7 @@ object Blueprint {
       */
     def fromJson(json: String): Blueprint = readFromString(json)
 
-    /** Parses a CIP-57 compliant [[Blueprint]] from an [[InputStream]].
+    /** Parses a CIP-57 compliant [[Blueprint]] from a [[java.io.InputStream]].
       *
       * @param inputStream
       *   the input stream containing JSON data representing a blueprint

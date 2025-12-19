@@ -62,7 +62,7 @@ object TransactionBuilderStep {
       * twice (reference or spend) is an error
       *
       * The reason that action is represented as a step is that reference utxos should be added to
-      * the context and also may be required to create a [[WitnessForSpend]].
+      * the context and also may be required to create a [[scalus.cardano.txbuilder.SpendWitness]].
       *
       * @param utxo
       *   any utxo
@@ -111,7 +111,7 @@ object TransactionBuilderStep {
     ) extends TransactionBuilderStep
 
     case class WithdrawRewards(
-        stakeCredential: StakeCredential,
+        stakeCredential: Credential,
         amount: Coin,
         witness: PubKeyWitness.type | NativeScriptWitness | TwoArgumentPlutusScriptWitness =
             PubKeyWitness

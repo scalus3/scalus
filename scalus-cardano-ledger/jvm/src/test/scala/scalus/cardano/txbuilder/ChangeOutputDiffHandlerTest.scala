@@ -14,7 +14,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.ledger.rules.{Context, State, ValueNotConservedUTxOValidator}
 import scalus.cardano.ledger.utils.{MinCoinSizedTransactionOutput, MinTransactionFee}
-import scalus.cardano.txbuilder.ChangeOutputDiffHandler
+import scalus.cardano.txbuilder.Change
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
 import scalus.|>
 
@@ -44,7 +44,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_000_000,
           output = 800_000,
           fee = 200_000,
-          expected = Expected.Failure(InsufficientFunds(0, 178370))
+          expected = Expected.Failure(InsufficientFunds(Value.zero, 178370))
         )
     }
 
@@ -121,7 +121,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     }
 
     test("should fail when output would become below minimum ADA") {
-        val insufficientFunds: InsufficientFunds = InsufficientFunds(-160705, 139075)
+        val insufficientFunds: InsufficientFunds =
+            InsufficientFunds(Value.lovelace(-160705), 139075)
         check(
           in = 1_000_000,
           output = 1_000_000,
@@ -133,7 +134,10 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_000_000 + insufficientFunds.minRequired,
           output = 1_000_000,
           fee = 0,
-          expected = Expected.success(outputLovelace = 978_370, fee = -insufficientFunds.diff)
+          expected = Expected.success(
+            outputLovelace = 978_370,
+            fee = -insufficientFunds.valueDiff.coin.value
+          )
         )
     }
 
@@ -221,12 +225,11 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     test("should fail on invalid change output index") {
         val (utxo, tx) = mkTx(Coin(2_000_000), Coin(1_000_000), Coin(200_000))
-        val handler = ChangeOutputDiffHandler(params, 5) // Invalid index > outputs.size
 
         try
             TransactionBuilder.balanceFeeAndChangeWithTokens(
               tx,
-              handler.changeOutputDiffHandler,
+              Change.changeOutputDiffHandler(_, _, params, 5), // Invalid index > outputs.size
               params,
               utxo,
               evaluator
@@ -352,10 +355,9 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     ): Assertion = {
         val (utxo, tx) = mkTx(in, output, Coin(fee))
 
-        val handler = ChangeOutputDiffHandler(params, 0)
         val r = TransactionBuilder.balanceFeeAndChangeWithTokens(
           tx,
-          handler.changeOutputDiffHandler,
+          Change.changeOutputDiffHandler(_, _, params, 0),
           params,
           utxo,
           evaluator
@@ -380,10 +382,9 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     private def checkFeeOk(in: Value, out: Value, feeAda: Long): Unit = {
         val (utxo, tx) = mkTx(in, out, Coin(feeAda))
-        val handler = ChangeOutputDiffHandler(params, 0)
         val result = TransactionBuilder.balanceFeeAndChangeWithTokens(
           tx,
-          handler.changeOutputDiffHandler,
+          Change.changeOutputDiffHandler(_, _, params, 0),
           params,
           utxo,
           evaluator

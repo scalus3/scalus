@@ -476,7 +476,7 @@ final class SIRCompiler(
         output.close()
     }
 
-    /** Creates [[AdtTypeInfo]] based on a [[Type]].
+    /** Creates [[AdtTypeInfo]] based on a compiler Type.
       *
       * We support these cases:
       *   1. case class Foo(a: Int, b: String) (case 1)

@@ -1,5 +1,80 @@
 # Changelog
 
+## 0.14.0 (2025-12-19)
+
+### Added
+
+- Plutus V4 language support with Case instructions on boolean, integer, list, Data, and Pair types
+- CIP-0138 Plutus Core Builtin Type Array implementation
+- CIP-0156 Plutus Core Builtin Function `multiIndexArray`
+- JIT compiler with 6x speedup over CEK interpreter
+- `TxBuilder.complete` with iterative balancing, automatic UTxO selection, and async support
+- `TxBuilder` staking and governance implementation with delegation, DRep registration, and voting
+- `Data` pattern matching support
+- `copy` method support for case classes in Scalus scripts
+- `dropList` builtin implementation with saturating CostingInteger arithmetic
+- cross-platform Ed25519 signing with type-safe opaque types (VerificationKey, Signature, SigningKey)
+- `addr` and `stake` string interpolators for bech32 address parsing
+- `ByteString.utf8` string interpolator support in SIR compiler
+- `Blueprint.fromJson(InputStream)` overload for efficient parsing
+- `Transaction.utxos` method for transaction chaining
+- `Emulator` for transaction testing
+- `StrictIf` optimization for if-then-else expressions
+- `preprod` and `preview` constants in `CardanoInfo`
+- SIR function application operator `$` with comprehensive test suite
+- collateral with native tokens support per Babbage specification
+- delayed redeemer support for minting operations
+- `TermSanitizer` to sanitize variable names in UPLC terms
+- field selection for Data subtypes (I, B, List, Map, Constr)
+- `toLedgerValue` method for Value conversion
+- `SortedMap.from` and `Value.unsafeFromSortedMap` methods
+- `MultiAsset.onlyPositive` method
+- Plutus conformance tests updated from 1.40.0.0 to 1.53.0.0
+- comprehensive ledger rules validation tests
+
+### Changed
+
+- **BREAKING**: `mint` API unified - use `mint(script, assets, redeemer)` for attached scripts,
+  `mint(policyId, assets, redeemer)` for reference scripts
+- **BREAKING**: `Provider` consolidated to async-only, `AsyncProvider` renamed to `Provider`
+- **BREAKING**: `scalus.sir` package moved to `scalus.compiler.sir`
+- **BREAKING**: `builtin.Data` uses `scalus.prelude.List` instead of `scala.collection.immutable.List`
+- **BREAKING**: `ChangeOutputDiffHandler` now accepts `Value` instead of `Coin`
+- renamed `NodeEmulator` to `Emulator` and moved to scalus-cardano-ledger
+- renamed `AsyncBlockfrostProvider` to `BlockfrostProvider`
+- renamed `LucidEvolutionKeyPair` to `LucidKeyPair`
+- `TxBuilder` async methods renamed: `completeAsync` to `complete` (returns `Future[TxBuilder]`)
+- deprecated `Environment` type alias in favor of `CardanoInfo`
+- deprecated `PaymentBuilder` in favor of `TxBuilder`
+- deprecated `mintAndAttach` in favor of `mint(script, assets, redeemer)`
+- deprecated `SpendWithDelayedRedeemer` in favor of `Spend` with delayed redeemer witness
+- migrated sttp from v3 to v4
+- updated jsoniter-scala-core to 2.38.6
+- updated bcprov-jdk18on to 1.83
+- updated pprint to 0.9.6
+- optimized CEK machine with mutable HashMap for builtins initialization
+- optimized list transformations using view for better performance
+- JIT compiler eliminates VCon allocations for cost-calculating builtins
+
+### Fixed
+
+- floor division edge case on Scala.js for `Long.MinValue / -1`
+- redeemer index recalculation after adding inputs in `TxBuilder.complete`
+- collateral calculation precision in `calculateRequiredCollateral`
+- inline datum handling for PlutusV1 scripts
+- deterministic ordering in topological sort during SIR lowering
+- wildcard case generation for product types in pattern matching
+- `TransactionSigner` preserves existing witnesses when signing
+- delayed redeemers recomputed after `complete` adds inputs
+- `Interop.toScalusData` preserves order in Map
+- zero-ada change output kept if it contains assets
+- `SIRType.show` deterministic by removing hashcodes from type variable display
+- collateral index output calculation in `PlutusScriptsTransactionMutator`
+- various ledger rule validators: `ValueNotConservedUTxO`, `MissingRequiredDatums`,
+  `MissingOrExtraScriptHashes`, `FeesOk`, `OutputsHaveNotEnoughCoins`
+- `balanceFeeAndChange` correctly handling modifications that invalidate result
+- bootstrap address attributes size validation in transactions
+
 ## 0.13.0 (2025-10-22)
 
 ### Added

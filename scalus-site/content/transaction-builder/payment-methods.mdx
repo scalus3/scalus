@@ -18,7 +18,7 @@ The most basic payment sends ADA to an address without any datum:
 TxBuilder(env)
   .spend(utxo)
   .payTo(recipientAddress, Value.ada(10))  // Send 10 ADA
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 ## Sending Native Tokens on Cardano
@@ -36,14 +36,14 @@ val assetName = AssetName(hex"...")
 val tokenValue = Value.asset(
   policyId,
   assetName,
-  amount = 100L,        // 100 tokens
-  ada = Coin.ada(2)     // Plus 2 ADA
+  amount = 100L,           // 100 tokens
+  lovelace = Coin.ada(2)   // Plus 2 ADA
 )
 
 TxBuilder(env)
   .spend(utxo)
   .payTo(recipientAddress, tokenValue)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 <Callout type="info">
@@ -65,7 +65,7 @@ val datum = MyDatum(ownerPubKeyHash, 1000)
 TxBuilder(env)
   .spend(utxo)
   .payTo(scriptAddress, Value.ada(10), datum)  // Datum is inlined
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 The datum is automatically serialized to `Data` and included inline in the output.
@@ -81,9 +81,9 @@ val datum = MyDatum(ownerPubKeyHash, 1000)
 
 TxBuilder(env)
   .spend(utxo)
-  .attach(datum)  // Add datum to witness set
+  .attach(datum.toData)  // Add datum to witness set
   .payTo(scriptAddress, Value.ada(10), datumHash)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 The `attach()` method computes the datum hash and stores the datum for inclusion in the witness set.
@@ -103,9 +103,9 @@ val datumHash = DataHash.fromByteString(
 
 TxBuilder(env)
   .spend(utxo)
-  .attach(datum)
+  .attach(datum.toData)
   .payTo(scriptAddress, Value.ada(10), datumHash)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 </Tabs.Tab>
 </Tabs>
@@ -120,7 +120,7 @@ TxBuilder(env)
   .payTo(recipient1, Value.ada(5))
   .payTo(recipient2, Value.ada(3))
   .payTo(recipient3, Value.ada(2))
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 Each call creates a separate UTxO at the recipient address.
@@ -142,7 +142,7 @@ val customOutput = TransactionOutput(
 TxBuilder(env)
   .spend(utxo)
   .output(customOutput)
-  .build(changeAddress)
+  .build(changeTo = changeAddress)
 ```
 
 This gives you complete control over all output fields, including attaching reference scripts.
@@ -158,8 +158,7 @@ val utxoWithTokens: Utxo = // ...
 TxBuilder(env)
   .spend(utxoWithTokens)
   .payTo(recipient, Value.ada(5))  // Only send ADA
-  .changeTo(changeAddress)         // Tokens automatically returned here
-  .build()
+  .build(changeTo = changeAddress) // Tokens automatically returned here
 ```
 
 The change output will contain the remaining ADA and all 1000 tokens.
@@ -167,5 +166,5 @@ The change output will contain the remaining ADA and all 1000 tokens.
 ## Next Steps
 
 - **[Spending UTxOs](/docs/transaction-builder/spending-utxos)** - Learn about input selection and spending from scripts
-- **[Minting & Burning](/docs/transaction-builder/mint-burn-assets)** - Create and destroy native tokens
+- **[Minting & Burning](/docs/transaction-builder/minting-burning-assets)** - Create and destroy native tokens
 - **[Validator Interactions](/docs/transaction-builder/validator-interactions)** - Work with Plutus scripts

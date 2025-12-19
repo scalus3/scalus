@@ -15,8 +15,8 @@ object JScalus {
 
     extension (self: ExUnits)
         /** Converts ExUnits to a JavaScript BigInt representation. */
-        def toJSExBudget: JSExBudget = new JSExBudget(
-          cpu = js.BigInt(self.steps.toString),
+        def toJSExUnits: JSExUnits = new JSExUnits(
+          steps = js.BigInt(self.steps.toString),
           memory = js.BigInt(self.memory.toString)
         )
 
@@ -26,28 +26,28 @@ object JScalus {
             case Result.Success(_, budget, _, logs) =>
                 JSResult(
                   isSuccess = true,
-                  budget = budget.toJSExBudget,
+                  budget = budget.toJSExUnits,
                   logs = js.Array(logs*)
                 )
             case Result.Failure(exception, budget, _, logs) =>
                 JSResult(
                   isSuccess = false,
-                  budget = budget.toJSExBudget,
+                  budget = budget.toJSExUnits,
                   logs = js.Array(exception.getMessage +: logs*)
                 )
 
-    @JSExportTopLevel("ExBudget")
-    class JSExBudget(val cpu: js.BigInt, val memory: js.BigInt) extends js.Object
+    @JSExportTopLevel("ExUnits")
+    class JSExUnits(val memory: js.BigInt, val steps: js.BigInt) extends js.Object
 
     @JSExportTopLevel("Result")
-    class JSResult(val isSuccess: Boolean, val budget: JSExBudget, val logs: js.Array[String])
+    class JSResult(val isSuccess: Boolean, val budget: JSExUnits, val logs: js.Array[String])
         extends js.Object
 
     @JSExportTopLevel("Redeemer")
     class Redeemer(
         val tag: String,
         val index: Int,
-        val budget: JSExBudget
+        val budget: JSExUnits
     ) extends js.Object
 
     @JSExportTopLevel("PlutusScriptEvaluationError")
@@ -94,7 +94,7 @@ object JScalus {
             case exception: Exception =>
                 JSResult(
                   isSuccess = false,
-                  budget = ExUnits.zero.toJSExBudget,
+                  budget = ExUnits.zero.toJSExUnits,
                   logs = js.Array(exception.getMessage)
                 )
     }
@@ -139,8 +139,8 @@ object JScalus {
                 yield new Redeemer(
                   tag = r.tag.toString,
                   index = r.index,
-                  budget = JSExBudget(
-                    cpu = js.BigInt(r.exUnits.steps.toString),
+                  budget = JSExUnits(
+                    steps = js.BigInt(r.exUnits.steps.toString),
                     memory = js.BigInt(r.exUnits.memory.toString)
                   )
                 )
