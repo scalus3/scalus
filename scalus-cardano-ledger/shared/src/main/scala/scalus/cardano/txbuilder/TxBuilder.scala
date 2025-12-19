@@ -1096,7 +1096,6 @@ case class TxBuilder(
         // Iteratively build and finalize until balanced
         completeLoop(
           pool = pool,
-          needsCollateral = needsCollateral,
           sponsor = sponsor,
           maxIterations = 10
         )
@@ -1105,7 +1104,6 @@ case class TxBuilder(
     /** Iterative loop that adds UTXOs until finalizeContext succeeds. */
     private def completeLoop(
         pool: UtxoPool,
-        needsCollateral: Boolean,
         sponsor: Address,
         maxIterations: Int
     ): TxBuilder = {
@@ -1155,7 +1153,6 @@ case class TxBuilder(
                           balancingError,
                           errorCtx,
                           pool,
-                          needsCollateral,
                           sponsor,
                           maxIterations
                         )
@@ -1171,7 +1168,6 @@ case class TxBuilder(
         error: TxBalancingError,
         errorCtx: TransactionBuilder.Context,
         pool: UtxoPool,
-        needsCollateral: Boolean,
         sponsor: Address,
         maxIterations: Int
     ): TxBuilder = {
@@ -1220,7 +1216,6 @@ case class TxBuilder(
 
                 completeLoop(
                   pool.withInputs(additionalUtxos),
-                  needsCollateral,
                   sponsor,
                   maxIterations - 1
                 )
@@ -1236,7 +1231,6 @@ case class TxBuilder(
 
                 completeLoop(
                   pool.withCollateral(additionalCollateral),
-                  needsCollateral,
                   sponsor,
                   maxIterations - 1
                 )
