@@ -316,4 +316,151 @@ class BuiltinValueCompileTest extends AnyFunSuite {
         // 150 >= 140 -> true
         assert(evalToBool(applied) == true)
     }
+
+    // ==================== Builtins.insertCoin tests ====================
+
+    test("Builtins.insertCoin compiles and inserts into empty value") {
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+
+        val sir = compile {
+            (currency: ByteString, token: ByteString, amount: BigInt, value: BuiltinValue) =>
+                Builtins.insertCoin(currency, token, amount, value)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(
+            Term.Apply(
+              Term.Apply(uplc, Term.Const(Constant.ByteString(policyA))),
+              Term.Const(Constant.ByteString(tokenA))
+            ),
+            Term.Const(Constant.Integer(BigInt(100)))
+          ),
+          Term.Const(Constant.BuiltinValue(BuiltinValue.empty))
+        )
+        val result = evalToBuiltinValue(applied)
+        assert(BuiltinValueOps.lookupCoin(policyA, tokenA, result) == BigInt(100))
+    }
+
+    test("Builtins.insertCoin compiles and updates existing token") {
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val existing = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(50), BuiltinValue.empty)
+
+        val sir = compile {
+            (currency: ByteString, token: ByteString, amount: BigInt, value: BuiltinValue) =>
+                Builtins.insertCoin(currency, token, amount, value)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(
+            Term.Apply(
+              Term.Apply(uplc, Term.Const(Constant.ByteString(policyA))),
+              Term.Const(Constant.ByteString(tokenA))
+            ),
+            Term.Const(Constant.Integer(BigInt(200)))
+          ),
+          Term.Const(Constant.BuiltinValue(existing))
+        )
+        val result = evalToBuiltinValue(applied)
+        // insertCoin replaces, doesn't add
+        assert(BuiltinValueOps.lookupCoin(policyA, tokenA, result) == BigInt(200))
+    }
+
+    test("Builtins.insertCoin with zero removes token") {
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val existing = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(100), BuiltinValue.empty)
+
+        val sir = compile {
+            (currency: ByteString, token: ByteString, amount: BigInt, value: BuiltinValue) =>
+                Builtins.insertCoin(currency, token, amount, value)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(
+            Term.Apply(
+              Term.Apply(uplc, Term.Const(Constant.ByteString(policyA))),
+              Term.Const(Constant.ByteString(tokenA))
+            ),
+            Term.Const(Constant.Integer(BigInt(0)))
+          ),
+          Term.Const(Constant.BuiltinValue(existing))
+        )
+        val result = evalToBuiltinValue(applied)
+        assert(BuiltinValueOps.lookupCoin(policyA, tokenA, result) == BigInt(0))
+    }
+
+    // ==================== Builtins.lookupCoin tests ====================
+
+    test("Builtins.lookupCoin compiles and returns 0 for missing token") {
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+
+        val sir = compile { (currency: ByteString, token: ByteString, value: BuiltinValue) =>
+            Builtins.lookupCoin(currency, token, value)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(
+            Term.Apply(uplc, Term.Const(Constant.ByteString(policyA))),
+            Term.Const(Constant.ByteString(tokenA))
+          ),
+          Term.Const(Constant.BuiltinValue(BuiltinValue.empty))
+        )
+        val result = evalToInteger(applied)
+        assert(result == BigInt(0))
+    }
+
+    test("Builtins.lookupCoin compiles and returns correct amount") {
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val value = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(12345), BuiltinValue.empty)
+
+        val sir = compile { (currency: ByteString, token: ByteString, value: BuiltinValue) =>
+            Builtins.lookupCoin(currency, token, value)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(
+            Term.Apply(uplc, Term.Const(Constant.ByteString(policyA))),
+            Term.Const(Constant.ByteString(tokenA))
+          ),
+          Term.Const(Constant.BuiltinValue(value))
+        )
+        val result = evalToInteger(applied)
+        assert(result == BigInt(12345))
+    }
+
+    test("Builtins.lookupCoin returns 0 for wrong token name") {
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val tokenB = ByteString.fromString("TokenB")
+        val value = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(100), BuiltinValue.empty)
+
+        val sir = compile { (currency: ByteString, token: ByteString, value: BuiltinValue) =>
+            Builtins.lookupCoin(currency, token, value)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(
+            Term.Apply(uplc, Term.Const(Constant.ByteString(policyA))),
+            Term.Const(Constant.ByteString(tokenB))
+          ),
+          Term.Const(Constant.BuiltinValue(value))
+        )
+        val result = evalToInteger(applied)
+        assert(result == BigInt(0))
+    }
+
+    // Helper to extract BigInt from evaluation result
+    def evalToInteger(term: Term)(using vm: PlutusVM): BigInt = {
+        term.evaluateDebug match {
+            case Result.Success(Term.Const(Constant.Integer(i)), _, _, _) => i
+            case Result.Success(other, _, _, _) =>
+                fail(s"Expected Const(Integer), got: $other")
+            case Result.Failure(err, _, _, _) =>
+                fail(s"Evaluation failed: $err")
+        }
+    }
 }
