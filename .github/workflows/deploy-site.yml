@@ -32,13 +32,17 @@ jobs:
           cache: 'yarn'
           cache-dependency-path: scalus-site/yarn.lock
 
-      - name: Setup Java and SBT (for Scaladoc generation)
+      - name: Setup Java (for Scaladoc generation)
         if: inputs.api_mode == 'regenerate'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'sbt'
+
+      - name: Setup sbt
+        if: inputs.api_mode == 'regenerate'
+        uses: sbt/setup-sbt@v1
 
       - name: Generate Scaladoc API documentation
         if: inputs.api_mode == 'regenerate'
