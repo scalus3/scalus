@@ -146,7 +146,7 @@
               ];
               shellHook = ''
                 if [ ! -L plutus-conformance ]; then
-                  rm -rf plutus-conformance
+                  unlink plutus-conformance
                   ln -s ${plutus}/plutus-conformance plutus-conformance
                 fi
                 echo "${pkgs.secp256k1}"
