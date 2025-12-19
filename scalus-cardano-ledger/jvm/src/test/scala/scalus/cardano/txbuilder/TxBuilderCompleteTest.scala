@@ -893,6 +893,160 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     // ============================================================================
+    // Synchronous complete(availableUtxos, sponsor) Tests
+    // ============================================================================
+
+    test("complete with UTXOs should automatically add inputs for simple ADA payment") {
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 100),
+          input(1) -> adaOutput(Alice.address, 50)
+        )
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(availableUtxos, Alice.address)
+            .transaction
+
+        assert(tx.body.value.inputs.toSeq.size == 1, "Transaction must have exactly 1 input")
+        assert(outputsOf(Bob, tx).size == 1, "Should have output to Bob")
+        assert(
+          outputsOf(Bob, tx).head.value.value.coin >= Coin.ada(10),
+          "Bob should receive at least 10 ADA"
+        )
+        assert(outputsOf(Alice, tx).nonEmpty, "Should have change output to Alice")
+    }
+
+    test("complete with UTXOs should handle multi-asset transactions") {
+        val availableUtxos: Utxos = Map(
+          input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
+          input(1) -> adaOutput(Alice.address, 50)
+        )
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.fromPolicy(policyId, Map(co2 -> 100L), Coin.ada(5)))
+            .complete(availableUtxos, Alice.address)
+            .transaction
+
+        val bobTokens = outputsOf(Bob, tx).head.value.value.assets.assets
+            .get(policyId)
+            .flatMap(_.get(co2))
+        assert(bobTokens.contains(100L), "Bob should receive 100 tokens")
+
+        val aliceTokens = outputsOf(Alice, tx).flatMap(
+          _.value.value.assets.assets.get(policyId).flatMap(_.get(co2))
+        )
+        assert(aliceTokens.sum == 100L, "Alice should receive 100 tokens as change")
+    }
+
+    test("complete with UTXOs should auto-detect and add collateral for script spending") {
+        val sUtxo = scriptUtxo(2, 20)
+
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 100),
+          input(1) -> adaOutput(Alice.address, 10),
+          sUtxo.input -> sUtxo.output
+        )
+
+        val tx = TxBuilder(testEnv)
+            .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+            .payTo(Bob.address, Value.ada(5))
+            .complete(availableUtxos, Alice.address)
+            .transaction
+
+        assert(tx.body.value.collateralInputs.toSeq.nonEmpty, "Should have collateral inputs")
+        assert(outputsOf(Bob, tx).nonEmpty, "Should have output to Bob")
+    }
+
+    test("complete with UTXOs should fail with insufficient funds") {
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 5)
+        )
+
+        val exception = intercept[TxBuilderException.InsufficientAdaException] {
+            TxBuilder(testEnv)
+                .payTo(Bob.address, Value.ada(100))
+                .complete(availableUtxos, Alice.address)
+        }
+
+        assert(
+          exception.required.value > exception.available.value,
+          s"Required ${exception.required.value} should be greater than available ${exception.available.value}"
+        )
+    }
+
+    test("complete with UTXOs should handle empty UTXO set") {
+        val availableUtxos: Utxos = Map.empty
+
+        val exception = intercept[TxBuilderException.InsufficientAdaException] {
+            TxBuilder(testEnv)
+                .payTo(Bob.address, Value.ada(10))
+                .complete(availableUtxos, Alice.address)
+        }
+
+        assert(
+          exception.available.value == 0,
+          s"Should indicate no UTXOs available (0 ADA), got: ${exception.available.value}"
+        )
+    }
+
+    test("complete with UTXOs should fail when required tokens are not available") {
+        val nonexistent = AssetName.fromString("nonexistent")
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 100)
+        )
+
+        val exception = intercept[TxBuilderException.InsufficientTokensException] {
+            TxBuilder(testEnv)
+                .payTo(
+                  Bob.address,
+                  Value.fromPolicy(policyId, Map(nonexistent -> 100L), Coin.ada(5))
+                )
+                .complete(availableUtxos, Alice.address)
+        }
+
+        assert(
+          exception.policyId == policyId,
+          s"Should indicate insufficient tokens for policyId $policyId"
+        )
+        assert(
+          exception.assetName == nonexistent,
+          s"Should indicate insufficient tokens for asset $nonexistent"
+        )
+    }
+
+    test("complete with UTXOs should not add collateral for pubkey-only transactions") {
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 100)
+        )
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(availableUtxos, Alice.address)
+            .transaction
+
+        assert(tx.body.value.collateralInputs.toSeq.isEmpty, "Should not have collateral inputs")
+        assert(tx.body.value.collateralReturnOutput.isEmpty, "Should not have collateral return")
+        assert(tx.body.value.totalCollateral.isEmpty, "Should not have totalCollateral")
+    }
+
+    test("complete with UTXOs should be signable with sign()") {
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 100)
+        )
+
+        val signedTx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(availableUtxos, Alice.address)
+            .sign(aliceSigner)
+            .transaction
+
+        assert(
+          signedTx.witnessSet.vkeyWitnesses.toSeq.nonEmpty,
+          "Transaction should have vkey witnesses after signing"
+        )
+    }
+
+    // ============================================================================
     // Redeemer Index Bug Test
     // ============================================================================
 

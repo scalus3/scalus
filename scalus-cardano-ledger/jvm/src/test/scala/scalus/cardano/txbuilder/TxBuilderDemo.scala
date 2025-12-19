@@ -59,6 +59,24 @@ class TxBuilderDemo extends AnyFunSuite {
 //        pprintln(tx.witnessSet)
     }
 
+    test("Building a transaction with pre-fetched UTXOs (synchronous)") {
+        // When you already have UTXOs (e.g., from a previous query or custom source)
+        val availableUtxos: Utxos = Map(
+          input(0) -> adaOutput(Alice.address, 100),
+          input(1) -> adaOutput(Alice.address, 50)
+        )
+
+        // Synchronous - no Future, no .await() needed
+        val tx = TxBuilder(env)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(availableUtxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+//        pprintln(tx.body.value)
+//        pprintln(tx.witnessSet)
+    }
+
     test("Building a simple transaction with full control") {
         val utxo = Utxo(emulator.utxos.head)
         val now = Instant.now()

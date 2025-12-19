@@ -1028,7 +1028,7 @@ case class TxBuilder(
     def complete(provider: Provider, sponsor: Address)(using
         ExecutionContext
     ): Future[TxBuilder] = {
-        // Step 1: Build initial context to understand requirements
+        // Build initial context FIRST (fail-fast before async call)
         val initialBuildResult = TransactionBuilder.build(env.network, steps)
 
         initialBuildResult match {
@@ -1036,38 +1036,70 @@ case class TxBuilder(
                 Future.failed(TxBuilderException.fromBuildError(error))
 
             case Right(initialCtx) =>
-                // Step 2: Query ALL available UTXOs at sponsor address ONCE
+                // Only fetch UTXOs if initial build succeeds
                 provider.findUtxos(address = sponsor).map { utxosResult =>
                     val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
-
-                    // Exclude UTXOs already used in initial context (from user's steps)
-                    val alreadyUsedInputs = initialCtx.resolvedUtxos.utxos.keySet
-                    val availableUtxos = allAvailableUtxos.filterNot { case (input, _) =>
-                        alreadyUsedInputs.contains(input)
-                    }
-
-                    // Step 3: Determine if we need collateral (transaction has scripts)
-                    val needsCollateral = initialCtx.redeemers.nonEmpty
-
-                    // Step 4: Create UTXO pool and select initial collateral if needed
-                    val emptyPool = UtxoPool(availableUtxos)
-                    val pool =
-                        if needsCollateral then {
-                            val initialCollateral =
-                                emptyPool.selectForCollateral(Coin.ada(5), env.protocolParams)
-                            emptyPool.withCollateral(initialCollateral)
-                        } else emptyPool
-
-                    // Step 5: Iteratively build and finalize until balanced
-                    // Start with empty inputs - let the balancing loop select what's needed
-                    completeLoop(
-                      pool = pool,
-                      needsCollateral = needsCollateral,
-                      sponsor = sponsor,
-                      maxIterations = 10
-                    )
+                    completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)
                 }
         }
+    }
+
+    /** Completes the transaction using pre-fetched UTXOs.
+      *
+      * This synchronous variant is useful when UTXOs are already available in memory, avoiding the
+      * need for async provider queries. Otherwise identical to the provider-based variant.
+      *
+      * @param availableUtxos
+      *   the UTXOs available at the sponsor address for input/collateral selection
+      * @param sponsor
+      *   the address to use for input selection, collateral, and change
+      * @return
+      *   a new TxBuilder with the transaction completed
+      */
+    def complete(availableUtxos: Utxos, sponsor: Address): TxBuilder = {
+        val initialBuildResult = TransactionBuilder.build(env.network, steps)
+
+        initialBuildResult match {
+            case Left(error) =>
+                throw TxBuilderException.fromBuildError(error)
+            case Right(initialCtx) =>
+                completeWithUtxos(availableUtxos, sponsor, initialCtx)
+        }
+    }
+
+    /** Internal implementation shared by both complete variants. Takes the pre-computed initial
+      * context to preserve fail-fast behavior in async version.
+      */
+    private def completeWithUtxos(
+        allAvailableUtxos: Utxos,
+        sponsor: Address,
+        initialCtx: TransactionBuilder.Context
+    ): TxBuilder = {
+        // Exclude UTXOs already used in initial context (from user's steps)
+        val alreadyUsedInputs = initialCtx.resolvedUtxos.utxos.keySet
+        val availableUtxos = allAvailableUtxos.filterNot { case (input, _) =>
+            alreadyUsedInputs.contains(input)
+        }
+
+        // Determine if we need collateral (transaction has scripts)
+        val needsCollateral = initialCtx.redeemers.nonEmpty
+
+        // Create UTXO pool and select initial collateral if needed
+        val emptyPool = UtxoPool(availableUtxos)
+        val pool =
+            if needsCollateral then {
+                val initialCollateral =
+                    emptyPool.selectForCollateral(Coin.ada(5), env.protocolParams)
+                emptyPool.withCollateral(initialCollateral)
+            } else emptyPool
+
+        // Iteratively build and finalize until balanced
+        completeLoop(
+          pool = pool,
+          needsCollateral = needsCollateral,
+          sponsor = sponsor,
+          maxIterations = 10
+        )
     }
 
     /** Iterative loop that adds UTXOs until finalizeContext succeeds. */

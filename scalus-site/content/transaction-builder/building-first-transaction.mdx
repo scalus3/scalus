@@ -256,6 +256,32 @@ val transaction = TxBuilder(cardanoInfo)
   .transaction
 ```
 
+### Completion with Pre-fetched UTXOs
+
+If you already have UTXOs available in memory (e.g., from a previous query or a custom source), you can use the synchronous `complete()` overload that accepts UTXOs directly:
+
+```scala copy
+// Pre-fetched or cached UTXOs from any source
+val availableUtxos: Utxos = Map(
+  TransactionInput(txHash, 0) -> TransactionOutput(sponsorAddress, Value.ada(100)),
+  TransactionInput(txHash, 1) -> TransactionOutput(sponsorAddress, Value.ada(50))
+)
+
+// Synchronous - no Future, no async provider query
+val transaction = TxBuilder(cardanoInfo)
+  .payTo(recipientAddress, Value.ada(10))
+  .complete(availableUtxos, sponsorAddress)  // Immediate completion
+  .sign(signer)
+  .transaction
+```
+
+This variant is useful when:
+- You've already queried UTXOs and want to avoid redundant network calls
+- You're building transactions in a batch with shared UTXO state
+- You're working with a custom UTXO source (e.g., in-memory ledger state)
+
+The behavior is identical to the provider-based `complete()` - it selects inputs, adds collateral if needed, and balances the transaction.
+
 ## Next Steps
 
 - **[Payment Methods](/docs/transaction-builder/payment-methods)** - Different ways to send ADA and tokens
