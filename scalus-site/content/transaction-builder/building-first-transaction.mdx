@@ -152,10 +152,13 @@ Finally, submit the signed transaction to the Cardano network:
 
 ```scala copy
 import scalus.cardano.node.Provider
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
 
 val provider: Provider = // ... blockfrost, ogmios, etc.
 
-provider.submitTransaction(transaction) match {
+provider.submit(transaction).await(30.seconds) match {
   case Right(txHash) =>
     println(s"Transaction submitted: ${txHash.toHex}")
   case Left(error) =>
@@ -174,6 +177,9 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.cardano.address.Address
 import scalus.cardano.node.Provider
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
 
 // Setup
 val cardanoInfo = CardanoInfo.mainnet
@@ -191,7 +197,7 @@ val transaction = TxBuilder(cardanoInfo)
   .sign(signer)
   .transaction
 
-provider.submitTransaction(transaction)
+provider.submit(transaction).await(30.seconds)
 ```
 
 ## Using Automatic Completion
@@ -227,34 +233,6 @@ val futureTransaction: Future[Transaction] = TxBuilder(cardanoInfo)
 ```
 
 This is the recommended approach for cross-platform code and async workflows.
-
-### JVM-Only Blocking Completion
-
-On the JVM, there's a blocking overload that takes a `Provider` directly and returns `TxBuilder` synchronously:
-
-```scala copy
-import scala.concurrent.duration.*
-
-val transaction = TxBuilder(cardanoInfo)
-  .payTo(recipientAddress, Value.ada(10))
-  .complete(provider, sponsorAddress, timeout = 30.seconds)  // Blocking (JVM only)
-  .sign(signer)
-  .transaction
-```
-
-You can also use the `await` extension to block on any `Future`:
-
-```scala copy
-import scalus.utils.await
-import scala.concurrent.duration.*
-
-val transaction = TxBuilder(cardanoInfo)
-  .payTo(recipientAddress, Value.ada(10))
-  .complete(asyncProvider, sponsorAddress)
-  .await(30.seconds)  // Block with timeout (JVM only)
-  .sign(signer)
-  .transaction
-```
 
 ### Completion with Pre-fetched UTXOs
 
