@@ -46,9 +46,13 @@ val tx = TxBuilder.withConstMaxBudgetEvaluator(env)
   .transaction
 
 // Now you can submit and verify it fails on-chain
-provider.submitTransaction(tx) match {
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+provider.submit(tx).await(30.seconds) match {
   case Left(error) =>
-    assert(error.contains("MyValidator logic error"))
+    assert(error.message.contains("MyValidator logic error"))
   case Right(_) =>
     fail("Transaction should have been rejected!")
 }
@@ -63,6 +67,10 @@ provider.submitTransaction(tx) match {
 Here's a complete testing pattern using both evaluators:
 
 ```scala copy
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
 class ValidatorIntegrationTest extends AnyFunSuite {
   val defaultEvaluator = PlutusScriptEvaluator(
     cardanoInfo,
@@ -82,7 +90,7 @@ class ValidatorIntegrationTest extends AnyFunSuite {
       .transaction
 
     // Should succeed on-chain
-    provider.submitTransaction(tx) match {
+    provider.submit(tx).await(30.seconds) match {
       case Right(txHash) =>
         println(s"Transaction accepted: ${txHash.toHex}")
       case Left(error) =>
@@ -103,9 +111,9 @@ class ValidatorIntegrationTest extends AnyFunSuite {
       .transaction
 
     // Should fail on-chain
-    provider.submitTransaction(tx) match {
+    provider.submit(tx).await(30.seconds) match {
       case Left(error) =>
-        assert(error.contains("preimage hash mismatch"))
+        assert(error.message.contains("preimage hash mismatch"))
       case Right(txHash) =>
         fail(s"Invalid transaction was accepted: ${txHash.toHex}")
     }
