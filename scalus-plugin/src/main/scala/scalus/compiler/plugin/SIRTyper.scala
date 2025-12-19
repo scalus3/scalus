@@ -275,6 +275,8 @@ class SIRTyper(using Context) {
             Some(SIRType.Boolean)
         else if symbol == Symbols.requiredClass("scalus.builtin.ByteString") then
             Some(SIRType.ByteString)
+        else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinValue") then
+            Some(SIRType.BuiltinValue)
         else if symbol == Symbols.requiredClass("scala.math.BigInt") then Some(SIRType.Integer)
         else if symbol == defn.IntType.typeSymbol || symbol == defn.BoxedIntClass then
             Some(SIRType.Integer)

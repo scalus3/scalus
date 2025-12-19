@@ -118,6 +118,7 @@ final class SIRCompiler(
     private val ByteStringModuleSymbol = requiredModule("scalus.builtin.ByteString")
     private val ByteStringSymbolHex = ByteStringModuleSymbol.requiredMethod("hex")
     private val ByteStringSymbolUtf8 = ByteStringModuleSymbol.requiredMethod("utf8")
+    private val BuiltinValueModuleSymbol = requiredModule("scalus.builtin.BuiltinValue")
     private val FromDataSymbol = requiredClass("scalus.builtin.FromData")
     private val ToDataSymbol = requiredClass("scalus.builtin.ToData")
     private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
@@ -2489,6 +2490,19 @@ final class SIRCompiler(
             // Equality and inequality: ==, !=
             case Apply(Select(lhs, op), List(rhs)) if op == nme.EQ || op == nme.NE =>
                 compileEquality(env, lhs, op, rhs, tree.srcPos)
+            // BuiltinValue.empty - compile to unValueData(emptyDataMap)
+            case expr if expr.symbol == BuiltinValueModuleSymbol.requiredMethod("empty") =>
+                val emptyDataMap = SIR.Const(
+                  scalus.uplc.Constant.Data(scalus.builtin.Data.Map(scalus.prelude.List.Nil)),
+                  SIRType.Data.tp,
+                  AnnotationsDecl.fromSrcPos(tree.srcPos)
+                )
+                SIR.Apply(
+                  SIRBuiltins.unValueData,
+                  emptyDataMap,
+                  SIRType.BuiltinValue,
+                  AnnotationsDecl.fromSrcPos(tree.srcPos)
+                )
             // BUILTINS
             case bi: Select if builtinFun(bi.symbol).isDefined =>
                 if env.debug then println(s"compileExpr: builtinFun: ${bi.symbol}")
