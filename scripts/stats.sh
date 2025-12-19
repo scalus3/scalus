@@ -18,6 +18,10 @@ else
   DATE_TYPE="gnu"
 fi
 
+# Get the last two version tags (filtering out non-version tags)
+LATEST_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+
 # Function to normalize author names
 normalize_author() {
   awk -F'|' '
@@ -57,6 +61,39 @@ get_git_stats() {
   fi
 
   eval "$git_cmd" | awk '
+    /^AUTHOR:/ {
+      if (author) {
+        print author "|" plus "|" minus "|" commits
+        plus=0; minus=0; commits=0
+      }
+      author=substr($0, 8)
+      commits++
+    }
+    /^[0-9]/ && NF==3 && $3 ~ /\.scala$/ {
+      plus+=$1
+      minus+=$2
+    }
+    /^$/ {
+      if (author) {
+        print author "|" plus "|" minus "|" commits
+        author=""
+        plus=0; minus=0; commits=0
+      }
+    }
+    END {
+      if (author) {
+        print author "|" plus "|" minus "|" commits
+      }
+    }
+  ' | normalize_author | sort -rn
+}
+
+# Function to get git stats for a ref range (e.g., "v0.13.0..v0.14.0" or "v0.14.0..HEAD")
+# Only counts .scala files
+get_git_stats_by_ref() {
+  local ref_range=$1
+
+  git log --numstat --pretty=format:'AUTHOR:%aN' $ref_range | awk '
     /^AUTHOR:/ {
       if (author) {
         print author "|" plus "|" minus "|" commits
@@ -252,6 +289,34 @@ for i in {11..0}; do
       "$month_name" 0 0 0 0
   fi
 done
+
+echo ""
+
+# Last Release stats
+echo -e "${BOLD}${YELLOW}📦 Last Release ($LATEST_TAG)${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "${CYAN}Changes from ${WHITE}$PREVIOUS_TAG${CYAN} to ${WHITE}$LATEST_TAG${RESET}"
+echo ""
+
+last_release_stats=$(get_git_stats_by_ref "${PREVIOUS_TAG}..${LATEST_TAG}")
+if [ -n "$last_release_stats" ]; then
+  display_author_stats "$last_release_stats" 0
+else
+  echo -e "${YELLOW}No commits in last release${RESET}"
+fi
+
+echo ""
+
+# Upcoming Release stats
+echo -e "${BOLD}${YELLOW}🚀 Upcoming Release (since $LATEST_TAG)${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+
+upcoming_stats=$(get_git_stats_by_ref "${LATEST_TAG}..HEAD")
+if [ -n "$upcoming_stats" ]; then
+  display_author_stats "$upcoming_stats" 0
+else
+  echo -e "${YELLOW}No commits since $LATEST_TAG${RESET}"
+fi
 
 echo ""
 echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"

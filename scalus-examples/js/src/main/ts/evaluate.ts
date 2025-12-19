@@ -3,7 +3,7 @@ import {readFileSync} from "node:fs";
 const {
     Scalus,
     SlotConfig
-} = require("../../../../../scalus-cardano-ledger/js/src/main/npm/scalus-cardano-ledger-opt-bundle.js");
+} = require("../../../../../scalus-cardano-ledger/js/src/main/npm/scalus.js");
 
 const script = "545301010023357389210753756363657373004981";
 const applied = Scalus.applyDataArgToScript(script, JSON.stringify({"int": 42}));

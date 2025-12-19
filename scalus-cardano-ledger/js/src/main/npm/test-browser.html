@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scalus Cardano Ledger - Browser Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 { color: #4cc9f0; }
+        .test-result {
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 6px;
+            font-family: monospace;
+        }
+        .success { background: #0a3d2a; border-left: 4px solid #00ff88; }
+        .error { background: #3d0a0a; border-left: 4px solid #ff4444; }
+        .info { background: #1a2a4a; border-left: 4px solid #4cc9f0; }
+        pre {
+            background: #0d0d1a;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+        }
+        button {
+            background: #4cc9f0;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover { background: #7dd8f5; }
+        #results { margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Scalus Cardano Ledger - Browser Test</h1>
+    <p>Open the browser console (F12) for detailed output.</p>
+
+    <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="clearResults()">Clear</button>
+
+    <div id="results"></div>
+
+    <!-- CommonJS shim for browser -->
+    <script>
+        // Create module/exports shim for CommonJS bundles
+        var module = { exports: {} };
+        var exports = module.exports;
+    </script>
+    <script src="scalus.js"></script>
+    <script>
+        // Expose exports to global scope after bundle loads
+        window.Scalus = module.exports.Scalus;
+        window.SlotConfig = module.exports.SlotConfig;
+        window.Result = module.exports.Result;
+        window.Redeemer = module.exports.Redeemer;
+        console.log('Module exports:', module.exports);
+    </script>
+    <script src="test-browser.js"></script>
+</body>
+</html>

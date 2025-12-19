@@ -12,7 +12,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.13.0"
+val scalusStableVersion = "0.14.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
@@ -494,17 +494,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        // ExBudget -> ExUnits migration in 0.13.0
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.TxEvaluator.this"),
-        ProblemFilters
-            .exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.TxEvaluator.initialBudget"),
-        // BloxbeanToLedgerTranslation moved to scalus-cardano-ledger
-        ProblemFilters
-            .exclude[MissingClassProblem]("scalus.cardano.ledger.BloxbeanToLedgerTranslation"),
-        ProblemFilters
-            .exclude[MissingClassProblem]("scalus.cardano.ledger.BloxbeanToLedgerTranslation$")
-      ),
+      mimaBinaryIssueFilters ++= Seq.empty,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
@@ -611,8 +601,8 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // copy scalus-*-bundle.js to dist for publishing on npm
       prepareNpmPackage := {
           val bundle = (Compile / fullOptJS / webpack).value
-          val target = (Compile / sourceDirectory).value / "npm"
-          bundle.foreach(f => IO.copyFile(f.data.file, target / f.data.file.getName))
+          val target = (Compile / sourceDirectory).value / "npm" / "scalus.js"
+          bundle.foreach(f => IO.copyFile(f.data.file, target))
           streams.value.log.info(s"Copied ${bundle} to ${target}")
       },
       // use custom webpack config to export scalus as a commonjs2 module

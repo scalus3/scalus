@@ -1,7 +1,12 @@
 {
   "name": "scalus",
-  "version": "0.0.2",
+  "version": "0.14.0",
   "description": "Scalus – Cardano on-chain / off-chain toolkit compiled with Scala.js",
+  "files": [
+    "scalus.js",
+    "scalus.d.ts",
+    "README.md"
+  ],
   "keywords": [
     "cardano",
     "plutus",
@@ -10,7 +15,7 @@
     "scala",
     "scalajs"
   ],
-  "main": "scalus-cardano-ledger-opt-bundle.js",
+  "main": "scalus.js",
   "types": "scalus.d.ts",
   "repository": {
     "type": "git",

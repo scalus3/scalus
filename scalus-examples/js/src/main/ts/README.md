@@ -32,7 +32,7 @@ This command:
 
 - Compiles the Scala.js code to JavaScript
 - Optimizes the bundle with Closure Compiler
-- Creates `scalus-cardano-ledger-opt-bundle.js` in `scalus-cardano-ledger/js/src/main/npm/`
+- Creates `scalus.js` in `scalus-cardano-ledger/js/src/main/npm/`
 
 ### 2. Install Dependencies
 
@@ -55,7 +55,7 @@ import {Scalus, SlotConfig} from "scalus";
 Change it to a relative path or the correct absolute path for your system:
 
 ```typescript
-const {Scalus, SlotConfig} = require("../../../../../scalus-cardano-ledger/js/src/main/npm/scalus-cardano-ledger-opt-bundle.js");
+const {Scalus, SlotConfig} = require("../../../../../scalus-cardano-ledger/js/src/main/npm/scalus.js");
 ```
 
 ## Running the Examples
@@ -162,7 +162,7 @@ You can copy this file to your project or reference it in your `tsconfig.json`:
 
 ## Troubleshooting
 
-### Error: Cannot find module 'scalus-cardano-ledger-opt-bundle.js'
+### Error: Cannot find module 'scalus.js'
 
 Make sure you've run `sbtn scalusCardanoLedgerJS/prepareNpmPackage` and updated the path in
 `evaluate.ts`.
