@@ -28,11 +28,11 @@ private[builtin] trait BuiltinValueApi {
     /** String representation - stub */
     private[builtin] def valueToString(self: BuiltinValue): String = "BuiltinValue(stub)"
 
-    /** Convert to Data - stub for plugin compilation */
+    /** Convert to Data - stub, not used in plugin */
     def toData(value: BuiltinValue): Data =
         throw new UnsupportedOperationException("BuiltinValue.toData not available in plugin")
 
-    /** Convert from Data - stub for plugin compilation */
+    /** Convert from Data - stub, not used in plugin */
     def fromData(data: Data): BuiltinValue =
         throw new UnsupportedOperationException("BuiltinValue.fromData not available in plugin")
 }
