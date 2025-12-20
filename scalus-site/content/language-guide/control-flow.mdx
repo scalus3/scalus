@@ -147,14 +147,11 @@ compile {
 
 ```scala
 compile {
-  val pair = (BigInt(10), ByteString.fromHex("abc"))
+  val pair = (BigInt(10), hex"abc")
 
   pair match
-    case (amount, hash) if amount > BigInt(0) =>
-      // Note: guards not supported, see workaround below
-      hash
-    case _ =>
-      ByteString.empty
+    case (amount, hash) if amount > BigInt(0) => hash
+    case _ => hex""
 }
 ```
 
@@ -174,79 +171,6 @@ compile {
   flag match
     case true => "yes"
     case false => "no"
-}
-```
-
-## Guards (Not Supported - Workarounds)
-
-Pattern matching guards (`case pattern if condition =>`) are **not supported** in Scalus. However, there are effective workarounds:
-
-### Workaround 1: Move Guard to Right-Hand Side
-
-Instead of:
-```scala
-// NOT SUPPORTED
-numbers match
-  case head :: tail if head > 10 => "big"
-  case head :: tail if head > 5 => "medium"
-  case _ => "small"
-```
-
-Do this:
-```scala
-// SUPPORTED
-numbers match
-  case head :: tail =>
-    if head > 10 then "big"
-    else if head > 5 then "medium"
-    else "small"
-  case Nil => "empty"
-```
-
-### Workaround 2: Extract to Helper Function
-
-```scala
-def processAccount(acc: Account): BigInt =
-  if acc.balance > BigInt(1000) then acc.balance * 2
-  else if acc.balance > BigInt(500) then acc.balance
-  else BigInt(0)
-
-compile {
-  state match
-    case State.Active(account) => processAccount(account)
-    case _ => BigInt(0)
-}
-```
-
-### Workaround 3: Nested Matching
-
-```scala
-compile {
-  state match
-    case State.Active(account) =>
-      account.balance match
-        case b if b > BigInt(1000) => /* Not supported */
-        // Instead:
-        case b =>
-          if b > BigInt(1000) then b * 2
-          else if b > BigInt(500) then b
-          else BigInt(0)
-    case _ => BigInt(0)
-}
-```
-
-### Workaround 4: Filter Then Match
-
-```scala
-compile {
-  val numbers = List(1, 2, 3, 4, 5)
-
-  // Instead of matching with guards, filter first
-  val largeNumbers = numbers.filter(_ > 3)
-
-  largeNumbers match
-    case Nil => "no large numbers"
-    case head :: tail => s"largest: $head"
 }
 ```
 
