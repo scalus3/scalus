@@ -95,6 +95,7 @@ lazy val profilingScalacOptions = Seq(
 
 lazy val copySharedFiles = taskKey[Unit]("Copy shared files")
 lazy val prepareNpmPackage = taskKey[Unit]("Make an copy scalus bundle.js to npm directory")
+lazy val runNpmTests = taskKey[Unit]("Run npm TypeScript tests")
 
 // Scalus Compiler Plugin Dependency
 lazy val PluginDependency: List[Def.Setting[?]] = List(scalacOptions ++= {
@@ -599,13 +600,41 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // Lucid Evolution and CML for transaction signing
       Compile / npmDependencies += "@lucid-evolution/wallet" -> "0.1.72",
       Compile / npmDependencies += "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3",
-      // copy scalus-*-bundle.js to dist for publishing on npm
+      // copy scalus.js and scalus.js.map to npm directory for publishing
       prepareNpmPackage := {
           val bundle = (Compile / fullOptJS / webpack).value
-          val target = (Compile / sourceDirectory).value / "npm" / "scalus.js"
-          bundle.foreach(f => IO.copyFile(f.data.file, target))
-          streams.value.log.info(s"Copied ${bundle} to ${target}")
+          val npmDir = (Compile / sourceDirectory).value / "npm"
+          val log = streams.value.log
+          bundle.foreach { f =>
+              val sourceJs = f.data.file
+              val targetJs = npmDir / "scalus.js"
+              IO.copyFile(sourceJs, targetJs)
+              log.info(s"Copied ${sourceJs} to ${targetJs}")
+              // Also copy source map if it exists
+              val sourceMap = new File(sourceJs.getParentFile, sourceJs.getName + ".map")
+              if (sourceMap.exists()) {
+                  val targetMap = npmDir / "scalus.js.map"
+                  IO.copyFile(sourceMap, targetMap)
+                  log.info(s"Copied ${sourceMap} to ${targetMap}")
+              }
+          }
       },
+      runNpmTests := {
+          import scala.sys.process._
+          val npmDir = (Compile / sourceDirectory).value / "npm"
+          val log = streams.value.log
+          log.info("Installing npm dependencies...")
+          val installExitCode = Process("npm" :: "install" :: Nil, npmDir).!
+          if (installExitCode != 0) {
+              throw new RuntimeException("npm install failed")
+          }
+          log.info("Running TypeScript tests...")
+          val testExitCode = Process("npm" :: "test" :: Nil, npmDir).!
+          if (testExitCode != 0) {
+              throw new RuntimeException("npm tests failed")
+          }
+      },
+      runNpmTests := runNpmTests.dependsOn(prepareNpmPackage).value,
       // use custom webpack config to export scalus as a commonjs2 module
       // otherwise it won't export the module correctly
       webpackConfigFile := Some(sourceDirectory.value / "main" / "webpack" / "webpack.config.js"),
@@ -697,7 +726,7 @@ addCommandAlias(
 )
 addCommandAlias(
   "ci-js",
-  "clean;js/Test/compile;js/test;scalusCardanoLedgerJS/prepareNpmPackage"
+  "clean;js/Test/compile;js/test;scalusCardanoLedgerJS/runNpmTests"
 )
 addCommandAlias(
   "ci-native",

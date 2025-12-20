@@ -12,6 +12,35 @@ function clearResults() {
     resultsDiv.innerHTML = '';
 }
 
+// Run shared tests from bundled shared-tests.ts
+function runSharedTests() {
+    log('<b>Running Shared Test Suite</b>', 'info');
+
+    if (typeof window.runAllSharedTests !== 'function') {
+        log('ERROR: Shared tests not loaded. Make sure to run "npm run build:browser-tests" first.', 'error');
+        return;
+    }
+
+    const results = window.runAllSharedTests(Scalus, SlotConfig);
+    let passed = 0;
+    let failed = 0;
+
+    for (const result of results) {
+        if (result.passed) {
+            log(`✓ ${result.name}`, 'success');
+            passed++;
+        } else {
+            log(`✗ ${result.name}: ${result.message || 'failed'}`, 'error');
+            failed++;
+        }
+    }
+
+    const allPassed = failed === 0;
+    log(`<b>Shared Tests: ${passed} passed, ${failed} failed</b>`, allPassed ? 'success' : 'error');
+    return allPassed;
+}
+
+// Legacy manual tests for additional exploration
 function testBasicScriptEvaluation() {
     log('<b>Test 1: Basic Script Evaluation</b>');
     try {
@@ -224,6 +253,17 @@ function testApiSummary() {
     }
 }
 
+function runLegacyTests() {
+    log('<b>Running Legacy Manual Tests</b>', 'info');
+    testBasicScriptEvaluation();
+    testSlotConfig();
+    testApplyDataArgToScript();
+    testExUnits();
+    testScriptFailure();
+    testEvalPlutusScripts();
+    testApiSummary();
+}
+
 function runAllTests() {
     clearResults();
     log('<b>Running Scalus Cardano Ledger Browser Tests</b><br>Bundle: scalus.js', 'info');
@@ -240,13 +280,14 @@ function runAllTests() {
     log(`Scalus object loaded. Available methods: ${methods.join(', ')}`, 'info');
     console.log('Scalus:', Scalus);
 
-    testBasicScriptEvaluation();
-    testSlotConfig();
-    testApplyDataArgToScript();
-    testExUnits();
-    testScriptFailure();
-    testEvalPlutusScripts();
-    testApiSummary();
+    // Run shared tests if available
+    if (typeof window.runAllSharedTests === 'function') {
+        runSharedTests();
+        log('<hr>', 'info');
+    }
+
+    // Run legacy manual tests
+    runLegacyTests();
 
     log('<b>All tests completed. Check console for details.</b>', 'info');
 }
@@ -257,4 +298,5 @@ window.onload = () => {
     // Log what we got from the module
     console.log('Scalus available:', typeof Scalus !== 'undefined');
     console.log('SlotConfig available:', typeof SlotConfig !== 'undefined');
+    console.log('Shared tests available:', typeof window.runAllSharedTests === 'function');
 };

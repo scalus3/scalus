@@ -17,6 +17,17 @@
   ],
   "main": "scalus.js",
   "types": "scalus.d.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:browser-tests": "esbuild __tests__/shared-tests.ts --bundle --outfile=shared-tests-bundle.js --format=iife --global-name=SharedTests"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.27.2",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/nau/scalus.git"

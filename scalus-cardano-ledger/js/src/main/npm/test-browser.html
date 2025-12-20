@@ -43,13 +43,27 @@
         }
         button:hover { background: #7dd8f5; }
         #results { margin-top: 20px; }
+        .note {
+            background: #2a2a3e;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <h1>Scalus Cardano Ledger - Browser Test</h1>
     <p>Open the browser console (F12) for detailed output.</p>
 
+    <div class="note">
+        <strong>Note:</strong> To run the shared test suite, first build it with:
+        <code>npm run build:browser-tests</code>
+    </div>
+
     <button onclick="runAllTests()">Run All Tests</button>
+    <button onclick="runSharedTests()">Run Shared Tests Only</button>
+    <button onclick="runLegacyTests()">Run Legacy Tests Only</button>
     <button onclick="clearResults()">Clear</button>
 
     <div id="results"></div>
@@ -69,6 +83,8 @@
         window.Redeemer = module.exports.Redeemer;
         console.log('Module exports:', module.exports);
     </script>
+    <!-- Load bundled shared tests (built with: npm run build:browser-tests) -->
+    <script src="shared-tests-bundle.js" onerror="console.log('shared-tests-bundle.js not found. Run npm run build:browser-tests to build it.')"></script>
     <script src="test-browser.js"></script>
 </body>
 </html>
