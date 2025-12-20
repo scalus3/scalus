@@ -3,4 +3,4 @@
 :HL["/_next/static/chunks/f826f98a685ea4b7.css","style"]
 :HL["https://tailwindcss.com/plus-assets/img/component-images/bento-03-security.png","image"]
 :HL["/scalus-logo-dark.png","image"]
-0:{"buildId":"DuY73ja0BQzrVqiromP52","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"buildId":"Ew12ZBprXammIypz3qwms","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
