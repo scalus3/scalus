@@ -19,6 +19,7 @@ You get a `Result` object that contains the result of the evaluation, the execut
 You can also use the low-level API to evaluate scripts.
 
 ```scala mdoc:compile-only
+import scalus.cardano.ledger.Language
 import scalus.ledger.api.*
 import scalus.uplc.*, eval.*
 
@@ -38,12 +39,12 @@ def evaluation() = {
     // you can get the actual execution costs from protocol parameters JSON from cardano-cli
     lazy val machineParams = MachineParams.fromCardanoCliProtocolParamsJson(
       "JSON with protocol parameters",
-      PlutusLedgerLanguage.PlutusV3
+      Language.PlutusV3
     )
     // or from blockfrost API
     lazy val machineParams2 = MachineParams.fromBlockfrostProtocolParamsJson(
       "JSON with protocol parameters",
-      PlutusLedgerLanguage.PlutusV3
+      Language.PlutusV3
     )
     // use latest PlutusV3 VM with explicit machine parameters
     val v3vm: PlutusVM = PlutusVM.makePlutusV3VM(machineParams)
