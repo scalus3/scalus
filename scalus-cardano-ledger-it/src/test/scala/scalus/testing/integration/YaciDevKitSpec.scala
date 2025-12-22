@@ -149,9 +149,8 @@ trait YaciDevKitSpec extends BeforeAndAfterAll { self: Suite =>
         // Use BloxbeanAccount for proper HD key signing
         val bloxbeanAccount =
             BloxbeanAccount(Network.Testnet, testMnemonic, PaymentDerivationPath)
-        val signer = new TransactionSigner(
-          Set(bloxbeanAccount.paymentKeyPair, bloxbeanAccount.stakeKeyPair)
-        )
+        // Default signer with only payment key - sufficient for most transactions
+        val signer = new TransactionSigner(Set(bloxbeanAccount.paymentKeyPair))
 
         val address = Address.fromBech32(testAccount.baseAddress())
         val stakeAddress = Address.fromBech32(testAccount.stakeAddress()).asInstanceOf[StakeAddress]
