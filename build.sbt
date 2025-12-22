@@ -671,6 +671,9 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.bitcoin-s" % "bitcoin-s-crypto_2.13" % "1.9.11" % "test",
       libraryDependencies += "org.bitcoin-s" % "bitcoin-s-secp256k1jni" % "1.9.11",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
+      // Testcontainers for Yaci DevKit integration tests
+      libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.41.5" % "test",
+      libraryDependencies += "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.41.5" % "test",
       inConfig(Test)(PluginDependency)
     )
 
