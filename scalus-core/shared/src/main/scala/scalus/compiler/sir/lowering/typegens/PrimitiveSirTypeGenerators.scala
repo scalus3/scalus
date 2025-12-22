@@ -856,10 +856,11 @@ object BuiltinValueSirTypeGenerator extends PrimitiveSirTypeGenerator {
         LoweringContext
     ): LoweredValue = {
         // valueData :: BuiltinValue -> Data
+        // Note: SIR type stays BuiltinValue, only representation changes to PackedData
         lvBuiltinApply(
           SIRBuiltins.valueData,
           input,
-          SIRType.Data(),
+          SIRType.BuiltinValue,
           PrimitiveRepresentation.PackedData,
           pos
         )

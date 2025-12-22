@@ -1,11 +1,12 @@
-package scalus.uplc.eval
+package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.Compiler.compile
 import scalus.builtin.{BuiltinValue, Builtins, ByteString, Data}
 import scalus.prelude.List as PList
-import scalus.uplc.{Constant, DefaultFun, Term}
+import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
+import scalus.uplc.eval.{BuiltinValueOps, PlutusVM, Result}
 
 /** Tests for BuiltinValue compilation and evaluation through @Compile blocks.
   *
@@ -462,5 +463,81 @@ class BuiltinValueCompileTest extends AnyFunSuite {
             case Result.Failure(err, _, _, _) =>
                 fail(s"Evaluation failed: $err")
         }
+    }
+
+    // ==================== Type parameter tests ====================
+
+    test("BuiltinValue as type parameter argument in foldLeft") {
+        // Test that BuiltinValue works as accumulator type in foldLeft,
+        // where the accumulator type B is a type parameter
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val v1 = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(100), BuiltinValue.empty)
+        val v2 = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(50), BuiltinValue.empty)
+        val v3 = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(25), BuiltinValue.empty)
+
+        // foldLeft has signature: def foldLeft[B](init: B)(combiner: (B, A) => B): B
+        // Here BuiltinValue is passed as type parameter B
+        val sir = compile { (values: PList[BuiltinValue]) =>
+            values.foldLeft(BuiltinValue.empty) { (acc, v) =>
+                Builtins.unionValue(acc, v)
+            }
+        }
+        val uplc = sir.toUplc()
+        // Build the list as UPLC terms - list elements are in Data representation
+        // because type parameter A uses PackedData representation for BuiltinValue
+        val listTerm = Term.Const(
+          Constant.List(
+            DefaultUni.Data,
+            scala.List(
+              Constant.Data(BuiltinValueOps.toData(v1)),
+              Constant.Data(BuiltinValueOps.toData(v2)),
+              Constant.Data(BuiltinValueOps.toData(v3))
+            )
+          )
+        )
+        val applied = Term.Apply(uplc, listTerm)
+        val result = evalToBuiltinValue(applied)
+        // 100 + 50 + 25 = 175
+        assert(BuiltinValueOps.lookupCoin(policyA, tokenA, result) == BigInt(175))
+    }
+
+    test("BuiltinValue as type parameter in generic function") {
+        // Test passing BuiltinValue to a function with type parameter
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val v1 = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(100), BuiltinValue.empty)
+
+        val sir = compile { (v: BuiltinValue) =>
+            // identity function has type parameter A
+            def identity[A](x: A): A = x
+            identity(v)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(uplc, Term.Const(Constant.BuiltinValue(v1)))
+        val result = evalToBuiltinValue(applied)
+        assert(BuiltinValueOps.lookupCoin(policyA, tokenA, result) == BigInt(100))
+    }
+
+    test("BuiltinValue as type parameter in higher-order function") {
+        // Test BuiltinValue passed through a higher-order function with type parameters
+        val policyA = ByteString.fromHex("aabbccdd")
+        val tokenA = ByteString.fromString("TokenA")
+        val v1 = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(100), BuiltinValue.empty)
+        val v2 = BuiltinValueOps.insertCoin(policyA, tokenA, BigInt(50), BuiltinValue.empty)
+
+        val sir = compile { (x: BuiltinValue, y: BuiltinValue) =>
+            // apply has type parameter A, B
+            def apply[A, B](f: A => B, a: A): B = f(a)
+            apply((v: BuiltinValue) => Builtins.unionValue(v, y), x)
+        }
+        val uplc = sir.toUplc()
+        val applied = Term.Apply(
+          Term.Apply(uplc, Term.Const(Constant.BuiltinValue(v1))),
+          Term.Const(Constant.BuiltinValue(v2))
+        )
+        val result = evalToBuiltinValue(applied)
+        // 100 + 50 = 150
+        assert(BuiltinValueOps.lookupCoin(policyA, tokenA, result) == BigInt(150))
     }
 }
