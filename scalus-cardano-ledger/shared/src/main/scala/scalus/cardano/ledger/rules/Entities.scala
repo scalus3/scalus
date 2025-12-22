@@ -9,7 +9,12 @@ import scala.annotation.threadUnsafe
 class Context(
     var fee: Coin = Coin.zero,
     val env: UtxoEnv = UtxoEnv.default,
-    val slotConfig: SlotConfig = SlotConfig.Mainnet
+    val slotConfig: SlotConfig = SlotConfig.Mainnet,
+    /** Evaluator mode for Plutus script execution.
+      *   - `Validate`: Enforce budget limits (default, production mode)
+      *   - `EvaluateAndComputeCost`: Ignore budget limits, just compute costs (for testing)
+      */
+    val evaluatorMode: EvaluatorMode = EvaluatorMode.Validate
 )
 
 object Context {

@@ -28,7 +28,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                   ExBudget.fromCpuAndMemory(maxTxExecutionUnits.steps, maxTxExecutionUnits.memory),
               protocolMajorVersion = protocolVersion.toMajor,
               costModels = protocolParameters.costModels,
-              mode = EvaluatorMode.Validate,
+              mode = context.evaluatorMode,
               debugDumpFilesForTesting = false
             ).evalPlutusScripts(event, utxo)
 

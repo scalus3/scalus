@@ -160,6 +160,9 @@ object PlutusScriptEvaluator {
       * @param costModels
       * @param mode
       * @param debugDumpFilesForTesting
+      * @param logBudgetDifferences
+      *   If true, logs differences between original redeemer budgets and computed budgets. Useful
+      *   for debugging budget discrepancies. Default is false.
       */
     def apply(
         slotConfig: SlotConfig,
@@ -167,7 +170,8 @@ object PlutusScriptEvaluator {
         protocolMajorVersion: MajorProtocolVersion,
         costModels: CostModels,
         mode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
-        debugDumpFilesForTesting: Boolean = false
+        debugDumpFilesForTesting: Boolean = false,
+        logBudgetDifferences: Boolean = false
     ): PlutusScriptEvaluator =
         new DefaultImpl(
           slotConfig,
@@ -175,7 +179,8 @@ object PlutusScriptEvaluator {
           protocolMajorVersion,
           costModels,
           mode,
-          debugDumpFilesForTesting
+          debugDumpFilesForTesting,
+          logBudgetDifferences
         )
 
     /** Creates a PlutusScriptEvaluator from [[CardanoInfo]].
@@ -205,7 +210,8 @@ object PlutusScriptEvaluator {
         val protocolMajorVersion: MajorProtocolVersion,
         val costModels: CostModels,
         val mode: EvaluatorMode,
-        val debugDumpFilesForTesting: Boolean
+        val debugDumpFilesForTesting: Boolean,
+        val logBudgetDifferences: Boolean = false
     ) extends PlutusScriptEvaluator {
 
         private val log = Logger()
@@ -349,10 +355,18 @@ object PlutusScriptEvaluator {
                           datum
                         )
 
-                    // Log execution unit differences for debugging
-                    if evaluatedRedeemer.exUnits != redeemer.exUnits then
-                        log.debug(
-                          s"ExUnits changed: ${redeemer.exUnits} -> ${evaluatedRedeemer.exUnits}"
+                    // Log execution unit differences for debugging (only if enabled)
+                    if logBudgetDifferences && evaluatedRedeemer.exUnits != redeemer.exUnits then
+                        val orig = redeemer.exUnits
+                        val comp = evaluatedRedeemer.exUnits
+                        val memDiff = comp.memory - orig.memory
+                        val cpuDiff = comp.steps - orig.steps
+                        log.info(
+                          s"Budget difference for ${redeemer.tag}[${redeemer.index}]: " +
+                              s"original(mem=${orig.memory}, cpu=${orig.steps}) -> " +
+                              s"computed(mem=${comp.memory}, cpu=${comp.steps}), " +
+                              s"diff(mem=${if memDiff >= 0 then "+" else ""}$memDiff, " +
+                              s"cpu=${if cpuDiff >= 0 then "+" else ""}$cpuDiff)"
                         )
 
                     // Update remaining budget (safe subtraction as evaluation would fail if budget exceeded)
