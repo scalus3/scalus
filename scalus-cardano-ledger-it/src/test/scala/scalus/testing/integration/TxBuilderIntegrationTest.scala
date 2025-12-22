@@ -2,12 +2,12 @@ package scalus.testing.integration
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.Compiler.compile
-import scalus.builtin.{ByteString, Data, platform}
+import scalus.builtin.{platform, ByteString, Data}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.{toUplc, plutusV2}
 import scalus.utils.await
+import scalus.{plutusV2, toUplc}
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -15,13 +15,13 @@ import scala.concurrent.duration.*
 
 /** Integration tests for TxBuilder with Yaci DevKit
   *
-  * These tests demonstrate that all types of transactions can be constructed
-  * and successfully submitted to a real Cardano node using Yaci DevKit.
+  * These tests demonstrate that all types of transactions can be constructed and successfully
+  * submitted to a real Cardano node using Yaci DevKit.
   *
   * Tests are ordered to handle dependencies (e.g., stake registration before delegation).
   *
-  * By default, a fresh container is created for each test run to ensure clean state.
-  * For faster iteration during development, set `reuseContainer = true` in YaciDevKitConfig.
+  * By default, a fresh container is created for each test run to ensure clean state. For faster
+  * iteration during development, set `reuseContainer = true` in YaciDevKitConfig.
   */
 class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
 
@@ -95,10 +95,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
             val assetName = AssetName.fromString("TestToken")
             val mintAmount = 1000L
 
-            val mintedValue = Value(
-              Coin.ada(2),
-              MultiAsset(SortedMap(policyId -> SortedMap(assetName -> mintAmount)))
-            )
+            val mintedValue = Value.asset(policyId, assetName, mintAmount, Coin.ada(2))
 
             TxBuilder(ctx.cardanoInfo)
                 .mint(mintingPolicyScript, Map(assetName -> mintAmount), ())
@@ -261,6 +258,51 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
                 .complete(ctx.provider, ctx.address)
                 .await(30.seconds)
                 .sign(signerWithDrep)
+                .transaction
+        }
+    }
+
+    // =========================================================================
+    // Test 9: Native Script Minting
+    // =========================================================================
+
+    test("9. native script minting") {
+        runTxTest("NativeScriptMinting") { ctx =>
+            // Get payment key hash for the native script
+            val paymentVkey = ctx.account.paymentKeyPair.verificationKey
+            val paymentKeyHash: AddrKeyHash =
+                Hash(platform.blake2b_224(ByteString.fromArray(paymentVkey.bytes)))
+
+            // Create a native script that requires the payment key signature
+            val nativeScript = Script.Native(Timelock.Signature(paymentKeyHash))
+            val policyId = nativeScript.scriptHash
+
+            val assetName = AssetName.fromString("NativeToken")
+            val mintAmount = 500L
+
+            // Value to send with minted tokens (must include min ADA)
+            val mintedValue = Value.asset(policyId, assetName, mintAmount, Coin.ada(2))
+
+            // Create native script witness with the expected signer
+            val nativeScriptWitness = NativeScriptWitness(
+              ScriptSource.NativeScriptValue(nativeScript),
+              Set(ExpectedSigner(paymentKeyHash))
+            )
+
+            TxBuilder(ctx.cardanoInfo)
+                .addSteps(
+                  TransactionBuilderStep.Mint(
+                    scriptHash = policyId,
+                    assetName = assetName,
+                    amount = mintAmount,
+                    witness = nativeScriptWitness
+                  )
+                )
+                .payTo(ctx.address, mintedValue)
+                .minFee(MinFee)
+                .complete(ctx.provider, ctx.address)
+                .await(30.seconds)
+                .sign(ctx.signer)
                 .transaction
         }
     }
