@@ -202,8 +202,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
     // Store the governance action ID for use in voting test
     private var submittedGovActionId: Option[GovActionId] = None
 
-    // TODO: Fix TxBuilder balancing for proposal deposits - deposit not properly accounted for
-    ignore("7. proposal submission") {
+    test("7. proposal submission") {
         runTxTest("ProposalSubmission") { ctx =>
             val deposit = Coin(ctx.cardanoInfo.protocolParams.govActionDeposit)
             val rewardAccount = RewardAccount(ctx.stakeAddress)
@@ -234,8 +233,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
     // Test 8: Voting Procedure Submission
     // =========================================================================
 
-    // TODO: Fix TxBuilder balancing for proposal deposits - depends on test 7
-    ignore("8. voting procedure submission") {
+    test("8. voting procedure submission") {
         // Ensure we have a governance action to vote on
         val govActionId = submittedGovActionId.getOrElse {
             fail("No governance action ID available. Test 7 (proposal submission) must run first.")

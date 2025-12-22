@@ -47,9 +47,10 @@ object TxBalance {
         val outputs = producedOutputs(tx)
         val burned = producedMint(tx)
         val conwayTotalDepositsTxCerts = this.conwayTotalDepositsTxCerts(tx, protocolParams)
+        val proposalDeposits = producedProposalDeposits(tx)
         val donation = producedDonation(tx)
 
-        val getTotalDepositsTxBody = conwayTotalDepositsTxCerts
+        val getTotalDepositsTxBody = conwayTotalDepositsTxCerts + proposalDeposits
         val shelleyProducedValue = outputs + Value(fee + getTotalDepositsTxBody)
         val getProducedMaryValue = shelleyProducedValue + burned
         val conwayProducedValue = getProducedMaryValue + donation
@@ -180,5 +181,13 @@ object TxBalance {
         tx: Transaction
     ): Value = {
         Value(tx.body.value.donation.getOrElse(Coin.zero))
+    }
+
+    private def producedProposalDeposits(
+        tx: Transaction
+    ): Coin = {
+        tx.body.value.proposalProcedures.toSeq
+            .map(_.deposit)
+            .foldLeft(Coin.zero)(_ + _)
     }
 }
