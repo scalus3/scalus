@@ -45,6 +45,18 @@ case class ProtocolParams(
 
 object ProtocolParams {
 
+    /** Extension to parse JSON values that may be either strings or numbers. Some APIs (like
+      * Blockfrost) return numeric values as strings, while others (like Yaci DevKit) return them as
+      * numbers.
+      */
+    extension (v: ujson.Value)
+        /** Parse as Long, handling both string and number formats */
+        private def asLong: Long = v.strOpt.map(_.toLong).getOrElse(v.num.toLong)
+
+        /** Parse as Long with default, handling both string and number formats */
+        private def asLongOr(default: Long): Long =
+            v.strOpt.map(_.toLong).orElse(v.numOpt.map(_.toLong)).getOrElse(default)
+
     /** Reads ProtocolParams from JSON string in Blockfrost format */
     def fromBlockfrostJson(json: String): ProtocolParams = {
         read[ProtocolParams](json)(using blockfrostParamsReadWriter)
@@ -123,16 +135,15 @@ object ProtocolParams {
           json =>
               ProtocolParams(
                 collateralPercentage = json("collateral_percent").num.toLong,
-                committeeMaxTermLength =
-                    json("committee_max_term_length").strOpt.map(_.toLong).getOrElse(0L),
-                committeeMinSize = json("committee_min_size").strOpt.map(_.toLong).getOrElse(0L),
+                committeeMaxTermLength = json("committee_max_term_length").asLongOr(0L),
+                committeeMinSize = json("committee_min_size").asLongOr(0L),
                 costModels = CostModels(
                   json("cost_models").obj.map { case (k, v) =>
                       Language.valueOf(k).languageId -> v.obj.values.map(_.num.toLong).toIndexedSeq
                   }.toMap
                 ),
-                dRepActivity = json("drep_activity").strOpt.map(_.toLong).getOrElse(0L),
-                dRepDeposit = json("drep_deposit").strOpt.map(_.toLong).getOrElse(0L),
+                dRepActivity = json("drep_activity").asLongOr(0L),
+                dRepDeposit = json("drep_deposit").asLongOr(0L),
                 dRepVotingThresholds = DRepVotingThresholds(
                   motionNoConfidence =
                       UnitInterval.fromDouble(json("dvt_motion_no_confidence").numOpt.getOrElse(0)),
@@ -177,24 +188,24 @@ object ProtocolParams {
                   priceMemory = NonNegativeInterval(json("price_mem").num),
                   priceSteps = NonNegativeInterval(json("price_step").num)
                 ),
-                govActionDeposit = json("gov_action_deposit").strOpt.map(_.toLong).getOrElse(0L),
-                govActionLifetime = json("gov_action_lifetime").strOpt.map(_.toLong).getOrElse(0L),
+                govActionDeposit = json("gov_action_deposit").asLongOr(0L),
+                govActionLifetime = json("gov_action_lifetime").asLongOr(0L),
                 maxBlockBodySize = json("max_block_size").num.toLong,
                 maxBlockExecutionUnits = ExUnits(
-                  memory = json("max_block_ex_mem").str.toLong,
-                  steps = json("max_block_ex_steps").str.toLong
+                  memory = json("max_block_ex_mem").asLong,
+                  steps = json("max_block_ex_steps").asLong
                 ),
                 maxBlockHeaderSize = json("max_block_header_size").num.toLong,
                 maxCollateralInputs = json("max_collateral_inputs").num.toLong,
                 maxTxExecutionUnits = ExUnits(
-                  memory = json("max_tx_ex_mem").str.toLong,
-                  steps = json("max_tx_ex_steps").str.toLong
+                  memory = json("max_tx_ex_mem").asLong,
+                  steps = json("max_tx_ex_steps").asLong
                 ),
                 maxTxSize = json("max_tx_size").num.toLong,
-                maxValueSize = json("max_val_size").str.toLong,
+                maxValueSize = json("max_val_size").asLong,
                 minFeeRefScriptCostPerByte =
                     json("min_fee_ref_script_cost_per_byte").numOpt.map(_.toLong).getOrElse(0L),
-                minPoolCost = json("min_pool_cost").str.toLong,
+                minPoolCost = json("min_pool_cost").asLong,
                 monetaryExpansion = json("rho").num,
                 poolPledgeInfluence = json("a0").num,
                 poolRetireMaxEpoch = json("e_max").num.toLong,
@@ -222,13 +233,13 @@ object ProtocolParams {
                   major = json("protocol_major_ver").num.toInt,
                   minor = json("protocol_minor_ver").num.toInt
                 ),
-                stakeAddressDeposit = json("key_deposit").str.toLong,
-                stakePoolDeposit = json("pool_deposit").str.toLong,
+                stakeAddressDeposit = json("key_deposit").asLong,
+                stakePoolDeposit = json("pool_deposit").asLong,
                 stakePoolTargetNum = json("n_opt").num.toLong,
                 treasuryCut = json("tau").num,
                 txFeeFixed = json("min_fee_b").num.toLong,
                 txFeePerByte = json("min_fee_a").num.toLong,
-                utxoCostPerByte = json("coins_per_utxo_size").str.toLong
+                utxoCostPerByte = json("coins_per_utxo_size").asLong
               )
         )
 

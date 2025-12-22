@@ -155,11 +155,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
               "https://example.com/drep-metadata.json",
               DataHash.fromHex("0" * 64)
             )
-            // Yaci DevKit may have dRepDeposit=0 in protocol params, use a reasonable default
-            val drepDeposit = {
-                val fromParams = ctx.cardanoInfo.protocolParams.dRepDeposit
-                if fromParams > 0 then Coin(fromParams) else Coin(500_000_000) // 500 ADA default
-            }
+            val drepDeposit = Coin(ctx.cardanoInfo.protocolParams.dRepDeposit)
             val cert = Certificate.RegDRepCert(drepCredential, drepDeposit, Some(anchor))
 
             // Create signer that includes drep key
@@ -209,12 +205,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
     // TODO: Fix TxBuilder balancing for proposal deposits - deposit not properly accounted for
     ignore("7. proposal submission") {
         runTxTest("ProposalSubmission") { ctx =>
-            // Yaci DevKit may have govActionDeposit=0 in protocol params, use a reasonable default
-            val deposit = {
-                val fromParams = ctx.cardanoInfo.protocolParams.govActionDeposit
-                // Default is 100,000 ADA for governance proposals
-                if fromParams > 0 then Coin(fromParams) else Coin(100_000_000_000L)
-            }
+            val deposit = Coin(ctx.cardanoInfo.protocolParams.govActionDeposit)
             val rewardAccount = RewardAccount(ctx.stakeAddress)
             val govAction = GovAction.InfoAction
             val anchor = Anchor(
