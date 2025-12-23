@@ -1,6 +1,8 @@
 package scalus.cardano.node
 
+import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
@@ -9,7 +11,7 @@ import scalus.utils.await
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class EmulatorTest extends AnyFunSuite {
+class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
 
@@ -37,7 +39,8 @@ class EmulatorTest extends AnyFunSuite {
             .await()
             .transaction
 
-        provider.submit(tx1).await()
+        val submitResult = provider.submit(tx1).await()
+        assert(submitResult.isRight, s"Transaction should succeed: $submitResult")
 
         // After tx1, utxos should be updated
         val utxosAfterTx1 = provider.utxos
@@ -46,5 +49,95 @@ class EmulatorTest extends AnyFunSuite {
           utxosAfterTx1.keys.exists(_.transactionId == tx1.id),
           "UTXOs should include outputs from tx1"
         )
+    }
+
+    test("Property: submitted valid transaction UTXOs become available") {
+        forAll(
+          Gen.choose(100L, 1000L),
+          Gen.choose(10L, 50L)
+        ) { (initialAmount: Long, paymentAmount: Long) =>
+            whenever(initialAmount > paymentAmount + 1) {
+                val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
+                val initialUtxos = Map(
+                  TransactionInput(genesisHash, 0) -> TransactionOutput(
+                    Alice.address,
+                    Value.ada(initialAmount)
+                  )
+                )
+
+                val emulator = Emulator(
+                  initialUtxos = initialUtxos,
+                  validators = Set.empty,
+                  mutators = Emulator.defaultMutators
+                )
+
+                val tx = TxBuilder(testEnv)
+                    .payTo(Bob.address, Value.ada(paymentAmount))
+                    .complete(emulator, Alice.address)
+                    .await()
+                    .transaction
+
+                val submitResult = emulator.submit(tx).await()
+
+                assert(
+                  submitResult.isRight,
+                  s"Transaction should be accepted but got: $submitResult"
+                )
+
+                // After submission, transaction outputs should be available
+                val utxosAfter = emulator.utxos
+                tx.body.value.outputs.zipWithIndex.foreach { case (output, idx) =>
+                    val txInput = TransactionInput(tx.id, idx)
+                    assert(
+                      utxosAfter.contains(txInput),
+                      s"Output $idx from transaction ${tx.id} should be available in UTXOs"
+                    )
+                    assert(
+                      utxosAfter(txInput) == output.value,
+                      s"Output $idx value should match"
+                    )
+                }
+
+                // All inputs should be consumed (removed from UTXO set)
+                tx.body.value.inputs.toSeq.foreach { input =>
+                    assert(
+                      !utxosAfter.contains(input),
+                      s"Input $input should be consumed (removed from UTXOs)"
+                    )
+                }
+            }
+        }
+    }
+
+    test("Property: invalid transaction (double spend) is rejected") {
+        forAll(Gen.choose(100L, 1000L)) { initialAmount =>
+            val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
+            val initialUtxos = Map(
+              TransactionInput(genesisHash, 0) -> TransactionOutput(
+                Alice.address,
+                Value.ada(initialAmount)
+              )
+            )
+
+            val emulator = Emulator(
+              initialUtxos = initialUtxos,
+              validators = Set.empty,
+              mutators = Emulator.defaultMutators
+            )
+
+            val tx1 = TxBuilder(testEnv)
+                .payTo(Bob.address, Value.ada(10))
+                .complete(emulator, Alice.address)
+                .await()
+                .transaction
+
+            val submit1 = emulator.submit(tx1).await()
+            assert(submit1.isRight, "First transaction should succeed")
+
+            val submit2 = emulator.submit(tx1).await()
+            assert(submit2.isLeft, "Double spend should be rejected")
+        }
     }
 }
