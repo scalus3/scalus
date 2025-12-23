@@ -1,8 +1,10 @@
 package scalus.builtin
 
 import scalus.builtin.Builtins.*
-import scalus.{Compile, CompileDerivations, Ignore}
+import scalus.{Compile, CompileDerivations}
 
+import java.math.BigInteger
+import scala.math.BigInt
 import scala.quoted.*
 
 @FunctionalInterface
@@ -13,7 +15,7 @@ trait ToData[-A] extends Function1[A, Data] with CompileDerivations {
 /** ToData[A] derivation macros.
   */
 @Compile
-object ToData {
+object ToData extends ToDataOffchainApi {
 
     extension [A: ToData](a: A)
         @deprecated("Use Data.toData instead", "0.13.0")
@@ -29,10 +31,6 @@ object ToData {
     @uplcIntrinsic("iData")
     given bigIntToData: ToData[BigInt] = (a: BigInt) => iData(a)
     given ToData[Data] = (a: Data) => a
-    @Ignore
-    given ToData[Int] = (a: Int) => iData(a)
-    @Ignore
-    given ToData[Long] = (a: Long) => iData(a)
     @uplcIntrinsic("bData")
     given ToData[ByteString] = (a: ByteString) => bData(a)
     given ToData[String] = (a: String) => bData(encodeUtf8(a))
@@ -47,13 +45,25 @@ object ToData {
                 mkCons(summon[ToData[B]](a._2), mkNilData())
               )
             )
+}
 
-    // TODO: are we need this?
-    @Ignore
+/** Offchain ToData instances
+  *
+  * We use private trait as Scalus plugin only compiles explicit definitions of @Compile-annotated
+  * objects. We inherit the offchain definitions from the private trait so they aren't compiled to
+  * UPLC.
+  */
+private trait ToDataOffchainApi {
+    given ToData[Byte] = (a: Byte) => iData(BigInt(a))
+    given ToData[Short] = (a: Short) => iData(BigInt(a))
+    given ToData[Int] = (a: Int) => iData(a)
+    given ToData[Long] = (a: Long) => iData(a)
+    given ToData[BigInteger] = (x: BigInteger) => iData(x)
+    given ToData[Integer] = (x: Integer) => iData(BigInt(x))
+    given given_ToData_jsLong: ToData[java.lang.Long] = (x: java.lang.Long) => iData(BigInt(x))
     given eitherToData[A: ToData, B: ToData]: ToData[Either[A, B]] =
         (a: Either[A, B]) =>
             a match
                 case Left(v)  => constrData(0, mkCons(summon[ToData[A]](v), mkNilData()))
                 case Right(v) => constrData(1, mkCons(summon[ToData[B]](v), mkNilData()))
-
 }

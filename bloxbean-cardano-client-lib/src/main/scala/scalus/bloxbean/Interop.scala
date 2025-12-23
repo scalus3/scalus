@@ -10,17 +10,17 @@ import com.bloxbean.cardano.client.transaction.spec.governance.actions.*
 import com.bloxbean.cardano.client.transaction.util.TransactionUtil
 import io.bullet.borer.Cbor
 import scalus.builtin.Builtins.*
-import scalus.builtin.{BuiltinPair, ByteString, Data}
 import scalus.builtin.Data.{toData, ToData}
+import scalus.builtin.{BuiltinPair, ByteString, Data, ToData}
 import scalus.cardano.ledger.{CostModels, Language, MajorProtocolVersion, Script, SlotConfig}
 import scalus.ledger.api
 import scalus.ledger.api.v1.{DCert, ScriptPurpose, StakingCredential}
-import scalus.ledger.api.{v1, v2, v3}
 import scalus.ledger.api.v3.GovernanceActionId
-import scalus.{builtin, ledger, prelude}
-import scalus.prelude.{asScalus, List as PList, SortedMap}
+import scalus.ledger.api.{v1, v2, v3}
 import scalus.prelude.List.toScalaList
+import scalus.prelude.{asScalus, List as PList, SortedMap}
 import scalus.uplc.eval.*
+import scalus.{builtin, ledger, prelude}
 
 import java.math.BigInteger
 import java.util
@@ -66,9 +66,12 @@ object Interop {
                 case c => c
     }
 
-    given ToData[BigInteger] = (x: BigInteger) => iData(x)
-    given ToData[Integer] = (x: Integer) => iData(BigInt(x))
-    given ToData[java.lang.Long] = (x: java.lang.Long) => iData(BigInt(x))
+    @deprecated("use ToData.given_ToData_BigInteger", "0.14.1")
+    given ToData[BigInteger] = ToData.given_ToData_BigInteger
+    @deprecated("use ToData.given_ToData_Integer", "0.14.1")
+    given ToData[Integer] = ToData.given_ToData_Integer
+    @deprecated("use ToData.given_ToData_jsLong", "0.14.1")
+    given ToData[java.lang.Long] = ToData.given_ToData_jsLong
 
     given ToData[ProtocolParamUpdate] =
         given ToData[Rational] = (x: Rational) =>
