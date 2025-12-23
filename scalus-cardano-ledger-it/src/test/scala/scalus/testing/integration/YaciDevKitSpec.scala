@@ -135,7 +135,7 @@ trait YaciDevKitSpec extends BeforeAndAfterAll { self: Suite =>
         val baseUrl = _container.getYaciStoreApiUrl.stripSuffix("/")
         val provider = BlockfrostProvider("", baseUrl)
 
-        val protocolParams = provider.fetchLatestParams().await()
+        val protocolParams = provider.fetchLatestParams.await()
 
         // Yaci DevKit uses slot length of 1 second and start time of 0
         val yaciSlotConfig = SlotConfig(

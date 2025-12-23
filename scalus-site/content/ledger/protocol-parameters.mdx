@@ -1,0 +1,73 @@
+---
+title: Protocol Parameters
+sidebarTitle: Protocol Parameters
+description: How to fetch, parse, and use Cardano protocol parameters in Scalus.
+---
+
+# Protocol Parameters
+
+Protocol parameters (pps, params) represent general, static information about the Cardano network that your app needs.
+Protocol parameters are necessary for most chain-related operations, such as transaction building, fee calculation, and ledger rule validation.
+
+Scalus models all relevant ledger values, and protocol parameters are one of them.
+Chances are, your application already computes, consumes, or otherwise handles protocol parameters.
+This article shows you how to fetch them, parse them from JSON strings, or map from other libraries' representations.
+
+## Fetching Protocol Parameters
+
+`Provider` is an interface for interacting with the blockchain. Its `fetchLatestParams` method allows you to get the parameters
+from a node, or any other source that a given `Provider` abstracts over. This method returns a `Future` of Scalus's
+representation of `ProtocolParams`, ready to use in all our APIs.
+
+```scala
+import scalus.cardano.node.Provider
+import scala.concurrent.ExecutionContext.Implicits.global
+
+val provider: Provider = ??? // BlockfrostProvider, Emulator, etc.
+
+val paramsFuture = provider.fetchLatestParams
+
+// On JVM, use the await extension
+import scalus.utils.await
+val params = paramsFuture.await()
+```
+
+## Parsing from JSON
+
+If you have a JSON string with protocol parameters, Scalus provides several methods for deserializing them
+into `ProtocolParams`. All of them are located in the companion object of `scalus.cardano.ledger.ProtocolParams`.
+
+### fromBlockfrostJson
+
+If you have a string of JSON that you've obtained from Blockfrost yourself, e.g., from using bloxbean, or from querying
+the endpoint directly, you can call `ProtocolParams.fromBlockfrostJson` with your string to get an instance of `ProtocolParams`.
+
+```scala
+import scalus.cardano.ledger.ProtocolParams
+
+// From string
+val params = ProtocolParams.fromBlockfrostJson(jsonString)
+
+// From InputStream
+import java.io.FileInputStream
+val stream = new FileInputStream("protocol-params.json")
+val params2 = ProtocolParams.fromBlockfrostJson(stream)
+```
+
+### fromCardanoCliJson
+
+If you have a string of JSON that you've obtained from the Cardano CLI tool, you can call
+`ProtocolParams.fromCardanoCliJson` with your string to get an instance of `ProtocolParams`.
+
+```scala
+import scalus.cardano.ledger.ProtocolParams
+
+// cardano-cli query protocol-parameters --mainnet > params.json
+val json = scala.io.Source.fromFile("params.json").mkString
+val params = ProtocolParams.fromCardanoCliJson(json)
+```
+
+## See Also
+
+- [Ledger Rules](/ledger/ledger-rules)
+- [Transaction Builder](/transaction-builder)

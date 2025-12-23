@@ -14,6 +14,8 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 trait Provider {
 
+    def fetchLatestParams(using ExecutionContext): Future[ProtocolParams]
+
     def submit(transaction: Transaction)(using
         ExecutionContext
     ): Future[Either[SubmitError, TransactionHash]]

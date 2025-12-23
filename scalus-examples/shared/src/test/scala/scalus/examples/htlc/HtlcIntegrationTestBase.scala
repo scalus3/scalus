@@ -97,8 +97,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
     private def createTestContext(testEnv: TestEnv): Future[TestContext] = testEnv match {
         case TestEnv.Local =>
             val client = BlockfrostProvider.localYaci
-            client
-                .fetchLatestParams()
+            client.fetchLatestParams
                 .map { protocolParams =>
                     // YaciDevKit uses Start Time: 0, Slot Length: 1 sec
                     val yaciSlotConfig = SlotConfig(
@@ -123,8 +122,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               throw new IllegalStateException("BLOCKFROST_API_KEY environment variable not set")
             )
             val client = BlockfrostProvider(apiKey, BlockfrostProvider.PreprodUrl)
-            client
-                .fetchLatestParams()
+            client.fetchLatestParams
                 .map { protocolParams =>
                     val cardanoInfo = CardanoInfo(
                       protocolParams = protocolParams,

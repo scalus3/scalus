@@ -41,6 +41,11 @@ class Emulator(
         }
     }
 
+    def fetchLatestParams(using ExecutionContext): Future[ProtocolParams] = {
+        val params = contextRef.get().env.params
+        Future.successful(params)
+    }
+
     def submit(transaction: Transaction)(using
         ExecutionContext
     ): Future[Either[SubmitError, TransactionHash]] =

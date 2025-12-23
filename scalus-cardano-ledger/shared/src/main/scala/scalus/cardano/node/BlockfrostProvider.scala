@@ -17,7 +17,7 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.Pr
 
     private def headers = Map("project_id" -> apiKey)
 
-    def fetchLatestParams(): Future[ProtocolParams] = {
+    def fetchLatestParams(using ExecutionContext): Future[ProtocolParams] = {
         val url = s"$baseUrl/epochs/latest/parameters"
         basicRequest
             .get(uri"$url")

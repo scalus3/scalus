@@ -1,0 +1,104 @@
+---
+title: Emulator
+sidebarTitle: Emulator
+description: Use the Emulator for local development and testing of your Cardano applications.
+---
+
+# Emulator
+
+This article covers the `Emulator` type and how to utilize it for local development of your on-chain applications.
+
+## Provider
+
+Scalus provides a `Provider` trait. `Provider`s allow you to interact with the blockchain by sending transactions and
+querying its state.
+
+One example of a Provider familiar to readers is Blockfrost. Its APIs allow you to send CBOR-encoded transactions
+and query UTxOs by address, datum, or tokens. Scalus represents this with `BlockfrostProvider`, and this class is useful
+to verify that your transactions and scripts work against a real blockchain, or a test node.
+
+Interacting with Blockfrost incurs network delays, and is impractical to run in, e.g., a unit test suite, where
+launching a local node would be inconvenient.
+
+## Emulator
+
+`Emulator` implements the `Provider` trait just the same way `BlockfrostProvider` does, but instead operates entirely
+locally.
+It allows querying for UTxOs in the same way, only in the local `Emulator` the entire UTxO set is kept in-memory.
+It allows you to submit transactions, running an extensive suite of [ledger rules](/ledger/ledger-rules)
+against them, and it doesn't keep consensus, since there's no actual chain underneath, only an emulator of a single node.
+
+Here's an example of how Scalus itself uses `Emulator` in its testing. This is a snippet of our transaction builder
+test:
+
+```scala
+test("complete should automatically add inputs for simple ADA payment") {
+  val provider = Emulator(
+    Map(
+      input(0) -> adaOutput(Alice.address, 100),
+      input(1) -> adaOutput(Alice.address, 50)
+    )
+  )
+
+  val tx = TxBuilder(testEnv)
+    .payTo(Bob.address, Value.ada(10))
+    .complete(provider, Alice.address)
+    .await()
+    .transaction
+
+  assert(tx.body.value.inputs.toSeq.size == 1, "Transaction must have exactly 1 input")
+  assert(outputsOf(Bob, tx).size == 1, "Should have output to Bob")
+  assert(
+    outputsOf(Bob, tx).head.value.value.coin >= Coin.ada(10),
+    "Bob should receive at least 10 ADA"
+  )
+  assert(outputsOf(Alice, tx).nonEmpty, "Should have change output to Alice")
+}
+```
+
+As you can see, it's very simple to create an Emulator. Above, only the initial UTxO set is provided. The `TxBuilder`
+then uses the provider to query additional UTxOs. If they weren't there, the transaction couldn't have been built.
+
+Here's the signature of `Emulator`'s constructor:
+
+```scala
+class Emulator(
+    initialUtxos: Utxos = Map.empty,
+    initialContext: Context = Context.testMainnet(),
+    val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
+)
+```
+
+This represents its functionality pretty well: it keeps track of UTxOs, updating them when a transaction is successfully
+handled, and allowing you to query them. It maintains a node context, which includes protocol parameters and slot configuration, and
+a number of `validators` and `mutators`, which represent the ledger rules that are run against every transaction.
+
+## Working with Emulator
+
+### Transaction Submission
+
+When you submit a transaction, the `submit` method returns `Future[Either[SubmitError, TransactionHash]]`. If a transaction
+violates any ledger rules, you'll get a `Left(NodeError(...))` with a description of which rule was violated:
+
+```scala
+provider.submit(tx).await() match {
+  case Right(txHash) => println(s"Transaction submitted: $txHash")
+  case Left(error) => println(s"Transaction failed: $error")
+}
+```
+
+### Inspecting State
+
+You can inspect the emulator's UTxO state at any time by querying it using the standard `Provider` API methods like
+`findUtxo` and `findUtxos`.
+
+### Thread Safety
+
+The `Emulator` is thread-safe and can be safely used from multiple threads concurrently.
+
+## See Also
+
+- [Ledger Rules](/ledger/ledger-rules)
+- [Protocol Parameters](/ledger/protocol-parameters)
+- [Transaction Builder](/transaction-builder)
