@@ -704,13 +704,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val nativeScript = Timelock.Signature(Hash(scalus.builtin.platform.blake2b_224(publicKey)))
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
 
-        val input1 = TransactionInput(
+        val input1 = Input(
           TransactionHash.fromHex(
             "a000000000000000000000000000000000000000000000000000000000000000"
           ),
           0
         )
-        val input2 = TransactionInput(
+        val input2 = Input(
           TransactionHash.fromHex(
             "b000000000000000000000000000000000000000000000000000000000000000"
           ),

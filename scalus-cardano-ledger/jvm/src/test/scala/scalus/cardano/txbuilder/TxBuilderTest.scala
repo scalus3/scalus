@@ -466,7 +466,7 @@ class TxBuilderTest extends AnyFunSuite {
         // (signature verification is tested elsewhere in TransactionSignerTest)
         val provider = Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100))
+            Input(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100))
           ),
           validators = Set.empty,
           mutators = Emulator.defaultMutators

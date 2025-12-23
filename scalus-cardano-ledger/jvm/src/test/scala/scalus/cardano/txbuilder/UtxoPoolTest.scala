@@ -25,7 +25,7 @@ class UtxoPoolTest extends AnyFunSuite {
     val tokenName: AssetName = AssetName.fromString("token")
 
     // Helper methods
-    def input(index: Int): TransactionInput = TransactionInput(genesisHash, index)
+    def input(index: Int): TransactionInput = Input(genesisHash, index)
 
     def adaOutput(ada: Int): TransactionOutput =
         TransactionOutput(Alice.address, Value.ada(ada))

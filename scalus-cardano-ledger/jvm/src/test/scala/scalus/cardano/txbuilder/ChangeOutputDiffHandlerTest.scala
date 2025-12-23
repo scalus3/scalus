@@ -310,7 +310,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     private lazy val h2so4 = AssetName.fromString("h2so4")
 
     private def mkTx(in: Value, output: Value, fee: Coin): (Utxos, Transaction) = {
-        val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
+        val input = Input(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val utxo = Map(
           input -> TransactionOutput(
             address = testAddress,

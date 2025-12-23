@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 object MempackParser {
 
     def parseTransactionInput(bytes: Array[Byte]): TransactionInput =
-        TransactionInput(
+        Input(
           TransactionHash.fromArray(bytes.slice(0, 32)),
           bytes(32) | (bytes(33) << 8)
         )

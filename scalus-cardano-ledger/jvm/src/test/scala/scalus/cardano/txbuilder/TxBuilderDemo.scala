@@ -27,7 +27,7 @@ class TxBuilderDemo extends AnyFunSuite {
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     // Helper methods for creating UTXOs
-    def input(index: Int): TransactionInput = TransactionInput(genesisHash, index)
+    def input(index: Int): TransactionInput = Input(genesisHash, index)
     def adaOutput(address: Address, ada: Int): TransactionOutput =
         TransactionOutput(address, Value.ada(ada))
 

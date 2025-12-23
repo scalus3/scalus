@@ -18,7 +18,7 @@ val genTransactionInput: Gen[TransactionInput] =
         txId <- genByteStringOfN(32).map(TransactionHash.fromByteString)
         index <- posNum[Int] // we subtract one below to get a non-negative
 
-    } yield TransactionInput(transactionId = txId, index = index - 1)
+    } yield Input(transactionId = txId, index = index - 1)
 
 val genAddrKeyHash: Gen[AddrKeyHash] =
     genByteStringOfN(28).map(AddrKeyHash.fromByteString)

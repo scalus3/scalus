@@ -19,7 +19,7 @@ class TransactionTest extends AnyFunSuite {
               TransactionBody(
                 inputs = TaggedSortedSet.from(
                   Set(
-                    TransactionInput(Hash(ByteString.fill(32, 0)), 0)
+                    Input(Hash(ByteString.fill(32, 0)), 0)
                   )
                 ),
                 outputs = Vector(

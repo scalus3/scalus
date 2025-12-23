@@ -1054,22 +1054,22 @@ val pkhOutput: Babbage = Babbage(
   scriptRef = None
 )
 
-def mkTransactionInput(txId: String, ix: Int): TransactionInput = {
+def mkInput(txId: String, ix: Int): TransactionInput = {
     val txIdBytes: Array[Byte] = ByteString.fromHex(txId).bytes
-    TransactionInput(
+    Input(
       transactionId = Hash(ByteString.fromArray(txIdBytes)),
       index = ix
     )
 }
 
 val input0: TransactionInput =
-    mkTransactionInput("5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65ad959996", 0)
+    mkInput("5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65ad959996", 0)
 
 val input1: TransactionInput =
-    mkTransactionInput("5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65ad959996", 1)
+    mkInput("5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65ad959996", 1)
 
 val input2: TransactionInput =
-    mkTransactionInput("5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65ad959996", 2)
+    mkInput("5d677265fa5bb21ce6d8c7502aca70b9316d10e958611f3c6b758f65ad959996", 2)
 
 val script2: Script.PlutusV1 =
     Cbor.decode(ByteString.fromHex("4e4d01000033222220051200120012").bytes)

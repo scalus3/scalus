@@ -19,8 +19,8 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         val initialUtxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(Bob.address, Value.ada(50))
+          Input(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100)),
+          Input(genesisHash, 1) -> TransactionOutput(Bob.address, Value.ada(50))
         )
 
         val provider = Emulator(
@@ -60,7 +60,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
                 val initialUtxos = Map(
-                  TransactionInput(genesisHash, 0) -> TransactionOutput(
+                  Input(genesisHash, 0) -> TransactionOutput(
                     Alice.address,
                     Value.ada(initialAmount)
                   )
@@ -88,7 +88,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 // After submission, transaction outputs should be available
                 val utxosAfter = emulator.utxos
                 tx.body.value.outputs.zipWithIndex.foreach { case (output, idx) =>
-                    val txInput = TransactionInput(tx.id, idx)
+                    val txInput = Input(tx.id, idx)
                     assert(
                       utxosAfter.contains(txInput),
                       s"Output $idx from transaction ${tx.id} should be available in UTXOs"
@@ -115,7 +115,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
             val initialUtxos = Map(
-              TransactionInput(genesisHash, 0) -> TransactionOutput(
+              Input(genesisHash, 0) -> TransactionOutput(
                 Alice.address,
                 Value.ada(initialAmount)
               )

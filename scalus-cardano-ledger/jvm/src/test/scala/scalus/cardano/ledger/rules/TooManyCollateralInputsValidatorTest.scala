@@ -12,7 +12,7 @@ class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTe
         val maxCollateralInputs = context.env.params.maxCollateralInputs.toInt
 
         val collateralInputs = (1 to maxCollateralInputs).map { i =>
-            TransactionInput(
+            Input(
               Arbitrary.arbitrary[TransactionHash].sample.get,
               i
             )
@@ -34,7 +34,7 @@ class TooManyCollateralInputsValidatorTest extends AnyFunSuite, ValidatorRulesTe
         val context = Context()
         val state = State()
         val collateralInputs = (1 to context.env.params.maxCollateralInputs.toInt + 1).map { i =>
-            TransactionInput(
+            Input(
               Arbitrary.arbitrary[TransactionHash].sample.get,
               i
             )

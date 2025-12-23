@@ -60,8 +60,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) ->
-                TransactionOutput.Babbage(
+            Input(genesisHash, 0) ->
+                TransactionOutput(
                   address = ownerAddress,
                   value = Value.lovelace(100_000_000L)
                 )

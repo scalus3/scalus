@@ -17,9 +17,9 @@ class StakeDistributionTest extends AnyFunSuite with Matchers:
 
         // Multiple UTxOs for same credential
         val utxos: Utxos = Map(
-          TransactionInput(TransactionHash.fromHex("1" * 64), 0) ->
+          Input(TransactionHash.fromHex("1" * 64), 0) ->
               TransactionOutput.Shelley(addr, Value(Coin(1000000000), MultiAsset.empty), None),
-          TransactionInput(TransactionHash.fromHex("2" * 64), 0) ->
+          Input(TransactionHash.fromHex("2" * 64), 0) ->
               TransactionOutput.Shelley(addr, Value(Coin(2000000000L), MultiAsset.empty), None)
         )
 
@@ -38,7 +38,7 @@ class StakeDistributionTest extends AnyFunSuite with Matchers:
         )
 
         val utxos: Utxos = Map(
-          TransactionInput(TransactionHash.fromHex("1" * 64), 0) ->
+          Input(TransactionHash.fromHex("1" * 64), 0) ->
               TransactionOutput.Shelley(addr, Value(Coin(1000000000), MultiAsset.empty), None)
         )
 

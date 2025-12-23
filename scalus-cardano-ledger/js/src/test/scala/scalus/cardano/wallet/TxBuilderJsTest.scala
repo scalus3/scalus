@@ -22,7 +22,7 @@ class TxBuilderJsTest extends AnyFunSuite {
 
     private val aliceUtxo: Utxo =
         Utxo(
-          TransactionInput(TransactionHash.fromHex("0" * 64), 0) -> TransactionOutput(
+          Input(TransactionHash.fromHex("0" * 64), 0) -> TransactionOutput(
             alice,
             Value.ada(100)
           )

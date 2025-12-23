@@ -84,12 +84,12 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) ->
+            Input(genesisHash, 0) ->
                 TransactionOutput.Babbage(
                   address = committerAddress,
                   value = Value.lovelace(100_000_000L)
                 ),
-            TransactionInput(genesisHash, 1) ->
+            Input(genesisHash, 1) ->
                 TransactionOutput.Babbage(
                   address = receiverAddress,
                   value = Value.lovelace(100_000_000L)

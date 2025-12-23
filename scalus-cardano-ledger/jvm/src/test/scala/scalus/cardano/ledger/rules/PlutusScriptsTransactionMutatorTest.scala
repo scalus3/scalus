@@ -171,7 +171,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         assert(result.isRight, result)
 
         val newState = result.toOption.get
-        val newInput = TransactionInput(
+        val newInput = Input(
           transactionId = transaction.id,
           index = 0
         )
@@ -256,7 +256,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         assert(result.isRight, result)
 
         val newState = result.toOption.get
-        val newInput = TransactionInput(
+        val newInput = Input(
           transactionId = transaction.id,
           index = 0
         )

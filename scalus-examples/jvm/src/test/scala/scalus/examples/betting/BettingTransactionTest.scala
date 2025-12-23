@@ -79,23 +79,23 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) ->
-                TransactionOutput.Babbage(
+            Input(genesisHash, 0) ->
+                TransactionOutput(
                   address = player1Address,
                   value = Value.ada(1_000_000L)
                 ),
-            TransactionInput(genesisHash, 1) ->
-                TransactionOutput.Babbage(
+            Input(genesisHash, 1) ->
+                TransactionOutput(
                   address = player2Address,
                   value = Value.ada(1_000_000L)
                 ),
-            TransactionInput(genesisHash, 2) ->
-                TransactionOutput.Babbage(
+            Input(genesisHash, 2) ->
+                TransactionOutput(
                   address = oracleAddress,
                   value = Value.ada(1_000_000_000L)
                 ),
-            TransactionInput(genesisHash, 3) ->
-                TransactionOutput.Babbage(
+            Input(genesisHash, 3) ->
+                TransactionOutput(
                   address = deploymentAddress,
                   value = Value.ada(1_000_000_000L)
                 )

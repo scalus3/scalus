@@ -36,7 +36,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
                 .toUplc()
                 .plutusV2
         val s = Script.PlutusV2(ByteString.unsafeFromArray(pubKeyValidator.cborEncoded))
-        val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
+        val input = Input(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val datum = Data.unit
         val dataHash: DataHash = Hash(platform.blake2b_256(datum.toCborByteString))
         val outputAddress =
@@ -91,7 +91,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
                 .toUplc()
                 .plutusV3
         val s = Script.PlutusV3(ByteString.unsafeFromArray(pubKeyValidator.cborEncoded))
-        val input = TransactionInput(Hash(platform.blake2b_256(utf8"asdf")), 0)
+        val input = Input(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val datum = Data.unit
         val dataHash: DataHash = Hash(platform.blake2b_256(datum.toCborByteString))
         val outputAddress =

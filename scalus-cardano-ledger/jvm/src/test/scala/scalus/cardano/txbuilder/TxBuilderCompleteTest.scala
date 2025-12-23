@@ -52,7 +52,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     )
 
     // Helper methods for creating UTXOs
-    def input(index: Int): TransactionInput = TransactionInput(genesisHash, index)
+    def input(index: Int): TransactionInput = Input(genesisHash, index)
 
     def adaOutput(address: Address, ada: Int): TransactionOutput =
         TransactionOutput(address, Value.ada(ada))
@@ -1063,13 +1063,13 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         // Script UTXO with transaction hash starting with "b" (sorts AFTER sponsor)
         val scriptTxHash = TransactionHash.fromByteString(ByteString.fromHex("b" + "0" * 63))
-        val scriptUtxoInput = TransactionInput(scriptTxHash, 0)
+        val scriptUtxoInput = Input(scriptTxHash, 0)
 
         // Sponsor UTXOs with transaction hashes starting with "0" (sorts BEFORE script "b...")
         // Need multiple UTXOs: one for collateral, one for fees
         val sponsorTxHash1 = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-        val sponsorInput1 = TransactionInput(sponsorTxHash1, 0)
-        val sponsorInput2 = TransactionInput(sponsorTxHash1, 1) // Same txhash, different index
+        val sponsorInput1 = Input(sponsorTxHash1, 0)
+        val sponsorInput2 = Input(sponsorTxHash1, 1) // Same txhash, different index
 
         // TxBuilder requires a datum for script outputs
         val sUtxo = Utxo(
