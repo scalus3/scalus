@@ -56,7 +56,7 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     val TestTag = Tag("conformance")
 
-    test("Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.Scripts pass in phase 2.datumIsWellformed") {
+    test("OutOfBudget failure") {
         val vectorName =
             "Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.Scripts pass in phase 2.datumIsWellformed"
         for
