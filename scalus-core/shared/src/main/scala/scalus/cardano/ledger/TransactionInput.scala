@@ -26,3 +26,9 @@ object TransactionInput {
                 case c => c
         }
 }
+
+/** Alias for [[TransactionInput]] */
+type Input = TransactionInput
+
+/** Alias for [[TransactionInput]] */
+val Input = TransactionInput
