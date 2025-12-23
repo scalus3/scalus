@@ -1,12 +1,10 @@
 package scalus.testing.conformance
 
 import org.scalatest.Tag
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.funsuite.*
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.*
 import scalus.testing.conformance.CardanoLedgerVectors.*
-import scalus.utils.Hex
-import scala.util.Try
+import org.scalatest.TryValues.*
 
 /** Cardano Ledger Conformance Test Suite
   *
@@ -53,112 +51,22 @@ import scala.util.Try
   *   [[https://github.com/IntersectMBO/plutus/blob/master/plutus-core/CHANGELOG.md Plutus CHANGELOG]]
   */
 class CardanoLedgerConformanceTest extends AnyFunSuite {
-
-    val TestTag = Tag("conformance")
-
-    test("OutOfBudget failure") {
-        val vectorName =
-            "Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.Scripts pass in phase 2.datumIsWellformed"
-        for
-            result <- validateVector(vectorName, EvaluatorMode.Validate)
-            if result._2 != result._3.isRight
-        do println(pprint(result))
+    for vector <- vectorNames().filter(_.contains(".UTXO")) do {
+        test("Conformance test vector: " + vector):
+            for
+                case (x, success, result) <-
+                    try validateVector(vector)
+                    catch {
+                        case e: Exception =>
+                            fail(s"[$vector] Exception: ${e.getMessage}", e)
+                    }
+                if success != result.isRight
+            do fail(s"[$vector/$x] $result")
     }
 
-    test("Conformance ledger rules test - EvaluatorMode.EvaluateAndComputeCost") {
-        assert(conformanceTestFailed(EvaluatorMode.EvaluateAndComputeCost).isEmpty)
+    test("Debug specific vector") {
+        val vector = "Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.No cost model"
+        println(s"Debugging vector: $vector")
+        print(pprint(validateVector(vector)))
     }
-
-    def validateVector(
-        vectorName: String,
-        evaluatorMode: EvaluatorMode
-    ): List[(String, Boolean, CardanoMutator.Result)] =
-        for case (path, vector) <- loadAllVectors(vectorName) yield
-            val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
-            val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
-
-            // Extract protocol parameters from test vector
-            val params = ConwayProtocolParams
-                .extractPparamsHash(vector.oldLedgerState, pparamsDir)
-                .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
-                .map(_.toProtocolParams)
-
-            val context = Context(
-              env = rules.UtxoEnv(
-                0,
-                params.getOrElse(UtxoEnv.default.params),
-                state.certState,
-                scalus.cardano.address.Network.Testnet
-              ),
-              evaluatorMode = evaluatorMode
-            )
-
-            val result = CardanoMutator.transit(context, state, transaction)
-            (
-              path.getFileName.toFile.getName,
-              vector.success,
-              result
-            )
-
-    private def failureVectors(
-        results: List[(String, Try[List[(String, Boolean, CardanoMutator.Result)]])]
-    ) = for
-        case (vectorName, result) <- results
-        x <- result.toOption.toList
-        case (n, success, result) <- x if success != result.isRight
-    yield (vectorName, n, success, result)
-
-    def conformanceTestFailed(evaluatorMode: EvaluatorMode) = {
-        val vectors = vectorNames().filter(_.contains(".UTXO"))
-        val results =
-            for vectorName <- vectors
-            yield vectorName -> Try(
-              validateVector(vectorName, evaluatorMode)
-            )
-
-        val failed = failureVectors(results)
-
-        // Group by exception type
-        val groups = failed
-            .groupBy {
-                case (_, _, _, Left(ex)) =>
-                    if ex.getMessage.contains("Out of budget") then "Out of budget"
-                    else ex.getClass.getSimpleName
-                case _ => "Unexpected success"
-            }
-            .toSeq
-            .sortBy(-_._2.length)
-
-        val failsRate =
-            (BigDecimal(100.0) * failed.length / vectors.length)
-                .setScale(2, BigDecimal.RoundingMode.UP)
-        val successRate = 100.0 - failsRate
-
-        println(s"Vectors: ${vectors.length}")
-        println(s"Failed: ${failed.length}")
-        println(s"Fails rate: $failsRate%")
-        println(s"Success rate: $successRate%")
-
-        println(s"\nFailures by exception type (with message):")
-        groups.foreach { case (exType, failures) =>
-            println(s"  $exType: ${failures.length}")
-        }
-
-        println(s"\nFailures details:")
-        groups.foreach { case (exType, failures) =>
-            println(s"$exType:")
-            failures.foreach { case (vectorName, name, expectedSuccess, result) =>
-                println(s"    $vectorName / $name")
-                println(s"      expectedSuccess=$expectedSuccess")
-                result match {
-                    case Left(ex) =>
-                        println(s"      error: ${ex.getClass.getSimpleName}: ${ex.getMessage}")
-                    case Right(_) => println(s"      (unexpectedly succeeded)")
-                }
-            }
-        }
-
-        failed
-    }
-
 }
