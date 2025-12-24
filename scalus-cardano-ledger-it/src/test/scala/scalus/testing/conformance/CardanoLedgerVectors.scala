@@ -31,15 +31,13 @@ object CardanoLedgerVectors {
       * @return
       *   List of (test file name, expected success, actual result)
       */
-    def validateVector(
+    def testVector(
         vectorName: String,
         evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
         useParams: Boolean = true
-    ): List[(String, Boolean, CardanoMutator.Result)] =
+    ): List[(String, Boolean, Try[CardanoMutator.Result])] =
         for case (path, vector) <- loadVector(vectorName) yield
-            val transaction = Transaction.fromCbor(Hex.hexToBytes(vector.cbor))
             val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
-
             // Extract protocol parameters from test vector
             val params =
                 if useParams then
@@ -48,7 +46,6 @@ object CardanoLedgerVectors {
                         .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
                         .map(_.toProtocolParams)
                 else None
-
             val context = Context(
               env = rules.UtxoEnv(
                 0,
@@ -59,11 +56,13 @@ object CardanoLedgerVectors {
               evaluatorMode = evaluatorMode
             )
 
-            val result = CardanoMutator.transit(context, state, transaction)
             (
               path.getFileName.toFile.getName,
               vector.success,
-              result
+              for
+                  transaction <- Try(Transaction.fromCbor(Hex.hexToBytes(vector.cbor)))
+                  result <- Try(CardanoMutator.transit(context, state, transaction))
+              yield result
             )
 
     // Extract vectors.tar.gz to a temporary directory

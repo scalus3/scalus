@@ -49,22 +49,20 @@ import scalus.testing.conformance.CardanoLedgerVectors.*
   *   [[https://github.com/IntersectMBO/plutus/blob/master/plutus-core/CHANGELOG.md Plutus CHANGELOG]]
   */
 class CardanoLedgerConformanceTest extends AnyFunSuite {
+
+    // Test all vectors with UTXO cases
     for vector <- vectorNames().filter(_.contains(".UTXO")) do {
         test("Conformance test vector: " + vector):
             for
-                case (x, success, result) <-
-                    try validateVector(vector)
-                    catch {
-                        case e: Exception =>
-                            fail(s"[$vector] Exception: ${e.getMessage}", e)
-                    }
-                if success != result.isRight
-            do fail(s"[$vector/$x] $result")
+                case (x, success, result) <- testVector(vector)
+                if success != (result.isSuccess && result.get.isRight)
+            do fail(s"[$vector/$x]($success) $result")
     }
 
     ignore("Debug specific vector") {
-        val vector = "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.Conway features fail in Plutusdescribe v1 and v2.Unsupported Fields.CurrentTreasuryValue.V1"
+        val vector =
+            "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.Conway features fail in Plutusdescribe v1 and v2.Unsupported Fields.CurrentTreasuryValue.V1"
         println(s"Debugging vector: $vector")
-        print(pprint(validateVector(vector)))
+        print(pprint(testVector(vector)))
     }
 }
