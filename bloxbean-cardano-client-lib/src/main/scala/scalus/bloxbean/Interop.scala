@@ -75,40 +75,55 @@ object Interop {
 
     given ToData[ProtocolParamUpdate] =
         given ToData[Rational] = (x: Rational) =>
-            listData(builtin.BuiltinList(x.getNumerator.toData, x.getDenominator.toData))
+            listData(
+              builtin.BuiltinList(
+                x.getNumerator.toData(using ToData.given_ToData_BigInteger),
+                x.getDenominator.toData(using ToData.given_ToData_BigInteger)
+              )
+            )
         given ToData[UnitInterval] = (x: UnitInterval) =>
-            listData(builtin.BuiltinList(x.getNumerator.toData, x.getDenominator.toData))
+            listData(
+              builtin.BuiltinList(
+                x.getNumerator.toData(using ToData.given_ToData_BigInteger),
+                x.getDenominator.toData(using ToData.given_ToData_BigInteger)
+              )
+            )
         given ToData[ExUnitPrices] = (x: ExUnitPrices) =>
             listData(builtin.BuiltinList(x.getMemPrice.toData, x.getStepPrice.toData))
         given ToData[ExUnits] = (x: ExUnits) =>
-            listData(builtin.BuiltinList(x.getMem.toData, x.getSteps.toData))
+            listData(
+              builtin.BuiltinList(
+                x.getMem.toData(using ToData.given_ToData_BigInteger),
+                x.getSteps.toData(using ToData.given_ToData_BigInteger)
+              )
+            )
 
         (x: ProtocolParamUpdate) => {
             val params = mutable.ArrayBuffer.empty[BuiltinPair[Data, Data]]
             def add[A: ToData](idx: Int, value: A): Unit =
                 if value != null then params.append(BuiltinPair(iData(idx), value.toData))
 
-            add(0, x.getMinFeeA)
-            add(1, x.getMinFeeB)
-            add(2, x.getMaxBlockSize)
-            add(3, x.getMaxTxSize)
-            add(4, x.getMaxBlockHeaderSize)
-            add(5, x.getKeyDeposit)
-            add(6, x.getPoolDeposit)
-            add(7, x.getMaxEpoch)
-            add(8, x.getNOpt)
+            add(0, x.getMinFeeA)(using ToData.given_ToData_BigInteger)
+            add(1, x.getMinFeeB)(using ToData.given_ToData_BigInteger)
+            add(2, x.getMaxBlockSize)(using ToData.given_ToData_Integer)
+            add(3, x.getMaxTxSize)(using ToData.given_ToData_Integer)
+            add(4, x.getMaxBlockHeaderSize)(using ToData.given_ToData_Integer)
+            add(5, x.getKeyDeposit)(using ToData.given_ToData_BigInteger)
+            add(6, x.getPoolDeposit)(using ToData.given_ToData_BigInteger)
+            add(7, x.getMaxEpoch)(using ToData.given_ToData_Integer)
+            add(8, x.getNOpt)(using ToData.given_ToData_Integer)
             add(9, x.getPoolPledgeInfluence)
             add(10, x.getExpansionRate)
             add(11, x.getTreasuryGrowthRate)
-            add(16, x.getMinPoolCost)
-            add(17, x.getAdaPerUtxoByte)
+            add(16, x.getMinPoolCost)(using ToData.given_ToData_BigInteger)
+            add(17, x.getAdaPerUtxoByte)(using ToData.given_ToData_BigInteger)
             // FIXME: implement 18 x.getCostModels
             add(19, x.getExecutionCosts)
             add(20, x.getMaxTxExUnits)
             add(21, x.getMaxBlockExUnits)
-            add(22, x.getMaxValSize)
-            add(23, x.getCollateralPercent)
-            add(24, x.getMaxCollateralInputs)
+            add(22, x.getMaxValSize)(using ToData.given_ToData_jsLong)
+            add(23, x.getCollateralPercent)(using ToData.given_ToData_Integer)
+            add(24, x.getMaxCollateralInputs)(using ToData.given_ToData_Integer)
             // FIXME: add missing fields when they are implemented in the client lib
             mapData(builtin.BuiltinList.from(params))
         }
