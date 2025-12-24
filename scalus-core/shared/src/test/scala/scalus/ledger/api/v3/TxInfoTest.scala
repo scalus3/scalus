@@ -1,9 +1,10 @@
 package scalus.ledger.api.v3
 
 import scalus.prelude.StdlibTestKit
-import scalus.prelude.{List, Option}
+import scalus.prelude.{List, Option, SortedMap}
 import scalus.builtin.ByteString
-//import scalus.ledger.api.v2.OutputDatum
+import scalus.builtin.Builtins.{constrData, mkNilData}
+import scalus.ledger.api.v2.OutputDatum
 
 class TxInfoTest extends StdlibTestKit with ArbitraryInstances {
     test("findOwnInput") {
@@ -11,11 +12,10 @@ class TxInfoTest extends StdlibTestKit with ArbitraryInstances {
             TxInfo.placeholder.findOwnInput(txOutRef).isEmpty
         }
 
-        // TODO: UPLC error -- need support to copy in case class
-//        checkEval { (txInfo: TxInfo, txInInfo: TxInInfo) =>
-//            val newTxInfo = txInfo.copy(inputs = txInInfo +: txInfo.inputs)
-//            newTxInfo.findOwnInput(txInInfo.outRef) === Option.Some(txInInfo)
-//        }
+        checkEval { (txInfo: TxInfo, txInInfo: TxInInfo) =>
+            val newTxInfo = txInfo.copy(inputs = txInInfo +: txInfo.inputs)
+            newTxInfo.findOwnInput(txInInfo.outRef) === Option.Some(txInInfo)
+        }
 
         assertEval(
           TxInfo.placeholder
@@ -28,39 +28,38 @@ class TxInfoTest extends StdlibTestKit with ArbitraryInstances {
               .isEmpty
         )
 
-        // TODO: UPLC error -- need support to copy in case class
-//        assertEvalEq(
-//          TxInfo.placeholder
-//              .copy(
-//                inputs = List(
-//                  TxInInfo(
-//                    TxOutRef(TxInfo.placeholder.id, BigInt(0)),
-//                    TxOut(
-//                      Address(
-//                        Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
-//                        Option.None
-//                      ),
-//                      Value.zero
-//                    )
-//                  )
-//                )
-//              )
-//              .findOwnInput(
-//                TxOutRef(TxInfo.placeholder.id, BigInt(0))
-//              ),
-//          Option.Some(
-//            TxInInfo(
-//              TxOutRef(TxInfo.placeholder.id, BigInt(0)),
-//              TxOut(
-//                Address(
-//                  Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
-//                  Option.None
-//                ),
-//                Value.zero
-//              )
-//            )
-//          )
-//        )
+        assertEvalEq(
+          TxInfo.placeholder
+              .copy(
+                inputs = List(
+                  TxInInfo(
+                    TxOutRef(TxInfo.placeholder.id, BigInt(0)),
+                    TxOut(
+                      Address(
+                        Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
+                        Option.None
+                      ),
+                      Value.zero
+                    )
+                  )
+                )
+              )
+              .findOwnInput(
+                TxOutRef(TxInfo.placeholder.id, BigInt(0))
+              ),
+          Option.Some(
+            TxInInfo(
+              TxOutRef(TxInfo.placeholder.id, BigInt(0)),
+              TxOut(
+                Address(
+                  Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
+                  Option.None
+                ),
+                Value.zero
+              )
+            )
+          )
+        )
     }
 
     test("findOwnDatum") {
@@ -68,70 +67,68 @@ class TxInfoTest extends StdlibTestKit with ArbitraryInstances {
             TxInfo.placeholder.findOwnDatum(datumHash).isEmpty
         }
 
-        // TODO: UPLC error -- need support to copy in case class
-//        checkEval { (txInfo: TxInfo, datum: Datum) =>
-//            val newTxInfo = txInfo.copy(
-//              data = SortedMap.singleton(datum.dataHash, datum),
-//              outputs = List.empty
-//            )
-//
-//            newTxInfo.findOwnDatum(datum.dataHash) === Option.Some(datum)
-//        }
+        checkEval { (txInfo: TxInfo, datum: Datum) =>
+            val newTxInfo = txInfo.copy(
+              data = SortedMap.singleton(datum.dataHash, datum),
+              outputs = List.empty
+            )
 
-        // TODO: UPLC error -- need support to copy in case class
-//        checkEval { (txInfo: TxInfo, datum: Datum) =>
-//            val newTxInfo = txInfo.copy(
-//              data = SortedMap.empty,
-//              outputs = List(
-//                TxOut(
-//                  Address(
-//                    Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
-//                    Option.None
-//                  ),
-//                  Value.zero,
-//                  OutputDatum.OutputDatum(datum)
-//                )
-//              )
-//            )
-//
-//            newTxInfo.findOwnDatum(datum.dataHash) === Option.Some(datum)
-//        }
+            newTxInfo.findOwnDatum(datum.dataHash) === Option.Some(datum)
+        }
 
-        // TODO: UPLC error
-//        assertEval(
-//          TxInfo.placeholder.findOwnDatum(Data.unit.dataHash).isEmpty
-//        )
+        checkEval { (txInfo: TxInfo, datum: Datum) =>
+            val newTxInfo = txInfo.copy(
+              data = SortedMap.empty,
+              outputs = List(
+                TxOut(
+                  Address(
+                    Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
+                    Option.None
+                  ),
+                  Value.zero,
+                  OutputDatum.OutputDatum(datum)
+                )
+              )
+            )
 
-        // TODO: UPLC error -- need support to copy in case class
-//        assertEvalEq(
-//          TxInfo.placeholder
-//              .copy(
-//                data = SortedMap.singleton(Data.unit.dataHash, Data.unit),
-//                outputs = List.empty
-//              )
-//              .findOwnDatum(Data.unit.dataHash),
-//          Option.Some(Data.unit)
-//        )
+            newTxInfo.findOwnDatum(datum.dataHash) === Option.Some(datum)
+        }
 
-        // TODO: UPLC error -- need support to copy in case class
-//        assertEvalEq(
-//          TxInfo.placeholder
-//              .copy(
-//                data = SortedMap.empty,
-//                outputs = List(
-//                  TxOut(
-//                    Address(
-//                      Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
-//                      Option.None
-//                    ),
-//                    Value.zero,
-//                    OutputDatum.OutputDatum(Data.unit)
-//                  )
-//                )
-//              )
-//              .findOwnDatum(Data.unit.dataHash),
-//          Option.Some(Data.unit)
-//        )
+        assertEval(
+          TxInfo.placeholder.findOwnDatum(constrData(BigInt(0), mkNilData()).dataHash).isEmpty
+        )
+
+        assertEvalEq(
+          TxInfo.placeholder
+              .copy(
+                data = SortedMap.singleton(
+                  constrData(BigInt(0), mkNilData()).dataHash,
+                  constrData(BigInt(0), mkNilData())
+                ),
+                outputs = List.empty
+              )
+              .findOwnDatum(constrData(BigInt(0), mkNilData()).dataHash),
+          Option.Some(constrData(BigInt(0), mkNilData()))
+        )
+
+        assertEvalEq(
+          TxInfo.placeholder
+              .copy(
+                data = SortedMap.empty,
+                outputs = List(
+                  TxOut(
+                    Address(
+                      Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
+                      Option.None
+                    ),
+                    Value.zero,
+                    OutputDatum.OutputDatum(constrData(BigInt(0), mkNilData()))
+                  )
+                )
+              )
+              .findOwnDatum(constrData(BigInt(0), mkNilData()).dataHash),
+          Option.Some(constrData(BigInt(0), mkNilData()))
+        )
     }
 
     test("findOwnScriptOutputs") {
@@ -139,37 +136,36 @@ class TxInfoTest extends StdlibTestKit with ArbitraryInstances {
             TxInfo.placeholder.findOwnScriptOutputs(validatorHash).isEmpty
         }
 
-        // TODO: UPLC error -- need support to copy in case class
-//        checkEval { (txInfo: TxInfo, validatorHash: ValidatorHash) =>
-//            val newTxInfo = txInfo.copy(
-//              outputs = List(
-//                TxOut(
-//                  Address(
-//                    Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
-//                    Option.None
-//                  ),
-//                  Value.zero
-//                ),
-//                TxOut(
-//                  Address(
-//                    Credential.ScriptCredential(validatorHash),
-//                    Option.None
-//                  ),
-//                  Value.zero
-//                )
-//              )
-//            )
-//
-//            newTxInfo.findOwnScriptOutputs(validatorHash) === List(
-//              TxOut(
-//                Address(
-//                  Credential.ScriptCredential(validatorHash),
-//                  Option.None
-//                ),
-//                Value.zero
-//              )
-//            )
-//        }
+        checkEval { (txInfo: TxInfo, validatorHash: ValidatorHash) =>
+            val newTxInfo = txInfo.copy(
+              outputs = List(
+                TxOut(
+                  Address(
+                    Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
+                    Option.None
+                  ),
+                  Value.zero
+                ),
+                TxOut(
+                  Address(
+                    Credential.ScriptCredential(validatorHash),
+                    Option.None
+                  ),
+                  Value.zero
+                )
+              )
+            )
+
+            newTxInfo.findOwnScriptOutputs(validatorHash) === List(
+              TxOut(
+                Address(
+                  Credential.ScriptCredential(validatorHash),
+                  Option.None
+                ),
+                Value.zero
+              )
+            )
+        }
 
         assertEval(
           TxInfo.placeholder
@@ -177,37 +173,36 @@ class TxInfoTest extends StdlibTestKit with ArbitraryInstances {
               .isEmpty
         )
 
-        // TODO: UPLC error -- need support to copy in case class
-//        assertEvalEq(
-//          TxInfo.placeholder
-//              .copy(
-//                outputs = List(
-//                  TxOut(
-//                    Address(
-//                      Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
-//                      Option.None
-//                    ),
-//                    Value.zero
-//                  ),
-//                  TxOut(
-//                    Address(
-//                      Credential.ScriptCredential(ByteString.empty),
-//                      Option.None
-//                    ),
-//                    Value.zero
-//                  )
-//                )
-//              )
-//              .findOwnScriptOutputs(ByteString.empty),
-//          List(
-//            TxOut(
-//              Address(
-//                Credential.ScriptCredential(ByteString.empty),
-//                Option.None
-//              ),
-//              Value.zero
-//            )
-//          )
-//        )
+        assertEvalEq(
+          TxInfo.placeholder
+              .copy(
+                outputs = List(
+                  TxOut(
+                    Address(
+                      Credential.PubKeyCredential(PubKeyHash(ByteString.empty)),
+                      Option.None
+                    ),
+                    Value.zero
+                  ),
+                  TxOut(
+                    Address(
+                      Credential.ScriptCredential(ByteString.empty),
+                      Option.None
+                    ),
+                    Value.zero
+                  )
+                )
+              )
+              .findOwnScriptOutputs(ByteString.empty),
+          List(
+            TxOut(
+              Address(
+                Credential.ScriptCredential(ByteString.empty),
+                Option.None
+              ),
+              Value.zero
+            )
+          )
+        )
     }
 }
