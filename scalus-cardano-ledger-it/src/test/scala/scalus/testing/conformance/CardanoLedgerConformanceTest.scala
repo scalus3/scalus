@@ -2,9 +2,7 @@ package scalus.testing.conformance
 
 import org.scalatest.Tag
 import org.scalatest.funsuite.*
-import scalus.cardano.ledger.*
 import scalus.testing.conformance.CardanoLedgerVectors.*
-import org.scalatest.TryValues.*
 
 /** Cardano Ledger Conformance Test Suite
   *
@@ -64,8 +62,8 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
             do fail(s"[$vector/$x] $result")
     }
 
-    test("Debug specific vector") {
-        val vector = "Conway.Imp.AlonzoImpSpec.UTXOS.PlutusV1.No cost model"
+    ignore("Debug specific vector") {
+        val vector = "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.Conway features fail in Plutusdescribe v1 and v2.Unsupported Fields.CurrentTreasuryValue.V1"
         println(s"Debugging vector: $vector")
         print(pprint(validateVector(vector)))
     }
