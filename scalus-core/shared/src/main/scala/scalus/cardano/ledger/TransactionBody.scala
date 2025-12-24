@@ -75,13 +75,6 @@ case class TransactionBody(
       "Network ID must be 0 (testnet) or 1 (mainnet)"
     )
 
-    /** Validate deposit and deposit return */
-    require(
-      !(currentTreasuryValue.isDefined && donation.isEmpty) &&
-          !(currentTreasuryValue.isEmpty && donation.isDefined),
-      "currentTreasuryValue and deposit return must both be defined or both be undefined"
-    )
-
 object TransactionBody:
     // Needed to resolve ambiguity between Encoder[TaggedSet] and Encoder[IndexedSeq]
     // we override it with explicit import which is higher priority in given resolution
@@ -325,7 +318,7 @@ object TransactionBody:
                         donation = Some(value)
 
                     case _ =>
-                        r.skipElement()
+                        r.validationFailure(s"Unknown key $key in TransactionBody")
                 i += 1
             end while
             TransactionBody(

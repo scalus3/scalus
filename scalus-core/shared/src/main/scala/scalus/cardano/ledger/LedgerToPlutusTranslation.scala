@@ -2,7 +2,9 @@ package scalus.cardano.ledger
 
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
+import scalus.cardano.address
 import scalus.cardano.address.*
+import scalus.cardano.address.StakePayload.Stake
 import scalus.cardano.ledger.*
 import scalus.ledger.api
 import scalus.ledger.api.*
@@ -78,6 +80,15 @@ object LedgerToPlutusTranslation {
       */
     def getStakingCredential(cred: Credential): v1.StakingCredential = {
         v1.StakingCredential.StakingHash(getCredential(cred))
+    }
+
+    /** Converts [[RewardAccount]] to Plutus [[v1.Credential]]
+      */
+    def getRewardAccount(rewardAccount: RewardAccount): v1.Credential = {
+        rewardAccount.address.payload match {
+            case StakePayload.Stake(hash)  => v1.Credential.PubKeyCredential(v1.PubKeyHash(hash))
+            case StakePayload.Script(hash) => v1.Credential.ScriptCredential(hash)
+        }
     }
 
     /** Convert scalus.cardano.address.Address to scalus.ledger.api.v1.Address.
@@ -834,7 +845,7 @@ object LedgerToPlutusTranslation {
     def getProposalProcedureV3(proposal: ProposalProcedure): v3.ProposalProcedure = {
         v3.ProposalProcedure(
           proposal.deposit.value,
-          getAddress(proposal.rewardAccount.address).credential,
+          getRewardAccount(proposal.rewardAccount),
           getGovernanceActionV3(proposal.govAction)
         )
     }
