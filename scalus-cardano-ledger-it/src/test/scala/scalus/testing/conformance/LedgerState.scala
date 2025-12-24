@@ -156,6 +156,11 @@ object LedgerState {
                 val expiry = r.readLong()
                 val anchor = r.read[Option[Anchor]]()
                 val deposit = r.read[Coin]()
+                // delegates is encoded as Tag(258, array) - a CBOR set
+                if r.dataItem() == DataItem.Tag then
+                    val tag = r.readTag()
+                    if tag.code != 258 then
+                        r.validationFailure(s"Expected tag 258 for Set, got $tag")
                 val delegates = r.read[Array[Element]]()
                 ConwayDRepState(expiry, anchor, deposit, delegates)
 

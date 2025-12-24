@@ -1,10 +1,9 @@
 package scalus.cardano.ledger
 
 import scalus.builtin.{platform, ByteString, Data, given}
+import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 
 import scala.collection.immutable.{ListMap, TreeSet}
-
-import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 
 object ScriptDataHashGenerator {
 
@@ -58,7 +57,7 @@ object ScriptDataHashGenerator {
     ): Option[ScriptDataHash] = {
         val costModels = CostModels(
           usedLanguages.view
-              .map(l => l.ordinal -> protocolParams.costModels.models(l.ordinal))
+              .flatMap(l => protocolParams.costModels.models.get(l.ordinal).map(l.ordinal -> _))
               .to(ListMap)
         )
 

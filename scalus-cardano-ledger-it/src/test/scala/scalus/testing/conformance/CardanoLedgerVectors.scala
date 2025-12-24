@@ -4,6 +4,9 @@ import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream
+import scalus.cardano.ledger.*
+import scalus.cardano.ledger.rules.*
+import scalus.utils.Hex
 
 import java.io.{FileInputStream, FileOutputStream}
 import java.nio.file.{Files, Path, Paths}
@@ -16,6 +19,51 @@ import scala.util.{Try, Using}
   * https://github.com/SundaeSwap-finance/cardano-ledger-conformance-tests
   */
 object CardanoLedgerVectors {
+
+    /** Validate a test vector by name
+      *
+      * @param vectorName
+      *   Name of the test vector (directory name under vectors/)
+      * @param evaluatorMode
+      *   Evaluator mode to use for validation
+      * @param useParams
+      *   Whether to load protocol parameters from the test vector files
+      * @return
+      *   List of (test file name, expected success, actual result)
+      */
+    def testVector(
+        vectorName: String,
+        evaluatorMode: EvaluatorMode = EvaluatorMode.EvaluateAndComputeCost,
+        useParams: Boolean = true
+    ): List[(String, Boolean, Try[CardanoMutator.Result])] =
+        for case (path, vector) <- loadVector(vectorName) yield
+            val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
+            // Extract protocol parameters from test vector
+            val params =
+                if useParams then
+                    ConwayProtocolParams
+                        .extractPparamsHash(vector.oldLedgerState, pparamsDir)
+                        .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                        .map(_.toProtocolParams)
+                else None
+            val context = Context(
+              env = rules.UtxoEnv(
+                0,
+                params.getOrElse(UtxoEnv.default.params),
+                state.certState,
+                scalus.cardano.address.Network.Testnet
+              ),
+              evaluatorMode = evaluatorMode
+            )
+
+            (
+              path.getFileName.toFile.getName,
+              vector.success,
+              for
+                  transaction <- Try(Transaction.fromCbor(Hex.hexToBytes(vector.cbor)))
+                  result <- Try(CardanoMutator.transit(context, state, transaction))
+              yield result
+            )
 
     // Extract vectors.tar.gz to a temporary directory
     lazy val conformanceVectorsPath: Path = {
@@ -104,8 +152,7 @@ object CardanoLedgerVectors {
             .toList
             .sorted
 
-    /** Load all test vectors from a directory tree */
-    def loadAllVectors(name: String): List[(Path, RawTestVector)] = {
+    def loadVector(name: String): List[(Path, RawTestVector)] = {
         val rootPath = conformanceVectorsPath.resolve(name)
         if !Files.exists(rootPath) then {
             println(s"Warning: Test vector directory not found: $rootPath")
