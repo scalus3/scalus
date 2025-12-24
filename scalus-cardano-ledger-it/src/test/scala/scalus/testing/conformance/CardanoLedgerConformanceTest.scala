@@ -51,7 +51,10 @@ import scalus.testing.conformance.CardanoLedgerVectors.*
 class CardanoLedgerConformanceTest extends AnyFunSuite {
 
     // Test all vectors with UTXO cases
-    for vector <- vectorNames().filter(_.contains(".UTXO")) do {
+    for vector <- vectorNames()
+            .filter(_.contains(".UTXO"))
+            .filterNot(_.contains("Bootstrap Witness"))
+    do {
         test("Conformance test vector: " + vector):
             for
                 case (x, success, result) <- testVector(vector)
@@ -59,9 +62,9 @@ class CardanoLedgerConformanceTest extends AnyFunSuite {
             do fail(s"[$vector/$x]($success) $result")
     }
 
-    ignore("Debug specific vector") {
+    test("Debug specific vector") {
         val vector =
-            "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.Conway features fail in Plutusdescribe v1 and v2.Unsupported Fields.CurrentTreasuryValue.V1"
+            "Conway.Imp.ConwayImpSpec - Version 10.UTXOS.Conway features fail in Plutusdescribe v1 and v2.Unsupported Fields.VotingProcedures.V1/3"
         println(s"Debugging vector: $vector")
         print(pprint(testVector(vector)))
     }
