@@ -2,10 +2,11 @@ package scalus.testing.integration
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.Compiler.compile
-import scalus.builtin.{platform, ByteString, Data}
+import scalus.builtin.{ByteString, Data, platform}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
+import scalus.testing.yaci.{TestContext, YaciDevKit}
 import scalus.utils.await
 import scalus.{plutusV2, toUplc}
 
@@ -21,9 +22,9 @@ import scala.concurrent.duration.*
   * Tests are ordered to handle dependencies (e.g., stake registration before delegation).
   *
   * By default, a fresh container is created for each test run to ensure clean state. For faster
-  * iteration during development, set `reuseContainer = true` in YaciDevKitConfig.
+  * iteration during development, set `reuseContainer = true` in YaciConfig.
   */
-class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
+class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     // Shared test context - created once for all tests in the suite
     private lazy val ctx: TestContext = createTestContext()

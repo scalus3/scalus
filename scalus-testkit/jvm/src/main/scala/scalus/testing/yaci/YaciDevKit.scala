@@ -1,98 +1,51 @@
-package scalus.testing.integration
+package scalus.testing.yaci
 
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Network as BloxbeanNetwork
 import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
 import org.scalatest.{BeforeAndAfterAll, Suite}
 import scalus.cardano.address.{Address, Network, StakeAddress}
-import scalus.cardano.ledger.{Bech32, CardanoInfo, PoolKeyHash, ProtocolParams, SlotConfig, Transaction}
-import scalus.cardano.node.{BlockfrostProvider, Provider}
+import scalus.cardano.ledger.{Bech32, CardanoInfo, PoolKeyHash, SlotConfig}
+import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.utils.await
 import sttp.client4.DefaultFutureBackend
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.*
 
 // Provide sttp backend for BlockfrostProvider
 given sttp.client4.Backend[scala.concurrent.Future] = DefaultFutureBackend()
 
-/** Configuration for Yaci DevKit container */
-case class YaciDevKitConfig(
-    enableLogs: Boolean = false,
-    containerName: String = "scalus-yaci-devkit",
-    reuseContainer: Boolean = false // Set to true for faster iteration during development
-)
-
-/** Singleton container holder for sharing across test suites */
-object YaciDevKitContainer {
-    private var _container: YaciCardanoContainer = _
-    private var _refCount: Int = 0
-    private val lock = new Object()
-
-    def acquire(config: YaciDevKitConfig): YaciCardanoContainer = lock.synchronized {
-        if (_container == null) {
-            _container = createContainer(config)
-            _container.start()
-        }
-        _refCount += 1
-        _container
-    }
-
-    def release(): Unit = lock.synchronized {
-        _refCount -= 1
-        // Don't stop the container - let testcontainers/ryuk handle cleanup
-        // This allows reuse across test runs when reuse is enabled
-    }
-
-    private def createContainer(config: YaciDevKitConfig): YaciCardanoContainer = {
-        val container = new YaciCardanoContainer()
-        // Don't set container name when not reusing - allows fresh containers each run
-        if config.reuseContainer then {
-            container.withCreateContainerCmdModifier(cmd => cmd.withName(config.containerName))
-            container.withReuse(true)
-        }
-
-        if config.enableLogs then {
-            container.withLogConsumer(frame => println(s"[Yaci] ${frame.getUtf8String}"))
-        }
-
-        container
-    }
-}
-
-/** Test context containing all utilities needed for transaction building and submission */
-case class TestContext(
-    cardanoInfo: CardanoInfo,
-    provider: Provider,
-    account: BloxbeanAccount,
-    signer: TransactionSigner,
-    address: Address,
-    stakeAddress: StakeAddress
-) {
-    def submitTx(tx: Transaction): Either[String, String] =
-        provider.submit(tx).await(30.seconds).map(_.toHex).left.map(_.toString)
-
-    def waitForBlock(): Unit = Thread.sleep(2000)
-}
-
 /** Base trait for integration tests using Yaci DevKit with ScalaTest
+  *
+  * This trait provides lifecycle management for Yaci DevKit containers in ScalaTest-based tests. It
+  * handles container startup/shutdown automatically using BeforeAndAfterAll hooks.
   *
   * Usage:
   * {{{
-  * class MyIntegrationTest extends AnyFunSuite with YaciDevKitSpec {
+  * class MyIntegrationTest extends AnyFunSuite with YaciDevKit {
   *   test("submit transaction to devnet") {
   *     val ctx = createTestContext()
   *     // Use ctx for testing
   *   }
   * }
   * }}}
+  *
+  * The trait supports container reuse across test runs for faster iteration. Override `yaciConfig`
+  * to customize behavior:
+  *
+  * {{{
+  * override def yaciConfig = YaciConfig(
+  *   enableLogs = true,
+  *   reuseContainer = true
+  * )
+  * }}}
   */
-trait YaciDevKitSpec extends BeforeAndAfterAll { self: Suite =>
+trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
 
     /** Override this to customize the Yaci DevKit configuration */
-    def yaciDevKitConfig: YaciDevKitConfig = YaciDevKitConfig()
+    def yaciConfig: YaciConfig = YaciConfig()
 
     /** Fixed mnemonic for reproducible tests (same as Yaci CLI default) */
     val testMnemonic: String =
@@ -120,15 +73,27 @@ trait YaciDevKitSpec extends BeforeAndAfterAll { self: Suite =>
 
     override def beforeAll(): Unit = {
         super.beforeAll()
-        _container = YaciDevKitContainer.acquire(yaciDevKitConfig)
+        _container = YaciContainer.acquire(yaciConfig)
     }
 
     override def afterAll(): Unit = {
-        YaciDevKitContainer.release()
+        YaciContainer.release()
         super.afterAll()
     }
 
-    /** Create TestContext from the running YaciCardanoContainer */
+    /** Create TestContext from the running YaciCardanoContainer
+      *
+      * This method sets up all the necessary components for transaction building and submission:
+      *   - BlockfrostProvider connected to Yaci Store API
+      *   - Protocol parameters from the devnet
+      *   - Slot configuration (1 second slots, zero start time)
+      *   - BloxbeanAccount with HD wallet support
+      *   - Transaction signer with payment key
+      *   - Base and stake addresses
+      *
+      * @return
+      *   TestContext ready for use in tests
+      */
     def createTestContext(): TestContext = {
         // Empty API key for local Yaci Store (Blockfrost-compatible API)
         // Strip trailing slash to avoid double-slash in URLs

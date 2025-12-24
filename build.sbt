@@ -434,6 +434,13 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
     )
+    .jvmSettings(
+      // Add Yaci DevKit dependencies for integration testing
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
+      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.0-M19",
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % Test
+    )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       scalaJSLinkerConfig ~= {
