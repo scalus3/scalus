@@ -53,30 +53,39 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       "Convering representation of builtin List (SumDataList => SumDataPairList) is not  allowed",
                       pos
                     )
-                val elementType = retrieveElementType(
-                  input.sirType,
-                  pos
-                )
-                val (elemTypeParams, elemConstrDecl, elemTypeArgs) = SIRType
-                    .collectProd(elementType)
-                    .getOrElse(
-                      throw new LoweringException(
-                        s"Element type of pair-list should be a pair or tuple, but we have ${elementType.show} from ${input.sirType.show}",
-                        pos
-                      )
+                // Special case: Nil list can be converted directly to empty pair list
+                if isNilType(input.sirType) then
+                    lvBuiltinApply0(
+                      SIRBuiltins.mkNilPairData,
+                      input.sirType,
+                      SumCaseClassRepresentation.SumDataPairList,
+                      pos
                     )
-                val fun =
-                    if elemConstrDecl.name == SIRType.BuiltinPair.name then {
-                        val retval = ScalusRuntime.dataListToPairsList
-                        ScalusRuntime.dataListToPairsList
-                    } else if elemConstrDecl.name == "scala.Tuple2" then
-                        ScalusRuntime.dataListToTuplesList
-                    else
-                        throw new LoweringException(
-                          s"Element type of pair-list should be a pair or tuple, but we have ${elementType.show}",
-                          pos
+                else
+                    val elementType = retrieveElementType(
+                      input.sirType,
+                      pos
+                    )
+                    val (elemTypeParams, elemConstrDecl, elemTypeArgs) = SIRType
+                        .collectProd(elementType)
+                        .getOrElse(
+                          throw new LoweringException(
+                            s"Element type of pair-list should be a pair or tuple, but we have ${elementType.show} from ${input.sirType.show}",
+                            pos
+                          )
                         )
-                lvApply(fun, input, pos, None, None)
+                    val fun =
+                        if elemConstrDecl.name == SIRType.BuiltinPair.name then {
+                            val retval = ScalusRuntime.dataListToPairsList
+                            ScalusRuntime.dataListToPairsList
+                        } else if elemConstrDecl.name == "scala.Tuple2" then
+                            ScalusRuntime.dataListToTuplesList
+                        else
+                            throw new LoweringException(
+                              s"Element type of pair-list should be a pair or tuple, but we have ${elementType.show}",
+                              pos
+                            )
+                    lvApply(fun, input, pos, None, None)
             case (
                   SumCaseClassRepresentation.SumDataList,
                   SumCaseClassRepresentation.SumDataAssocMap

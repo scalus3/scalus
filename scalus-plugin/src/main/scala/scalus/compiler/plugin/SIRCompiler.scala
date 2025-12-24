@@ -107,6 +107,13 @@ final class SIRCompiler(
     private val BigIntClassSymbol = requiredClass("scala.math.BigInt")
     private val ByteStringClassSymbol = requiredClass("scalus.builtin.ByteString")
     private val DataClassSymbol = requiredClass("scalus.builtin.Data")
+    private val DataModuleSymbol = requiredModule("scalus.builtin.Data")
+    // Data case class companion apply methods (for Data.I(x), Data.B(x))
+    private val DataIApplySymbol =
+        requiredClass("scalus.builtin.Data.I").companionModule.requiredMethod("apply")
+    private val DataBApplySymbol =
+        requiredClass("scalus.builtin.Data.B").companionModule.requiredMethod("apply")
+    // Note: Data.Constr, Data.List, Data.Map are handled by default case class compilation
     private val PairSymbol = requiredClass("scalus.builtin.BuiltinPair")
     private val ScalusBuiltinListClassSymbol = requiredClass("scalus.builtin.BuiltinList")
     private val ScalusBuiltinArrayClassSymbol = requiredClass("scalus.builtin.BuiltinArray")
@@ -832,24 +839,8 @@ final class SIRCompiler(
                 val (moduleName, valName) =
                     (e.symbol.owner.fullName.toString, e.symbol.fullName.toString)
 
-                // Check if this is a Data constructor - they should not be used directly
-                if moduleName == "scalus.builtin.Data" && (valName.endsWith(".I") || valName
-                        .endsWith(".B") || valName.endsWith(".Constr") || valName.endsWith(
-                      ".List"
-                    ) || valName.endsWith(".Map"))
-                then
-                    error(
-                      GenericError(
-                        s"Data constructors (Data.I, Data.Constr, Data.List, Data.Map, Data.B) cannot be used directly in Scalus code.\n" +
-                            s"Use ToData/FromData type classes or builtin functions instead.\n" +
-                            s"Constructor: ${valName}",
-                        e.srcPos
-                      ),
-                      SIR.Error(
-                        s"Data constructor ${valName} not allowed",
-                        AnnotationsDecl.fromSrcPos(e.srcPos)
-                      )
-                    )
+                // Note: Data constructors (Data.I, Data.B, etc.) are now handled
+                // in compileExpr via Apply cases that emit the appropriate builtins
 
                 (
                   SIR.ExternalVar(
@@ -1551,6 +1542,10 @@ final class SIRCompiler(
 
         case expr if expr.symbol == ByteStringModuleSymbol.requiredMethod("empty") =>
             scalus.uplc.Constant.ByteString(scalus.builtin.ByteString.empty)
+        case expr if expr.symbol == DataModuleSymbol.requiredMethod("unit") =>
+            scalus.uplc.Constant.Data(
+              scalus.builtin.Data.Constr(0, scalus.prelude.List.Nil)
+            )
         case Apply(expr, List(SkipInline(literal)))
             if expr.symbol == ByteStringModuleSymbol.requiredMethod("fromHex") =>
             literal match
@@ -2530,6 +2525,17 @@ final class SIRCompiler(
                   SIRType.Integer,
                   AnnotationsDecl.fromSrcPos(tree.srcPos)
                 )
+            // Data constructors: Data.I(x), Data.B(x), Data.Constr(tag, args), etc.
+            case Apply(fn, args) if fn.symbol == DataIApplySymbol =>
+                val posAnns = AnnotationsDecl.fromSrcPos(tree.srcPos)
+                val arg = compileExpr(env, args.head)
+                SIR.Apply(SIRBuiltins.iData, arg, SIRType.Data.tp, posAnns)
+            case Apply(fn, args) if fn.symbol == DataBApplySymbol =>
+                val posAnns = AnnotationsDecl.fromSrcPos(tree.srcPos)
+                val arg = compileExpr(env, args.head)
+                SIR.Apply(SIRBuiltins.bData, arg, SIRType.Data.tp, posAnns)
+            // Note: Data.Constr, Data.List, Data.Map are compiled as regular case class
+            // constructors - the lowering handles the conversion to constrData/listData/mapData
             // List BUILTINS
             case TypeApply(Select(lst, fun), targs) if lst.isList =>
                 compileBuiltinListMethods(env, lst, fun, targs, tree)
