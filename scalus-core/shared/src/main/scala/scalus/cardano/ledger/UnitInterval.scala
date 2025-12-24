@@ -2,6 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import upickle.{readwriter, ReadWriter}
+import scalus.builtin.{BuiltinList, Data, FromData, ToData}
+import scalus.builtin.Builtins.{iData, listData, unIData, unListData}
 
 /** Represents a unit interval (a number between 0 and 1) in the Cardano blockchain.
   *
@@ -61,26 +63,22 @@ object UnitInterval {
     /** CBOR Encoder for UnitInterval. Encodes as a tagged array [numerator, denominator] with tag
       * 30.
       */
-    given Encoder[UnitInterval] = new Encoder[UnitInterval] {
-        def write(w: Writer, value: UnitInterval): Writer =
-            w.writeTag(Tag.Other(30))
-                .writeArrayOpen(2)
-                .writeLong(value.numerator)
-                .writeLong(value.denominator)
-                .writeArrayClose()
-    }
+    given Encoder[UnitInterval] = (w: Writer, value: UnitInterval) =>
+        w.writeTag(Tag.Other(30))
+            .writeArrayOpen(2)
+            .writeLong(value.numerator)
+            .writeLong(value.denominator)
+            .writeArrayClose()
 
     /** CBOR Decoder for UnitInterval. Decodes from a tagged array [numerator, denominator] with tag
       * 30.
       */
-    given Decoder[UnitInterval] = new Decoder[UnitInterval] {
-        def read(r: Reader): UnitInterval = {
-            r.readTag(Tag.Other(30)) // Read and discard tag 30
-            r.readArrayHeader(2)
-            val numerator = r.readLong()
-            val denominator = r.readLong()
-            UnitInterval(numerator, denominator)
-        }
+    given Decoder[UnitInterval] = (r: Reader) => {
+        r.readTag(Tag.Other(30)) // Read and discard tag 30
+        r.readArrayHeader(2)
+        val numerator = r.readLong()
+        val denominator = r.readLong()
+        UnitInterval(numerator, denominator)
     }
 
     given ReadWriter[UnitInterval] =
@@ -88,4 +86,31 @@ object UnitInterval {
           interval => interval.toDouble,
           double => UnitInterval.fromDouble(double)
         )
+
+    /** ToData instance for UnitInterval. Encodes as array [numerator, denominator] in Plutus Data.
+      * Note: The tag (30) is NOT included in the Plutus Data representation, only the array
+      * structure.
+      */
+    given ToData[UnitInterval] = (interval: UnitInterval) => {
+        listData(
+          BuiltinList.from(
+            List(
+              iData(interval.numerator),
+              iData(interval.denominator)
+            )
+          )
+        )
+    }
+
+    /** FromData instance for UnitInterval. Decodes from array [numerator, denominator] in Plutus
+      * Data. Note: The tag (30) is NOT included in the Plutus Data representation, only the array
+      * structure.
+      */
+    given FromData[UnitInterval] = (data: Data) => {
+        val list = unListData(data)
+        UnitInterval(
+          unIData(list.head).toLong,
+          unIData(list.tail.head).toLong
+        )
+    }
 }

@@ -2,6 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import upickle.default.{readwriter as upickleReadwriter, ReadWriter as UpickleReadWriter}
+import scalus.builtin.{BuiltinList, Data, FromData, ToData}
+import scalus.builtin.Builtins.{iData, listData, unIData, unListData}
 
 import scala.annotation.tailrec
 
@@ -237,25 +239,48 @@ object NonNegativeInterval {
     /** CBOR Encoder for NonNegativeInterval. Encodes as a tagged array [numerator, denominator]
       * with tag 30.
       */
-    given Encoder[NonNegativeInterval] = new Encoder[NonNegativeInterval] {
-        def write(w: Writer, value: NonNegativeInterval): Writer =
-            w.writeTag(Tag.Other(30))
-                .writeArrayOpen(2)
-                .writeLong(value.numerator)
-                .writeLong(value.denominator)
-                .writeArrayClose()
-    }
+    given Encoder[NonNegativeInterval] = (w: Writer, value: NonNegativeInterval) =>
+        w.writeTag(Tag.Other(30))
+            .writeArrayOpen(2)
+            .writeLong(value.numerator)
+            .writeLong(value.denominator)
+            .writeArrayClose()
 
     /** CBOR Decoder for NonNegativeInterval. Decodes from a tagged array [numerator, denominator]
       * with tag 30.
       */
-    given Decoder[NonNegativeInterval] = new Decoder[NonNegativeInterval] {
-        def read(r: Reader): NonNegativeInterval = {
-            r.readTag() // Read and discard tag 30
-            r.readArrayHeader()
-            val numerator = r.readLong()
-            val denominator = r.readLong()
-            NonNegativeInterval(numerator, denominator)
-        }
+    given Decoder[NonNegativeInterval] = (r: Reader) => {
+        r.readTag() // Read and discard tag 30
+        r.readArrayHeader()
+        val numerator = r.readLong()
+        val denominator = r.readLong()
+        NonNegativeInterval(numerator, denominator)
+    }
+
+    /** ToData instance for NonNegativeInterval. Encodes as array [numerator, denominator] in Plutus
+      * Data. Note: The tag (30) is NOT included in the Plutus Data representation, only the array
+      * structure.
+      */
+    given ToData[NonNegativeInterval] = (interval: NonNegativeInterval) => {
+        listData(
+          BuiltinList.from(
+            List(
+              iData(interval.numerator),
+              iData(interval.denominator)
+            )
+          )
+        )
+    }
+
+    /** FromData instance for NonNegativeInterval. Decodes from array [numerator, denominator] in
+      * Plutus Data. Note: The tag (30) is NOT included in the Plutus Data representation, only the
+      * array structure.
+      */
+    given FromData[NonNegativeInterval] = (data: Data) => {
+        val list = unListData(data)
+        NonNegativeInterval(
+          unIData(list.head).toLong,
+          unIData(list.tail.head).toLong
+        )
     }
 }

@@ -97,6 +97,9 @@ object Interop {
                 x.getSteps.toData(using ToData.given_ToData_BigInteger)
               )
             )
+        given ToData[CostMdls] = (costMdls: CostMdls) =>
+            // Convert Bloxbean CostMdls to Scalus CostModels, then use its ToData instance
+            getCostModels(costMdls).toData
 
         (x: ProtocolParamUpdate) => {
             val params = mutable.ArrayBuffer.empty[BuiltinPair[Data, Data]]
@@ -117,7 +120,7 @@ object Interop {
             add(11, x.getTreasuryGrowthRate)
             add(16, x.getMinPoolCost)(using ToData.given_ToData_BigInteger)
             add(17, x.getAdaPerUtxoByte)(using ToData.given_ToData_BigInteger)
-            // FIXME: implement 18 x.getCostModels
+            add(18, x.getCostModels)
             add(19, x.getExecutionCosts)
             add(20, x.getMaxTxExUnits)
             add(21, x.getMaxBlockExUnits)

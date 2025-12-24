@@ -3,7 +3,8 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import io.bullet.borer.NullOptions.given
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
-import scalus.builtin.{platform, ByteString, Data}
+import scalus.builtin.{platform, BuiltinList, BuiltinPair, ByteString, Data, FromData, ToData}
+import scalus.builtin.Builtins.{iData, listData, mapData, unIData, unListData, unMapData}
 import scalus.cardano.address.Address
 import scalus.serialization.cbor.Cbor
 import scalus.utils.Hex.toHex
@@ -59,6 +60,9 @@ object Coin {
         def combine(x: Coin, y: Coin): Coin = x + y
         def empty: Coin = Coin.zero
         def inverse(x: Coin): Coin = -x
+
+    given ToData[Coin] = (coin: Coin) => iData(coin.value)
+    given FromData[Coin] = (data: Data) => Coin(unIData(data).toLong)
 }
 
 /** Minting MultiAsset. Can't contain zeros, can't be empty */
@@ -472,6 +476,16 @@ object ExUnits {
             )
         def empty: ExUnits = ExUnits.zero
         def inverse(x: ExUnits): ExUnits = ExUnits(-x.memory, -x.steps)
+
+    /** ToData instance for ExUnits. Encodes as array [memory, steps] */
+    given ToData[ExUnits] = (exUnits: ExUnits) =>
+        listData(BuiltinList.from(List(iData(exUnits.memory), iData(exUnits.steps))))
+
+    /** FromData instance for ExUnits. Decodes from array [memory, steps] */
+    given FromData[ExUnits] = (data: scalus.builtin.Data) => {
+        val list = unListData(data)
+        ExUnits(unIData(list.head).toLong, unIData(list.tail.head).toLong)
+    }
 }
 
 /** Represents execution unit prices in the Cardano blockchain.
@@ -489,6 +503,30 @@ case class ExUnitPrices(
     priceSteps: NonNegativeInterval
 ) derives Codec,
       UpickleReadWriter
+
+object ExUnitPrices {
+
+    /** ToData instance for ExUnitPrices. Encodes as array [priceMemory, priceSteps] */
+    given ToData[ExUnitPrices] = (prices: ExUnitPrices) =>
+        listData(
+          BuiltinList.from(
+            List(
+              summon[ToData[NonNegativeInterval]].apply(prices.priceMemory),
+              summon[ToData[NonNegativeInterval]].apply(prices.priceSteps)
+            )
+          )
+        )
+
+    /** FromData instance for ExUnitPrices. Decodes from array [priceMemory, priceSteps] */
+    given FromData[ExUnitPrices] = (data: Data) => {
+        val list = unListData(data)
+        val fromDataInterval = summon[scalus.builtin.FromData[NonNegativeInterval]]
+        ExUnitPrices(
+          fromDataInterval(list.head),
+          fromDataInterval(list.tail.head)
+        )
+    }
+}
 
 /** Represents cost models for script languages in the Cardano blockchain.
   *
@@ -590,6 +628,33 @@ object CostModels {
                 }.toMap
               )
         )
+
+    /** ToData instance for CostModels. Encodes as a map with language IDs as keys and cost lists as
+      * values.
+      */
+    given ToData[CostModels] = (costModels: CostModels) => {
+        val pairs = costModels.models.map { case (langId, costs) =>
+            val costDataList = listData(BuiltinList.from(costs.map(c => iData(c)).toList))
+            BuiltinPair(iData(langId), costDataList)
+        }.toList
+        mapData(BuiltinList.from(pairs))
+    }
+
+    /** FromData instance for CostModels. Decodes from a map with language IDs as keys and cost
+      * lists as values.
+      */
+    given FromData[CostModels] = (data: Data) => {
+        val mapPairs = unMapData(data)
+        val modelsList: List[(Int, IndexedSeq[Long])] = mapPairs.toList.map { pair =>
+            val langId: Int = unIData(pair.fst).toInt
+            val costsList = unListData(pair.snd)
+            val costs: IndexedSeq[Long] =
+                costsList.toList.map(d => unIData(d).toLong).toIndexedSeq
+            (langId, costs)
+        }
+
+        CostModels(Map.from(modelsList))
+    }
 }
 
 /** Represents a constitution in the Cardano blockchain governance system.
