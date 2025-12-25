@@ -30,10 +30,44 @@ import scalus.uplc.eval.BuiltinException
   *   [[https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf]]
   */
 private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
-    // Integers
+
+    // ============================================================================
+    // Integer Operations
+    // ============================================================================
+
+    /** Add two arbitrary-precision integers.
+      *
+      * @example
+      *   addInteger(3, 5) == 8
+      */
     def addInteger(i1: BigInt, i2: BigInt): BigInt = i1 + i2
+
+    /** Subtract two arbitrary-precision integers.
+      *
+      * @example
+      *   subtractInteger(10, 3) == 7
+      */
     def subtractInteger(i1: BigInt, i2: BigInt): BigInt = i1 - i2
+
+    /** Multiply two arbitrary-precision integers.
+      *
+      * @example
+      *   multiplyInteger(4, 5) == 20
+      */
     def multiplyInteger(i1: BigInt, i2: BigInt): BigInt = i1 * i2
+
+    /** Divide two integers using floor division (truncate toward negative infinity).
+      *
+      * For negative dividends with positive divisors (or vice versa), this differs from truncated
+      * division (`quotientInteger`) by rounding toward negative infinity.
+      *
+      * @example
+      *   divideInteger(7, 2) == 3
+      * @example
+      *   divideInteger(-7, 2) == -4 // floor division
+      * @throws java.lang.ArithmeticException
+      *   if divisor is zero
+      */
     def divideInteger(i1: BigInt, i2: BigInt): BigInt =
         // Floor division: truncate toward negative infinity
         // Standard BigInt `/` truncates toward zero
@@ -41,19 +75,97 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
         val q = i1 / i2
         val r = i1 % i2
         if r != 0 && (i1 < 0) != (i2 < 0) then q - 1 else q
+
+    /** Compute the quotient of two integers (truncate toward zero).
+      *
+      * This is standard truncated division, which rounds toward zero.
+      *
+      * @example
+      *   quotientInteger(7, 2) == 3
+      * @example
+      *   quotientInteger(-7, 2) == -3 // truncated toward zero
+      * @throws java.lang.ArithmeticException
+      *   if divisor is zero
+      */
     def quotientInteger(i1: BigInt, i2: BigInt): BigInt = i1 / i2
+
+    /** Compute the remainder after truncated division (`quotientInteger`).
+      *
+      * The result has the same sign as the dividend. Satisfies:
+      * `dividend == quotientInteger(dividend, divisor) * divisor + remainderInteger(dividend, divisor)`
+      *
+      * @example
+      *   remainderInteger(7, 3) == 1
+      * @example
+      *   remainderInteger(-7, 3) == -1
+      * @throws java.lang.ArithmeticException
+      *   if divisor is zero
+      */
     def remainderInteger(i1: BigInt, i2: BigInt): BigInt = i1 % i2
+
+    /** Compute the modulus after floor division (`divideInteger`).
+      *
+      * The result has the same sign as the divisor. Satisfies:
+      * `dividend == divideInteger(dividend, divisor) * divisor + modInteger(dividend, divisor)`
+      *
+      * @example
+      *   modInteger(7, 3) == 1
+      * @example
+      *   modInteger(-7, 3) == 2 // result has sign of divisor
+      * @throws java.lang.ArithmeticException
+      *   if divisor is zero
+      */
     def modInteger(i1: BigInt, i2: BigInt): BigInt =
         /*divMod n d          =  if signum r == negate (signum d) then (q-1, r+d) else qr
                                      where qr@(q,r) = quotRem n d */
         val r = i1 % i2
         if r.signum == -i2.signum then r + i2 else r
+
+    /** Check if two integers are equal.
+      *
+      * @example
+      *   equalsInteger(5, 5) == true
+      */
     def equalsInteger(i1: BigInt, i2: BigInt): Boolean = i1 == i2
+
+    /** Check if the first integer is strictly less than the second.
+      *
+      * @example
+      *   lessThanInteger(3, 5) == true
+      */
     def lessThanInteger(i1: BigInt, i2: BigInt): Boolean = i1 < i2
+
+    /** Check if the first integer is less than or equal to the second.
+      *
+      * @example
+      *   lessThanEqualsInteger(5, 5) == true
+      */
     def lessThanEqualsInteger(i1: BigInt, i2: BigInt): Boolean = i1 <= i2
-    // Bytestrings
+
+    // ============================================================================
+    // ByteString Operations
+    // ============================================================================
+
+    /** Concatenate two bytestrings.
+      *
+      * @example
+      *   appendByteString(hex"1234", hex"5678") == hex"12345678"
+      */
     def appendByteString(a: ByteString, b: ByteString): ByteString =
         ByteString.unsafeFromArray(a.bytes ++ b.bytes)
+
+    /** Prepend a byte to a bytestring.
+      *
+      * @param char
+      *   the byte value to prepend, must be in range [0, 255]
+      * @param byteString
+      *   the bytestring to prepend to
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if byte value is outside [0, 255]
+      *
+      * @example
+      *   consByteString(0x12, hex"3456") == hex"123456"
+      */
     def consByteString(char: BigInt, byteString: ByteString): ByteString =
         if char < 0 || char > 255 then
             throw new BuiltinException(s"consByteString: invalid byte value: $char")
@@ -94,9 +206,21 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
             )
         else BigInt(bs.bytes(i.toInt) & 0xff)
 
+    /** Check if two bytestrings are equal.
+      *
+      * @example
+      *   equalsByteString(hex"1234", hex"1234") == true
+      */
     def equalsByteString(a: ByteString, b: ByteString): Boolean = a == b
 
-    /** Checks if one 'ByteString' is less than another */
+    /** Check if one bytestring is lexicographically less than another.
+      *
+      * Comparison is byte-by-byte, treating bytes as unsigned. Shorter bytestrings are considered
+      * less than longer ones with the same prefix.
+      *
+      * @example
+      *   lessThanByteString(hex"12", hex"1234") == true
+      */
     def lessThanByteString(a: ByteString, b: ByteString): Boolean =
         val minLen = math.min(a.size, b.size)
         var i = 0
@@ -109,7 +233,11 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
         if a.size < b.size then true
         else false
 
-    /** Checks if one 'ByteString' is less than or equal to another */
+    /** Check if one bytestring is lexicographically less than or equal to another.
+      *
+      * @example
+      *   lessThanEqualsByteString(hex"1234", hex"1234") == true
+      */
     def lessThanEqualsByteString(a: ByteString, b: ByteString): Boolean =
         val minLen = math.min(a.size, b.size)
         var i = 0
@@ -121,49 +249,180 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
             i += 1
         if a.size <= b.size then true
         else false
-    // Cryptography and hashes
 
+    // ============================================================================
+    // Cryptographic Hash Functions
+    // ============================================================================
+
+    /** Compute SHA2-256 hash.
+      *
+      * @return
+      *   a 32-byte (256-bit) hash digest
+      */
     def sha2_256(bs: ByteString): ByteString = ps.sha2_256(bs)
+
+    /** Compute SHA3-256 hash.
+      *
+      * @return
+      *   a 32-byte (256-bit) hash digest using Keccak-based SHA3
+      */
     def sha3_256(bs: ByteString): ByteString = ps.sha3_256(bs)
+
+    /** Compute BLAKE2b-256 hash.
+      *
+      * This is the primary hash function used in Cardano for script hashing and transaction IDs.
+      *
+      * @return
+      *   a 32-byte (256-bit) hash digest
+      */
     def blake2b_256(bs: ByteString): ByteString = ps.blake2b_256(bs)
+
+    /** Compute BLAKE2b-224 hash.
+      *
+      * @return
+      *   a 28-byte (224-bit) hash digest
+      */
     def blake2b_224(bs: ByteString): ByteString = ps.blake2b_224(bs)
+
+    /** Verify an Ed25519 signature.
+      *
+      * @param pk
+      *   public key (32 bytes)
+      * @param msg
+      *   message to verify
+      * @param sig
+      *   signature (64 bytes)
+      * @return
+      *   true if the signature is valid
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if key or signature has wrong length
+      */
     def verifyEd25519Signature(
         pk: ByteString,
         msg: ByteString,
         sig: ByteString
     ): Boolean = ps.verifyEd25519Signature(pk, msg, sig)
+
+    /** Verify an ECDSA signature on the secp256k1 curve.
+      *
+      * @param pk
+      *   public key (33 bytes compressed)
+      * @param msg
+      *   message hash (32 bytes, must be pre-hashed)
+      * @param sig
+      *   signature (64 bytes, r||s format)
+      * @return
+      *   true if the signature is valid
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if inputs have wrong lengths
+      */
     def verifyEcdsaSecp256k1Signature(pk: ByteString, msg: ByteString, sig: ByteString): Boolean =
         ps.verifyEcdsaSecp256k1Signature(pk, msg, sig)
+
+    /** Verify a Schnorr signature on the secp256k1 curve (BIP-340).
+      *
+      * @param pk
+      *   public key (32 bytes x-only)
+      * @param msg
+      *   message (arbitrary length)
+      * @param sig
+      *   signature (64 bytes)
+      * @return
+      *   true if the signature is valid
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if inputs have wrong lengths
+      */
     def verifySchnorrSecp256k1Signature(pk: ByteString, msg: ByteString, sig: ByteString): Boolean =
         ps.verifySchnorrSecp256k1Signature(pk, msg, sig)
 
-    // Strings
+    // ============================================================================
+    // String Operations
+    // ============================================================================
+
+    /** Concatenate two strings.
+      *
+      * @example
+      *   appendString("Hello, ", "World!") == "Hello, World!"
+      */
     def appendString(s1: String, s2: String): String = s1 + s2
+
+    /** Check if two strings are equal. */
     def equalsString(s1: String, s2: String): Boolean = s1 == s2
+
+    /** Encode a string as UTF-8 bytes.
+      *
+      * @example
+      *   encodeUtf8("hello") == hex"68656c6c6f"
+      */
     def encodeUtf8(s: String): ByteString = ByteString.fromArray(s.getBytes("UTF-8"))
+
+    /** Decode UTF-8 bytes to a string.
+      *
+      * @throws java.lang.IllegalArgumentException
+      *   if the bytestring is not valid UTF-8
+      */
     def decodeUtf8(bs: ByteString): String =
         UTF8Decoder.decode(bs.bytes)
 
-    // Bool
+    // ============================================================================
+    // Control Flow
+    // ============================================================================
+
+    /** Conditional expression (if-then-else).
+      *
+      * Returns the second argument if the condition is true, third argument otherwise.
+      *
+      * @example
+      *   ifThenElse(true, "yes", "no") == "yes"
+      */
     def ifThenElse[A](cond: Boolean, a: A, b: A): A =
         if cond then a else b
 
-    // Unit
+    /** Choose based on unit value.
+      *
+      * Always returns the argument after consuming the unit input.
+      */
     def chooseUnit[A]()(a: A): A = a
 
-    // Tracing
+    // ============================================================================
+    // Tracing (Debugging)
+    // ============================================================================
+
+    /** Trace a message and return a value.
+      *
+      * Logs the string message (for debugging) and returns the second argument unchanged. In
+      * on-chain execution, traces are collected but don't affect the result.
+      */
     def trace[A](s: String)(a: A): A =
         // calculate the hash
         println(s)
         a
 
-    // Pairs
+    // ============================================================================
+    // Pair Operations
+    // ============================================================================
+
+    /** Extract the first element of a pair. */
     def fstPair[A, B](p: BuiltinPair[A, B]): A = p.fst
+
+    /** Extract the second element of a pair. */
     def sndPair[A, B](p: BuiltinPair[A, B]): B = p.snd
 
-    // Arrays
+    // ============================================================================
+    // Array Operations (CIP-0156)
+    // ============================================================================
+
+    /** Get the length of an array. */
     def lengthOfArray[A](a: BuiltinArray[A]): BigInt = a.length
+
+    /** Convert a list to an array for O(1) indexed access. */
     def listToArray[A](a: BuiltinList[A]): BuiltinArray[A] = BuiltinArray.fromList(a)
+
+    /** Access an element by index.
+      *
+      * @throws IndexOutOfBoundsException
+      *   if index is out of bounds
+      */
     def indexArray[A](a: BuiltinArray[A], n: BigInt): A = a(n)
 
     /** Multi-index array access from CIP-0156.
@@ -198,12 +457,48 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
         }
         BuiltinList.from(result)
 
-    // Lists
+    // ============================================================================
+    // List Operations
+    // ============================================================================
+
+    /** Pattern match on a list - return one value for empty, another for non-empty.
+      *
+      * @param l
+      *   the list to match on
+      * @param e
+      *   value to return if the list is empty
+      * @param ne
+      *   value to return if the list is non-empty
+      */
     def chooseList[A, B](l: BuiltinList[A], e: B, ne: B): B =
         if l.isEmpty then e else ne
+
+    /** Prepend an element to a list.
+      *
+      * @example
+      *   mkCons(1, BuiltinList(2, 3)) == BuiltinList(1, 2, 3)
+      */
     def mkCons[A](a: A, l: BuiltinList[A]): BuiltinList[A] = a :: l
+
+    /** Get the first element of a list.
+      *
+      * @throws java.util.NoSuchElementException
+      *   if the list is empty
+      */
     def headList[A](l: BuiltinList[A]): A = l.head
+
+    /** Get all elements except the first.
+      *
+      * @throws java.util.NoSuchElementException
+      *   if the list is empty
+      */
     def tailList[A](l: BuiltinList[A]): BuiltinList[A] = l.tail
+
+    /** Check if a list is empty.
+      *
+      * @example
+      *   nullList(BuiltinList.empty) == true
+      */
     def nullList[A](l: BuiltinList[A]): Boolean = l.isEmpty
 
     /** Drop the first n elements from a list.
@@ -218,7 +513,28 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
             val dropCount = if n.isValidInt then n.toInt else Int.MaxValue
             BuiltinList.from(l.toList.drop(dropCount))
 
-    // Data
+    // ============================================================================
+    // Data Operations
+    // ============================================================================
+
+    /** Pattern match on a Data value by its constructor type.
+      *
+      * Returns one of five values depending on the Data constructor: Constr, Map, List, I
+      * (integer), or B (bytestring).
+      *
+      * @param d
+      *   the Data value to match
+      * @param constrCase
+      *   value to return if d is a Constr
+      * @param mapCase
+      *   value to return if d is a Map
+      * @param listCase
+      *   value to return if d is a List
+      * @param iCase
+      *   value to return if d is an Integer
+      * @param bCase
+      *   value to return if d is a ByteString
+      */
     def chooseData[A](d: Data, constrCase: A, mapCase: A, listCase: A, iCase: A, bCase: A): A =
         d match
             case Data.Constr(_, _) => constrCase
@@ -227,41 +543,121 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
             case Data.I(_)         => iCase
             case Data.B(_)         => bCase
 
+    /** Construct a Data.Constr value.
+      *
+      * @param ctor
+      *   constructor index (must be non-negative)
+      * @param args
+      *   list of constructor arguments
+      */
     def constrData(ctor: BigInt, args: BuiltinList[Data]): Data =
         Data.Constr(ctor, PList.from(args.toList))
+
+    /** Construct a Data.Map value.
+      *
+      * @param values
+      *   list of key-value pairs
+      */
     def mapData(values: BuiltinList[BuiltinPair[Data, Data]]): Data =
         Data.Map(PList.from(values.toList.map(p => (p.fst, p.snd))))
+
+    /** Construct a Data.List value.
+      *
+      * @param values
+      *   list of Data elements
+      */
     def listData(values: BuiltinList[Data]): Data = Data.List(PList.from(values.toList))
+
+    /** Construct a Data.I (integer) value. */
     def iData(value: BigInt): Data = Data.I(value)
+
+    /** Construct a Data.B (bytestring) value. */
     def bData(value: ByteString): Data = Data.B(value)
+
+    /** Deconstruct a Data.Constr value.
+      *
+      * @return
+      *   a pair of (constructor index, list of arguments)
+      * @throws java.lang.Exception
+      *   if the Data is not a Constr
+      */
     def unConstrData(d: Data): BuiltinPair[BigInt, BuiltinList[Data]] = d match
         case Data.Constr(constr, args) => BuiltinPair(constr, BuiltinList.from(args.toScalaList))
         case _                         => throw new Exception(s"not a constructor but $d")
+
+    /** Deconstruct a Data.List value.
+      *
+      * @return
+      *   the list of Data elements
+      * @throws java.lang.Exception
+      *   if the Data is not a List
+      */
     def unListData(d: Data): BuiltinList[Data] = d match
         case Data.List(values) => BuiltinList.from(values.toScalaList)
         case _                 => throw new Exception(s"not a list but $d")
 
+    /** Deconstruct a Data.Map value.
+      *
+      * @return
+      *   the list of key-value pairs
+      * @throws java.lang.Exception
+      *   if the Data is not a Map
+      */
     def unMapData(d: Data): BuiltinList[BuiltinPair[Data, Data]] = d match
         case Data.Map(values) => BuiltinList.from(values.toScalaList.map(BuiltinPair.apply))
         case _                => throw new Exception(s"not a list but $d")
+
+    /** Deconstruct a Data.I value.
+      *
+      * @return
+      *   the integer value
+      * @throws java.lang.Exception
+      *   if the Data is not an Integer
+      */
     def unIData(d: Data): BigInt = d match
         case Data.I(value) => value
         case _             => throw new Exception(s"not an integer but $d")
+
+    /** Deconstruct a Data.B value.
+      *
+      * @return
+      *   the bytestring value
+      * @throws java.lang.Exception
+      *   if the Data is not a ByteString
+      */
     def unBData(d: Data): ByteString = d match
         case Data.B(value) => value
         case _             => throw new Exception(s"not a bytestring but $d")
 
+    /** Check if two Data values are structurally equal. */
     def equalsData(d1: Data, d2: Data): Boolean = d1 == d2
 
+    /** Serialize a Data value to CBOR format.
+      *
+      * @return
+      *   the CBOR-encoded bytestring
+      * @since Plutus
+      *   V2
+      */
     def serialiseData(d: Data): ByteString =
         ByteString.fromArray(Cbor.encode(d).toByteArray)
 
-    // Misc monomorphized constructors.
-    // We could simply replace those with constants, but we use built-in functions for consistency
-    // with monomorphic built-in types. Polymorphic built-in constructors are generally problematic,
-    // See note [Representable built-in functions over polymorphic built-in types].
+    /** Create a pair of Data values.
+      *
+      * This is a monomorphic constructor for pairs of Data.
+      */
     def mkPairData(fst: Data, snd: Data): BuiltinPair[Data, Data] = BuiltinPair(fst, snd)
+
+    /** Create an empty list of Data values.
+      *
+      * This is a monomorphic constructor for empty lists of Data.
+      */
     def mkNilData(): BuiltinList[Data] = BuiltinList.empty
+
+    /** Create an empty list of Data pairs.
+      *
+      * This is a monomorphic constructor for empty lists of Data pairs, useful for building Maps.
+      */
     def mkNilPairData(): BuiltinList[BuiltinPair[Data, Data]] = BuiltinList.empty
 
     /** Convert a [[BigInt]] into a [[ByteString]].
@@ -645,65 +1041,250 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def findFirstSetBit(byteString: ByteString): BigInt =
         BitwiseLogicalOperations.findFirstSetBit(byteString)
 
+    // ============================================================================
+    // BLS12-381 Elliptic Curve Operations (CIP-0381)
+    // ============================================================================
+
+    /** Check if two G1 points are equal.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
         ps.bls12_381_G1_equal(p1, p2)
 
+    /** Add two points in the G1 group.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_add(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): BLS12_381_G1_Element =
         ps.bls12_381_G1_add(p1, p2)
 
+    /** Scalar multiplication of a G1 point.
+      *
+      * Equivalent to repeated addition of the point with itself `s` times.
+      *
+      * @param s
+      *   the scalar multiplier
+      * @param p
+      *   the point to multiply
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_scalarMul(s: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element =
         ps.bls12_381_G1_scalarMul(s, p)
 
+    /** Negate a G1 point.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_neg(p: BLS12_381_G1_Element): BLS12_381_G1_Element = ps.bls12_381_G1_neg(p)
 
+    /** Compress a G1 point to its 48-byte compressed form.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString =
         ps.bls12_381_G1_compress(p)
 
+    /** Uncompress a 48-byte compressed G1 point.
+      *
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if the bytestring is not a valid compressed G1 point
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_uncompress(bs: ByteString): BLS12_381_G1_Element =
         ps.bls12_381_G1_uncompress(bs)
 
+    /** Hash a bytestring to a G1 point using the specified domain separation tag.
+      *
+      * @param bs
+      *   the bytestring to hash
+      * @param dst
+      *   domain separation tag (up to 255 bytes)
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G1_Element =
         ps.bls12_381_G1_hashToGroup(bs, dst)
 
+    /** Check if two G2 points are equal.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
         ps.bls12_381_G2_equal(p1, p2)
 
+    /** Add two points in the G2 group.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_add(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): BLS12_381_G2_Element =
         ps.bls12_381_G2_add(p1, p2)
 
+    /** Scalar multiplication of a G2 point.
+      *
+      * Equivalent to repeated addition of the point with itself `s` times.
+      *
+      * @param s
+      *   the scalar multiplier
+      * @param p
+      *   the point to multiply
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_scalarMul(s: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element =
         ps.bls12_381_G2_scalarMul(s, p)
 
+    /** Negate a G2 point.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_neg(p: BLS12_381_G2_Element): BLS12_381_G2_Element = ps.bls12_381_G2_neg(p)
 
+    /** Compress a G2 point to its 96-byte compressed form.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString =
         ps.bls12_381_G2_compress(p)
 
+    /** Uncompress a 96-byte compressed G2 point.
+      *
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if the bytestring is not a valid compressed G2 point
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_uncompress(bs: ByteString): BLS12_381_G2_Element =
         ps.bls12_381_G2_uncompress(bs)
 
+    /** Hash a bytestring to a G2 point using the specified domain separation tag.
+      *
+      * @param bs
+      *   the bytestring to hash
+      * @param dst
+      *   domain separation tag (up to 255 bytes)
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element =
         ps.bls12_381_G2_hashToGroup(bs, dst)
 
-    /** The compressed form of the point at infinity in G2, 96 bytes long.
+    /** The compressed form of the point at infinity (zero) in G2, 96 bytes long.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
       */
     def bls12_381_G2_compressed_zero: ByteString = PlatformSpecific.bls12_381_G2_compressed_zero
 
+    /** The compressed form of the generator point in G2, 96 bytes long.
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_G2_compressed_generator: ByteString =
         PlatformSpecific.bls12_381_G2_compressed_generator
 
+    /** Compute the Miller loop for a pairing.
+      *
+      * This is the first step in computing a bilinear pairing e(P, Q) where P is in G1 and Q is in
+      * G2.
+      *
+      * @param p1
+      *   a point in G1
+      * @param p2
+      *   a point in G2
+      * @return
+      *   an intermediate Miller loop result
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_millerLoop(
         p1: BLS12_381_G1_Element,
         p2: BLS12_381_G2_Element
     ): BLS12_381_MlResult =
         ps.bls12_381_millerLoop(p1, p2)
 
+    /** Multiply two Miller loop results.
+      *
+      * Used to combine multiple pairings: e(P1,Q1) * e(P2,Q2) = mulMlResult(millerLoop(P1,Q1),
+      * millerLoop(P2,Q2))
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_mulMlResult(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): BLS12_381_MlResult =
         ps.bls12_381_mulMlResult(r1, r2)
 
+    /** Final verification step for pairing equality check.
+      *
+      * Returns true if e(P1, Q1) == e(P2, Q2) where r1 = millerLoop(P1, Q1) and r2 = millerLoop(P2,
+      * Q2).
+      *
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381 CIP-381]]
+      * @since Plutus
+      *   V3
+      */
     def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
         ps.bls12_381_finalVerify(p1, p2)
 
+    /** Compute Keccak-256 hash.
+      *
+      * This is the original Keccak hash (as used in Ethereum), not the NIST SHA-3 standard.
+      *
+      * @return
+      *   a 32-byte (256-bit) hash digest
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0158 CIP-158]]
+      * @since Plutus
+      *   V3
+      */
     def keccak_256(bs: ByteString): ByteString =
         ps.keccak_256(bs)
 
