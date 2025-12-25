@@ -223,6 +223,42 @@ object ProductCaseClassRepresentation {
 
     case object UplcConstr extends ProductCaseClassRepresentation(false, false)
 
+    /** Representation for BuiltinArray[Data] as a native UPLC array.
+      *
+      * This is the default representation for BuiltinArray, providing O(1) indexed access.
+      */
+    case object ArrayData extends ProductCaseClassRepresentation(false, false) {
+        override def isCompatibleWithType(tp: SIRType): Boolean = {
+            tp match
+                case SIRType.BuiltinArray(_) => true
+                case _                       => false
+        }
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case ArrayData                => true
+                case TypeVarRepresentation(_) => true
+                case _                        => false
+            }
+    }
+
+    /** Representation for BuiltinArray[Data] packed as Data.List.
+      *
+      * This is used when the array needs to be Data-compatible (e.g., stored in a case class
+      * field). The array is converted to a list and then wrapped in Data.List.
+      */
+    case object PackedArrayAsList extends ProductCaseClassRepresentation(true, true) {
+        override def isCompatibleWithType(tp: SIRType): Boolean = {
+            tp match
+                case SIRType.BuiltinArray(_) => true
+                case _                       => false
+        }
+    }
+
     case class OneElementWrapper(representation: LoweredValueRepresentation)
         extends ProductCaseClassRepresentation(
           representation.isPackedData,
@@ -510,9 +546,9 @@ object LoweredValueRepresentation {
                       s"Only BuiltinList[Data] and BuiltinList[BuiltinPair[Data,Data]] can be constants.",
                   SIRPosition.empty
                 )
-            // BuiltinArray[Data] -> use Constant representation (native UPLC array)
+            // BuiltinArray[Data] -> use ArrayData representation (native UPLC array)
             case SIRType.BuiltinArray(SIRType.Data()) =>
-                PrimitiveRepresentation.Constant
+                ProductCaseClassRepresentation.ArrayData
             // BuiltinArray with non-Data element type - not supported as constant
             case SIRType.BuiltinArray(elemType) =>
                 throw LoweringException(

@@ -164,6 +164,17 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                               representation,
                                               pos
                                             )
+                                // BuiltinArray representations
+                                case ProductCaseClassRepresentation.ArrayData =>
+                                    // Convert ArrayData to PackedArrayAsList for Data compatibility
+                                    val r1 = input.toRepresentation(
+                                      ProductCaseClassRepresentation.PackedArrayAsList,
+                                      pos
+                                    )
+                                    new RepresentationProxyLoweredValue(r1, representation, pos)
+                                case ProductCaseClassRepresentation.PackedArrayAsList =>
+                                    // Already Data-compatible
+                                    new RepresentationProxyLoweredValue(input, representation, pos)
                             }
                         case PrimitiveRepresentation.PackedData =>
                             new RepresentationProxyLoweredValue(input, representation, pos)
