@@ -69,7 +69,6 @@
 
                 # Memory efficiency
                 "-XX:+UseCompressedOops"            # Use 32-bit pointers on 64-bit JVM (saves memory)
-                "-XX:+UseCompressedClassPointers"   # Compress class metadata pointers
 
                 # Java 23 preview features
                 "--enable-preview"                  # Enable preview language features
