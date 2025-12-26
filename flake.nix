@@ -28,12 +28,6 @@
                 };
         };
         uplc = plutus.packages.${system}.uplc;
-        tiny_keccak_wrapper = pkgs.rustPlatform.buildRustPackage (finalAttrs: {
-            name = "tiny_keccak_wrapper";
-            src = ./scalus-core/native/lib/tiny_keccak_wrapper;  # directory with Rust code
-            cargoHash = "sha256-S9NH9JqykVq2Qo/b5xSJJIH7LeGh4UFQ/glusW2EvsQ=";
-            # useFetchCargoVendor removed - became default and non-optional in Nixpkgs 25.05
-        });
 
         # cardano-cli = cardano-node-flake.packages.${system}.cardano-cli;
       in
@@ -112,8 +106,6 @@
               JAVA_HOME = "${jdk}";
               JAVA_OPTS = builtins.concatStringsSep " " appJvmOpts;
               SBT_OPTS = builtins.concatStringsSep " " sbtJvmOpts;
-              CARGO_NET_GIT_FETCH_WITH_CLI = "true";
-              CARGO_REGISTRIES_CRATES_IO_PROTOCOL = "sparse";
               # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
               NODE_OPTIONS="--openssl-legacy-provider";
               # This fixes bash prompt/autocomplete issues with subshells (i.e. in VSCode) under `nix develop`/direnv
@@ -140,10 +132,7 @@
                 libsodium
                 secp256k1
                 pandoc
-                pkgs.rustc
-                pkgs.cargo
                 texliveSmall
-                tiny_keccak_wrapper
                 # cardano-cli
               ];
               shellHook = ''
@@ -153,11 +142,10 @@
                 fi
                 echo "${pkgs.secp256k1}"
                 echo "${pkgs.libsodium}"
-                echo "${tiny_keccak_wrapper}"
                 echo "${pkgs.async-profiler}"
-                export DYLD_LIBRARY_PATH="${tiny_keccak_wrapper}/lib:$DYLD_LIBRARY_PATH"
-                export LIBRARY_PATH="${tiny_keccak_wrapper}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${tiny_keccak_wrapper}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                export DYLD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$DYLD_LIBRARY_PATH"
+                export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
               '';
             };
           ci =
@@ -205,8 +193,6 @@
               JAVA_HOME = "${jdk}";
               JAVA_OPTS = builtins.concatStringsSep " " ciCommonJvmOpts;
               SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
-              CARGO_NET_GIT_FETCH_WITH_CLI = "true";
-              CARGO_REGISTRIES_CRATES_IO_PROTOCOL = "sparse";
               # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
               NODE_OPTIONS="--openssl-legacy-provider";
               packages = with pkgs; [
@@ -217,14 +203,11 @@
                 llvm
                 libsodium
                 secp256k1
-                pkgs.rustc
-                pkgs.cargo
-                tiny_keccak_wrapper
               ];
               shellHook = ''
                 ln -s ${plutus}/plutus-conformance plutus-conformance
-                export LIBRARY_PATH="${tiny_keccak_wrapper}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${tiny_keccak_wrapper}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
               '';
             };
         };

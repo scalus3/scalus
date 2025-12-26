@@ -1,5 +1,6 @@
 package scalus.builtin
 
+import scalus.crypto.Keccak
 import scalus.crypto.ed25519.{NativeEd25519Signer, SigningKey}
 
 import java.nio.file.{Files, Paths}
@@ -96,28 +97,6 @@ object Sodium {
           msg.length.toULong,
           pubKey.atUnsafe(0)
         ) == 0
-    }
-}
-
-object SHA3 {
-    @link("tiny_keccak_wrapper")
-    @extern
-    object LibTinyKeccak {
-        def sha3_256(data: Ptr[Byte], len: CSize, out: Ptr[Byte]): Unit = extern
-        def keccak_256(data: Ptr[Byte], len: CSize, out: Ptr[Byte]): Unit = extern
-    }
-
-    def sha3_256(input: Array[Byte]): Array[Byte] = {
-        val output = new Array[Byte](32) // SHA3-256 produces 32 bytes
-        // Compute hash
-        LibTinyKeccak.sha3_256(input.atUnsafe(0), input.length.toCSize, output.atUnsafe(0))
-        output
-    }
-
-    def keccak256(input: Array[Byte]): Array[Byte] = {
-        val output = new Array[Byte](32)
-        LibTinyKeccak.keccak_256(input.atUnsafe(0), input.length.toCSize, output.atUnsafe(0))
-        output
     }
 }
 
@@ -291,7 +270,7 @@ trait NativePlatformSpecific extends PlatformSpecific {
         ByteString.unsafeFromArray(Sodium.sha256(bs.bytes))
 
     override def sha3_256(bs: ByteString): ByteString =
-        ByteString.unsafeFromArray(SHA3.sha3_256(bs.bytes))
+        ByteString.unsafeFromArray(Keccak.sha3_256(bs.bytes))
 
     override def blake2b_224(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Sodium.blake2b224(bs.bytes))
@@ -376,7 +355,7 @@ trait NativePlatformSpecific extends PlatformSpecific {
     override def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
         ???
     override def keccak_256(bs: ByteString): ByteString =
-        ByteString.unsafeFromArray(SHA3.keccak256(bs.bytes))
+        ByteString.unsafeFromArray(Keccak.keccak256(bs.bytes))
 
     // TODO: make native implementation for ripemd_160
     override def ripemd_160(byteString: ByteString): ByteString = ???

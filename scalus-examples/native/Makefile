@@ -2,7 +2,7 @@ CXX=clang
 LIBSCALUS_PATH=../../scalus-core/native/target/scala-3.3.6
 CXXFLAGS=-Wall -I.
 LDFLAGS=-L$(LIBSCALUS_PATH)
-LIBS=-lsodium -lsecp256k1 -ltiny_keccak_wrapper -lc++ -lscalus
+LIBS=-lsodium -lsecp256k1 -lc++ -lscalus
 
 
 all: example
