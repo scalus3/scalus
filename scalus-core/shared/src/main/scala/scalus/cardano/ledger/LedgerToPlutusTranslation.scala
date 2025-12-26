@@ -91,10 +91,14 @@ object LedgerToPlutusTranslation {
         }
     }
 
-    /** Convert scalus.cardano.address.Address to scalus.ledger.api.v1.Address.
+    /** Convert scalus.cardano.address.Address to Plutus Address format.
       *
       * This function converts between the comprehensive address representation used in the domain
       * model and the simplified address representation used in Plutus script contexts.
+      *
+      * Note: Returns v1.Address which is also used by v2 and v3 (v3.Address is re-exported from
+      * v1). This single implementation works for all Plutus versions since the Address type is
+      * unchanged.
       */
     def getAddress(address: Address): v1.Address = {
         address match
@@ -873,7 +877,7 @@ object LedgerToPlutusTranslation {
                 )
             case GovAction.TreasuryWithdrawals(withdrawals, policy) =>
                 val wdwls = withdrawals.map { case (account, coin) =>
-                    getAddress(account.address).credential -> BigInt(coin.value)
+                    getRewardAccount(account) -> BigInt(coin.value)
                 }.toSeq
                 v3.GovernanceAction.TreasuryWithdrawals(
                   withdrawals = SortedMap.fromList(prelude.List.from(wdwls)),

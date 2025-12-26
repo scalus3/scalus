@@ -402,7 +402,12 @@ object ProtocolParamUpdate {
                     minFeeRefScriptCoinsPerByte =
                         Some(summon[FromData[NonNegativeInterval]].apply(value))
 
-                case _ => () // Ignore unknown keys
+                // Unknown keys should cause decoding to fail, matching Haskell behavior where
+                // IntMap.lookup returns Nothing for unknown keys, causing the entire fromPlutusData to fail
+                case _ =>
+                    throw new IllegalArgumentException(
+                      s"Unknown protocol parameter key: $key. Valid keys are 0-11, 16-24, 25-32, 33"
+                    )
             }
         }
 
