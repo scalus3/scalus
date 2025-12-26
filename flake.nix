@@ -1,6 +1,6 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
     plutus.url = "github:IntersectMBO/plutus/1.56.0.0";
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -41,7 +41,7 @@
         devShells = {
           default =
             let
-              jdk = pkgs.openjdk23;
+              jdk = pkgs.openjdk25;
               graalvm = pkgs.graalvmPackages.graalvm-ce;
               metals = pkgs.metals.override { jre = graalvm; };
               bloop = pkgs.bloop.override { jre = graalvm; };
@@ -139,8 +139,10 @@
                 clang
                 libsodium
                 secp256k1
+                pandoc
                 pkgs.rustc
                 pkgs.cargo
+                texliveSmall
                 tiny_keccak_wrapper
                 # cardano-cli
               ];
