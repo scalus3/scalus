@@ -521,15 +521,11 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
 lazy val docs = project // documentation project
     .in(file("scalus-docs")) // important: it must not be docs/
     .dependsOn(scalus.jvm)
-    .enablePlugins(MdocPlugin, ScalaUnidocPlugin)
+    .enablePlugins(ScalaUnidocPlugin)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       publish / skip := true,
       moduleName := "scalus-docs",
-      mdocVariables := Map(
-        "VERSION" -> scalusStableVersion,
-        "SCALA3_VERSION" -> scalaVersion.value
-      ),
       ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
         scalus.jvm,
         scalusCardanoLedger.jvm,
@@ -724,15 +720,15 @@ addCommandAlias(
 )
 addCommandAlias(
   "precommit",
-  "clean;docs/clean;scalusPluginTests/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusPluginTests/test;jvm/test;docs/mdoc"
+  "clean;docs/clean;scalusPluginTests/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusPluginTests/test;jvm/test"
 )
 addCommandAlias(
   "ci",
-  "clean;docs/clean;scalusPluginTests/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;scalusPluginTests/Test/compile;Test/nativeLink;test;docs/mdoc;mima"
+  "clean;docs/clean;scalusPluginTests/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;scalusPluginTests/Test/compile;Test/nativeLink;test;mima"
 )
 addCommandAlias(
   "ci-jvm",
-  "clean;docs/clean;scalusPluginTests/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusPluginTests/Test/compile;jvm/test;docs/mdoc;mima"
+  "clean;docs/clean;scalusPluginTests/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusPluginTests/Test/compile;jvm/test;mima"
 )
 addCommandAlias(
   "ci-js",

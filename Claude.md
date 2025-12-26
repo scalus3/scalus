@@ -159,7 +159,7 @@ sbtn "bench/Jmh/run -i 1 -wi 1 -f 1 -t 1 .*CekBenchmark.*"
 
 - **`bench/`** (`bench`) - JMH benchmarks
 
-- **`scalus-docs/`** (`docs`) - Documentation (mdoc)
+- **`scalus-docs/`** (`docs`) - Documentation (Unidoc)
 
 **Aggregate projects** (for convenience):
 
