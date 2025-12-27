@@ -185,8 +185,9 @@ object ProtocolParams {
                       UnitInterval.fromDouble(json("dvt_treasury_withdrawal").numOpt.getOrElse(0))
                 ),
                 executionUnitPrices = ExUnitPrices(
-                  priceMemory = NonNegativeInterval(json("price_mem").num),
-                  priceSteps = NonNegativeInterval(json("price_step").num)
+                  // Use precision=15 to preserve tiny values like 7.21e-8
+                  priceMemory = NonNegativeInterval(json("price_mem").num, precision = 15),
+                  priceSteps = NonNegativeInterval(json("price_step").num, precision = 15)
                 ),
                 govActionDeposit = json("gov_action_deposit").asLongOr(0L),
                 govActionLifetime = json("gov_action_lifetime").asLongOr(0L),

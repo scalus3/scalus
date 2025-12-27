@@ -46,15 +46,15 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
         if factor == 0 then {
             NonNegativeInterval.zero
         } else {
-            val newNumerator = (BigInt(this.numerator) * BigInt(factor)).toLong
-            NonNegativeInterval.reduce(newNumerator, this.denominator)
+            val newNumerator = BigInt(this.numerator) * BigInt(factor)
+            NonNegativeInterval.reduceBigInt(newNumerator, BigInt(this.denominator))
         }
     }
 
     /** Multiplication operation with Long.
       *
       * @param factor
-      *   The Int to multiply by
+      *   The Long to multiply by
       * @return
       *   The product as a reduced NonNegativeInterval
       * @throws IllegalArgumentException
@@ -65,8 +65,8 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
         if factor == 0 then {
             NonNegativeInterval.zero
         } else {
-            val newNumerator = (BigInt(this.numerator) * BigInt(factor)).toLong
-            NonNegativeInterval.reduce(newNumerator, this.denominator)
+            val newNumerator = BigInt(this.numerator) * BigInt(factor)
+            NonNegativeInterval.reduceBigInt(newNumerator, BigInt(this.denominator))
         }
     }
 
@@ -78,11 +78,11 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
       *   The sum as a reduced NonNegativeInterval
       */
     def +(other: NonNegativeInterval): NonNegativeInterval = {
-        val newNumerator = (BigInt(this.numerator) * BigInt(other.denominator) + BigInt(
+        val newNumerator = BigInt(this.numerator) * BigInt(other.denominator) + BigInt(
           other.numerator
-        ) * BigInt(this.denominator)).toLong
-        val newDenominator = (BigInt(this.denominator) * BigInt(other.denominator)).toLong
-        NonNegativeInterval.reduce(newNumerator, newDenominator)
+        ) * BigInt(this.denominator)
+        val newDenominator = BigInt(this.denominator) * BigInt(other.denominator)
+        NonNegativeInterval.reduceBigInt(newNumerator, newDenominator)
     }
 
     /** Multiplication operation.
@@ -93,9 +93,9 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
       *   The product as a reduced NonNegativeInterval
       */
     def *(other: NonNegativeInterval): NonNegativeInterval = {
-        val newNumerator = (BigInt(this.numerator) * BigInt(other.numerator)).toLong
-        val newDenominator = (BigInt(this.denominator) * BigInt(other.denominator)).toLong
-        NonNegativeInterval.reduce(newNumerator, newDenominator)
+        val newNumerator = BigInt(this.numerator) * BigInt(other.numerator)
+        val newDenominator = BigInt(this.denominator) * BigInt(other.denominator)
+        NonNegativeInterval.reduceBigInt(newNumerator, newDenominator)
     }
 
     /** Division operation.
@@ -109,9 +109,9 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
       */
     def /(other: NonNegativeInterval): NonNegativeInterval = {
         require(other.numerator > 0, "Cannot divide by zero")
-        val newNumerator = (BigInt(this.numerator) * BigInt(other.denominator)).toLong
-        val newDenominator = (BigInt(this.denominator) * BigInt(other.numerator)).toLong
-        NonNegativeInterval.reduce(newNumerator, newDenominator)
+        val newNumerator = BigInt(this.numerator) * BigInt(other.denominator)
+        val newDenominator = BigInt(this.denominator) * BigInt(other.numerator)
+        NonNegativeInterval.reduceBigInt(newNumerator, newDenominator)
     }
 
     /** Less than comparison.
@@ -197,8 +197,35 @@ object NonNegativeInterval {
     val zero: NonNegativeInterval = NonNegativeInterval(0, 1)
 
     def reduce(numerator: Long, denominator: Long): NonNegativeInterval = {
-        val gcdValue = gcd(numerator, denominator)
-        NonNegativeInterval(numerator / gcdValue, denominator / gcdValue)
+        val absNumerator = math.abs(numerator)
+        val absDenominator = math.abs(denominator)
+        val gcdValue = gcd(absNumerator, absDenominator)
+        NonNegativeInterval(absNumerator / gcdValue, absDenominator / gcdValue)
+    }
+
+    /** Reduces a fraction represented as BigInts to a NonNegativeInterval. This version handles
+      * values that may overflow Long during intermediate calculations.
+      *
+      * @param numerator
+      *   The numerator as BigInt
+      * @param denominator
+      *   The denominator as BigInt (must be positive)
+      * @return
+      *   A reduced NonNegativeInterval
+      * @throws IllegalArgumentException
+      *   if the reduced values don't fit in Long
+      */
+    def reduceBigInt(numerator: BigInt, denominator: BigInt): NonNegativeInterval = {
+        require(numerator >= 0, "Numerator must be non-negative")
+        require(denominator > 0, "Denominator must be positive")
+        val gcdValue = numerator.gcd(denominator)
+        val reducedNum = numerator / gcdValue
+        val reducedDenom = denominator / gcdValue
+        require(
+          reducedNum <= Long.MaxValue && reducedDenom <= Long.MaxValue,
+          s"Reduced fraction ($reducedNum / $reducedDenom) overflows Long"
+        )
+        NonNegativeInterval(reducedNum.toLong, reducedDenom.toLong)
     }
 
     def apply(numerator: Long): NonNegativeInterval = {

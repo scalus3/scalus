@@ -91,7 +91,8 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(cpu == 128540)
         assert(mem == 703)
         assert(lovelacePerRecursion.ceil == 50)
-        assert(pricePerRecursionInUSDMilliCents == 3.28798668)
+        // Precise value with higher precision price_step representation
+        assert(pricePerRecursionInUSDMilliCents == 3.2888350440000003)
     }
 
     test("equalsInteger(unIData) < equalsData(iData)") {
@@ -152,7 +153,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(result.budget.fee(prices).value == 74)
     }
 
-    test("5th bytestring in a list fee = 190") {
+    test("5th bytestring in a list fee = 191") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
@@ -171,7 +172,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(result.success.term == bs5.asTerm)
         assert(result.budget.memory == 2324)
         assert(result.budget.steps == 775977)
-        assert(result.budget.fee(prices).value == 190)
+        assert(result.budget.fee(prices).value == 191)
     }
 
     test("5th bytestring in a packed bytestring fee = 74") {
