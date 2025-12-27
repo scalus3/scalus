@@ -98,7 +98,7 @@ jobs:
       - name: Publish to Sonatype
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          nix develop .#ci-secp --accept-flake-config --command bash -c "sbt scalus-secp256k1-jni/ci-release"
+          nix develop .#ci-secp --accept-flake-config --command bash -c "sbt 'scalus-secp256k1-jni/publishSigned; sonatypeBundleRelease'"
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
           PGP_SECRET: ${{ secrets.PGP_SECRET }}
