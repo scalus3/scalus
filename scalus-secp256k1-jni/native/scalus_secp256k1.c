@@ -13,6 +13,7 @@
 #include <secp256k1_extrakeys.h>
 #include <secp256k1_schnorrsig.h>
 #include <string.h>
+#include <stdint.h>
 #include <pthread.h>
 
 /* Context for secp256k1 operations - lazily initialized */
