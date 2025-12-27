@@ -276,6 +276,21 @@ lazy val scalusPluginTests = project
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test"
     )
 
+// Scalus secp256k1 JNI bindings - separate project, not aggregated
+// Build with: sbt scalus-secp256k1-jni/compile
+// Publish with: sbt scalus-secp256k1-jni/publish
+lazy val `scalus-secp256k1-jni` = project
+    .in(file("scalus-secp256k1-jni"))
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-secp256k1-jni",
+      version := "0.6.0",
+      // Java-only project
+      crossPaths := false,
+      autoScalaLibrary := false,
+      libraryDependencies += "org.scijava" % "native-lib-loader" % "2.5.0"
+    )
+
 // Scalus Core and Standard Library for JVM and JS
 lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     .in(file("scalus-core"))
