@@ -3,7 +3,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
     plutus.url = "github:IntersectMBO/plutus/1.56.0.0";
-    rust-overlay.url = "github:oxalica/rust-overlay";
     # cardano-node-flake.url = "github:input-output-hk/cardano-node/9.1.1";
   };
 
@@ -12,7 +11,6 @@
     , flake-utils
     , nixpkgs
     , plutus
-    , rust-overlay
     # , cardano-node-flake
     , ...
     } @ inputs:
@@ -20,7 +18,6 @@
       let
         pkgs = import nixpkgs {
                 inherit system;
-                overlays = [ rust-overlay.overlays.default ];
                 config = {
                   # Explicitly set WebKitGTK ABI version to avoid evaluation warning
                   # WebKitGTK has multiple ABI versions (4.0, 4.1, 6.0) and Nix requires explicit selection
@@ -207,6 +204,25 @@
                 ln -s ${plutus}/plutus-conformance plutus-conformance
                 export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
                 export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+              '';
+            };
+          ci-secp =
+            let
+              jdk = pkgs.openjdk11;
+              sbt = pkgs.sbt.override { jre = jdk; };
+            in
+            pkgs.mkShell {
+              JAVA_HOME = "${jdk}";
+              packages = with pkgs; [
+                jdk
+                sbt
+                clang
+                secp256k1
+                pkg-config
+              ];
+              shellHook = ''
+                export LIBRARY_PATH="${pkgs.secp256k1}/lib:$LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:$LD_LIBRARY_PATH"
               '';
             };
         };
