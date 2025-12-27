@@ -60,13 +60,10 @@ else ifeq ($(UNAME_S),Darwin)
     JNI_INCLUDE += -I"$(JAVA_HOME)/include/darwin"
 endif
 
-# secp256k1 library - use pkg-config for includes, static linking for self-contained JAR
-SECP256K1_CFLAGS := $(shell pkg-config --cflags libsecp256k1 2>/dev/null)
-# Static linking: link directly to .a file (works on both Linux and macOS)
-SECP256K1_LIBDIR := $(shell pkg-config --variable=libdir libsecp256k1 2>/dev/null)
-SECP256K1_LIBS := $(SECP256K1_LIBDIR)/libsecp256k1.a
-# Include NIX_CFLAGS_COMPILE if set (contains -isystem paths in nix environment)
-NIX_CFLAGS := $(NIX_CFLAGS_COMPILE)
+# secp256k1 library - use SECP256K1_HOME from nix environment
+# Static linking: link directly to .a file for self-contained JAR (like bitcoin-s does)
+SECP256K1_CFLAGS := -I$(SECP256K1_HOME)/include
+SECP256K1_LIBS := $(SECP256K1_HOME)/lib/libsecp256k1.a
 
 # Source files
 SOURCES := $(NATIVE_DIR)/scalus_secp256k1.c
@@ -75,7 +72,7 @@ all: $(RESOURCES_DIR)/$(OUTPUT_LIB)
 
 $(RESOURCES_DIR)/$(OUTPUT_LIB): $(SOURCES)
 	@mkdir -p $(RESOURCES_DIR)
-	$(CC) $(CFLAGS) $(JNI_INCLUDE) $(SECP256K1_CFLAGS) $(NIX_CFLAGS) $(SHARED_FLAG) -o $@ $< $(SECP256K1_LIBS)
+	$(CC) $(CFLAGS) $(JNI_INCLUDE) $(SECP256K1_CFLAGS) $(SHARED_FLAG) -o $@ $< $(SECP256K1_LIBS)
 	@echo "Built $(OUTPUT_LIB) for $(PLATFORM)"
 
 clean:
@@ -86,6 +83,7 @@ info:
 	@echo "Platform: $(PLATFORM)"
 	@echo "Library: $(OUTPUT_LIB)"
 	@echo "JAVA_HOME: $(JAVA_HOME)"
+	@echo "SECP256K1_HOME: $(SECP256K1_HOME)"
 	@echo "JNI_INCLUDE: $(JNI_INCLUDE)"
 	@echo "SECP256K1_CFLAGS: $(SECP256K1_CFLAGS)"
 	@echo "SECP256K1_LIBS: $(SECP256K1_LIBS)"

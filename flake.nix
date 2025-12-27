@@ -26,6 +26,17 @@
         };
         uplc = plutus.packages.${system}.uplc;
 
+        # secp256k1 with static library and required modules for JNI builds
+        secp256k1Static = pkgs.secp256k1.overrideAttrs (old: {
+          dontDisableStatic = true;
+          configureFlags = (old.configureFlags or []) ++ [
+            "--enable-experimental"
+            "--enable-module-schnorrsig"
+            "--enable-module-extrakeys"
+            "--enable-module-ecdh"
+          ];
+        });
+
         # cardano-cli = cardano-node-flake.packages.${system}.cardano-cli;
       in
       {
@@ -213,17 +224,13 @@
             in
             pkgs.mkShell {
               JAVA_HOME = "${jdk}";
-              packages = with pkgs; [
+              SECP256K1_HOME = "${secp256k1Static}";
+              packages = [
                 jdk
                 sbt
-                clang
-                secp256k1
-                pkg-config
+                pkgs.clang
+                secp256k1Static
               ];
-              shellHook = ''
-                export LIBRARY_PATH="${pkgs.secp256k1}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:$LD_LIBRARY_PATH"
-              '';
             };
         };
       })
