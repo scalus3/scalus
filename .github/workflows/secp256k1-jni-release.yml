@@ -20,6 +20,9 @@ jobs:
           - os: macos-latest
             platform: osx_arm64
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +52,9 @@ jobs:
   publish:
     needs: build-native
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
