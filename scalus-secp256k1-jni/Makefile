@@ -60,8 +60,11 @@ else ifeq ($(UNAME_S),Darwin)
     JNI_INCLUDE += -I"$(JAVA_HOME)/include/darwin"
 endif
 
-# secp256k1 library
-SECP256K1_LIBS := -lsecp256k1
+# secp256k1 library - use pkg-config or NIX_CFLAGS_COMPILE for includes
+SECP256K1_CFLAGS := $(shell pkg-config --cflags libsecp256k1 2>/dev/null)
+SECP256K1_LIBS := $(shell pkg-config --libs libsecp256k1 2>/dev/null || echo "-lsecp256k1")
+# Include NIX_CFLAGS_COMPILE if set (contains -isystem paths in nix environment)
+NIX_CFLAGS := $(NIX_CFLAGS_COMPILE)
 
 # Source files
 SOURCES := $(NATIVE_DIR)/scalus_secp256k1.c
@@ -70,7 +73,7 @@ all: $(RESOURCES_DIR)/$(OUTPUT_LIB)
 
 $(RESOURCES_DIR)/$(OUTPUT_LIB): $(SOURCES)
 	@mkdir -p $(RESOURCES_DIR)
-	$(CC) $(CFLAGS) $(JNI_INCLUDE) $(SHARED_FLAG) -o $@ $< $(SECP256K1_LIBS)
+	$(CC) $(CFLAGS) $(JNI_INCLUDE) $(SECP256K1_CFLAGS) $(NIX_CFLAGS) $(SHARED_FLAG) -o $@ $< $(SECP256K1_LIBS)
 	@echo "Built $(OUTPUT_LIB) for $(PLATFORM)"
 
 clean:
@@ -82,3 +85,5 @@ info:
 	@echo "Library: $(OUTPUT_LIB)"
 	@echo "JAVA_HOME: $(JAVA_HOME)"
 	@echo "JNI_INCLUDE: $(JNI_INCLUDE)"
+	@echo "SECP256K1_CFLAGS: $(SECP256K1_CFLAGS)"
+	@echo "SECP256K1_LIBS: $(SECP256K1_LIBS)"
