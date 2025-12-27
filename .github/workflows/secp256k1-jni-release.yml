@@ -93,7 +93,7 @@ jobs:
 
       - name: Compile and package
         run: |
-          nix develop .#ci-secp --accept-flake-config --command bash -c "sbt scalus-secp256k1-jni/compile scalus-secp256k1-jni/package"
+          nix develop .#ci-secp --accept-flake-config --command bash -c "sbt scalus-secp256k1-jni/package"
 
       - name: Publish to Sonatype
         if: startsWith(github.ref, 'refs/tags/')

@@ -60,9 +60,11 @@ else ifeq ($(UNAME_S),Darwin)
     JNI_INCLUDE += -I"$(JAVA_HOME)/include/darwin"
 endif
 
-# secp256k1 library - use pkg-config or NIX_CFLAGS_COMPILE for includes
+# secp256k1 library - use pkg-config for includes, static linking for self-contained JAR
 SECP256K1_CFLAGS := $(shell pkg-config --cflags libsecp256k1 2>/dev/null)
-SECP256K1_LIBS := $(shell pkg-config --libs libsecp256k1 2>/dev/null || echo "-lsecp256k1")
+# Static linking: link directly to .a file (works on both Linux and macOS)
+SECP256K1_LIBDIR := $(shell pkg-config --variable=libdir libsecp256k1 2>/dev/null)
+SECP256K1_LIBS := $(SECP256K1_LIBDIR)/libsecp256k1.a
 # Include NIX_CFLAGS_COMPILE if set (contains -isystem paths in nix environment)
 NIX_CFLAGS := $(NIX_CFLAGS_COMPILE)
 
