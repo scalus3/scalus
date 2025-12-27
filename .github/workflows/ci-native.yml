@@ -1,6 +1,9 @@
 name: CI-Native
 on:
   push:
+    paths-ignore:
+      - 'scalus-secp256k1-jni/**'
+      - '.github/workflows/**'
 jobs:
   test:
     runs-on: ubuntu-latest
