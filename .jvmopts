@@ -10,7 +10,6 @@
 # Memory optimizations
 -XX:+UseStringDeduplication
 -XX:+UseCompressedOops
--XX:+UseCompressedClassPointers
 
 # Code cache settings for better JIT performance
 -XX:ReservedCodeCacheSize=512m
