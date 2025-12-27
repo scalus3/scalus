@@ -9,6 +9,7 @@ on:
 jobs:
   build-native:
     strategy:
+      max-parallel: 1
       matrix:
         include:
           - os: ubuntu-latest
