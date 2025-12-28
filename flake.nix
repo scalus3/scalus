@@ -143,10 +143,8 @@
                 # cardano-cli
               ];
               shellHook = ''
-                if [ ! -L plutus-conformance ]; then
-                  unlink plutus-conformance
-                  ln -s ${plutus}/plutus-conformance plutus-conformance
-                fi
+                unlink plutus-conformance 2>/dev/null || true
+                ln -s ${plutus}/plutus-conformance plutus-conformance
                 echo "${pkgs.secp256k1}"
                 echo "${pkgs.libsodium}"
                 echo "${pkgs.async-profiler}"
@@ -202,6 +200,9 @@
               SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
               # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
               NODE_OPTIONS="--openssl-legacy-provider";
+              # Fix locale warnings in CI
+              LC_ALL = "C";
+              LOCALE_ARCHIVE = pkgs.lib.optionalString pkgs.stdenv.isLinux "${pkgs.glibcLocales}/lib/locale/locale-archive";
               packages = with pkgs; [
                 jdk
                 sbt
@@ -212,6 +213,7 @@
                 secp256k1
               ];
               shellHook = ''
+                unlink plutus-conformance 2>/dev/null || true
                 ln -s ${plutus}/plutus-conformance plutus-conformance
                 export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
                 export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
