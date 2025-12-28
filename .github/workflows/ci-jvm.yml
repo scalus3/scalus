@@ -1,5 +1,6 @@
 name: CI-JVM
 on:
+  workflow_dispatch:
   push:
     paths-ignore:
       - 'scalus-secp256k1-jni/**'
