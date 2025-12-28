@@ -26,25 +26,6 @@
         };
         uplc = plutus.packages.${system}.uplc;
 
-        # Pre-built uplc for CI shell (avoids slow haskell-nix evaluation)
-        # Requires: experimental-features = fetch-closure (in nix.conf or CI workflow)
-        # To update: run `nix path-info $(which uplc)` in default shell after updating plutus
-        uplcCachedPaths = {
-          "x86_64-linux" = /nix/store/5y1gd9jj0bd9adfc3fvsgw2w850is6b2-plutus-executables-exe-uplc-1.56.0.0;
-          "aarch64-darwin" = /nix/store/001ff7xjx4kmbkkckpyzdxa46xfqjbgd-plutus-executables-exe-uplc-1.56.0.0;
-        };
-        uplcCached = builtins.fetchClosure {
-          fromStore = "https://cache.iog.io";
-          fromPath = uplcCachedPaths.${system};
-          inputAddressed = true;
-        };
-
-        # Plutus conformance test data fetched directly (avoids haskell-nix)
-        plutusConformanceSrc = builtins.fetchTarball {
-          url = "https://github.com/IntersectMBO/plutus/archive/refs/tags/1.56.0.0.tar.gz";
-          sha256 = "1423jdr4njby64fgsnzilb7x0xwjm2shznbxw3bai4hh3qpgavwz";
-        };
-
         # secp256k1 with static library and required modules for JNI builds
         secp256k1Static = pkgs.secp256k1.overrideAttrs (old: {
           dontDisableStatic = true;
@@ -221,21 +202,17 @@
               SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
               # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
               NODE_OPTIONS="--openssl-legacy-provider";
-              # Fix locale warnings in CI
-              LC_ALL = "C";
-              LOCALE_ARCHIVE = pkgs.lib.optionalString pkgs.stdenv.isLinux "${pkgs.glibcLocales}/lib/locale/locale-archive";
               packages = with pkgs; [
                 jdk
                 sbt
                 nodejs
-                uplcCached  # Use pre-built uplc (fast, avoids haskell-nix)
+                uplc
                 llvm
                 libsodium
                 secp256k1
               ];
               shellHook = ''
-                unlink plutus-conformance 2>/dev/null || true
-                ln -s ${plutusConformanceSrc}/plutus-conformance plutus-conformance
+                ln -s ${plutus}/plutus-conformance plutus-conformance
                 export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
                 export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
               '';
@@ -273,7 +250,7 @@
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
     ];
     allow-import-from-derivation = true;
-    experimental-features = [ "nix-command" "flakes" "fetch-closure" ];
+    experimental-features = [ "nix-command" "flakes" ];
     accept-flake-config = true;
   };
 }
