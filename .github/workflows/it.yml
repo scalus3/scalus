@@ -79,6 +79,8 @@ jobs:
             allow-import-from-derivation = true
             experimental-features = nix-command flakes
       - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
       - name: Build and test in Nix devshell
         run: nix develop .#ci --accept-flake-config --command bash -c "export SCALUS_IT_DATA_PATH=$GITHUB_WORKSPACE/it-data/it-data; sbt it"
       - name: Report test results
