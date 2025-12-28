@@ -38,6 +38,12 @@
         });
 
         # cardano-cli = cardano-node-flake.packages.${system}.cardano-cli;
+
+        # Plutus conformance test data fetched directly (avoids haskell.nix evaluation in CI)
+        plutusConformanceSrc = builtins.fetchTarball {
+          url = "https://github.com/IntersectMBO/plutus/archive/refs/tags/1.56.0.0.tar.gz";
+          sha256 = "1423jdr4njby64fgsnzilb7x0xwjm2shznbxw3bai4hh3qpgavwz";
+        };
       in
       {
         devShells = {
@@ -208,7 +214,7 @@
                 jdk
                 sbt
                 nodejs
-                uplc
+                # uplc is provided by CI artifact (avoids haskell.nix evaluation)
                 llvm
                 libsodium
                 secp256k1
@@ -216,7 +222,7 @@
               ];
               shellHook = ''
                 unlink plutus-conformance 2>/dev/null || true
-                ln -s ${plutus}/plutus-conformance plutus-conformance
+                ln -s ${plutusConformanceSrc}/plutus-conformance plutus-conformance
                 export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
                 export LD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
               '';
