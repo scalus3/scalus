@@ -524,7 +524,8 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/rotateByteString/case-16/case-16")
     check("builtin/semantics/rotateByteString/case-17/case-17")
     check("builtin/semantics/rotateByteString/case-18/case-18")
-    // NOTE: ripemd_160 tests are in PlutusConformanceJvmTest.scala
+    check("builtin/semantics/ripemd_160/ripemd_160-empty/ripemd_160-empty")
+    check("builtin/semantics/ripemd_160/ripemd_160-length-200/ripemd_160-length-200")
     check("builtin/semantics/sha2_256/sha2_256-empty/sha2_256-empty")
     check("builtin/semantics/sha2_256/sha2_256-length-200/sha2_256-length-200")
     check("builtin/semantics/sha3_256/sha3_256-empty/sha3_256-empty")

@@ -1,7 +1,7 @@
 package scalus.builtin
 
-import scalus.crypto.Keccak
 import scalus.crypto.ed25519.{NativeEd25519Signer, SigningKey}
+import scalus.crypto.{Keccak, Ripemd160}
 
 import java.nio.file.{Files, Paths}
 import scala.scalanative.unsafe.*
@@ -357,8 +357,8 @@ trait NativePlatformSpecific extends PlatformSpecific {
     override def keccak_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Keccak.keccak256(bs.bytes))
 
-    // TODO: make native implementation for ripemd_160
-    override def ripemd_160(byteString: ByteString): ByteString = ???
+    override def ripemd_160(byteString: ByteString): ByteString =
+        ByteString.unsafeFromArray(Ripemd160.ripemd160(byteString.bytes))
 
     override def readFile(path: String): Array[Byte] = {
         Files.readAllBytes(Paths.get(path))

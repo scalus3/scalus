@@ -192,6 +192,3 @@ class PlutusConformanceJvmTest extends PlutusConformanceTest:
     ignore("builtin/semantics/bls12_381_G2_multiScalarMul/multiScalarMul-11/multiScalarMul-11")(())
     ignore("builtin/semantics/bls12_381_G2_multiScalarMul/multiScalarMul-12a/multiScalarMul-12a")(())
     ignore("builtin/semantics/bls12_381_G2_multiScalarMul/multiScalarMul-12b/multiScalarMul-12b")(())
-    // ripemd_160 tests - only available on JVM
-    check("builtin/semantics/ripemd_160/ripemd_160-empty/ripemd_160-empty")
-    check("builtin/semantics/ripemd_160/ripemd_160-length-200/ripemd_160-length-200")
