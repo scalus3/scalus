@@ -76,7 +76,7 @@ jobs:
             substituters = https://cache.iog.io https://cache.nixos.org/ https://iohk.cachix.org https://nix-community.cachix.org
             accept-flake-config = true
             allow-import-from-derivation = true
-            experimental-features = nix-command flakes
+            experimental-features = nix-command flakes fetch-closure
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
