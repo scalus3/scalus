@@ -556,14 +556,9 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-14/test-vector-14")
     check("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-15/test-vector-15")
     check("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-16/test-vector-16")
-    /* FIXME: Theses test are failing because the signature is not valid
-     * Plutus code throws error in this case.
-     * We need to call secp256k1_ecdsa_signature_parse_compact function to parse the signature
-     * but bitcoins-s secp256k1jni library does not export this function now.
-     * TODO: either make a PR into the library and export this function or fork the library and export it.
-     */
-    ignore("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-17/test-vector-17")(())
-    ignore("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-18/test-vector-18")(())
+    // These tests now work with our custom JNI library that properly parses compact signatures
+    check("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-17/test-vector-17")
+    check("builtin/semantics/verifyEcdsaSecp256k1Signature/test-vector-18/test-vector-18")
     check("builtin/semantics/verifyEd25519Signature/long-key/long-key")
     check("builtin/semantics/verifyEd25519Signature/long-sig/long-sig")
     check("builtin/semantics/verifyEd25519Signature/short-key/short-key")
@@ -618,15 +613,11 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-12/test-vector-12")
     check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-13/test-vector-13")
     check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-14/test-vector-14")
-    /* FIXME: Theses test are failing because bitcoins-s schnorrVerify function
-     * expects a message to be 32 bytes long, which is against the BIP-340 specification.
-     * I created an issue in the bitcoins-s repository to fix this: 
-     * https://github.com/bitcoin-s/bitcoin-s/issues/5436
-     */
-    ignore("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-15/test-vector-15")(())
-    ignore("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-16/test-vector-16")(())
-    ignore("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-17/test-vector-17")(())
-    ignore("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-18/test-vector-18")(())
+    // These tests use variable-length messages (per BIP-340), now supported by our custom JNI library
+    check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-15/test-vector-15")
+    check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-16/test-vector-16")
+    check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-17/test-vector-17")
+    check("builtin/semantics/verifySchnorrSecp256k1Signature/test-vector-18/test-vector-18")
     check("builtin/semantics/writeBits/case-01/case-01")
     check("builtin/semantics/writeBits/case-02/case-02")
     check("builtin/semantics/writeBits/case-03/case-03")

@@ -328,17 +328,12 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / fork := true,
       // Run forked tests from project root so paths are consistent across platforms
       Test / baseDirectory := (LocalRootProject / baseDirectory).value,
-      // needed for secp256k1jni. Otherwise, JVM loads secp256k1 library from LD_LIBRARY_PATH
-      // which doesn't export the secp256k1_ec_pubkey_decompress function
-      // that is needed by bitcoin-s-secp256k1jni, because it's an older fork of secp256k1
-      Test / javaOptions += "-Djava.library.path=",
       // Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-S", "-8077211454138081902"),
       Test / testOptions += Tests.Argument("-oF"),
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "provided",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
-      libraryDependencies += "org.bitcoin-s" % "bitcoin-s-crypto_2.13" % "1.9.11" % "test",
-      libraryDependencies += "org.bitcoin-s" % "bitcoin-s-secp256k1jni" % "1.9.11"
+      libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0"
     )
     .jsSettings(
       // Add JS-specific settings here
@@ -657,10 +652,6 @@ lazy val scalusCardanoLedgerIt = project
       publish / skip := true,
       Test / fork := true,
       Test / testOptions += Tests.Argument("-oF"),
-      // needed for secp256k1jni. Otherwise, JVM loads secp256k1 library from LD_LIBRARY_PATH
-      // which doesn't export the secp256k1_ec_pubkey_decompress function
-      // that is needed by bitcoin-s-secp256k1jni, because it's an older fork of secp256k1
-      Test / javaOptions += "-Djava.library.path=",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1" % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
@@ -671,8 +662,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.0" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
-      libraryDependencies += "org.bitcoin-s" % "bitcoin-s-crypto_2.13" % "1.9.11" % "test",
-      libraryDependencies += "org.bitcoin-s" % "bitcoin-s-secp256k1jni" % "1.9.11",
+      libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
       // Testcontainers for Yaci DevKit integration tests
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.41.5" % "test",

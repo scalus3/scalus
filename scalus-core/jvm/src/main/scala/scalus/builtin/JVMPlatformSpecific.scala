@@ -1,15 +1,14 @@
 package scalus.builtin
 
-import org.bitcoin.NativeSecp256k1
 import org.bouncycastle.crypto.digests.Blake2bDigest
 import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.bouncycastle.jcajce.provider.digest.{Keccak, RIPEMD160, SHA3}
 import scalus.crypto.ed25519.{JvmEd25519Signer, SigningKey}
+import scalus.crypto.{NativeSecp256k1, Secp256k1Context}
 import scalus.utils.Utils
 import supranational.blst.{P1, P2, PT}
 
-import java.math.BigInteger
 import java.nio.file.{Files, Paths}
 
 object Builtins extends Builtins(using JVMPlatformSpecific)
@@ -43,9 +42,13 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         msg: ByteString,
         sig: ByteString
     ): Boolean = {
+        require(Secp256k1Context.isEnabled, "secp256k1 native library not available")
         require(pk.size == 32, s"Invalid public key length ${pk.size}")
-        // parity byte 0x02 for compressed public key
-        require(NativeSecp256k1.isValidPubKey(0x02 +: pk.bytes), s"Invalid public key ${pk}")
+        // Validate as compressed pubkey (prepend 0x02 parity byte)
+        require(
+          NativeSecp256k1.isValidPubKey((0x02.toByte +: pk.bytes).toArray),
+          s"Invalid public key ${pk}"
+        )
         require(sig.size == 64, s"Invalid signature length ${sig.size}")
         NativeSecp256k1.schnorrVerify(sig.bytes, msg.bytes, pk.bytes)
     }
@@ -68,11 +71,16 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         val signingKey = SigningKey.unsafeFromByteString(privateKey)
         JvmEd25519Signer.sign(signingKey, message)
 
+    // secp256k1 group order n
+    private val SECP256K1_ORDER =
+        BigInt("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
+
     override def verifyEcdsaSecp256k1Signature(
         pk: ByteString,
         msg: ByteString,
         sig: ByteString
     ): Boolean = {
+        require(Secp256k1Context.isEnabled, "secp256k1 native library not available")
         require(
           pk.size == 33,
           s"Invalid public key length ${pk.size}, expected 33, ${pk.toHex}"
@@ -80,18 +88,13 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         require(NativeSecp256k1.isValidPubKey(pk.bytes), s"Invalid public key ${pk}")
         require(msg.size == 32, s"Invalid message length ${msg.size}, expected 32")
         require(sig.size == 64, s"Invalid signature length ${sig.size}, expected 64")
-
-        val r = BigInt(new BigInteger(1, sig.bytes, 0, 32)) // avoid copying the array
-        val s = BigInt(new BigInteger(1, sig.bytes, 32, 32)) // avoid copying the array
-        val rsSize = r.toByteArray.length + s.toByteArray.length
-        val totalSize = 4 + rsSize
-        val signature = Array(
-          0x30.toByte,
-          totalSize.toByte,
-          0x2.toByte,
-          r.toByteArray.length.toByte
-        ) ++ r.toByteArray ++ Array(0x2.toByte, s.toByteArray.length.toByte) ++ s.toByteArray
-        NativeSecp256k1.verify(msg.bytes, signature, pk.bytes)
+        // Validate signature components r and s are in valid range [1, n-1]
+        val r = BigInt(1, sig.bytes.slice(0, 32))
+        val s = BigInt(1, sig.bytes.slice(32, 64))
+        require(r > 0 && r < SECP256K1_ORDER, s"Invalid signature: r out of range")
+        require(s > 0 && s < SECP256K1_ORDER, s"Invalid signature: s out of range")
+        // Our JNI accepts compact signature (r || s) directly, no DER encoding needed
+        NativeSecp256k1.ecdsaVerify(msg.bytes, sig.bytes, pk.bytes)
     }
 
     // BLS12_381 operations
