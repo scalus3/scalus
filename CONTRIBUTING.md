@@ -117,6 +117,37 @@ of the project.
 For benchmarking of allocations use `event=alloc` instead of `event=cycles` option in the command
 above.
 
+## Publishing scalus-secp256k1-jni to Maven Central
+
+The `scalus-secp256k1-jni` library is a standalone project in the `scalus-secp256k1-jni/` directory with its own `build.sbt`. It provides JNI bindings for libsecp256k1 and is versioned independently from Scalus using `secp256k1-jni-v*` tags.
+
+### Release Process
+
+1. Create and push a version tag:
+   ```bash
+   git tag secp256k1-jni-v0.7.0
+   git push origin secp256k1-jni-v0.7.0
+   ```
+
+2. The `secp256k1-jni-release.yml` GitHub Actions workflow will automatically:
+   - Build native libraries for linux_64, linux_arm64, osx_64, osx_arm64
+   - Package them into a single JAR with `native-lib-loader`
+   - Publish to Maven Central via `sbt ci-release`
+
+3. After publishing, update the dependency version in `build.sbt`:
+   ```scala
+   libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.7.0"
+   ```
+
+### Building Native Libraries Locally
+
+```bash
+cd scalus-secp256k1-jni
+make
+```
+
+This requires libsecp256k1 development headers installed on your system.
+
 ## Publishing Scalus JS library to NPM
 
 ```sbt

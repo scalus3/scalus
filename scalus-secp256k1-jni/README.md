@@ -74,6 +74,36 @@ make
 sbt compile
 ```
 
+## Publishing
+
+This is a standalone sbt project with its own `build.sbt`. It uses `sbt-ci-release` with `dynverTagPrefix` to version independently from the main Scalus project.
+
+### Automated Release (CI)
+
+1. Update the version by creating and pushing a tag:
+   ```bash
+   git tag secp256k1-jni-v0.7.0
+   git push origin secp256k1-jni-v0.7.0
+   ```
+
+2. The GitHub Actions workflow `secp256k1-jni-release.yml` will:
+   - Build native libraries for all platforms (linux_64, linux_arm64, osx_64, osx_arm64)
+   - Package them into a JAR
+   - Publish to Maven Central via `sbt ci-release`
+
+### Manual Release (Local)
+
+```bash
+cd scalus-secp256k1-jni
+sbt ci-release
+```
+
+Required environment variables:
+- `PGP_PASSPHRASE` - GPG key passphrase
+- `PGP_SECRET` - Base64-encoded GPG private key
+- `SONATYPE_USERNAME` - Sonatype Central Portal token name
+- `SONATYPE_PASSWORD` - Sonatype Central Portal token password
+
 ## License
 
 Apache License 2.0
