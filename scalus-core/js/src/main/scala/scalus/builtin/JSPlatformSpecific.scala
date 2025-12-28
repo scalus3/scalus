@@ -130,6 +130,10 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
             true
         catch case e: Throwable => false
 
+    // secp256k1 group order n
+    private val SECP256K1_ORDER =
+        BigInt("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
+
     override def verifyEcdsaSecp256k1Signature(
         pk: ByteString,
         msg: ByteString,
@@ -139,6 +143,11 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
         require(isValidPublicKey(pk), s"Invalid public key ${pk}")
         require(msg.size == 32, s"Invalid message length ${msg.size}, expected 32")
         require(sig.size == 64, s"Invalid signature length ${sig.size}, expected 64")
+        // Validate signature components r and s are in valid range [1, n-1]
+        val r = BigInt(1, sig.bytes.slice(0, 32))
+        val s = BigInt(1, sig.bytes.slice(32, 64))
+        require(r > 0 && r < SECP256K1_ORDER, s"Invalid signature: r out of range")
+        require(s > 0 && s < SECP256K1_ORDER, s"Invalid signature: s out of range")
 
         Secp256k1Curve.secp256k1.verify(sig.toUint8Array, msg.toUint8Array, pk.toUint8Array)
     }
@@ -148,12 +157,11 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
         msg: ByteString,
         sig: ByteString
     ): Boolean =
-        require(pk.size == 32, s"Invalid public key length ${pk.size}, expected 33")
+        require(pk.size == 32, s"Invalid public key length ${pk.size}, expected 32")
         require(
           isValidPublicKey(ByteString.fromArray(0x02 +: pk.bytes)),
           s"Invalid public key ${pk}"
         )
-        require(msg.size == 32, s"Invalid message length ${msg.size}, expected 32")
         require(sig.size == 64, s"Invalid signature length ${sig.size}, expected 64")
         Secp256k1Curve.schnorr.verify(sig.toUint8Array, msg.toUint8Array, pk.toUint8Array)
 
