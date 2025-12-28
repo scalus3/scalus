@@ -169,68 +169,6 @@ Update the version in `scalus-cardano-ledger/js/src/main/npm/package.json` and p
 npm publish --access public
 ```
 
-## Updating Plutus Version
-
-The project uses the Plutus `uplc` tool for conformance testing. The Nix flake has two devShells:
-
-- **`default`** - Uses the full `plutus` flake input (slower to evaluate due to haskell-nix)
-- **`ci`** - Uses pre-built `uplc` via `fetchClosure` for fast CI startup (~5s vs ~90s)
-
-### When to Update
-
-Update when bumping the Plutus version in `flake.nix` (e.g., changing `plutus.url`).
-
-### Update Process
-
-1. Update the `plutus.url` in `flake.nix` to the new version:
-   ```nix
-   plutus.url = "github:IntersectMBO/plutus/1.XX.0.0";
-   ```
-
-2. Enter the default dev shell to build the new uplc:
-   ```bash
-   nix develop
-   ```
-
-3. Get the store path for the new uplc binary:
-   ```bash
-   nix path-info $(which uplc)
-   ```
-   This will output something like:
-   ```
-   /nix/store/001ff7xjx4kmbkkckpyzdxa46xfqjbgd-plutus-executables-exe-uplc-1.56.0.0
-   ```
-
-4. Update `uplcCached` in `flake.nix` with the new store path:
-   ```nix
-   uplcCached = builtins.fetchClosure {
-     fromStore = "https://cache.iog.io";
-     fromPath = /nix/store/NEW-HASH-HERE-plutus-executables-exe-uplc-X.XX.0.0;
-     inputAddressed = true;
-   };
-   ```
-
-5. Update `plutusConformanceSrc` with the new version tag and hash:
-   ```nix
-   plutusConformanceSrc = builtins.fetchTarball {
-     url = "https://github.com/IntersectMBO/plutus/archive/refs/tags/1.XX.0.0.tar.gz";
-     sha256 = "0000000000000000000000000000000000000000000000000000";  # Use placeholder, nix will tell you the correct hash
-   };
-   ```
-
-6. Test the CI shell:
-   ```bash
-   nix develop .#ci
-   ```
-
-### Requirements
-
-The `fetch-closure` experimental feature must be enabled. Add to `~/.config/nix/nix.conf`:
-```
-experimental-features = nix-command flakes fetch-closure
-accept-flake-config = true
-```
-
 ## Notes on issues
 
 ### BLS12-381 signature library
