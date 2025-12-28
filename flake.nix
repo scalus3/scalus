@@ -138,6 +138,7 @@
                 clang
                 libsodium
                 secp256k1
+                blst
                 pandoc
                 texliveSmall
                 # cardano-cli
@@ -148,9 +149,9 @@
                 echo "${pkgs.secp256k1}"
                 echo "${pkgs.libsodium}"
                 echo "${pkgs.async-profiler}"
-                export DYLD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$DYLD_LIBRARY_PATH"
-                export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                export DYLD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$DYLD_LIBRARY_PATH"
+                export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
               '';
             };
           ci =
@@ -211,12 +212,13 @@
                 llvm
                 libsodium
                 secp256k1
+                blst
               ];
               shellHook = ''
                 unlink plutus-conformance 2>/dev/null || true
                 ln -s ${plutus}/plutus-conformance plutus-conformance
-                export LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
               '';
             };
           ci-secp =

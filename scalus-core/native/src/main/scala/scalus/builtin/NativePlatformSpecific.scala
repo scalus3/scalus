@@ -262,6 +262,384 @@ object Secp256k1Builtins:
         ) == 1
     }
 
+/** Native bindings for libblst (BLS12-381) */
+@link("blst")
+@extern
+private object LibBlst {
+    // Structure sizes in bytes:
+    // blst_p1: 144 bytes (3 x 48-byte coordinates in Jacobian form)
+    // blst_p1_affine: 96 bytes (2 x 48-byte coordinates)
+    // blst_p2: 288 bytes (3 x 96-byte coordinates in Jacobian form)
+    // blst_p2_affine: 192 bytes (2 x 96-byte coordinates)
+    // blst_fp12: 576 bytes (12 x 48-byte field elements)
+    // blst_scalar: 32 bytes
+
+    // P1 (G1) operations
+    def blst_p1_add(out: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
+    def blst_p1_mult(out: Ptr[Byte], p: Ptr[Byte], scalar: Ptr[Byte], nbits: CSize): Unit = extern
+    def blst_p1_cneg(p: Ptr[Byte], cbit: CBool): Unit = extern
+    def blst_p1_in_g1(p: Ptr[Byte]): CBool = extern
+    def blst_p1_compress(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+    def blst_p1_uncompress(out: Ptr[Byte], in: Ptr[Byte]): CInt = extern // BLST_ERROR
+    def blst_p1_from_affine(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+    def blst_p1_to_affine(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+    def blst_hash_to_g1(
+        out: Ptr[Byte],
+        msg: Ptr[Byte],
+        msg_len: CSize,
+        DST: Ptr[Byte],
+        DST_len: CSize,
+        aug: Ptr[Byte],
+        aug_len: CSize
+    ): Unit = extern
+
+    // P2 (G2) operations
+    def blst_p2_add(out: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
+    def blst_p2_mult(out: Ptr[Byte], p: Ptr[Byte], scalar: Ptr[Byte], nbits: CSize): Unit = extern
+    def blst_p2_cneg(p: Ptr[Byte], cbit: CBool): Unit = extern
+    def blst_p2_in_g2(p: Ptr[Byte]): CBool = extern
+    def blst_p2_compress(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+    def blst_p2_uncompress(out: Ptr[Byte], in: Ptr[Byte]): CInt = extern
+    def blst_p2_from_affine(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+    def blst_p2_to_affine(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+    def blst_hash_to_g2(
+        out: Ptr[Byte],
+        msg: Ptr[Byte],
+        msg_len: CSize,
+        DST: Ptr[Byte],
+        DST_len: CSize,
+        aug: Ptr[Byte],
+        aug_len: CSize
+    ): Unit = extern
+
+    // Pairing operations
+    def blst_miller_loop(ret: Ptr[Byte], Q: Ptr[Byte], P: Ptr[Byte]): Unit = extern
+    def blst_fp12_mul(ret: Ptr[Byte], a: Ptr[Byte], b: Ptr[Byte]): Unit = extern
+    def blst_fp12_finalverify(gt1: Ptr[Byte], gt2: Ptr[Byte]): CBool = extern
+
+    // Scalar operations for reducing BigInt
+    def blst_scalar_from_bendian(out: Ptr[Byte], in: Ptr[Byte]): Unit = extern
+
+    // Point equality
+    def blst_p1_is_equal(a: Ptr[Byte], b: Ptr[Byte]): CBool = extern
+    def blst_p2_is_equal(a: Ptr[Byte], b: Ptr[Byte]): CBool = extern
+}
+
+/** BLS12-381 implementation using libblst */
+object Blst:
+    import LibBlst.*
+
+    // Structure sizes
+    private val P1_SIZE = 144
+    private val P1_AFFINE_SIZE = 96
+    private val P2_SIZE = 288
+    private val P2_AFFINE_SIZE = 192
+    private val FP12_SIZE = 576
+    private val SCALAR_SIZE = 32
+    private val G1_COMPRESSED_SIZE = 48
+    private val G2_COMPRESSED_SIZE = 96
+
+    // Helper to copy bytes from native pointer to Array[Byte]
+    private inline def copyToArray(src: Ptr[Byte], len: Int): Array[Byte] =
+        val arr = new Array[Byte](len)
+        var i = 0
+        while i < len do
+            arr(i) = src(i)
+            i += 1
+        arr
+
+    // Helper to copy Array[Byte] to native pointer
+    private inline def copyFromArray(src: Array[Byte], dst: Ptr[Byte]): Unit =
+        var i = 0
+        while i < src.length do
+            dst(i) = src(i)
+            i += 1
+
+    // G1 operations
+
+    def g1Equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
+        java.util.Arrays.equals(p1.compressed, p2.compressed)
+
+    def g1Add(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): BLS12_381_G1_Element =
+        val affine1 = stackalloc[Byte](P1_AFFINE_SIZE)
+        val affine2 = stackalloc[Byte](P1_AFFINE_SIZE)
+        val jac1 = stackalloc[Byte](P1_SIZE)
+        val jac2 = stackalloc[Byte](P1_SIZE)
+        val result = stackalloc[Byte](P1_SIZE)
+        val compressed = stackalloc[Byte](G1_COMPRESSED_SIZE)
+
+        // Uncompress inputs to affine
+        blst_p1_uncompress(affine1, p1.compressed.atUnsafe(0))
+        blst_p1_uncompress(affine2, p2.compressed.atUnsafe(0))
+
+        // Convert to Jacobian
+        blst_p1_from_affine(jac1, affine1)
+        blst_p1_from_affine(jac2, affine2)
+
+        // Add
+        blst_p1_add(result, jac1, jac2)
+
+        // Compress result
+        blst_p1_compress(compressed, result)
+
+        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+
+    def g1ScalarMul(scalar: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+        val affine = stackalloc[Byte](P1_AFFINE_SIZE)
+        val jac = stackalloc[Byte](P1_SIZE)
+        val result = stackalloc[Byte](P1_SIZE)
+        val compressed = stackalloc[Byte](G1_COMPRESSED_SIZE)
+        val scalarBytes = stackalloc[Byte](SCALAR_SIZE)
+
+        // Reduce scalar modulo the curve order (Java BigInteger.mod always returns non-negative)
+        val reduced =
+            BigInt(scalar.bigInteger.mod(PlatformSpecific.bls12_381_scalar_period.bigInteger))
+        val bytes = reduced.toByteArray
+
+        // Pad or trim to 32 bytes (big-endian from BigInt)
+        val padded = new Array[Byte](SCALAR_SIZE)
+        if bytes.length <= SCALAR_SIZE then
+            System.arraycopy(bytes, 0, padded, SCALAR_SIZE - bytes.length, bytes.length)
+        else
+            // bytes.length > 32, take the last 32 bytes
+            System.arraycopy(bytes, bytes.length - SCALAR_SIZE, padded, 0, SCALAR_SIZE)
+
+        // blst expects little-endian scalar, reverse from big-endian
+        val leBytes = padded.reverse
+        copyFromArray(leBytes, scalarBytes)
+
+        // Uncompress point
+        blst_p1_uncompress(affine, p.compressed.atUnsafe(0))
+        blst_p1_from_affine(jac, affine)
+
+        // Multiply
+        blst_p1_mult(result, jac, scalarBytes, (SCALAR_SIZE * 8).toCSize)
+
+        // Compress result
+        blst_p1_compress(compressed, result)
+
+        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+
+    def g1Neg(p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+        val affine = stackalloc[Byte](P1_AFFINE_SIZE)
+        val jac = stackalloc[Byte](P1_SIZE)
+        val compressed = stackalloc[Byte](G1_COMPRESSED_SIZE)
+
+        // Uncompress
+        blst_p1_uncompress(affine, p.compressed.atUnsafe(0))
+        blst_p1_from_affine(jac, affine)
+
+        // Negate (cbit=true means negate)
+        blst_p1_cneg(jac, true)
+
+        // Compress result
+        blst_p1_compress(compressed, jac)
+
+        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+
+    def g1Compress(p: BLS12_381_G1_Element): ByteString =
+        p.toCompressedByteString
+
+    def g1Uncompress(bs: ByteString): BLS12_381_G1_Element =
+        require(
+          bs.size == G1_COMPRESSED_SIZE,
+          s"Invalid length for G1 compressed point: expected $G1_COMPRESSED_SIZE, got ${bs.size}"
+        )
+        require(
+          (bs.bytes(0) & 0x80) != 0,
+          s"Compressed bit not set for G1 point"
+        )
+
+        val affine = stackalloc[Byte](P1_AFFINE_SIZE)
+        val jac = stackalloc[Byte](P1_SIZE)
+
+        val err = blst_p1_uncompress(affine, bs.bytes.atUnsafe(0))
+        if err != 0 then
+            throw new IllegalArgumentException(s"Failed to uncompress G1 point: error $err")
+
+        // Convert to Jacobian to check group membership
+        blst_p1_from_affine(jac, affine)
+        if !blst_p1_in_g1(jac) then
+            throw new IllegalArgumentException("Point is not in G1 subgroup")
+
+        BLS12_381_G1_Element(bs.bytes.clone())
+
+    def g1HashToGroup(msg: ByteString, dst: ByteString): BLS12_381_G1_Element =
+        require(
+          dst.size <= 255,
+          s"DST must be <= 255 bytes, got ${dst.size}"
+        )
+
+        val jac = stackalloc[Byte](P1_SIZE)
+        val compressed = stackalloc[Byte](G1_COMPRESSED_SIZE)
+
+        blst_hash_to_g1(
+          jac,
+          msg.bytes.atUnsafe(0),
+          msg.size.toCSize,
+          dst.bytes.atUnsafe(0),
+          dst.size.toCSize,
+          null, // no augmentation
+          0.toCSize
+        )
+
+        blst_p1_compress(compressed, jac)
+
+        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+
+    // G2 operations
+
+    def g2Equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
+        java.util.Arrays.equals(p1.compressed, p2.compressed)
+
+    def g2Add(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): BLS12_381_G2_Element =
+        val affine1 = stackalloc[Byte](P2_AFFINE_SIZE)
+        val affine2 = stackalloc[Byte](P2_AFFINE_SIZE)
+        val jac1 = stackalloc[Byte](P2_SIZE)
+        val jac2 = stackalloc[Byte](P2_SIZE)
+        val result = stackalloc[Byte](P2_SIZE)
+        val compressed = stackalloc[Byte](G2_COMPRESSED_SIZE)
+
+        blst_p2_uncompress(affine1, p1.compressed.atUnsafe(0))
+        blst_p2_uncompress(affine2, p2.compressed.atUnsafe(0))
+
+        blst_p2_from_affine(jac1, affine1)
+        blst_p2_from_affine(jac2, affine2)
+
+        blst_p2_add(result, jac1, jac2)
+
+        blst_p2_compress(compressed, result)
+
+        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+
+    def g2ScalarMul(scalar: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+        val affine = stackalloc[Byte](P2_AFFINE_SIZE)
+        val jac = stackalloc[Byte](P2_SIZE)
+        val result = stackalloc[Byte](P2_SIZE)
+        val compressed = stackalloc[Byte](G2_COMPRESSED_SIZE)
+        val scalarBytes = stackalloc[Byte](SCALAR_SIZE)
+
+        // Reduce scalar modulo the curve order (Java BigInteger.mod always returns non-negative)
+        val reduced =
+            BigInt(scalar.bigInteger.mod(PlatformSpecific.bls12_381_scalar_period.bigInteger))
+        val bytes = reduced.toByteArray
+
+        val padded = new Array[Byte](SCALAR_SIZE)
+        if bytes.length <= SCALAR_SIZE then
+            System.arraycopy(bytes, 0, padded, SCALAR_SIZE - bytes.length, bytes.length)
+        else System.arraycopy(bytes, bytes.length - SCALAR_SIZE, padded, 0, SCALAR_SIZE)
+
+        // blst expects little-endian scalar, reverse from big-endian
+        val leBytes = padded.reverse
+        copyFromArray(leBytes, scalarBytes)
+
+        blst_p2_uncompress(affine, p.compressed.atUnsafe(0))
+        blst_p2_from_affine(jac, affine)
+
+        blst_p2_mult(result, jac, scalarBytes, (SCALAR_SIZE * 8).toCSize)
+
+        blst_p2_compress(compressed, result)
+
+        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+
+    def g2Neg(p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+        val affine = stackalloc[Byte](P2_AFFINE_SIZE)
+        val jac = stackalloc[Byte](P2_SIZE)
+        val compressed = stackalloc[Byte](G2_COMPRESSED_SIZE)
+
+        blst_p2_uncompress(affine, p.compressed.atUnsafe(0))
+        blst_p2_from_affine(jac, affine)
+
+        blst_p2_cneg(jac, true)
+
+        blst_p2_compress(compressed, jac)
+
+        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+
+    def g2Compress(p: BLS12_381_G2_Element): ByteString =
+        p.toCompressedByteString
+
+    def g2Uncompress(bs: ByteString): BLS12_381_G2_Element =
+        require(
+          bs.size == G2_COMPRESSED_SIZE,
+          s"Invalid length for G2 compressed point: expected $G2_COMPRESSED_SIZE, got ${bs.size}"
+        )
+        require(
+          (bs.bytes(0) & 0x80) != 0,
+          s"Compressed bit not set for G2 point"
+        )
+
+        val affine = stackalloc[Byte](P2_AFFINE_SIZE)
+        val jac = stackalloc[Byte](P2_SIZE)
+
+        val err = blst_p2_uncompress(affine, bs.bytes.atUnsafe(0))
+        if err != 0 then
+            throw new IllegalArgumentException(s"Failed to uncompress G2 point: error $err")
+
+        blst_p2_from_affine(jac, affine)
+        if !blst_p2_in_g2(jac) then
+            throw new IllegalArgumentException("Point is not in G2 subgroup")
+
+        BLS12_381_G2_Element(bs.bytes.clone())
+
+    def g2HashToGroup(msg: ByteString, dst: ByteString): BLS12_381_G2_Element =
+        require(
+          dst.size <= 255,
+          s"DST must be <= 255 bytes, got ${dst.size}"
+        )
+
+        val jac = stackalloc[Byte](P2_SIZE)
+        val compressed = stackalloc[Byte](G2_COMPRESSED_SIZE)
+
+        blst_hash_to_g2(
+          jac,
+          msg.bytes.atUnsafe(0),
+          msg.size.toCSize,
+          dst.bytes.atUnsafe(0),
+          dst.size.toCSize,
+          null,
+          0.toCSize
+        )
+
+        blst_p2_compress(compressed, jac)
+
+        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+
+    // Pairing operations
+
+    def millerLoop(g1: BLS12_381_G1_Element, g2: BLS12_381_G2_Element): BLS12_381_MlResult =
+        val g1Affine = stackalloc[Byte](P1_AFFINE_SIZE)
+        val g2Affine = stackalloc[Byte](P2_AFFINE_SIZE)
+        val fp12 = stackalloc[Byte](FP12_SIZE)
+
+        blst_p1_uncompress(g1Affine, g1.compressed.atUnsafe(0))
+        blst_p2_uncompress(g2Affine, g2.compressed.atUnsafe(0))
+
+        blst_miller_loop(fp12, g2Affine, g1Affine)
+
+        BLS12_381_MlResult(copyToArray(fp12, FP12_SIZE))
+
+    def mulMlResult(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): BLS12_381_MlResult =
+        val fp12_1 = stackalloc[Byte](FP12_SIZE)
+        val fp12_2 = stackalloc[Byte](FP12_SIZE)
+        val result = stackalloc[Byte](FP12_SIZE)
+
+        copyFromArray(r1.fp12Bytes, fp12_1)
+        copyFromArray(r2.fp12Bytes, fp12_2)
+
+        blst_fp12_mul(result, fp12_1, fp12_2)
+
+        BLS12_381_MlResult(copyToArray(result, FP12_SIZE))
+
+    def finalVerify(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): Boolean =
+        val fp12_1 = stackalloc[Byte](FP12_SIZE)
+        val fp12_2 = stackalloc[Byte](FP12_SIZE)
+
+        copyFromArray(r1.fp12Bytes, fp12_1)
+        copyFromArray(r2.fp12Bytes, fp12_2)
+
+        blst_fp12_finalverify(fp12_1, fp12_2)
+
 object Builtins extends Builtins(using NativePlatformSpecific)
 class Builtins(using ps: PlatformSpecific) extends AbstractBuiltins(using ps)
 
@@ -304,56 +682,67 @@ trait NativePlatformSpecific extends PlatformSpecific {
 
     // BLS12_381 operations
     override def bls12_381_G1_equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
-        ???
+        Blst.g1Equal(p1, p2)
 
     override def bls12_381_G1_add(
         p1: BLS12_381_G1_Element,
         p2: BLS12_381_G1_Element
     ): BLS12_381_G1_Element =
-        ???
+        Blst.g1Add(p1, p2)
 
     override def bls12_381_G1_scalarMul(s: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element =
-        ???
+        Blst.g1ScalarMul(s, p)
 
-    override def bls12_381_G1_neg(
-        p: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = ???
+    override def bls12_381_G1_neg(p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+        Blst.g1Neg(p)
 
-    override def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString = ???
+    override def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString =
+        Blst.g1Compress(p)
 
     override def bls12_381_G1_uncompress(bs: ByteString): BLS12_381_G1_Element =
-        ???
+        Blst.g1Uncompress(bs)
+
     override def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G1_Element =
-        ???
+        Blst.g1HashToGroup(bs, dst)
+
     override def bls12_381_G2_equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
-        ???
+        Blst.g2Equal(p1, p2)
+
     override def bls12_381_G2_add(
         p1: BLS12_381_G2_Element,
         p2: BLS12_381_G2_Element
     ): BLS12_381_G2_Element =
-        ???
+        Blst.g2Add(p1, p2)
+
     override def bls12_381_G2_scalarMul(s: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element =
-        ???
-    override def bls12_381_G2_neg(
-        p: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = ???
-    override def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString = ???
+        Blst.g2ScalarMul(s, p)
+
+    override def bls12_381_G2_neg(p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+        Blst.g2Neg(p)
+
+    override def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString =
+        Blst.g2Compress(p)
+
     override def bls12_381_G2_uncompress(bs: ByteString): BLS12_381_G2_Element =
-        ???
+        Blst.g2Uncompress(bs)
+
     override def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element =
-        ???
+        Blst.g2HashToGroup(bs, dst)
+
     override def bls12_381_millerLoop(
         p1: BLS12_381_G1_Element,
         p2: BLS12_381_G2_Element
     ): BLS12_381_MlResult =
-        ???
+        Blst.millerLoop(p1, p2)
+
     override def bls12_381_mulMlResult(
         r1: BLS12_381_MlResult,
         r2: BLS12_381_MlResult
     ): BLS12_381_MlResult =
-        ???
+        Blst.mulMlResult(r1, r2)
+
     override def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
-        ???
+        Blst.finalVerify(p1, p2)
     override def keccak_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Keccak.keccak256(bs.bytes))
 
