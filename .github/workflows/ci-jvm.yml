@@ -26,12 +26,12 @@ jobs:
             accept-flake-config = true
             allow-import-from-derivation = true
             experimental-features = nix-command flakes fetch-closure
-      - name: Pre-fetch uplc from IOG cache
-        run: |
-          nix copy --from https://cache.iog.io /nix/store/5y1gd9jj0bd9adfc3fvsgw2w850is6b2-plutus-executables-exe-uplc-1.56.0.0
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
+      - name: Pre-fetch uplc from IOG cache
+        run: |
+          nix copy --from https://cache.iog.io /nix/store/5y1gd9jj0bd9adfc3fvsgw2w850is6b2-plutus-executables-exe-uplc-1.56.0.0
       - name: Build and test in Nix devshell
         id: build
         run: |
