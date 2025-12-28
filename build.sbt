@@ -284,7 +284,9 @@ lazy val `scalus-secp256k1-jni` = project
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-secp256k1-jni",
+      // Independent versioning from Scalus - update manually before release
       version := "0.6.0",
+      isSnapshot := false,
       // Java-only project
       crossPaths := false,
       autoScalaLibrary := false,
