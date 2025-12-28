@@ -19,6 +19,11 @@ jobs:
           fetch-depth: 0
       - uses: coursier/cache-action@v6
       - uses: nixbuild/nix-quick-install-action@v34
+        with:
+          nix_conf: |
+            extra-experimental-features = fetch-closure
+            extra-substituters = https://cache.iog.io
+            extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ=
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
