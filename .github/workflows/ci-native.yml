@@ -29,6 +29,9 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
+      - name: Pre-fetch uplc from IOG cache
+        run: |
+          nix copy --from https://cache.iog.io /nix/store/5y1gd9jj0bd9adfc3fvsgw2w850is6b2-plutus-executables-exe-uplc-1.56.0.0
       - name: Build and test in Nix devshell
         run: nix develop .#ci --accept-flake-config --command bash -c "sbt ci-native"
       - name: Report test results
