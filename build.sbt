@@ -15,6 +15,11 @@ autoCompilerPlugins := true
 val scalusStableVersion = "0.14.0"
 val scalusCompatibleVersion = scalusStableVersion
 
+// Bloxbean Cardano Client Library versions
+val cardanoClientLibVersion = "0.7.1"
+val yaciVersion = "0.3.8"
+val yaciCardanoTestVersion = "0.1.0"
+
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.7.3-RC1-bin-SNAPSHOT"
@@ -461,8 +466,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     )
     .jvmSettings(
       // Add Yaci DevKit dependencies for integration testing
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
-      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
+      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
       libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.0-M19",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % Test
     )
@@ -493,7 +498,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .configurePlatform(JVMPlatform)(_.dependsOn(`scalus-bloxbean-cardano-client-lib`))
     .jvmSettings(
       Test / fork := true,
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1"
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion
     )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.9.1",
@@ -529,14 +534,14 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq.empty,
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
-      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
       Test / fork := true, // needed for BlocksValidation to run in sbt
       inConfig(Test)(PluginDependency)
@@ -587,7 +592,7 @@ lazy val bench = project
       Jmh / incOptions := (Jmh / incOptions).value.withEnabled(false),
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.1",
       libraryDependencies += "io.bullet" %%% "borer-core" % "1.16.2",
       libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2"
@@ -607,13 +612,13 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         "io.bullet" %%% "borer-derivation" % "1.16.2"
       ),
       // For tx builder
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.outr" %%% "scribe" % "3.17.0", // logging
       libraryDependencies ++= Seq(
         "dev.optics" %%% "monocle-core" % "3.3.0",
         "dev.optics" %%% "monocle-macro" % "3.3.0",
       ),
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
@@ -682,10 +687,10 @@ lazy val scalusCardanoLedgerIt = project
       publish / skip := true,
       Test / fork := true,
       Test / testOptions += Tests.Argument("-oF"),
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % "0.7.1" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % "0.7.1" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "yaci" % "0.3.8" % "test",
-      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % "0.1.0" % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
+      libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.3.0" % "test",
