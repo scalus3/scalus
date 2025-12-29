@@ -2,6 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
+import scalus.builtin.ByteString
+import scalus.builtin.ByteString.given
 
 /** Represents an input to a transaction
   *
@@ -19,12 +21,10 @@ final case class TransactionInput(
 
 object TransactionInput {
     given Ordering[TransactionInput] with
-        def compare(x: TransactionInput, y: TransactionInput): Int = {
-            // fixme: this is not the best way to compare TransactionInput, but it works
-            x.transactionId.toHex.compareTo(y.transactionId.toHex) match
+        def compare(x: TransactionInput, y: TransactionInput): Int =
+            summon[Ordering[ByteString]].compare(x.transactionId, y.transactionId) match
                 case 0 => x.index.compareTo(y.index)
                 case c => c
-        }
 }
 
 /** Alias for [[TransactionInput]] */
