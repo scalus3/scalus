@@ -121,13 +121,13 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             val apiKey = getEnv("BLOCKFROST_API_KEY").getOrElse(
               throw new IllegalStateException("BLOCKFROST_API_KEY environment variable not set")
             )
-            val client = BlockfrostProvider(apiKey, BlockfrostProvider.PreprodUrl)
+            val client = BlockfrostProvider(apiKey, BlockfrostProvider.preprodUrl)
             client.fetchLatestParams
                 .map { protocolParams =>
                     val cardanoInfo = CardanoInfo(
                       protocolParams = protocolParams,
                       network = Network.Testnet,
-                      slotConfig = SlotConfig.Preprod
+                      slotConfig = SlotConfig.preprod
                     )
                     val evaluator = PlutusScriptEvaluator(
                       cardanoInfo,

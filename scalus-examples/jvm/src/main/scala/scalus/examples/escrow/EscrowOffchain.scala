@@ -235,7 +235,7 @@ object EscrowOffChain:
             .ignoreScriptCostEvaluationError(false)
             .withTxEvaluator(
               ScalusTransactionEvaluator(
-                slotConfig = SlotConfig.Preview,
+                slotConfig = SlotConfig.preview,
                 protocolParams = protocolParams,
                 utxoSupplier = utxoSupplier
               )
@@ -295,7 +295,7 @@ object EscrowOffChain:
             .ignoreScriptCostEvaluationError(false)
             .withTxEvaluator(
               ScalusTransactionEvaluator(
-                slotConfig = SlotConfig.Preview,
+                slotConfig = SlotConfig.preview,
                 protocolParams = protocolParams,
                 utxoSupplier = utxoSupplier
               )
@@ -348,7 +348,7 @@ object EscrowOffChain:
             .ignoreScriptCostEvaluationError(false)
             .withTxEvaluator(
               ScalusTransactionEvaluator(
-                slotConfig = SlotConfig.Preview,
+                slotConfig = SlotConfig.preview,
                 protocolParams = protocolParams,
                 utxoSupplier = utxoSupplier
               )

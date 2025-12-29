@@ -46,7 +46,7 @@ class ScalusTransactionEvaluator(
 ) extends TransactionEvaluator {
 
     /** Constructor with protocol params, utxo supplier, script supplier and mode. Uses
-      * [[scalus.cardano.ledger.SlotConfig.Mainnet]].
+      * [[scalus.cardano.ledger.SlotConfig.mainnet]].
       *
       * @param protocolParams
       * @param utxoSupplier
@@ -58,11 +58,11 @@ class ScalusTransactionEvaluator(
         utxoSupplier: UtxoSupplier,
         scriptSupplier: ScriptSupplier,
         mode: EvaluatorMode
-    ) = this(SlotConfig.Mainnet, protocolParams, utxoSupplier, scriptSupplier, mode)
+    ) = this(SlotConfig.mainnet, protocolParams, utxoSupplier, scriptSupplier, mode)
 
     /** Constructor with protocol params and utxo supplier. Uses
       * [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] mode and
-      * [[scalus.cardano.ledger.SlotConfig.Mainnet]].
+      * [[scalus.cardano.ledger.SlotConfig.mainnet]].
       * @param protocolParams
       *   Protocol parameters
       * @param utxoSupplier
@@ -70,7 +70,7 @@ class ScalusTransactionEvaluator(
       */
     def this(protocolParams: ProtocolParams, utxoSupplier: UtxoSupplier) =
         this(
-          SlotConfig.Mainnet,
+          SlotConfig.mainnet,
           protocolParams,
           utxoSupplier,
           NoScriptSupplier(),
@@ -96,7 +96,7 @@ class ScalusTransactionEvaluator(
         )
 
     /** Constructor with protocol params, utxo supplier and script supplier. Uses
-      * [[scalus.cardano.ledger.SlotConfig.Mainnet]] and
+      * [[scalus.cardano.ledger.SlotConfig.mainnet]] and
       * [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] mode.
       * @param protocolParams
       *   Protocol parameters
@@ -111,7 +111,7 @@ class ScalusTransactionEvaluator(
         scriptSupplier: ScriptSupplier
     ) =
         this(
-          SlotConfig.Mainnet,
+          SlotConfig.mainnet,
           protocolParams,
           utxoSupplier,
           scriptSupplier,

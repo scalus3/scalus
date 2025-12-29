@@ -63,7 +63,7 @@ object BlocksTestUtils {
     val scalusUtxoResolver = ScalusUtxoResolver(utxoSupplier, scriptSupplier)
 
     def newEvaluator(epoch: Int = epochMagic) = ScalusTransactionEvaluator(
-      SlotConfig.Mainnet,
+      SlotConfig.mainnet,
       protocolParamsSupplier.getProtocolParameters(epoch).getValue,
       utxoSupplier,
       scriptSupplier,

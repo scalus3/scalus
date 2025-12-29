@@ -10,7 +10,7 @@ import sttp.model.StatusCode
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
 
-class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.PreviewUrl)(using
+class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.previewUrl)(using
     backend: Backend[Future],
     ec: ExecutionContext
 ) extends Provider {
@@ -299,25 +299,45 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.Pr
 }
 
 object BlockfrostProvider {
-    val MainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
-    val PreviewUrl = "https://cardano-preview.blockfrost.io/api/v0"
-    val PreprodUrl = "https://cardano-preprod.blockfrost.io/api/v0"
-    val LocalUrl = "http://localhost:8080/api/v1"
+
+    /** Blockfrost API URL for Cardano mainnet */
+    val mainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
+
+    /** Blockfrost API URL for Cardano preview testnet */
+    val previewUrl = "https://cardano-preview.blockfrost.io/api/v0"
+
+    /** Blockfrost API URL for Cardano preprod testnet */
+    val preprodUrl = "https://cardano-preprod.blockfrost.io/api/v0"
+
+    /** Local Yaci DevKit API URL */
+    val localUrl = "http://localhost:8080/api/v1"
+
+    @deprecated("Use mainnetUrl instead", "0.14.1")
+    val MainnetUrl: String = mainnetUrl
+
+    @deprecated("Use previewUrl instead", "0.14.1")
+    val PreviewUrl: String = previewUrl
+
+    @deprecated("Use preprodUrl instead", "0.14.1")
+    val PreprodUrl: String = preprodUrl
+
+    @deprecated("Use localUrl instead", "0.14.1")
+    val LocalUrl: String = localUrl
 
     def localYaci(using backend: Backend[Future], ec: ExecutionContext) =
-        BlockfrostProvider("", LocalUrl)
+        BlockfrostProvider("", localUrl)
 
     /** Create a Blockfrost client for mainnet */
     def mainnet(apiKey: String)(using backend: Backend[Future], ec: ExecutionContext) =
-        new BlockfrostProvider(apiKey, MainnetUrl)
+        new BlockfrostProvider(apiKey, mainnetUrl)
 
     /** Create a Blockfrost client for preview testnet */
     def preview(apiKey: String)(using backend: Backend[Future], ec: ExecutionContext) =
-        new BlockfrostProvider(apiKey, PreviewUrl)
+        new BlockfrostProvider(apiKey, previewUrl)
 
     /** Create a Blockfrost client for preprod testnet */
     def preprod(apiKey: String)(using backend: Backend[Future], ec: ExecutionContext) =
-        new BlockfrostProvider(apiKey, PreprodUrl)
+        new BlockfrostProvider(apiKey, preprodUrl)
 
     enum BlockfrostError:
         case NetworkError(underlying: Throwable)

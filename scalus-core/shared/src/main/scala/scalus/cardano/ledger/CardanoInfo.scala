@@ -25,7 +25,7 @@ object CardanoInfo {
             inlineResource("blockfrost-params-epoch-544.json")
           ),
           Network.Mainnet,
-          SlotConfig.Mainnet
+          SlotConfig.mainnet
         )
 
     /** Cardano info for Preprod testnet */
@@ -35,7 +35,7 @@ object CardanoInfo {
             inlineResource("blockfrost-params-preprod-258.json")
           ),
           Network.Testnet,
-          SlotConfig.Preprod
+          SlotConfig.preprod
         )
 
     /** Cardano info for Preview testnet */
@@ -45,7 +45,7 @@ object CardanoInfo {
             inlineResource("blockfrost-params-preview-1145.json")
           ),
           Network.Testnet,
-          SlotConfig.Preview
+          SlotConfig.preview
         )
 
     private inline def inlineResource(name: String): String =

@@ -22,7 +22,7 @@ class EvalPlutusScriptsTest extends AnyFunSuite {
             )
 
         // Evaluate Plutus scripts
-        val redeemers = evalPlutusScripts(tx, utxo, SlotConfig.Mainnet)
+        val redeemers = evalPlutusScripts(tx, utxo, SlotConfig.mainnet)
 
         // Verify results
         assert(redeemers.length == 2, "Should have 2 redeemers evaluated")

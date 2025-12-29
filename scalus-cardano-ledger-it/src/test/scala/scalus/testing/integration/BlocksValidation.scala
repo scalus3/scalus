@@ -91,7 +91,7 @@ class BlocksValidation extends AnyFunSuite {
         val protocolParams = protocolParamsSupplier.getProtocolParameters(epoch).getValue
         val utxoResolver = CclUtxoResolver(utxoSupplier, scriptSupplier)
         val evaluator = ScalusTransactionEvaluator(
-          SlotConfig.Mainnet,
+          SlotConfig.mainnet,
           protocolParams,
           utxoSupplier,
           scriptSupplier,

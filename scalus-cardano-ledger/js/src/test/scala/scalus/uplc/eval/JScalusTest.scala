@@ -28,7 +28,7 @@ class JScalusTest extends AnyFunSuite {
             CardanoInfo.mainnet.protocolParams.costModels.models.values.map(_.toJSArray).toJSArray
 
         // Evaluate Plutus scripts
-        val redeemers = JScalus.evalPlutusScripts(tx, utxo, SlotConfig.Mainnet, costModels)
+        val redeemers = JScalus.evalPlutusScripts(tx, utxo, SlotConfig.mainnet, costModels)
 
         // Verify results
         assert(redeemers.length == 2, "Should have 2 redeemers evaluated")

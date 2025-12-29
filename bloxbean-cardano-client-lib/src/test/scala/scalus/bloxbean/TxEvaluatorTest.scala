@@ -30,7 +30,7 @@ class TxEvaluatorTest extends AnyFunSuite:
         costMdls.add(CostModelUtil.PlutusV1CostModel)
         costMdls.add(CostModelUtil.PlutusV2CostModel)
         val evaluator = TxEvaluator(
-          SlotConfig.Mainnet,
+          SlotConfig.mainnet,
           initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
           protocolMajorVersion = 8,
           costMdls = costMdls
@@ -100,7 +100,7 @@ class TxEvaluatorTest extends AnyFunSuite:
         costMdls.add(CostModelUtil.PlutusV2CostModel)
         costMdls.add(CostModelUtil.PlutusV3CostModel)
         val evaluator = TxEvaluator(
-          SlotConfig.Mainnet,
+          SlotConfig.mainnet,
           initialBudget = ExBudget.fromCpuAndMemory(10_000000000L, 10_000000L),
           protocolMajorVersion = 9,
           costMdls = costMdls
