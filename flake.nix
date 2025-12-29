@@ -152,9 +152,18 @@
                 echo "${pkgs.secp256k1}"
                 echo "${pkgs.libsodium}"
                 echo "${pkgs.async-profiler}"
-                export DYLD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$DYLD_LIBRARY_PATH"
+                # IMPORTANT: blst must NOT be in DYLD_LIBRARY_PATH/LD_LIBRARY_PATH
+                # Root cause: blst-java (JVM) bundles its own JNI native library with SWIG-generated
+                # symbols (e.g., new_P1__SWIG_2). The nix blst package is the raw C library without
+                # these JNI symbols. On macOS, JNI uses dlsym(RTLD_DEFAULT) which searches ALL loaded
+                # libraries for symbols. If nix blst is in the library path, its symbols conflict with
+                # blst-java's, causing UnsatisfiedLinkError for SWIG JNI functions.
+                # Solution: Keep blst in LIBRARY_PATH only (for Scala Native compile-time linking).
+                export DYLD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$DYLD_LIBRARY_PATH"
                 export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                # For Scala Native tests, provide blst path separately (used by build.sbt)
+                export BLST_NATIVE_LIB_PATH="${pkgs.blst}/lib"
               '';
             };
           ci =
@@ -220,8 +229,12 @@
               shellHook = ''
                 unlink plutus-conformance 2>/dev/null || true
                 ln -s ${plutus}/plutus-conformance plutus-conformance
+                # IMPORTANT: blst must NOT be in LD_LIBRARY_PATH (same issue as macOS DYLD_LIBRARY_PATH)
+                # See default shell comment for detailed explanation of blst-java JNI symbol conflict.
                 export LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LIBRARY_PATH"
-                export LD_LIBRARY_PATH="${pkgs.blst}/lib:${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                export LD_LIBRARY_PATH="${pkgs.secp256k1}/lib:${pkgs.libsodium}/lib:$LD_LIBRARY_PATH"
+                # For Scala Native tests, provide blst path separately (used by build.sbt)
+                export BLST_NATIVE_LIB_PATH="${pkgs.blst}/lib"
               '';
             };
           ci-secp =
