@@ -172,7 +172,7 @@ object TransactionException {
                 s"collateral contains non-ADA assets: $remainingAssets (UTxOs: $collateralsContainNotOnlyADA, collateral return: $collateralReturnOutput)"
               ),
               Option.when(
-                !areTotalExUnitsZero && CollateralSufficient.check(
+                !areTotalExUnitsZero && !CollateralSufficient.check(
                   actualTotalSumOfCollateralCoins,
                   transactionFee,
                   collateralPercentage
@@ -207,7 +207,7 @@ object TransactionException {
 
         // 5) The collateral is sufficient to cover the appropriate percentage of the fee marked in the transaction
         def isCollateralInsufficient: Boolean =
-            !areTotalExUnitsZero && CollateralSufficient.check(
+            !areTotalExUnitsZero && !CollateralSufficient.check(
               actualTotalSumOfCollateralCoins,
               transactionFee,
               collateralPercentage
