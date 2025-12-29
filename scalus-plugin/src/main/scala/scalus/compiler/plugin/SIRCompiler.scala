@@ -188,10 +188,10 @@ final class SIRCompiler(
         )
     }
 
-    opaque type LocalBingingFlags = Int
+    opaque type LocalBindingFlags = Int
     object LocalBindingFlags {
-        val None: LocalBingingFlags = 0
-        val ErasedOnDataRepr: LocalBingingFlags = 1 << 0
+        val None: LocalBindingFlags = 0
+        val ErasedOnDataRepr: LocalBindingFlags = 1 << 0
     }
 
     case class LocalBinding(
@@ -202,7 +202,7 @@ final class SIRCompiler(
         recursivity: Recursivity,
         body: AnnotatedSIR,
         pos: SourcePosition,
-        flags: LocalBingingFlags
+        flags: LocalBindingFlags
     ):
 
         def fullName(using Context): FullName = FullName(symbol)
@@ -527,9 +527,13 @@ final class SIRCompiler(
                         if parents.isEmpty then None
                         else if parents.size == 1 then parents.headOption
                         else
-                            val msg =
-                                s"Multiple parents for ${baseClassSymbol.fullName.show}: ${parents.map(_.fullName.show).mkString(", ")}"
-                            throw new RuntimeException(msg)
+                            error(
+                              GenericError(
+                                s"Multiple parents for ${baseClassSymbol.fullName.show}: ${parents.map(_.fullName.show).mkString(", ")}",
+                                baseClassSymbol.srcPos
+                              ),
+                              None
+                            )
                     AdtTypeInfo(
                       baseClassSymbol,
                       baseDataParams,
@@ -747,13 +751,9 @@ final class SIRCompiler(
         ts.isClass && ts.caseFields.nonEmpty
     }
 
-    def error[A](error: CompilationError, defaultValue: A): A = {
+    def error[A](error: CompilationError, @unused defaultValue: A): A = {
         report.error(error.message, error.srcPos)
-        if true then {
-            throw new RuntimeException(error.message)
-            // Thread.dumpStack()
-        }
-        defaultValue
+        throw new RuntimeException(error.message)
     }
 
     /** Compile an identifier or a qualified select, possible type-applied
@@ -1947,8 +1947,7 @@ final class SIRCompiler(
                           posAnns
                         )
                     case other =>
-                        throw new Exception("expected that exprA.tp is List")
-            /*                        error(
+                        error(
                           TypeMismatch(
                             fun.toString,
                             SIRType.List(SIRType.TypeVar("A", None, false)),
@@ -1956,7 +1955,7 @@ final class SIRCompiler(
                             tree.srcPos
                           ),
                           SIR.Error("", posAnns)
-                        ) */
+                        )
             case "tail" =>
                 val exprArg = compileExpr(env, lst)
                 SIR.Apply(
@@ -2748,8 +2747,17 @@ final class SIRCompiler(
                 //
                 //    ???
                 else if env.thisVal != Symbols.NoSymbol && sel.symbol == env.thisVal then
-                    // this.field or just field
-                    ???
+                    // this.field or just field - not yet implemented
+                    error(
+                      GenericError(
+                        s"Access to 'this' reference is not yet supported: ${tree.show}",
+                        tree.srcPos
+                      ),
+                      SIR.Error(
+                        "this reference not supported",
+                        AnnotationsDecl.fromSrcPos(tree.srcPos)
+                      )
+                    )
                 else if isVirtualCall(tree, obj, ident) then
                     compileVirtualCall(env, tree, obj, ident)
                 else {
@@ -3420,7 +3428,7 @@ final class SIRCompiler(
     }
      */
 
-    private def calculateLocalBindingFlags(tp: Type): LocalBingingFlags = {
+    private def calculateLocalBindingFlags(tp: Type): LocalBindingFlags = {
         if tp.baseType(FromDataSymbol).exists || tp.baseType(ToDataSymbol).exists then
             LocalBindingFlags.ErasedOnDataRepr
         else LocalBindingFlags.None
