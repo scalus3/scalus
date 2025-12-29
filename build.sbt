@@ -48,6 +48,9 @@ ThisBuild / Test / javaOptions ++= sys.env.get("JAVA_OPTS").toSeq.flatMap(_.spli
 // Enable native access for BLST JNI library (required for Java 22+)
 // Explicit fallback for environments not using nix develop
 ThisBuild / Test / javaOptions += "--enable-native-access=ALL-UNNAMED"
+// Suppress sun.misc.Unsafe deprecation warnings from Scala 3.3.x lazy vals (Java 23+)
+ThisBuild / Test / javaOptions += "--sun-misc-unsafe-memory-access=allow"
+ThisBuild / run / javaOptions += "--sun-misc-unsafe-memory-access=allow"
 
 // Improve incremental compilation
 ThisBuild / incOptions := {
