@@ -49,10 +49,15 @@ ThisBuild / Test / javaOptions ++= sys.env.get("JAVA_OPTS").toSeq.flatMap(_.spli
 // Java version-specific JVM options
 val javaVersion = sys.props("java.specification.version").toInt
 // Enable native access for BLST JNI library (Java 22+)
-ThisBuild / Test / javaOptions ++= (if (javaVersion >= 22) Seq("--enable-native-access=ALL-UNNAMED") else Nil)
+ThisBuild / Test / javaOptions ++= (if (javaVersion >= 22) Seq("--enable-native-access=ALL-UNNAMED")
+                                    else Nil)
 // Suppress sun.misc.Unsafe deprecation warnings from Scala 3.3.x lazy vals (Java 23+)
-ThisBuild / Test / javaOptions ++= (if (javaVersion >= 23) Seq("--sun-misc-unsafe-memory-access=allow") else Nil)
-ThisBuild / run / javaOptions ++= (if (javaVersion >= 23) Seq("--sun-misc-unsafe-memory-access=allow") else Nil)
+ThisBuild / Test / javaOptions ++= (if (javaVersion >= 23)
+                                        Seq("--sun-misc-unsafe-memory-access=allow")
+                                    else Nil)
+ThisBuild / run / javaOptions ++= (if (javaVersion >= 23)
+                                       Seq("--sun-misc-unsafe-memory-access=allow")
+                                   else Nil)
 
 // Improve incremental compilation
 ThisBuild / incOptions := {
