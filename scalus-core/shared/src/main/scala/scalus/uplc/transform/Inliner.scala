@@ -101,16 +101,16 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *   The lambda body where the variable appears
       * @param inlining
       *   The term being inlined in place of the variable
-      * @param occurances
+      * @param occurrences
       *   Number of times the variable appears in the body
       * @return
       *   `true` if the term should be inlined, `false` otherwise
       */
-    def inlineConstVarBuiltin(name: String, body: Term, inlining: Term, occurances: Int): Boolean =
+    def inlineConstVarBuiltin(name: String, body: Term, inlining: Term, occurrences: Int): Boolean =
         inlining match
             case Var(_) => true // Variables are safe to duplicate
             case Const(c) =>
-                if occurances == 1 then true
+                if occurrences == 1 then true
                 else flatConstant.bitSize(c) <= 64 // Small constants are safe
             case Builtin(_) => true
             case _          => false

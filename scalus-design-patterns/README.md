@@ -249,7 +249,7 @@ To allow this validation on-chain, some restrictions are needed:
 3. The dependent script must be provided with CBOR bytes of instances before and
    after the parameter(s)
 4. Wrapping of instances' logics in an outer function so that there'll be single
-   occurances of each parameter
+   occurrences of each parameter
 
 This pattern provides two sets of functions. One for applying parameter(s) in
 the dependent script (i.e. the minting script in the example above), and one for
