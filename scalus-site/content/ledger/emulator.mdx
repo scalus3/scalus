@@ -8,25 +8,13 @@ description: Use the Emulator for local development and testing of your Cardano 
 
 This article covers the `Emulator` type and how to utilize it for local development of your on-chain applications.
 
-## Provider
+## Overview
 
-Scalus provides a `Provider` trait. `Provider`s allow you to interact with the blockchain by sending transactions and
-querying its state.
+The `Emulator` is a local implementation of the [`Provider`](/ledger/provider) trait that operates entirely in-memory, without any network connection. Unlike `BlockfrostProvider` which interacts with a real blockchain, the `Emulator` keeps the entire UTxO set in memory and validates transactions locally.
 
-One example of a Provider familiar to readers is Blockfrost. Its APIs allow you to send CBOR-encoded transactions
-and query UTxOs by address, datum, or tokens. Scalus represents this with `BlockfrostProvider`, and this class is useful
-to verify that your transactions and scripts work against a real blockchain, or a test node.
+When you submit transactions to the Emulator, it runs an extensive suite of [ledger rules](/ledger/ledger-rules) to validate them, but doesn't maintain consensus since there's no actual chain underneath—only an emulator of a single node.
 
-Interacting with Blockfrost incurs network delays, and is impractical to run in, e.g., a unit test suite, where
-launching a local node would be inconvenient.
-
-## Emulator
-
-`Emulator` implements the `Provider` trait just the same way `BlockfrostProvider` does, but instead operates entirely
-locally.
-It allows querying for UTxOs in the same way, only in the local `Emulator` the entire UTxO set is kept in-memory.
-It allows you to submit transactions, running an extensive suite of [ledger rules](/ledger/ledger-rules)
-against them, and it doesn't keep consensus, since there's no actual chain underneath, only an emulator of a single node.
+This makes the Emulator ideal for unit tests and rapid development, where launching a local node would be inconvenient and network delays would slow down the development cycle.
 
 Here's an example of how Scalus itself uses `Emulator` in its testing. This is a snippet of our transaction builder
 test:
@@ -99,6 +87,7 @@ The `Emulator` is thread-safe and can be safely used from multiple threads concu
 
 ## See Also
 
-- [Ledger Rules](/ledger/ledger-rules)
-- [Protocol Parameters](/ledger/protocol-parameters)
-- [Transaction Builder](/transaction-builder)
+- [Provider](/ledger/provider) - Understanding the Provider interface
+- [Ledger Rules](/ledger/ledger-rules) - Transaction validation rules
+- [Protocol Parameters](/ledger/protocol-parameters) - Network configuration
+- [Transaction Builder](/transaction-builder) - Building transactions with providers

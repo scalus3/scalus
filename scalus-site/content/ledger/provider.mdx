@@ -1,0 +1,93 @@
+---
+title: Provider
+sidebarTitle: Provider
+description: Interact with the Cardano blockchain using the Provider interface.
+---
+
+# Provider
+
+The `Provider` trait is Scalus's abstraction for interacting with the Cardano blockchain. Providers allow you to send transactions and query blockchain state in a consistent way, regardless of whether you're working with a real blockchain, test node, or local emulator.
+
+## Overview
+
+The `Provider` interface provides methods for:
+- Querying UTxOs by address, datum, or tokens
+- Submitting CBOR-encoded transactions
+- Retrieving transaction information
+- Accessing blockchain state
+
+## Available Providers
+
+### Emulator
+
+The `Emulator` implements the `Provider` trait but operates entirely locally, without any network connection. It provides:
+- In-memory UTxO set management
+- Local transaction validation using [ledger rules](/ledger/ledger-rules)
+- Instant feedback without network delays
+- Perfect isolation for testing
+
+The Emulator is ideal for:
+- Unit test suites
+- Rapid development iterations
+- Scenarios where launching a local node would be inconvenient
+
+Learn more about the Emulator in the [Emulator documentation](/ledger/emulator).
+
+### BlockfrostProvider
+
+`BlockfrostProvider` connects to the Cardano blockchain via the Blockfrost API service. This provider is useful for:
+- Verifying transactions and scripts against a real blockchain
+- Testing against a test node (testnet, preview, preprod)
+- Production deployments
+
+Interacting with Blockfrost incurs network delays, making it less suitable for rapid development cycles or unit tests.
+
+## Example Usage
+
+Here's how you might use different providers interchangeably:
+
+```scala
+// Using Blockfrost for production
+val blockfrostProvider = BlockfrostProvider(apiKey, network)
+
+// Using Emulator for testing
+val emulatorProvider = Emulator(
+  Map(
+    input(0) -> adaOutput(Alice.address, 100)
+  )
+)
+
+// Same code works with both providers
+def buildAndSubmit(provider: Provider) = {
+  val tx = TxBuilder(testEnv)
+    .payTo(Bob.address, Value.ada(10))
+    .complete(provider, Alice.address)
+    .await()
+    .transaction
+
+  provider.submit(tx).await()
+}
+
+// Works with Blockfrost
+buildAndSubmit(blockfrostProvider)
+
+// Works with Emulator
+buildAndSubmit(emulatorProvider)
+```
+
+## Provider Methods
+
+The `Provider` trait defines methods for interacting with the blockchain. Common methods include:
+
+- `findUtxo(txIn: TxIn)`: Find a specific UTxO by transaction input
+- `findUtxos(address: Address)`: Find all UTxOs at an address
+- `submit(tx: Transaction)`: Submit a transaction for processing
+- And more query methods for specific use cases
+
+Check the API documentation for the complete list of available methods.
+
+## See Also
+
+- [Emulator](/ledger/emulator) - Local development and testing
+- [Transaction Builder](/transaction-builder) - Building transactions with providers
+- [Ledger Rules](/ledger/ledger-rules) - Understanding transaction validation
