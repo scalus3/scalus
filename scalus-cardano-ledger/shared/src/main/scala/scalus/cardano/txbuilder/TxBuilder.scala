@@ -931,12 +931,14 @@ case class TxBuilder(
       *
       * @param diffHandler
       *   the handler for managing transaction balance differences (change)
+      * @param validationSlot
+      *   the slot against which the ledger rules are validated. Defaults to 0
       * @return
       *   a new TxBuilder with the finalized transaction
       * @throws RuntimeException
       *   if script execution fails or if the transaction cannot be balanced
       */
-    def build(diffHandler: DiffHandler): TxBuilder = {
+    def build(diffHandler: DiffHandler, validationSlot: Long): TxBuilder = {
         val network = env.network
         val params = env.protocolParams
         // Could be a good idea to immediately `modify` on every step, maybe not tho.
@@ -948,6 +950,7 @@ case class TxBuilder(
             finalized <- withAttachments.finalizeContext(
               params,
               diffHandler,
+              validationSlot,
               evaluator,
               validators
             )
@@ -969,14 +972,17 @@ case class TxBuilder(
       *
       * @param changeTo
       *   the address to receive any remaining value (change)
+      * @param validationSlot
+      *   the slot against which the ledger rules are validated. Defaults to 0.
       * @return
       *   a new TxBuilder with the finalized transaction
       * @throws RuntimeException
       *   if script execution fails or if the transaction cannot be balanced
       */
-    def build(changeTo: Address): TxBuilder = {
-        build(diffHandler =
-            (diff, tx) => Change.handleChange(diff, tx, changeTo, env.protocolParams)
+    def build(changeTo: Address, validationSlot: Long = 1): TxBuilder = {
+        build(
+          diffHandler = (diff, tx) => Change.handleChange(diff, tx, changeTo, env.protocolParams),
+          validationSlot = validationSlot
         )
     }
 
@@ -1105,7 +1111,8 @@ case class TxBuilder(
     private def completeLoop(
         pool: UtxoPool,
         sponsor: Address,
-        maxIterations: Int
+        maxIterations: Int,
+        validationSlot: Long = 1
     ): TxBuilder = {
         if maxIterations <= 0 then {
             throw new RuntimeException(
@@ -1136,6 +1143,7 @@ case class TxBuilder(
                 ctxWithAttachments.finalizeContext(
                   env.protocolParams,
                   diffHandler,
+                  validationSlot,
                   evaluator,
                   validators
                 ) match {
