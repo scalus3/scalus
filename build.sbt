@@ -44,7 +44,7 @@ ThisBuild / semanticdbEnabled := true
 
 // Pass JAVA_OPTS environment variable to forked test JVMs
 // This allows configuring test JVM options via flake.nix or shell environment
-ThisBuild / Test / javaOptions ++= sys.env.get("JAVA_OPTS").toSeq.flatMap(_.split("\\s+"))
+//ThisBuild / Test / javaOptions ++= sys.env.get("JAVA_OPTS").toSeq.flatMap(_.split("\\s+"))
 
 // Java version-specific JVM options
 val javaVersion = sys.props("java.specification.version").toInt
