@@ -629,7 +629,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jvmSettings(
       // For conformance test vector extraction
-      libraryDependencies += "org.apache.commons" % "commons-compress" % "1.26.2" % "test"
+      libraryDependencies += "org.apache.commons" % "commons-compress" % "1.28.0" % "test"
     )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.9.1",
