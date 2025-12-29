@@ -627,7 +627,10 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
-    .jvmSettings()
+    .jvmSettings(
+      // For conformance test vector extraction
+      libraryDependencies += "org.apache.commons" % "commons-compress" % "1.26.2" % "test"
+    )
     .jsSettings(
       Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       // Lucid Evolution and CML for transaction signing
@@ -680,7 +683,11 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
 
 lazy val scalusCardanoLedgerIt = project
     .in(file("scalus-cardano-ledger-it"))
-    .dependsOn(scalusCardanoLedger.jvm, `scalus-bloxbean-cardano-client-lib`, scalusExamples.jvm)
+    .dependsOn(
+      scalusCardanoLedger.jvm % "compile->compile;test->test",
+      `scalus-bloxbean-cardano-client-lib`,
+      scalusExamples.jvm
+    )
     .settings(
       name := "scalus-cardano-ledger-it",
       scalacOptions ++= commonScalacOptions,

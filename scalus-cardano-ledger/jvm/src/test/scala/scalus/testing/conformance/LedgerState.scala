@@ -1,9 +1,8 @@
 package scalus.testing.conformance
 
-import io.bullet.borer.Dom
+import io.bullet.borer.*
 import io.bullet.borer.Dom.Element
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
-import io.bullet.borer.*
 import scalus.cardano.ledger.*
 
 import java.nio.file.{Files, Path}
@@ -177,8 +176,8 @@ object LedgerState {
       *
       * DState is encoded as: [dsAccounts, dsFutureGenDelegs, dsGenDelegs, dsIRewards] (4 elements)
       *
-      * In test vectors, dsAccounts uses old UMap format: [[umElems: Map], [umPtrs: Map]] The umElems
-      * map contains UMElem entries with rewards, deposits, and delegations.
+      * In test vectors, dsAccounts uses old UMap format: [[umElems: Map], [umPtrs: Map]] The
+      * umElems map contains UMElem entries with rewards, deposits, and delegations.
       *
       * UMElem encoding: [RDPair, stakePool, dRep, ptrs] where: - RDPair = [reward, deposit] (both
       * CompactCoin) - stakePool = null | KeyHash - dRep = null | DRep - ptrs = Set (always empty
@@ -194,7 +193,10 @@ object LedgerState {
     object DState {
         // Create empty DOM elements for the empty state
         private val emptyMapElem: Element = Cbor.decode(Array[Byte](0xa0.toByte)).to[Element].value
-        private val emptyArrayElem: Element = Cbor.decode(Array[Byte](0x84.toByte, 0xa0.toByte, 0xa0.toByte, 0xa0.toByte, 0xa0.toByte)).to[Element].value
+        private val emptyArrayElem: Element = Cbor
+            .decode(Array[Byte](0x84.toByte, 0xa0.toByte, 0xa0.toByte, 0xa0.toByte, 0xa0.toByte))
+            .to[Element]
+            .value
 
         val empty: DState = DState(
           Map.empty,
@@ -206,13 +208,35 @@ object LedgerState {
         given Decoder[DState] with
             def read(r: Reader): DState =
                 r.readArrayHeader(4)
-                // dsAccounts - parse UMap format: [umElems: Map, umPtrs: Map]
-                val accounts = parseUMapAccounts(r)
+                // dsAccounts - supports two formats:
+                // New format (cardano-ledger 1.x+): Map Credential AccountState
+                // Old format (UMap): [umElems: Map, umPtrs: Map]
+                val accounts = parseAccounts(r)
                 val futureGenDelegs = r.read[Element]()
                 val genDelegs = r.read[Element]()
                 val iRewards = r.read[Element]()
                 DState(accounts, futureGenDelegs, genDelegs, iRewards)
 
+        private def parseAccounts(r: Reader): Map[Credential, ConwayAccountState] =
+            // Check if next item is a Map (new format) or Array (old UMap format)
+            val dataItem = r.dataItem()
+            if dataItem == DataItem.MapHeader || dataItem == DataItem.MapStart then
+                // New format: direct Map Credential AccountState
+                parseDirectMap(r)
+            else
+                // Old format: UMap as [umElems: Map, umPtrs: Map]
+                parseUMapAccounts(r)
+
+        /** Parse new direct Map format: Map Credential AccountState */
+        private def parseDirectMap(r: Reader): Map[Credential, ConwayAccountState] =
+            val mapSize = r.readMapHeader()
+            (0 until mapSize.toInt).map { _ =>
+                val cred = r.read[Credential]()
+                val accountState = r.read[ConwayAccountState]()
+                cred -> accountState
+            }.toMap
+
+        /** Parse old UMap format: [umElems: Map, umPtrs: Map] */
         private def parseUMapAccounts(r: Reader): Map[Credential, ConwayAccountState] =
             r.readArrayHeader(2)
             // umElems: Map Credential UMElem
@@ -228,7 +252,8 @@ object LedgerState {
 
         /** Parse UMElem from cardano-ledger UMap format
           *
-          * UMElem is encoded as: [StrictMaybe RDPair, Set Ptr, StrictMaybe KeyHash, StrictMaybe DRep]
+          * UMElem is encoded as: [StrictMaybe RDPair, Set Ptr, StrictMaybe KeyHash, StrictMaybe
+          * DRep]
           *
           * StrictMaybe encoding:
           *   - SNothing = [] (array length 0)
@@ -240,14 +265,14 @@ object LedgerState {
             r.readArrayHeader(4)
             // StrictMaybe RDPair - encoded as [] or [RDPair]
             val rdPairArrayLen = r.readArrayHeader()
-            val (balance, deposit) = if rdPairArrayLen == 0 then
-                (Coin.zero, Coin.zero)
-            else
-                // RDPair = [reward, deposit]
-                r.readArrayHeader(2)
-                val reward = r.read[Coin]()
-                val dep = r.read[Coin]()
-                (reward, dep)
+            val (balance, deposit) =
+                if rdPairArrayLen == 0 then (Coin.zero, Coin.zero)
+                else
+                    // RDPair = [reward, deposit]
+                    r.readArrayHeader(2)
+                    val reward = r.read[Coin]()
+                    val dep = r.read[Coin]()
+                    (reward, dep)
             // Set Ptr - skip
             r.read[Element]()
             // StrictMaybe KeyHash - encoded as [] or [KeyHash]
@@ -440,8 +465,8 @@ case class ConwayProtocolParams(
     minFeeRefScriptCostPerByteNum: Long,
     minFeeRefScriptCostPerByteDen: Long
 ):
-    /** Parse cost models from raw DOM element.
-      * Returns None if parsing fails, allowing fallback to default cost models.
+    /** Parse cost models from raw DOM element. Returns None if parsing fails, allowing fallback to
+      * default cost models.
       */
     private def parseCostModels: Option[CostModels] =
         try
@@ -537,9 +562,9 @@ object ConwayProtocolParams:
     /** Extract pparams hash from ledger state CBOR hex string.
       *
       * The hash appears after "5820" (CBOR prefix for 32-byte bytestring) in the GovState section.
-      * Since multiple pparams hashes may appear in the state (prevPParams and curPParams),
-      * we find all matching hashes and return the one with the highest protocol version,
-      * as the current pparams should have the highest version.
+      * Since multiple pparams hashes may appear in the state (prevPParams and curPParams), we find
+      * all matching hashes and return the one with the highest protocol version, as the current
+      * pparams should have the highest version.
       */
     def extractPparamsHash(oldLedgerStateHex: String, pparamsDir: Path): Option[String] =
         import scala.jdk.CollectionConverters.*

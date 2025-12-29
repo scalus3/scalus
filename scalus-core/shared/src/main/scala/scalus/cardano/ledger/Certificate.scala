@@ -199,6 +199,12 @@ object Certificate {
             case Certificate.StakeRegDelegCert(_, _, deposit) =>
                 // Registration and delegation with deposit
                 totalDeposits += deposit.value
+            case Certificate.VoteRegDelegCert(_, _, deposit) =>
+                // Registration and vote delegation with deposit
+                totalDeposits += deposit.value
+            case Certificate.StakeVoteRegDelegCert(_, _, _, deposit) =>
+                // Registration, pool delegation and vote delegation with deposit
+                totalDeposits += deposit.value
             case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) =>
                 // Pool registration
                 totalDeposits += poolDeposit

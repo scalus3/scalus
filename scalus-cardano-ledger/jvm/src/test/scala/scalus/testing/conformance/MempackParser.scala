@@ -224,8 +224,8 @@ object MempackParser {
 
     /** Decode Addr28Extra to extract payment credential and network
       *
-      * Addr28Extra is 32 bytes (4 x Word64) encoded in LITTLE-ENDIAN (native machine byte order
-      * on x86/x64) as follows:
+      * Addr28Extra is 32 bytes (4 x Word64) encoded in LITTLE-ENDIAN (native machine byte order on
+      * x86/x64) as follows:
       *   - First 3 Word64s + high 32 bits of 4th Word64 = 28-byte payment credential hash
       *   - Low 32 bits of 4th Word64 contains flags in the lowest 2 bits:
       *     - Bit 1: network (1=Mainnet, 0=Testnet)
@@ -233,8 +233,8 @@ object MempackParser {
       *
       * IMPORTANT: The Haskell mempack library uses native byte order (little-endian on x86/x64),
       * NOT big-endian. To reconstruct the 28-byte hash:
-      * 1. Read each Word64 in little-endian order
-      * 2. Write them in big-endian order to get the correct hash bytes
+      *   1. Read each Word64 in little-endian order
+      *   2. Write them in big-endian order to get the correct hash bytes
       *
       * Based on Cardano.Ledger.Alonzo.TxOut.decodeAddress28
       */
@@ -415,7 +415,9 @@ object MempackParser {
                     case 1 => Script.PlutusV2(scriptBs)
                     case 2 => Script.PlutusV3(scriptBs)
                     case _ =>
-                        throw new IllegalArgumentException(s"Unsupported PlutusScript version tag: $versionTag")
+                        throw new IllegalArgumentException(
+                          s"Unsupported PlutusScript version tag: $versionTag"
+                        )
                 }
                 Some(ScriptRef(script))
             case _ => throw new IllegalArgumentException(s"Unsupported Script tag: $scriptTag")
@@ -523,8 +525,8 @@ object MempackParser {
       *
       * Note: The mempack format for MultiAsset in cardano-ledger test vectors uses a complex
       * encoding that differs from the standard MemPack instance. For now, we return an empty
-      * MultiAsset to allow the tests to pass. The conformance tests primarily validate
-      * transaction execution logic rather than exact output value parsing.
+      * MultiAsset to allow the tests to pass. The conformance tests primarily validate transaction
+      * execution logic rather than exact output value parsing.
       *
       * TODO: Implement full MultiAsset parsing when the exact format is understood.
       */

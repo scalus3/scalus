@@ -39,11 +39,16 @@ object CardanoLedgerVectors {
         for case (path, vector) <- loadVector(vectorName) yield
             val state = LedgerState.fromCbor(Hex.hexToBytes(vector.oldLedgerState)).ruleState
             // Extract protocol parameters from test vector
+            // First try the explicit pparamsHash field (new format), then fall back to searching in ledger state
             val params =
                 if useParams then
-                    ConwayProtocolParams
-                        .extractPparamsHash(vector.oldLedgerState, pparamsDir)
+                    vector.pparamsHash
                         .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                        .orElse(
+                          ConwayProtocolParams
+                              .extractPparamsHash(vector.oldLedgerState, pparamsDir)
+                              .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                        )
                         .map(_.toProtocolParams)
                 else None
             val context = Context(
@@ -76,7 +81,7 @@ object CardanoLedgerVectors {
             Using.resource(new FileInputStream(Paths.get(vectorsTarGz.toURI).toFile)) { fis =>
                 Using.resource(new GzipCompressorInputStream(fis)) { gzis =>
                     Using.resource(new TarArchiveInputStream(gzis)) { tis =>
-                        var entry = tis.getNextTarEntry
+                        var entry = tis.getNextEntry
                         while entry != null do {
                             val outputFile = tempDir.resolve(entry.getName).toFile
                             if entry.isDirectory then {
@@ -92,7 +97,7 @@ object CardanoLedgerVectors {
                                     }
                                 }
                             }
-                            entry = tis.getNextTarEntry
+                            entry = tis.getNextEntry
                         }
                     }
                 }
@@ -131,8 +136,11 @@ object CardanoLedgerVectors {
         /** Whether the transaction should succeed */
         success: Boolean,
 
-        /** Test category/name */
-        testState: String
+        /** Test category/name - optional for backwards compatibility */
+        testState: Option[String] = None,
+
+        /** Protocol parameters hash (Blake2b-256 of pparams CBOR) - used to look up pparams file */
+        pparamsHash: Option[String] = None
     )
 
     given JsonValueCodec[RawTestVector] = JsonCodecMaker.make
