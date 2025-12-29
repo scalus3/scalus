@@ -364,14 +364,14 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // BLST_NATIVE_LIB_PATH is provided by flake.nix separately from DYLD_LIBRARY_PATH/LD_LIBRARY_PATH
       // to avoid conflicts with blst-java on JVM (see flake.nix shellHook comment for details).
       Test / envVars ++= {
-        val blstPath = sys.env.getOrElse("BLST_NATIVE_LIB_PATH", "")
-        if (blstPath.nonEmpty) {
-          val isMac = sys.props.get("os.name").exists(_.toLowerCase.contains("mac"))
-          val pathVar = if (isMac) "DYLD_LIBRARY_PATH" else "LD_LIBRARY_PATH"
-          val existingPath = sys.env.getOrElse(pathVar, "")
-          val newPath = if (existingPath.nonEmpty) s"$blstPath:$existingPath" else blstPath
-          Map(pathVar -> newPath)
-        } else Map.empty
+          val blstPath = sys.env.getOrElse("BLST_NATIVE_LIB_PATH", "")
+          if (blstPath.nonEmpty) {
+              val isMac = sys.props.get("os.name").exists(_.toLowerCase.contains("mac"))
+              val pathVar = if (isMac) "DYLD_LIBRARY_PATH" else "LD_LIBRARY_PATH"
+              val existingPath = sys.env.getOrElse(pathVar, "")
+              val newPath = if (existingPath.nonEmpty) s"$blstPath:$existingPath" else blstPath
+              Map(pathVar -> newPath)
+          } else Map.empty
       }
     )
 
