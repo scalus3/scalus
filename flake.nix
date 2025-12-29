@@ -57,6 +57,9 @@
                 "-XX:MaxRAMPercentage=75.0"         # Max heap: 75% of physical RAM
                 "-Xss64m"                           # Stack size for deep recursive calls in compiler
 
+                # Enable native access for BLST JNI library (required for Java 22+)
+                "--enable-native-access=ALL-UNNAMED"
+
                 # Enable experimental features for Java 23
                 "-XX:+UnlockExperimentalVMOptions"  # Allow use of experimental VM options
 
