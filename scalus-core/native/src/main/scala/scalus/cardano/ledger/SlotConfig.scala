@@ -7,19 +7,34 @@ case class SlotConfig(zeroTime: Long, zeroSlot: Long, slotLength: Long) {
 
 object SlotConfig {
     // taken from https://github.com/spacebudz/lucid/blob/main/src/plutus/time.ts
-    val Mainnet: SlotConfig = SlotConfig(
+
+    /** Mainnet slot configuration starting at Shelley era */
+    val mainnet: SlotConfig = SlotConfig(
       zeroTime = 1596059091000L,
       zeroSlot = 4492800,
       slotLength = 1000
-    ) // Starting at Shelley era
-    val Preview: SlotConfig = SlotConfig(
+    )
+
+    /** Preview testnet slot configuration starting at Shelley era */
+    val preview: SlotConfig = SlotConfig(
       zeroTime = 1666656000000L,
       zeroSlot = 0,
       slotLength = 1000
-    ) // Starting at Shelley era
-    val Preprod: SlotConfig = SlotConfig(
+    )
+
+    /** Preprod testnet slot configuration */
+    val preprod: SlotConfig = SlotConfig(
       zeroTime = 1654041600000L + 1728000000L,
       zeroSlot = 86400,
       slotLength = 1000
     )
+
+    @deprecated("Use mainnet instead", "0.14.1")
+    val Mainnet: SlotConfig = mainnet
+
+    @deprecated("Use preview instead", "0.14.1")
+    val Preview: SlotConfig = preview
+
+    @deprecated("Use preprod instead", "0.14.1")
+    val Preprod: SlotConfig = preprod
 }

@@ -11,22 +11,40 @@ class SlotConfig(zeroTime: Long, zeroSlot: Long, slotLength: Long) extends js.Ob
 
 object SlotConfig {
     // taken from https://github.com/spacebudz/lucid/blob/main/src/plutus/time.ts
+
+    /** Mainnet slot configuration starting at Shelley era */
     @JSExportStatic
-    val Mainnet: SlotConfig = SlotConfig(
+    val mainnet: SlotConfig = SlotConfig(
       zeroTime = 1596059091000L,
       zeroSlot = 4492800,
       slotLength = 1000
-    ) // Starting at Shelley era
+    )
+
+    /** Preview testnet slot configuration starting at Shelley era */
     @JSExportStatic
-    val Preview: SlotConfig = SlotConfig(
+    val preview: SlotConfig = SlotConfig(
       zeroTime = 1666656000000L,
       zeroSlot = 0,
       slotLength = 1000
-    ) // Starting at Shelley era
+    )
+
+    /** Preprod testnet slot configuration */
     @JSExportStatic
-    val Preprod: SlotConfig = SlotConfig(
+    val preprod: SlotConfig = SlotConfig(
       zeroTime = 1654041600000L + 1728000000L,
       zeroSlot = 86400,
       slotLength = 1000
     )
+
+    @deprecated("Use mainnet instead", "0.14.1")
+    @JSExportStatic
+    val Mainnet: SlotConfig = mainnet
+
+    @deprecated("Use preview instead", "0.14.1")
+    @JSExportStatic
+    val Preview: SlotConfig = preview
+
+    @deprecated("Use preprod instead", "0.14.1")
+    @JSExportStatic
+    val Preprod: SlotConfig = preprod
 }
