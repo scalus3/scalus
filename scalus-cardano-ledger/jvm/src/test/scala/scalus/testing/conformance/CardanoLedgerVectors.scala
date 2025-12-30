@@ -157,6 +157,8 @@ object CardanoLedgerVectors {
             .map(_.getFileName.toFile.getName)
             .iterator()
             .asScala
+            .filterNot(_.startsWith("._"))
+            .filterNot(_ == "pparams-by-hash")
             .toList
             .sorted
 
