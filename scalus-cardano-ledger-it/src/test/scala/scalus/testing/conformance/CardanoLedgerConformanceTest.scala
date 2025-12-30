@@ -21,18 +21,10 @@ import scalus.testing.conformance.CardanoLedgerVectors.*
   *   `scalus-cardano-ledger-it/src/test/resources/TEST_VECTORS.md` for vector regeneration
   */
 class CardanoLedgerConformanceTest extends AnyFunSuite {
-
-    // Test all vectors with UTXO cases
-    // Old format: directories contain ".UTXO" (e.g., "Conway.Imp.AlonzoImpSpec.UTXOS...")
-    // New format: directories start with "UTXO" (e.g., "UTXOS.PlutusV1...")
-    for vector <- vectorNames()
-            .filter(v => v.contains(".UTXO") || v.startsWith("UTXO"))
-            .filterNot(_.contains("Bootstrap Witness"))
-    do {
+    for vector <- vectorNames() do
         test("Conformance test vector: " + vector):
             for
                 case (x, success, result) <- testVector(vector, EvaluatorMode.Validate)
                 if success != (result.isSuccess && result.get.isRight)
             do fail(s"[$vector/$x]($success) $result")
-    }
 }
