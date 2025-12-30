@@ -1,10 +1,10 @@
 package scalus.cardano.blueprint
 
 import scalus.*
+import scalus.cardano.address.*
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler.sir.SIR
 import scalus.uplc.Program
-import scalus.cardano.address.*
 
 /** A description of a Scalus application, containing one or more contracts.
   */
@@ -103,8 +103,8 @@ object PlutusV3CompiledContract {
           Preamble(title, Some(description)),
           sir,
           program,
-          datumSchema,
-          redeemerSchema
+          Some(datumSchema),
+          Some(redeemerSchema)
         )
     }
 
@@ -116,6 +116,6 @@ object PlutusV3CompiledContract {
         val program = sir.toUplc(using options)().plutusV3
         val datumSchema = PlutusDataSchema.derived[D]
         val redeemerSchema = PlutusDataSchema.derived[R]
-        PlutusV3CompiledContract(preamble, sir, program, datumSchema, redeemerSchema)
+        PlutusV3CompiledContract(preamble, sir, program, Some(datumSchema), Some(redeemerSchema))
     }
 }

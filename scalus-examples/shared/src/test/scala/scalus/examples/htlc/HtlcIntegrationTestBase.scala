@@ -162,7 +162,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             }
             lockAmount = 8_000_000L
 
-            compiledContract = HtlcContract.defaultCompiledContract
+            compiledContract = HtlcContract
 
             txCreator = HtlcTransactionCreator(
               ctx.cardanoInfo,
@@ -208,7 +208,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
 
             // HTLC parameters - must match the locked UTXO
             preimage = utf8"secret_preimage_54321"
-            compiledContract = HtlcContract.defaultCompiledContract
+            compiledContract = HtlcContract
             scriptAddress = Address(
               ctx.cardanoInfo.network,
               Credential.ScriptHash(compiledContract.script.scriptHash)

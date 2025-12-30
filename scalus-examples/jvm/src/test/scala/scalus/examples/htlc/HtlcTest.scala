@@ -19,7 +19,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class HtlcTest extends AnyFunSuite, ScalusTest {
     private val env = TestUtil.testEnvironment
-    private val compiledContract = HtlcContract.debugCompiledContract
+    private val compiledContract = HtlcContract.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
 
     private val committerKeyPair @ (committerPrivateKey, committerPublicKey) = generateKeyPair()
@@ -38,7 +38,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
       signer = signer,
-      compiledContract = compiledContract
+      contract = compiledContract
     )
 
     private def transactionCreatorWithConstEvaluatorFor(signer: TransactionSigner) =
@@ -46,7 +46,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           env = env,
           evaluator = PlutusScriptEvaluator.constMaxBudget(env),
           signer = signer,
-          compiledContract = compiledContract
+          contract = compiledContract
         )
 
     private val committerPkh = AddrKeyHash(platform.blake2b_224(committerPublicKey))

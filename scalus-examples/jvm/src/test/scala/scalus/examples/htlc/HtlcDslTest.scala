@@ -179,7 +179,7 @@ object HtlcDslTest extends ScalusTest {
               contractDatum = contractDatum
             )
 
-            val actual = Try(HtlcValidator.validate(context.toData))
+            val actual = Try(HtlcContract.code(context.toData))
             (expected, actual) match
                 case ((msg: String, _), scala.util.Failure(exception)) =>
                 case (((), _), scala.util.Success(_))                  =>
@@ -217,6 +217,6 @@ object HtlcDslTest extends ScalusTest {
         )
     }
 
-    private lazy val program = HtlcContract.debugCompiledContract.program
-    private lazy val scriptHash = HtlcContract.debugCompiledContract.script.scriptHash
+    private lazy val program = HtlcContract.withErrorTraces.program
+    private lazy val scriptHash = HtlcContract.withErrorTraces.script.scriptHash
 }

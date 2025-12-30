@@ -58,41 +58,31 @@ object PlutusDataSchema {
       * @note
       *   can only be used for onchain types
       */
-    inline def derived[T]: Option[PlutusDataSchema] = ${ deriveSchemaImpl[T] }
+    inline def derived[T]: PlutusDataSchema = ${ deriveSchemaImpl[T] }
 
-    private def deriveSchemaImpl[T: Type](using Quotes): Expr[Option[PlutusDataSchema]] =
+    private def deriveSchemaImpl[T: Type](using Quotes): Expr[PlutusDataSchema] =
         import quotes.reflect.*
 
         val tpe = TypeRepr.of[T].dealias.widen
         val symbol = tpe.typeSymbol
 
-        if isUnit(tpe) then {
-            '{ None }
-        } else if isPrimitive(tpe) then {
-            val schema = deriveForPrimitive(tpe)
-            '{ Some($schema) }
-        } else if isTuple(tpe) then {
-            val schema = deriveForTuple(tpe)
-            '{ Some($schema) }
-        } else if symbol.flags.is(Flags.Case) && !symbol.flags.is(Flags.Enum) then {
-            val schema = deriveForCaseClass(symbol)
-            '{ Some($schema) }
-        } else if !symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then {
-            val schema = deriveForEnumRoot(symbol)
-            '{ Some($schema) }
-        } else if symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then {
-            val schema = generateForEnumLeafWithIndex(symbol, 0)
-            '{ Some($schema) }
-        } else {
-            report.errorAndAbort(s"Unsupported type for schema generation: ${tpe.show}")
-        }
+        if isUnit(tpe) then '{ PlutusDataSchema(dataType = Some(DataType.UnitBuiltin)) }
+        else if isPrimitive(tpe) then deriveForPrimitive(tpe)
+        else if isTuple(tpe) then deriveForTuple(tpe)
+        else if symbol.flags.is(Flags.Case) && !symbol.flags.is(Flags.Enum) then
+            deriveForCaseClass(symbol)
+        else if !symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then
+            deriveForEnumRoot(symbol)
+        else if symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then
+            generateForEnumLeafWithIndex(symbol, 0)
+        else report.errorAndAbort(s"Unsupported type for schema generation: ${tpe.show}")
 
     private def deriveForPrimitive(using
         Quotes
     )(tpe: quotes.reflect.TypeRepr): Expr[PlutusDataSchema] =
         import quotes.reflect.*
         tpe.show match {
-            case "scala.Int" | "scala.Long" | "scala.BigInt" =>
+            case "scala.Int" | "scala.Long" | "scala.math.BigInt" =>
                 '{ PlutusDataSchema(dataType = Some(DataType.Integer)) }
             case "scalus.builtin.ByteString" | "scala.Array[scala.Byte]" |
                 "scala.collection.immutable.List[scala.Byte]" =>

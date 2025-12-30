@@ -1,11 +1,12 @@
 package scalus.examples.htlc
 
+import scalus.builtin.Data
 import scalus.cardano.address.Address
-import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
+import scalus.uplc.PlutusV3
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -13,10 +14,10 @@ case class HtlcTransactionCreator(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,
-    compiledContract: PlutusV3CompiledContract = HtlcContract.defaultCompiledContract
+    contract: PlutusV3[Data => Unit] = HtlcContract
 ) {
-    def script: Script.PlutusV3 = compiledContract.script
-    val scriptAddress: Address = compiledContract.address(env.network)
+    def script: Script.PlutusV3 = contract.script
+    val scriptAddress: Address = contract.address(env.network)
 
     def lock(
         utxos: Utxos,
