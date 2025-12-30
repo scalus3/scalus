@@ -23,8 +23,10 @@ import scalus.testing.conformance.CardanoLedgerVectors.*
 class CardanoLedgerConformanceTest extends AnyFunSuite {
     for vector <- vectorNames() do
         test("Conformance test vector: " + vector):
-            for
-                case (x, success, result) <- testVector(vector, EvaluatorMode.Validate)
-                if success != (result.isSuccess && result.get.isRight)
-            do fail(s"[$vector/$x]($success) $result")
+            for case (x, success, result) <- testVector(vector, EvaluatorMode.Validate)
+            do {
+                println(pprint((x, success, result)))
+                if success != (result.isSuccess && result.get.isRight) then
+                    fail(s"[$vector/$x]($success) $result")
+            }
 }
