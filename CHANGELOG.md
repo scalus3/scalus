@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.14.1 (2025-12-22)
+
+### Added
+
+- CIP-0153 MaryEraValue (BuiltinValue) support with 7 builtin functions: `insertCoin`, `lookupCoin`,
+  `unionValue`, `valueContains`, `valueData`, `unValueData`, `scaleValue`
+- TypeScript tests for Scalus NPM package
+- Yaci DevKit integration tests for TxBuilder
+- native script minting integration test
+- browser tests for NPM package
+
+### Changed
+
+- NPM bundle renamed to `scalus.js`
+- removed pattern matching restrictions (guards section)
+- documentation updated for new TxBuilder API
+
+### Fixed
+
+- include proposal deposits in `TxBalance.produced` calculation
+- `BuiltinValue` type parameter support in SIR lowering
+- JSON parsing for `ProtocolParams` to handle both string and number formats
+
 ## 0.14.0 (2025-12-19)
 
 ### Added
@@ -13,7 +36,8 @@
 - `Data` pattern matching support
 - `copy` method support for case classes in Scalus scripts
 - `dropList` builtin implementation with saturating CostingInteger arithmetic
-- cross-platform Ed25519 signing with type-safe opaque types (VerificationKey, Signature, SigningKey)
+- cross-platform Ed25519 signing with type-safe opaque types (VerificationKey, Signature,
+  SigningKey)
 - `addr` and `stake` string interpolators for bech32 address parsing
 - `ByteString.utf8` string interpolator support in SIR compiler
 - `Blueprint.fromJson(InputStream)` overload for efficient parsing
@@ -38,7 +62,8 @@
   `mint(policyId, assets, redeemer)` for reference scripts
 - **BREAKING**: `Provider` consolidated to async-only, `AsyncProvider` renamed to `Provider`
 - **BREAKING**: `scalus.sir` package moved to `scalus.compiler.sir`
-- **BREAKING**: `builtin.Data` uses `scalus.prelude.List` instead of `scala.collection.immutable.List`
+- **BREAKING**: `builtin.Data` uses `scalus.prelude.List` instead of
+  `scala.collection.immutable.List`
 - **BREAKING**: `ChangeOutputDiffHandler` now accepts `Value` instead of `Coin`
 - renamed `NodeEmulator` to `Emulator` and moved to scalus-cardano-ledger
 - renamed `AsyncBlockfrostProvider` to `BlockfrostProvider`
