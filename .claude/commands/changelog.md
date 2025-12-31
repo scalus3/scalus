@@ -8,8 +8,10 @@ description: Write a CHANGELOG.md entry for a version
 
 ## Your task
 
-Analyze the changes made since the last CHANGELOG.md entry version tag (like v0.14.0) using
-`git log` and add a new entry using a version from $ARGUMENTS.
+1. Read CHANGELOG.md to find the last version (e.g., 0.14.1)
+2. Use the git tag for that version to get changes: `git log v<last_version>..HEAD --oneline`
+   - Example: if CHANGELOG.md shows 0.14.1 as latest, run `git log v0.14.1..HEAD --oneline`
+3. Analyze the commits and add a new entry using version from $ARGUMENTS
 
 Follow the same style as in CHANGELOG.md
 

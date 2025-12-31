@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.14.2 (2025-12-31)
+
+### Added
+
+- BLS12-381 cryptographic operations for Scala Native via FFI bindings to blst library, enabling
+  full Plutus V3 support on Native platform
+- pure Scala implementations of cryptographic hash functions for Native platform:
+  - Keccak-256 and SHA3-256 (replaces Rust tiny_keccak_wrapper)
+  - RIPEMD-160 (enables ripemd_160 builtin on Native)
+- type-safe `Blueprint.plutusV3` factory methods with automatic schema derivation for CIP-57
+  blueprints
+- `PlutusV3.withErrorTraces` method for debug builds with error traces
+- `ToData` and `FromData` instances for Conway era protocol parameters to support governance actions
+  in Plutus V3 scripts
+- `scalus-secp256k1-jni` project with custom secp256k1 JNI bindings (replaces bitcoin-s dependency)
+- `Input` type alias for `TransactionInput` to improve code readability
+- missing Plutus conformance tests for 100% coverage (108 new tests)
+- documentation for builtin functions, protocol parameters, emulator, and TxBuilder
+
+### Changed
+
+- replaced bitcoin-s secp256k1 with scalus-secp256k1-jni using secp256k1 0.6.0
+- `TransactionInput` comparison now uses efficient ByteString ordering instead of hex string
+  conversion
+- slot configuration variables renamed to camelCase with deprecation warnings
+- deprecated old `Blueprint.apply` method in favor of type-safe `Blueprint.plutusV3` methods
+- updated nixpkgs to version 25.11 and JDK to version 25
+
+### Fixed
+
+- collateral sufficiency check in `FeesOkException`
+- error handling in `SIRCompiler`
+- ECDSA signature component validation in secp256k1 on JavaScript platform
+- overflow in `NonNegativeInterval` arithmetic with large denominators
+- empty list handling in `Data.Map` lowering
+- reward account conversion in `ProposalProcedure` translation for V3
+- `ScriptDataHashGenerator.computeScriptDataHash` "no such element" exception
+- native access for BLST JNI library on Java 22+
+- blst-java JNI symbol conflict with nix blst library
+
 ## 0.14.1 (2025-12-22)
 
 ### Added
