@@ -3,13 +3,15 @@ package scalus.cardano.txbuilder
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.cardano.address.Address
 import scalus.builtin.ByteString.utf8
+import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.ArbitraryInstances.given_Arbitrary_Hash
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
 
-class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
+class ChangeTest
+    extends AnyFunSuite,
+      ScalaCheckPropertyChecks,
+      scalus.cardano.ledger.ArbitraryInstances {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
 
@@ -32,7 +34,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val output = TransactionOutput(genPubkeyAddr().sample.get, Value(outputAda))
         val changeOutput = TransactionOutput(genPubkeyAddr().sample.get, Value(Coin.zero, asset))
 
-        val input = genTransactionInput.sample.get
+        val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val tx = makeSimpleTx(
           // A single random input is enough
           ins = Seq(input),
@@ -67,7 +69,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
         val otherOutput = TransactionOutput(genPubkeyAddr().sample.get, Value(Coin.ada(3)))
 
-        val input = genTransactionInput.sample.get
+        val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val tx = makeSimpleTx(
           ins = Seq(input),
           outs = Seq(otherOutput, changeOutput),
@@ -325,7 +327,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             )
 
             // Generate tokens
-            policyId <- genPolicyId
+            policyId <- Arbitrary.arbitrary[PolicyId]
             assetName <- Gen.const(AssetName.fromString("token"))
             tokenAmount <- Gen.choose(1L, 1000L)
             tokenDiff <- Gen.choose(-tokenAmount, tokenAmount)
@@ -375,7 +377,7 @@ class ChangeTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         require(outputAmount > 0, "Must have at least one output")
 
         for {
-            inputs <- Gen.listOfN(inputAmount, genTransactionInput)
+            inputs <- Gen.listOfN(inputAmount, Arbitrary.arbitrary[TransactionInput])
             inputValues = distributeValue(inputSum, inputAmount)
             inputAddresses <- Gen.listOfN(inputAmount, genPubkeyAddr())
             outputAddresses <- Gen.listOfN(outputAmount, genPubkeyAddr())

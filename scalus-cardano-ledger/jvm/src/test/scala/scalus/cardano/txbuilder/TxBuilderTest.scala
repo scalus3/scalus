@@ -1,6 +1,7 @@
 package scalus.cardano.txbuilder
 
 import monocle.syntax.all.*
+import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.{hex, utf8}
 import scalus.builtin.{ByteString, Data}
@@ -19,7 +20,7 @@ import scalus.{plutusV3, toUplc, Compiler}
 import scala.collection.immutable.SortedMap
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class TxBuilderTest extends AnyFunSuite {
+class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstances {
 
     val testEnv: CardanoInfo = CardanoInfo.mainnet
 
@@ -313,7 +314,10 @@ class TxBuilderTest extends AnyFunSuite {
         // has tokens
         val inputValue = Value.asset(policyId, co2, tokenAmount, Coin.ada(10))
         val tokenUtxo =
-            (genTransactionInput.sample.get, TransactionOutput(Alice.address, inputValue))
+            (
+              Arbitrary.arbitrary[TransactionInput].sample.get,
+              TransactionOutput(Alice.address, inputValue)
+            )
 
         // Only send ADA, no tokens
         val tx = TxBuilder(testEnv)
@@ -349,7 +353,10 @@ class TxBuilderTest extends AnyFunSuite {
 
         val inputValue = Value.asset(policyId, co2, tokenAmount, Coin.ada(10))
         val tokenUtxo =
-            (genTransactionInput.sample.get, TransactionOutput(Alice.address, inputValue))
+            (
+              Arbitrary.arbitrary[TransactionInput].sample.get,
+              TransactionOutput(Alice.address, inputValue)
+            )
 
         val paymentValue = Value.asset(policyId, co2, sendAmount, Coin.ada(3))
 
@@ -394,7 +401,10 @@ class TxBuilderTest extends AnyFunSuite {
         )
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
         val tokenUtxo =
-            (genTransactionInput.sample.get, TransactionOutput(Alice.address, inputValue))
+            (
+              Arbitrary.arbitrary[TransactionInput].sample.get,
+              TransactionOutput(Alice.address, inputValue)
+            )
 
         // Send only co2, no h2so4
         val paymentValue = Value.asset(policyId, co2, 200, Coin.ada(3))

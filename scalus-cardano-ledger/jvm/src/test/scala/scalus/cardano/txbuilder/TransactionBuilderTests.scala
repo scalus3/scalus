@@ -4,12 +4,11 @@ import io.bullet.borer.Cbor
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
 import org.scalacheck.Arbitrary.arbitrary
-import org.scalacheck.Gen
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
-import scalus.prelude.List as PList
 import scalus.cardano.address.Network.{Mainnet, Testnet}
 import scalus.cardano.address.ShelleyDelegationPart.{Key, Null}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
@@ -29,6 +28,7 @@ import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TestPeer.Alice
 import scalus.cardano.txbuilder.TransactionBuilder.{build, Context, ResolvedUtxos}
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint, *}
+import scalus.prelude.List as PList
 import scalus.|>
 
 import scala.collection.immutable.SortedMap
@@ -540,7 +540,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
     )
 
-    val mintSigners = Set(ExpectedSigner(genAddrKeyHash.sample.get))
+    val mintSigners = Set(ExpectedSigner(Arbitrary.arbitrary[AddrKeyHash].sample.get))
 
     // Mint the given amount of tokens from script 1
     def mintScript1(amount: Long, redeemer: Data = Data.List(PList.Nil)): Mint =
@@ -864,7 +864,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           txWithFee,
           ctx.resolvedUtxos.utxos,
           None,
-          blockfrost544Params
+          CardanoInfo.mainnet.protocolParams
         )
 
         result match {
