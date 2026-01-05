@@ -6,7 +6,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 
-import scala.annotation.{switch, tailrec}
+import scala.annotation.{switch, tailrec, threadUnsafe}
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.{immutable, mutable}
@@ -153,15 +153,15 @@ case class MachineParams(
 
 object MachineParams {
 
-    lazy val defaultPlutusV1PostConwayParams: MachineParams = {
+    @threadUnsafe lazy val defaultPlutusV1PostConwayParams: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV1)
     }
 
-    lazy val defaultPlutusV2PostConwayParams: MachineParams = {
+    @threadUnsafe lazy val defaultPlutusV2PostConwayParams: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV2)
     }
 
-    lazy val defaultPlutusV3Params: MachineParams = {
+    @threadUnsafe lazy val defaultPlutusV3Params: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV3)
     }
 
@@ -205,6 +205,7 @@ object MachineParams {
       * @return
       *   The machine parameters
       */
+    @deprecated("Use fromProtocolParams and ProtocolParams.fromCardanoCliJson instead", "0.14.2")
     def fromCardanoCliProtocolParamsJson(
         json: String,
         plutus: Language
@@ -222,6 +223,7 @@ object MachineParams {
       * @return
       *   The machine parameters
       */
+    @deprecated("Use fromProtocolParams and ProtocolParams.fromBlockfrostJson instead", "0.14.2")
     def fromBlockfrostProtocolParamsJson(
         json: String,
         plutus: Language

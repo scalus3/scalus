@@ -21,9 +21,7 @@ object CardanoInfo {
       */
     @threadUnsafe lazy val mainnet: CardanoInfo =
         CardanoInfo(
-          ProtocolParams.fromBlockfrostJson(
-            inlineResource("blockfrost-params-epoch-544.json")
-          ),
+          inlineProtocolParams("blockfrost-params-epoch-544.json"),
           Network.Mainnet,
           SlotConfig.mainnet
         )
@@ -31,9 +29,7 @@ object CardanoInfo {
     /** Cardano info for Preprod testnet */
     @threadUnsafe lazy val preprod: CardanoInfo =
         CardanoInfo(
-          ProtocolParams.fromBlockfrostJson(
-            inlineResource("blockfrost-params-preprod-258.json")
-          ),
+          inlineProtocolParams("blockfrost-params-preprod-258.json"),
           Network.Testnet,
           SlotConfig.preprod
         )
@@ -41,13 +37,11 @@ object CardanoInfo {
     /** Cardano info for Preview testnet */
     @threadUnsafe lazy val preview: CardanoInfo =
         CardanoInfo(
-          ProtocolParams.fromBlockfrostJson(
-            inlineResource("blockfrost-params-preview-1145.json")
-          ),
+          inlineProtocolParams("blockfrost-params-preview-1145.json"),
           Network.Testnet,
           SlotConfig.preview
         )
 
-    private inline def inlineResource(name: String): String =
-        ${ Macros.inlineResource('name) }
+    private inline def inlineProtocolParams(name: String): ProtocolParams =
+        ${ Macros.inlineProtocolParams('name) }
 }

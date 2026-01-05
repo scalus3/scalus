@@ -3,6 +3,7 @@ package scalus.utils
 import scalus.Compiler
 import scalus.builtin.Builtins
 import scalus.builtin.Data
+import scalus.cardano.ledger.{ProtocolParams, ProtocolParamsToExpr}
 import scalus.compiler.sir.SIR
 import scalus.uplc.{BuiltinRuntime, BuiltinsMeaning, DefaultFun, Expr as Exp, NamedDeBruijn, Term as Trm}
 import scalus.uplc.ExprBuilder.*
@@ -426,6 +427,25 @@ object Macros {
     def inlineResource(using Quotes)(name: Expr[String]): Expr[String] = {
         val string = readResource(name.value.get)
         Expr(string)
+    }
+
+    /** Read a Blockfrost JSON resource at compile time and generate ProtocolParams constructor
+      * code.
+      *
+      * This macro reads the JSON file, parses it into ProtocolParams, and generates Scala code that
+      * constructs the ProtocolParams directly. This avoids embedding the JSON string in the
+      * compiled artifacts, significantly reducing bundle size for JS targets.
+      *
+      * @param name
+      *   quoted resource filename (e.g., "blockfrost-params-epoch-544.json")
+      * @return
+      *   quoted ProtocolParams constructor
+      */
+    def inlineProtocolParams(using Quotes)(name: Expr[String]): Expr[ProtocolParams] = {
+        import ProtocolParamsToExpr.given
+        val json = readResource(name.value.get)
+        val params = ProtocolParams.fromBlockfrostJson(json)
+        Expr(params)
     }
 
     /** Read a resource file from disk using the compile-time source root.

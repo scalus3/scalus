@@ -53,7 +53,7 @@ object BLS12_381_G1_Element:
             )
 
         BLS12_381_G1_Element(
-          BLS.G1.Point.fromRowBytes(byteString.toUint8Array)
+          BLS.G1.Point.fromRawBytes(byteString.toUint8Array)
         )
     }
 
@@ -119,7 +119,7 @@ object BLS12_381_G2_Element:
             )
 
         BLS12_381_G2_Element(
-          BLS.G2.Point.fromRowBytes(byteString.toUint8Array)
+          BLS.G2.Point.fromRawBytes(byteString.toUint8Array)
         )
     }
 
@@ -188,7 +188,7 @@ private[builtin] object BLS:
         @js.native
         trait PointModule extends js.Object:
             @JSName("fromHex")
-            def fromRowBytes(bytes: Uint8Array): Point = js.native
+            def fromRawBytes(bytes: Uint8Array): Point = js.native
 
         @js.native
         trait Point extends js.Object:
@@ -201,7 +201,7 @@ private[builtin] object BLS:
             def toHex(isCompressed: Boolean = true): String = js.native
 
         object Point:
-            def fromRowBytes(bytes: Uint8Array): Point = g1.pointModule.fromRowBytes(bytes)
+            def fromRawBytes(bytes: Uint8Array): Point = g1.pointModule.fromRawBytes(bytes)
     end G1
 
     @js.native
@@ -216,7 +216,7 @@ private[builtin] object BLS:
         @js.native
         trait PointModule extends js.Object:
             @JSName("fromHex")
-            def fromRowBytes(bytes: Uint8Array): Point = js.native
+            def fromRawBytes(bytes: Uint8Array): Point = js.native
 
         @js.native
         trait Point extends js.Object:
@@ -229,7 +229,7 @@ private[builtin] object BLS:
             def toHex(isCompressed: Boolean = true): String = js.native
 
         object Point:
-            def fromRowBytes(bytes: Uint8Array): Point = g2.pointModule.fromRowBytes(bytes)
+            def fromRawBytes(bytes: Uint8Array): Point = g2.pointModule.fromRawBytes(bytes)
     end G2
 
     @js.native

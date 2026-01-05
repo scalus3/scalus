@@ -22,6 +22,7 @@ object TaggedSortedSet extends TaggedSeq:
     extension [A](s: TaggedSortedSet[A])
         inline def toSet: SortedSet[A] = s
         inline def toSeq: IndexedSeq[A] = s.toIndexedSeq
+        inline def toIndexedSeq: IndexedSeq[A] = s.toIndexedSeq
 
     given [A: Encoder]: Encoder[TaggedSortedSet[A]] = writeTagged(_, _)
     given [A: Decoder: Ordering](using

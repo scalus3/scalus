@@ -32,3 +32,4 @@ node_modules
 .envrc.local
 *.log
 test-logs-archive/
+/scalus-cardano-ledger/js/src/main/npm/scalus.js.map
