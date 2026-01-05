@@ -640,6 +640,44 @@ object Blst:
 
         blst_fp12_finalverify(fp12_1, fp12_2)
 
+    def g1MultiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G1_Element]
+    ): BLS12_381_G1_Element = {
+        // Use zip behavior: take minimum length, return identity for empty
+        // Start with zero element
+        var result = g1Uncompress(
+          ByteString.fromHex(
+            "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          )
+        )
+
+        scalars.zip(points).foreach { case (scalar, point) =>
+            val product = g1ScalarMul(scalar, point)
+            result = g1Add(result, product)
+        }
+        result
+    }
+
+    def g2MultiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G2_Element]
+    ): BLS12_381_G2_Element = {
+        // Use zip behavior: take minimum length, return identity for empty
+        // Start with zero element
+        var result = g2Uncompress(
+          ByteString.fromHex(
+            "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+          )
+        )
+
+        scalars.zip(points).foreach { case (scalar, point) =>
+            val product = g2ScalarMul(scalar, point)
+            result = g2Add(result, product)
+        }
+        result
+    }
+
 object Builtins extends Builtins(using NativePlatformSpecific)
 class Builtins(using ps: PlatformSpecific) extends AbstractBuiltins(using ps)
 
@@ -743,6 +781,19 @@ trait NativePlatformSpecific extends PlatformSpecific {
 
     override def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
         Blst.finalVerify(p1, p2)
+
+    override def bls12_381_G1_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G1_Element]
+    ): BLS12_381_G1_Element =
+        Blst.g1MultiScalarMul(scalars, points)
+
+    override def bls12_381_G2_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G2_Element]
+    ): BLS12_381_G2_Element =
+        Blst.g2MultiScalarMul(scalars, points)
+
     override def keccak_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Keccak.keccak256(bs.bytes))
 

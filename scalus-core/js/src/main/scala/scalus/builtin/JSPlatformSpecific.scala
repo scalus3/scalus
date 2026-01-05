@@ -239,6 +239,26 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
     override def bls12_381_finalVerify(lhs: BLS12_381_MlResult, rhs: BLS12_381_MlResult): Boolean =
         lhs == rhs
 
+    override def bls12_381_G1_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G1_Element]
+    ): BLS12_381_G1_Element = {
+        // Use zip behavior: take minimum length, return identity for empty
+        scalars.zip(points).foldLeft(BLS12_381_G1_Element.zero) { case (acc, (scalar, point)) =>
+            acc + (point * scalar)
+        }
+    }
+
+    override def bls12_381_G2_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G2_Element]
+    ): BLS12_381_G2_Element = {
+        // Use zip behavior: take minimum length, return identity for empty
+        scalars.zip(points).foldLeft(BLS12_381_G2_Element.zero) { case (acc, (scalar, point)) =>
+            acc + (point * scalar)
+        }
+    }
+
     override def keccak_256(bs: ByteString): ByteString =
         Sha3.keccak_256(bs.toUint8Array).toByteString
 

@@ -942,6 +942,34 @@ enum DefaultFun extends Enum[DefaultFun]:
       */
     case Bls12_381_finalVerify
 
+    /** Multi-scalar multiplication on G1.
+      *
+      * '''Type:''' `[Integer] -> [G1_Element] -> G1_Element`
+      *
+      * Computes the sum ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm.
+      * Both input lists must be non-empty and have equal length.
+      *
+      * @throws BuiltinException
+      *   if either list is empty or lists have different lengths
+      * @since Plutus
+      *   V4 (CIP-133)
+      */
+    case Bls12_381_G1_multiScalarMul
+
+    /** Multi-scalar multiplication on G2.
+      *
+      * '''Type:''' `[Integer] -> [G2_Element] -> G2_Element`
+      *
+      * Computes the sum ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm.
+      * Both input lists must be non-empty and have equal length.
+      *
+      * @throws BuiltinException
+      *   if either list is empty or lists have different lengths
+      * @since Plutus
+      *   V4 (CIP-133)
+      */
+    case Bls12_381_G2_multiScalarMul
+
     // ============================================================================
     // Additional Hash Functions
     // ============================================================================
@@ -1438,6 +1466,8 @@ object DefaultFun {
                 case Bls12_381_millerLoop            => 68
                 case Bls12_381_mulMlResult           => 69
                 case Bls12_381_finalVerify           => 70
+                case Bls12_381_G1_multiScalarMul     => 92
+                case Bls12_381_G2_multiScalarMul     => 93
                 case Keccak_256                      => 71
                 case Blake2b_224                     => 72
 
@@ -1464,7 +1494,7 @@ object DefaultFun {
                 case LengthOfArray   => 89
                 case ListToArray     => 90
                 case IndexArray      => 91
-                case MultiIndexArray => 92
+                case MultiIndexArray => 101
 
                 // MaryEraValue builtins (CIP-0153)
                 case InsertCoin    => 94
@@ -1550,6 +1580,8 @@ object DefaultFun {
                 case 68 => Bls12_381_millerLoop
                 case 69 => Bls12_381_mulMlResult
                 case 70 => Bls12_381_finalVerify
+                case 92 => Bls12_381_G1_multiScalarMul
+                case 93 => Bls12_381_G2_multiScalarMul
                 case 71 => Keccak_256
                 case 72 => Blake2b_224
                 case 73 => IntegerToByteString
@@ -1569,10 +1601,10 @@ object DefaultFun {
                 // Plutus 1.53 new builtins
                 case 88 => DropList
                 // Array builtins
-                case 89 => LengthOfArray
-                case 90 => ListToArray
-                case 91 => IndexArray
-                case 92 => MultiIndexArray
+                case 89  => LengthOfArray
+                case 90  => ListToArray
+                case 91  => IndexArray
+                case 101 => MultiIndexArray
                 // MaryEraValue builtins (CIP-0153)
                 case 94  => InsertCoin
                 case 95  => LookupCoin

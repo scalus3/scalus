@@ -245,6 +245,32 @@
             "type": "constant_cost"
         }
     },
+    "bls12_381_G1_multiScalarMul": {
+        "cpu": {
+            "arguments": {
+                "intercept": 321837444,
+                "slope": 25087669
+            },
+            "type": "linear_in_x"
+        },
+        "memory": {
+            "arguments": 18,
+            "type": "constant_cost"
+        }
+    },
+    "bls12_381_G2_multiScalarMul": {
+        "cpu": {
+            "arguments": {
+                "intercept": 617887431,
+                "slope": 67302824
+            },
+            "type": "linear_in_x"
+        },
+        "memory": {
+            "arguments": 36,
+            "type": "constant_cost"
+        }
+    },
     "bls12_381_millerLoop": {
         "cpu": {
             "arguments": 254006273,

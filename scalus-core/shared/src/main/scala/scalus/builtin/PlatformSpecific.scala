@@ -164,6 +164,44 @@ trait PlatformSpecific:
 
     def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean
 
+    /** Multi-scalar multiplication on G1.
+      *
+      * Computes ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm. Both
+      * input lists must be non-empty and have equal length.
+      *
+      * @param scalars
+      *   List of scalars (integers)
+      * @param points
+      *   List of G1 group elements
+      * @return
+      *   The sum of scalar multiplications
+      * @throws BuiltinException
+      *   if either list is empty or lists have different lengths
+      */
+    def bls12_381_G1_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G1_Element]
+    ): BLS12_381_G1_Element
+
+    /** Multi-scalar multiplication on G2.
+      *
+      * Computes ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm. Both
+      * input lists must be non-empty and have equal length.
+      *
+      * @param scalars
+      *   List of scalars (integers)
+      * @param points
+      *   List of G2 group elements
+      * @return
+      *   The sum of scalar multiplications
+      * @throws BuiltinException
+      *   if either list is empty or lists have different lengths
+      */
+    def bls12_381_G2_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G2_Element]
+    ): BLS12_381_G2_Element
+
     def keccak_256(bs: ByteString): ByteString
 
     def ripemd_160(byteString: ByteString): ByteString

@@ -944,6 +944,50 @@ class BuiltinsMeaning(
       builtinCostModel.bls12_381_finalVerify
     )
 
+    val Bls12_381_G1_multiScalarMul: BuiltinRuntime = mkMeaning(
+      DefaultUni.List(DefaultUni.Integer) ->: DefaultUni.List(
+        DefaultUni.BLS12_381_G1_Element
+      ) ->: DefaultUni.BLS12_381_G1_Element,
+      (_: Logger, args: Seq[CekValue]) =>
+          val scalars = args(0).asList.map {
+              case Constant.Integer(i) => i
+              case _ => throw new KnownTypeUnliftingError(DefaultUni.Integer, args(0))
+          }
+          val points = args(1).asList.map {
+              case Constant.BLS12_381_G1_Element(p) => p
+              case _ => throw new KnownTypeUnliftingError(DefaultUni.BLS12_381_G1_Element, args(1))
+          }
+          VCon(
+            Constant.BLS12_381_G1_Element(
+              platformSpecific.bls12_381_G1_multiScalarMul(scalars, points)
+            )
+          )
+      ,
+      builtinCostModel.bls12_381_G1_multiScalarMul
+    )
+
+    val Bls12_381_G2_multiScalarMul: BuiltinRuntime = mkMeaning(
+      DefaultUni.List(DefaultUni.Integer) ->: DefaultUni.List(
+        DefaultUni.BLS12_381_G2_Element
+      ) ->: DefaultUni.BLS12_381_G2_Element,
+      (_: Logger, args: Seq[CekValue]) =>
+          val scalars = args(0).asList.map {
+              case Constant.Integer(i) => i
+              case _ => throw new KnownTypeUnliftingError(DefaultUni.Integer, args(0))
+          }
+          val points = args(1).asList.map {
+              case Constant.BLS12_381_G2_Element(p) => p
+              case _ => throw new KnownTypeUnliftingError(DefaultUni.BLS12_381_G2_Element, args(1))
+          }
+          VCon(
+            Constant.BLS12_381_G2_Element(
+              platformSpecific.bls12_381_G2_multiScalarMul(scalars, points)
+            )
+          )
+      ,
+      builtinCostModel.bls12_381_G2_multiScalarMul
+    )
+
     val IntegerToByteString: BuiltinRuntime =
         mkMeaning(
           Bool ->: Integer ->: Integer ->: DefaultUni.ByteString,

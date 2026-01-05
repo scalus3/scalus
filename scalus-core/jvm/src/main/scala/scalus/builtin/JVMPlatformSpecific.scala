@@ -222,6 +222,36 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         PT.finalverify(p1.value, p2.value)
     }
 
+    override def bls12_381_G1_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G1_Element]
+    ): BLS12_381_G1_Element = {
+        // Use zip behavior: take minimum length, return identity for empty
+        val period = PlatformSpecific.bls12_381_scalar_period.bigInteger
+        val result = new P1(PlatformSpecific.bls12_381_G1_compressed_zero.bytes)
+        scalars.zip(points).foreach { case (scalar, point) =>
+            val reducedScalar = scalar.bigInteger.mod(period)
+            val product = point.value.dup.mult(reducedScalar)
+            result.add(product)
+        }
+        BLS12_381_G1_Element(result)
+    }
+
+    override def bls12_381_G2_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G2_Element]
+    ): BLS12_381_G2_Element = {
+        // Use zip behavior: take minimum length, return identity for empty
+        val period = PlatformSpecific.bls12_381_scalar_period.bigInteger
+        val result = new P2(PlatformSpecific.bls12_381_G2_compressed_zero.bytes)
+        scalars.zip(points).foreach { case (scalar, point) =>
+            val reducedScalar = scalar.bigInteger.mod(period)
+            val product = point.value.dup.mult(reducedScalar)
+            result.add(product)
+        }
+        BLS12_381_G2_Element(result)
+    }
+
     override def keccak_256(bs: ByteString): ByteString = {
         val digest = new Keccak.Digest256()
         ByteString.unsafeFromArray(digest.digest(bs.bytes))

@@ -93,6 +93,8 @@ case class BuiltinCostModel(
     bls12_381_millerLoop: ConstCostingFun,
     bls12_381_mulMlResult: ConstCostingFun,
     bls12_381_finalVerify: ConstCostingFun,
+    bls12_381_G1_multiScalarMul: DefaultCostingFun[TwoArguments],
+    bls12_381_G2_multiScalarMul: DefaultCostingFun[TwoArguments],
     integerToByteString: IntegerToByteStringCostingFun,
     byteStringToInteger: DefaultCostingFun[TwoArguments],
     andByteString: DefaultCostingFun[ThreeArguments],
@@ -290,6 +292,8 @@ object BuiltinCostModel {
             "bls12_381_finalVerify" -> writeJs(
               model.bls12_381_finalVerify.toDefaultFun[TwoArguments]
             ),
+            "bls12_381_G1_multiScalarMul" -> writeJs(model.bls12_381_G1_multiScalarMul),
+            "bls12_381_G2_multiScalarMul" -> writeJs(model.bls12_381_G2_multiScalarMul),
             "integerToByteString" -> writeJs(model.integerToByteString),
             "byteStringToInteger" -> writeJs(model.byteStringToInteger),
             "andByteString" -> writeJs(model.andByteString),
@@ -441,6 +445,10 @@ object BuiltinCostModel {
               "bls12_381_finalVerify",
               json("bls12_381_finalVerify")
             ),
+            bls12_381_G1_multiScalarMul =
+                read[DefaultCostingFun[TwoArguments]](json("bls12_381_G1_multiScalarMul")),
+            bls12_381_G2_multiScalarMul =
+                read[DefaultCostingFun[TwoArguments]](json("bls12_381_G2_multiScalarMul")),
             integerToByteString = read[IntegerToByteStringCostingFun](json("integerToByteString")),
             byteStringToInteger =
                 read[DefaultCostingFun[TwoArguments]](json("byteStringToInteger")),
@@ -1254,6 +1262,25 @@ object BuiltinCostModel {
           bls12_381_finalVerify = ConstCostingFun(
             cpu = params.`bls12_381_finalVerify-cpu-arguments`,
             memory = params.`bls12_381_finalVerify-memory-arguments`
+          ),
+          // MSM builtins - Plutus V4, use hardcoded values until protocol params are updated
+          bls12_381_G1_multiScalarMul = DefaultCostingFun(
+            cpu = TwoArguments.LinearInX(
+              OneVariableLinearFunction(
+                intercept = CostingInteger(321837444L),
+                slope = CostingInteger(25087669L)
+              )
+            ),
+            memory = TwoArguments.ConstantCost(CostingInteger(18L))
+          ),
+          bls12_381_G2_multiScalarMul = DefaultCostingFun(
+            cpu = TwoArguments.LinearInX(
+              OneVariableLinearFunction(
+                intercept = CostingInteger(617887431L),
+                slope = CostingInteger(67302824L)
+              )
+            ),
+            memory = TwoArguments.ConstantCost(CostingInteger(36L))
           ),
           integerToByteString = IntegerToByteStringCostingFun(
             cpu = ThreeArguments.QuadraticInZ(

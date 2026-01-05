@@ -422,6 +422,22 @@ object SIRBuiltins {
       AnnotationsDecl.empty
     )
 
+    // Multi-scalar multiplication
+    val bls12_381_G1_multiScalarMul: SIR.Builtin = SIR.Builtin(
+      DefaultFun.Bls12_381_G1_multiScalarMul,
+      SIRType.List(SIRType.Integer) ->: SIRType.List(
+        SIRType.BLS12_381_G1_Element
+      ) ->: SIRType.BLS12_381_G1_Element,
+      AnnotationsDecl.empty
+    )
+    val bls12_381_G2_multiScalarMul: SIR.Builtin = SIR.Builtin(
+      DefaultFun.Bls12_381_G2_multiScalarMul,
+      SIRType.List(SIRType.Integer) ->: SIRType.List(
+        SIRType.BLS12_381_G2_Element
+      ) ->: SIRType.BLS12_381_G2_Element,
+      AnnotationsDecl.empty
+    )
+
     // keccak_256
     val keccak_256: SIR.Builtin = SIR.Builtin(
       DefaultFun.Keccak_256,
@@ -691,6 +707,8 @@ object SIRBuiltins {
             case DefaultFun.Bls12_381_millerLoop            => bls12_381_millerLoop
             case DefaultFun.Bls12_381_mulMlResult           => bls12_381_mulMlResult
             case DefaultFun.Bls12_381_finalVerify           => bls12_381_finalVerify
+            case DefaultFun.Bls12_381_G1_multiScalarMul     => bls12_381_G1_multiScalarMul
+            case DefaultFun.Bls12_381_G2_multiScalarMul     => bls12_381_G2_multiScalarMul
             case DefaultFun.Keccak_256                      => keccak_256
             case DefaultFun.Blake2b_224                     => blake2b_224
             case DefaultFun.IntegerToByteString             => integerToByteString

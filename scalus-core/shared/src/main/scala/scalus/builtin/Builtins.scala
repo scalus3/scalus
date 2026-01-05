@@ -1274,6 +1274,50 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
         ps.bls12_381_finalVerify(p1, p2)
 
+    /** Multi-scalar multiplication on G1.
+      *
+      * Computes ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm. Both
+      * input lists must be non-empty and have equal length.
+      *
+      * @param scalars
+      *   List of scalars (integers)
+      * @param points
+      *   List of G1 group elements
+      * @return
+      *   The sum of scalar multiplications
+      * @throws BuiltinException
+      *   if either list is empty or lists have different lengths
+      * @since Plutus
+      *   V4 (CIP-133)
+      */
+    def bls12_381_G1_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G1_Element]
+    ): BLS12_381_G1_Element =
+        ps.bls12_381_G1_multiScalarMul(scalars, points)
+
+    /** Multi-scalar multiplication on G2.
+      *
+      * Computes ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm. Both
+      * input lists must be non-empty and have equal length.
+      *
+      * @param scalars
+      *   List of scalars (integers)
+      * @param points
+      *   List of G2 group elements
+      * @return
+      *   The sum of scalar multiplications
+      * @throws BuiltinException
+      *   if either list is empty or lists have different lengths
+      * @since Plutus
+      *   V4 (CIP-133)
+      */
+    def bls12_381_G2_multiScalarMul(
+        scalars: Seq[BigInt],
+        points: Seq[BLS12_381_G2_Element]
+    ): BLS12_381_G2_Element =
+        ps.bls12_381_G2_multiScalarMul(scalars, points)
+
     /** Compute Keccak-256 hash.
       *
       * This is the original Keccak hash (as used in Ethereum), not the NIST SHA-3 standard.
