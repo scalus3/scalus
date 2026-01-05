@@ -7,7 +7,7 @@ import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Constants.Constant
 import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.Decorators.toTermName
-import dotty.tools.dotc.core.NameKinds.DefaultGetterName
+import dotty.tools.dotc.core.NameKinds.{DefaultGetterName, InlineAccessorName}
 import dotty.tools.dotc.core.Names.*
 import dotty.tools.dotc.core.StdNames.nme
 import dotty.tools.dotc.core.Symbols.*
@@ -750,6 +750,14 @@ final class SIRCompiler(
         val ts = obj.tpe.widen.dealias.typeSymbol
         ts.isClass && ts.caseFields.nonEmpty
     }
+
+    // Get the effective method name, seeing through inline accessors.
+    // Inline accessors are named like `inline$methodName$uniqueId`, this extracts `methodName`.
+    // For regular methods, returns the name as-is.
+    private def effectiveMethodName(symbol: Symbol): String =
+        symbol.name match
+            case InlineAccessorName(underlying) => underlying.toString
+            case name                           => name.toString
 
     def error[A](error: CompilationError, @unused defaultValue: A): A = {
         report.error(error.message, error.srcPos)
@@ -2638,17 +2646,20 @@ final class SIRCompiler(
              * val t = Test(42)
              * is translated to
              * val t = Test.apply(42), where Test.apply is a synthetic method of a companion object
-             * We need to compile it as a primary constructor
+             * We need to compile it as a primary constructor.
+             * This also handles inline accessors like inline$apply$... generated when inline methods
+             * call case class constructors.
              */
             case Apply(TypeApply(apply, targs), args)
                 if apply.symbol.flags
                     .is(Flags.Synthetic) && apply.symbol.owner.flags.is(Flags.ModuleClass)
-                    && apply.symbol.name.toString == "apply" =>
+                    && effectiveMethodName(apply.symbol) == "apply" =>
                 val classSymbol: Symbol = apply.symbol.owner.linkedClass
                 compileNewConstructor(env, classSymbol.typeRef, tree.tpe.widen, args, tree)
-            case Apply(apply @ Select(f, nme.apply), args)
+            case Apply(apply @ Select(f, _), args)
                 if apply.symbol.flags
-                    .is(Flags.Synthetic) && apply.symbol.owner.flags.is(Flags.ModuleClass) =>
+                    .is(Flags.Synthetic) && apply.symbol.owner.flags.is(Flags.ModuleClass)
+                    && effectiveMethodName(apply.symbol) == "apply" =>
                 // get a class symbol from a companion object
                 val classSymbol: Symbol = apply.symbol.owner.linkedClass
                 compileNewConstructor(env, classSymbol.typeRef, tree.tpe.widen, args, tree)
