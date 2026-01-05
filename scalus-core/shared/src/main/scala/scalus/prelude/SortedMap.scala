@@ -59,7 +59,7 @@ object SortedMap {
       * @see
       *   [[fromList]] or [[fromStrictlyAscendingList]] for safe versions
       */
-    def unsafeFromList[A, B](lst: List[(A, B)]): SortedMap[A, B] = SortedMap(lst)
+    inline def unsafeFromList[A, B](lst: List[(A, B)]): SortedMap[A, B] = SortedMap(lst)
 
     /** Constructs a `SortedMap` from a list of key-value pairs, ordering it in strictly ascending
       * order, in case when a key is presented multiple times, the first occurrence prevails.
