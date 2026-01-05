@@ -345,13 +345,37 @@ case class TxBuilder(
         redeemerBuilder: Transaction => Data,
         script: PlutusScript
     ): TxBuilder = {
+        spend(utxo, redeemerBuilder, script, Set.empty)
+    }
+
+    /** Spends a script-protected UTXO with a delayed redeemer computed from the built transaction.
+      *
+      * Use this method when the redeemer depends on the final transaction structure (e.g., for
+      * self-referential scripts that need to know input/output indices). The redeemer is computed
+      * after the transaction is assembled but before script evaluation.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      * @param script
+      *   the Plutus script that protects the UTXO
+      * @param requiredSigners
+      *   * set of public key hashes that must sign the transaction
+      */
+    def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data,
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemerBuilder = redeemerBuilder,
           datum = datum,
-          additionalSigners = Set.empty
+          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
         )
         spend(utxo, witness)
     }
