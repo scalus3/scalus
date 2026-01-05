@@ -4,11 +4,10 @@ import io.bullet.borer.Cbor
 import scalus.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
-import scalus.utils.Macros
 
 import scala.scalajs.js
+import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
-import js.JSConverters.*
 
 @JSExportTopLevel("Scalus")
 object JScalus {

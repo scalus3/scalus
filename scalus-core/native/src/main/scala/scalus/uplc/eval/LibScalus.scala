@@ -4,7 +4,6 @@ package eval
 import scalus.builtin.Data
 import scalus.cardano.ledger.{Language, MajorProtocolVersion, ProtocolParams}
 import scalus.uplc
-import scalus.uplc.eval.MachineParams.fromProtocolParams
 
 import java.nio.charset.Charset
 import scala.scalanative.runtime.ffi
