@@ -99,9 +99,6 @@ object JScalus {
                 )
     }
 
-    private inline def inlineResource(name: String): String =
-        ${ Macros.inlineResource('name) }
-
     /** Evaluates all Plutus scripts in a transaction against the provided UTxO set.
       *
       * @param txCborBytes
