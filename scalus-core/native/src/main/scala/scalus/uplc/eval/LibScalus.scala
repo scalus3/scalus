@@ -2,8 +2,9 @@ package scalus.uplc
 package eval
 
 import scalus.builtin.Data
-import scalus.cardano.ledger.{Language, MajorProtocolVersion}
+import scalus.cardano.ledger.{Language, MajorProtocolVersion, ProtocolParams}
 import scalus.uplc
+import scalus.uplc.eval.MachineParams.fromProtocolParams
 
 import java.nio.charset.Charset
 import scala.scalanative.runtime.ffi
@@ -77,7 +78,8 @@ private object LibScalus:
         val jsonStr = fromCString(json)
         try
             val pll = Language.fromOrdinal(plutusVersion - 1)
-            MachineParams.fromCardanoCliProtocolParamsJson(jsonStr, pll).gc
+            val pparams = ProtocolParams.fromCardanoCliJson(jsonStr)
+            MachineParams.fromProtocolParams(pparams, pll).gc
         catch case _: Exception => null
     }
 

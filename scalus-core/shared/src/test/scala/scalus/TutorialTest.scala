@@ -10,7 +10,7 @@ import scalus.builtin.Data
 import scalus.builtin.Data.FromData
 import scalus.builtin.Data.fromData
 import scalus.builtin.FromData
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, ProtocolParams}
 import scalus.prelude.===
 import scalus.uplc.eval.CountingBudgetSpender
 import scalus.uplc.eval.Log
@@ -175,15 +175,11 @@ def evaluation() = {
     term.evaluate.show // (con integer 2)
 
     // you can get the actual execution costs from protocol parameters JSON from cardano-cli
-    lazy val machineParams = MachineParams.fromCardanoCliProtocolParamsJson(
-      "JSON with protocol parameters",
-      Language.PlutusV3
-    )
+    lazy val pparams = ProtocolParams.fromCardanoCliJson("JSON with protocol parameters")
+    lazy val machineParams = MachineParams.fromProtocolParams(pparams, Language.PlutusV3)
     // or from blockfrost API
-    lazy val machineParams2 = MachineParams.fromBlockfrostProtocolParamsJson(
-      "JSON with protocol parameters",
-      Language.PlutusV3
-    )
+    lazy val pparams2 = ProtocolParams.fromBlockfrostJson("JSON with protocol parameters")
+    lazy val machineParams2 = MachineParams.fromProtocolParams(pparams2, Language.PlutusV3)
     // use latest PlutusV3 VM with explicit machine parameters
     val v3vm: PlutusVM = PlutusVM.makePlutusV3VM(machineParams)
     // evaluate a Plutus V3 script considering CIP-117
