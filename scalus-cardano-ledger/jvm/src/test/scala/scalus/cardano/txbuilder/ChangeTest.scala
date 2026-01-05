@@ -7,6 +7,7 @@ import scalus.builtin.ByteString.utf8
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
+import scalus.testing.kit.TestKit.genPubkeyAddr
 
 class ChangeTest
     extends AnyFunSuite,
