@@ -142,6 +142,41 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       */
     def lessThanEqualsInteger(i1: BigInt, i2: BigInt): Boolean = i1 <= i2
 
+    /** Compute modular exponentiation: base^exponent mod modulus.
+      *
+      * Supports negative exponents via modular inverse.
+      *
+      * @param base
+      *   the base integer
+      * @param exponent
+      *   the exponent (can be negative if base is invertible mod modulus)
+      * @param modulus
+      *   the modulus (must be positive)
+      * @return
+      *   base^exponent mod modulus as a non-negative integer
+      * @throws scalus.uplc.eval.BuiltinException
+      *   if modulus <= 0, or if exponent < 0 and base is not invertible mod modulus
+      * @example
+      *   expModInteger(2, 10, 1000) == 24 // 2^10 mod 1000
+      * @example
+      *   expModInteger(3, -1, 7) == 5 // modular inverse of 3 mod 7
+      */
+    def expModInteger(base: BigInt, exponent: BigInt, modulus: BigInt): BigInt =
+        if modulus <= 0 then throw BuiltinException("expModInteger: modulus must be positive")
+        else if modulus == 1 then BigInt(0)
+        else if exponent >= 0 then base.modPow(exponent, modulus)
+        else
+            // Negative exponent: compute modular inverse first
+            // modInverse throws ArithmeticException if gcd(base, modulus) != 1
+            try
+                val inverse = base.modInverse(modulus)
+                inverse.modPow(-exponent, modulus)
+            catch
+                case _: ArithmeticException =>
+                    throw BuiltinException(
+                      s"expModInteger: $base is not invertible modulo $modulus"
+                    )
+
     // ============================================================================
     // ByteString Operations
     // ============================================================================

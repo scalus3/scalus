@@ -1148,6 +1148,19 @@ class BuiltinsMeaning(
           builtinCostModel.ripemd_160
         )
 
+    // CIP-109 modular exponentiation
+    val ExpModInteger: BuiltinRuntime =
+        mkMeaning(
+          Integer ->: Integer ->: Integer ->: Integer,
+          (_: Logger, args: Seq[CekValue]) =>
+              val base = args(0).asInteger
+              val exponent = args(1).asInteger
+              val modulus = args(2).asInteger
+              VCon(asConstant(expModInteger(base, exponent, modulus)))
+          ,
+          builtinCostModel.expModInteger
+        )
+
     // Plutus 1.53 new builtins
 
     // [ forall a, integer, list(a) ] -> list(a)

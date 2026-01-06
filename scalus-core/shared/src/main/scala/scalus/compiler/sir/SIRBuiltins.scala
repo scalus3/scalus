@@ -54,6 +54,11 @@ object SIRBuiltins {
       SIRType.Integer ->: SIRType.Integer ->: SIRType.Boolean,
       AnnotationsDecl.empty
     )
+    val expModInteger: SIR.Builtin = SIR.Builtin(
+      DefaultFun.ExpModInteger,
+      SIRType.Integer ->: SIRType.Integer ->: SIRType.Integer ->: SIRType.Integer,
+      AnnotationsDecl.empty
+    )
 
     // Bytestrings
     val appendByteString: SIR.Builtin = SIR.Builtin(
@@ -725,6 +730,7 @@ object SIRBuiltins {
             case DefaultFun.CountSetBits                    => countSetBits
             case DefaultFun.FindFirstSetBit                 => findFirstSetBit
             case DefaultFun.Ripemd_160                      => ripemd_160
+            case DefaultFun.ExpModInteger                   => expModInteger
             // Plutus 1.53 new builtins
             case DefaultFun.DropList => dropList
             // Array builtins

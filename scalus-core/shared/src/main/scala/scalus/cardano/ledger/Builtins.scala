@@ -168,7 +168,7 @@ object Builtins {
 
         val batch6: Set[DefaultFun] =
             Set(
-//              DefaultFun.ExpModInteger,
+              DefaultFun.ExpModInteger
 //              DefaultFun.DropList,
 //              DefaultFun.LengthOfArray,
 //              DefaultFun.ListToArray,

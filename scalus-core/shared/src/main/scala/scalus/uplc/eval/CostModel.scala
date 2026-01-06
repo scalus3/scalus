@@ -145,6 +145,29 @@ case class TwoVariableQuadraticFunction(
     }
 }
 
+/** Costing function for modular exponentiation (expModInteger builtin).
+  *
+  * The cost formula is: if aa <= mm then cost0 else cost0 + cost0/2 where cost0 = c00 + c11 * ee *
+  * mm + c12 * ee * mm * mm
+  *
+  * @param coefficient00
+  *   constant coefficient
+  * @param coefficient11
+  *   coefficient for e * m term
+  * @param coefficient12
+  *   coefficient for e * m^2 term
+  */
+case class ExpModCostingFunction(
+    coefficient00: CostingInteger,
+    coefficient11: CostingInteger,
+    coefficient12: CostingInteger
+) derives ReadWriter {
+    def apply(aa: CostingInteger, ee: CostingInteger, mm: CostingInteger): CostingInteger = {
+        val cost0 = coefficient00 + coefficient11 * ee * mm + coefficient12 * ee * mm * mm
+        if aa <= mm then cost0 else cost0 + cost0 / CostingInteger(2L)
+    }
+}
+
 case class ConstantOrLinear(constant: CostingInteger, intercept: Intercept, slope: Slope)
     derives ReadWriter {
     def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger = {
@@ -422,6 +445,20 @@ object ThreeArguments {
             costFun(arg2, arg3)
     }
 
+    /** ExpMod cost function for modular exponentiation.
+      *
+      * Cost formula: if a <= m then cost0 else cost0 + cost0/2 where cost0 = c00 + c11 * e * m +
+      * c12 \* e * m^2
+      */
+    case class ExpModCost(costFun: ExpModCostingFunction) extends ThreeArguments {
+        def apply(
+            arg1: CostingInteger,
+            arg2: CostingInteger,
+            arg3: CostingInteger
+        ): CostingInteger =
+            costFun(arg1, arg2, arg3)
+    }
+
     given ReadWriter[ThreeArguments] = readwriter[ujson.Value].bimap(
       {
           case ConstantCost(cost) =>
@@ -440,6 +477,8 @@ object ThreeArguments {
               ujson.Obj("type" -> "linear_in_max_yz", "arguments" -> writeJs(costFun))
           case LinearInYAndZ(costFun) =>
               ujson.Obj("type" -> "linear_in_y_and_z", "arguments" -> writeJs(costFun))
+          case ExpModCost(costFun) =>
+              ujson.Obj("type" -> "exp_mod_cost", "arguments" -> writeJs(costFun))
       },
       json => {
           json.obj("type").str match
@@ -458,6 +497,8 @@ object ThreeArguments {
                   LinearInMaxYZ(read[OneVariableLinearFunction](json.obj("arguments")))
               case "linear_in_y_and_z" =>
                   LinearInYAndZ(read[TwoVariableLinearFunction](json.obj("arguments")))
+              case "exp_mod_cost" =>
+                  ExpModCost(read[ExpModCostingFunction](json.obj("arguments")))
               case other => throw new RuntimeException(s"Unexpected type ${other}")
       }
     )
@@ -744,6 +785,21 @@ case class DropListCostingFun(cpu: TwoArguments, memory: TwoArguments) extends C
           MemoryUsage.memoryUsageLiteral(n), // Use literal value, not memory representation
           MemoryUsage.memoryUsage(arg1)
         )
+        val cpu = this.cpu.calculateCost(argsMem)
+        val mem = this.memory.calculateCost(argsMem)
+        ExUnits(mem.toLong, cpu.toLong)
+    }
+}
+
+/** Custom costing function for expModInteger builtin (CIP-109).
+  *
+  * The CPU cost uses the ExpModCost formula which accounts for the size of base, exponent, and
+  * modulus. Memory cost is linear in the size of the modulus.
+  */
+case class ExpModIntegerCostingFun(cpu: ThreeArguments, memory: ThreeArguments) extends CostingFun
+    derives ReadWriter {
+    def calculateCost(args: CekValue*): ExUnits = {
+        val argsMem = args.map(MemoryUsage.memoryUsage)
         val cpu = this.cpu.calculateCost(argsMem)
         val mem = this.memory.calculateCost(argsMem)
         ExUnits(mem.toLong, cpu.toLong)

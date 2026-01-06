@@ -1226,6 +1226,41 @@ enum DefaultFun extends Enum[DefaultFun]:
     case Ripemd_160
 
     // ============================================================================
+    // Modular Exponentiation (CIP-109)
+    // ============================================================================
+
+    /** Compute modular exponentiation.
+      *
+      * '''Type:''' `Integer -> Integer -> Integer -> Integer`
+      *
+      * Computes `base^exponent mod modulus`. Supports negative exponents via modular inverse.
+      *
+      * Parameters:
+      *   - base: the base integer
+      *   - exponent: the exponent (can be negative if base is invertible mod modulus)
+      *   - modulus: the modulus (must be positive)
+      *
+      * Semantics:
+      *   - If modulus <= 0: error
+      *   - If modulus == 1: returns 0
+      *   - If exponent >= 0: returns base^exponent mod modulus
+      *   - If exponent < 0 and gcd(base, modulus) == 1: returns (base^(-1))^(-exponent) mod modulus
+      *   - If exponent < 0 and gcd(base, modulus) != 1: error (base not invertible)
+      *
+      * @example
+      *   `expModInteger(2, 10, 1000)` returns `24` (2^10 mod 1000)
+      * @example
+      *   `expModInteger(3, -1, 7)` returns `5` (modular inverse of 3 mod 7)
+      * @throws BuiltinException
+      *   if modulus <= 0 or base not invertible for negative exponent
+      * @see
+      *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0109 CIP-109]]
+      * @since Plutus
+      *   V3
+      */
+    case ExpModInteger
+
+    // ============================================================================
     // List Extensions (CIP-158)
     // ============================================================================
 
@@ -1486,6 +1521,7 @@ object DefaultFun {
                 case CountSetBits     => 84
                 case FindFirstSetBit  => 85
                 case Ripemd_160       => 86
+                case ExpModInteger    => 87
 
                 // Plutus 1.53 new builtins
                 case DropList => 88
@@ -1598,6 +1634,7 @@ object DefaultFun {
                 case 84 => CountSetBits
                 case 85 => FindFirstSetBit
                 case 86 => Ripemd_160
+                case 87 => ExpModInteger
                 // Plutus 1.53 new builtins
                 case 88 => DropList
                 // Array builtins

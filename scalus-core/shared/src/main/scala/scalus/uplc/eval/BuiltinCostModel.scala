@@ -109,6 +109,19 @@ case class BuiltinCostModel(
     countSetBits: DefaultCostingFun[OneArgument],
     findFirstSetBit: DefaultCostingFun[OneArgument],
     ripemd_160: DefaultCostingFun[OneArgument],
+    // CIP-109 modular exponentiation
+    expModInteger: ExpModIntegerCostingFun = ExpModIntegerCostingFun(
+      cpu = ThreeArguments.ExpModCost(
+        ExpModCostingFunction(
+          coefficient00 = CostingInteger(607153L),
+          coefficient11 = CostingInteger(231697L),
+          coefficient12 = CostingInteger(53144L)
+        )
+      ),
+      memory = ThreeArguments.LinearInZ(
+        OneVariableLinearFunction(intercept = CostingInteger(0L), slope = CostingInteger(1L))
+      )
+    ),
     // Plutus 1.53 new builtins
     dropList: DropListCostingFun,
     // Array builtins
@@ -308,6 +321,8 @@ object BuiltinCostModel {
             "countSetBits" -> writeJs(model.countSetBits),
             "findFirstSetBit" -> writeJs(model.findFirstSetBit),
             "ripemd_160" -> writeJs(model.ripemd_160),
+            // CIP-109 modular exponentiation
+            "expModInteger" -> writeJs(model.expModInteger),
             // Plutus 1.53 new builtins
             "dropList" -> writeJs(model.dropList),
             // Array builtins
@@ -500,6 +515,27 @@ object BuiltinCostModel {
                 if json.obj.keySet.contains("ripemd_160") then
                     read[DefaultCostingFun[OneArgument]](json("ripemd_160"))
                 else null,
+            // CIP-109 modular exponentiation
+            expModInteger =
+                if json.obj.keySet.contains("expModInteger") then
+                    read[ExpModIntegerCostingFun](json("expModInteger"))
+                else
+                    ExpModIntegerCostingFun(
+                      cpu = ThreeArguments.ExpModCost(
+                        ExpModCostingFunction(
+                          coefficient00 = CostingInteger(607153L),
+                          coefficient11 = CostingInteger(231697L),
+                          coefficient12 = CostingInteger(53144L)
+                        )
+                      ),
+                      memory = ThreeArguments.LinearInZ(
+                        OneVariableLinearFunction(
+                          intercept = CostingInteger(0L),
+                          slope = CostingInteger(1L)
+                        )
+                      )
+                    )
+            ,
             // Plutus 1.53 new builtins
             dropList =
                 if json.obj.keySet.contains("dropList") then
@@ -1462,6 +1498,19 @@ object BuiltinCostModel {
             ),
             memory = OneArgument.ConstantCost(
               cost = params.`ripemd_160-memory-arguments`
+            )
+          ),
+          // CIP-109 modular exponentiation - uses proper cost model from Plutus reference
+          expModInteger = ExpModIntegerCostingFun(
+            cpu = ThreeArguments.ExpModCost(
+              ExpModCostingFunction(
+                coefficient00 = CostingInteger(607153L),
+                coefficient11 = CostingInteger(231697L),
+                coefficient12 = CostingInteger(53144L)
+              )
+            ),
+            memory = ThreeArguments.LinearInZ(
+              OneVariableLinearFunction(intercept = CostingInteger(0L), slope = CostingInteger(1L))
             )
           ),
           // Plutus 1.53 new builtins - default cost model until protocol params are updated
