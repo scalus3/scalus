@@ -167,7 +167,6 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             txCreator = HtlcTransactionCreator(
               ctx.cardanoInfo,
               ctx.evaluator,
-              signer,
               compiledContract
             )
 
@@ -179,7 +178,8 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               AddrKeyHash(senderPkh.hash),
               image,
               timeout.toLong,
-              ctx.client
+              ctx.client,
+              signer
             )
 
             submitResult <- ctx.client.submit(signedLockTx)
@@ -246,7 +246,6 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             txCreator = HtlcTransactionCreator(
               ctx.cardanoInfo,
               ctx.evaluator,
-              signer,
               compiledContract
             )
 
@@ -258,7 +257,8 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               senderAddr,
               preimage,
               AddrKeyHash(senderPkh.hash),
-              revealTime
+              revealTime,
+              signer
             )
 
             submitResult <- ctx.client.submit(signedRevealTx)

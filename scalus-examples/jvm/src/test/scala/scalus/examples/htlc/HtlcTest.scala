@@ -34,20 +34,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     private val wrongCommitterSigner = TransactionSigner(Set(wrongCommitterKeyPair))
     private val wrongReceiverSigner = TransactionSigner(Set(wrongReceiverKeyPair))
 
-    private def transactionCreatorFor(signer: TransactionSigner) = HtlcTransactionCreator(
+    private val txCreator = HtlcTransactionCreator(
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
-      signer = signer,
       contract = compiledContract
     )
 
-    private def transactionCreatorWithConstEvaluatorFor(signer: TransactionSigner) =
-        HtlcTransactionCreator(
-          env = env,
-          evaluator = PlutusScriptEvaluator.constMaxBudget(env),
-          signer = signer,
-          contract = compiledContract
-        )
+    private val txCreatorWithConstEvaluator = HtlcTransactionCreator(
+      env = env,
+      evaluator = PlutusScriptEvaluator.constMaxBudget(env),
+      contract = compiledContract
+    )
 
     private val committerPkh = AddrKeyHash(platform.blake2b_224(committerPublicKey))
     private val receiverPkh = AddrKeyHash(platform.blake2b_224(receiverPublicKey))
@@ -137,16 +134,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -174,17 +171,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(receiverSigner)
-                .reveal(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = receiverAddress,
-                  changeAddress = changeAddress,
-                  preimage = validPreimage,
-                  receiverPkh = receiverPkh,
-                  time = timeout
-                )
+            txCreator.reveal(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = receiverAddress,
+              changeAddress = changeAddress,
+              preimage = validPreimage,
+              receiverPkh = receiverPkh,
+              time = timeout,
+              signer = receiverSigner
+            )
         }
 
         val result = runValidator(provider, revealTx, lockedUtxo._1)
@@ -220,16 +217,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -257,17 +254,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorWithConstEvaluatorFor(receiverSigner)
-                .reveal(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = receiverAddress,
-                  changeAddress = changeAddress,
-                  preimage = wrongPreimage,
-                  receiverPkh = receiverPkh,
-                  time = timeout
-                )
+            txCreatorWithConstEvaluator.reveal(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = receiverAddress,
+              changeAddress = changeAddress,
+              preimage = wrongPreimage,
+              receiverPkh = receiverPkh,
+              time = timeout,
+              signer = receiverSigner
+            )
         }
 
         val result = runValidator(provider, revealTx, lockedUtxo._1)
@@ -298,16 +295,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -335,19 +332,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorWithConstEvaluatorFor(
-              TransactionSigner(Set(receiverKeyPair, wrongReceiverKeyPair))
+            txCreatorWithConstEvaluator.reveal(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = receiverAddress,
+              changeAddress = changeAddress,
+              preimage = validPreimage,
+              receiverPkh = wrongReceiverPkh,
+              time = timeout,
+              signer = TransactionSigner(Set(receiverKeyPair, wrongReceiverKeyPair))
             )
-                .reveal(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = receiverAddress,
-                  changeAddress = changeAddress,
-                  preimage = validPreimage,
-                  receiverPkh = wrongReceiverPkh,
-                  time = timeout
-                )
         }
 
         val result = runValidator(provider, revealTx, lockedUtxo._1)
@@ -378,16 +373,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -415,17 +410,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorWithConstEvaluatorFor(receiverSigner)
-                .reveal(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = receiverAddress,
-                  changeAddress = changeAddress,
-                  preimage = validPreimage,
-                  receiverPkh = receiverPkh,
-                  time = afterTimeout
-                )
+            txCreatorWithConstEvaluator.reveal(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = receiverAddress,
+              changeAddress = changeAddress,
+              preimage = validPreimage,
+              receiverPkh = receiverPkh,
+              time = afterTimeout,
+              signer = receiverSigner
+            )
         }
 
         val result = runValidator(provider, revealTx, lockedUtxo._1)
@@ -456,16 +451,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -493,16 +488,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .timeout(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = committerAddress,
-                  changeAddress = changeAddress,
-                  committerPkh = committerPkh,
-                  time = afterTimeout
-                )
+            txCreator.timeout(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = committerAddress,
+              changeAddress = changeAddress,
+              committerPkh = committerPkh,
+              time = afterTimeout,
+              signer = committerSigner
+            )
         }
 
         val result = runValidator(provider, timeoutTx, lockedUtxo._1)
@@ -538,16 +533,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -575,18 +570,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorWithConstEvaluatorFor(
-              TransactionSigner(Set(committerKeyPair, wrongCommitterKeyPair))
+            txCreatorWithConstEvaluator.timeout(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = committerAddress,
+              changeAddress = changeAddress,
+              committerPkh = wrongCommitterPkh,
+              time = afterTimeout,
+              signer = TransactionSigner(Set(committerKeyPair, wrongCommitterKeyPair))
             )
-                .timeout(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = committerAddress,
-                  changeAddress = changeAddress,
-                  committerPkh = wrongCommitterPkh,
-                  time = afterTimeout
-                )
         }
 
         val result = runValidator(provider, timeoutTx, lockedUtxo._1)
@@ -617,16 +610,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorFor(committerSigner)
-                .lock(
-                  utxos = utxos,
-                  value = Value(lockAmount),
-                  changeAddress = committerAddress,
-                  committer = committerPkh,
-                  receiver = receiverPkh,
-                  image = image,
-                  timeout = timeout
-                )
+            txCreator.lock(
+              utxos = utxos,
+              value = Value(lockAmount),
+              changeAddress = committerAddress,
+              committer = committerPkh,
+              receiver = receiverPkh,
+              image = image,
+              timeout = timeout,
+              signer = committerSigner
+            )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -654,16 +647,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                 .toOption
                 .get
 
-            transactionCreatorWithConstEvaluatorFor(committerSigner)
-                .timeout(
-                  utxos = utxos,
-                  collateralUtxos = utxos,
-                  lockedUtxo = lockedUtxo,
-                  payeeAddress = committerAddress,
-                  changeAddress = changeAddress,
-                  committerPkh = committerPkh,
-                  time = beforeTimeout
-                )
+            txCreatorWithConstEvaluator.timeout(
+              utxos = utxos,
+              collateralUtxos = utxos,
+              lockedUtxo = lockedUtxo,
+              payeeAddress = committerAddress,
+              changeAddress = changeAddress,
+              committerPkh = committerPkh,
+              time = beforeTimeout,
+              signer = committerSigner
+            )
         }
 
         val result = runValidator(provider, timeoutTx, lockedUtxo._1)

@@ -13,7 +13,6 @@ import scala.concurrent.{ExecutionContext, Future}
 case class HtlcTransactionCreator(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
-    signer: TransactionSigner,
     contract: PlutusV3[Data => Unit]
 ) {
     def script: Script.PlutusV3 = contract.script
@@ -26,7 +25,8 @@ case class HtlcTransactionCreator(
         committer: AddrKeyHash,
         receiver: AddrKeyHash,
         image: Image,
-        timeout: Long
+        timeout: Long,
+        signer: TransactionSigner
     ): Transaction = {
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 
@@ -50,7 +50,8 @@ case class HtlcTransactionCreator(
         receiver: AddrKeyHash,
         image: Image,
         timeout: Long,
-        provider: Provider
+        provider: Provider,
+        signer: TransactionSigner
     )(using ExecutionContext): Future[Transaction] = {
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 
@@ -68,7 +69,8 @@ case class HtlcTransactionCreator(
         changeAddress: Address,
         preimage: Preimage,
         receiverPkh: AddrKeyHash,
-        time: Long
+        time: Long,
+        signer: TransactionSigner
     ): Transaction = {
         val redeemer = Action.Reveal(preimage)
 
@@ -90,7 +92,8 @@ case class HtlcTransactionCreator(
         payeeAddress: Address,
         changeAddress: Address,
         committerPkh: AddrKeyHash,
-        time: Long
+        time: Long,
+        signer: TransactionSigner
     ): Transaction = {
         val redeemer = Action.Timeout
 
