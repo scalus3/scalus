@@ -82,7 +82,7 @@ object IntervalBoundType {
 case class IntervalBound(boundType: IntervalBoundType, isInclusive: Closure)
 
 @Compile
-object IntervalBound:
+object IntervalBound {
 
     given Eq[IntervalBound] = (x: IntervalBound, y: IntervalBound) =>
         (x.boundType === y.boundType) && (x.isInclusive === y.isInclusive)
@@ -126,7 +126,15 @@ object IntervalBound:
             case Order.Equal   => lhs
             case Order.Greater => lhs
 
-end IntervalBound
+    extension (self: IntervalBound) {
+        inline def finite(default: PosixTime): PosixTime = self.boundType match
+            case IntervalBoundType.Finite(time) => time
+            case _                              => default
+        inline def finiteOrFail(message: String): PosixTime = self.boundType match
+            case IntervalBoundType.Finite(time) => time
+            case _                              => scalus.prelude.fail(message)
+    }
+}
 
 /** A type to represent time intervals.
   * @param from
@@ -157,24 +165,29 @@ object Interval:
     val never: Interval = Interval(IntervalBound.posInf, IntervalBound.negInf)
 
     /** Creates an interval that includes all values greater than the given bound. i.e
-      * [lower_bound,+∞)
+      * [lower_bound,+∞]
       */
     def after(time: PosixTime): Interval =
         Interval(IntervalBound.finiteInclusive(time), IntervalBound.posInf)
 
     /** Creates an interval that includes all values after (and not including) the given bound. i.e
-      * (lower_bound,+∞)
+      * (lower_bound,+∞]
+      *
+      * @note
+      *   Since Cardano protocol version 9 [[ScriptContext]] always uses inclusive finite lower
+      *   bounds for the validity interval.
       */
+    @deprecated("Use after instead", "0.14.2")
     def entirelyAfter(time: PosixTime): Interval =
         Interval(IntervalBound.finiteExclusive(time), IntervalBound.posInf)
 
-    /** Creates an interval that includes all values less than the given bound. i.e (-∞,upper_bound]
+    /** Creates an interval that includes all values less than the given bound. i.e [-∞,upper_bound]
       */
     def before(time: PosixTime): Interval =
         Interval(IntervalBound.negInf, IntervalBound.finiteInclusive(time))
 
     /** Creates an interval that includes all values before (and not including) the given bound. i.e
-      * (-∞,upper_bound)
+      * [-∞,upper_bound)
       */
     def entirelyBefore(time: PosixTime): Interval =
         Interval(IntervalBound.negInf, IntervalBound.finiteExclusive(time))
