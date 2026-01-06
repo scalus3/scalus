@@ -32,8 +32,8 @@ interface ScalusAPI {
     logs: string[];
   };
   evalPlutusScripts(
-    txCborBytes: number[],
-    utxoCborBytes: number[],
+    txCborBytes: Uint8Array,
+    utxoCborBytes: Uint8Array,
     slotConfig: SlotConfigAPI,
     costModels: number[][]
   ): Array<{ tag: string; index: number; budget: { memory: bigint; steps: bigint } }>;
@@ -200,7 +200,7 @@ export function testSlotConfig(SlotConfig: SlotConfigStatic): TestResult[] {
 
   // Test slotToTime and timeToSlot are callable
   try {
-    const mainnet = SlotConfig.Mainnet;
+    const mainnet = SlotConfig.mainnet;
     // Test that the functions are callable and return a value
     // Note: Scala.js may return Long objects instead of numbers
     const time = mainnet.slotToTime(10000000);
@@ -271,6 +271,8 @@ export function testEvalPlutusScripts(
 
     try {
       const redeemers = Scalus.evalPlutusScripts(txBytes, utxoBytes, slotConfig, costModelsArray);
+      console.log("Hello");
+      console.log(redeemers);
 
       // If we get here, the evaluation succeeded
       results.push({

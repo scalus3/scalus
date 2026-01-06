@@ -15,6 +15,7 @@ import scalus.prelude.{asScalus, List, SortedMap}
 import scalus.uplc.eval.*
 import scalus.{builtin, ledger, prelude}
 
+import scala.annotation.nowarn
 import scala.collection.{immutable, mutable}
 import scala.math.BigInt
 
@@ -332,6 +333,11 @@ object LedgerToPlutusTranslation {
       * Plutus script contexts. The interval bounds depend on the protocol version for backward
       * compatibility.
       */
+    // @nowarn: Suppress Long→Double implicit conversion warning. This is intentional for
+    // cross-platform compatibility: JS SlotConfig uses Double (JavaScript's number type),
+    // while JVM uses Long. The conversion is safe because slot values and POSIX timestamps
+    // are well within Double's safe integer range (2^53).
+    @nowarn("msg=long2double")
     def getInterval(
         validityStartSlot: Option[Long],
         ttl: Option[Long],
@@ -343,18 +349,22 @@ object LedgerToPlutusTranslation {
             case (None, Some(validTo)) =>
                 val closure = if protocolVersion.version > 8 then false else true
                 val upper = v1.IntervalBound(
-                  v1.IntervalBoundType.Finite(slotConfig.slotToTime(validTo)),
+                  v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo).toLong)),
                   closure
                 )
                 v1.Interval(v1.IntervalBound.negInf, upper)
             case (Some(validFrom), None) =>
                 v1.Interval(
-                  v1.IntervalBound.finiteInclusive(slotConfig.slotToTime(validFrom)),
+                  v1.IntervalBound.finiteInclusive(BigInt(slotConfig.slotToTime(validFrom).toLong)),
                   v1.IntervalBound.posInf
                 )
             case (Some(validFrom), Some(validTo)) =>
-                val lower = v1.IntervalBound.finiteInclusive(slotConfig.slotToTime(validFrom))
-                val upper = v1.IntervalBound.finiteExclusive(slotConfig.slotToTime(validTo))
+                val lower =
+                    v1.IntervalBound.finiteInclusive(
+                      BigInt(slotConfig.slotToTime(validFrom).toLong)
+                    )
+                val upper =
+                    v1.IntervalBound.finiteExclusive(BigInt(slotConfig.slotToTime(validTo).toLong))
                 v1.Interval(lower, upper)
     }
 

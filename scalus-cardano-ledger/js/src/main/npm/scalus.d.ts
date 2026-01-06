@@ -58,8 +58,8 @@ export namespace Scalus {
    * @returns An array of Redeemers with computed execution budgets.
    */
   export function evalPlutusScripts(
-    txCborBytes: number[],
-    utxoCborBytes: number[],
+    txCborBytes: Uint8Array,
+    utxoCborBytes: Uint8Array,
     slotConfig: SlotConfig,
     costModels: number[][],
   ): Redeemer[];
@@ -84,11 +84,11 @@ export class SlotConfig {
   timeToSlot(time: number): number;
 
   /** Mainnet slot configuration (starting at Shelley era). */
-  static Mainnet: SlotConfig;
+  static mainnet: SlotConfig;
 
   /** Preview testnet slot configuration. */
-  static Preview: SlotConfig;
+  static preview: SlotConfig;
 
   /** Preprod testnet slot configuration. */
-  static Preprod: SlotConfig;
+  static preprod: SlotConfig;
 }

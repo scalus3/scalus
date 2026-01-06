@@ -8,6 +8,7 @@ import scalus.uplc.{Constant, DeBruijnedProgram, Term}
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
+import scala.scalajs.js.typedarray.Uint8Array
 
 @JSExportTopLevel("Scalus")
 object JScalus {
@@ -109,19 +110,19 @@ object JScalus {
       */
     @JSExport
     def evalPlutusScripts(
-        txCborBytes: js.Array[Byte],
-        utxoCborBytes: js.Array[Byte],
+        txCborBytes: Uint8Array,
+        utxoCborBytes: Uint8Array,
         slotConfig: SlotConfig,
-        costModels: js.Array[js.Array[Long]]
+        costModels: js.Array[js.Array[Double]]
     ): js.Array[Redeemer] = {
         try
-            val tx = Transaction.fromCbor(txCborBytes.toArray)
+            val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
             val utxo =
-                Cbor.decode(utxoCborBytes.toArray)
+                Cbor.decode(utxoCborBytes.toArray.map(_.toByte))
                     .to[Map[TransactionInput, TransactionOutput]]
                     .value
             val cms = CostModels(costModels.zipWithIndex.map { case (cm, lang) =>
-                lang -> cm.toIndexedSeq
+                lang -> cm.toIndexedSeq.map(_.toLong)
             }.toMap)
             val evaluator = PlutusScriptEvaluator(
               slotConfig = slotConfig,

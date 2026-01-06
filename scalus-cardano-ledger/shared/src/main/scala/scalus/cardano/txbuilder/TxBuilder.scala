@@ -930,7 +930,7 @@ case class TxBuilder(
       *   the earliest valid time for the transaction
       */
     def validFrom(from: Instant): TxBuilder = {
-        val slot = env.slotConfig.timeToSlot(from.toEpochMilli)
+        val slot = env.slotConfig.timeToSlot(from.toEpochMilli).toLong
         addSteps(TransactionBuilderStep.ValidityStartSlot(slot))
     }
 
@@ -943,7 +943,7 @@ case class TxBuilder(
       *   the latest valid time for the transaction (exclusive)
       */
     def validTo(to: Instant): TxBuilder = {
-        val slot = env.slotConfig.timeToSlot(to.toEpochMilli)
+        val slot = env.slotConfig.timeToSlot(to.toEpochMilli).toLong
         addSteps(TransactionBuilderStep.ValidityEndSlot(slot))
     }
 

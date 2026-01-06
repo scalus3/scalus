@@ -6,26 +6,29 @@ import scalus.cardano.ledger.{CardanoInfo, SlotConfig}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
+import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
 
 class JScalusTest extends AnyFunSuite {
 
     test("JScalus.evalPlutusScripts with CBOR files") {
         // Read transaction CBOR bytes using platform-specific file I/O
-        val tx = platform
+        val txBytes = platform
             .readFile(
               "scalus-examples/js/src/main/ts/tx-743042177a25ed7675d6258211df87cd7dcc208d2fa82cb32ac3c77221bd87c3.cbor"
             )
-            .toJSArray
+        val tx = new Uint8Array(byteArray2Int8Array(txBytes).buffer)
 
         // Read UTxO CBOR bytes using platform-specific file I/O
-        val utxo = platform
+        val utxoBytes = platform
             .readFile(
               "scalus-examples/js/src/main/ts/utxo-743042177a25ed7675d6258211df87cd7dcc208d2fa82cb32ac3c77221bd87c3.cbor"
             )
-            .toJSArray
+        val utxo = new Uint8Array(byteArray2Int8Array(utxoBytes).buffer)
 
         val costModels =
-            CardanoInfo.mainnet.protocolParams.costModels.models.values.map(_.toJSArray).toJSArray
+            CardanoInfo.mainnet.protocolParams.costModels.models.values
+                .map(_.map(_.toDouble).toJSArray)
+                .toJSArray
 
         // Evaluate Plutus scripts
         val redeemers = JScalus.evalPlutusScripts(tx, utxo, SlotConfig.mainnet, costModels)

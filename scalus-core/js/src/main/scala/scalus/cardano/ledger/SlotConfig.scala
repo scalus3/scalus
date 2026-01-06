@@ -4,9 +4,9 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
 
 @JSExportTopLevel("SlotConfig")
-class SlotConfig(zeroTime: Long, zeroSlot: Long, slotLength: Long) extends js.Object {
-    def slotToTime(slot: Long): Long = zeroTime + (slot - zeroSlot) * slotLength
-    def timeToSlot(time: Long): Long = zeroSlot + ((time - zeroTime) / slotLength)
+class SlotConfig(zeroTime: Double, zeroSlot: Double, slotLength: Double) extends js.Object {
+    def slotToTime(slot: Double): Double = zeroTime + (slot - zeroSlot) * slotLength
+    def timeToSlot(time: Double): Double = zeroSlot + ((time - zeroTime) / slotLength)
 }
 
 object SlotConfig {

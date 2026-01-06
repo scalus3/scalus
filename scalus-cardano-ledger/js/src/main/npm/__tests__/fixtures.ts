@@ -3,12 +3,12 @@
 // CBOR data converted to hex strings for cross-environment compatibility
 
 /**
- * Helper to convert hex string to byte array
+ * Helper to convert hex string to Uint8Array
  */
-export function hexToBytes(hex: string): number[] {
-  const bytes: number[] = [];
+export function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
-    bytes.push(parseInt(hex.slice(i, i + 2), 16));
+    bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
   }
   return bytes;
 }

@@ -154,11 +154,11 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
                 case TestEnv.Local =>
                     val timeoutSlot =
                         ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
-                    BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot))
+                    BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot).toLong)
                 case TestEnv.Preprod =>
                     val timeoutSlot =
                         ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
-                    BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot))
+                    BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot).toLong)
             }
             lockAmount = 8_000_000L
 
@@ -236,11 +236,11 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             revealTime = testEnv match {
                 case TestEnv.Local =>
                     // yaci time works a lil' differently
-                    ctx.cardanoInfo.slotConfig.slotToTime(100L)
+                    ctx.cardanoInfo.slotConfig.slotToTime(100L).toLong
                 case TestEnv.Preprod =>
                     val revealSlot =
                         ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) - 100
-                    ctx.cardanoInfo.slotConfig.slotToTime(revealSlot)
+                    ctx.cardanoInfo.slotConfig.slotToTime(revealSlot).toLong
             }
 
             txCreator = HtlcTransactionCreator(
