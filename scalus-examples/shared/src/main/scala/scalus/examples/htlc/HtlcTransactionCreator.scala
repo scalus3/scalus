@@ -14,7 +14,7 @@ case class HtlcTransactionCreator(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,
-    contract: PlutusV3[Data => Unit] = HtlcContract
+    contract: PlutusV3[Data => Unit]
 ) {
     def script: Script.PlutusV3 = contract.script
     val scriptAddress: Address = contract.address(env.network)

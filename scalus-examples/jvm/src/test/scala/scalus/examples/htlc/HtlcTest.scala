@@ -192,9 +192,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
-        val value1 = provider.submit(revealTx).await()
-        println(value1)
-        assert(value1.isRight)
+        assert(provider.submit(revealTx).await().isRight)
 
         val unlockedUtxo = provider
             .findUtxo(
