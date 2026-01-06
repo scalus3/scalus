@@ -338,27 +338,23 @@ object LedgerToPlutusTranslation {
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
     ): v1.Interval = {
-        (validityStartSlot.getOrElse(0L), ttl.getOrElse(0L)) match
-            case (0, 0) => v1.Interval.always
-            case (0, validTo) =>
+        (validityStartSlot, ttl) match
+            case (None, None) => v1.Interval.always
+            case (None, Some(validTo)) =>
                 val closure = if protocolVersion.version > 8 then false else true
                 val upper = v1.IntervalBound(
-                  v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo))),
+                  v1.IntervalBoundType.Finite(slotConfig.slotToTime(validTo)),
                   closure
                 )
                 v1.Interval(v1.IntervalBound.negInf, upper)
-            case (validFrom, 0) =>
+            case (Some(validFrom), None) =>
                 v1.Interval(
-                  v1.IntervalBound.finiteInclusive(BigInt(slotConfig.slotToTime(validFrom))),
+                  v1.IntervalBound.finiteInclusive(slotConfig.slotToTime(validFrom)),
                   v1.IntervalBound.posInf
                 )
-            case (validFrom, validTo) =>
-                val lower =
-                    v1.IntervalBound.finiteInclusive(BigInt(slotConfig.slotToTime(validFrom)))
-                val upper = v1.IntervalBound(
-                  v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo))),
-                  false
-                )
+            case (Some(validFrom), Some(validTo)) =>
+                val lower = v1.IntervalBound.finiteInclusive(slotConfig.slotToTime(validFrom))
+                val upper = v1.IntervalBound.finiteExclusive(slotConfig.slotToTime(validTo))
                 v1.Interval(lower, upper)
     }
 
