@@ -251,7 +251,6 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
 
             signedRevealTx = txCreator.reveal(
               Map.empty,
-              Map(collateralUtxo.input -> collateralUtxo.output),
               lockedUtxo,
               senderAddr,
               senderAddr,

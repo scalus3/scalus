@@ -122,14 +122,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     }
 
     private def createAndSubmitLockTx(provider: Emulator): (Transaction, Utxo) = {
-        val utxos = provider
-            .findUtxos(
-              address = committerAddress,
-              minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val utxos = provider.findUtxos(address = committerAddress).await().toOption.get
 
         val lockTx = txCreator.lock(
           utxos = utxos,
@@ -141,23 +134,9 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           timeout = timeout,
           signer = committerSigner
         )
-
         assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
-
-        (lockTx, lockedUtxo)
+        val lockedUtxo = lockTx.utxos.find { case (_, txOut) => txOut.address == scriptAddress }.get
+        (lockTx, Utxo(lockedUtxo))
     }
 
     test("receiver reveals preimage before timeout") {
@@ -176,7 +155,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreator.reveal(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = receiverAddress,
               changeAddress = changeAddress,
@@ -223,7 +201,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreatorWithConstEvaluator.reveal(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = receiverAddress,
               changeAddress = changeAddress,
@@ -265,7 +242,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreatorWithConstEvaluator.reveal(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = receiverAddress,
               changeAddress = changeAddress,
@@ -307,7 +283,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreatorWithConstEvaluator.reveal(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = receiverAddress,
               changeAddress = changeAddress,
@@ -349,7 +324,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreator.timeout(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = committerAddress,
               changeAddress = changeAddress,
@@ -395,7 +369,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreatorWithConstEvaluator.timeout(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = committerAddress,
               changeAddress = changeAddress,
@@ -436,7 +409,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
             txCreatorWithConstEvaluator.timeout(
               utxos = utxos,
-              collateralUtxos = utxos,
               lockedUtxo = lockedUtxo,
               payeeAddress = committerAddress,
               changeAddress = changeAddress,

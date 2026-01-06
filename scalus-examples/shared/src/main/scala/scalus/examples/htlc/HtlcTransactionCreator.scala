@@ -8,6 +8,7 @@ import scalus.cardano.txbuilder.*
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.uplc.PlutusV3
 
+import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 
 case class HtlcTransactionCreator(
@@ -31,9 +32,8 @@ case class HtlcTransactionCreator(
         val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
 
         TxBuilder(env, evaluator)
-            .spend(utxos)
             .payTo(scriptAddress, value, datum)
-            .build(changeTo = changeAddress)
+            .complete(availableUtxos = utxos, sponsor = changeAddress)
             .sign(signer)
             .transaction
     }
@@ -63,31 +63,27 @@ case class HtlcTransactionCreator(
 
     def reveal(
         utxos: Utxos,
-        collateralUtxos: Utxos,
         lockedUtxo: Utxo,
         payeeAddress: Address,
         changeAddress: Address,
         preimage: Preimage,
         receiverPkh: AddrKeyHash,
-        time: Long,
+        time: SlotNo,
         signer: TransactionSigner
     ): Transaction = {
         val redeemer = Action.Reveal(preimage)
 
         TxBuilder(env, evaluator)
-            .spend(utxos)
-            .collaterals(collateralUtxos)
             .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
-            .validTo(java.time.Instant.ofEpochMilli(time))
-            .build(changeTo = changeAddress)
+            .validTo(Instant.ofEpochMilli(time))
+            .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
             .transaction
     }
 
     def timeout(
         utxos: Utxos,
-        collateralUtxos: Utxos,
         lockedUtxo: Utxo,
         payeeAddress: Address,
         changeAddress: Address,
@@ -98,12 +94,10 @@ case class HtlcTransactionCreator(
         val redeemer = Action.Timeout
 
         TxBuilder(env, evaluator)
-            .spend(utxos)
-            .collaterals(collateralUtxos)
             .spend(lockedUtxo, redeemer, script, Set(committerPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
-            .validFrom(java.time.Instant.ofEpochMilli(time))
-            .build(changeTo = changeAddress)
+            .validFrom(Instant.ofEpochMilli(time))
+            .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
             .transaction
     }
