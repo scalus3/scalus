@@ -121,30 +121,26 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         program.runWithDebug(scriptContext)
     }
 
-    test("receiver reveals preimage before timeout") {
-        val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
+    private def createAndSubmitLockTx(provider: Emulator): (Transaction, Utxo) = {
+        val utxos = provider
+            .findUtxos(
+              address = committerAddress,
+              minRequiredTotalAmount = Some(lockAmount + commissionAmount)
             )
-        }
+            .await()
+            .toOption
+            .get
+
+        val lockTx = txCreator.lock(
+          utxos = utxos,
+          value = Value(lockAmount),
+          changeAddress = committerAddress,
+          committer = committerPkh,
+          receiver = receiverPkh,
+          image = image,
+          timeout = timeout,
+          signer = committerSigner
+        )
 
         assert(provider.submit(lockTx).await().isRight)
 
@@ -160,6 +156,13 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
             .get
 
         assert(lockedUtxo._2.value.coin == lockAmount)
+
+        (lockTx, lockedUtxo)
+    }
+
+    test("receiver reveals preimage before timeout") {
+        val provider = createProvider()
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val revealTx = {
             val utxos = provider
@@ -206,43 +209,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
     test("receiver fails with wrong preimage") {
         val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
-            )
-        }
-
-        assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val revealTx = {
             val utxos = provider
@@ -284,43 +251,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
     test("receiver fails with wrong receiver pubkey hash") {
         val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
-            )
-        }
-
-        assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val revealTx = {
             val utxos = provider
@@ -362,43 +293,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
     test("receiver fails after timeout") {
         val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
-            )
-        }
-
-        assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val revealTx = {
             val utxos = provider
@@ -440,43 +335,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
     test("committer reclaims after timeout") {
         val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
-            )
-        }
-
-        assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val timeoutTx = {
             val utxos = provider
@@ -522,43 +381,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
     test("committer fails with wrong committer pubkey hash") {
         val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
-            )
-        }
-
-        assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val timeoutTx = {
             val utxos = provider
@@ -599,43 +422,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
     test("committer fails before timeout") {
         val provider = createProvider()
-
-        val lockTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = committerAddress,
-                  minRequiredTotalAmount = Some(lockAmount + commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            txCreator.lock(
-              utxos = utxos,
-              value = Value(lockAmount),
-              changeAddress = committerAddress,
-              committer = committerPkh,
-              receiver = receiverPkh,
-              image = image,
-              timeout = timeout,
-              signer = committerSigner
-            )
-        }
-
-        assert(provider.submit(lockTx).await().isRight)
-
-        val lockedUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              datum = Some(DatumOption.Inline(datum)),
-              minAmount = Some(lockAmount)
-            )
-            .await()
-            .toOption
-            .get
-
-        assert(lockedUtxo._2.value.coin == lockAmount)
+        val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
 
         val timeoutTx = {
             val utxos = provider
