@@ -18,7 +18,7 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
 //        println(HtlcContract.sir.showHighlighted)
 //        println(HtlcContract.withErrorTraces.program.showHighlighted)
-        assert(HtlcContract.script.script.size == 744)
+        assert(HtlcContract.script.script.size == 755)
     }
 
     test("committer successfully unlocks HTLC after timeout") {
@@ -44,7 +44,7 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           value = 1000,
           fee = 50,
           timeout = 1000,
-          validFrom = 500,
+          validTo = Option.Some(500),
           signatories = List(Receiver),
           action = Action.Reveal(preimage),
           preimage = preimage,
@@ -75,7 +75,7 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           value = 1000,
           fee = 50,
           timeout = 1000,
-          validFrom = 1500,
+          validTo = Option.Some(1500),
           signatories = List(Receiver),
           action = Action.Reveal(preimage),
           preimage = preimage,
@@ -92,7 +92,7 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           value = 1000,
           fee = 50,
           timeout = 1000,
-          validFrom = 500,
+          validTo = Option.Some(500),
           signatories = List(Receiver),
           action = Action.Reveal(invalidPreimage),
           preimage = validPreimage,
@@ -123,7 +123,7 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           value = 1000,
           fee = 50,
           timeout = 1000,
-          validFrom = 500,
+          validTo = Option.Some(500),
           signatories = List(WrongReceiver),
           action = Action.Reveal(preimage),
           preimage = preimage,
@@ -159,6 +159,7 @@ object HtlcDslTest extends ScalusTest {
         fee: BigInt = 0,
         timeout: BigInt = 0,
         validFrom: BigInt = 0,
+        validTo: Option[BigInt] = Option.None,
         signatories: List[Person] = List.empty,
         action: Action,
         preimage: ByteString,
@@ -179,7 +180,13 @@ object HtlcDslTest extends ScalusTest {
               outputs = outputs
                   .map(output => makePubKeyHashOutput(output.person.pkh, output.value)),
               fee = fee,
-              validRange = Interval.after(validFrom),
+              validRange = validTo match
+                  case Option.Some(validTo) =>
+                      Interval(
+                        IntervalBound.finiteInclusive(validFrom),
+                        IntervalBound.finiteExclusive(validTo)
+                      )
+                  case Option.None => Interval.after(validFrom),
               signatories = signatories.map(_.pkh),
               action = action,
               contractDatum = contractDatum

@@ -77,7 +77,7 @@ case class HtlcTransactionCreator(
             .collaterals(collateralUtxos)
             .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
-            .validFrom(java.time.Instant.ofEpochMilli(time))
+            .validTo(java.time.Instant.ofEpochMilli(time))
             .build(changeTo = changeAddress)
             .sign(signer)
             .transaction

@@ -1,6 +1,6 @@
 package scalus.examples.htlc
 
-import scalus.*
+import scalus.Compile
 import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.Data.{FromData, ToData}
 import scalus.builtin.{ByteString, Data, FromData, ToData}
@@ -60,18 +60,22 @@ object HtlcValidator {
         val config = datum.getOrFail(InvalidDatum).to[Config]
         redeemer.to[Action] match
             case Action.Timeout =>
+                val validFrom = tx.validRange.from.finite(0)
+                // validFrom is inclusive, hence 10 <= 10 is correct
+                require(config.timeout <= validFrom, InvalidCommitterTimePoint)
                 require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
-                require(tx.validRange.isEntirelyAfter(config.timeout), InvalidCommitterTimePoint)
-
             case Action.Reveal(preimage) =>
+                val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+                // validTo is exclusive, hence 10 <= 10 is correct
+                require(validTo <= config.timeout, InvalidReceiverTimePoint)
                 require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
-                require(!tx.validRange.isEntirelyAfter(config.timeout), InvalidReceiverTimePoint)
                 require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
     }
 
     // Error messages
     inline val MustBeSpending = "Must be a spending script"
     inline val InvalidDatum = "Invalid Datum"
+    inline val ValidRangeMustBeBound = "ValidTo must be set"
     inline val UnsignedCommitterTransaction = "Must be signed by a committer"
     inline val UnsignedReceiverTransaction = "Must be signed by a receiver"
     inline val InvalidCommitterTimePoint = "Must be exclusively after timeout"

@@ -183,7 +183,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   changeAddress = changeAddress,
                   preimage = validPreimage,
                   receiverPkh = receiverPkh,
-                  time = beforeTimeout
+                  time = timeout
                 )
         }
 
@@ -192,7 +192,9 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(env.slotConfig.timeToSlot(beforeTimeout))
 
-        assert(provider.submit(revealTx).await().isRight)
+        val value1 = provider.submit(revealTx).await()
+        println(value1)
+        assert(value1.isRight)
 
         val unlockedUtxo = provider
             .findUtxo(
@@ -266,7 +268,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   changeAddress = changeAddress,
                   preimage = wrongPreimage,
                   receiverPkh = receiverPkh,
-                  time = beforeTimeout
+                  time = timeout
                 )
         }
 
@@ -346,7 +348,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
                   changeAddress = changeAddress,
                   preimage = validPreimage,
                   receiverPkh = wrongReceiverPkh,
-                  time = beforeTimeout
+                  time = timeout
                 )
         }
 
@@ -432,7 +434,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         assert(result.isFailure)
         assert(result.logs.last.contains(HtlcValidator.InvalidReceiverTimePoint))
 
-        provider.setSlot(env.slotConfig.timeToSlot(afterTimeout))
+        provider.setSlot(env.slotConfig.timeToSlot(timeout))
 
         provider.submit(revealTx).await() match
             case Left(nodeError: SubmitError.NodeError) =>
