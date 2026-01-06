@@ -15,6 +15,10 @@ import scala.util.Try
 class HtlcDslTest extends AnyFunSuite with ScalusTest {
     import HtlcDslTest.*
 
+    test(s"HTLC validator size is ${HtlcContract.script.script.size}") {
+        assert(HtlcContract.script.script.size == 874)
+    }
+
     test("committer successfully unlocks HTLC after timeout") {
         TestCase(
           inputs = List(Committer gives 100),
