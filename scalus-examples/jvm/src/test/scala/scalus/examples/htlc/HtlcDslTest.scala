@@ -26,7 +26,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Committer gives 100),
           outputs = List(Committer gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 500,
           validFrom = 1000,
           signatories = List(Committer),
@@ -42,7 +41,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Receiver gives 100),
           outputs = List(Receiver gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 1000,
           validTo = Option.Some(500),
           signatories = List(Receiver),
@@ -57,7 +55,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Committer gives 100),
           outputs = List(Committer gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 500,
           validFrom = 10,
           signatories = List(Committer),
@@ -73,7 +70,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Receiver gives 100),
           outputs = List(Receiver gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 1000,
           validTo = Option.Some(1500),
           signatories = List(Receiver),
@@ -90,7 +86,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Receiver gives 100),
           outputs = List(Receiver gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 1000,
           validTo = Option.Some(500),
           signatories = List(Receiver),
@@ -105,7 +100,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Committer gives 100),
           outputs = List(Committer gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 500,
           validFrom = 1000,
           signatories = List(WrongCommitter),
@@ -121,7 +115,6 @@ class HtlcDslTest extends AnyFunSuite with ScalusTest {
           inputs = List(Receiver gives 100),
           outputs = List(Receiver gets 1050),
           value = 1000,
-          fee = 50,
           timeout = 1000,
           validTo = Option.Some(500),
           signatories = List(WrongReceiver),
@@ -156,13 +149,12 @@ object HtlcDslTest extends ScalusTest {
         inputs: List[Input] = List.empty,
         outputs: List[Output] = List.empty,
         value: BigInt = 0,
-        fee: BigInt = 0,
         timeout: BigInt = 0,
         validFrom: BigInt = 0,
         validTo: Option[BigInt] = Option.None,
         signatories: List[Person] = List.empty,
         action: Action,
-        preimage: ByteString,
+        preimage: Preimage,
         expected: (String | Unit, Option[ExUnits]) = success
     ):
         def runWithDebug(): Unit = {
@@ -179,7 +171,7 @@ object HtlcDslTest extends ScalusTest {
                   .prepended(makeScriptHashInput(scriptHash, value)),
               outputs = outputs
                   .map(output => makePubKeyHashOutput(output.person.pkh, output.value)),
-              fee = fee,
+              fee = 200000,
               validRange = validTo match
                   case Option.Some(validTo) =>
                       Interval(
