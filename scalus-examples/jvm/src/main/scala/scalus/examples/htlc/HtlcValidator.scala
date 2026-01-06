@@ -39,36 +39,42 @@ object Action
   *   https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/htlc
   */
 @Compile
-object HtlcValidator extends Validator {
+object HtlcValidator {
+
+    inline def validate(scData: Data): Unit = {
+        val ctx = scData.to[ScriptContext]
+        ctx.scriptInfo match
+            case ScriptInfo.SpendingScript(txOutRef, datum) =>
+                spend(datum, ctx.redeemer, ctx.txInfo, txOutRef)
+            case _ => fail(MustBeSpending)
+    }
 
     /** Spending script purpose validation
       */
-    inline override def spend(
+    inline def spend(
         datum: Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val Config(committer, receiver, image, timeout) =
-            datum.map(_.to[Config]).getOrFail(InvalidDatum)
-
+        val config = datum.getOrFail(InvalidDatum).to[Config]
         redeemer.to[Action] match
             case Action.Timeout =>
-                require(tx.isSignedBy(committer), UnsignedCommitterTransaction)
-                require(tx.validRange.isEntirelyAfter(timeout), InvalidCommitterTimePoint)
+                require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
+                require(tx.validRange.isEntirelyAfter(config.timeout), InvalidCommitterTimePoint)
 
             case Action.Reveal(preimage) =>
-                require(tx.isSignedBy(receiver), UnsignedReceiverTransaction)
-                require(!tx.validRange.isEntirelyAfter(timeout), InvalidReceiverTimePoint)
-                require(sha3_256(preimage) === image, InvalidReceiverPreimage)
+                require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
+                require(!tx.validRange.isEntirelyAfter(config.timeout), InvalidReceiverTimePoint)
+                require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
     }
 
     // Error messages
-    inline val InvalidDatum = "Datum must be a Config(committer, receiver, image, timeout)"
-    inline val UnsignedCommitterTransaction = "Transaction must be signed by a committer"
-    inline val UnsignedReceiverTransaction = "Transaction must be signed by a receiver"
-    inline val InvalidCommitterTimePoint = "Committer Transaction must be exclusively after timeout"
-    inline val InvalidReceiverTimePoint = "Receiver Transaction must be inclusively before timeout"
-    inline val InvalidReceiverPreimage = "Invalid receiver preimage"
-
+    inline val MustBeSpending = "Must be a spending script"
+    inline val InvalidDatum = "Invalid Datum"
+    inline val UnsignedCommitterTransaction = "Must be signed by a committer"
+    inline val UnsignedReceiverTransaction = "Must be signed by a receiver"
+    inline val InvalidCommitterTimePoint = "Must be exclusively after timeout"
+    inline val InvalidReceiverTimePoint = "Must be inclusively before timeout"
+    inline val InvalidReceiverPreimage = "Invalid preimage"
 }
