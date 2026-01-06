@@ -15,6 +15,7 @@ out
 .metals
 .vscode
 metals.sbt
+/docs/local
 /plutus-conformance
 scalus-plugin/src/main/shared
 scalus-testkit/core-shared
