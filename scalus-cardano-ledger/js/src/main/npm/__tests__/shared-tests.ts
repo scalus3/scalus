@@ -45,9 +45,9 @@ interface SlotConfigAPI {
 }
 
 interface SlotConfigStatic {
-  Mainnet: SlotConfigAPI;
-  Preview: SlotConfigAPI;
-  Preprod: SlotConfigAPI;
+  mainnet: SlotConfigAPI;
+  preview: SlotConfigAPI;
+  preprod: SlotConfigAPI;
   new (zeroTime: number, zeroSlot: number, slotLength: number): SlotConfigAPI;
 }
 
@@ -177,18 +177,18 @@ export function testSlotConfig(SlotConfig: SlotConfigStatic): TestResult[] {
   // Test static instances exist
   try {
     results.push({
-      name: "SlotConfig: Mainnet exists",
-      passed: SlotConfig.Mainnet !== undefined,
+      name: "SlotConfig: mainnet exists",
+      passed: SlotConfig.mainnet !== undefined,
     });
 
     results.push({
-      name: "SlotConfig: Preview exists",
-      passed: SlotConfig.Preview !== undefined,
+      name: "SlotConfig: preview exists",
+      passed: SlotConfig.preview !== undefined,
     });
 
     results.push({
-      name: "SlotConfig: Preprod exists",
-      passed: SlotConfig.Preprod !== undefined,
+      name: "SlotConfig: preprod exists",
+      passed: SlotConfig.preprod !== undefined,
     });
   } catch (e) {
     results.push({
@@ -266,7 +266,7 @@ export function testEvalPlutusScripts(
   try {
     const txBytes = hexToBytes(testTxCborHex);
     const utxoBytes = hexToBytes(testUtxoCborHex);
-    const slotConfig = SlotConfig.Mainnet;
+    const slotConfig = SlotConfig.mainnet;
     const costModelsArray = [costModels.PlutusV1, costModels.PlutusV2, costModels.PlutusV3];
 
     try {
@@ -321,7 +321,7 @@ export function testEvalPlutusScripts(
   try {
     const txBytes = hexToBytes(failingTxCborHex);
     const utxoBytes = hexToBytes(failingUtxoCborHex);
-    const slotConfig = SlotConfig.Mainnet;
+    const slotConfig = SlotConfig.mainnet;
     const costModelsArray = [costModels.PlutusV1, costModels.PlutusV2, costModels.PlutusV3];
 
     try {

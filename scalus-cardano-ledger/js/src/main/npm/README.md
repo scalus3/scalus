@@ -81,11 +81,11 @@ const costModels = [
 ];
 
 // Load transaction and UTxO CBOR bytes
-const txBytes = Array.from(fs.readFileSync("transaction.cbor"));
-const utxoBytes = Array.from(fs.readFileSync("utxo.cbor"));
+const txBytes = new Uint8Array(fs.readFileSync("transaction.cbor"));
+const utxoBytes = new Uint8Array(fs.readFileSync("utxo.cbor"));
 
 // Use predefined slot configurations
-const slotConfig = SlotConfig.Mainnet;  // or SlotConfig.Preview, SlotConfig.Preprod
+const slotConfig = SlotConfig.mainnet;  // or SlotConfig.preview, SlotConfig.preprod
 
 // Evaluate all Plutus scripts in the transaction
 const redeemers = Scalus.evalPlutusScripts(txBytes, utxoBytes, slotConfig, costModels);
@@ -118,9 +118,9 @@ Use predefined slot configurations or create custom ones:
 const { SlotConfig } = require('scalus');
 
 // Predefined configurations
-const mainnet = SlotConfig.Mainnet;
-const preview = SlotConfig.Preview;
-const preprod = SlotConfig.Preprod;
+const mainnet = SlotConfig.mainnet;
+const preview = SlotConfig.preview;
+const preprod = SlotConfig.preprod;
 
 // Convert between slots and POSIX time
 const time = mainnet.slotToTime(100000);  // slot -> milliseconds
@@ -153,8 +153,8 @@ Applies a data argument to a Plutus script.
 Evaluates all Plutus scripts in a transaction.
 
 **Parameters:**
-- `txCborBytes`: `number[]` - CBOR bytes of the transaction
-- `utxoCborBytes`: `number[]` - CBOR bytes of the UTxO map
+- `txCborBytes`: `Uint8Array` - CBOR bytes of the transaction
+- `utxoCborBytes`: `Uint8Array` - CBOR bytes of the UTxO map
 - `slotConfig`: `SlotConfig` - Slot configuration for time conversions
 - `costModels`: `number[][]` - Cost models array `[PlutusV1, PlutusV2, PlutusV3]`
 
@@ -170,9 +170,9 @@ Evaluates all Plutus scripts in a transaction.
 Slot configuration for time conversions.
 
 **Static properties:**
-- `SlotConfig.Mainnet` - Mainnet configuration (Shelley era)
-- `SlotConfig.Preview` - Preview testnet configuration
-- `SlotConfig.Preprod` - Preprod testnet configuration
+- `SlotConfig.mainnet` - Mainnet configuration (Shelley era)
+- `SlotConfig.preview` - Preview testnet configuration
+- `SlotConfig.preprod` - Preprod testnet configuration
 
 **Methods:**
 - `slotToTime(slot: number): number` - Convert slot to POSIX time (milliseconds)
