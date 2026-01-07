@@ -262,6 +262,9 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         ByteString.unsafeFromArray(digest.digest(byteString.bytes))
     }
 
+    override def modPow(base: BigInt, exp: BigInt, modulus: BigInt): BigInt =
+        base.modPow(exp, modulus)
+
     override def readFile(path: String): Array[Byte] = {
         Files.readAllBytes(Paths.get(path))
     }

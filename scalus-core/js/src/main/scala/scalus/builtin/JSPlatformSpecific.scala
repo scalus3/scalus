@@ -265,6 +265,24 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
     override def ripemd_160(byteString: ByteString): ByteString =
         Ripemd160.ripemd160(byteString.toUint8Array).toByteString
 
+    /** Custom modular exponentiation using square-and-multiply algorithm.
+      *
+      * This implementation avoids relying on BigInt.modPow which has bugs in Scala.js for very
+      * large numbers.
+      */
+    override def modPow(base: BigInt, exp: BigInt, modulus: BigInt): BigInt =
+        if exp == 0 then BigInt(1)
+        else
+            var result = BigInt(1)
+            var b = base mod modulus
+            var e = exp
+            while e > 0 do
+                if (e mod 2) == 1 then result = (result * b) mod modulus
+                e = e >> 1
+                b = (b * b) mod modulus
+            // Ensure result is non-negative
+            if result < 0 then result + modulus else result
+
     override def readFile(path: String): Array[Byte] = {
         val fs = js.Dynamic.global.require("fs")
         val buffer = fs.readFileSync(path).asInstanceOf[Uint8Array]

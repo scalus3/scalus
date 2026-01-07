@@ -164,13 +164,13 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
     def expModInteger(base: BigInt, exponent: BigInt, modulus: BigInt): BigInt =
         if modulus <= 0 then throw BuiltinException("expModInteger: modulus must be positive")
         else if modulus == 1 then BigInt(0)
-        else if exponent >= 0 then base.modPow(exponent, modulus)
+        else if exponent >= 0 then platform.modPow(base, exponent, modulus)
         else
             // Negative exponent: compute modular inverse first
             // modInverse throws ArithmeticException if gcd(base, modulus) != 1
             try
                 val inverse = base.modInverse(modulus)
-                inverse.modPow(-exponent, modulus)
+                platform.modPow(inverse, -exponent, modulus)
             catch
                 case _: ArithmeticException =>
                     throw BuiltinException(

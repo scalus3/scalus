@@ -800,6 +800,9 @@ trait NativePlatformSpecific extends PlatformSpecific {
     override def ripemd_160(byteString: ByteString): ByteString =
         ByteString.unsafeFromArray(Ripemd160.ripemd160(byteString.bytes))
 
+    override def modPow(base: BigInt, exp: BigInt, modulus: BigInt): BigInt =
+        base.modPow(exp, modulus)
+
     override def readFile(path: String): Array[Byte] = {
         Files.readAllBytes(Paths.get(path))
     }

@@ -206,6 +206,21 @@ trait PlatformSpecific:
 
     def ripemd_160(byteString: ByteString): ByteString
 
+    /** Modular exponentiation: base^exp mod modulus.
+      *
+      * This is platform-specific because Scala.js BigInt.modPow has bugs with very large numbers.
+      *
+      * @param base
+      *   the base
+      * @param exp
+      *   the exponent (must be non-negative)
+      * @param modulus
+      *   the modulus (must be positive)
+      * @return
+      *   base^exp mod modulus
+      */
+    def modPow(base: BigInt, exp: BigInt, modulus: BigInt): BigInt
+
     /** Read a file from the filesystem and return its contents as a byte array.
       *
       * @note
