@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
-import scalus.cardano.txbuilder.TestPeer.Alice
+import scalus.cardano.txbuilder.Party.Alice
 
 class UtxoPoolTest extends AnyFunSuite {
 

@@ -10,7 +10,7 @@ import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
+import scalus.cardano.txbuilder.Party.{Alice, Bob}
 import scalus.prelude.List as PList
 import scalus.utils.await
 import scalus.{plutusV3, toUplc, Compiler}
@@ -70,20 +70,10 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     def scriptUtxo(index: Int, ada: Int, datum: DatumOption = inlineDatum42): Utxo =
         Utxo(input(index), scriptOutput(ada, datum))
 
-    // Create TransactionSigner from TestPeer's keys
-    def peerSigner(peer: TestPeer): TransactionSigner = {
-        val account = peer.account
-        // Ed25519 private key is 32 bytes, but bloxbean returns 64 (32 private + 32 public)
-        val privateKeyData = account.hdKeyPair().getPrivateKey.getKeyData
-        val privateKey = ByteString.fromArray(privateKeyData.take(32))
-        val publicKey = ByteString.fromArray(account.hdKeyPair().getPublicKey.getKeyData)
-        TransactionSigner(Set((privateKey, publicKey)))
-    }
+    lazy val aliceSigner: TransactionSigner = Alice.signer
 
-    lazy val aliceSigner: TransactionSigner = peerSigner(Alice)
-
-    private def outputsOf(peer: TestPeer, tx: Transaction) =
-        tx.body.value.outputs.toSeq.filter(_.value.address == peer.address)
+    private def outputsOf(party: Party, tx: Transaction) =
+        tx.body.value.outputs.toSeq.filter(_.value.address == party.address)
 
     // ============================================================================
     // Basic ADA Transactions

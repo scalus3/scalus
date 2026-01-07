@@ -9,7 +9,7 @@ import scalus.cardano.address.Address.{addr, stake}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.AuxiliaryData.Metadata
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
+import scalus.cardano.txbuilder.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.transform.V3Optimizer

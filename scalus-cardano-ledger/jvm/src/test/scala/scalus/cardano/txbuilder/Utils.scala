@@ -11,7 +11,7 @@ import scalus.cardano.txbuilder.TransactionBuilder.ensureMinAda
   * datum, no script ref
   */
 def genAdaOnlyPubKeyUtxo(
-    peer: TestPeer,
+    party: Party,
     params: ProtocolParams = CardanoInfo.mainnet.protocolParams,
     min: Long = 0L
 ): Gen[(TransactionInput, Babbage)] =
@@ -20,7 +20,7 @@ def genAdaOnlyPubKeyUtxo(
       txId,
       ensureMinAda(
         Babbage(
-          address = peer.address,
+          address = party.address,
           value = Value(Coin(0L)),
           datumOption = None,
           scriptRef = None

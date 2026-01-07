@@ -15,7 +15,7 @@ import scalus.cardano.wallet.BloxbeanAccount
 
 import scala.collection.mutable
 
-enum TestPeer derives CanEqual:
+enum Party derives CanEqual:
     case Alice // First party
     case Bob // Second party
     case Charles // Third party
@@ -43,21 +43,21 @@ enum TestPeer derives CanEqual:
     case Yve
     case Zulu
 
-    def compareTo(another: TestPeer): Int = this.toString.compareTo(another.toString)
+    def compareTo(another: Party): Int = this.toString.compareTo(another.toString)
 
-    def account: Account = TestPeer.account(this)
+    def account: Account = Party.account(this)
 
-    def wallet: Wallet = TestPeer.mkWallet(this)
+    def wallet: Wallet = Party.mkWallet(this)
 
-    def walletId: WalletId = TestPeer.mkWalletId(this)
+    def walletId: WalletId = Party.mkWalletId(this)
 
-    def address: ShelleyAddress = TestPeer.address(this)
+    def address: ShelleyAddress = Party.address(this)
 
     def signer: TransactionSigner = {
         new TransactionSigner(Set(new BloxbeanAccount(account).paymentKeyPair))
     }
 
-object TestPeer:
+object Party:
     private val mnemonic: String =
         "test test test test " +
             "test test test test " +
@@ -66,7 +66,7 @@ object TestPeer:
             "test test test test " +
             "test test test sauce"
 
-    private val accountCache: mutable.Map[TestPeer, Account] = mutable.Map.empty
+    private val accountCache: mutable.Map[Party, Account] = mutable.Map.empty
         .withDefault(peer =>
             Account.createFromMnemonic(
               BBNetwork(0, 42),
@@ -75,7 +75,7 @@ object TestPeer:
             )
         )
 
-    private val walletCache: mutable.Map[TestPeer, Wallet] = mutable.Map.empty
+    private val walletCache: mutable.Map[Party, Wallet] = mutable.Map.empty
         .withDefault(peer =>
             Wallet(
               peer.toString,
@@ -85,7 +85,7 @@ object TestPeer:
             )
         )
 
-    private val addressCache: mutable.Map[TestPeer, (ShelleyPaymentPart, ShelleyDelegationPart)] =
+    private val addressCache: mutable.Map[Party, (ShelleyPaymentPart, ShelleyDelegationPart)] =
         mutable.Map.empty.withDefault(peer =>
             (
               Key(Hash(blake2b_224(ByteString.fromArray(account(peer).publicKeyBytes())))),
@@ -93,14 +93,14 @@ object TestPeer:
             )
         )
 
-    def account(peer: TestPeer): Account = accountCache.cache(peer)
+    def account(party: Party): Account = accountCache.cache(party)
 
-    def mkWallet(peer: TestPeer): Wallet = walletCache.cache(peer)
+    def mkWallet(party: Party): Wallet = walletCache.cache(party)
 
-    def mkWalletId(peer: TestPeer): WalletId = WalletId(peer.toString)
+    def mkWalletId(party: Party): WalletId = WalletId(party.toString)
 
-    def address(peer: TestPeer, network: Network = Mainnet): ShelleyAddress = {
-        val (payment, delegation) = addressCache.cache(peer)
+    def address(party: Party, network: Network = Mainnet): ShelleyAddress = {
+        val (payment, delegation) = addressCache.cache(party)
         ShelleyAddress(network, payment, delegation)
     }
 
@@ -117,10 +117,10 @@ extension [K, V](map: mutable.Map[K, V])
 /////////////////////////////
 // Generators
 
-val genTestPeer: Gen[TestPeer] =
-    Gen.choose(0, TestPeer.values.length - 1).map(TestPeer.fromOrdinal)
+val genParty: Gen[Party] =
+    Gen.choose(0, Party.values.length - 1).map(Party.fromOrdinal)
 
 /** Choose between 2 and 26 peers */
-val genTestPeers: Gen[Seq[TestPeer]] =
-    for numPeers <- Gen.choose(2, TestPeer.values.length)
-    yield TestPeer.values.take(numPeers).toSeq
+val genParties: Gen[Seq[Party]] =
+    for numParties <- Gen.choose(2, Party.values.length)
+    yield Party.values.take(numParties).toSeq

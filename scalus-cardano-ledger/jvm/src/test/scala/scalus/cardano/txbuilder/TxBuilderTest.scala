@@ -12,7 +12,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.TestPeer.{Alice, Bob}
+import scalus.cardano.txbuilder.Party.{Alice, Bob}
 import scalus.prelude.List as PList
 import scalus.utils.await
 import scalus.{plutusV3, toUplc, Compiler}
@@ -428,8 +428,8 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         assert(aliceAssets(h2so4) == 300L, "Alice should receive all 300 h2so4 as change")
     }
 
-    private def outputsOf(peer: TestPeer, tx: Transaction) =
-        tx.body.value.outputs.toSeq.filter(_.value.address == peer.address)
+    private def outputsOf(party: Party, tx: Transaction) =
+        tx.body.value.outputs.toSeq.filter(_.value.address == party.address)
 
     // ============================================================================
     // Transaction Chaining Tests
