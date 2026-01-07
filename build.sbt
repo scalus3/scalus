@@ -433,7 +433,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
               .withRecompileOnMacroDef(false)
       },
       Test / scalacOptions += "-color:never",
-      copySharedFiles := {
+      // Copy shared test files from scalus-core to managed sources
+      Compile / sourceGenerators += Def.task {
           val sharedFiles = Seq(
             "scalus/testing/ArbitraryDerivation.scala",
             "scalus/uplc/test/ArbitraryInstances.scala",
@@ -447,34 +448,44 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           )
           val baseDir =
               (scalus.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"
-          val targetDir = crossProjectBaseDirectory.value / "core-shared" / "scala"
+          val targetDir = (Compile / sourceManaged).value
           val log = streams.value.log
-          copyFiles(sharedFiles, baseDir, targetDir, log)
-          // Copy Party.scala from scalus-cardano-ledger JVM test sources (JVM-only)
-          val cardanoLedgerFiles = Seq("scalus/testing/kit/Party.scala")
-          val cardanoLedgerBaseDir =
-              (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala"
-          copyFiles(cardanoLedgerFiles, cardanoLedgerBaseDir, targetDir, log)
-          log.info(s"Copied shared files to target $targetDir")
-      },
-      Compile / unmanagedSourceDirectories += crossProjectBaseDirectory.value / "core-shared" / "scala",
-      // Ensure shared files are copied before any source inspection
-      Compile / sourceGenerators += Def.task {
-          copySharedFiles.value
-          Seq.empty[File]
+          sharedFiles.flatMap { file =>
+              val source = baseDir / file
+              val target = targetDir / file
+              if (source.exists) {
+                  IO.copyFile(source, target)
+                  Some(target)
+              } else {
+                  log.error(s"Shared file $file does not exist in $baseDir")
+                  None
+              }
+          }
       }.taskValue,
-      cleanFiles += crossProjectBaseDirectory.value / "core-shared",
-      Compile / compile := (Compile / compile).dependsOn(copySharedFiles).value,
       PluginDependency,
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
     )
     .jvmSettings(
+      // Copy Party.scala (JVM-only due to Bloxbean dependencies)
+      Compile / sourceGenerators += Def.task {
+          val source =
+              (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala" / "scalus" / "testing" / "kit" / "Party.scala"
+          val target =
+              (Compile / sourceManaged).value / "scalus" / "testing" / "kit" / "Party.scala"
+          if (source.exists) {
+              IO.copyFile(source, target)
+              Seq(target)
+          } else {
+              streams.value.log.error(s"Party.scala does not exist at $source")
+              Seq.empty
+          }
+      }.taskValue,
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.0-M19",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.13",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % Test
     )
     .jsSettings(
@@ -713,8 +724,8 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
       // Testcontainers for Yaci DevKit integration tests
-      libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.41.5" % "test",
-      libraryDependencies += "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.41.5" % "test",
+      libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.44.1" % "test",
+      libraryDependencies += "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.44.1" % "test",
       inConfig(Test)(PluginDependency)
     )
 

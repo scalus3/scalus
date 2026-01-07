@@ -15,6 +15,16 @@ import scalus.testing.kit.Party.{accountCache, mnemonic}
 
 import scala.collection.mutable
 
+/** Test parties (A-Z) for smart contract testing.
+  *
+  * Each party has a deterministic wallet derived from a test mnemonic, providing:
+  *   - `account`: Bloxbean Account for key management
+  *   - `address`: Shelley address for receiving funds
+  *   - `signer`: TransactionSigner for signing transactions
+  *
+  * Many names reference classic cryptographic roles (Alice, Bob, Eve, Mallory, etc.) or notable
+  * figures in cryptography and blockchain (Hal Finney, Nick Szabo).
+  */
 enum Party derives CanEqual {
     case Alice // First party
     case Bob // Second party
