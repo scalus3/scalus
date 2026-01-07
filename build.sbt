@@ -433,8 +433,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
               .withRecompileOnMacroDef(false)
       },
       Test / scalacOptions += "-color:never",
-      // Copy shared test files from scalus-core to managed sources
-      Compile / sourceGenerators += Def.task {
+      // Reference shared test files from scalus-core directly (no copying)
+      Compile / managedSources ++= {
           val sharedFiles = Seq(
             "scalus/testing/ArbitraryDerivation.scala",
             "scalus/uplc/test/ArbitraryInstances.scala",
@@ -448,40 +448,17 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           )
           val baseDir =
               (scalus.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"
-          val targetDir = (Compile / sourceManaged).value
-          val log = streams.value.log
-          sharedFiles.flatMap { file =>
-              val source = baseDir / file
-              val target = targetDir / file
-              if (source.exists) {
-                  IO.copyFile(source, target)
-                  Some(target)
-              } else {
-                  log.error(s"Shared file $file does not exist in $baseDir")
-                  None
-              }
-          }
-      }.taskValue,
+          sharedFiles.map(file => baseDir / file)
+      },
       PluginDependency,
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
     )
     .jvmSettings(
-      // Copy Party.scala (JVM-only due to Bloxbean dependencies)
-      Compile / sourceGenerators += Def.task {
-          val source =
-              (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala" / "scalus" / "testing" / "kit" / "Party.scala"
-          val target =
-              (Compile / sourceManaged).value / "scalus" / "testing" / "kit" / "Party.scala"
-          if (source.exists) {
-              IO.copyFile(source, target)
-              Seq(target)
-          } else {
-              streams.value.log.error(s"Party.scala does not exist at $source")
-              Seq.empty
-          }
-      }.taskValue,
+      // Reference Party.scala directly (JVM-only due to Bloxbean dependencies)
+      Compile / managedSources +=
+          (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala" / "scalus" / "testing" / "kit" / "Party.scala",
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
