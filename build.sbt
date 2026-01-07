@@ -639,7 +639,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       Compile / npmDependencies += "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3",
       // copy scalus.js and scalus.js.map to npm directory for publishing
       prepareNpmPackage := {
-          val bundle = (Compile / fastOptJS / webpack).value
+          val bundle = (Compile / fullOptJS / webpack).value
           val npmDir = (Compile / sourceDirectory).value / "npm"
           val log = streams.value.log
           bundle.foreach { f =>

@@ -345,9 +345,11 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v1.Interval = {
         (validityStartSlot, ttl) match
-            case (None, None) => v1.Interval.always
+            case (None, None)          => v1.Interval.always
             case (None, Some(validTo)) =>
-                val closure = protocolVersion.version < 8
+                // upper bound is inclusive for protocol versions <= 8 (pre-Conway)
+                // and exclusive for protocol versions > 9 (post-Conway)
+                val closure = protocolVersion.version <= 8
                 val upper = v1.IntervalBound(
                   v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo).toLong)),
                   closure
