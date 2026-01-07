@@ -11,6 +11,7 @@ import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.AddrKeyHash
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
+import scalus.testing.kit.Party.{accountCache, mnemonic}
 
 import scala.collection.mutable
 
@@ -42,9 +43,14 @@ enum Party derives CanEqual {
     case Yve
     case Zulu
 
-    def compareTo(another: Party): Int = this.toString.compareTo(another.toString)
-
-    def account: Account = Party.account(this)
+    def account: Account = accountCache.getOrElseUpdate(
+      this,
+      Account.createFromMnemonic(
+        BBNetwork(0, 42),
+        mnemonic,
+        createExternalAddressDerivationPathForAccount(this.ordinal)
+      )
+    )
 
     def address: ShelleyAddress = Party.address(this)
 
@@ -64,17 +70,8 @@ object Party {
 
     private val accountCache: mutable.Map[Party, Account] = mutable.Map.empty
 
-    def account(party: Party): Account = accountCache.getOrElseUpdate(
-      party,
-      Account.createFromMnemonic(
-        BBNetwork(0, 42),
-        mnemonic,
-        createExternalAddressDerivationPathForAccount(party.ordinal)
-      )
-    )
-
     def address(party: Party, network: Network = Mainnet): ShelleyAddress = {
-        val pkh = account(party).hdKeyPair().getPublicKey.getKeyHash
+        val pkh = party.account.hdKeyPair().getPublicKey.getKeyHash
         ShelleyAddress(network, Key(AddrKeyHash.fromArray(pkh)), Null)
     }
 
