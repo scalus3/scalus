@@ -1,6 +1,5 @@
 package scalus.cardano.txbuilder
 
-import cats.data.NonEmptyList
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Network as BBNetwork
 import com.bloxbean.cardano.client.crypto.cip1852.DerivationPath.createExternalAddressDerivationPathForAccount
@@ -16,33 +15,33 @@ import scalus.cardano.wallet.BloxbeanAccount
 
 import scala.collection.mutable
 
-enum TestPeer(@annotation.unused ix: Int) derives CanEqual:
-    case Alice extends TestPeer(0) // First party
-    case Bob extends TestPeer(1) // Second party
-    case Charles extends TestPeer(2) // Third party
-    case Dave extends TestPeer(3) // Fourth party
-    case Eve extends TestPeer(4) // Eavesdropper
-    case Faith extends TestPeer(5) // Trusted third party
-    case Grace extends TestPeer(6) // Government representative
-    case Heidi extends TestPeer(7)
-    case Ivan extends TestPeer(8) // Issuer
-    case Judy extends TestPeer(9) // Judge
-    case Kevin extends TestPeer(10)
-    case Laura extends TestPeer(11)
-    case Mallory extends TestPeer(12) // Malicious attacker
-    case Nathan extends TestPeer(13)
-    case Oracle extends TestPeer(14) // Blockchain oracle
-    case Peggy extends TestPeer(15) // Prover
-    case Quentin extends TestPeer(16)
-    case Rachel extends TestPeer(17)
-    case Sybil extends TestPeer(18) // Sybil attack
-    case Trent extends TestPeer(19) // Trusted third party
-    case Ursula extends TestPeer(20)
-    case Victor extends TestPeer(21) // Verifier
-    case Wendy extends TestPeer(22) // Whistleblower
-    case Xavier extends TestPeer(23)
-    case Yve extends TestPeer(24)
-    case Zulu extends TestPeer(25)
+enum TestPeer derives CanEqual:
+    case Alice // First party
+    case Bob // Second party
+    case Charles // Third party
+    case Dave // Fourth party
+    case Eve // Eavesdropper
+    case Faith // Trusted third party
+    case Grace // Government representative
+    case Hal // Hal Finney
+    case Ivan // Issuer
+    case Judy // Judge
+    case Kevin
+    case Laura
+    case Mallory // Malicious attacker
+    case Nick // Nick Szabo
+    case Oracle // Blockchain oracle
+    case Peggy // Prover
+    case Quentin // Quentin Tarantino
+    case Rachel
+    case Sybil // Sybil attack
+    case Trent // Trusted third party
+    case Ursula
+    case Victor // Verifier
+    case Wendy // Whistleblower
+    case Xavier // Xavier Leroy
+    case Yve
+    case Zulu
 
     def compareTo(another: TestPeer): Int = this.toString.compareTo(another.toString)
 
@@ -119,65 +118,9 @@ extension [K, V](map: mutable.Map[K, V])
 // Generators
 
 val genTestPeer: Gen[TestPeer] =
-    Gen.oneOf(
-      TestPeer.Alice,
-      TestPeer.Bob,
-      TestPeer.Charles,
-      TestPeer.Dave,
-      TestPeer.Eve,
-      TestPeer.Faith,
-      TestPeer.Grace,
-      TestPeer.Heidi,
-      TestPeer.Ivan,
-      TestPeer.Judy,
-      TestPeer.Kevin,
-      TestPeer.Laura,
-      TestPeer.Mallory,
-      TestPeer.Nathan,
-      TestPeer.Oracle,
-      TestPeer.Peggy,
-      TestPeer.Quentin,
-      TestPeer.Rachel,
-      TestPeer.Sybil,
-      TestPeer.Trent,
-      TestPeer.Ursula,
-      TestPeer.Victor,
-      TestPeer.Wendy,
-      TestPeer.Xavier,
-      TestPeer.Yve,
-      TestPeer.Zulu
-    )
+    Gen.choose(0, TestPeer.values.length - 1).map(TestPeer.fromOrdinal)
 
 /** Choose between 2 and 26 peers */
-val genTestPeers: Gen[NonEmptyList[TestPeer]] =
-    for {
-        numPeers <- Gen.choose(2, 26)
-        peersList = List(
-          TestPeer.Alice,
-          TestPeer.Bob,
-          TestPeer.Charles,
-          TestPeer.Dave,
-          TestPeer.Eve,
-          TestPeer.Faith,
-          TestPeer.Grace,
-          TestPeer.Heidi,
-          TestPeer.Ivan,
-          TestPeer.Judy,
-          TestPeer.Kevin,
-          TestPeer.Laura,
-          TestPeer.Mallory,
-          TestPeer.Nathan,
-          TestPeer.Oracle,
-          TestPeer.Peggy,
-          TestPeer.Quentin,
-          TestPeer.Rachel,
-          TestPeer.Sybil,
-          TestPeer.Trent,
-          TestPeer.Ursula,
-          TestPeer.Victor,
-          TestPeer.Wendy,
-          TestPeer.Xavier,
-          TestPeer.Yve,
-          TestPeer.Zulu
-        )
-    } yield NonEmptyList.fromList(peersList.take(numPeers)).get
+val genTestPeers: Gen[Seq[TestPeer]] =
+    for numPeers <- Gen.choose(2, TestPeer.values.length)
+    yield TestPeer.values.take(numPeers).toSeq
