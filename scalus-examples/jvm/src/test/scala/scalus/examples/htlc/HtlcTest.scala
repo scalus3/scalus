@@ -22,7 +22,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     import HtlcTest.*
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
-        assert(HtlcContract.script.script.size == 755)
+        assert(HtlcContract.script.script.size == 577)
     }
 
     test("receiver reveals preimage before timeout") {

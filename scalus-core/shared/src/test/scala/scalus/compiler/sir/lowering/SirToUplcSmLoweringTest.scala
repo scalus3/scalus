@@ -633,8 +633,8 @@ class SirToUplcSmLoweringTest
 
         result2 match {
             case Result.Success(term, _, _, _) =>
-                // from option - in PackedData representation.
-                assert(term == I(42).asTerm)
+                // match result type is Integer, so converted to Constant representation
+                assert(term == BigInt(42).asTerm)
             case _ =>
                 fail(s"Expected success, got: ${result2}")
         }

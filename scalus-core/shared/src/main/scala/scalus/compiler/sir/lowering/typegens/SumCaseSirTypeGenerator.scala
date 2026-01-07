@@ -206,6 +206,8 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
     }
 
+    case class PreparedCase(sirCase: SIR.Case, constrIndex: Option[Int], originIndex: Int)
+
     /** Prepares cases withour wildcards, ordered the same as in enum definition, for match
       * expression,
       *
@@ -214,10 +216,10 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
       * @param lctx
       * @return
       */
-    private def prepareOrderedCased(
+    private def prepareCases(
         matchData: SIR.Match,
-        loweredScrutinee: LoweredValue
-    )(using LoweringContext): List[SIR.Case] = {
+        loweredScrutinee: LoweredValue,
+    )(using LoweringContext): List[PreparedCase] = {
 
         val cases = matchData.cases
         val anns = matchData.anns
@@ -233,7 +235,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
         val allConstructors = constructors.toSet
         val matchedConstructors = mutable.HashSet.empty[String]
-        val expandedCases = mutable.ArrayBuffer.empty[SIR.Case]
+        val expandedCases = mutable.ArrayBuffer.empty[PreparedCase]
 
         // when we have a deconstruction like this:
         // val Some(x) = expr
@@ -267,7 +269,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             )
                         case Some(_) =>
                             matchedConstructors += constrDecl.name // collect all matched constructors
-                            expandedCases += c
+                            expandedCases += PreparedCase(c, Some(-1), idx)
                 case SIR.Case(SIR.Pattern.Const(_), _, anns) =>
                     throw LoweringException(
                       s"Constant pattern not supported for sum type ${loweredScrutinee.sirType.show}",
@@ -275,11 +277,11 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     )
                 case SIR.Case(SIR.Pattern.Wildcard, rhs, anns) =>
                     // If we have a wildcard case, it must be the last one
-                    if idx != enhancedCases.length - 1 then
+                    if idx != enhancedCases.length - 1 then {
                         throw new IllegalArgumentException(
                           s"Wildcard case must be the last and only one in match expression"
                         )
-                    else
+                    } else
                         // Convert Wildcard to the rest of the cases/constructors
                         val missingConstructors =
                             allConstructors.filter(c => !matchedConstructors.contains(c.name))
@@ -291,11 +293,12 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             // also we have no way to know type-arguments, so use abstract type-vars (will use FreeUnificator)
                             val typeArgs =
                                 constrDecl.typeParams.map(_ => SIRType.FreeUnificator)
-                            expandedCases += SIR.Case(
+                            val newCase = SIR.Case(
                               Pattern.Constr(constrDecl, bindings, typeArgs),
                               rhs,
                               anns
                             )
+                            expandedCases += PreparedCase(newCase, None, idx)
                             matchedConstructors += constrDecl.name // collect all matched constructors
                         }
             idx += 1
@@ -303,11 +306,17 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
         // Sort the cases by the same order as the constructors
 
-        val orderedCases = constructors.map { constr =>
-            val optExpandedCase = expandedCases.find(_.pattern match {
-                case Pattern.Constr(constrDecl, _, _) => constrDecl.name == constr.name
-                case _                                => false
-            })
+        val orderedCases = constructors.zipWithIndex.map { case (constr, constrIndex) =>
+            val optExpandedCase = expandedCases
+                .find(_.sirCase.pattern match {
+                    case Pattern.Constr(constrDecl, _, _) => constrDecl.name == constr.name
+                    case _                                => false
+                })
+                .map { pc =>
+                    pc.constrIndex match
+                        case Some(_) => pc.copy(constrIndex = Some(constrIndex))
+                        case None    => pc // keep None for wildcard-expanded cases
+                }
             optExpandedCase.getOrElse(
               throw LoweringException(
                 s"Missing case for constructor ${constr.name}",
@@ -324,8 +333,6 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-
-        val orderedCases = prepareOrderedCased(matchData, loweredScrutinee)
 
         val prevScope = lctx.scope
 
@@ -368,34 +375,60 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
           matchData.scrutinee.anns.pos
         )
 
+        val orderedCases = prepareCases(matchData, loweredScrutinee)
+
         // For PlutusV4, use Case on integer directly since orderedCases are already 0..n-1
         val body = if lctx.targetLanguage == Language.PlutusV4 then {
-            val branches = orderedCases.map { sirCase =>
-                genMatchDataConstrCase(sirCase, dataListVar, optTargetType, false)
+            val branches = orderedCases.map { preparedCase =>
+                genMatchDataConstrCase(preparedCase.sirCase, dataListVar, optTargetType, false)
             }
             lvCaseInteger(constrIdxVar, branches, matchData.anns.pos, optTargetType)
         } else {
-            val lastTerm = lctx.lower(
-              SIR.Error(
-                s"Incorrect constructor index for type ${loweredScrutinee.sirType.show}",
-                matchData.anns
-              )
-            )
 
-            orderedCases.zipWithIndex.foldRight(lastTerm) { case ((sirCase, caseIndex), state) =>
-                val caseBody =
-                    genMatchDataConstrCase(sirCase, dataListVar, optTargetType, false)
-                lvIfThenElse(
-                  lvEqualsInteger(
-                    constrIdxVar,
-                    lvIntConstant(caseIndex, sirCase.anns.pos),
-                    caseBody.pos
-                  ),
-                  caseBody,
-                  state,
-                  sirCase.anns.pos
-                )
+            // Find wildcard-expanded case (if any) - these have constrIndex = None
+            val wildcardOriginIndex = orderedCases.find(_.constrIndex.isEmpty).map(_.originIndex)
+
+            // For the else branch: use wildcard body if present, otherwise use the last case
+            // (for complete matches, the last case becomes the else branch - more efficient than Error)
+            val (lastTerm, defaultOriginIndex) = wildcardOriginIndex match {
+                case Some(origIdx) =>
+                    // Find the wildcard case and use its body
+                    val wc = orderedCases.find(_.originIndex == origIdx).get
+                    (genMatchDataConstrCase(wc.sirCase, dataListVar, optTargetType, false), origIdx)
+                case None =>
+                    // Complete match: use the last case (highest constructor index) as default
+                    val lastCase = orderedCases.last
+                    (
+                      genMatchDataConstrCase(lastCase.sirCase, dataListVar, optTargetType, false),
+                      lastCase.originIndex
+                    )
             }
+
+            // Build if-then-else chain, skipping cases that share originIndex with the default
+            orderedCases.foldRight(lastTerm) { (preparedCase, state) =>
+                if preparedCase.originIndex == defaultOriginIndex then
+                    state // this case is handled in lastTerm
+                else
+                    val caseBody =
+                        genMatchDataConstrCase(
+                          preparedCase.sirCase,
+                          dataListVar,
+                          optTargetType,
+                          false
+                        )
+                    val constrIndex = preparedCase.constrIndex.get
+                    lvIfThenElse(
+                      lvEqualsInteger(
+                        constrIdxVar,
+                        lvIntConstant(constrIndex, preparedCase.sirCase.anns.pos),
+                        caseBody.pos
+                      ),
+                      caseBody,
+                      state,
+                      preparedCase.sirCase.anns.pos
+                    )
+            }
+
         }
 
         lctx.scope = prevScope
