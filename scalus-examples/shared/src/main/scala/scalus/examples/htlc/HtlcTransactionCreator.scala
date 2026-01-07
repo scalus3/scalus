@@ -26,10 +26,10 @@ case class HtlcTransactionCreator(
         committer: AddrKeyHash,
         receiver: AddrKeyHash,
         image: Image,
-        timeout: Long,
+        timeout: Instant,
         signer: TransactionSigner
     ): Transaction = {
-        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
+        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout.toEpochMilli)
 
         TxBuilder(env, evaluator)
             .payTo(scriptAddress, value, datum)
@@ -49,11 +49,11 @@ case class HtlcTransactionCreator(
         committer: AddrKeyHash,
         receiver: AddrKeyHash,
         image: Image,
-        timeout: Long,
+        timeout: Instant,
         provider: Provider,
         signer: TransactionSigner
     )(using ExecutionContext): Future[Transaction] = {
-        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout)
+        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout.toEpochMilli)
 
         TxBuilder(env)
             .payTo(scriptAddress, value, datum)
@@ -68,7 +68,7 @@ case class HtlcTransactionCreator(
         changeAddress: Address,
         preimage: Preimage,
         receiverPkh: AddrKeyHash,
-        time: SlotNo,
+        validTo: Instant,
         signer: TransactionSigner
     ): Transaction = {
         val redeemer = Action.Reveal(preimage)
@@ -76,7 +76,7 @@ case class HtlcTransactionCreator(
         TxBuilder(env, evaluator)
             .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
-            .validTo(Instant.ofEpochMilli(time))
+            .validTo(validTo)
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
             .transaction
@@ -88,7 +88,7 @@ case class HtlcTransactionCreator(
         payeeAddress: Address,
         changeAddress: Address,
         committerPkh: AddrKeyHash,
-        time: Long,
+        validFrom: Instant,
         signer: TransactionSigner
     ): Transaction = {
         val redeemer = Action.Timeout
@@ -96,7 +96,7 @@ case class HtlcTransactionCreator(
         TxBuilder(env, evaluator)
             .spend(lockedUtxo, redeemer, script, Set(committerPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
-            .validFrom(Instant.ofEpochMilli(time))
+            .validFrom(validFrom)
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
             .transaction

@@ -11,11 +11,11 @@ import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.showHighlighted
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.testing.kit.Party.{Alice, Bob, Eve, Mallory}
 import scalus.utils.await
 
+import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 
@@ -23,8 +23,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     import HtlcTest.*
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
-        println(HtlcContract.sir.showHighlighted)
-        println(HtlcContract.program.showHighlighted)
+//        println(HtlcContract.sir.showHighlighted)
+//        println(HtlcContract.program.showHighlighted)
         assert(HtlcContract.script.script.size == 569)
     }
 
@@ -127,9 +127,9 @@ object HtlcTest extends ScalusTest {
     private val slot: SlotNo = 10
     private val beforeSlot: SlotNo = slot - 1
     private val afterSlot: SlotNo = slot + 1
-    private val timeout: Long = env.slotConfig.slotToTime(slot)
-    private val beforeTimeout: Long = env.slotConfig.slotToTime(beforeSlot)
-    private val afterTimeout: Long = env.slotConfig.slotToTime(afterSlot)
+    private val timeout: Instant = Instant.ofEpochMilli(env.slotConfig.slotToTime(slot))
+    private val beforeTimeout: Instant = Instant.ofEpochMilli(env.slotConfig.slotToTime(beforeSlot))
+    private val afterTimeout: Instant = Instant.ofEpochMilli(env.slotConfig.slotToTime(afterSlot))
 
     val validPreimage: Preimage = genByteStringOfN(32).sample.get
     val wrongPreimage: Preimage = genByteStringOfN(12).sample.get
@@ -139,7 +139,7 @@ object HtlcTest extends ScalusTest {
       PubKeyHash(committerPkh),
       PubKeyHash(receiverPkh),
       image,
-      timeout
+      timeout.toEpochMilli
     ).toData
 
     enum Person:
@@ -195,7 +195,7 @@ object HtlcTest extends ScalusTest {
                       changeAddress = changeAddress,
                       preimage = preimage,
                       receiverPkh = pkhVal,
-                      time = txTime,
+                      validTo = txTime,
                       signer = signer
                     )
                     (revealTx, lockedUtxo._1)
@@ -231,7 +231,7 @@ object HtlcTest extends ScalusTest {
                       payeeAddress = committerAddress,
                       changeAddress = changeAddress,
                       committerPkh = pkhVal,
-                      time = txTime,
+                      validFrom = txTime,
                       signer = signer
                     )
                     (timeoutTx, lockedUtxo._1)

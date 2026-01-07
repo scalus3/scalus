@@ -12,6 +12,7 @@ import scalus.ledger.api.v1.PubKeyHash
 import scalus.testing.IntegrationTest
 import sttp.client4.*
 
+import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Base class for HTLC integration tests that interact with real Cardano testnets.
@@ -177,7 +178,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               AddrKeyHash(senderPkh.hash),
               AddrKeyHash(senderPkh.hash),
               image,
-              timeout.toLong,
+              Instant.ofEpochMilli(timeout.toLong),
               ctx.client,
               signer
             )
@@ -256,7 +257,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               senderAddr,
               preimage,
               AddrKeyHash(senderPkh.hash),
-              revealTime,
+              Instant.ofEpochMilli(revealTime),
               signer
             )
 
