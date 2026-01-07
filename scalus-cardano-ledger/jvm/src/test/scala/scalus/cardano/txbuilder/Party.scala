@@ -47,10 +47,6 @@ enum Party derives CanEqual:
 
     def account: Account = Party.account(this)
 
-    def wallet: Wallet = Party.mkWallet(this)
-
-    def walletId: WalletId = Party.mkWalletId(this)
-
     def address: ShelleyAddress = Party.address(this)
 
     def signer: TransactionSigner = {
@@ -75,16 +71,6 @@ object Party:
             )
         )
 
-    private val walletCache: mutable.Map[Party, Wallet] = mutable.Map.empty
-        .withDefault(peer =>
-            Wallet(
-              peer.toString,
-              WalletModuleBloxbean,
-              account(peer).hdKeyPair().getPublicKey,
-              account(peer).hdKeyPair().getPrivateKey
-            )
-        )
-
     private val addressCache: mutable.Map[Party, (ShelleyPaymentPart, ShelleyDelegationPart)] =
         mutable.Map.empty.withDefault(peer =>
             (
@@ -94,10 +80,6 @@ object Party:
         )
 
     def account(party: Party): Account = accountCache.cache(party)
-
-    def mkWallet(party: Party): Wallet = walletCache.cache(party)
-
-    def mkWalletId(party: Party): WalletId = WalletId(party.toString)
 
     def address(party: Party, network: Network = Mainnet): ShelleyAddress = {
         val (payment, delegation) = addressCache.cache(party)
