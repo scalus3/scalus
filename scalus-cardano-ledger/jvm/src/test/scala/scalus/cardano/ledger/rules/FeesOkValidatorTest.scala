@@ -84,7 +84,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -96,7 +96,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey2))
                       )
                   ),
@@ -238,7 +238,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -250,7 +250,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey2))
                       )
                   ),
@@ -331,7 +331,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -441,7 +441,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -453,7 +453,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey2))
                       )
                   ),
@@ -545,7 +545,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -557,7 +557,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey2))
                       )
                   ),
@@ -653,7 +653,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -665,7 +665,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey2))
                       )
                   ),
@@ -753,7 +753,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey1))
                       )
                   ),
@@ -765,7 +765,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .sample
                   .get
                   .copy(payment =
-                      ShelleyPaymentPart.keyHash(
+                      ShelleyPaymentPart.Key(
                         Hash(platform.blake2b_224(publicKey2))
                       )
                   ),

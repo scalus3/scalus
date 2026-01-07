@@ -94,7 +94,7 @@ class CardanoAddressTest extends AnyFunSuite {
 
     test("ShelleyPaymentPart should handle key and script hashes") {
         val keyPart = ShelleyPaymentPart.Key(samplePaymentHash)
-        val scriptPart = ShelleyPaymentPart.scriptHash(sampleScriptHash)
+        val scriptPart = ShelleyPaymentPart.Script(sampleScriptHash)
 
         assert(keyPart.asHash == samplePaymentHash)
         assert(scriptPart.asHash == sampleScriptHash)
@@ -142,7 +142,7 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("ShelleyAddress should calculate correct type IDs") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
 
         val addr = ShelleyAddress(Network.Mainnet, payment, delegation)
@@ -150,7 +150,7 @@ class CardanoAddressTest extends AnyFunSuite {
 
         val scriptAddr = ShelleyAddress(
           Network.Mainnet,
-          ShelleyPaymentPart.scriptHash(sampleScriptHash),
+          ShelleyPaymentPart.Script(sampleScriptHash),
           ShelleyDelegationPart.keyHash(sampleStakeHash)
         )
         assert(scriptAddr.typeId == 0x01)
@@ -164,7 +164,7 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("ShelleyAddress should build correct headers") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
 
         val mainnetAddr = ShelleyAddress(Network.Mainnet, payment, delegation)
@@ -189,7 +189,7 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Address serialization should produce correct bytes") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
         val shelleyAddr = ShelleyAddress(Network.Mainnet, payment, delegation)
 
@@ -252,7 +252,7 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Address round-trip should preserve data") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
         val originalAddr = ShelleyAddress(Network.Mainnet, payment, delegation)
 
@@ -265,8 +265,8 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Address utility methods should work correctly") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
-        val scriptPayment = ShelleyPaymentPart.scriptHash(sampleScriptHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
+        val scriptPayment = ShelleyPaymentPart.Script(sampleScriptHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
 
         val normalAddr = ShelleyAddress(Network.Mainnet, payment, delegation)
@@ -286,7 +286,7 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Address conversion between Shelley and Stake should work") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
         val shelleyAddr = ShelleyAddress(Network.Mainnet, payment, delegation)
 
@@ -323,7 +323,7 @@ class CardanoAddressTest extends AnyFunSuite {
     }
 
     test("Human readable prefixes should be correct") {
-        val payment = ShelleyPaymentPart.keyHash(samplePaymentHash)
+        val payment = ShelleyPaymentPart.Key(samplePaymentHash)
         val delegation = ShelleyDelegationPart.keyHash(sampleStakeHash)
 
         val mainnetShelley = ShelleyAddress(Network.Mainnet, payment, delegation)

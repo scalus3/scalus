@@ -15,7 +15,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
               .sample
               .get
               .copy(payment =
-                  ShelleyPaymentPart.keyHash(
+                  ShelleyPaymentPart.Key(
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
@@ -57,7 +57,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
               .sample
               .get
               .copy(payment =
-                  ShelleyPaymentPart.keyHash(
+                  ShelleyPaymentPart.Key(
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
@@ -91,7 +91,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
               .sample
               .get
               .copy(payment =
-                  ShelleyPaymentPart.keyHash(
+                  ShelleyPaymentPart.Key(
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
@@ -132,7 +132,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
               .sample
               .get
               .copy(payment =
-                  ShelleyPaymentPart.keyHash(
+                  ShelleyPaymentPart.Key(
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
@@ -174,7 +174,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
               .sample
               .get
               .copy(payment =
-                  ShelleyPaymentPart.keyHash(
+                  ShelleyPaymentPart.Key(
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
@@ -208,7 +208,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
               .sample
               .get
               .copy(payment =
-                  ShelleyPaymentPart.keyHash(
+                  ShelleyPaymentPart.Key(
                     Arbitrary.arbitrary[AddrKeyHash].sample.get
                   )
               ),
