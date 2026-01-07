@@ -12,7 +12,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.Party.{Alice, Bob}
+import scalus.testing.kit.Party
+import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.prelude.List as PList
 import scalus.utils.await
 import scalus.{plutusV3, toUplc, Compiler}

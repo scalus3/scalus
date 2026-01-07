@@ -6,6 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.ArbitraryInstances.given
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.txbuilder.TransactionBuilder.ensureMinAda
+import scalus.testing.kit.Party
 
 /** Ada-only pub key utxo from the given peer, at least `min` Ada, random tx id, random index, no
   * datum, no script ref

@@ -1,4 +1,4 @@
-package scalus.cardano.txbuilder
+package scalus.testing.kit
 
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Network as BBNetwork
@@ -9,6 +9,7 @@ import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.AddrKeyHash
+import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 
 import scala.collection.mutable

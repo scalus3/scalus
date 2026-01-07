@@ -5,7 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.Party.{Alice, Bob}
+import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.utils.await
 

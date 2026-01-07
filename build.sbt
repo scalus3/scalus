@@ -450,6 +450,11 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           val targetDir = crossProjectBaseDirectory.value / "core-shared" / "scala"
           val log = streams.value.log
           copyFiles(sharedFiles, baseDir, targetDir, log)
+          // Copy Party.scala from scalus-cardano-ledger JVM test sources (JVM-only)
+          val cardanoLedgerFiles = Seq("scalus/testing/kit/Party.scala")
+          val cardanoLedgerBaseDir =
+              (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala"
+          copyFiles(cardanoLedgerFiles, cardanoLedgerBaseDir, targetDir, log)
           log.info(s"Copied shared files to target $targetDir")
       },
       Compile / unmanagedSourceDirectories += crossProjectBaseDirectory.value / "core-shared" / "scala",

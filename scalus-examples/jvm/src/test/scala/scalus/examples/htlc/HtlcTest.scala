@@ -3,13 +3,16 @@ package scalus.examples.htlc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
 import scalus.builtin.Data.toData
-import scalus.builtin.{platform, ByteString}
+import scalus.builtin.ByteString
+import scalus.cardano.address.ShelleyPaymentPart
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.TransactionSigner
+import scalus.cardano.wallet.BloxbeanAccount
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.testing.kit.{Party, ScalusTest, TestUtil}
+import scalus.testing.kit.Party.{Alice, Bob, Eve, Mallory}
 import scalus.utils.await
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -91,33 +94,31 @@ object HtlcTest extends ScalusTest {
     private val compiledContract = HtlcContract.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
 
-    private val committerKeyPair @ (committerPrivateKey, committerPublicKey) = generateKeyPair()
-    private val receiverKeyPair @ (receiverPrivateKey, receiverPublicKey) = generateKeyPair()
-    private val wrongCommitterKeyPair @ (wrongCommitterPrivateKey, wrongCommitterPublicKey) =
-        generateKeyPair()
-    private val wrongReceiverKeyPair @ (wrongReceiverPrivateKey, wrongReceiverPublicKey) =
-        generateKeyPair()
+    // Party to role mapping
+    private val committer = Alice
+    private val receiver = Bob
+    private val wrongCommitter = Mallory
+    private val wrongReceiver = Eve
 
-    private val committerSigner = TransactionSigner(Set(committerKeyPair))
-    private val receiverSigner = TransactionSigner(Set(receiverKeyPair))
-    private val wrongCommitterSigner =
-        TransactionSigner(Set(committerKeyPair, wrongCommitterKeyPair))
-    private val wrongReceiverSigner = TransactionSigner(Set(receiverKeyPair, wrongReceiverKeyPair))
+    // Extract PKH from Party's address payment credential
+    private def pkh(party: Party): AddrKeyHash = party.address.payment match
+        case ShelleyPaymentPart.Key(hash) => hash
+        case _ => throw IllegalArgumentException("Party must have key payment")
+
+    private val committerPkh = pkh(committer)
+    private val receiverPkh = pkh(receiver)
+    private val wrongCommitterPkh = pkh(wrongCommitter)
+    private val wrongReceiverPkh = pkh(wrongReceiver)
+
+    private val committerAddress = Party.address(committer, env.network)
+    private val receiverAddress = Party.address(receiver, env.network)
+    private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     private val txCreator = HtlcTransactionCreator(
       env = env,
       evaluator = PlutusScriptEvaluator.constMaxBudget(env),
       contract = compiledContract
     )
-
-    private val committerPkh = AddrKeyHash(platform.blake2b_224(committerPublicKey))
-    private val receiverPkh = AddrKeyHash(platform.blake2b_224(receiverPublicKey))
-    private val wrongCommitterPkh = AddrKeyHash(platform.blake2b_224(wrongCommitterPublicKey))
-    private val wrongReceiverPkh = AddrKeyHash(platform.blake2b_224(wrongReceiverPublicKey))
-
-    private val committerAddress = TestUtil.createTestAddress(committerPkh)
-    private val receiverAddress = TestUtil.createTestAddress(receiverPkh)
-    private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     private val lockAmount = Coin(10_000_000L)
     private val commissionAmount = Coin(2_000_000L)
@@ -171,9 +172,17 @@ object HtlcTest extends ScalusTest {
                         .toOption
                         .get
 
-                    val (pkh, signer) = person match
-                        case Person.Receiver      => (receiverPkh, receiverSigner)
-                        case Person.WrongReceiver => (wrongReceiverPkh, wrongReceiverSigner)
+                    val (pkhVal, signer) = person match
+                        case Person.Receiver      => (receiverPkh, receiver.signer)
+                        case Person.WrongReceiver =>
+                            // Use wrong PKH but sign with both keys to pass ledger checks
+                            val combinedSigner = new TransactionSigner(
+                              Set(
+                                new BloxbeanAccount(receiver.account).paymentKeyPair,
+                                new BloxbeanAccount(wrongReceiver.account).paymentKeyPair
+                              )
+                            )
+                            (wrongReceiverPkh, combinedSigner)
                         case _ =>
                             throw IllegalArgumentException(s"Invalid person for Reveal: $person")
 
@@ -187,7 +196,7 @@ object HtlcTest extends ScalusTest {
                       payeeAddress = receiverAddress,
                       changeAddress = changeAddress,
                       preimage = preimage,
-                      receiverPkh = pkh,
+                      receiverPkh = pkhVal,
                       time = txTime,
                       signer = signer
                     )
@@ -203,10 +212,17 @@ object HtlcTest extends ScalusTest {
                         .toOption
                         .get
 
-                    val (pkh, signer) = person match
-                        case Person.Committer => (committerPkh, committerSigner)
+                    val (pkhVal, signer) = person match
+                        case Person.Committer      => (committerPkh, committer.signer)
                         case Person.WrongCommitter =>
-                            (wrongCommitterPkh, wrongCommitterSigner)
+                            // Use wrong PKH but sign with both keys to pass ledger checks
+                            val combinedSigner = new TransactionSigner(
+                              Set(
+                                new BloxbeanAccount(committer.account).paymentKeyPair,
+                                new BloxbeanAccount(wrongCommitter.account).paymentKeyPair
+                              )
+                            )
+                            (wrongCommitterPkh, combinedSigner)
                         case _ =>
                             throw IllegalArgumentException(s"Invalid person for Timeout: $person")
 
@@ -219,7 +235,7 @@ object HtlcTest extends ScalusTest {
                       lockedUtxo = lockedUtxo,
                       payeeAddress = committerAddress,
                       changeAddress = changeAddress,
-                      committerPkh = pkh,
+                      committerPkh = pkhVal,
                       time = txTime,
                       signer = signer
                     )
@@ -316,7 +332,7 @@ object HtlcTest extends ScalusTest {
           receiver = receiverPkh,
           image = image,
           timeout = timeout,
-          signer = committerSigner
+          signer = committer.signer
         )
         assert(provider.submit(lockTx).await().isRight)
         val lockedUtxo = lockTx.utxos.find { case (_, txOut) => txOut.address == scriptAddress }.get
