@@ -11,6 +11,7 @@ import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.ledger.api.v1.PubKeyHash
+import scalus.showHighlighted
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.testing.kit.Party.{Alice, Bob, Eve, Mallory}
 import scalus.utils.await
@@ -22,7 +23,9 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     import HtlcTest.*
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
-        assert(HtlcContract.script.script.size == 577)
+        println(HtlcContract.sir.showHighlighted)
+        println(HtlcContract.program.showHighlighted)
+        assert(HtlcContract.script.script.size == 569)
     }
 
     test("receiver reveals preimage before timeout") {
@@ -95,8 +98,6 @@ object HtlcTest extends ScalusTest {
     private val scriptAddress = compiledContract.address(env.network)
 
     // Party to role mapping
-    private val committer = Alice
-    private val receiver = Bob
     private val wrongCommitter = Mallory
     private val wrongReceiver = Eve
 
@@ -105,13 +106,13 @@ object HtlcTest extends ScalusTest {
         case ShelleyPaymentPart.Key(hash) => hash
         case _ => throw IllegalArgumentException("Party must have key payment")
 
-    private val committerPkh = pkh(committer)
-    private val receiverPkh = pkh(receiver)
+    private val committerPkh = pkh(Alice)
+    private val receiverPkh = pkh(Bob)
     private val wrongCommitterPkh = pkh(wrongCommitter)
     private val wrongReceiverPkh = pkh(wrongReceiver)
 
-    private val committerAddress = committer.address
-    private val receiverAddress = receiver.address
+    private val committerAddress = Alice.address
+    private val receiverAddress = Bob.address
     private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     private val txCreator = HtlcTransactionCreator(
@@ -170,12 +171,12 @@ object HtlcTest extends ScalusTest {
                         .get
 
                     val (pkhVal, signer) = person match
-                        case Person.Receiver      => (receiverPkh, receiver.signer)
+                        case Person.Receiver      => (receiverPkh, Bob.signer)
                         case Person.WrongReceiver =>
                             // Use wrong PKH but sign with both keys to pass ledger checks
                             val combinedSigner = new TransactionSigner(
                               Set(
-                                new BloxbeanAccount(receiver.account).paymentKeyPair,
+                                new BloxbeanAccount(Bob.account).paymentKeyPair,
                                 new BloxbeanAccount(wrongReceiver.account).paymentKeyPair
                               )
                             )
@@ -207,12 +208,12 @@ object HtlcTest extends ScalusTest {
                         .get
 
                     val (pkhVal, signer) = person match
-                        case Person.Committer      => (committerPkh, committer.signer)
+                        case Person.Committer      => (committerPkh, Alice.signer)
                         case Person.WrongCommitter =>
                             // Use wrong PKH but sign with both keys to pass ledger checks
                             val combinedSigner = new TransactionSigner(
                               Set(
-                                new BloxbeanAccount(committer.account).paymentKeyPair,
+                                new BloxbeanAccount(Alice.account).paymentKeyPair,
                                 new BloxbeanAccount(wrongCommitter.account).paymentKeyPair
                               )
                             )
@@ -326,7 +327,7 @@ object HtlcTest extends ScalusTest {
           receiver = receiverPkh,
           image = image,
           timeout = timeout,
-          signer = committer.signer
+          signer = Alice.signer
         )
         assert(provider.submit(lockTx).await().isRight)
         val lockedUtxo = lockTx.utxos.find { case (_, txOut) => txOut.address == scriptAddress }.get

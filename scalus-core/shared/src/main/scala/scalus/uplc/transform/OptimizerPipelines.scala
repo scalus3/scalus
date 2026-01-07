@@ -14,8 +14,10 @@ class V1V2Optimizer extends Optimizer {
         val etaReduce = new EtaReduce(logger)
         val strictIf = new StrictIf(logger)
 
-        term |> etaReduce.apply // first eta reduce to expose more inlining opportunities
-            |> inliner.apply // inline functions and eliminate dead code
+        // Run eta-reduce/inline passes 3 times to handle patterns created by inlining
+        term |> etaReduce.apply |> inliner.apply
+            |> etaReduce.apply |> inliner.apply
+            |> etaReduce.apply |> inliner.apply
             |> strictIf.apply // convert eligible ifs to strict ifs
             |> builtinsExtractor.apply // extract forced builtins
     }
@@ -33,8 +35,10 @@ class V3Optimizer extends Optimizer {
         val etaReduce = new EtaReduce(logger)
         val strictIf = new StrictIf(logger)
 
-        term |> etaReduce.apply // first eta reduce to expose more inlining opportunities
-            |> inliner.apply // inline functions and eliminate dead code
+        // Run eta-reduce/inline passes 3 times to handle patterns created by inlining
+        term |> etaReduce.apply |> inliner.apply
+            |> etaReduce.apply |> inliner.apply
+            |> etaReduce.apply |> inliner.apply
             |> strictIf.apply // convert eligible ifs to strict ifs
             |> builtinsExtractor.apply // extract forced builtins
             |> caseConstr.apply // optimize multiple applys to more optimal case/constr nodes
