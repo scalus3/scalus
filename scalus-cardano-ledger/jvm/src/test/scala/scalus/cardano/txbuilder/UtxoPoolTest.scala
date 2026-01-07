@@ -9,6 +9,7 @@ import scalus.testing.kit.Party.Alice
 class UtxoPoolTest extends AnyFunSuite {
 
     // Use mainnet protocol params like other tests
+    given CardanoInfo = CardanoInfo.mainnet
     val testProtocolParams: ProtocolParams = CardanoInfo.mainnet.protocolParams
 
     // Computed minAda for a simple ADA-only output (using Alice's address as reference)

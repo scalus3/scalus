@@ -90,7 +90,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
 }
 
 object HtlcTest extends ScalusTest {
-    private val env = TestUtil.testEnvironment
+    private given env: CardanoInfo = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
 
@@ -110,8 +110,8 @@ object HtlcTest extends ScalusTest {
     private val wrongCommitterPkh = pkh(wrongCommitter)
     private val wrongReceiverPkh = pkh(wrongReceiver)
 
-    private val committerAddress = Party.address(committer, env.network)
-    private val receiverAddress = Party.address(receiver, env.network)
+    private val committerAddress = committer.address
+    private val receiverAddress = receiver.address
     private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     private val txCreator = HtlcTransactionCreator(

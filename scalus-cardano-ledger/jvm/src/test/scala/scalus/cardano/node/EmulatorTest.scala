@@ -13,7 +13,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
-    val testEnv: CardanoInfo = CardanoInfo.mainnet
+    given testEnv: CardanoInfo = CardanoInfo.mainnet
 
     test("Emulator.utxos returns all UTXOs") {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))

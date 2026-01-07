@@ -4,11 +4,10 @@ import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Network as BBNetwork
 import com.bloxbean.cardano.client.crypto.cip1852.DerivationPath.createExternalAddressDerivationPathForAccount
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
-import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
-import scalus.cardano.ledger.AddrKeyHash
+import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
+import scalus.cardano.ledger.{AddrKeyHash, CardanoInfo}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.testing.kit.Party.{accountCache, mnemonic}
@@ -62,7 +61,10 @@ enum Party derives CanEqual {
       )
     )
 
-    def address: ShelleyAddress = Party.address(this)
+    def address(using env: CardanoInfo): ShelleyAddress = {
+        val pkh = account.hdKeyPair().getPublicKey.getKeyHash
+        ShelleyAddress(env.network, Key(AddrKeyHash.fromArray(pkh)), Null)
+    }
 
     def signer: TransactionSigner = {
         new TransactionSigner(Set(new BloxbeanAccount(account).paymentKeyPair))
@@ -79,11 +81,6 @@ object Party {
             "test test test sauce"
 
     private val accountCache: mutable.Map[Party, Account] = mutable.Map.empty
-
-    def address(party: Party, network: Network = Mainnet): ShelleyAddress = {
-        val pkh = party.account.hdKeyPair().getPublicKey.getKeyHash
-        ShelleyAddress(network, Key(AddrKeyHash.fromArray(pkh)), Null)
-    }
 
     /////////////////////////////
     // Generators

@@ -35,6 +35,8 @@ import scala.collection.immutable.SortedMap
 
 class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
+    given CardanoInfo = CardanoInfo.mainnet
+
     /** Test that the builder steps fail with the expected error
       *
       * @param label

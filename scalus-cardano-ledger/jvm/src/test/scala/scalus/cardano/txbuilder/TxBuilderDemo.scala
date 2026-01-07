@@ -21,7 +21,7 @@ given Compiler.Options = Compiler.Options.default
 
 class TxBuilderDemo extends AnyFunSuite {
 
-    val env: CardanoInfo = CardanoInfo.mainnet
+    given env: CardanoInfo = CardanoInfo.mainnet
     // Common test values
     val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))

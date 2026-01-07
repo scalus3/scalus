@@ -22,7 +22,7 @@ import scala.collection.immutable.SortedMap
 
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
-    val testEnv: CardanoInfo = CardanoInfo.mainnet
+    given testEnv: CardanoInfo = CardanoInfo.mainnet
 
     // Common test values
     val genesisHash: TransactionHash =

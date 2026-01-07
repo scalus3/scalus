@@ -23,7 +23,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstances {
 
-    val testEnv: CardanoInfo = CardanoInfo.mainnet
+    given testEnv: CardanoInfo = CardanoInfo.mainnet
 
     // Deterministic test mnemonic for cross-platform signature comparison
     private val testMnemonic =

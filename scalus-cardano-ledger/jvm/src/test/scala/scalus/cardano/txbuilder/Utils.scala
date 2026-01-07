@@ -15,7 +15,7 @@ def genAdaOnlyPubKeyUtxo(
     party: Party,
     params: ProtocolParams = CardanoInfo.mainnet.protocolParams,
     min: Long = 0L
-): Gen[(TransactionInput, Babbage)] =
+)(using CardanoInfo): Gen[(TransactionInput, Babbage)] =
     for txId <- Arbitrary.arbitrary[TransactionInput]
     yield (
       txId,
