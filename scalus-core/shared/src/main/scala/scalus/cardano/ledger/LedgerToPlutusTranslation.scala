@@ -347,7 +347,7 @@ object LedgerToPlutusTranslation {
         (validityStartSlot, ttl) match
             case (None, None) => v1.Interval.always
             case (None, Some(validTo)) =>
-                val closure = if protocolVersion.version > 8 then false else true
+                val closure = protocolVersion.version < 8
                 val upper = v1.IntervalBound(
                   v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo).toLong)),
                   closure
