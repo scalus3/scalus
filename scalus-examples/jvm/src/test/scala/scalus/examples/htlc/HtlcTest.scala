@@ -106,12 +106,6 @@ object HtlcTest extends ScalusTest {
 
     private val txCreator = HtlcTransactionCreator(
       env = env,
-      evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
-      contract = compiledContract
-    )
-
-    private val txCreatorConstEval = HtlcTransactionCreator(
-      env = env,
       evaluator = PlutusScriptEvaluator.constMaxBudget(env),
       contract = compiledContract
     )
@@ -187,7 +181,7 @@ object HtlcTest extends ScalusTest {
                         case Time.BeforeTimeout => timeout
                         case Time.AfterTimeout  => afterTimeout
 
-                    val revealTx = txCreatorConstEval.reveal(
+                    val revealTx = txCreator.reveal(
                       utxos = utxos,
                       lockedUtxo = lockedUtxo,
                       payeeAddress = receiverAddress,
@@ -220,7 +214,7 @@ object HtlcTest extends ScalusTest {
                         case Time.BeforeTimeout => beforeTimeout
                         case Time.AfterTimeout  => afterTimeout
 
-                    val timeoutTx = txCreatorConstEval.timeout(
+                    val timeoutTx = txCreator.timeout(
                       utxos = utxos,
                       lockedUtxo = lockedUtxo,
                       payeeAddress = committerAddress,
