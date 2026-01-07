@@ -4,6 +4,7 @@ import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Network as BBNetwork
 import com.bloxbean.cardano.client.crypto.cip1852.DerivationPath.createExternalAddressDerivationPathForAccount
 import org.scalacheck.{Arbitrary, Gen}
+import scalus.builtin.ByteString
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
@@ -12,6 +13,7 @@ import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.testing.kit.Party.{accountCache, mnemonic}
 
+import scala.annotation.threadUnsafe
 import scala.collection.mutable
 
 /** Test parties (A-Z) for smart contract testing.
@@ -61,9 +63,14 @@ enum Party derives CanEqual {
       )
     )
 
+    @threadUnsafe
+    lazy val addrKeyHash: AddrKeyHash = {
+        val pkh = ByteString.unsafeFromArray(account.hdKeyPair().getPublicKey.getKeyHash)
+        AddrKeyHash.fromByteString(pkh)
+    }
+
     def address(using env: CardanoInfo): ShelleyAddress = {
-        val pkh = account.hdKeyPair().getPublicKey.getKeyHash
-        ShelleyAddress(env.network, Key(AddrKeyHash.fromArray(pkh)), Null)
+        ShelleyAddress(env.network, Key(addrKeyHash), Null)
     }
 
     def signer: TransactionSigner = {
