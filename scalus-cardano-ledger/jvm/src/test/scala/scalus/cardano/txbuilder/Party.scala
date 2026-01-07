@@ -3,19 +3,17 @@ package scalus.cardano.txbuilder
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Network as BBNetwork
 import com.bloxbean.cardano.client.crypto.cip1852.DerivationPath.createExternalAddressDerivationPathForAccount
-import org.scalacheck.Gen
-import scalus.builtin.Builtins.blake2b_224
-import scalus.builtin.ByteString
+import org.scalacheck.{Arbitrary, Gen}
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
-import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.ledger.Hash
+import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
+import scalus.cardano.ledger.AddrKeyHash
 import scalus.cardano.wallet.BloxbeanAccount
 
 import scala.collection.mutable
 
-enum Party derives CanEqual:
+enum Party derives CanEqual {
     case Alice // First party
     case Bob // Second party
     case Charles // Third party
@@ -52,8 +50,9 @@ enum Party derives CanEqual:
     def signer: TransactionSigner = {
         new TransactionSigner(Set(new BloxbeanAccount(account).paymentKeyPair))
     }
+}
 
-object Party:
+object Party {
     private val mnemonic: String =
         "test test test test " +
             "test test test test " +
@@ -63,46 +62,31 @@ object Party:
             "test test test sauce"
 
     private val accountCache: mutable.Map[Party, Account] = mutable.Map.empty
-        .withDefault(peer =>
-            Account.createFromMnemonic(
-              BBNetwork(0, 42),
-              mnemonic,
-              createExternalAddressDerivationPathForAccount(peer.ordinal)
-            )
-        )
 
-    private val addressCache: mutable.Map[Party, (ShelleyPaymentPart, ShelleyDelegationPart)] =
-        mutable.Map.empty.withDefault(peer =>
-            (
-              Key(Hash(blake2b_224(ByteString.fromArray(account(peer).publicKeyBytes())))),
-              Null
-            )
-        )
-
-    def account(party: Party): Account = accountCache.cache(party)
+    def account(party: Party): Account = accountCache.getOrElseUpdate(
+      party,
+      Account.createFromMnemonic(
+        BBNetwork(0, 42),
+        mnemonic,
+        createExternalAddressDerivationPathForAccount(party.ordinal)
+      )
+    )
 
     def address(party: Party, network: Network = Mainnet): ShelleyAddress = {
-        val (payment, delegation) = addressCache.cache(party)
-        ShelleyAddress(network, payment, delegation)
+        val pkh = account(party).hdKeyPair().getPublicKey.getKeyHash
+        ShelleyAddress(network, Key(AddrKeyHash.fromArray(pkh)), Null)
     }
 
-extension [K, V](map: mutable.Map[K, V])
-    def cache(key: K): V = map.get(key) match {
-        case None =>
-            val missing = map.default(key)
-            @annotation.unused
-            val _ = map.put(key, missing)
-            missing
-        case Some(value) => value
-    }
+    /////////////////////////////
+    // Generators
 
-/////////////////////////////
-// Generators
+    val genParty: Gen[Party] =
+        Gen.choose(0, Party.values.length - 1).map(Party.fromOrdinal)
 
-val genParty: Gen[Party] =
-    Gen.choose(0, Party.values.length - 1).map(Party.fromOrdinal)
+    /** Choose between 2 and 26 peers */
+    val genParties: Gen[Seq[Party]] =
+        for numParties <- Gen.choose(2, Party.values.length)
+        yield Party.values.take(numParties).toSeq
 
-/** Choose between 2 and 26 peers */
-val genParties: Gen[Seq[Party]] =
-    for numParties <- Gen.choose(2, Party.values.length)
-    yield Party.values.take(numParties).toSeq
+    given Arbitrary[Party] = Arbitrary(genParty)
+}
