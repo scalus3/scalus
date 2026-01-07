@@ -22,72 +22,164 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     import HtlcTest.*
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
-//        println(HtlcContract.sir.showHighlighted)
-//        println(HtlcContract.program.showHighlighted)
         assert(HtlcContract.script.script.size == 569)
     }
 
     test("receiver reveals preimage before timeout") {
-        TestCase(
-          action = Action.Reveal(validPreimage),
-          person = Person.Receiver,
-          time = Time.BeforeTimeout,
-          expected = Expected.Success
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+
+        val revealTx = txCreator.reveal(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = receiverAddress,
+          changeAddress = changeAddress,
+          preimage = validPreimage,
+          receiverPkh = receiverPkh,
+          validTo = timeout,
+          signer = Bob.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertSuccess(provider, revealTx, lockedUtxo._1)
     }
 
     test("receiver fails with wrong preimage") {
-        TestCase(
-          action = Action.Reveal(wrongPreimage),
-          person = Person.Receiver,
-          time = Time.BeforeTimeout,
-          expected = Expected.Failure(HtlcValidator.InvalidReceiverPreimage)
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+
+        val revealTx = txCreator.reveal(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = receiverAddress,
+          changeAddress = changeAddress,
+          preimage = wrongPreimage,
+          receiverPkh = receiverPkh,
+          validTo = timeout,
+          signer = Bob.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, revealTx, lockedUtxo._1, HtlcValidator.InvalidReceiverPreimage)
     }
 
     test("receiver fails with wrong receiver pubkey hash") {
-        TestCase(
-          action = Action.Reveal(validPreimage),
-          person = Person.WrongReceiver,
-          time = Time.BeforeTimeout,
-          expected = Expected.Failure(HtlcValidator.UnsignedReceiverTransaction)
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+
+        val combinedSigner = new TransactionSigner(
+          Set(
+            new BloxbeanAccount(Bob.account).paymentKeyPair,
+            new BloxbeanAccount(Eve.account).paymentKeyPair
+          )
+        )
+
+        val revealTx = txCreator.reveal(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = receiverAddress,
+          changeAddress = changeAddress,
+          preimage = validPreimage,
+          receiverPkh = wrongReceiverPkh,
+          validTo = timeout,
+          signer = combinedSigner
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, revealTx, lockedUtxo._1, HtlcValidator.UnsignedReceiverTransaction)
     }
 
     test("receiver fails after timeout") {
-        TestCase(
-          action = Action.Reveal(validPreimage),
-          person = Person.Receiver,
-          time = Time.AfterTimeout,
-          expected = Expected.Failure(HtlcValidator.InvalidReceiverTimePoint)
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+
+        val revealTx = txCreator.reveal(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = receiverAddress,
+          changeAddress = changeAddress,
+          preimage = validPreimage,
+          receiverPkh = receiverPkh,
+          validTo = afterTimeout,
+          signer = Bob.signer
+        )
+
+        // Submit at timeout slot (not after) because ledger validity interval check happens first
+        provider.setSlot(slot)
+        assertFailure(provider, revealTx, lockedUtxo._1, HtlcValidator.InvalidReceiverTimePoint)
     }
 
     test("committer reclaims after timeout") {
-        TestCase(
-          action = Action.Timeout,
-          person = Person.Committer,
-          time = Time.AfterTimeout,
-          expected = Expected.Success
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(committerAddress).await().toOption.get
+
+        val timeoutTx = txCreator.timeout(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = committerAddress,
+          changeAddress = changeAddress,
+          committerPkh = committerPkh,
+          validFrom = afterTimeout,
+          signer = Alice.signer
+        )
+
+        provider.setSlot(afterSlot)
+        assertSuccess(provider, timeoutTx, lockedUtxo._1)
     }
 
     test("committer fails with wrong committer pubkey hash") {
-        TestCase(
-          action = Action.Timeout,
-          person = Person.WrongCommitter,
-          time = Time.AfterTimeout,
-          expected = Expected.Failure(HtlcValidator.UnsignedCommitterTransaction)
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(committerAddress).await().toOption.get
+
+        val combinedSigner = new TransactionSigner(
+          Set(
+            new BloxbeanAccount(Alice.account).paymentKeyPair,
+            new BloxbeanAccount(Mallory.account).paymentKeyPair
+          )
+        )
+
+        val timeoutTx = txCreator.timeout(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = committerAddress,
+          changeAddress = changeAddress,
+          committerPkh = wrongCommitterPkh,
+          validFrom = afterTimeout,
+          signer = combinedSigner
+        )
+
+        provider.setSlot(afterSlot)
+        assertFailure(
+          provider,
+          timeoutTx,
+          lockedUtxo._1,
+          HtlcValidator.UnsignedCommitterTransaction
+        )
     }
 
     test("committer fails before timeout") {
-        TestCase(
-          action = Action.Timeout,
-          person = Person.Committer,
-          time = Time.BeforeTimeout,
-          expected = Expected.Failure(HtlcValidator.InvalidCommitterTimePoint)
-        ).run()
+        val provider = createProvider()
+        val (_, lockedUtxo) = createAndSubmitLockTx(provider)
+        val utxos = provider.findUtxos(committerAddress).await().toOption.get
+
+        val timeoutTx = txCreator.timeout(
+          utxos = utxos,
+          lockedUtxo = lockedUtxo,
+          payeeAddress = committerAddress,
+          changeAddress = changeAddress,
+          committerPkh = committerPkh,
+          validFrom = beforeTimeout,
+          signer = Alice.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, timeoutTx, lockedUtxo._1, HtlcValidator.InvalidCommitterTimePoint)
     }
 }
 
@@ -96,14 +188,10 @@ object HtlcTest extends ScalusTest {
     private val compiledContract = HtlcContract.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
 
-    // Party to role mapping
-    private val wrongCommitter = Mallory
-    private val wrongReceiver = Eve
-
     private val committerPkh = Alice.addrKeyHash
     private val receiverPkh = Bob.addrKeyHash
-    private val wrongCommitterPkh = wrongCommitter.addrKeyHash
-    private val wrongReceiverPkh = wrongReceiver.addrKeyHash
+    private val wrongCommitterPkh = Mallory.addrKeyHash
+    private val wrongReceiverPkh = Eve.addrKeyHash
 
     private val committerAddress = Alice.address
     private val receiverAddress = Bob.address
@@ -116,7 +204,6 @@ object HtlcTest extends ScalusTest {
     )
 
     private val lockAmount = Coin(10_000_000L)
-    private val commissionAmount = Coin(2_000_000L)
 
     private val slot: SlotNo = 10
     private val beforeSlot: SlotNo = slot - 1
@@ -135,145 +222,6 @@ object HtlcTest extends ScalusTest {
       image,
       timeout.toEpochMilli
     ).toData
-
-    enum Person:
-        case Committer, Receiver, WrongCommitter, WrongReceiver
-
-    enum Time:
-        case BeforeTimeout, AfterTimeout
-
-    enum Expected:
-        case Success
-        case Failure(errorMsg: String)
-
-    case class TestCase(
-        action: Action,
-        person: Person,
-        time: Time,
-        expected: Expected
-    ):
-        def run(): Unit = {
-            val provider = createProvider()
-            val (lockTx, lockedUtxo) = createAndSubmitLockTx(provider)
-
-            val (tx, lockedInput) = action match
-                case Action.Reveal(preimage) =>
-                    val utxos = provider
-                        .findUtxos(address = receiverAddress)
-                        .await()
-                        .toOption
-                        .get
-
-                    val (pkhVal, signer) = person match
-                        case Person.Receiver      => (receiverPkh, Bob.signer)
-                        case Person.WrongReceiver =>
-                            // Use wrong PKH but sign with both keys to pass ledger checks
-                            val combinedSigner = new TransactionSigner(
-                              Set(
-                                new BloxbeanAccount(Bob.account).paymentKeyPair,
-                                new BloxbeanAccount(wrongReceiver.account).paymentKeyPair
-                              )
-                            )
-                            (wrongReceiverPkh, combinedSigner)
-                        case _ =>
-                            throw IllegalArgumentException(s"Invalid person for Reveal: $person")
-
-                    val txTime = time match
-                        case Time.BeforeTimeout => timeout
-                        case Time.AfterTimeout  => afterTimeout
-
-                    val revealTx = txCreator.reveal(
-                      utxos = utxos,
-                      lockedUtxo = lockedUtxo,
-                      payeeAddress = receiverAddress,
-                      changeAddress = changeAddress,
-                      preimage = preimage,
-                      receiverPkh = pkhVal,
-                      validTo = txTime,
-                      signer = signer
-                    )
-                    (revealTx, lockedUtxo._1)
-
-                case Action.Timeout =>
-                    val utxos = provider
-                        .findUtxos(address = committerAddress)
-                        .await()
-                        .toOption
-                        .get
-
-                    val (pkhVal, signer) = person match
-                        case Person.Committer      => (committerPkh, Alice.signer)
-                        case Person.WrongCommitter =>
-                            // Use wrong PKH but sign with both keys to pass ledger checks
-                            val combinedSigner = new TransactionSigner(
-                              Set(
-                                new BloxbeanAccount(Alice.account).paymentKeyPair,
-                                new BloxbeanAccount(wrongCommitter.account).paymentKeyPair
-                              )
-                            )
-                            (wrongCommitterPkh, combinedSigner)
-                        case _ =>
-                            throw IllegalArgumentException(s"Invalid person for Timeout: $person")
-
-                    val txTime = time match
-                        case Time.BeforeTimeout => beforeTimeout
-                        case Time.AfterTimeout  => afterTimeout
-
-                    val timeoutTx = txCreator.timeout(
-                      utxos = utxos,
-                      lockedUtxo = lockedUtxo,
-                      payeeAddress = committerAddress,
-                      changeAddress = changeAddress,
-                      committerPkh = pkhVal,
-                      validFrom = txTime,
-                      signer = signer
-                    )
-                    (timeoutTx, lockedUtxo._1)
-
-            // Direct validator call for JVM debugging
-            val scriptContext = getScriptContext(provider, tx, lockedInput)
-            val directResult = Try(HtlcContract.code(scriptContext.toData))
-
-            // Set slot and submit to Emulator
-            // For reveal actions after timeout, submit at timeout slot (not after)
-            // because the ledger validity interval check happens before the validator
-            val submissionSlot = (action, time) match
-                case (Action.Reveal(_), Time.AfterTimeout) => slot // at timeout, not after
-                case (_, Time.BeforeTimeout)               => beforeSlot
-                case (_, Time.AfterTimeout)                => afterSlot
-            provider.setSlot(submissionSlot)
-            val submissionResult = provider.submit(tx).await()
-
-            // Verify results
-            expected match
-                case Expected.Success =>
-                    assert(
-                      directResult.isSuccess,
-                      s"Direct validator call failed: ${directResult.failed.get}"
-                    )
-                    assert(
-                      submissionResult.isRight,
-                      s"Emulator submission failed: $submissionResult"
-                    )
-
-                case Expected.Failure(errorMsg) =>
-                    assert(
-                      directResult.isFailure,
-                      s"Direct validator call should have failed but succeeded"
-                    )
-                    submissionResult match
-                        case Left(nodeError: SubmitError.NodeError) =>
-                            assert(
-                              nodeError.message.endsWith(errorMsg),
-                              s"Expected error '$errorMsg' but got '${nodeError.message}'"
-                            )
-                        case Left(other) =>
-                            throw AssertionError(s"Expected NodeError but got: $other")
-                        case Right(_) =>
-                            throw AssertionError(
-                              "Emulator submission should have failed but succeeded"
-                            )
-        }
 
     private def createProvider(): Emulator = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
@@ -326,5 +274,42 @@ object HtlcTest extends ScalusTest {
         assert(provider.submit(lockTx).await().isRight)
         val lockedUtxo = lockTx.utxos.find { case (_, txOut) => txOut.address == scriptAddress }.get
         (lockTx, Utxo(lockedUtxo))
+    }
+
+    private def assertSuccess(
+        provider: Emulator,
+        tx: Transaction,
+        lockedInput: TransactionInput
+    ): Unit = {
+        val scriptContext = getScriptContext(provider, tx, lockedInput)
+        val directResult = Try(HtlcContract.code(scriptContext.toData))
+        val submissionResult = provider.submit(tx).await()
+
+        assert(directResult.isSuccess, s"Direct validator call failed: ${directResult.failed.get}")
+        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
+    }
+
+    private def assertFailure(
+        provider: Emulator,
+        tx: Transaction,
+        lockedInput: TransactionInput,
+        expectedError: String
+    ): Unit = {
+        val scriptContext = getScriptContext(provider, tx, lockedInput)
+        val directResult = Try(HtlcContract.code(scriptContext.toData))
+        val submissionResult = provider.submit(tx).await()
+
+        assert(directResult.isFailure, "Direct validator call should have failed but succeeded")
+        submissionResult match {
+            case Left(nodeError: SubmitError.NodeError) =>
+                assert(
+                  nodeError.message.endsWith(expectedError),
+                  s"Expected error '$expectedError' but got '${nodeError.message}'"
+                )
+            case Left(other) =>
+                throw AssertionError(s"Expected NodeError but got: $other")
+            case Right(_) =>
+                throw AssertionError("Emulator submission should have failed but succeeded")
+        }
     }
 }
