@@ -127,9 +127,9 @@ object HtlcTest extends ScalusTest {
     private val slot: SlotNo = 10
     private val beforeSlot: SlotNo = slot - 1
     private val afterSlot: SlotNo = slot + 1
-    private val timeout: Instant = Instant.ofEpochMilli(env.slotConfig.slotToTime(slot))
-    private val beforeTimeout: Instant = Instant.ofEpochMilli(env.slotConfig.slotToTime(beforeSlot))
-    private val afterTimeout: Instant = Instant.ofEpochMilli(env.slotConfig.slotToTime(afterSlot))
+    private val timeout: Instant = env.slotConfig.slotToInstant(slot)
+    private val beforeTimeout: Instant = env.slotConfig.slotToInstant(beforeSlot)
+    private val afterTimeout: Instant = env.slotConfig.slotToInstant(afterSlot)
 
     val validPreimage: Preimage = genByteStringOfN(32).sample.get
     val wrongPreimage: Preimage = genByteStringOfN(12).sample.get

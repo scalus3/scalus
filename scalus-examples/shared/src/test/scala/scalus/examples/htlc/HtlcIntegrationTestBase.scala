@@ -154,11 +154,11 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
             timeout = testEnv match {
                 case TestEnv.Local =>
                     val timeoutSlot =
-                        ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
+                        ctx.cardanoInfo.slotConfig.instantToSlot(Instant.now()) + 1875
                     BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot).toLong)
                 case TestEnv.Preprod =>
                     val timeoutSlot =
-                        ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) + 1875
+                        ctx.cardanoInfo.slotConfig.instantToSlot(Instant.now()) + 1875
                     BigInt(ctx.cardanoInfo.slotConfig.slotToTime(timeoutSlot).toLong)
             }
             lockAmount = 8_000_000L
@@ -234,14 +234,14 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
                   .getOrElse(fail("No suitable collateral UTXO found"))
             )
 
-            revealTime = testEnv match {
+            revealInstant = testEnv match {
                 case TestEnv.Local =>
                     // yaci time works a lil' differently
-                    ctx.cardanoInfo.slotConfig.slotToTime(100L).toLong
+                    ctx.cardanoInfo.slotConfig.slotToInstant(100L)
                 case TestEnv.Preprod =>
                     val revealSlot =
-                        ctx.cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()) - 100
-                    ctx.cardanoInfo.slotConfig.slotToTime(revealSlot).toLong
+                        ctx.cardanoInfo.slotConfig.instantToSlot(Instant.now()) - 100
+                    ctx.cardanoInfo.slotConfig.slotToInstant(revealSlot)
             }
 
             txCreator = HtlcTransactionCreator(
@@ -257,7 +257,7 @@ abstract class HtlcIntegrationTestBase(using backend: Backend[Future]) extends A
               senderAddr,
               preimage,
               AddrKeyHash(senderPkh.hash),
-              Instant.ofEpochMilli(revealTime),
+              revealInstant,
               signer
             )
 

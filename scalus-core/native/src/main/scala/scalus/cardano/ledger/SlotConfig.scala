@@ -1,8 +1,12 @@
 package scalus.cardano.ledger
 
+import java.time.Instant
+
 case class SlotConfig(zeroTime: Long, zeroSlot: Long, slotLength: Long) {
     def slotToTime(slot: Long): Long = zeroTime + (slot - zeroSlot) * slotLength
     def timeToSlot(time: Long): Long = zeroSlot + ((time - zeroTime) / slotLength)
+    def slotToInstant(slot: Long): Instant = Instant.ofEpochMilli(slotToTime(slot))
+    def instantToSlot(instant: Instant): Long = timeToSlot(instant.toEpochMilli)
 }
 
 object SlotConfig {

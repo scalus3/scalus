@@ -1,5 +1,6 @@
 package scalus.cardano.ledger
 
+import java.time.Instant
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
 
@@ -7,6 +8,8 @@ import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
 class SlotConfig(zeroTime: Double, zeroSlot: Double, slotLength: Double) extends js.Object {
     def slotToTime(slot: Double): Double = zeroTime + (slot - zeroSlot) * slotLength
     def timeToSlot(time: Double): Double = zeroSlot + ((time - zeroTime) / slotLength)
+    def slotToInstant(slot: Double): Instant = Instant.ofEpochMilli(slotToTime(slot).toLong)
+    def instantToSlot(instant: Instant): Double = timeToSlot(instant.toEpochMilli.toDouble)
 }
 
 object SlotConfig {

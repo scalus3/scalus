@@ -130,13 +130,11 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
         assert(tx.body.value.validityStartSlot.isDefined)
         assert(
-          tx.body.value.validityStartSlot.get == testEnv.slotConfig.timeToSlot(
-            validFrom.toEpochMilli
-          )
+          tx.body.value.validityStartSlot.get == testEnv.slotConfig.instantToSlot(validFrom)
         )
 
         assert(tx.body.value.ttl.isDefined)
-        assert(tx.body.value.ttl.get == testEnv.slotConfig.timeToSlot(validTo.toEpochMilli))
+        assert(tx.body.value.ttl.get == testEnv.slotConfig.instantToSlot(validTo))
     }
 
     test("TxBuilder mint with script and payTo sends minted tokens to specified output") {
