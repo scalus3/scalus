@@ -2,17 +2,16 @@ package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.Data.toData
 import scalus.builtin.ByteString
-import scalus.cardano.address.ShelleyPaymentPart
+import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.BloxbeanAccount
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.testing.kit.Party.{Alice, Bob, Eve, Mallory}
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
 import java.time.Instant
@@ -101,15 +100,10 @@ object HtlcTest extends ScalusTest {
     private val wrongCommitter = Mallory
     private val wrongReceiver = Eve
 
-    // Extract PKH from Party's address payment credential
-    private def pkh(party: Party): AddrKeyHash = party.address.payment match
-        case ShelleyPaymentPart.Key(hash) => hash
-        case _ => throw IllegalArgumentException("Party must have key payment")
-
-    private val committerPkh = pkh(Alice)
-    private val receiverPkh = pkh(Bob)
-    private val wrongCommitterPkh = pkh(wrongCommitter)
-    private val wrongReceiverPkh = pkh(wrongReceiver)
+    private val committerPkh = Alice.addrKeyHash
+    private val receiverPkh = Bob.addrKeyHash
+    private val wrongCommitterPkh = wrongCommitter.addrKeyHash
+    private val wrongReceiverPkh = wrongReceiver.addrKeyHash
 
     private val committerAddress = Alice.address
     private val receiverAddress = Bob.address
