@@ -164,10 +164,7 @@ object HtlcTest extends ScalusTest {
             val (tx, lockedInput) = action match
                 case Action.Reveal(preimage) =>
                     val utxos = provider
-                        .findUtxos(
-                          address = receiverAddress,
-                          minRequiredTotalAmount = Some(commissionAmount)
-                        )
+                        .findUtxos(address = receiverAddress)
                         .await()
                         .toOption
                         .get
@@ -204,10 +201,7 @@ object HtlcTest extends ScalusTest {
 
                 case Action.Timeout =>
                     val utxos = provider
-                        .findUtxos(
-                          address = committerAddress,
-                          minRequiredTotalAmount = Some(commissionAmount)
-                        )
+                        .findUtxos(address = committerAddress)
                         .await()
                         .toOption
                         .get
