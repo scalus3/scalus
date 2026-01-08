@@ -7,10 +7,8 @@ import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{Emulator, SubmitError}
-import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.BloxbeanAccount
-import scalus.ledger.api.v1.PubKeyHash
-import scalus.testing.kit.Party.{Alice, Bob, Eve, Mallory}
+import scalus.ledger.api.v3.ScriptContext
+import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -19,7 +17,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 
 class HtlcTest extends AnyFunSuite, ScalusTest {
-    import HtlcTest.*
+    import HtlcTest.{given, *}
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
         assert(HtlcContract.script.script.size == 569)
@@ -28,15 +26,15 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("receiver reveals preimage before timeout") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+        val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
         val revealTx = txCreator.reveal(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = receiverAddress,
-          changeAddress = changeAddress,
+          payeeAddress = Bob.address,
+          sponsor = Bob.address,
           preimage = validPreimage,
-          receiverPkh = receiverPkh,
+          receiverPkh = Bob.addrKeyHash,
           validTo = timeout,
           signer = Bob.signer
         )
@@ -48,15 +46,15 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("receiver fails with wrong preimage") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+        val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
         val revealTx = txCreator.reveal(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = receiverAddress,
-          changeAddress = changeAddress,
+          payeeAddress = Bob.address,
+          sponsor = Bob.address,
           preimage = wrongPreimage,
-          receiverPkh = receiverPkh,
+          receiverPkh = Bob.addrKeyHash,
           validTo = timeout,
           signer = Bob.signer
         )
@@ -68,24 +66,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("receiver fails with wrong receiver pubkey hash") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
-
-        val combinedSigner = new TransactionSigner(
-          Set(
-            new BloxbeanAccount(Bob.account).paymentKeyPair,
-            new BloxbeanAccount(Eve.account).paymentKeyPair
-          )
-        )
+        val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
         val revealTx = txCreator.reveal(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = receiverAddress,
-          changeAddress = changeAddress,
+          payeeAddress = Eve.address,
+          sponsor = Eve.address,
           preimage = validPreimage,
-          receiverPkh = wrongReceiverPkh,
+          receiverPkh = Eve.addrKeyHash, // Wrong receiver PKH (should be Bob)
           validTo = timeout,
-          signer = combinedSigner
+          signer = Eve.signer
         )
 
         provider.setSlot(beforeSlot)
@@ -95,15 +86,15 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("receiver fails after timeout") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(receiverAddress).await().toOption.get
+        val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
         val revealTx = txCreator.reveal(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = receiverAddress,
-          changeAddress = changeAddress,
+          payeeAddress = Bob.address,
+          sponsor = Bob.address,
           preimage = validPreimage,
-          receiverPkh = receiverPkh,
+          receiverPkh = Bob.addrKeyHash,
           validTo = afterTimeout,
           signer = Bob.signer
         )
@@ -116,14 +107,14 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("committer reclaims after timeout") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(committerAddress).await().toOption.get
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
         val timeoutTx = txCreator.timeout(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = committerAddress,
-          changeAddress = changeAddress,
-          committerPkh = committerPkh,
+          payeeAddress = Alice.address,
+          sponsor = Alice.address,
+          committerPkh = Alice.addrKeyHash,
           validFrom = afterTimeout,
           signer = Alice.signer
         )
@@ -135,23 +126,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("committer fails with wrong committer pubkey hash") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(committerAddress).await().toOption.get
-
-        val combinedSigner = new TransactionSigner(
-          Set(
-            new BloxbeanAccount(Alice.account).paymentKeyPair,
-            new BloxbeanAccount(Mallory.account).paymentKeyPair
-          )
-        )
+        val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
         val timeoutTx = txCreator.timeout(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = committerAddress,
-          changeAddress = changeAddress,
-          committerPkh = wrongCommitterPkh,
+          payeeAddress = Eve.address,
+          sponsor = Eve.address,
+          committerPkh = Eve.addrKeyHash, // Wrong committer PKH (should be Alice)
           validFrom = afterTimeout,
-          signer = combinedSigner
+          signer = Eve.signer
         )
 
         provider.setSlot(afterSlot)
@@ -166,14 +150,14 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     test("committer fails before timeout") {
         val provider = createProvider()
         val (_, lockedUtxo) = createAndSubmitLockTx(provider)
-        val utxos = provider.findUtxos(committerAddress).await().toOption.get
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
         val timeoutTx = txCreator.timeout(
           utxos = utxos,
           lockedUtxo = lockedUtxo,
-          payeeAddress = committerAddress,
-          changeAddress = changeAddress,
-          committerPkh = committerPkh,
+          payeeAddress = Alice.address,
+          sponsor = Alice.address,
+          committerPkh = Alice.addrKeyHash,
           validFrom = beforeTimeout,
           signer = Alice.signer
         )
@@ -187,15 +171,6 @@ object HtlcTest extends ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
-
-    private val committerPkh = Alice.addrKeyHash
-    private val receiverPkh = Bob.addrKeyHash
-    private val wrongCommitterPkh = Mallory.addrKeyHash
-    private val wrongReceiverPkh = Eve.addrKeyHash
-
-    private val committerAddress = Alice.address
-    private val receiverAddress = Bob.address
-    private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     private val txCreator = HtlcTransactionCreator(
       env = env,
@@ -216,13 +191,6 @@ object HtlcTest extends ScalusTest {
     val wrongPreimage: Preimage = genByteStringOfN(12).sample.get
     private val image: Image = sha3_256(validPreimage)
 
-    private val datum = Config(
-      PubKeyHash(committerPkh),
-      PubKeyHash(receiverPkh),
-      image,
-      timeout.toEpochMilli
-    ).toData
-
     private def createProvider(): Emulator = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
@@ -230,12 +198,17 @@ object HtlcTest extends ScalusTest {
           initialUtxos = Map(
             Input(genesisHash, 0) ->
                 TransactionOutput.Babbage(
-                  address = committerAddress,
+                  address = Alice.address,
                   value = Value.lovelace(100_000_000L)
                 ),
             Input(genesisHash, 1) ->
                 TransactionOutput.Babbage(
-                  address = receiverAddress,
+                  address = Bob.address,
+                  value = Value.lovelace(100_000_000L)
+                ),
+            Input(genesisHash, 2) ->
+                TransactionOutput.Babbage(
+                  address = Eve.address,
                   value = Value.lovelace(100_000_000L)
                 )
           ),
@@ -248,7 +221,7 @@ object HtlcTest extends ScalusTest {
         provider: Emulator,
         tx: Transaction,
         lockedInput: TransactionInput
-    ): scalus.ledger.api.v3.ScriptContext = {
+    ): ScriptContext = {
         val utxos = {
             val body = tx.body.value
             val allInputs =
@@ -259,14 +232,14 @@ object HtlcTest extends ScalusTest {
     }
 
     private def createAndSubmitLockTx(provider: Emulator): (Transaction, Utxo) = {
-        val utxos = provider.findUtxos(address = committerAddress).await().toOption.get
+        val utxos = provider.findUtxos(address = Alice.address).await().toOption.get
 
         val lockTx = txCreator.lock(
           utxos = utxos,
           value = Value(lockAmount),
-          changeAddress = committerAddress,
-          committer = committerPkh,
-          receiver = receiverPkh,
+          sponsor = Alice.address,
+          committer = Alice.addrKeyHash,
+          receiver = Bob.addrKeyHash,
           image = image,
           timeout = timeout,
           signer = Alice.signer

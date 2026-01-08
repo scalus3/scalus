@@ -22,7 +22,7 @@ case class HtlcTransactionCreator(
     def lock(
         utxos: Utxos,
         value: Value,
-        changeAddress: Address,
+        sponsor: Address,
         committer: AddrKeyHash,
         receiver: AddrKeyHash,
         image: Image,
@@ -33,7 +33,7 @@ case class HtlcTransactionCreator(
 
         TxBuilder(env, evaluator)
             .payTo(scriptAddress, value, datum)
-            .complete(availableUtxos = utxos, sponsor = changeAddress)
+            .complete(availableUtxos = utxos, sponsor = sponsor)
             .sign(signer)
             .transaction
     }
@@ -65,7 +65,7 @@ case class HtlcTransactionCreator(
         utxos: Utxos,
         lockedUtxo: Utxo,
         payeeAddress: Address,
-        changeAddress: Address,
+        sponsor: Address,
         preimage: Preimage,
         receiverPkh: AddrKeyHash,
         validTo: Instant,
@@ -77,7 +77,7 @@ case class HtlcTransactionCreator(
             .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
             .validTo(validTo)
-            .complete(availableUtxos = utxos, changeAddress)
+            .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
             .transaction
     }
@@ -86,7 +86,7 @@ case class HtlcTransactionCreator(
         utxos: Utxos,
         lockedUtxo: Utxo,
         payeeAddress: Address,
-        changeAddress: Address,
+        sponsor: Address,
         committerPkh: AddrKeyHash,
         validFrom: Instant,
         signer: TransactionSigner
@@ -97,7 +97,7 @@ case class HtlcTransactionCreator(
             .spend(lockedUtxo, redeemer, script, Set(committerPkh))
             .payTo(payeeAddress, lockedUtxo.output.value)
             .validFrom(validFrom)
-            .complete(availableUtxos = utxos, changeAddress)
+            .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
             .transaction
     }
