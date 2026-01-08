@@ -1015,7 +1015,6 @@ case class TxBuilder(
       *   a new TxBuilder with the signed transaction
       */
     def sign(signer: TransactionSigner): TxBuilder = {
-        val tx = context.transaction
         val signedTx = signer.sign(transaction)
         copy(context = context.copy(transaction = signedTx))
     }
@@ -1121,7 +1120,7 @@ case class TxBuilder(
         completeLoop(
           pool = pool,
           sponsor = sponsor,
-          maxIterations = 10
+          maxIterations = TxBuilder.MaxCompleteIterations
         )
     }
 
@@ -1326,6 +1325,14 @@ case class TxBuilder(
 
 /** Factory methods for creating TxBuilder instances. */
 object TxBuilder {
+
+    /** Maximum number of iterations for the complete loop.
+      *
+      * The complete loop adds UTXOs from the pool until the transaction can be finalized. Typical
+      * transactions complete in 1-2 iterations. If this limit is exceeded, it usually indicates
+      * insufficient funds or an issue with the transaction structure.
+      */
+    val MaxCompleteIterations = 10
 
     // -------------------------------------------------------------------------
     // Factory methods

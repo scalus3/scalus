@@ -167,6 +167,14 @@ case class ExpectedSigner(hash: AddrKeyHash)
 
 object TransactionBuilder {
 
+    /** Maximum number of iterations for the transaction balancing loop.
+      *
+      * The balancing loop adjusts fees and change outputs until the transaction is balanced.
+      * Typical transactions converge in 2-3 iterations. If this limit is exceeded, it indicates a
+      * problem with the transaction structure or diff handler.
+      */
+    val MaxBalancingIterations = 20
+
     /** Represents different types of authorized operations (except the spending, which goes
       * separately).
       */
@@ -667,7 +675,8 @@ object TransactionBuilder {
 
         @tailrec def loop(tx: Transaction): Either[TxBalancingError, Transaction] = {
             iteration += 1
-            if iteration > 20 then return Left(TxBalancingError.BalanceDidNotConverge(iteration))
+            if iteration > MaxBalancingIterations then
+                return Left(TxBalancingError.BalanceDidNotConverge(iteration))
 
             val eTrialTx = for {
                 txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
