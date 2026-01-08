@@ -9,6 +9,7 @@ import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.ledger.api.v3.ScriptContext
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
+import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -17,7 +18,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 
 class HtlcTest extends AnyFunSuite, ScalusTest {
-    import HtlcTest.{given, *}
+    import HtlcTest.{*, given}
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
         assert(HtlcContract.script.script.size == 569)
@@ -228,7 +229,7 @@ object HtlcTest extends ScalusTest {
                 (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
             provider.findUtxos(allInputs).await().toOption.get
         }
-        TestUtil.getScriptContextV3(tx, utxos, lockedInput, RedeemerTag.Spend, env)
+        tx.getScriptContextV3(utxos, lockedInput, RedeemerTag.Spend)
     }
 
     private def createAndSubmitLockTx(provider: Emulator): (Transaction, Utxo) = {

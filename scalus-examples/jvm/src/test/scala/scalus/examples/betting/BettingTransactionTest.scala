@@ -10,6 +10,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
+import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
@@ -18,7 +19,7 @@ import scalus.utils.await
 import scala.concurrent.ExecutionContext.Implicits.global
 
 class BettingTransactionTest extends AnyFunSuite, ScalusTest {
-    private val env = TestUtil.testEnvironment
+    private given env: CardanoInfo = TestUtil.testEnvironment
     private val compiledContract = BettingContract.debugCompiledContract
     private val scriptAddress = compiledContract.address(env.network)
 
@@ -117,8 +118,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             provider.findUtxos(allInputs).await().toOption.get
         }
 
-        val scriptContext =
-            TestUtil.getScriptContextV3(tx, utxos, scriptInput, RedeemerTag.Spend, env)
+        val scriptContext = tx.getScriptContextV3(utxos, scriptInput, RedeemerTag.Spend)
 
         val allResolvedPlutusScriptsMap =
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get

@@ -114,25 +114,6 @@ object TestUtil extends ScalusTest {
             case _ => None
     }
 
-    def getScriptContextV3(
-        tx: Transaction,
-        utxos: Utxos,
-        input: TransactionInput,
-        redeemerTag: RedeemerTag = RedeemerTag.Spend,
-        environment: CardanoInfo = testEnvironment
-    ): v3.ScriptContext = {
-        given CardanoInfo = environment
-        val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
-        tx.scriptContextsV3(utxos)
-            .find { case (redeemer, _) =>
-                redeemer.tag == redeemerTag && redeemer.index == inputIdx
-            }
-            .map(_._2)
-            .getOrElse(
-              throw new Exception(s"No V3 script context found for $redeemerTag at index $inputIdx")
-            )
-    }
-
     @deprecated("Will be removed", "0.13.0")
     def runValidator(
         validatorProgram: Program,
@@ -143,8 +124,8 @@ object TestUtil extends ScalusTest {
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
         environment: CardanoInfo = testEnvironment
     ) = {
-        val scriptContext =
-            TestUtil.getScriptContextV3(tx, utxo, scriptInput, redeemerTag, environment)
+        given CardanoInfo = environment
+        val scriptContext = tx.getScriptContextV3(utxo, scriptInput, redeemerTag)
         validatorProgram.runWithDebug(scriptContext)
     }
 
@@ -223,4 +204,97 @@ object TestUtil extends ScalusTest {
         /** Get only V3 script contexts */
         def scriptContextsV3(utxos: Utxos)(using CardanoInfo): Map[Redeemer, v3.ScriptContext] =
             scriptContexts(utxos).collect { case (r, sc: v3.ScriptContext) => r -> sc }
+
+        /** Get a single V1 script context for a specific input and redeemer tag.
+          *
+          * @param utxos
+          *   The UTxO set for resolving spent outputs
+          * @param input
+          *   The transaction input to get the context for
+          * @param redeemerTag
+          *   The redeemer tag (default: Spend)
+          * @return
+          *   The V1 script context
+          * @throws Exception
+          *   if no V1 script context is found for the given input
+          */
+        def getScriptContextV1(
+            utxos: Utxos,
+            input: TransactionInput,
+            redeemerTag: RedeemerTag = RedeemerTag.Spend
+        )(using CardanoInfo): v1.ScriptContext = {
+            val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+            tx.scriptContextsV1(utxos)
+                .find { case (redeemer, _) =>
+                    redeemer.tag == redeemerTag && redeemer.index == inputIdx
+                }
+                .map(_._2)
+                .getOrElse(
+                  throw new Exception(
+                    s"No V1 script context found for $redeemerTag at index $inputIdx"
+                  )
+                )
+        }
+
+        /** Get a single V2 script context for a specific input and redeemer tag.
+          *
+          * @param utxos
+          *   The UTxO set for resolving spent outputs
+          * @param input
+          *   The transaction input to get the context for
+          * @param redeemerTag
+          *   The redeemer tag (default: Spend)
+          * @return
+          *   The V2 script context
+          * @throws Exception
+          *   if no V2 script context is found for the given input
+          */
+        def getScriptContextV2(
+            utxos: Utxos,
+            input: TransactionInput,
+            redeemerTag: RedeemerTag = RedeemerTag.Spend
+        )(using CardanoInfo): v2.ScriptContext = {
+            val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+            tx.scriptContextsV2(utxos)
+                .find { case (redeemer, _) =>
+                    redeemer.tag == redeemerTag && redeemer.index == inputIdx
+                }
+                .map(_._2)
+                .getOrElse(
+                  throw new Exception(
+                    s"No V2 script context found for $redeemerTag at index $inputIdx"
+                  )
+                )
+        }
+
+        /** Get a single V3 script context for a specific input and redeemer tag.
+          *
+          * @param utxos
+          *   The UTxO set for resolving spent outputs
+          * @param input
+          *   The transaction input to get the context for
+          * @param redeemerTag
+          *   The redeemer tag (default: Spend)
+          * @return
+          *   The V3 script context
+          * @throws Exception
+          *   if no V3 script context is found for the given input
+          */
+        def getScriptContextV3(
+            utxos: Utxos,
+            input: TransactionInput,
+            redeemerTag: RedeemerTag = RedeemerTag.Spend
+        )(using CardanoInfo): v3.ScriptContext = {
+            val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+            tx.scriptContextsV3(utxos)
+                .find { case (redeemer, _) =>
+                    redeemer.tag == redeemerTag && redeemer.index == inputIdx
+                }
+                .map(_._2)
+                .getOrElse(
+                  throw new Exception(
+                    s"No V3 script context found for $redeemerTag at index $inputIdx"
+                  )
+                )
+        }
 }
