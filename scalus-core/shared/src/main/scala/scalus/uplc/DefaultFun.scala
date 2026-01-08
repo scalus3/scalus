@@ -94,7 +94,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *   `divideInteger(7, 2)` returns `3`
       * @example
       *   `divideInteger(-7, 2)` returns `-4` (floor division)
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if divisor is zero
       * @since Plutus
       *   V1
@@ -111,7 +111,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *   `quotientInteger(7, 2)` returns `3`
       * @example
       *   `quotientInteger(-7, 2)` returns `-3` (truncated toward zero)
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if divisor is zero
       * @since Plutus
       *   V1
@@ -129,7 +129,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *   `remainderInteger(7, 3)` returns `1`
       * @example
       *   `remainderInteger(-7, 3)` returns `-1`
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if divisor is zero
       * @since Plutus
       *   V1
@@ -147,7 +147,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *   `modInteger(7, 3)` returns `1`
       * @example
       *   `modInteger(-7, 3)` returns `2` (result has sign of divisor)
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if divisor is zero
       * @since Plutus
       *   V1
@@ -212,7 +212,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @example
       *   `consByteString(0x12, hex"3456")` returns `hex"123456"`
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if byte value is outside [0, 255]
       * @since Plutus
       *   V1
@@ -255,7 +255,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @example
       *   `indexByteString(hex"1234", 0)` returns `0x12`
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if index is out of bounds
       * @since Plutus
       *   V1
@@ -347,7 +347,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @example
       *   `verifyEd25519Signature(pubKey, message, signature)` returns `true` if valid
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if key or signature has wrong length
       * @since Plutus
       *   V1
@@ -363,7 +363,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @note
       *   The message must be pre-hashed (typically with SHA-256 or Keccak-256).
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if inputs have wrong lengths
       * @since Plutus
       *   V2
@@ -422,7 +422,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `ByteString -> String`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the bytestring is not valid UTF-8
       * @since Plutus
       *   V1
@@ -542,7 +542,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * Requires one `force` application.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the list is empty
       * @since Plutus
       *   V1
@@ -555,7 +555,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * Requires one `force` application.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the list is empty
       * @since Plutus
       *   V1
@@ -648,7 +648,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `Data -> Pair Integer (List Data)`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the Data is not a Constr
       * @since Plutus
       *   V1
@@ -659,7 +659,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `Data -> List (Pair Data Data)`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the Data is not a Map
       * @since Plutus
       *   V1
@@ -670,7 +670,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `Data -> List Data`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the Data is not a List
       * @since Plutus
       *   V1
@@ -681,7 +681,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `Data -> Integer`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the Data is not an Integer
       * @since Plutus
       *   V1
@@ -692,7 +692,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `Data -> ByteString`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the Data is not a ByteString
       * @since Plutus
       *   V1
@@ -831,7 +831,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `ByteString -> G1_Element`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the bytes don't represent a valid G1 point
       * @since Plutus
       *   V3 (CIP-381)
@@ -898,7 +898,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * '''Type:''' `ByteString -> G2_Element`
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if the bytes don't represent a valid G2 point
       * @since Plutus
       *   V3 (CIP-381)
@@ -949,7 +949,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       * Computes the sum ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm.
       * Both input lists must be non-empty and have equal length.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if either list is empty or lists have different lengths
       * @since Plutus
       *   V4 (CIP-133)
@@ -963,7 +963,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       * Computes the sum ∑(i=0 to N-1) scalar_i × point_i efficiently using Pippenger's algorithm.
       * Both input lists must be non-empty and have equal length.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if either list is empty or lists have different lengths
       * @since Plutus
       *   V4 (CIP-133)
@@ -1018,7 +1018,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *   `integerToByteString(true, 2, 4660)` returns `hex"1234"`
       * @example
       *   `integerToByteString(false, 2, 4660)` returns `hex"3412"` (little-endian)
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if integer is negative or doesn't fit in specified length
       * @since Plutus
       *   V3 (CIP-121)
@@ -1109,7 +1109,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @example
       *   `readBit(hex"0004", 2)` returns `true`
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if index is out of bounds
       * @since Plutus
       *   V3 (CIP-122)
@@ -1124,7 +1124,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @example
       *   `writeBits(hex"0000", [0, 1, 2, 3], true)` returns `hex"000F"`
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if any index is out of bounds
       * @since Plutus
       *   V3 (CIP-122)
@@ -1139,7 +1139,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * @example
       *   `replicateByte(4, 0xFF)` returns `hex"FFFFFFFF"`
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if length is negative or byte is outside [0, 255]
       * @since Plutus
       *   V3 (CIP-122)
@@ -1251,7 +1251,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *   `expModInteger(2, 10, 1000)` returns `24` (2^10 mod 1000)
       * @example
       *   `expModInteger(3, -1, 7)` returns `5` (modular inverse of 3 mod 7)
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if modulus <= 0 or base not invertible for negative exponent
       * @see
       *   [[https://github.com/cardano-foundation/CIPs/tree/master/CIP-0109 CIP-109]]
@@ -1314,7 +1314,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * Requires one `force` application.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if index is out of bounds
       * @since Plutus
       *   V4 (CIP-156)
@@ -1327,7 +1327,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * Requires one `force` application. Returns elements at the specified indices in order.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if any index is out of bounds
       * @since Plutus
       *   V4 (CIP-156)
@@ -1399,7 +1399,7 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * The Data must have the structure `Map ByteString (Map ByteString Integer)`.
       *
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if Data doesn't have the expected structure
       * @since Plutus
       *   V4 (CIP-153)

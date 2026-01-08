@@ -1320,7 +1320,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   List of G1 group elements
       * @return
       *   The sum of scalar multiplications
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if either list is empty or lists have different lengths
       * @since Plutus
       *   V4 (CIP-133)
@@ -1342,7 +1342,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   List of G2 group elements
       * @return
       *   The sum of scalar multiplications
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if either list is empty or lists have different lengths
       * @since Plutus
       *   V4 (CIP-133)

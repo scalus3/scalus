@@ -15,8 +15,8 @@ import scala.annotation.threadUnsafe
   *
   * This trait represents a script that has been compiled from Scala source code through the Scalus
   * compiler pipeline (Scala -> SIR -> UPLC -> Plutus Script). It contains original Scala code, its
-  * type, [[SIR]], compiler options (backend etc), and generated UPLC program and serialized Plutus
-  * script.
+  * type, [[scalus.compiler.sir.SIR]], compiler options (backend etc), and generated UPLC program
+  * and serialized Plutus script.
   *
   * @tparam A
   *   the Scala type of the compiled code, typically a function type representing the validator
@@ -126,7 +126,7 @@ case class PlutusV3[A](
     /** Evaluates and returns the original Scala code. */
     def code: A = lazyCode()
 
-    /** Returns [[Language.PlutusV3]]. */
+    /** Returns [[scalus.cardano.ledger.Language.PlutusV3]]. */
     def language: Language = Language.PlutusV3
 
     /** The compiled UPLC program. Lazily computed on first access. */

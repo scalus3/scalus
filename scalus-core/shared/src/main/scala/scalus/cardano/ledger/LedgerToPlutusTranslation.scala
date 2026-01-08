@@ -83,7 +83,7 @@ object LedgerToPlutusTranslation {
         v1.StakingCredential.StakingHash(getCredential(cred))
     }
 
-    /** Converts [[RewardAccount]] to Plutus [[v1.Credential]]
+    /** Converts [[RewardAccount]] to Plutus [[scalus.ledger.api.v1.Credential]]
       */
     def getRewardAccount(rewardAccount: RewardAccount): v1.Credential = {
         rewardAccount.address.payload match {

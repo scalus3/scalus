@@ -175,7 +175,7 @@ trait PlatformSpecific:
       *   List of G1 group elements
       * @return
       *   The sum of scalar multiplications
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if either list is empty or lists have different lengths
       */
     def bls12_381_G1_multiScalarMul(
@@ -194,7 +194,7 @@ trait PlatformSpecific:
       *   List of G2 group elements
       * @return
       *   The sum of scalar multiplications
-      * @throws BuiltinException
+      * @throws scalus.uplc.eval.BuiltinException
       *   if either list is empty or lists have different lengths
       */
     def bls12_381_G2_multiScalarMul(
