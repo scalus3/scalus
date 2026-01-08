@@ -1,7 +1,8 @@
 package scalus.cardano.node
 
+import scalus.builtin.ByteString
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{CardanoMutator, Context, STS, State}
+import scalus.cardano.ledger.rules.{CardanoMutator, Context, PlutusScriptsTransactionMutator, STS, State}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.SubmitError.NodeError
 
@@ -180,4 +181,33 @@ class Emulator(
 object Emulator {
     val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
     val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
+
+    /** Creates an Emulator with the specified addresses, each with the given initial value.
+      *
+      * @param addresses
+      *   The addresses to initialize with funds
+      * @param initialValue
+      *   Initial value per address (default: 10,000 ADA like Yaci Devkit)
+      * @return
+      *   An Emulator instance with the addresses funded
+      */
+    def withAddresses(
+        addresses: Seq[Address],
+        initialValue: Value = Value.ada(10_000L)
+    ): Emulator = {
+        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val initialUtxos = addresses.zipWithIndex.map { case (address, index) =>
+            val input = TransactionInput(genesisHash, index)
+            val output = TransactionOutput.Babbage(
+              address = address,
+              value = initialValue
+            )
+            input -> output
+        }.toMap
+        Emulator(
+          initialUtxos = initialUtxos,
+          initialContext = Context.testMainnet(),
+          mutators = Set(PlutusScriptsTransactionMutator)
+        )
+    }
 }

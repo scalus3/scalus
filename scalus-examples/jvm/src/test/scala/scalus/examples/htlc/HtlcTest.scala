@@ -2,10 +2,8 @@ package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.ByteString
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.ledger.api.v3.ScriptContext
@@ -180,8 +178,6 @@ object HtlcTest extends ScalusTest {
       contract = compiledContract
     )
 
-    private val lockAmount = Coin(10_000_000L)
-
     private val slot: SlotNo = 10
     private val beforeSlot: SlotNo = slot - 1
     private val afterSlot: SlotNo = slot + 1
@@ -193,31 +189,8 @@ object HtlcTest extends ScalusTest {
     val wrongPreimage: Preimage = genByteStringOfN(12).sample.get
     private val image: Image = sha3_256(validPreimage)
 
-    private def createProvider(): Emulator = {
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
-        Emulator(
-          initialUtxos = Map(
-            Input(genesisHash, 0) ->
-                TransactionOutput.Babbage(
-                  address = Alice.address,
-                  value = Value.lovelace(100_000_000L)
-                ),
-            Input(genesisHash, 1) ->
-                TransactionOutput.Babbage(
-                  address = Bob.address,
-                  value = Value.lovelace(100_000_000L)
-                ),
-            Input(genesisHash, 2) ->
-                TransactionOutput.Babbage(
-                  address = Eve.address,
-                  value = Value.lovelace(100_000_000L)
-                )
-          ),
-          initialContext = Context.testMainnet(),
-          mutators = Set(PlutusScriptsTransactionMutator)
-        )
-    }
+    private def createProvider(): Emulator =
+        Emulator.withAddresses(Seq(Alice.address, Bob.address, Eve.address))
 
     private def getScriptContext(
         provider: Emulator,
@@ -238,7 +211,7 @@ object HtlcTest extends ScalusTest {
 
         val lockTx = txCreator.lock(
           utxos = utxos,
-          value = Value(lockAmount),
+          value = Value.ada(10),
           sponsor = Alice.address,
           committer = Alice.addrKeyHash,
           receiver = Bob.addrKeyHash,

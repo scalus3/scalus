@@ -16,7 +16,7 @@ import scalus.testing.kit.Party.{accountCache, mnemonic}
 import scala.annotation.threadUnsafe
 import scala.collection.mutable
 
-/** Test parties (A-Z) for smart contract testing.
+/** Test parties for smart contract testing.
   *
   * Each party has a deterministic wallet derived from a test mnemonic, providing:
   *   - `account`: Bloxbean Account for key management
@@ -25,6 +25,11 @@ import scala.collection.mutable
   *
   * Many names reference classic cryptographic roles (Alice, Bob, Eve, Mallory, etc.) or notable
   * figures in cryptography and blockchain (Hal Finney, Nick Szabo).
+  *
+  * There are exactly 20 parties to match Yaci Devkit's default configuration, which creates 20
+  * funded addresses from the same test mnemonic. This allows the same test code to work with both
+  * the in-memory [[scalus.cardano.node.Emulator]] (for fast unit tests) and Yaci Devkit (for
+  * integration tests).
   */
 enum Party derives CanEqual {
     case Alice // First party
@@ -43,16 +48,10 @@ enum Party derives CanEqual {
     case Nick // Nick Szabo
     case Oracle // Blockchain oracle
     case Peggy // Prover
-    case Quentin // Quentin Tarantino
-    case Rachel
     case Sybil // Sybil attack
     case Trent // Trusted third party
-    case Ursula
     case Victor // Verifier
     case Wendy // Whistleblower
-    case Xavier // Xavier Leroy
-    case Yve
-    case Zulu
 
     def account: Account = accountCache.getOrElseUpdate(
       this,
@@ -95,7 +94,7 @@ object Party {
     val genParty: Gen[Party] =
         Gen.choose(0, Party.values.length - 1).map(Party.fromOrdinal)
 
-    /** Choose between 2 and 26 peers */
+    /** Choose between 2 and 20 parties */
     val genParties: Gen[Seq[Party]] =
         for numParties <- Gen.choose(2, Party.values.length)
         yield Party.values.take(numParties).toSeq
