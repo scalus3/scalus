@@ -122,7 +122,6 @@ class SirToUplcSmLoweringTest
         )
         val uplc = lower(sir)
         // sscala type-vars are represented as Data.
-        println("uplc = " + uplc.pretty.render(100))
         val expected = lam("x1")(vr"x1") $ Constant.Unit
         assert(uplc alphaEq expected)
     }
