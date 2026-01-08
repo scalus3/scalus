@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.Emulator
 import scalus.ledger.api.v1.PosixTime
-import scalus.testing.kit.{Party, ScalusTest, TestUtil}
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.utils.await
 
@@ -59,7 +59,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 }
 
 object AuctionValidatorTest extends ScalusTest {
-    private val env = TestUtil.testEnvironment
+    private given env: CardanoInfo = TestUtil.testEnvironment
     private val compiledContract = AuctionContract.withErrorTraces
 
     // Party to role mapping
@@ -67,9 +67,9 @@ object AuctionValidatorTest extends ScalusTest {
     private val bidder1Party = Bob
     private val bidder2Party = Charles
 
-    private val sellerAddress: ShelleyAddress = Party.address(sellerParty, env.network)
-    private val bidder1Address: ShelleyAddress = Party.address(bidder1Party, env.network)
-    private val bidder2Address: ShelleyAddress = Party.address(bidder2Party, env.network)
+    private val sellerAddress: ShelleyAddress = sellerParty.address
+    private val bidder1Address: ShelleyAddress = bidder1Party.address
+    private val bidder2Address: ShelleyAddress = bidder2Party.address
 
     private val itemId = utf8"auction-item-001"
     private val startingBid = 2_000_000L
