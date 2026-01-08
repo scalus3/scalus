@@ -3,8 +3,9 @@ package scalus.testing.kit
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 import scalus.cardano.txbuilder.{PubKeyWitness, Wallet as WalletTrait, Witness}
-import scalus.ledger.api.v3
+import scalus.ledger.api.{v1, v2, v3, ScriptContext}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 
@@ -161,4 +162,80 @@ object TestUtil extends ScalusTest {
             TestUtil.getScriptContextV3(tx, utxo, scriptInput, redeemerTag, environment)
         validatorProgram.runWithDebug(scriptContext)
     }
+
+    extension (tx: Transaction)
+        /** Get all script contexts for all Plutus scripts in the transaction.
+          *
+          * @param utxos
+          *   The UTxO set for resolving spent outputs
+          * @param env
+          *   The CardanoInfo containing protocol parameters and slot configuration
+          * @return
+          *   Map from Redeemer to ScriptContext (union type: v1 | v2 | v3)
+          */
+        def scriptContexts(utxos: Utxos)(using env: CardanoInfo): Map[Redeemer, ScriptContext] =
+            // 1. Resolve all scripts
+            val scriptsMap = AllResolvedScripts.allResolvedScriptsMap(tx, utxos) match
+                case Right(map)  => map
+                case Left(error) => throw error
+
+            // 2. Get needed script data
+            val neededScripts = AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
+                case Right(data) => data
+                case Left(error) => throw error
+
+            // 3. Get redeemers map
+            val redeemersMap = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
+
+            // 4. Build contexts for each Plutus script redeemer
+            neededScripts.flatMap { case (tag, index, hash, outputOpt) =>
+                for
+                    script <- scriptsMap.get(hash)
+                    plutusScript <- script match
+                        case ps: PlutusScript => Some(ps)
+                        case _                => None // Skip native scripts
+                    (data, exUnits) <- redeemersMap.get((tag, index))
+                yield
+                    val redeemer = Redeemer(tag, index, data, exUnits)
+                    val datum = outputOpt.flatMap(extractDatumFromOutput(tx, _))
+                    val context: ScriptContext = plutusScript match
+                        case _: Script.PlutusV1 =>
+                            LedgerToPlutusTranslation.getScriptContextV1(
+                              redeemer,
+                              tx,
+                              utxos,
+                              env.slotConfig,
+                              env.majorProtocolVersion
+                            )
+                        case _: Script.PlutusV2 =>
+                            LedgerToPlutusTranslation.getScriptContextV2(
+                              redeemer,
+                              tx,
+                              utxos,
+                              env.slotConfig,
+                              env.majorProtocolVersion
+                            )
+                        case _: Script.PlutusV3 =>
+                            LedgerToPlutusTranslation.getScriptContextV3(
+                              redeemer,
+                              datum,
+                              tx,
+                              utxos,
+                              env.slotConfig,
+                              env.majorProtocolVersion
+                            )
+                    redeemer -> context
+            }.toMap
+
+        /** Get only V1 script contexts */
+        def scriptContextsV1(utxos: Utxos)(using CardanoInfo): Map[Redeemer, v1.ScriptContext] =
+            scriptContexts(utxos).collect { case (r, sc: v1.ScriptContext) => r -> sc }
+
+        /** Get only V2 script contexts */
+        def scriptContextsV2(utxos: Utxos)(using CardanoInfo): Map[Redeemer, v2.ScriptContext] =
+            scriptContexts(utxos).collect { case (r, sc: v2.ScriptContext) => r -> sc }
+
+        /** Get only V3 script contexts */
+        def scriptContextsV3(utxos: Utxos)(using CardanoInfo): Map[Redeemer, v3.ScriptContext] =
+            scriptContexts(utxos).collect { case (r, sc: v3.ScriptContext) => r -> sc }
 }

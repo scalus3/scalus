@@ -283,36 +283,13 @@ object PlutusScriptEvaluator {
             var remainingBudget = initialBudget
 
             val neededScriptsData =
-                (
-                  AllNeededScriptHashes.allNeededInputsScriptIndexHashesAndOutputs(tx, utxos) match
-                      case Right(inputsScriptIndexHashesAndOutputs) =>
-                          inputsScriptIndexHashesAndOutputs.view.map {
-                              case (index, scriptHash, output) =>
-                                  val datum = extractDatumFromOutput(output, lookupTable)
-                                  (RedeemerTag.Spend, index, scriptHash, datum)
-                          }
-                      case Left(error) => throw error
-                ) ++
-                    AllNeededScriptHashes.allNeededMintScriptIndexHashesView(tx).map {
-                        case (index, scriptHash) =>
-                            (RedeemerTag.Mint, index, scriptHash, None)
-                    } ++
-                    AllNeededScriptHashes.allNeededVotingProceduresScriptIndexHashesView(tx).map {
-                        case (index, scriptHash) =>
-                            (RedeemerTag.Voting, index, scriptHash, None)
-                    } ++
-                    AllNeededScriptHashes.allNeededWithdrawalsScriptIndexHashesView(tx).map {
-                        case (index, scriptHash) =>
-                            (RedeemerTag.Reward, index, scriptHash, None)
-                    } ++
-                    AllNeededScriptHashes.allNeededProposalProceduresScriptIndexHashesView(tx).map {
-                        case (index, scriptHash) =>
-                            (RedeemerTag.Proposing, index, scriptHash, None)
-                    } ++
-                    AllNeededScriptHashes.allNeededCertificatesScriptIndexHashesView(tx).map {
-                        case (index, scriptHash) =>
-                            (RedeemerTag.Cert, index, scriptHash, None)
-                    }
+                AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
+                    case Right(data) =>
+                        data.map { case (tag, index, hash, outputOpt) =>
+                            val datum = outputOpt.flatMap(extractDatumFromOutput(_, lookupTable))
+                            (tag, index, hash, datum)
+                        }
+                    case Left(error) => throw error
 
             val evaluatedRedeemers =
                 (for

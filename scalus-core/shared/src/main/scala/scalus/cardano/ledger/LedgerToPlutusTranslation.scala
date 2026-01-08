@@ -991,6 +991,21 @@ object LedgerToPlutusTranslation {
             case Vote.Abstain => v3.Vote.Abstain
     }
 
+    /** Create a complete V1 script context from transaction and redeemer.
+      */
+    def getScriptContextV1(
+        redeemer: Redeemer,
+        tx: Transaction,
+        utxos: Map[TransactionInput, TransactionOutput],
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion
+    ): v1.ScriptContext = {
+        val purpose = getScriptPurposeV1(tx, redeemer)
+        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
+        val txInfo = getTxInfoV1(tx, datums, utxos, slotConfig, protocolVersion)
+        v1.ScriptContext(txInfo, purpose)
+    }
+
     /** Create a complete V2 script context from transaction and redeemer.
       */
     def getScriptContextV2(

@@ -213,4 +213,37 @@ object AllNeededScriptHashes {
             scriptHash <- certificate.scriptHashOption
         yield (index, scriptHash)
     }
+
+    /** Returns all needed script data: (RedeemerTag, index, ScriptHash, Option[TransactionOutput])
+      * For Spend redeemers, includes the spent output for datum extraction.
+      */
+    def allNeededScriptData(
+        tx: Transaction,
+        utxos: Utxos
+    ): Either[
+      TransactionException.BadInputsUTxOException,
+      View[(RedeemerTag, Int, ScriptHash, Option[TransactionOutput])]
+    ] = {
+        allNeededInputsScriptIndexHashesAndOutputs(tx, utxos).map { inputsData =>
+            inputsData.view.map { case (index, scriptHash, output) =>
+                (RedeemerTag.Spend, index, scriptHash, Some(output))
+            } ++
+                allNeededMintScriptIndexHashesView(tx).map { case (index, scriptHash) =>
+                    (RedeemerTag.Mint, index, scriptHash, None)
+                } ++
+                allNeededCertificatesScriptIndexHashesView(tx).map { case (index, scriptHash) =>
+                    (RedeemerTag.Cert, index, scriptHash, None)
+                } ++
+                allNeededWithdrawalsScriptIndexHashesView(tx).map { case (index, scriptHash) =>
+                    (RedeemerTag.Reward, index, scriptHash, None)
+                } ++
+                allNeededVotingProceduresScriptIndexHashesView(tx).map { case (index, scriptHash) =>
+                    (RedeemerTag.Voting, index, scriptHash, None)
+                } ++
+                allNeededProposalProceduresScriptIndexHashesView(tx).map {
+                    case (index, scriptHash) =>
+                        (RedeemerTag.Proposing, index, scriptHash, None)
+                }
+        }
+    }
 }
