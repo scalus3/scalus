@@ -2,9 +2,9 @@ package scalus.patterns
 
 import scalus.*
 import scalus.builtin.Data
-import scalus.ledger.api.v1.{Address, Credential, ValidatorHash}
-import scalus.ledger.api.v3.{Redeemer, ScriptPurpose, TxInInfo, TxInfo, TxOutRef}
+import scalus.ledger.api.v1.{Credential, ValidatorHash}
 import scalus.ledger.api.v2.TxOut
+import scalus.ledger.api.v3.*
 import scalus.prelude.*
 
 import scala.annotation.tailrec

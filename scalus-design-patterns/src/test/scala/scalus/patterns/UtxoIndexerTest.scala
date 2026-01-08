@@ -1,12 +1,12 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.builtin.{ByteString, Data}
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, ValidatorHash, Value}
+import scalus.builtin.ByteString
+import scalus.cardano.onchain.RequirementError
+import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.cardano.onchain.RequirementError
 
 class UtxoIndexerTest extends StdlibTestKit with scalus.ledger.api.v3.ArbitraryInstances {
 
