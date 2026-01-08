@@ -4,7 +4,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
-import scalus.cardano.txbuilder.{PubKeyWitness, Wallet as WalletTrait, Witness}
+import scalus.cardano.txbuilder.{PubKeyWitness, RedeemerManagement, RedeemerPurpose, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.{v1, v2, v3, ScriptContext}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
@@ -125,7 +125,7 @@ object TestUtil extends ScalusTest {
         environment: CardanoInfo = testEnvironment
     ) = {
         given CardanoInfo = environment
-        val scriptContext = tx.getScriptContextV3(utxo, scriptInput, redeemerTag)
+        val scriptContext = tx.getScriptContextV3(utxo, RedeemerPurpose.ForSpend(scriptInput))
         validatorProgram.runWithDebug(scriptContext)
     }
 
@@ -205,96 +205,84 @@ object TestUtil extends ScalusTest {
         def scriptContextsV3(utxos: Utxos)(using CardanoInfo): Map[Redeemer, v3.ScriptContext] =
             scriptContexts(utxos).collect { case (r, sc: v3.ScriptContext) => r -> sc }
 
-        /** Get a single V1 script context for a specific input and redeemer tag.
+        /** Get a single V1 script context for a specific redeemer purpose.
           *
           * @param utxos
           *   The UTxO set for resolving spent outputs
-          * @param input
-          *   The transaction input to get the context for
-          * @param redeemerTag
-          *   The redeemer tag (default: Spend)
+          * @param purpose
+          *   The redeemer purpose (ForSpend, ForMint, ForCert, ForReward, ForVote, ForPropose)
           * @return
           *   The V1 script context
           * @throws Exception
-          *   if no V1 script context is found for the given input
+          *   if no V1 script context is found for the given purpose
           */
         def getScriptContextV1(
             utxos: Utxos,
-            input: TransactionInput,
-            redeemerTag: RedeemerTag = RedeemerTag.Spend
+            purpose: RedeemerPurpose
         )(using CardanoInfo): v1.ScriptContext = {
-            val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+            val tag = purpose.redeemerTag
+            val index = RedeemerManagement.indexFor(tx, purpose)
             tx.scriptContextsV1(utxos)
                 .find { case (redeemer, _) =>
-                    redeemer.tag == redeemerTag && redeemer.index == inputIdx
+                    redeemer.tag == tag && redeemer.index == index
                 }
                 .map(_._2)
                 .getOrElse(
-                  throw new Exception(
-                    s"No V1 script context found for $redeemerTag at index $inputIdx"
-                  )
+                  throw new Exception(s"No V1 script context found for $purpose")
                 )
         }
 
-        /** Get a single V2 script context for a specific input and redeemer tag.
+        /** Get a single V2 script context for a specific redeemer purpose.
           *
           * @param utxos
           *   The UTxO set for resolving spent outputs
-          * @param input
-          *   The transaction input to get the context for
-          * @param redeemerTag
-          *   The redeemer tag (default: Spend)
+          * @param purpose
+          *   The redeemer purpose (ForSpend, ForMint, ForCert, ForReward, ForVote, ForPropose)
           * @return
           *   The V2 script context
           * @throws Exception
-          *   if no V2 script context is found for the given input
+          *   if no V2 script context is found for the given purpose
           */
         def getScriptContextV2(
             utxos: Utxos,
-            input: TransactionInput,
-            redeemerTag: RedeemerTag = RedeemerTag.Spend
+            purpose: RedeemerPurpose
         )(using CardanoInfo): v2.ScriptContext = {
-            val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+            val tag = purpose.redeemerTag
+            val index = RedeemerManagement.indexFor(tx, purpose)
             tx.scriptContextsV2(utxos)
                 .find { case (redeemer, _) =>
-                    redeemer.tag == redeemerTag && redeemer.index == inputIdx
+                    redeemer.tag == tag && redeemer.index == index
                 }
                 .map(_._2)
                 .getOrElse(
-                  throw new Exception(
-                    s"No V2 script context found for $redeemerTag at index $inputIdx"
-                  )
+                  throw new Exception(s"No V2 script context found for $purpose")
                 )
         }
 
-        /** Get a single V3 script context for a specific input and redeemer tag.
+        /** Get a single V3 script context for a specific redeemer purpose.
           *
           * @param utxos
           *   The UTxO set for resolving spent outputs
-          * @param input
-          *   The transaction input to get the context for
-          * @param redeemerTag
-          *   The redeemer tag (default: Spend)
+          * @param purpose
+          *   The redeemer purpose (ForSpend, ForMint, ForCert, ForReward, ForVote, ForPropose)
           * @return
           *   The V3 script context
           * @throws Exception
-          *   if no V3 script context is found for the given input
+          *   if no V3 script context is found for the given purpose
           */
         def getScriptContextV3(
             utxos: Utxos,
-            input: TransactionInput,
-            redeemerTag: RedeemerTag = RedeemerTag.Spend
+            purpose: RedeemerPurpose
         )(using CardanoInfo): v3.ScriptContext = {
-            val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+            val tag = purpose.redeemerTag
+            val index = RedeemerManagement.indexFor(tx, purpose)
             tx.scriptContextsV3(utxos)
                 .find { case (redeemer, _) =>
-                    redeemer.tag == redeemerTag && redeemer.index == inputIdx
+                    redeemer.tag == tag && redeemer.index == index
                 }
                 .map(_._2)
                 .getOrElse(
-                  throw new Exception(
-                    s"No V3 script context found for $redeemerTag at index $inputIdx"
-                  )
+                  throw new Exception(s"No V3 script context found for $purpose")
                 )
         }
 }

@@ -213,13 +213,14 @@ object RedeemerManagement {
         purposeOpt.map(purpose => DetachedRedeemer(redeemer.data, purpose))
     }
 
-    /** Attach a detached redeemer to a transaction, converting value-based reference to
-      * index-based.
+    /** Find the redeemer index for a given purpose in a transaction.
+      *
+      * @return
+      *   the index if found, or -1 if not found
       */
-    def attachRedeemer(tx: Transaction, detached: DetachedRedeemer): Option[Redeemer] = {
+    def indexFor(tx: Transaction, purpose: RedeemerPurpose): Int = {
         val body = tx.body.value
-        val tag = detached.purpose.redeemerTag
-        val indexOpt = detached.purpose match {
+        purpose match {
             case RedeemerPurpose.ForSpend(input) => body.inputs.toSeq.indexOf(input)
             case RedeemerPurpose.ForMint(scriptHash) =>
                 body.mint.map(_.assets.keys.toVector).getOrElse(Vector.empty).indexOf(scriptHash)
@@ -240,11 +241,17 @@ object RedeemerManagement {
                     .getOrElse(Vector.empty)
                     .indexOf(voter)
         }
+    }
 
-        if indexOpt >= 0 then
-            Some(
-              Redeemer(tag = tag, index = indexOpt, data = detached.datum, exUnits = ExUnits.zero)
-            )
+    /** Attach a detached redeemer to a transaction, converting value-based reference to
+      * index-based.
+      */
+    def attachRedeemer(tx: Transaction, detached: DetachedRedeemer): Option[Redeemer] = {
+        val tag = detached.purpose.redeemerTag
+        val index = indexFor(tx, detached.purpose)
+
+        if index >= 0 then
+            Some(Redeemer(tag = tag, index = index, data = detached.datum, exUnits = ExUnits.zero))
         else None
     }
 

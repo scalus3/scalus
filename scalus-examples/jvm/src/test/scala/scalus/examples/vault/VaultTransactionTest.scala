@@ -6,7 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.TransactionSigner
+import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
 import scalus.examples.vault.State
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -84,7 +84,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
             provider.findUtxos(allInputs).await().toOption.get
         }
 
-        val scriptContext = tx.getScriptContextV3(utxos, scriptInput, RedeemerTag.Spend)
+        val scriptContext = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(scriptInput))
 
         val allResolvedPlutusScriptsMap =
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get

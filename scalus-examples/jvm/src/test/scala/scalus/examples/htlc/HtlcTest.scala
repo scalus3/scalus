@@ -7,6 +7,7 @@ import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{Emulator, SubmitError}
+import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.ledger.api.v3.ScriptContext
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.getScriptContextV3
@@ -229,7 +230,7 @@ object HtlcTest extends ScalusTest {
                 (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
             provider.findUtxos(allInputs).await().toOption.get
         }
-        tx.getScriptContextV3(utxos, lockedInput, RedeemerTag.Spend)
+        tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(lockedInput))
     }
 
     private def createAndSubmitLockTx(provider: Emulator): (Transaction, Utxo) = {

@@ -10,6 +10,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
@@ -118,7 +119,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             provider.findUtxos(allInputs).await().toOption.get
         }
 
-        val scriptContext = tx.getScriptContextV3(utxos, scriptInput, RedeemerTag.Spend)
+        val scriptContext = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(scriptInput))
 
         val allResolvedPlutusScriptsMap =
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
