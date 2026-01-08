@@ -121,31 +121,16 @@ object TestUtil extends ScalusTest {
         redeemerTag: RedeemerTag = RedeemerTag.Spend,
         environment: CardanoInfo = testEnvironment
     ): v3.ScriptContext = {
-        val inputs = tx.body.value.inputs
-        // assume 1 script input
-        val inputIdx = inputs.toSeq.indexWhere(_ == input)
-
-        val redeemersMap = tx.witnessSet.redeemers.get.value.toMap
-        val (data, exUnits) = redeemersMap.getOrElse(
-          (redeemerTag, inputIdx),
-          throw new Exception(s"No redeemer found for $redeemerTag input at index $inputIdx")
-        )
-        val redeemer = scalus.cardano.ledger.Redeemer(redeemerTag, inputIdx, data, exUnits)
-
-        val spentOutput = utxos.getOrElse(
-          input,
-          throw new Exception(s"$redeemerTag output not found in UTxO set: $input")
-        )
-        val datum = extractDatumFromOutput(tx, spentOutput)
-
-        LedgerToPlutusTranslation.getScriptContextV3(
-          redeemer,
-          datum,
-          tx,
-          utxos,
-          environment.slotConfig,
-          environment.protocolParams.protocolVersion.toMajor
-        )
+        given CardanoInfo = environment
+        val inputIdx = tx.body.value.inputs.toSeq.indexWhere(_ == input)
+        tx.scriptContextsV3(utxos)
+            .find { case (redeemer, _) =>
+                redeemer.tag == redeemerTag && redeemer.index == inputIdx
+            }
+            .map(_._2)
+            .getOrElse(
+              throw new Exception(s"No V3 script context found for $redeemerTag at index $inputIdx")
+            )
     }
 
     @deprecated("Will be removed", "0.13.0")
