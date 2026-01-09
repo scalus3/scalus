@@ -1,9 +1,7 @@
 package scalus
 
-import scalus.cardano.ledger.Language
-import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType}
 import scalus.builtin.Data
-import scalus.utils.Macros
+import scalus.compiler.sir.{SIR, SIRType}
 
 import scala.annotation.Annotation
 
@@ -18,144 +16,64 @@ final class Ignore extends Annotation
   */
 trait CompileDerivations
 
+@deprecated("Use scalus.compiler package instead", "0.14.2")
 object Compiler:
 
-    type TargetLoweringBackend =
-        scalus.compiler.sir.TargetLoweringBackend
+    @deprecated("Use scalus.compiler.TargetLoweringBackend instead", "0.14.2")
+    type TargetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend
+
+    @deprecated("Use scalus.compiler.TargetLoweringBackend instead", "0.14.2")
     val TargetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend
 
-    case class Options(
-        targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
-        targetLanguage: Language = Language.PlutusV3,
-        generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
-        optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
-        debugLevel: Int = SIRDefaultOptions.debugLevel,
-        debug: Boolean = false
-    )
+    @deprecated("Use scalus.compiler.Options instead", "0.14.2")
+    type Options = scalus.compiler.Options
 
-    object Options {
-        val default: Options = Options()
+    @deprecated("Use scalus.compiler.Options instead", "0.14.2")
+    val Options = scalus.compiler.Options
 
-        val debug: Options = Options(
-          targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
-          generateErrorTraces = true,
-          optimizeUplc = false,
-          debug = false
-        )
+    @deprecated("Use scalus.compiler.defaultOptions instead", "0.14.2")
+    def defaultOptions: scalus.compiler.Options = scalus.compiler.defaultOptions
 
-        val release: Options = Options(
-          targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
-          generateErrorTraces = false,
-          optimizeUplc = true,
-          debug = false
-        )
-    }
+    @deprecated("Use scalus.compiler.fieldAsData instead", "0.14.2")
+    inline def fieldAsData[A](inline expr: A => Any): Data => Data =
+        scalus.compiler.fieldAsData(expr)
 
-    def defaultOptions: Options = Options.default
+    // Note: These methods are intercepted by the compiler plugin at call sites.
+    // They should NOT forward to scalus.compiler.* because the plugin would then
+    // try to compile the parameter 'e' which is just a variable, not actual code.
+    // The plugin replaces calls to these methods with compiled SIR at compile time.
 
-    inline def fieldAsData[A](inline expr: A => Any): Data => Data = ${
-        Macros.fieldAsDataMacro('expr)
-    }
-
-    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
-      * Scalus compiler plugin.
-      *
-      * @param e
-      *   The expression to compile.
-      * @return
-      *   The compiled [[scalus.compiler.sir.SIR]].
-      *
-      * @example
-      *   {{{
-      *   val sir = Compiler.compile(true) // Compiles the expression `true` to a SIR
-      *   val uplc = sir.toUplc() // Converts the SIR to UPLC
-      *   }}}
-      */
+    @deprecated("Use scalus.compiler.compile instead", "0.14.2")
     def compile(e: Any): SIR = throwCompilerPluginMissingException()
 
-    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
-      * Scalus compiler plugin, with explicit compiler options.
-      *
-      * @param options
-      *   The compiler options to use.
-      * @param e
-      *   The expression to compile.
-      * @return
-      *   The compiled [[scalus.compiler.sir.SIR]].
-      */
-    def compileWithOptions(options: Options, e: Any): SIR = throwCompilerPluginMissingException()
-
-    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
-      * Scalus compiler plugin, producing debug output during the compilation.
-      *
-      * @param e
-      *   The expression to compile.
-      * @return
-      *   The compiled [[scalus.compiler.sir.SIR]].
-      */
-    def compileDebug(e: Any): SIR = throwCompilerPluginMissingException()
-
-    /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the
-      * Scalus compiler plugin, with explicit compiler options and debug output.
-      *
-      * @param options
-      *   The compiler options to use.
-      * @param e
-      *   The expression to compile.
-      * @return
-      *   The compiled [[scalus.compiler.sir.SIR]].
-      */
-    def compileDebugWithOptions(options: Options, e: Any): SIR =
+    @deprecated("Use scalus.compiler.compileWithOptions instead", "0.14.2")
+    def compileWithOptions(options: scalus.compiler.Options, e: Any): SIR =
         throwCompilerPluginMissingException()
 
-    /** Compiles the given expression to a [[scalus.compiler.sir.SIRType]] at compile time using the
-      * Scalus compiler plugin.
-      *
-      * @tparam T
-      *   The type to compile.
-      * @return
-      *   The compiled [[scalus.compiler.sir.SIRType]].
-      *
-      * @example
-      *   {{{
-      *   // Compiles the type `BigInt` to a SIRType.Integer
-      *   val sirType = Compiler.compileType[BigInt]
-      *   }}}
-      */
+    @deprecated("Use scalus.compiler.compileDebug instead", "0.14.2")
+    def compileDebug(e: Any): SIR = throwCompilerPluginMissingException()
+
+    @deprecated("Use scalus.compiler.compileDebugWithOptions instead", "0.14.2")
+    def compileDebugWithOptions(options: scalus.compiler.Options, e: Any): SIR =
+        throwCompilerPluginMissingException()
+
+    @deprecated("Use scalus.compiler.compileType instead", "0.14.2")
     def compileType[T]: SIRType = throwCompilerPluginMissingException()
-
-    /** Generates a `Compiler.compile(code)` call at compile time.
-      *
-      * When you want to use [[Compiler.compile]] in an inline method you can't do it directly,
-      * because the Scalus compiler plugin finds the call to `Compiler.compile` and replaces it with
-      * the compiled code. Which is not what you want in this case!
-      *
-      * For example this will not work:
-      * {{{
-      *   inline def myTest(inline code: Any): SIR = {
-      *       Compiler.compile(code).toUplc().evaluate
-      *   }
-      * }}}
-      *
-      * Instead, you should use this method:
-      * {{{
-      *  inline def myTest(inline code: Any): SIR = {
-      *     Compiler.compileInline(code).toUplc().evaluate
-      *  }
-      * }}}
-      */
-    inline def compileInline(inline code: Any): SIR = ${
-        Macros.generateCompileCall('code)
-    }
-
-    inline def compileInlineWithOptions(inline options: Options, inline code: Any): SIR = ${
-        Macros.generateCompileCall('options, 'code)
-    }
 
     private def throwCompilerPluginMissingException(): Nothing =
         throw new RuntimeException(
           "This method call is handled by the Scalus compiler plugin. " +
-              "If you see this message at runtime, the compiler plugin is not enabled." +
+              "If you see this message at runtime, the compiler plugin is not enabled. " +
               "Try adding the compiler plugin to your build.sbt: " +
               "compilerPlugin(\"scalus\" %% \"scalus-plugin\" % scalusPluginVersion)"
         )
+
+    @deprecated("Use scalus.compiler.compileInline instead", "0.14.2")
+    inline def compileInline(inline code: Any): SIR = scalus.compiler.compileInline(code)
+
+    @deprecated("Use scalus.compiler.compileInlineWithOptions instead", "0.14.2")
+    inline def compileInlineWithOptions(
+        inline options: scalus.compiler.Options,
+        inline code: Any
+    ): SIR =
+        scalus.compiler.compileInlineWithOptions(options, code)
