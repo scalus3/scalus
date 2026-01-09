@@ -6,10 +6,15 @@ import scalus.builtin.ByteString.*
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
+import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
+import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.ledger.api.v1.PosixTime
 import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
+import scalus.uplc.Program
+import scalus.uplc.eval.Result
 import scalus.utils.await
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -55,6 +60,47 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.EndNoBids,
           expected = Expected.Success
         ).run()
+    }
+
+    // Budget measurement tests
+    test("budget: first bid") {
+        val budget = TestCase(
+          action = TestAction.Bid(bidAmount = 3_000_000L),
+          expected = Expected.Success
+        ).runWithBudget()
+        println(s"First bid budget: cpu=${budget.steps}, mem=${budget.memory}")
+        assert(budget.steps > 0)
+        assert(budget.memory > 0)
+    }
+
+    test("budget: outbid with refund") {
+        val budget = TestCase(
+          action = TestAction.Outbid(newBidAmount = 5_000_000L),
+          expected = Expected.Success
+        ).runWithBudget()
+        println(s"Outbid budget: cpu=${budget.steps}, mem=${budget.memory}")
+        assert(budget.steps > 0)
+        assert(budget.memory > 0)
+    }
+
+    test("budget: end auction with winner") {
+        val budget = TestCase(
+          action = TestAction.EndWithWinner,
+          expected = Expected.Success
+        ).runWithBudget()
+        println(s"End with winner budget: cpu=${budget.steps}, mem=${budget.memory}")
+        assert(budget.steps > 0)
+        assert(budget.memory > 0)
+    }
+
+    test("budget: end auction without bids") {
+        val budget = TestCase(
+          action = TestAction.EndNoBids,
+          expected = Expected.Success
+        ).runWithBudget()
+        println(s"End without bids budget: cpu=${budget.steps}, mem=${budget.memory}")
+        assert(budget.steps > 0)
+        assert(budget.memory > 0)
     }
 }
 
@@ -289,6 +335,245 @@ object AuctionValidatorTest extends ScalusTest {
                       errorMsg.contains(errorContains),
                       s"Expected error '$errorContains' but got '$errorMsg'"
                     )
+
+        /** Run the test and return the execution budget for spend validators */
+        def runWithBudget(): ExUnits =
+            val provider = createProvider()
+            val endpoints = AuctionEndpoints(env, provider, compiledContract)
+
+            action match
+                case TestAction.Start =>
+                    throw RuntimeException("Start action uses mint, not spend - no budget test")
+                case TestAction.Bid(bidAmount) =>
+                    runBidWithBudget(provider, endpoints, bidAmount)
+                case TestAction.Outbid(newBidAmount) =>
+                    runOutbidWithBudget(provider, endpoints, newBidAmount)
+                case TestAction.EndWithWinner =>
+                    runEndWithWinnerWithBudget(provider, endpoints)
+                case TestAction.EndNoBids =>
+                    runEndNoBidsWithBudget(provider, endpoints)
+
+        private def runBidWithBudget(
+            provider: Emulator,
+            endpoints: AuctionEndpoints,
+            bidAmount: Long
+        ): ExUnits =
+            provider.setSlot(beforeSlot)
+            endpoints
+                .startAuction(
+                  sellerAddress = sellerAddress,
+                  itemId = itemId,
+                  startingBid = startingBid,
+                  auctionEndTime = auctionEndTime,
+                  initialValue = initialAuctionValue,
+                  signer = sellerParty.signer
+                )
+                .await()
+
+            // Capture the UTxO BEFORE the bid transaction consumes it
+            val auctionUtxo = provider
+                .findUtxo(scriptAddress, None, None)
+                .await()
+                .toOption
+                .get
+
+            // Save the utxo map before submission
+            val utxosBeforeBid = Map(auctionUtxo._1 -> auctionUtxo._2)
+
+            val tx = endpoints
+                .bid(
+                  itemId = itemId,
+                  bidderAddress = bidder1Address,
+                  bidAmount = bidAmount,
+                  signer = bidder1Party.signer
+                )
+                .await()
+
+            runValidatorWithUtxos(provider, tx, auctionUtxo._1, utxosBeforeBid).budget
+
+        private def runOutbidWithBudget(
+            provider: Emulator,
+            endpoints: AuctionEndpoints,
+            newBidAmount: Long
+        ): ExUnits =
+            provider.setSlot(beforeSlot)
+            endpoints
+                .startAuction(
+                  sellerAddress = sellerAddress,
+                  itemId = itemId,
+                  startingBid = startingBid,
+                  auctionEndTime = auctionEndTime,
+                  initialValue = initialAuctionValue,
+                  signer = sellerParty.signer
+                )
+                .await()
+
+            endpoints
+                .bid(
+                  itemId = itemId,
+                  bidderAddress = bidder1Address,
+                  bidAmount = 3_000_000L,
+                  signer = bidder1Party.signer
+                )
+                .await()
+
+            // Capture ALL UTxOs BEFORE the outbid transaction consumes them
+            val auctionUtxo = provider
+                .findUtxo(scriptAddress, None, None)
+                .await()
+                .toOption
+                .get
+
+            // Get all UTxOs from the provider before the transaction
+            val allUtxosBeforeOutbid = provider.utxos
+
+            val tx = endpoints
+                .bid(
+                  itemId = itemId,
+                  bidderAddress = bidder2Address,
+                  bidAmount = newBidAmount,
+                  signer = bidder2Party.signer
+                )
+                .await()
+
+            runValidatorWithUtxos(provider, tx, auctionUtxo._1, allUtxosBeforeOutbid).budget
+
+        private def runEndWithWinnerWithBudget(
+            provider: Emulator,
+            endpoints: AuctionEndpoints
+        ): ExUnits =
+            provider.setSlot(beforeSlot)
+            endpoints
+                .startAuction(
+                  sellerAddress = sellerAddress,
+                  itemId = itemId,
+                  startingBid = startingBid,
+                  auctionEndTime = auctionEndTime,
+                  initialValue = initialAuctionValue,
+                  signer = sellerParty.signer
+                )
+                .await()
+
+            endpoints
+                .bid(
+                  itemId = itemId,
+                  bidderAddress = bidder1Address,
+                  bidAmount = 3_000_000L,
+                  signer = bidder1Party.signer
+                )
+                .await()
+
+            // Capture the UTxO BEFORE the end transaction consumes it
+            val auctionUtxo = provider
+                .findUtxo(scriptAddress, None, None)
+                .await()
+                .toOption
+                .get
+
+            // Get all UTxOs from the provider before the transaction
+            val allUtxosBeforeEnd = provider.utxos
+
+            provider.setSlot(afterSlot)
+            val tx = endpoints
+                .endAuction(
+                  itemId = itemId,
+                  sponsorAddress = sellerAddress,
+                  signer = sellerParty.signer
+                )
+                .await()
+
+            runValidatorWithUtxos(provider, tx, auctionUtxo._1, allUtxosBeforeEnd).budget
+
+        private def runEndNoBidsWithBudget(
+            provider: Emulator,
+            endpoints: AuctionEndpoints
+        ): ExUnits =
+            provider.setSlot(beforeSlot)
+            endpoints
+                .startAuction(
+                  sellerAddress = sellerAddress,
+                  itemId = itemId,
+                  startingBid = startingBid,
+                  auctionEndTime = auctionEndTime,
+                  initialValue = initialAuctionValue,
+                  signer = sellerParty.signer
+                )
+                .await()
+
+            // Capture the UTxO BEFORE the end transaction consumes it
+            val auctionUtxo = provider
+                .findUtxo(scriptAddress, None, None)
+                .await()
+                .toOption
+                .get
+
+            // Save the utxo map before submission
+            val utxosBeforeEnd = Map(auctionUtxo._1 -> auctionUtxo._2)
+
+            provider.setSlot(afterSlot)
+            val tx = endpoints
+                .endAuction(
+                  itemId = itemId,
+                  sponsorAddress = sellerAddress,
+                  signer = sellerParty.signer
+                )
+                .await()
+
+            runValidatorWithUtxos(provider, tx, auctionUtxo._1, utxosBeforeEnd).budget
+
+    private val scriptAddress = compiledContract.address(env.network)
+
+    private def runValidator(
+        provider: Emulator,
+        tx: Transaction,
+        scriptInput: TransactionInput
+    ): Result =
+        val utxos =
+            val body = tx.body.value
+            val allInputs =
+                (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
+            provider.findUtxos(allInputs).await().toOption.get
+
+        val scriptContext = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(scriptInput))
+
+        val allResolvedPlutusScriptsMap =
+            AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
+        val plutusScript =
+            scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
+        val program = Program.fromCborByteString(plutusScript.script)
+
+        val result = program.runWithDebug(scriptContext)
+        assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")
+        result
+
+    /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted) */
+    private def runValidatorWithUtxos(
+        provider: Emulator,
+        tx: Transaction,
+        scriptInput: TransactionInput,
+        knownUtxos: Map[TransactionInput, TransactionOutput]
+    ): Result =
+        // Merge known utxos with any remaining utxos from provider
+        val body = tx.body.value
+        val allInputs =
+            (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
+        val remainingInputs = allInputs -- knownUtxos.keySet
+        val providerUtxos = if remainingInputs.nonEmpty then
+            provider.findUtxos(remainingInputs).await().toOption.getOrElse(Map.empty)
+        else Map.empty
+        val utxos = knownUtxos ++ providerUtxos
+
+        val scriptContext = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(scriptInput))
+
+        val allResolvedPlutusScriptsMap =
+            AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
+        val plutusScript =
+            scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
+        val program = Program.fromCborByteString(plutusScript.script)
+
+        val result = program.runWithDebug(scriptContext)
+        assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")
+        result
 
     private def createProvider(): Emulator =
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))

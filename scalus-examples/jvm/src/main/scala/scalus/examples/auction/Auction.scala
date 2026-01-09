@@ -1,7 +1,8 @@
 package scalus.examples.auction
 
 import scalus.{Compile, Compiler}
-import scalus.builtin.{ByteString, Data}
+import scalus.builtin.{ByteString, Data, ToData}
+import scalus.builtin.ToData.toData
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, DatumOption, Transaction, Utxo, Value as LedgerValue}
@@ -52,6 +53,9 @@ object Datum {
   */
 
 /** Actions that can be performed on the auction contract
+  *
+  * Bid and End actions include index parameters for O(1) UTxO lookups (indexed UTxO pattern).
+  * The indices are computed off-chain using delayed redeemer pattern.
   */
 enum Action derives Data.FromData, Data.ToData:
     case Start(
@@ -60,8 +64,34 @@ enum Action derives Data.FromData, Data.ToData:
         startingBid: BigInt,
         auctionEndTime: PosixTime
     )
-    case Bid(amount: BigInt, bidder: PubKeyHash)
-    case End // end auction and transfer item to highest bidder, funds to seller
+    /** Place a bid on the auction
+      * @param amount
+      *   The bid amount in lovelace
+      * @param bidder
+      *   The bidder's public key hash
+      * @param inputIdx
+      *   Index of the auction input in txInfo.inputs
+      * @param outputIdx
+      *   Index of the continuing auction output in txInfo.outputs
+      * @param refundOutputIdx
+      *   Index of refund output for previous bidder (-1 if no previous bidder)
+      */
+    case Bid(
+        amount: BigInt,
+        bidder: PubKeyHash,
+        inputIdx: BigInt,
+        outputIdx: BigInt,
+        refundOutputIdx: BigInt
+    )
+    /** End the auction and transfer item to highest bidder, funds to seller
+      * @param inputIdx
+      *   Index of the auction input in txInfo.inputs
+      * @param sellerOutputIdx
+      *   Index of seller's payment output in txInfo.outputs
+      * @param winnerOutputIdx
+      *   Index of winner's NFT output (-1 if no winner, seller reclaims)
+      */
+    case End(inputIdx: BigInt, sellerOutputIdx: BigInt, winnerOutputIdx: BigInt)
 
 @Compile
 object Action
@@ -75,47 +105,62 @@ object AuctionValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit =
-        // Extract own input to get script hash, value, and inline datum
-        val (scriptHash, inputValue, currentDatum) =
-            txInfo.findOwnInputOrFail(txOutRef, "Auction input must be present") match
-                case TxInInfo(
-                      _,
-                      TxOut(
-                        Address(Credential.ScriptCredential(scriptHash), _),
-                        value,
-                        OutputDatum.OutputDatum(inlineDatum),
-                        _
-                      )
-                    ) =>
-                    (scriptHash, value, inlineDatum.to[Datum])
-                case _ => fail("Auction datum must be inline")
-
-        val Datum(seller, currentHighestBidder, currentHighestBid, auctionEndTime, itemId) =
-            currentDatum
-
-        // Match on redeemer action
+        // Match on redeemer action and extract input using provided index
         redeemer.to[Action] match
-            case Action.Bid(bidAmount, bidder) =>
+            case Action.Bid(bidAmount, bidder, inputIdx, outputIdx, refundOutputIdx) =>
+                // Use indexed lookup instead of searching
+                val input = txInfo.inputs.at(inputIdx)
+                require(input.outRef === txOutRef, "Input index does not match txOutRef")
+
+                val (scriptHash, inputValue, currentDatum) = input.resolved match
+                    case TxOut(
+                          Address(Credential.ScriptCredential(sh), _),
+                          value,
+                          OutputDatum.OutputDatum(inlineDatum),
+                          _
+                        ) =>
+                        (sh, value, inlineDatum.to[Datum])
+                    case _ => fail("Auction input must have script credential and inline datum")
+
                 handleBid(
                   txInfo,
                   scriptHash,
-                  inputValue,
                   currentDatum,
                   bidAmount,
-                  bidder
+                  bidder,
+                  outputIdx,
+                  refundOutputIdx
                 )
-            case Action.End =>
-                handleEnd(txInfo, scriptHash, inputValue, currentDatum)
+
+            case Action.End(inputIdx, sellerOutputIdx, winnerOutputIdx) =>
+                // Use indexed lookup instead of searching
+                val input = txInfo.inputs.at(inputIdx)
+                require(input.outRef === txOutRef, "Input index does not match txOutRef")
+
+                val (scriptHash, inputValue, currentDatum) = input.resolved match
+                    case TxOut(
+                          Address(Credential.ScriptCredential(sh), _),
+                          value,
+                          OutputDatum.OutputDatum(inlineDatum),
+                          _
+                        ) =>
+                        (sh, value, inlineDatum.to[Datum])
+                    case _ => fail("Auction input must have script credential and inline datum")
+
+                handleEnd(txInfo, scriptHash, currentDatum, sellerOutputIdx, winnerOutputIdx)
+
             case Action.Start(_, _, _, _) =>
                 fail("Start action is only valid for minting")
 
+    /** Handle bid action using indexed UTxO pattern for O(1) lookups */
     private inline def handleBid(
         txInfo: TxInfo,
         scriptHash: ValidatorHash,
-        inputValue: Value,
         datum: Datum,
         bidAmount: BigInt,
-        bidder: PubKeyHash
+        bidder: PubKeyHash,
+        outputIdx: BigInt,
+        refundOutputIdx: BigInt
     ): Unit =
         val Datum(seller, currentHighestBidder, currentHighestBid, auctionEndTime, itemId) = datum
 
@@ -137,17 +182,11 @@ object AuctionValidator extends Validator {
           "Bid must be higher than current highest bid"
         )
 
-        // 4. Find the continuing output to the script
-        val (continuingOutput, newDatum) = txInfo
-            .findOwnScriptOutputs(scriptHash)
-            .match
-                case List.Cons(
-                      out @ TxOut(_, _, OutputDatum.OutputDatum(newDatumData), _),
-                      List.Nil
-                    ) =>
-                    (out, newDatumData.to[Datum])
-                case _ =>
-                    fail("There must be exactly one continuing auction output with inline datum")
+        // 4. Use indexed lookup for continuing output (O(1) instead of O(n))
+        val continuingOutput = txInfo.outputs.at(outputIdx)
+        val newDatum = continuingOutput.datum match
+            case OutputDatum.OutputDatum(newDatumData) => newDatumData.to[Datum]
+            case _ => fail("Continuing auction output must have inline datum")
 
         // 5. Verify the new datum is correct
         val expectedNewDatum = Datum(
@@ -174,33 +213,34 @@ object AuctionValidator extends Validator {
           "Continuing output must contain at least the bid amount"
         )
 
-        // 8. If there was a previous bidder, verify they get refunded
+        // 8. If there was a previous bidder, verify they get refunded using indexed lookup
         currentHighestBidder match
             case Option.Some(previousBidder) =>
-                // Find output paying the previous bidder
-                val refundOutputs = txInfo.outputs.filter { out =>
-                    out.address === Address.fromPubKeyHash(previousBidder)
-                }
+                // refundOutputIdx >= 0 means there should be a refund output
                 require(
-                  refundOutputs.nonEmpty,
-                  "Previous highest bidder must receive refund"
+                  refundOutputIdx >= BigInt(0),
+                  "Refund output index required when previous bidder exists"
                 )
-                val totalRefund = refundOutputs.foldLeft(BigInt(0)) { (acc, out) =>
-                    acc + out.value.getLovelace
-                }
+                val refundOutput = txInfo.outputs.at(refundOutputIdx)
                 require(
-                  totalRefund >= currentHighestBid,
+                  refundOutput.address === Address.fromPubKeyHash(previousBidder),
+                  "Refund output must go to previous bidder"
+                )
+                require(
+                  refundOutput.value.getLovelace >= currentHighestBid,
                   "Previous bidder must receive at least their bid amount"
                 )
             case Option.None =>
                 // No previous bidder, no refund needed
                 ()
 
+    /** Handle end action using indexed UTxO pattern for O(1) lookups */
     private inline def handleEnd(
         txInfo: TxInfo,
         scriptHash: ValidatorHash,
-        inputValue: Value,
-        datum: Datum
+        datum: Datum,
+        sellerOutputIdx: BigInt,
+        winnerOutputIdx: BigInt
     ): Unit =
         val Datum(seller, currentHighestBidder, currentHighestBid, auctionEndTime, itemId) = datum
 
@@ -212,35 +252,29 @@ object AuctionValidator extends Validator {
 
         currentHighestBidder match
             case Option.Some(winner) =>
-                // 2. Winner must receive the NFT (the auctioned item)
-                val winnerOutputs = txInfo.outputs.filter { out =>
-                    out.address === Address.fromPubKeyHash(winner)
-                }
+                // 2. Winner must receive the NFT (the auctioned item) - use indexed lookup
                 require(
-                  winnerOutputs.nonEmpty,
-                  "Winner must receive output"
+                  winnerOutputIdx >= BigInt(0),
+                  "Winner output index required when there is a winner"
                 )
-                val winnerNftCount = winnerOutputs.foldLeft(BigInt(0)) { (acc, out) =>
-                    acc + out.value.quantityOf(scriptHash, itemId)
-                }
+                val winnerOutput = txInfo.outputs.at(winnerOutputIdx)
                 require(
-                  winnerNftCount === BigInt(1),
+                  winnerOutput.address === Address.fromPubKeyHash(winner),
+                  "Winner output must go to the winner"
+                )
+                require(
+                  winnerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
                   "Winner must receive the auction NFT"
                 )
 
-                // 3. Seller must receive the highest bid amount
-                val sellerOutputs = txInfo.outputs.filter { out =>
-                    out.address === Address.fromPubKeyHash(seller)
-                }
+                // 3. Seller must receive the highest bid amount - use indexed lookup
+                val sellerOutput = txInfo.outputs.at(sellerOutputIdx)
                 require(
-                  sellerOutputs.nonEmpty,
-                  "Seller must receive payment"
+                  sellerOutput.address === Address.fromPubKeyHash(seller),
+                  "Seller output must go to the seller"
                 )
-                val sellerPayment = sellerOutputs.foldLeft(BigInt(0)) { (acc, out) =>
-                    acc + out.value.getLovelace
-                }
                 require(
-                  sellerPayment >= currentHighestBid,
+                  sellerOutput.value.getLovelace >= currentHighestBid,
                   "Seller must receive at least the highest bid amount"
                 )
 
@@ -251,15 +285,14 @@ object AuctionValidator extends Validator {
                   txInfo.isSignedBy(seller),
                   "Seller must sign to end auction without bids"
                 )
-                // NFT goes back to seller
-                val sellerOutputs = txInfo.outputs.filter { out =>
-                    out.address === Address.fromPubKeyHash(seller)
-                }
-                val sellerNftCount = sellerOutputs.foldLeft(BigInt(0)) { (acc, out) =>
-                    acc + out.value.quantityOf(scriptHash, itemId)
-                }
+                // NFT goes back to seller - use indexed lookup
+                val sellerOutput = txInfo.outputs.at(sellerOutputIdx)
                 require(
-                  sellerNftCount === BigInt(1),
+                  sellerOutput.address === Address.fromPubKeyHash(seller),
+                  "Seller output must go to the seller"
+                )
+                require(
+                  sellerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
                   "Seller must receive back the auction NFT"
                 )
 
@@ -474,30 +507,57 @@ class AuctionEndpoints(
               highestBid = BigInt(bidAmount)
             )
 
-            redeemer = Action.Bid(BigInt(bidAmount), bidderPkh)
-
             nftAsset = AssetName(currentDatum.itemId)
             nftValue = LedgerValue.asset(policyId, nftAsset, 1L)
             newAuctionValue = LedgerValue.lovelace(bidAmount) + nftValue
 
-            // Build transaction with optional refund to previous bidder
+            // Calculate previous bidder address for refund output index computation
+            prevBidderAddr: scala.Option[ShelleyAddress] = currentDatum.highestBidder match
+                case Option.Some(prevBidder) => scala.Some(addressFromPkh(prevBidder))
+                case Option.None             => scala.None
+
+            // Build transaction with delayed redeemer that computes indices
+            // The redeemerBuilder receives the complete transaction and computes indices
             builder = TxBuilder(env)
                 .spend(
                   auctionUtxo,
-                  redeemer,
+                  redeemerBuilder = (tx: Transaction) => {
+                      // Compute input index - find our auction input
+                      val inputIdx = tx.body.value.inputs.toSeq.indexOf(auctionUtxo.input)
+
+                      // Compute output index - find the continuing auction output
+                      val outputIdx = tx.body.value.outputs.indexWhere { sized =>
+                          sized.value.address == scriptAddress
+                      }
+
+                      // Compute refund output index if there was a previous bidder
+                      val refundOutputIdx = prevBidderAddr match
+                          case scala.Some(addr) =>
+                              tx.body.value.outputs.indexWhere { sized =>
+                                  sized.value.address == addr
+                              }
+                          case scala.None => -1
+
+                      Action
+                          .Bid(
+                            BigInt(bidAmount),
+                            bidderPkh,
+                            BigInt(inputIdx),
+                            BigInt(outputIdx),
+                            BigInt(refundOutputIdx)
+                          )
+                          .toData
+                  },
                   script,
                   Set(AddrKeyHash.fromByteString(bidderPkh.hash))
                 )
                 .payTo(scriptAddress, newAuctionValue, newDatum)
                 .validTo(Instant.ofEpochMilli(currentDatum.auctionEndTime.toLong - 1000))
 
-            builderWithRefund = currentDatum.highestBidder match
-                case Option.Some(prevBidder) =>
-                    builder.payTo(
-                      addressFromPkh(prevBidder),
-                      LedgerValue.lovelace(currentDatum.highestBid.toLong)
-                    )
-                case Option.None => builder
+            builderWithRefund = prevBidderAddr match
+                case scala.Some(addr) =>
+                    builder.payTo(addr, LedgerValue.lovelace(currentDatum.highestBid.toLong))
+                case scala.None => builder
 
             tx <- builderWithRefund
                 .complete(provider, bidderAddress)
@@ -534,7 +594,6 @@ class AuctionEndpoints(
             )
             currentDatum = extractDatum(auctionUtxo)
 
-            redeemer = Action.End
             nftAsset = AssetName(currentDatum.itemId)
             nftValue = LedgerValue.asset(policyId, nftAsset, 1L)
 
@@ -547,19 +606,48 @@ class AuctionEndpoints(
                 case Option.Some(_) => Set.empty[AddrKeyHash]
                 case Option.None    => Set(sellerAddrKeyHash)
 
-            // Build transaction based on whether there's a winner
-            // NFT is transferred (not burned) to winner or back to seller
+            // Calculate winner address for output index computation
+            winnerAddr: scala.Option[ShelleyAddress] = currentDatum.highestBidder match
+                case Option.Some(winner) => scala.Some(addressFromPkh(winner))
+                case Option.None         => scala.None
+
+            // Build transaction with delayed redeemer that computes indices
             builder = TxBuilder(env)
-                .spend(auctionUtxo, redeemer, script, spendRequiredSigners)
+                .spend(
+                  auctionUtxo,
+                  redeemerBuilder = (tx: Transaction) => {
+                      // Compute input index - find our auction input
+                      val inputIdx = tx.body.value.inputs.toSeq.indexOf(auctionUtxo.input)
+
+                      // Compute seller output index
+                      val sellerOutputIdx = tx.body.value.outputs.indexWhere { sized =>
+                          sized.value.address == sellerAddr
+                      }
+
+                      // Compute winner output index if there is a winner
+                      val winnerOutputIdx = winnerAddr match
+                          case scala.Some(addr) =>
+                              tx.body.value.outputs.indexWhere { sized =>
+                                  sized.value.address == addr
+                              }
+                          case scala.None => -1
+
+                      Action
+                          .End(BigInt(inputIdx), BigInt(sellerOutputIdx), BigInt(winnerOutputIdx))
+                          .toData
+                  },
+                  script,
+                  spendRequiredSigners
+                )
                 .validFrom(Instant.ofEpochMilli(currentDatum.auctionEndTime.toLong + 1000))
 
-            builderWithOutputs = currentDatum.highestBidder match
-                case Option.Some(winner) =>
+            builderWithOutputs = winnerAddr match
+                case scala.Some(addr) =>
                     // Winner gets the NFT (auctioned item), seller gets the bid amount
                     builder
-                        .payTo(addressFromPkh(winner), LedgerValue.lovelace(2_000_000L) + nftValue)
+                        .payTo(addr, LedgerValue.lovelace(2_000_000L) + nftValue)
                         .payTo(sellerAddr, LedgerValue.lovelace(currentDatum.highestBid.toLong))
-                case Option.None =>
+                case scala.None =>
                     // No bids - seller reclaims the NFT (auctioned item)
                     builder.payTo(sellerAddr, LedgerValue.lovelace(2_000_000L) + nftValue)
 
