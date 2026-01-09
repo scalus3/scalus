@@ -769,7 +769,7 @@ case class TxBuilder(
       * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
       */
     def registerStake(stakeAddress: StakeAddress): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val cert = Certificate.RegCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -779,7 +779,7 @@ case class TxBuilder(
       * The refund amount is taken from protocol parameters (stakeAddressDeposit).
       */
     def deregisterStake(stakeAddress: StakeAddress): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val cert = Certificate.UnregCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -790,14 +790,14 @@ case class TxBuilder(
       *   the amount originally deposited during registration (must match ledger state)
       */
     def deregisterStake(stakeAddress: StakeAddress, refund: Coin): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val cert = Certificate.UnregCert(credential, Some(refund))
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
     /** Delegates a stake key to the specified stake pool. */
     def delegateTo(stakeAddress: StakeAddress, poolId: PoolKeyHash): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val cert = Certificate.StakeDelegation(credential, poolId)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -807,7 +807,7 @@ case class TxBuilder(
       * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
       */
     def stakeAndDelegate(stakeAddress: StakeAddress, poolId: PoolKeyHash): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeRegDelegCert(credential, poolId, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
@@ -815,7 +815,7 @@ case class TxBuilder(
 
     /** Withdraws staking rewards. */
     def withdrawRewards(stakeAddress: StakeAddress, amount: Coin): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         addSteps(
           TransactionBuilderStep.WithdrawRewards(
             credential,
@@ -827,7 +827,7 @@ case class TxBuilder(
 
     /** Delegates voting power to a DRep. */
     def delegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val cert = Certificate.VoteDelegCert(credential, drep)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -837,7 +837,7 @@ case class TxBuilder(
       * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
       */
     def registerAndDelegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.VoteRegDelegCert(credential, drep, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
@@ -849,7 +849,7 @@ case class TxBuilder(
         poolId: PoolKeyHash,
         drep: DRep
     ): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val cert = Certificate.StakeVoteDelegCert(credential, poolId, drep)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
@@ -863,7 +863,7 @@ case class TxBuilder(
         poolId: PoolKeyHash,
         drep: DRep
     ): TxBuilder = {
-        val credential = stakeAddressToCredential(stakeAddress)
+        val credential = stakeAddress.credential
         val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeVoteRegDelegCert(credential, poolId, drep, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
@@ -1313,14 +1313,6 @@ case class TxBuilder(
       *   the steps to append
       */
     def addSteps(s: TransactionBuilderStep*): TxBuilder = copy(steps = steps ++ s)
-
-    private def stakeAddressToCredential(stakeAddress: StakeAddress): Credential = {
-        stakeAddress.payload match {
-            case StakePayload.Stake(stakeKeyHash) =>
-                Credential.KeyHash(stakeKeyHash.asInstanceOf[AddrKeyHash])
-            case StakePayload.Script(scriptHash) => Credential.ScriptHash(scriptHash)
-        }
-    }
 }
 
 /** Factory methods for creating TxBuilder instances. */

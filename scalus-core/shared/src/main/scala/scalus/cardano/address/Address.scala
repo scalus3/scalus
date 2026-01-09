@@ -411,6 +411,11 @@ case class StakeAddress(network: Network, payload: StakePayload) extends Address
         case StakePayload.Script(hash) => Some(hash)
         case _                         => None
 
+    /** Convert the stake address payload to a Credential */
+    def credential: Credential = payload match
+        case StakePayload.Stake(hash)  => Credential.KeyHash(hash.asInstanceOf[AddrKeyHash])
+        case StakePayload.Script(hash) => Credential.ScriptHash(hash)
+
     inline override def getNetwork: Option[Network] = Some(network)
 }
 
