@@ -17,8 +17,10 @@ import scalus.cardano.txbuilder.TransactionBuilder.*
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint as _, *}
 import scalus.|>
 
+import scala.annotation.nowarn
 import scala.collection.immutable.SortedMap
 
+@nowarn("msg=SpendWithDelayedRedeemer .* is deprecated")
 private class TransactionStepsProcessor(private var _ctx: Context) {
 
     /** Transaction builder monad. Retains context at point of failure, if there's any.

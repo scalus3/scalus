@@ -4,12 +4,15 @@ import scalus.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
+import scala.annotation.nowarn
+
 sealed trait TransactionBuilderStep
 
 /** Steps to build the transaction:
   *   - generally non-commutative, so the order matters
   *   - some are additive (e.g. [[Mint]]), some are not, e.g., ([[Spend]])
   */
+@nowarn("msg=SpendWithDelayedRedeemer .* is deprecated")
 object TransactionBuilderStep {
 
     /** Spend any utxo. An attempt to consume (reference or spend) the same utxo twice will error.

@@ -4,7 +4,9 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import java.time.Instant
+import scala.annotation.nowarn
 
+@nowarn("msg=(toLong is redundant|long2double)")
 class SlotConfigTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     test("slotToInstant converts slot to Instant correctly for mainnet") {

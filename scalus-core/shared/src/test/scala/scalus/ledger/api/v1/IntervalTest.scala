@@ -3,6 +3,9 @@ import org.scalacheck.Arbitrary
 import scalus.*
 import scalus.prelude.StdlibTestKit
 
+import scala.annotation.nowarn
+
+@nowarn("msg=entirelyAfter .* is deprecated")
 class IntervalTest extends StdlibTestKit with scalus.ledger.api.v1.ArbitraryInstances {
 
     test("`never` contains no values") {

@@ -1,8 +1,7 @@
 package scalus.examples.auction
 
-import scalus.{Compile, Compiler}
+import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, ToData}
-import scalus.builtin.ToData.toData
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, DatumOption, Transaction, Utxo, Value as LedgerValue}
@@ -13,6 +12,7 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.uplc.PlutusV3
+import scalus.{Compile, Compiler}
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
