@@ -2,10 +2,11 @@ package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, ToData}
 import scalus.cardano.ledger.ExUnits
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
@@ -234,8 +235,8 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
         )
     }
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       // generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
@@ -249,7 +250,7 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
             // println(s"lw=${lw.pretty.render(100)}")
             val uplc = sir.toUplc(
               generateErrorTraces = true,
-              backend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+              backend = TargetLoweringBackend.SirToUplcV3Lowering
             )
             // println(s"uplc=${uplc.pretty.render(100)}")
             uplc.plutusV3

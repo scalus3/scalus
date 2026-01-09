@@ -68,7 +68,7 @@ class BLS12_381_G2Test extends AnyFunSuiteLike {
     private inline def assertEval(inline code: Boolean): Unit = {
         import scalus.*
         assert(code)
-        val term = Compiler.compileInline(code).toUplc(true).evaluate
+        val term = scalus.compiler.compileInline(code).toUplc(true).evaluate
         term match
             case Term.Const(Constant.Bool(b)) =>
                 assert(b)

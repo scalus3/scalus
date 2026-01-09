@@ -8,7 +8,7 @@ import SIRType.{Boolean, Fun, Integer, Unit}
 
 class RemoveRecursivityTest extends AnyFunSuite:
     test("remove recursivity") {
-        val compiled = Compiler.compile {
+        val compiled = scalus.compiler.compile {
             def nonRecursive(x: BigInt): BigInt =
                 def recursive(x: BigInt): BigInt =
                     if x == BigInt(0) then 0 else recursive(x - 1)

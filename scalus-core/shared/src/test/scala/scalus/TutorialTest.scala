@@ -2,7 +2,7 @@ package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
+import scalus.compiler.compile
 import scalus.builtin.Builtins
 import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
@@ -219,7 +219,7 @@ def evaluation() = {
 }
 
 def fieldAsDataExample() = {
-    import Compiler.*, builtin.{Data, Builtins}, Builtins.*
+    import scalus.compiler.*, builtin.{Data, Builtins}, Builtins.*
     import scalus.ledger.api.v3.*
     val pubKeyValidator = compile:
         def validator(ctxData: Data) =
@@ -238,7 +238,7 @@ def fieldAsDataExample() = {
 }
 
 def inlineExample() = {
-    import Compiler.compile, builtin.{Data, Builtins}, Builtins.*
+    import scalus.compiler.compile, builtin.{Data, Builtins}, Builtins.*
     inline def validator(
         inline pubKeyHash: ByteString
     )(datum: Data, redeemer: Data, ctxData: Data) =
@@ -249,7 +249,7 @@ def inlineExample() = {
 }
 
 def debugFlagExample() = {
-    import Compiler.compile, builtin.{Data, Builtins}, Builtins.*
+    import scalus.compiler.compile, builtin.{Data, Builtins}, Builtins.*
     inline def dbg[A](msg: String)(a: A)(using debug: Boolean): A =
         inline if debug then trace(msg)(a) else a
     inline def validator(using debug: Boolean)(datum: Data, redeemer: Data, ctxData: Data) =

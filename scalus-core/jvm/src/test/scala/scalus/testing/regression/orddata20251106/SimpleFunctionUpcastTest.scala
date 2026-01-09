@@ -2,12 +2,14 @@ package scalus.testing.regression.orddata20251106
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.compiler.{compile, Options}
+import scalus.compiler.sir.TargetLoweringBackend
 
 /** Test simple function upcasting without enum representation issues */
 class SimpleFunctionUpcastTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -19,7 +21,7 @@ class SimpleFunctionUpcastTest extends AnyFunSuite {
         case class Cat() extends Animal
 
         // Test upcasting () => Dog to () => Animal
-        val sir = Compiler.compile {
+        val sir = compile {
             val getDog: () => Dog = () => Dog()
             val getAnimal: () => Animal = getDog // This should trigger upcast
             getAnimal()
@@ -31,7 +33,7 @@ class SimpleFunctionUpcastTest extends AnyFunSuite {
 
     test("BigInt function upcast should work") {
         // Test upcasting () => BigInt to () => Any
-        val sir = Compiler.compile {
+        val sir = compile {
             val getNum: () => BigInt = () => BigInt(42)
             val getAny: () => Any = getNum // This should trigger upcast
             getAny()

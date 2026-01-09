@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
+import scalus.compiler.{compile, Options}
 
 // Simple enum similar to VoteStatus
 enum Status derives FromData, ToData:
@@ -39,8 +40,8 @@ class BooleanOrMatchTest extends AnyFunSuite:
     import scalus.uplc.eval.PlutusVM
     given PlutusVM = PlutusVM.makePlutusV2VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
@@ -48,7 +49,7 @@ class BooleanOrMatchTest extends AnyFunSuite:
 
     test("Boolean OR with extracted match results (WORKING)") {
         // This should compile successfully
-        val sir = Compiler.compile {
+        val sir = compile {
             val datum1 = TestDatum(BigInt(1), Status.Pending(BigInt(42)))
             val datum2 = TestDatum(BigInt(2), Status.Complete(BigInt(100), BigInt(200)))
 
@@ -77,7 +78,7 @@ class BooleanOrMatchTest extends AnyFunSuite:
 
     test("Boolean OR with parenthesized match expressions - simple (WORKS)") {
         // This simple case works fine
-        val sir = Compiler.compile {
+        val sir = compile {
             val datum1 = TestDatum(BigInt(1), Status.Pending(BigInt(42)))
             val datum2 = TestDatum(BigInt(2), Status.Complete(BigInt(100), BigInt(200)))
 
@@ -101,7 +102,7 @@ class BooleanOrMatchTest extends AnyFunSuite:
 
     test("Boolean OR in complex expression (TRY TO REPRODUCE BUG)") {
         // Try to reproduce with more complex nesting like user's actual code
-        val sir = Compiler.compile {
+        val sir = compile {
             def checkStatus(datum: TestDatum, other: TestDatum): BigInt = {
                 val continuing = datum
                 val removed = other
@@ -130,7 +131,7 @@ class BooleanOrMatchTest extends AnyFunSuite:
 
     test("Boolean AND with extracted match results (WORKING)") {
         // Test that && works with the same pattern
-        val sir = Compiler.compile {
+        val sir = compile {
             val datum1 = TestDatum(BigInt(1), Status.Pending(BigInt(42)))
             val datum2 = TestDatum(BigInt(2), Status.Complete(BigInt(100), BigInt(200)))
 
@@ -157,7 +158,7 @@ class BooleanOrMatchTest extends AnyFunSuite:
 
     test("Nested if-else as alternative to OR (WORKING)") {
         // This is another workaround that should work
-        val sir = Compiler.compile {
+        val sir = compile {
             val datum1 = TestDatum(BigInt(1), Status.Pending(BigInt(42)))
             val datum2 = TestDatum(BigInt(2), Status.Complete(BigInt(100), BigInt(200)))
 

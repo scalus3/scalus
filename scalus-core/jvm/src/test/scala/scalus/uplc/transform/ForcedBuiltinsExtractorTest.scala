@@ -1,8 +1,8 @@
 package scalus.uplc.transform
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.{compile, Options, TargetLoweringBackend}
 import scalus.builtin.Builtins.*
+import scalus.compiler.{compile, Options, TargetLoweringBackend}
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.*
 import scalus.uplc.eval.Log

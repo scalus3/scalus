@@ -69,8 +69,8 @@ class DerivingTest extends AnyFunSuite {
 
     protected given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -121,7 +121,7 @@ class DerivingTest extends AnyFunSuite {
 
     test("Compile To/From Data for AE3") {
 
-        val sir = Compiler.compile { (d: Data) =>
+        val sir = scalus.compiler.compile { (d: Data) =>
             val a = summon[FromData[DerivingSpec_AE3]](d)
             a match
                 case DerivingSpec_AE3.DS3_A        => BigInt(1)
@@ -158,7 +158,7 @@ class DerivingTest extends AnyFunSuite {
 
     test("Compile To/From Data for AE4") {
 
-        val sir = Compiler.compile { (d: Data) =>
+        val sir = scalus.compiler.compile { (d: Data) =>
             val a = summon[FromData[DerivingSpec_AE4]](d)
             a match
                 case DerivingSpec_AE4.DS4_A        => BigInt(1)

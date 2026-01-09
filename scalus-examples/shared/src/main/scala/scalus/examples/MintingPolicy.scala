@@ -1,17 +1,15 @@
 package scalus.examples
 
-import scalus.Compile
-import scalus.Compiler
-import scalus.Compiler.compile
-import scalus.Ignore
 import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
-import scalus.ledger.api.v1.*
-import scalus.prelude.Option.*
-import scalus.prelude.*
-import scalus.builtin.Data
 import scalus.builtin.Data.fromData
+import scalus.builtin.{ByteString, Data}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
+import scalus.ledger.api.v1.*
+import scalus.prelude.*
+import scalus.prelude.Option.*
+import scalus.{Compile, Ignore}
 
 case class TxInInfoTxOutRefOnly(txInInfoOutRef: TxOutRef)
 
@@ -113,8 +111,8 @@ object MintingPolicy {
     }
 
     @Ignore
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering
     )
 
     @Ignore
@@ -164,8 +162,8 @@ object MintingPolicyV2 {
 
 object MintingPolicySimpleBackend {
     // Use SimpleSirToUplcLowering backend explicitly
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering
     )
 
     val compiledOptimizedMintingPolicyScript = compile(

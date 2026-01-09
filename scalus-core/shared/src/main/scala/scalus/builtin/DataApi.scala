@@ -3,8 +3,8 @@ package scalus.builtin
 import io.bullet.borer
 import io.bullet.borer.Tag.{NegativeBigNum, Other, PositiveBigNum}
 import io.bullet.borer.{ByteAccess, Cbor, DataItem as DI, Decoder, Encoder, Reader, Tag}
-import scalus.Compiler
 import scalus.builtin.Data.{B, Constr, FromData, I, Map}
+import scalus.compiler.fieldAsData
 import scalus.prelude.List as PList
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
@@ -241,7 +241,7 @@ private trait DataApi {
         def toCborByteString: ByteString = ByteString.fromArray(toCbor)
 
     extension (inline data: Data)
-        inline def field[A](inline expr: A => Any): Data = Compiler.fieldAsData(expr)(data)
+        inline def field[A](inline expr: A => Any): Data = fieldAsData(expr)(data)
         inline def toConstr: BuiltinPair[BigInt, scalus.builtin.BuiltinList[Data]] =
             Builtins.unConstrData(data)
         inline def toMap: BuiltinList[BuiltinPair[Data, Data]] = Builtins.unMapData(data)

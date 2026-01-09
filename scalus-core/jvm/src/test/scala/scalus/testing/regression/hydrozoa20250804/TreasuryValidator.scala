@@ -4,27 +4,29 @@ package scalus.testing.regression.hydrozoa20250804
 //import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 //import hydrozoa.infra.{encodeHex, toBB}
 //import hydrozoa.l1.multisig.state.L2ConsensusParamsH32
-import DisputeResolutionValidator.VoteDatum
-import DisputeResolutionValidator.VoteStatus.{NoVote, Vote}
-import TreasuryValidator.TreasuryDatum.{Resolved, Unresolved}
-import TreasuryValidator.TreasuryRedeemer.{Deinit, Resolve, Withdraw}
-import ByteStringExtensions.take
-import TxOutExtensions.inlineDatumOfType
-import ValueExtensions.{containsExactlyOneAsset, unary_-}
 import Scalar as ScalusScalar
+
 import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data.toData
-import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element, ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v1.{PosixTime, Value}
+import scalus.builtin.*
+import scalus.compiler.compile
 import scalus.ledger.api.v1.Value.+
+import scalus.ledger.api.v1.{PosixTime, Value}
 import scalus.ledger.api.v3.*
+import scalus.prelude.*
 import scalus.prelude.List.Nil
 import scalus.prelude.Option.{None, Some}
 import scalus.prelude.crypto.bls12_381.G1
 import scalus.prelude.crypto.bls12_381.G1.scale
-import scalus.prelude.*
+import scalus.testing.regression.hydrozoa20250804.ByteStringExtensions.take
+import scalus.testing.regression.hydrozoa20250804.DisputeResolutionValidator.VoteDatum
+import scalus.testing.regression.hydrozoa20250804.DisputeResolutionValidator.VoteStatus.{NoVote, Vote}
+import scalus.testing.regression.hydrozoa20250804.TreasuryValidator.TreasuryDatum.{Resolved, Unresolved}
+import scalus.testing.regression.hydrozoa20250804.TreasuryValidator.TreasuryRedeemer.{Deinit, Resolve, Withdraw}
+import scalus.testing.regression.hydrozoa20250804.TxOutExtensions.inlineDatumOfType
+import scalus.testing.regression.hydrozoa20250804.ValueExtensions.{containsExactlyOneAsset, unary_-}
 
 type L2ConsensusParamsH32 = ByteString
 
@@ -435,7 +437,7 @@ object TreasuryValidator extends Validator:
 end TreasuryValidator
 
 object TreasuryValidatorScript {
-    val sir = Compiler.compile(TreasuryValidator.validate)
+    val sir = compile(TreasuryValidator.validate)
     val script = sir.toUplcOptimized(generateErrorTraces = true).plutusV3
     //    val script = sir.toUplc().plutusV3
 

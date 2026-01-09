@@ -1,24 +1,24 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.Credential
-import scalus.builtin.Data.toData
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
+import scalus.compiler.compileInline
+import scalus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
-import scalus.prelude.List as PList
 import scalus.utils.await
-import scalus.{toUplc, Compiler}
+import scalus.toUplc
 
 import java.time.Instant
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.immutable.SortedMap
+import scala.concurrent.ExecutionContext.Implicits.global
 
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
@@ -29,7 +29,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     val alwaysOkScript: Script.PlutusV3 = {
-        val alwaysOk = Compiler.compileInline((sc: Data) => ())
+        val alwaysOk = compileInline((sc: Data) => ())
         val alwaysOkCborBytes = alwaysOk.toUplc().plutusV3.cborByteString
         Script.PlutusV3(alwaysOkCborBytes)
     }

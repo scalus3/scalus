@@ -2,9 +2,9 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.BuiltinList
 import scalus.builtin.Builtins.*
+import scalus.compiler.compile
 import scalus.uplc.eval.{PlutusVM, Result}
 
 /** Tests for lowering issues with BuiltinList literals.

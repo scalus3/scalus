@@ -3,8 +3,8 @@ package scalus.bloxbean
 import com.bloxbean.cardano.client.plutus.spec.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Data
+import scalus.compiler.compile
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm

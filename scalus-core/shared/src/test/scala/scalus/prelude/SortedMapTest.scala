@@ -590,7 +590,7 @@ class SortedMapTest extends StdlibTestKit {
             map === fromDataMap
         }
 
-        val sir = scalus.Compiler.compile {
+        val sir = scalus.compiler.compile {
             given [A: FromData: Ord, B: FromData]: FromData[SortedMap[A, B]] =
                 SortedMap.sortedMapFromDataWithValidation
 

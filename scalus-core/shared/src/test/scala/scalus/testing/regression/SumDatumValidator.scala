@@ -32,7 +32,7 @@ object SumDatumValidator extends Validator:
 end SumDatumValidator
 
 object SumDatumScript {
-    val sir = Compiler.compile(SumDatumValidator.validate)
+    val sir = scalus.compiler.compile(SumDatumValidator.validate)
     def uplc = sir.toUplc(true)
 }
 

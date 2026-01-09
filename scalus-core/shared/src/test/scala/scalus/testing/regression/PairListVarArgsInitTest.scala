@@ -1,16 +1,16 @@
 package scalus.testing.regression
 
-import scalus.*
-import scalus.Compiler.compile
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.compiler.compile
 import scalus.uplc.eval.*
 
 case class PairListVarArgsInitCaseClass(name: String, pairs: scalus.prelude.List[(BigInt, BigInt)])
 
 class PairListVarArgsInitTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

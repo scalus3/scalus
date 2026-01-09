@@ -1,16 +1,12 @@
 package scalus.examples
 
-import scalus.Compiler.compileWithOptions
-import scalus.builtin.Builtins
-import scalus.builtin.Data
-import scalus.builtin.Data.FromData
-import scalus.builtin.Data.ToData
-import scalus.cardano.blueprint.Application
-import scalus.cardano.blueprint.Blueprint
+import scalus.builtin.{Builtins, Data}
+import scalus.builtin.Data.{FromData, ToData}
+import scalus.cardano.blueprint.{Application, Blueprint}
+import scalus.compiler.{compileWithOptions, Options}
 import scalus.ledger.api.v1.Address
 import scalus.ledger.api.v3.*
-import scalus.patterns.Config
-import scalus.patterns.Cons
+import scalus.patterns.{Config, Cons}
 import scalus.patterns.OrderedLinkedList.*
 import scalus.prelude.*
 import scalus.{show as _, *}
@@ -215,11 +211,11 @@ object OrderedLinkedList extends DataParameterizedValidator:
 
 object OrderedLinkedListContract:
 
-    inline def make(param: Config)(using options: scalus.Compiler.Options) =
+    inline def make(param: Config)(using options: Options) =
         import scalus.builtin.Data.toData
         compileWithOptions(options, OrderedLinkedList.validate).toUplc().plutusV3 $ param.toData
 
-    inline def compiled(using options: scalus.Compiler.Options) =
+    inline def compiled(using options: Options) =
         compileWithOptions(options, OrderedLinkedList.validate)
 
     def application: Application = Application

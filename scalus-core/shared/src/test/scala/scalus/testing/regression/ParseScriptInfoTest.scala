@@ -1,17 +1,18 @@
 package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
+import scalus.*
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.compiler.compile
 import scalus.ledger.api.v3.*
-import scalus.*
 import scalus.prelude.*
 import scalus.prelude.List.{Cons, Nil}
 import scalus.uplc.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
+
 import scala.language.implicitConversions
 
 @scalus.Compile
@@ -87,8 +88,8 @@ object ParseScriptInfo {
 
 class ParseScriptInfoTest extends AnyFunSuite:
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       // debug = true
@@ -143,8 +144,8 @@ class ParseScriptInfoTest extends AnyFunSuite:
 
 class ParseScriptInfoOldBackendTest extends AnyFunSuite:
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SumOfProductsLowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SumOfProductsLowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

@@ -2,14 +2,14 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString
+import scalus.cardano.ledger.ExUnits
+import scalus.compiler.*
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.*
-import scalus.cardano.ledger.ExUnits
 import scalus.uplc.transform.{CaseConstrApply, Inliner}
 
 import scala.annotation.tailrec

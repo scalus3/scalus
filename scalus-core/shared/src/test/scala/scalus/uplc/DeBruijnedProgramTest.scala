@@ -2,12 +2,12 @@ package scalus.uplc
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.serialization.cbor.Cbor
 import scalus.*
 import scalus.builtin.ByteString
+import scalus.serialization.cbor.Cbor
 
 class DeBruijnedProgramTest extends AnyFunSuite {
-    private val flatEncoded = Compiler.compile(true).toUplc().plutusV3.flatEncoded
+    private val flatEncoded = compiler.compile(true).toUplc().plutusV3.flatEncoded
 
     test("fromCborWithRemainingBytes") {
         val suffix = Arbitrary.arbitrary[Array[Byte]].sample.get

@@ -3,6 +3,7 @@ package rules
 
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.compiler.compile
 import scalus.builtin.Data
 import scalus.cardano.address.*
 import scalus.cardano.address.Network.Testnet
@@ -1188,14 +1189,14 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
     private def validPlutusV3Script = {
         import scalus.*
-        val program = scalus.Compiler.compile((data: Data) => ()).toUplc(true).plutusV3
+        val program = compile((data: Data) => ()).toUplc(true).plutusV3
         Script.PlutusV3(program.cborByteString)
     }
 
     private def invalidPlutusV3Script = {
         import scalus.*
         val program =
-            scalus.Compiler.compile((data: Data) => scalus.prelude.fail()).toUplc(true).plutusV3
+            compile((data: Data) => scalus.prelude.fail()).toUplc(true).plutusV3
         Script.PlutusV3(program.cborByteString)
     }
 }

@@ -2,10 +2,10 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
-import scalus.uplc.{Constant, DeBruijnedProgram, DefaultUni, Term}
+import scalus.compiler.compile
 import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.uplc.{Constant, DeBruijnedProgram, DefaultUni, Term}
 
 class BuiltinArrayTest extends AnyFunSuite {
 

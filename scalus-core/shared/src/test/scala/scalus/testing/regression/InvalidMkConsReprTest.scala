@@ -1,23 +1,23 @@
 package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
 import scalus.*
-import scalus.prelude.*
-import scalus.builtin.{ByteString, Data}
 import scalus.builtin.ByteString.utf8
 import scalus.builtin.Data.toData
+import scalus.builtin.{ByteString, Data}
+import scalus.compiler.compile
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v1.{Credential, PubKeyHash, Value}
 import scalus.ledger.api.v1.Value.getLovelace
+import scalus.ledger.api.v1.{Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
 import scalus.ledger.api.v3.*
+import scalus.prelude.*
 import scalus.uplc.eval.*
 
 class InvalidMkConsReprTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

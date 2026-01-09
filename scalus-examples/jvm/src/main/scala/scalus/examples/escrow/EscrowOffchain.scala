@@ -12,6 +12,7 @@ import com.bloxbean.cardano.client.function.helper.*
 import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
 import scalus.*
+import scalus.compiler.{compileWithOptions, Options, TargetLoweringBackend}
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
 import scalus.builtin.Data.*
@@ -41,12 +42,9 @@ object EscrowOffChain:
       backendService.getEpochService
     )
 
-    private inline def compiled(using scalus.Compiler.Options) =
-        scalus.Compiler.compileWithOptions(
-          summon[scalus.Compiler.Options],
-          EscrowValidator.validate
-        )
-    private inline def doubleCborHex(using scalus.Compiler.Options) =
+    private inline def compiled(using Options) =
+        compileWithOptions(summon[Options], EscrowValidator.validate)
+    private inline def doubleCborHex(using Options) =
         compiled.toUplc(true).plutusV3.doubleCborHex
 
     private val script = PlutusV3Script
@@ -58,8 +56,8 @@ object EscrowOffChain:
 
     private val scriptAddressBech32 = scriptAddress.toBech32()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

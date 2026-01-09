@@ -2,13 +2,13 @@ package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
-import scalus.Compiler.compile
+import scalus.compiler.compile
 import scalus.uplc.Constant.given
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM, Result}
 import scalus.uplc.jit.hybrid.HybridJIT
 import scalus.uplc.jit.nativestack.JIT
 import scalus.uplc.{Constant, Term}
-import scalus.uplc.Term.asTerm
 
 import java.lang.management.ManagementFactory
 

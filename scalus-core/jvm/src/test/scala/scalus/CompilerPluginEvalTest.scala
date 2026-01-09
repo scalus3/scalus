@@ -1,11 +1,11 @@
 package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, JVMPlatformSpecific}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.compiler.sir.*
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.*
 import scalus.uplc.*
 import scalus.uplc.Constant.given
@@ -21,7 +21,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV2VM()
 
-    given Compiler.Options = Compiler.Options(
+    given Options = Options(
       targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,

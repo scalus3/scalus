@@ -36,8 +36,8 @@ private object AssocMapTest {
 
 class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given compiler.Options = compiler.Options(
+      targetLoweringBackend = compiler.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -50,7 +50,7 @@ class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitr
     test("union") {
         import AssocMapTest.*
         val m3 = AssocMap.union(m1, m2)
-        val compiled = Compiler.compile {
+        val compiled = compiler.compile {
             val a = BigInt(132)
             AssocMap.union(m1, m2)
         }
@@ -65,7 +65,7 @@ class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitr
           )
         )
         {
-            val compiled = Compiler.compile {
+            val compiled = compiler.compile {
                 equalsAssets(m1, m2)
             }
             // println(compiled.pretty.render(100))
@@ -73,7 +73,7 @@ class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitr
             // println(VM.evaluateTerm(term).pretty.render(100))
         }
         {
-            val compiled = Compiler.compile {
+            val compiled = compiler.compile {
                 equalsAssets(m1, m1)
             }
             val term = compiled.toUplc()

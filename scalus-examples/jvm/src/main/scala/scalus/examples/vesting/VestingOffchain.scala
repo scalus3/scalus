@@ -17,8 +17,8 @@ import scalus.bloxbean.ScalusTransactionEvaluator
 import scalus.builtin.Data.*
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.SlotConfig
+import scalus.compiler.{compileWithOptions, Options, TargetLoweringBackend}
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.Compiler.compileWithOptions
 
 import java.util.Optional
 import scala.util.control.Breaks.*
@@ -38,7 +38,7 @@ object VestingOffChain:
       backendService.getEpochService
     )
 
-    private inline def compiled(using options: scalus.Compiler.Options) = {
+    private inline def compiled(using options: Options) = {
         compileWithOptions(options, VestingValidator.validate)
     }
 
@@ -51,8 +51,8 @@ object VestingOffChain:
 
     private val scriptAddressBech32 = scriptAddress.toBech32()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

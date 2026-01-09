@@ -37,7 +37,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
     }
 
     test("check order of parameters in TxnInfo") {
-        val sir = Compiler.compile {
+        val sir = scalus.compiler.compile {
             // TODO:  resolve apply for case-classes.
             val txIdPrev = new TxId(ByteString.fromString("0x12345678"))
             val outRef = new TxOutRef(txIdPrev, 0)

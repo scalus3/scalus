@@ -1,15 +1,13 @@
 package scalus.examples
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.hex
-import scalus.builtin.Data
+import scalus.builtin.{ByteString, Data}
 import scalus.builtin.Data.toData
+import scalus.compiler.{compile, Options, TargetLoweringBackend}
 import scalus.examples.Groth16.*
 import scalus.prelude.List
-import scalus.uplc.Constant
-import scalus.uplc.Term
+import scalus.uplc.{Constant, Term}
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
 
@@ -37,8 +35,8 @@ class Groth16Test extends AnyFunSuite:
       )
     )
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

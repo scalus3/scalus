@@ -1,18 +1,16 @@
 package scalus
 
-import scalus.Compiler.compile
-import scalus.builtin.ByteString
-import scalus.builtin.Data
+import scalus.builtin.{ByteString, Data}
+import scalus.compiler.compile
+import scalus.compiler.sir.SIR
 import scalus.examples.MintingPolicy
 import scalus.prelude.SortedMap
-import scalus.compiler.sir.SIR
 import scalus.uplc.Term
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
 
 import scala.language.implicitConversions
-import scala.scalajs.js.annotation.JSExport
-import scala.scalajs.js.annotation.JSExportTopLevel
+import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
 
 @JSExportTopLevel("MintingPolicyJS")
 object MintingPolicyJS:

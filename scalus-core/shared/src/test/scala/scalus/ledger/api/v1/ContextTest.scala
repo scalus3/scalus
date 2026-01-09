@@ -3,19 +3,17 @@ package scalus.ledger.api.v1
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.Compiler.compile
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
-import scalus.builtin.Data
-import scalus.builtin.Data.fromData
-import scalus.builtin.Data.toData
-import scalus.prelude.*
+import scalus.builtin.{ByteString, Data}
+import scalus.builtin.Data.{fromData, toData}
+import scalus.compiler.compile
 import scalus.compiler.sir.SIR
-import scalus.uplc.Constant
-import scalus.uplc.Term
+import scalus.prelude.*
+import scalus.uplc.{Constant, Term}
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.test.ArbitraryInstances
+
 import scala.language.implicitConversions
 
 class ContextTest

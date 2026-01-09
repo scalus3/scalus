@@ -2,21 +2,22 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.Compiler.compile
 import scalus.*
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.*
-import scalus.prelude.List.Cons
-import scalus.prelude.List.Nil
+import scalus.prelude.List.{Cons, Nil}
 import scalus.uplc.*
 import scalus.uplc.eval.PlutusVM
+
 import scala.language.implicitConversions
 
 class PubKeyValidatorTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

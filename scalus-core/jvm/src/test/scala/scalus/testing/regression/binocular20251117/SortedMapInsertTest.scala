@@ -3,6 +3,8 @@ package scalus.testing.regression.binocular20251117
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
+import scalus.compiler.{compile, Options}
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.prelude.{List, SortedMap}
 
 /** Regression test for SortedMap.insert behavior with ByteString keys
@@ -18,8 +20,8 @@ import scalus.prelude.{List, SortedMap}
   */
 class SortedMapInsertTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -73,7 +75,7 @@ class SortedMapInsertTest extends AnyFunSuite {
         import scalus.uplc.eval.PlutusVM
         given PlutusVM = PlutusVM.makePlutusV3VM()
 
-        val sir = Compiler.compile {
+        val sir = compile {
             // Batch 1 keys (10 keys)
             val b1k0 = ByteString.fromHex(
               "0292cad364cf66a04f9ade0238e96a8978e8bc01c65301000000000000000000"

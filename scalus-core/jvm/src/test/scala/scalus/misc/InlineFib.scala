@@ -2,6 +2,7 @@ package scalus.misc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.compiler.compile
 import scalus.uplc.*
 import scalus.uplc.eval.PlutusVM
 
@@ -20,7 +21,7 @@ class InlineFibTest extends AnyFunSuite {
     val compileMe = 1
 
     test("Compile inline fib") {
-        val sir = scalus.Compiler.compile {
+        val sir = compile {
             BigInt(InlineFib.fib(10))
         }
         // println(s"SIR:\n${sir.showHighlighted}")

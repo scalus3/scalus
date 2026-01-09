@@ -1,31 +1,21 @@
 package scalus.prelude
 
-import org.scalacheck.Arbitrary
-import org.scalacheck.Prop
 import org.scalacheck.util.Pretty
-import org.scalactic.Prettifier
-import org.scalactic.source
+import org.scalacheck.{Arbitrary, Prop}
+import org.scalactic.{source, Prettifier}
 import org.scalatest.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
 import scalus.builtin.Data
-import scalus.builtin.Data.FromData
-import scalus.builtin.Data.ToData
-import scalus.builtin.Data.fromData
-import scalus.builtin.Data.toData
-import scalus.compiler.sir.SIR
-import scalus.uplc.Constant
-import scalus.uplc.DeBruijn
-import scalus.uplc.Term
-import scalus.uplc.Term.asTerm
+import scalus.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
-import scalus.uplc.eval.CountingBudgetSpender
-import scalus.uplc.eval.NoBudgetSpender
-import scalus.uplc.eval.PlutusVM
-import scalus.uplc.eval.Result
-import scalus.uplc.eval.TallyingBudgetSpenderLogger
+import scalus.compiler.sir.{SIR, TargetLoweringBackend}
+import scalus.compiler.{compileInline, Options}
+import scalus.uplc.Term.asTerm
+import scalus.uplc.eval.*
 import scalus.uplc.test.ArbitraryInstances
+import scalus.uplc.{Constant, DeBruijn, Term}
 
 import scala.annotation.targetName
 import scala.reflect.ClassTag
@@ -39,8 +29,8 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
     export scalus.prelude.{!==, <=>, ===}
     // export scalus.prelude.{Eq, Ord}
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -69,7 +59,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                       summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
                       s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
                     )
-                    val result = Compiler.compileInline(code).toUplc(true).evaluateDebug
+                    val result = compileInline(code).toUplc(true).evaluateDebug
                     result match
                         case failure: Result.Failure =>
                             result.logs.lastOption match {
@@ -125,7 +115,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                       s"Expected message '$expectedMessage', but got '${exception.getMessage}'"
                     )
 
-                    val result = Compiler.compileInline(code).toUplc(true).evaluateDebug
+                    val result = compileInline(code).toUplc(true).evaluateDebug
                     result match
                         case failure: Result.Failure =>
                             result.logs.lastOption match {
@@ -156,7 +146,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
             catch
                 case NonFatal(exception) => fail(s"Expected success, but got exception: $exception")
 
-        val result = Compiler.compileInline(code).toUplc(true).evaluateDebug
+        val result = compileInline(code).toUplc(true).evaluateDebug
         result match
             case failure: Result.Failure =>
                 fail(s"Expected success, but got failure: $failure")
@@ -186,7 +176,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
             else NoBudgetSpender
 
         val codeTerm = vm.evaluateDeBruijnedTerm(
-          DeBruijn.deBruijnTerm(Compiler.compileInline(code).toUplc(true)),
+          DeBruijn.deBruijnTerm(compileInline(code).toUplc(true)),
           budgetSpender = spender
         )
 
@@ -203,7 +193,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                       .costs
                       .toMap}""".stripMargin
 
-        val expectedTerm = Compiler.compileInline(expected).toUplc(true).evaluate
+        val expectedTerm = compileInline(expected).toUplc(true).evaluate
         assert(
           codeTerm α_== expectedTerm,
           s"Expected term $expectedTerm, but got $codeTerm"
@@ -216,8 +206,8 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
     protected final inline def assertEvalNotEq[T: Eq](inline code: T, inline expected: T): Unit = {
         assert(code !== expected, s"Expected not equal to $expected, but got $code")
 
-        val codeTerm = Compiler.compileInline(code).toUplc(true).evaluate
-        val expectedTerm = Compiler.compileInline(expected).toUplc(true).evaluate
+        val codeTerm = compileInline(code).toUplc(true).evaluate
+        val expectedTerm = compileInline(expected).toUplc(true).evaluate
         assert(
           !(codeTerm α_== expectedTerm),
           s"Expected term not equal to $expectedTerm, but got $codeTerm"
@@ -227,12 +217,12 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
     protected final inline def assertEval(inline code: Boolean): Unit = {
         assert(code)
 
-        val codeTerm = Compiler.compileInline(code).toUplc(true).evaluate
+        val codeTerm = compileInline(code).toUplc(true).evaluate
         assert(codeTerm α_== trueTerm)
     }
 
     protected final inline def assertEvalCompile(inline code: Any): Unit = {
-        Compiler.compileInline(code).toUplc(true).evaluate
+        compileInline(code).toUplc(true).evaluate
     }
 
     protected inline final def checkEval[A1](
@@ -250,7 +240,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
     ): Assertion = {
         import scala.compiletime.summonInline
 
-        val sir = Compiler.compileInline { (data: Data) => f(fromData[A1](data)) }
+        val sir = compileInline { (data: Data) => f(fromData[A1](data)) }
         val uplc = sir.toUplc(true)
 
         def handler(payload: A1): Boolean = {
@@ -282,7 +272,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion = {
-        val sir = Compiler.compileInline { (d1: Data, d2: Data) =>
+        val sir = compileInline { (d1: Data, d2: Data) =>
             f(fromData[A1](d1), fromData[A2](d2))
         }
 
@@ -320,7 +310,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion = {
-        val sir = Compiler.compileInline { (d1: Data, d2: Data, d3: Data) =>
+        val sir = compileInline { (d1: Data, d2: Data, d3: Data) =>
             f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3))
         }
 
@@ -364,7 +354,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion = {
-        val sir = Compiler.compileInline { (d1: Data, d2: Data, d3: Data, d4: Data) =>
+        val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data) =>
             f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3), fromData[A4](d4))
         }
 
@@ -413,7 +403,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion = {
-        val sir = Compiler.compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data) =>
+        val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data) =>
             f(
               fromData[A1](d1),
               fromData[A2](d2),
@@ -485,16 +475,15 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion = {
-        val sir = Compiler.compileInline {
-            (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data, d6: Data) =>
-                f(
-                  fromData[A1](d1),
-                  fromData[A2](d2),
-                  fromData[A3](d3),
-                  fromData[A4](d4),
-                  fromData[A5](d5),
-                  fromData[A6](d6)
-                )
+        val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data, d6: Data) =>
+            f(
+              fromData[A1](d1),
+              fromData[A2](d2),
+              fromData[A3](d3),
+              fromData[A4](d4),
+              fromData[A5](d5),
+              fromData[A6](d6)
+            )
         }
 
         val uplc = sir.toUplc(true)
@@ -523,6 +512,6 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         check(handler, configParams*)
     }
 
-    private val trueTerm = Compiler.compileInline(true).toUplc(true).evaluate
+    private val trueTerm = compileInline(true).toUplc(true).evaluate
     protected given PlutusVM = PlutusVM.makePlutusV3VM()
 }

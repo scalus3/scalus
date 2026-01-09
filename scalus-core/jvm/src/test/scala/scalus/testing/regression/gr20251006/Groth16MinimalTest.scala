@@ -2,8 +2,10 @@ package scalus.testing.regression.gr20251006
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Data
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
+
 import scala.util.{Failure, Success, Try}
 
 /** Regression test for Groth16 compilation issue
@@ -19,8 +21,8 @@ import scala.util.{Failure, Success, Try}
   */
 class Groth16MinimalTest extends AnyFunSuite:
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

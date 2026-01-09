@@ -1,8 +1,9 @@
 package scalus.testing.regression.binocular20251004
 
-import scalus.*
-import scalus.prelude.List
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.prelude.List
 
 /** Regression test for "Cannot upcast Unit -> Int to Int" error
   *
@@ -16,15 +17,15 @@ import org.scalatest.funsuite.AnyFunSuite
   */
 class MedianListIndexing extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
     )
 
     test("compile list indexing in pattern match - minimal reproducer") {
-        val sir = Compiler.compile {
+        val sir = compile {
             def getMedian(values: List[BigInt], size: BigInt): BigInt =
                 values match
                     case List.Nil => BigInt(0)
@@ -41,7 +42,7 @@ class MedianListIndexing extends AnyFunSuite {
     }
 
     test("compile list indexing without pattern match - control test") {
-        val sir = Compiler.compile {
+        val sir = compile {
             val values = List(BigInt(1), BigInt(2), BigInt(3))
             val index = BigInt(1)
             values !! index
@@ -52,7 +53,7 @@ class MedianListIndexing extends AnyFunSuite {
     }
 
     test("compile pattern match without indexing - control test") {
-        val sir = Compiler.compile {
+        val sir = compile {
             def getFirst(values: List[BigInt]): BigInt =
                 values match
                     case List.Nil           => BigInt(0)
@@ -68,7 +69,7 @@ class MedianListIndexing extends AnyFunSuite {
     /*
     test("compile original getMedianTimePast pattern - from binocular") {
 
-        val sir = Compiler.compile {
+        val sir = scalus.compiler.compile {
             def getMedianTimePast(timestamps: List[BigInt], size: BigInt): BigInt =
                 val UnixEpoch = BigInt(1231006505)
                 timestamps match

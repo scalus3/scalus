@@ -1,10 +1,10 @@
 package scalus.examples.htlc
 
-import scalus.Compiler
 import scalus.cardano.blueprint.Blueprint
+import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 
-private given Compiler.Options = Compiler.Options.release
+private given Options = Options.release
 lazy val HtlcContract = PlutusV3.compile(HtlcValidator.validate)
 lazy val HtlcBlueprint = Blueprint.plutusV3[Config, Action](
   title = "Hashed timelocked contract",

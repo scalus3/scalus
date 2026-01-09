@@ -5,28 +5,27 @@ import scalus.*
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v2.TxOut
+import scalus.cardano.ledger.ExUnits
+import scalus.compiler.{Options, TargetLoweringBackend}
+import scalus.examples.{UnorderedLinkedListContract, UnorderedNodeAction}
+import scalus.ledger.api.v2.{OutputDatum, TxOut}
 import scalus.ledger.api.v3.*
+import scalus.patterns.UnorderedLinkedList as LinkedList
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.uplc.eval.Result
-
-import scalus.examples.{UnorderedLinkedListContract, UnorderedNodeAction}
-import scalus.patterns.UnorderedLinkedList as LinkedList
 import scalus.testing.kit.{Mock, ScalusTest}
+import scalus.uplc.eval.Result
 
 import scala.language.implicitConversions
 
 class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
     )
     import Cons.{cons, head}
-    import scalus.cardano.ledger.ExUnits
 
     extension (self: TxOut) def token: Value = self.value.withoutLovelace
 
@@ -109,9 +108,9 @@ class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
             then
                 fail:
                     s"""Performance regression,
-                    |expected: $budget,
-                    |but got: ${result.budget};
-                    |costs: ${result.costs}""".stripMargin
+                        |expected: $budget,
+                        |but got: ${result.budget};
+                        |costs: ${result.costs}""".stripMargin
         else
             result.logs.foreach(println)
             val reason = result match

@@ -1,14 +1,13 @@
 package scalus.examples
 
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString
-import scalus.builtin.Data
+import scalus.builtin.{ByteString, Data}
 import scalus.cardano.blueprint.{Application, Blueprint}
+import scalus.compiler.sir.SIR
+import scalus.compiler.{compile, Options, TargetLoweringBackend}
 import scalus.ledger.api.v2.*
 import scalus.prelude.*
-import scalus.compiler.sir.SIR
 import scalus.uplc.*
 
 @Compile
@@ -70,8 +69,8 @@ object OptimizedPreimageValidator {
 
 object OptimizedPreimage {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
     )
 
     val compiledOptimizedPreimageValidator: SIR = compile(

@@ -2,22 +2,21 @@ package scalus.ledger.api.v1
 
 import io.bullet.borer.Cbor
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.*
-import scalus.cardano.ledger.MajorProtocolVersion
-import scalus.ledger.api.v2
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.Credential.*
-import scalus.prelude.SortedMap
+import scalus.ledger.api.v2
 import scalus.prelude.List.*
 import scalus.prelude.Option.*
+import scalus.prelude.SortedMap
 import scalus.uplc.*
-import scalus.uplc.eval.MachineParams
-import scalus.uplc.eval.PlutusVM
-import scalus.utils.Utils
+import scalus.uplc.eval.{MachineParams, PlutusVM}
 import scalus.utils.Hex.hexToBytes
+import scalus.utils.Utils
 
 import scala.language.implicitConversions
 
@@ -115,8 +114,8 @@ class ScriptContextV1DataSerializationTest extends BaseValidatorTest:
         MachineParams.defaultParamsFor(Language.PlutusV2, MajorProtocolVersion.vasilPV)
 
     // in Data-based backend, to/from Data is no-op, so use simple backend
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

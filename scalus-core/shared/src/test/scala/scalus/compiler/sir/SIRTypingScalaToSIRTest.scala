@@ -2,7 +2,7 @@ package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
+import scalus.compiler.compile
 
 import scala.annotation.tailrec
 

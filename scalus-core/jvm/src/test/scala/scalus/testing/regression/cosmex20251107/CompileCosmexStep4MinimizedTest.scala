@@ -3,6 +3,7 @@ package scalus.testing.regression.cosmex20251107
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
+import scalus.compiler.{compile, Options, TargetLoweringBackend}
 
 class CompileCosmexStep4MinimizedTest extends AnyFunSuite {
 
@@ -10,10 +11,10 @@ class CompileCosmexStep4MinimizedTest extends AnyFunSuite {
         val key =
             ByteString.fromHex("aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899")
 
-        given Compiler.Options = Compiler.Options(
-          targetLoweringBackend = Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+        given Options = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering
         )
-        val compiledValidator = Compiler.compile(minimized.CosmexContract.validate)
+        val compiledValidator = compile(minimized.CosmexContract.validate)
 
         val uplc = compiledValidator.toUplcOptimized().plutusV3
 

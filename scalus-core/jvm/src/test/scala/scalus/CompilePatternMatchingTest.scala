@@ -1,7 +1,7 @@
 package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
+import scalus.compiler.{compile, Options}
 import scalus.builtin.ByteString.*
 import scalus.ledger.api.v1.*
 import scalus.uplc.*
@@ -14,8 +14,8 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV2VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

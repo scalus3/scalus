@@ -2,13 +2,13 @@ package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.Compiler.{compile, fieldAsData}
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, Data}
-import scalus.prelude.List.{Cons, Nil}
-import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.{Boolean, Fun, TypeVar}
+import scalus.compiler.{compile, fieldAsData, Options}
+import scalus.prelude.List.{Cons, Nil}
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
@@ -49,8 +49,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
     def AnE = AnnotationsDecl.empty
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
@@ -361,9 +361,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
             BigInt(1).toData
         }
         val expected = {
-            if summon[
-                  Compiler.Options
-                ].targetLoweringBackend == Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+            if summon[Options].targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then {
                 val a1Tp = SIRType.TypeVar("A", Some(1), false)
                 val a2Tp = SIRType.TypeVar("A", Some(2), false)
@@ -545,8 +543,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         val appliedScript = term.plutusV1 $ scriptContext.toData
         assert(appliedScript.evaluate == hex"deadbeef".asTerm)
         val flatBytesLength = appliedScript.flatEncoded.length
-        summon[Compiler.Options].targetLoweringBackend match
-            case Compiler.TargetLoweringBackend.SirToUplcV3Lowering =>
+        summon[Options].targetLoweringBackend match
+            case TargetLoweringBackend.SirToUplcV3Lowering =>
                 assert(flatBytesLength == 170)
             case _ =>
                 assert(flatBytesLength == 348)

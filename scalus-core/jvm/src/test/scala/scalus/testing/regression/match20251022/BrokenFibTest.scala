@@ -1,7 +1,8 @@
 package scalus.testing.regression.match20251022
 
-import scalus.*
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.compiler.compile
 
 @Compile
 object BrokenFib {
@@ -22,7 +23,7 @@ class BrokenFibTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV2VM()
 
     test("Compile list of fib") {
-        val sir = scalus.Compiler.compile {
+        val sir = compile {
             val result = BrokenFib.fib(10)
             Data.toData(result)
         }

@@ -116,7 +116,7 @@ class ValueTest extends StdlibTestKit with ArbitraryInstances {
 
     test("unsafeFromList") {
 
-        val sir = scalus.Compiler.compile {
+        val sir = scalus.compiler.compile {
             // (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             (d: Data) =>
                 import scalus.prelude.*
@@ -179,7 +179,7 @@ class ValueTest extends StdlibTestKit with ArbitraryInstances {
         val uplc = sir.toUplc()
         println(s"uplc=${uplc.pretty.render(100)}")
 
-        val listFromDataSir = scalus.Compiler.compile { (x: Data) =>
+        val listFromDataSir = scalus.compiler.compile { (x: Data) =>
             Data.fromData[
               scalus.prelude.List[(PolicyId, scalus.prelude.List[(TokenName, BigInt)])]
             ](x)

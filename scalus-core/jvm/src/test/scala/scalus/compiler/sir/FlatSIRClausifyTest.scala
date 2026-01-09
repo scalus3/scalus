@@ -2,7 +2,7 @@ package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
+import scalus.compiler.compile
 import scalus.serialization.flat.FlatInstances.{*, given}
 import scalus.serialization.flat.{DecoderState, EncoderState, HSRIdentityHashMap, HashConsed, HashConsedDecoderState, HashConsedEncoderState}
 

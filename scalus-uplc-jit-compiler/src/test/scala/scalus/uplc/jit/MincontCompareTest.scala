@@ -2,7 +2,7 @@ package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.*
-import scalus.Compiler.compile
+import scalus.compiler.compile
 import scalus.uplc.eval.{Log, NoBudgetSpender, PlutusVM}
 
 class MincontCompareTest extends AnyFunSuiteLike {

@@ -5,7 +5,8 @@ import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, S
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.compiler.sir.TargetLoweringBackend.{ScottEncodingLowering, SirToUplcV3Lowering, SumOfProductsLowering}
-import scalus.{toUplc, Compiler}
+import scalus.compiler.{compileInlineWithOptions, Options}
+import scalus.toUplc
 import scalus.uplc.Program
 
 object ScriptFeeComparison {
@@ -29,12 +30,12 @@ object ScriptFeeComparison {
     enum ComparisonResult {
         case Ok(
             comparison: FeeComparison,
-            options: Compiler.Options,
+            options: Options,
         )
-        case Fail(message: String, options: Compiler.Options)
+        case Fail(message: String, options: Options)
     }
 
-    case class ComparisonMatrix(results: Map[Compiler.Options, ComparisonResult])
+    case class ComparisonMatrix(results: Map[Options, ComparisonResult])
 
     private def arbAddress(env: CardanoInfo) = Address(
       env.network,
@@ -148,7 +149,7 @@ object ScriptFeeComparison {
         env: CardanoInfo,
         additionalSigners: Set[ExpectedSigner] = Set.empty,
         scriptValue: Value = Value.ada(10)
-    ): Map[Compiler.Options, ComparisonResult] = enumerateOptions
+    ): Map[Options, ComparisonResult] = enumerateOptions
         .groupMap(identity) { options =>
             val plutusV3 = makePlutusV3(options, code)
             compareFees(plutusV3, redeemer, datum, env, additionalSigners, scriptValue) match {
@@ -160,17 +161,17 @@ object ScriptFeeComparison {
         .mapValues(_.head)
         .toMap
 
-    private inline def makePlutusV3(options: Compiler.Options, inline code: Any) = {
-        val p: Program = Compiler.compileInlineWithOptions(options, code).toUplc().plutusV3
+    private inline def makePlutusV3(options: Options, inline code: Any) = {
+        val p: Program = compileInlineWithOptions(options, code).toUplc().plutusV3
         Script.PlutusV3(p.cborByteString)
     }
 
-    private def enumerateOptions: Seq[Compiler.Options] = for {
+    private def enumerateOptions: Seq[Options] = for {
         backend <- Seq(ScottEncodingLowering, SumOfProductsLowering, SirToUplcV3Lowering)
         traces <- Seq(true, false)
         optimize <- Seq(true, false)
         debug <- Seq(true, false)
-    } yield Compiler.Options(
+    } yield Options(
       targetLoweringBackend = backend,
       generateErrorTraces = traces,
       optimizeUplc = optimize,

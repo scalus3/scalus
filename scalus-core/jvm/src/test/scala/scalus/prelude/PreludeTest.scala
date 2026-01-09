@@ -2,9 +2,10 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.{ImpossibleLedgerStateError, OnchainError, RequirementError}
+import scalus.compiler.compileInline
 import scalus.uplc.Constant.toValue
-import scalus.uplc.eval.PlutusVM
 import scalus.uplc.Term
+import scalus.uplc.eval.PlutusVM
 
 import scala.reflect.ClassTag
 
@@ -46,14 +47,14 @@ class PreludeTest extends AnyFunSuite {
     private inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit = {
         import scalus.*
         assertThrows[E](code)
-        val result = Compiler.compileInline(code).toUplc(true).evaluateDebug
+        val result = compileInline(code).toUplc(true).evaluateDebug
         assert(result.isFailure)
     }
 
     private inline def assertEvalEq(inline code: Any, expected: Any): Unit = {
         import scalus.*
         assert(code == expected)
-        val term = Compiler.compileInline(code).toUplc(true).evaluate
+        val term = compileInline(code).toUplc(true).evaluate
         term match
             case Term.Const(const) => assert(toValue(const) == expected)
             case _                 => fail(s"Unexpected term: $term")

@@ -54,7 +54,7 @@ object Plugin {
         // Try new package first, fall back to old for backward compatibility
         val compilerOptionType =
             try requiredClassRef("scalus.compiler.Options")
-            catch case _: Exception => requiredClassRef("scalus.Compiler.Options")
+            catch case _: Exception => requiredClassRef("scalus.compiler.Options")
         if !ctx.phase.allowsImplicitSearch then
             println(
               s"ScalusPhase: Implicit search is not allowed in phase ${ctx.phase.phaseName}. "
@@ -606,7 +606,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
         }
 
         // Parse the arguments of the compiler options
-        //  Note, that default values should be synchronized with the default value in scalus.Compiler.Options class
+        //  Note, that default values should be synchronized with the default value in scalus.compiler.Options class
         //  (which is unaccessibke from here, so we should keep them in sync manually)
         def parseArg(arg: Tree, idx: Int, vals: List[Tree]): Unit = {
             arg match
@@ -678,11 +678,11 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
         def parseCompilerOptionsApply(app: tpd.Apply, stats: List[Tree]): Unit = {
             // println("compiler options apply: " + app.show)
             if app.fun.symbol != Symbols.requiredMethod(
-                  "scalus.Compiler.Options.apply"
+                  "scalus.compiler.Options.apply"
                 )
             then
                 report.warning(
-                  "expected scalus.Compiler.Options.apply",
+                  "expected scalus.compiler.Options.apply",
                   posTree.srcPos
                 )
             app.args.zipWithIndex.foreach { case (arg, idx) =>
@@ -696,7 +696,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
             }
         }
 
-        val compilerOptionType = requiredClassRef("scalus.Compiler.Options")
+        val compilerOptionType = requiredClassRef("scalus.compiler.Options")
         if !ctx.phase.allowsImplicitSearch then
             println(
               s"ScalusPhase: Implicit search is not allowed in phase ${ctx.phase.phaseName}. "
@@ -730,7 +730,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                             parseCompilerOptionsApply(app, stats)
                         case _ =>
                             report.warning(
-                              s"ScalusPhase: Expected a call to scalus.Compiler.Options.apply, but found: ${underTyped.show}" +
+                              s"ScalusPhase: Expected a call to scalus.compiler.Options.apply, but found: ${underTyped.show}" +
                                   s"ntree:${underTyped}",
                               posTree.srcPos
                             )

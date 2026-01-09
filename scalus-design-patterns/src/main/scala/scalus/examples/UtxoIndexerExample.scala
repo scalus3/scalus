@@ -1,13 +1,13 @@
 package scalus.examples
 
 import scalus.*
-import scalus.prelude.Validator
-import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
+import scalus.compiler.compile
 import scalus.ledger.api.v3.{TxInfo, TxOutRef}
 import scalus.patterns.UtxoIndexer
+import scalus.prelude.Validator
 import scalus.uplc.Program
 
 /** Example validator using the UTxO Indexer pattern. */
@@ -50,8 +50,8 @@ object IndexerValidatorContract:
 object Offchain:
     import scalus.builtin.Data.toData
     import scalus.cardano.address.Address
-    import scalus.cardano.ledger.{CardanoInfo, Transaction, Utxo}
     import scalus.cardano.ledger.Script.PlutusV3
+    import scalus.cardano.ledger.{CardanoInfo, Transaction, Utxo}
     import scalus.cardano.txbuilder.TxBuilder
 
     def buildTransaction(
