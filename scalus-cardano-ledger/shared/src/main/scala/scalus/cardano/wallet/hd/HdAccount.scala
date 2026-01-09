@@ -1,22 +1,23 @@
 package scalus.cardano.wallet.hd
 
+import scalus.builtin.platform
+import scalus.cardano.address.*
+import scalus.cardano.ledger.{AddrKeyHash, Hash, StakeKeyHash}
 import scalus.cardano.wallet.{Account, KeyPair}
 import scalus.crypto.ed25519.Ed25519Signer
 
-/** HD wallet account implementing CIP-1852 derivation with SLIP-0010.
+/** HD wallet account implementing CIP-1852 derivation with BIP32-Ed25519.
   *
-  * Provides payment, change, staking, and DRep keys derived from a BIP-39 seed using SLIP-0010 key
-  * derivation and CIP-1852 path structure.
+  * Provides payment, change, staking, and DRep keys derived from a BIP-39 mnemonic using
+  * BIP32-Ed25519 key derivation (Icarus-style) and CIP-1852 path structure.
   *
-  * IMPORTANT: SLIP-0010 only supports hardened derivation for Ed25519. This implementation uses
-  * hardened derivation for all path components (including role and index), which differs from
-  * standard CIP-1852. For full CIP-1852 compatibility with non-hardened derivation, use a
-  * BIP32-Ed25519 implementation instead.
+  * This implementation is compatible with standard Cardano wallets (Daedalus, Yoroi, etc.) because
+  * it uses BIP32-Ed25519 which supports both hardened and non-hardened derivation.
   *
-  * Path structure (all hardened):
-  *   - Payment keys: m/1852'/1815'/account'/0'/index'
-  *   - Change keys: m/1852'/1815'/account'/1'/index'
-  *   - Staking keys: m/1852'/1815'/account'/2'/index'
+  * Path structure (CIP-1852 standard):
+  *   - Payment keys: m/1852'/1815'/account'/0/index (role and index are non-hardened)
+  *   - Change keys: m/1852'/1815'/account'/1/index
+  *   - Staking keys: m/1852'/1815'/account'/2/index
   *
   * @param accountIndex
   *   the account index (0, 1, 2, ...)
@@ -57,25 +58,78 @@ class HdAccount(
       */
     override lazy val drepKeyPair: KeyPair = stakeKeyPair
 
-    /** Derive a payment key at the given index (hardened). */
+    /** Get the payment key hash (Blake2b-224 of verification key). */
+    lazy val paymentKeyHash: AddrKeyHash = keyHash(paymentKeyPair)
+
+    /** Get the stake key hash (Blake2b-224 of verification key). */
+    lazy val stakeKeyHash: StakeKeyHash = Hash.stakeKeyHash(
+      platform.blake2b_224(stakeKeyPair.verificationKey)
+    )
+
+    /** Get the base address for this account.
+      *
+      * Base address = payment key hash + stake key hash
+      *
+      * @param network
+      *   the Cardano network (Mainnet or Testnet)
+      * @return
+      *   the base ShelleyAddress
+      */
+    def baseAddress(network: Network): ShelleyAddress =
+        ShelleyAddress(
+          network,
+          ShelleyPaymentPart.Key(paymentKeyHash),
+          ShelleyDelegationPart.Key(stakeKeyHash)
+        )
+
+    /** Get the enterprise address for this account.
+      *
+      * Enterprise address = payment key hash only (no staking)
+      *
+      * @param network
+      *   the Cardano network (Mainnet or Testnet)
+      * @return
+      *   the enterprise ShelleyAddress
+      */
+    def enterpriseAddress(network: Network): ShelleyAddress =
+        ShelleyAddress(
+          network,
+          ShelleyPaymentPart.Key(paymentKeyHash),
+          ShelleyDelegationPart.Null
+        )
+
+    /** Get the stake address for this account.
+      *
+      * @param network
+      *   the Cardano network (Mainnet or Testnet)
+      * @return
+      *   the StakeAddress
+      */
+    def stakeAddress(network: Network): StakeAddress =
+        StakeAddress(network, StakePayload.Stake(stakeKeyHash))
+
+    private def keyHash(keyPair: KeyPair): AddrKeyHash =
+        AddrKeyHash(platform.blake2b_224(keyPair.verificationKey))
+
+    /** Derive a payment key at the given index (non-hardened per CIP-1852). */
     def derivePaymentKey(index: Int): HdKeyPair = {
         require(index >= 0, s"Index must be non-negative, got $index")
-        // m/1852'/1815'/account'/0'/index' (all hardened for SLIP-0010 Ed25519)
-        accountKey.deriveHardened(Cip1852.RoleExternal).deriveHardened(index)
+        // m/1852'/1815'/account'/0/index (role and index are non-hardened per CIP-1852)
+        accountKey.deriveNormal(Cip1852.RoleExternal).deriveNormal(index)
     }
 
-    /** Derive a change key at the given index (hardened). */
+    /** Derive a change key at the given index (non-hardened per CIP-1852). */
     def deriveChangeKey(index: Int): HdKeyPair = {
         require(index >= 0, s"Index must be non-negative, got $index")
-        // m/1852'/1815'/account'/1'/index' (all hardened for SLIP-0010 Ed25519)
-        accountKey.deriveHardened(Cip1852.RoleInternal).deriveHardened(index)
+        // m/1852'/1815'/account'/1/index (role and index are non-hardened per CIP-1852)
+        accountKey.deriveNormal(Cip1852.RoleInternal).deriveNormal(index)
     }
 
-    /** Derive a staking key at the given index (hardened). */
+    /** Derive a staking key at the given index (non-hardened per CIP-1852). */
     def deriveStakingKey(index: Int): HdKeyPair = {
         require(index >= 0, s"Index must be non-negative, got $index")
-        // m/1852'/1815'/account'/2'/index' (all hardened for SLIP-0010 Ed25519)
-        accountKey.deriveHardened(Cip1852.RoleStaking).deriveHardened(index)
+        // m/1852'/1815'/account'/2/index (role and index are non-hardened per CIP-1852)
+        accountKey.deriveNormal(Cip1852.RoleStaking).deriveNormal(index)
     }
 
     /** Create a new HdAccount with a different payment index. */
@@ -93,23 +147,10 @@ class HdAccount(
 
 object HdAccount {
 
-    /** Create an HdAccount from a BIP-39 seed.
-      *
-      * @param seed
-      *   the 64-byte BIP-39 seed
-      * @param accountIndex
-      *   the account index (default 0)
-      * @return
-      *   the HD account
-      */
-    def fromSeed(seed: Array[Byte], accountIndex: Int = 0)(using Ed25519Signer): HdAccount = {
-        require(accountIndex >= 0, s"Account index must be non-negative, got $accountIndex")
-        val accountPath = Cip1852.accountPath(accountIndex)
-        val accountKey = HdKeyPair.fromSeed(seed, accountPath)
-        new HdAccount(accountIndex, accountKey)
-    }
-
     /** Create an HdAccount from a BIP-39 mnemonic.
+      *
+      * Uses BIP32-Ed25519 (Icarus-style) key derivation which is compatible with standard Cardano
+      * wallets like Daedalus, Yoroi, and others.
       *
       * @param mnemonic
       *   the BIP-39 mnemonic sentence
@@ -123,21 +164,27 @@ object HdAccount {
     def fromMnemonic(mnemonic: String, passphrase: String = "", accountIndex: Int = 0)(using
         Ed25519Signer
     ): HdAccount = {
-        val seed = Bip39.mnemonicToSeed(mnemonic, passphrase)
-        fromSeed(seed, accountIndex)
+        require(accountIndex >= 0, s"Account index must be non-negative, got $accountIndex")
+        val accountPath = Cip1852.accountPath(accountIndex)
+        val accountKey = HdKeyPair.fromMnemonic(mnemonic, passphrase, accountPath)
+        new HdAccount(accountIndex, accountKey)
     }
 
-    /** Create multiple HdAccounts from a single seed.
+    /** Create multiple HdAccounts from a single mnemonic.
       *
-      * @param seed
-      *   the 64-byte BIP-39 seed
+      * @param mnemonic
+      *   the BIP-39 mnemonic
+      * @param passphrase
+      *   optional passphrase
       * @param count
       *   number of accounts to create
       * @return
       *   sequence of HD accounts
       */
-    def multipleFromSeed(seed: Array[Byte], count: Int)(using Ed25519Signer): Seq[HdAccount] = {
+    def multipleFromMnemonic(mnemonic: String, passphrase: String = "", count: Int)(using
+        Ed25519Signer
+    ): Seq[HdAccount] = {
         require(count > 0, s"Count must be positive, got $count")
-        (0 until count).map(i => fromSeed(seed, i))
+        (0 until count).map(i => fromMnemonic(mnemonic, passphrase, i))
     }
 }

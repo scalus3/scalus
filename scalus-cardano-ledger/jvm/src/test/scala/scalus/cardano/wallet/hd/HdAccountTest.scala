@@ -22,18 +22,16 @@ class HdAccountTest extends AnyFunSuite {
         assert(account.drepKeyPair.verificationKey.size == 32)
     }
 
-    test("fromSeed creates valid account") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val account = HdAccount.fromSeed(seed)
+    test("fromMnemonic with passphrase creates valid account") {
+        val account = HdAccount.fromMnemonic(testMnemonic, "testpass")
 
         assert(account.accountIndex == 0)
         assert(account.paymentKeyPair.verificationKey.size == 32)
     }
 
     test("different account indices produce different keys") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val account0 = HdAccount.fromSeed(seed, 0)
-        val account1 = HdAccount.fromSeed(seed, 1)
+        val account0 = HdAccount.fromMnemonic(testMnemonic, "", 0)
+        val account1 = HdAccount.fromMnemonic(testMnemonic, "", 1)
 
         assert(account0.paymentKeyPair.verificationKey != account1.paymentKeyPair.verificationKey)
         assert(account0.stakeKeyPair.verificationKey != account1.stakeKeyPair.verificationKey)
@@ -107,9 +105,8 @@ class HdAccountTest extends AnyFunSuite {
         )
     }
 
-    test("multipleFromSeed creates multiple accounts") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val accounts = HdAccount.multipleFromSeed(seed, 3)
+    test("multipleFromMnemonic creates multiple accounts") {
+        val accounts = HdAccount.multipleFromMnemonic(testMnemonic, "", 3)
 
         assert(accounts.length == 3)
         assert(accounts(0).accountIndex == 0)
@@ -168,10 +165,8 @@ class HdAccountTest extends AnyFunSuite {
     }
 
     test("negative account index validation") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-
         intercept[IllegalArgumentException] {
-            HdAccount.fromSeed(seed, -1)
+            HdAccount.fromMnemonic(testMnemonic, "", -1)
         }
     }
 }

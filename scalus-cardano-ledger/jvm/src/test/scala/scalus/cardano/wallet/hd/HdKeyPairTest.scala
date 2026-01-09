@@ -23,36 +23,30 @@ class HdKeyPairTest extends AnyFunSuite {
         assert(keyPair.chainCode.length == 32)
     }
 
-    test("fromSeed creates valid key pair") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val keyPair = HdKeyPair.fromSeed(seed, "m/1852'/1815'/0'/0/0")
+    test("fromMnemonic with passphrase creates valid key pair") {
+        val keyPair = HdKeyPair.fromMnemonic(testMnemonic, "secret", "m/1852'/1815'/0'/0/0")
 
         assert(keyPair.verificationKey.size == 32)
     }
 
-    test("masterFromSeed creates master key") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val master = HdKeyPair.masterFromSeed(seed)
+    test("masterFromMnemonic creates master key") {
+        val master = HdKeyPair.masterFromMnemonic(testMnemonic)
 
         assert(master.verificationKey.size == 32)
     }
 
     test("deriveHardened produces deterministic keys") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val master = HdKeyPair.masterFromSeed(seed)
+        val master = HdKeyPair.masterFromMnemonic(testMnemonic)
 
         val child1 = master.deriveHardened(0)
         val child2 = master.deriveHardened(0)
 
         assert(child1.verificationKey == child2.verificationKey)
-        assert(
-          child1.extendedKey.privateKeyBytes.toHex == child2.extendedKey.privateKeyBytes.toHex
-        )
+        assert(child1.extendedKey.kL.toHex == child2.extendedKey.kL.toHex)
     }
 
     test("different indices produce different keys") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val master = HdKeyPair.masterFromSeed(seed)
+        val master = HdKeyPair.masterFromMnemonic(testMnemonic)
 
         val child0 = master.deriveHardened(0)
         val child1 = master.deriveHardened(1)
@@ -81,9 +75,8 @@ class HdKeyPairTest extends AnyFunSuite {
     }
 
     test("CIP-1852 payment key derivation") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
         val paymentPath = Cip1852.paymentPath(0, 0)
-        val paymentKey = HdKeyPair.fromSeed(seed, paymentPath)
+        val paymentKey = HdKeyPair.fromMnemonic(testMnemonic, paymentPath)
 
         assert(paymentKey.verificationKey.size == 32)
 
@@ -94,27 +87,23 @@ class HdKeyPairTest extends AnyFunSuite {
     }
 
     test("CIP-1852 staking key derivation") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
         val stakingPath = Cip1852.stakingPath(0)
-        val stakingKey = HdKeyPair.fromSeed(seed, stakingPath)
+        val stakingKey = HdKeyPair.fromMnemonic(testMnemonic, stakingPath)
 
         assert(stakingKey.verificationKey.size == 32)
     }
 
     test("chain derivation matches manual derivation") {
-        val seed = Bip39.mnemonicToSeed(testMnemonic, "")
-        val master = HdKeyPair.masterFromSeed(seed)
+        val master = HdKeyPair.masterFromMnemonic(testMnemonic)
 
         // Derive using chain: m/1852'/1815'/0'
         val account = master.deriveHardened(1852).deriveHardened(1815).deriveHardened(0)
 
         // Derive using path
-        val accountDirect = HdKeyPair.fromSeed(seed, Cip1852.accountPath(0))
+        val accountDirect = HdKeyPair.fromMnemonic(testMnemonic, Cip1852.accountPath(0))
 
         assert(account.verificationKey == accountDirect.verificationKey)
-        assert(
-          account.extendedKey.privateKeyBytes.toHex == accountDirect.extendedKey.privateKeyBytes.toHex
-        )
+        assert(account.extendedKey.kL.toHex == accountDirect.extendedKey.kL.toHex)
     }
 
     test("equality") {
@@ -137,5 +126,15 @@ class HdKeyPairTest extends AnyFunSuite {
         val keyPairWithPass = HdKeyPair.fromMnemonic(testMnemonic, "secret", "m/1852'/1815'/0'/0/0")
 
         assert(keyPairNoPass.verificationKey != keyPairWithPass.verificationKey)
+    }
+
+    test("non-hardened derivation works") {
+        val master = HdKeyPair.masterFromMnemonic(testMnemonic)
+        val account = master.deriveHardened(1852).deriveHardened(1815).deriveHardened(0)
+
+        // Non-hardened derivation for role and index (CIP-1852)
+        val paymentKey = account.deriveNormal(0).deriveNormal(0)
+
+        assert(paymentKey.verificationKey.size == 32)
     }
 }

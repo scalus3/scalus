@@ -1,25 +1,25 @@
 package scalus.testing.kit
 
-import com.bloxbean.cardano.client.account.Account
-import com.bloxbean.cardano.client.common.model.Network as BBNetwork
-import com.bloxbean.cardano.client.crypto.cip1852.DerivationPath.createExternalAddressDerivationPathForAccount
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.builtin.ByteString
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
-import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
+import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.{AddrKeyHash, CardanoInfo}
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.BloxbeanAccount
+import scalus.cardano.wallet.hd.HdAccount
+import scalus.crypto.ed25519.JvmEd25519Signer
 import scalus.testing.kit.Party.{accountCache, mnemonic}
 
 import scala.annotation.threadUnsafe
 import scala.collection.mutable
 
+// Use JVM Ed25519 signer for key derivation
+given scalus.crypto.ed25519.Ed25519Signer = JvmEd25519Signer
+
 /** Test parties for smart contract testing.
   *
   * Each party has a deterministic wallet derived from a test mnemonic, providing:
-  *   - `account`: Bloxbean Account for key management
+  *   - `hdAccount`: HdAccount for CIP-1852 compatible key management
   *   - `address`: Shelley address for receiving funds
   *   - `signer`: TransactionSigner for signing transactions
   *
@@ -53,27 +53,21 @@ enum Party derives CanEqual {
     case Victor // Verifier
     case Wendy // Whistleblower
 
-    def account: Account = accountCache.getOrElseUpdate(
+    /** HD wallet account for this party (CIP-1852 compatible). */
+    def hdAccount: HdAccount = accountCache.getOrElseUpdate(
       this,
-      Account.createFromMnemonic(
-        BBNetwork(0, 42),
-        mnemonic,
-        createExternalAddressDerivationPathForAccount(this.ordinal)
-      )
+      HdAccount.fromMnemonic(mnemonic, "", this.ordinal)
     )
 
     @threadUnsafe
-    lazy val addrKeyHash: AddrKeyHash = {
-        val pkh = ByteString.unsafeFromArray(account.hdKeyPair().getPublicKey.getKeyHash)
-        AddrKeyHash.fromByteString(pkh)
-    }
+    lazy val addrKeyHash: AddrKeyHash = hdAccount.paymentKeyHash
 
     def address(using env: CardanoInfo): ShelleyAddress = {
         ShelleyAddress(env.network, Key(addrKeyHash), Null)
     }
 
     def signer: TransactionSigner = {
-        new TransactionSigner(Set(new BloxbeanAccount(account).paymentKeyPair))
+        new TransactionSigner(Set(hdAccount.paymentKeyPair))
     }
 }
 
@@ -86,7 +80,7 @@ object Party {
             "test test test test " +
             "test test test sauce"
 
-    private val accountCache: mutable.Map[Party, Account] = mutable.Map.empty
+    private val accountCache: mutable.Map[Party, HdAccount] = mutable.Map.empty
 
     /////////////////////////////
     // Generators
