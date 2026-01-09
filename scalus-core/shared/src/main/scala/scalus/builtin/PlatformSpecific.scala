@@ -14,6 +14,7 @@ inline def platform: PlatformSpecific = summon[PlatformSpecific]
   */
 trait PlatformSpecific:
     def sha2_256(bs: ByteString): ByteString
+    def sha2_512(bs: ByteString): ByteString
     def sha3_256(bs: ByteString): ByteString
     def blake2b_224(bs: ByteString): ByteString
     def blake2b_256(bs: ByteString): ByteString

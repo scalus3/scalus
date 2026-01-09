@@ -10,6 +10,7 @@ import scala.scalajs.js.typedarray.Uint8Array
 @js.native
 private object Sha2 extends js.Object {
     def sha256(msg: Uint8Array): Uint8Array = js.native
+    def sha512(msg: Uint8Array): Uint8Array = js.native
 }
 
 @JSImport("@noble/hashes/sha3", JSImport.Namespace)
@@ -99,6 +100,9 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
 
     override def sha2_256(bs: ByteString): ByteString =
         Sha2.sha256(bs.toUint8Array).toByteString
+
+    override def sha2_512(bs: ByteString): ByteString =
+        Sha2.sha512(bs.toUint8Array).toByteString
 
     override def sha3_256(bs: ByteString): ByteString =
         Sha3.sha3_256(bs.toUint8Array).toByteString

@@ -16,6 +16,10 @@ object LibSodium {
 
     def crypto_hash_sha256(out: Ptr[Byte], in: Ptr[Byte], inlen: CUnsignedLongLong): CInt = extern
 
+    def crypto_hash_sha512_bytes(): CSize = extern
+
+    def crypto_hash_sha512(out: Ptr[Byte], in: Ptr[Byte], inlen: CUnsignedLongLong): CInt = extern
+
     // SHA3-256
     def crypto_hash_sha3_256_bytes(): CSize = extern
     def crypto_hash_sha3_256(out: Ptr[Byte], in: Ptr[Byte], inlen: CUnsignedLongLong): CInt = extern
@@ -57,6 +61,13 @@ object Sodium {
           input,
           crypto_hash_sha256_bytes().toInt,
           LibSodium.crypto_hash_sha256
+        )
+
+    def sha512(input: Array[Byte]): Array[Byte] =
+        hashWithSodium(
+          input,
+          crypto_hash_sha512_bytes().toInt,
+          LibSodium.crypto_hash_sha512
         )
 
     private def blake2b(
@@ -684,6 +695,9 @@ class Builtins(using ps: PlatformSpecific) extends AbstractBuiltins(using ps)
 trait NativePlatformSpecific extends PlatformSpecific {
     override def sha2_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Sodium.sha256(bs.bytes))
+
+    override def sha2_512(bs: ByteString): ByteString =
+        ByteString.unsafeFromArray(Sodium.sha512(bs.bytes))
 
     override def sha3_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Keccak.sha3_256(bs.bytes))
