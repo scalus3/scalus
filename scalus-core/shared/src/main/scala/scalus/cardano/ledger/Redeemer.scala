@@ -4,10 +4,11 @@ import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import scalus.builtin.Data
 
+import scala.annotation.threadUnsafe
 import scala.collection.immutable
 import scala.collection.immutable.TreeMap
-import scala.math.Ordering.ordered
 import scala.math.Ordered.orderingToOrdered
+import scala.math.Ordering.ordered
 
 /** Represents the purpose of a redeemer in Cardano
   *
@@ -83,6 +84,14 @@ sealed trait Redeemers:
     def isEmpty: Boolean = this match
         case Redeemers.Array(redeemers) => redeemers.isEmpty
         case Redeemers.Map(redeemers)   => redeemers.isEmpty
+
+    /** Calculate total execution units from all redeemers */
+    @threadUnsafe
+    lazy val totalExUnits: ExUnits = this match
+        case Redeemers.Array(redeemers) =>
+            redeemers.foldLeft(ExUnits.zero)(_ + _.exUnits)
+        case Redeemers.Map(redeemers) =>
+            redeemers.values.foldLeft(ExUnits.zero) { case (acc, (_, exUnits)) => acc + exUnits }
 
 object Redeemers:
     /** Array-based representation (legacy format) */

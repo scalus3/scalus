@@ -126,18 +126,15 @@ object MinTransactionFee {
         protocolParams: ProtocolParams
     ): Coin = {
         val executionUnitPrices = protocolParams.executionUnitPrices
-        val totalExUnits = calculateTotalExUnits(transaction)
+        val totalExUnits =
+            transaction.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
 
         if totalExUnits == ExUnits.zero then Coin.zero
         else totalExUnits.fee(executionUnitPrices)
     }
 
     private def calculateTotalExUnits(transaction: Transaction): ExUnits = {
-        transaction.witnessSet.redeemers
-            .map(_.value.toSeq.foldLeft(ExUnits.zero) { (exUnits, redeemer) =>
-                exUnits + redeemer.exUnits
-            })
-            .getOrElse(ExUnits.zero)
+        transaction.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
     }
 
     // Cache the lens at object level

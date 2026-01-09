@@ -12,11 +12,8 @@ object ExUnitsTooBigValidator extends STS.Validator {
         val maxTxExecutionUnits = context.env.params.maxTxExecutionUnits
 
         val actualTxExecutionUnits = event.witnessSet.redeemers
-            .map(_.value.toSeq)
-            .getOrElse(Seq.empty)
-            .view
-            .map { _.exUnits }
-            .foldLeft(ExUnits.zero)(_ + _)
+            .map(_.value.totalExUnits)
+            .getOrElse(ExUnits.zero)
 
         if actualTxExecutionUnits > maxTxExecutionUnits then
             failure(

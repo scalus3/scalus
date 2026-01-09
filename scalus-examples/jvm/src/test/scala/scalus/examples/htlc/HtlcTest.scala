@@ -67,9 +67,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
       */
     private def assertSuccess(provider: Emulator, tx: Transaction): Unit = {
         // Verify execution units are reasonable (not max budget)
-        val totalExUnits = tx.witnessSet.redeemers
-            .map(_.value.toSeq.foldLeft(ExUnits.zero)(_ + _.exUnits))
-            .getOrElse(ExUnits.zero)
+        val totalExUnits = tx.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
         assert(totalExUnits.memory > 0, "Execution units memory should be positive")
         assert(totalExUnits.steps > 0, "Execution units steps should be positive")
         assert(
