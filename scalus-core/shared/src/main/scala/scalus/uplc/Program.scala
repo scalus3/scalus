@@ -4,10 +4,14 @@ import io.bullet.borer.Cbor
 import org.typelevel.paiges.Doc
 import scalus.*
 import scalus.builtin.{ByteString, Data}
+import scalus.cardano.ledger.Language
+import scalus.compiler.sir.PrettyPrinter
+import scalus.compiler.sir.PrettyPrinter.Style
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, Natural, given}
 import scalus.uplc.Term.Const
-import scalus.utils.Hex
+import scalus.uplc.eval.*
+import scalus.utils.{Hex, Utils}
 import scalus.utils.Hex.hexToBytes
 
 import scala.annotation.targetName
@@ -100,6 +104,42 @@ case class Program(version: (Int, Int, Int), term: Term):
       * using De Bruijn indices. A program must be named.
       */
     lazy val deBruijnedProgram: DeBruijnedProgram = DeBruijn.deBruijnProgram(this)
+
+    /** Pretty-print the program. */
+    def pretty: Doc = PrettyPrinter.pretty(this, Style.Normal)
+
+    /** Pretty-print the program with XTerm syntax highlighting. */
+    def prettyXTerm: Doc = PrettyPrinter.pretty(this, Style.XTerm)
+
+    /** Show the program as a string. */
+    def show: String = pretty.render(80)
+
+    /** Show the program as a string with XTerm syntax highlighting. */
+    def showHighlighted: String = prettyXTerm.render(80)
+
+    /** Write the program to a Plutus file.
+      *
+      * @param path
+      *   the path to the file
+      * @param plutusVersion
+      *   the Plutus version (V1, V2, or V3)
+      */
+    def writePlutusFile(path: String, plutusVersion: Language): Unit =
+        Utils.writePlutusFile(path, deBruijnedProgram, plutusVersion)
+
+    /** Evaluates the program using the given VM according to the Plutus specification.
+      *
+      * @throws RuntimeException
+      *   on evaluation error
+      */
+    def evaluate(using vm: PlutusVM): Term =
+        vm.evaluateScript(deBruijnedProgram, NoBudgetSpender, NoLogger)
+
+    /** Evaluates the program using the given VM according to the Plutus specification.
+      * @return
+      *   [[scalus.uplc.eval.Result]] with the evaluation result and the spent budget
+      */
+    def evaluateDebug(using vm: PlutusVM): Result = vm.evaluateScriptDebug(deBruijnedProgram)
 
 object Program:
     /** Deserializes a program from a double-CBOR-encoded hex string.
@@ -254,6 +294,38 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
       *   the program with the argument applied
       */
     def applyArg(arg: Data): DeBruijnedProgram = this $ arg
+
+    /** Pretty-print the program with XTerm syntax highlighting. */
+    def prettyXTerm: Doc = PrettyPrinter.pretty(toProgram, Style.XTerm)
+
+    /** Show the program as a string. */
+    def show: String = pretty.render(80)
+
+    /** Show the program as a string with XTerm syntax highlighting. */
+    def showHighlighted: String = prettyXTerm.render(80)
+
+    /** Write the program to a Plutus file.
+      *
+      * @param path
+      *   the path to the file
+      * @param plutusVersion
+      *   the Plutus version (V1, V2, or V3)
+      */
+    def writePlutusFile(path: String, plutusVersion: Language): Unit =
+        Utils.writePlutusFile(path, this, plutusVersion)
+
+    /** Evaluates the program using the given VM according to the Plutus specification.
+      *
+      * @throws RuntimeException
+      *   on evaluation error
+      */
+    def evaluate(using vm: PlutusVM): Term = vm.evaluateScript(this, NoBudgetSpender, NoLogger)
+
+    /** Evaluates the program using the given VM according to the Plutus specification.
+      * @return
+      *   [[scalus.uplc.eval.Result]] with the evaluation result and the spent budget
+      */
+    def evaluateDebug(using vm: PlutusVM): Result = vm.evaluateScriptDebug(this)
 
 object DeBruijnedProgram {
 

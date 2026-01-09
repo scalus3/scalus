@@ -8,7 +8,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.testing.yaci.{TestContext, YaciDevKit}
 import scalus.utils.await
-import scalus.{plutusV2, toUplc}
+import scalus.toUplc
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.ExecutionContext.Implicits.global

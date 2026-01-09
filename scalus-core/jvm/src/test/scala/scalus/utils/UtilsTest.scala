@@ -3,7 +3,6 @@ package scalus.utils
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.*
 import scalus.cardano.ledger.Language
 import scalus.uplc.{Program, Term}
 import scalus.uplc.Term.*

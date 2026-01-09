@@ -7,7 +7,7 @@ import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.Term.asTerm
-import scalus.{evaluateDebug, toUplc, Compiler}
+import scalus.{toUplc, Compiler}
 
 class ShowTest extends StdlibTestKit {
 

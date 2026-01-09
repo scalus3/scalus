@@ -5,7 +5,7 @@ import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
-import scalus.{evaluate, Compiler}
+import scalus.Compiler
 
 class CompiledTest extends AnyFunSuite {
     private given Compiler.Options = Compiler.Options.release

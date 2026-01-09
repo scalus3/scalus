@@ -1,10 +1,14 @@
 package scalus.uplc
 
+import org.typelevel.paiges.Doc
 import scalus.*
 import scalus.cardano.ledger.Word64
+import scalus.compiler.sir.PrettyPrinter
+import scalus.compiler.sir.PrettyPrinter.Style
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.uplc.Constant.flatConstant
+import scalus.uplc.eval.*
 import scalus.utils.Macros
 
 import scala.annotation.targetName
@@ -104,7 +108,79 @@ enum Term:
         equals(this, that)
     }
 
+    /** Pretty-print the term. */
+    def pretty: Doc = PrettyPrinter.pretty(this, Style.Normal)
+
+    /** Pretty-print the term with XTerm syntax highlighting. */
+    def prettyXTerm: Doc = PrettyPrinter.pretty(this, Style.XTerm)
+
+    /** Show the term as a string. */
+    def show: String = pretty.render(80)
+
+    /** Show the term as a string with XTerm syntax highlighting. */
+    def showHighlighted: String = prettyXTerm.render(80)
+
+    /** Show the term as a short string (truncated to 60 chars, first line only). */
+    def showShort: String = Term.truncateForDisplay(pretty.render(100), 60)
+
+    /** Evaluate the term using the given VM.
+      * @note
+      *   This method just runs the CEK machine on the term. It does not follow Plutus specification
+      *   like CIP-117
+      *
+      * @throws RuntimeException
+      *   on evaluation error
+      */
+    def evaluate(using vm: PlutusVM): Term =
+        vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(this))
+
+    /** Evaluate the term using the given VM.
+      * @note
+      *   This method just runs the CEK machine on the term. It does not follow Plutus specification
+      *   like CIP-117
+      *
+      * @return
+      *   [[scalus.uplc.eval.Result]] with the evaluation result and the spent budget
+      */
+    def evaluateDebug(using vm: PlutusVM): Result =
+        val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+        try
+            val result = vm.evaluateDeBruijnedTerm(
+              DeBruijn.deBruijnTerm(this),
+              spenderLogger,
+              spenderLogger
+            )
+            Result.Success(
+              result,
+              spenderLogger.getSpentBudget,
+              spenderLogger.costs.toMap,
+              spenderLogger.getLogsWithBudget
+            )
+        catch
+            case e: Exception =>
+                Result.Failure(
+                  e,
+                  spenderLogger.getSpentBudget,
+                  spenderLogger.costs.toMap,
+                  spenderLogger.getLogsWithBudget
+                )
+
+    /** Wrap the term in a Plutus V1 program. */
+    def plutusV1: Program = Program.plutusV1(this)
+
+    /** Wrap the term in a Plutus V2 program. */
+    def plutusV2: Program = Program.plutusV2(this)
+
+    /** Wrap the term in a Plutus V3 program. */
+    def plutusV3: Program = Program.plutusV3(this)
+
 object Term {
+
+    /** Truncate a string to a maximum length, showing only first line if multiline */
+    private[uplc] def truncateForDisplay(s: String, maxLength: Int = 60): String =
+        val firstLine = s.linesIterator.nextOption().getOrElse("")
+        if firstLine.length <= maxLength then firstLine
+        else firstLine.take(maxLength) + "..."
 
     @deprecated("Use alphaEq or α_== methods instead", "0.13.0")
     def alphaEq(t1: Term, t2: Term): Boolean = t1 α_== t2

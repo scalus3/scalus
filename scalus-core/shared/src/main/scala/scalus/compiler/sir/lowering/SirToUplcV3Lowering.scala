@@ -2,7 +2,6 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.*
-import scalus.pretty
 import scalus.compiler.sir.{SIR, SIRType}
 import scalus.uplc.*
 

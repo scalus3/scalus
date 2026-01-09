@@ -5,7 +5,7 @@ import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, S
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.compiler.sir.TargetLoweringBackend.{ScottEncodingLowering, SirToUplcV3Lowering, SumOfProductsLowering}
-import scalus.{plutusV3, toUplc, Compiler}
+import scalus.{toUplc, Compiler}
 import scalus.uplc.Program
 
 object ScriptFeeComparison {

@@ -14,7 +14,7 @@ import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.prelude.List as PList
 import scalus.utils.await
-import scalus.{plutusV3, toUplc, Compiler}
+import scalus.{toUplc, Compiler}
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global

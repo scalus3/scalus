@@ -505,8 +505,6 @@ enum Result:
         case _          => throw new NoSuchElementException("Not a Success result")
 
     override def toString: String =
-        import scalus.*
-
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
 
         this match
