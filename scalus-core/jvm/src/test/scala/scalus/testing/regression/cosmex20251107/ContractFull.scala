@@ -1,9 +1,10 @@
 package scalus.testing.regression.cosmex20251107.full
 import scalus.*
+import scalus.builtin.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.toData
-import scalus.builtin.*
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.IntervalBound
 import scalus.ledger.api.v1.IntervalBoundType.Finite
 import scalus.ledger.api.v2

@@ -17,7 +17,7 @@ import scalus.uplc.eval.{PlutusVM, Result}
 class SirToUplcFromDataReplacementTest extends AnyFunSuite {
 
     given scalus.compiler.Options = scalus.compiler.Options(
-      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

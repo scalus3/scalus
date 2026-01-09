@@ -5,8 +5,6 @@ import scalus.cardano.ledger.Language
 import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType, TargetLoweringBackend}
 import scalus.utils.Macros
 
-export scalus.compiler.sir.TargetLoweringBackend
-
 case class Options(
     targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
     targetLanguage: Language = Language.PlutusV3,

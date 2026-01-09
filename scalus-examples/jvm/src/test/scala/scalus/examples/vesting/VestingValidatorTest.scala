@@ -4,7 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
-import scalus.compiler.{compileWithOptions, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compileWithOptions, Options}
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.IntervalBoundType.*
 import scalus.ledger.api.v1.Value.getLovelace

@@ -6,7 +6,8 @@ import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.{Options, TargetLoweringBackend}
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest

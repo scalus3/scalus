@@ -17,7 +17,8 @@ import scalus.bloxbean.ScalusTransactionEvaluator
 import scalus.builtin.Data.*
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.SlotConfig
-import scalus.compiler.{compileWithOptions, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compileWithOptions, Options}
 import scalus.ledger.api.v1.PubKeyHash
 
 import java.util.Optional

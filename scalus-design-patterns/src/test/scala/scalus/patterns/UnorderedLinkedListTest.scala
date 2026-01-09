@@ -6,7 +6,8 @@ import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.{Options, TargetLoweringBackend}
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.{UnorderedLinkedListContract, UnorderedNodeAction}
 import scalus.ledger.api.v2.{OutputDatum, TxOut}
 import scalus.ledger.api.v3.*

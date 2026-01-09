@@ -3,7 +3,8 @@ package scalus.testing.regression.cosmex20251107
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 
 class CompileCosmexStep4MinimizedTest extends AnyFunSuite {
 

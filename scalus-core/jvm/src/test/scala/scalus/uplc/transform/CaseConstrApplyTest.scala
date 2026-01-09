@@ -6,7 +6,8 @@ import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
 import scalus.cardano.ledger.ExUnits.given
 import scalus.cardano.ledger.{ExUnits, Word64}
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.uplc.Term.*
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.eval.Result.Success

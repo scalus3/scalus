@@ -2,9 +2,10 @@ package scalus
 package examples
 
 import scalus.builtin.ByteString.*
-import scalus.builtin.{ByteString, Data}
 import scalus.builtin.Data.toData
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.builtin.{ByteString, Data}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1
 import scalus.ledger.api.v1.{PubKeyHash, TxId}
 import scalus.ledger.api.v2.*

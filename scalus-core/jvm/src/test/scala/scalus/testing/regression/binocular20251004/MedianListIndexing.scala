@@ -2,7 +2,8 @@ package scalus.testing.regression.binocular20251004
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.prelude.List
 
 /** Regression test for "Cannot upcast Unit -> Int to Int" error

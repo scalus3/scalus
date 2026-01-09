@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 
 // Simple enum similar to VoteStatus
@@ -38,10 +39,11 @@ object TestDatum
 class BooleanOrMatchTest extends AnyFunSuite:
 
     import scalus.uplc.eval.PlutusVM
+
     given PlutusVM = PlutusVM.makePlutusV2VM()
 
     given Options = Options(
-      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

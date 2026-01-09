@@ -2,14 +2,15 @@ package scalus.examples
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString.hex
-import scalus.builtin.{ByteString, Data}
 import scalus.builtin.Data.toData
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.builtin.{ByteString, Data}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.examples.Groth16.*
 import scalus.prelude.List
-import scalus.uplc.{Constant, Term}
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
+import scalus.uplc.{Constant, Term}
 
 import scala.language.implicitConversions
 

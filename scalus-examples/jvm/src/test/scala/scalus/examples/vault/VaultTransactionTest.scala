@@ -7,7 +7,8 @@ import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
-import scalus.compiler.{Options, TargetLoweringBackend}
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.vault.State
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}

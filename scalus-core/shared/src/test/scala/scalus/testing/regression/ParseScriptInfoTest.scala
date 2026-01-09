@@ -89,7 +89,7 @@ object ParseScriptInfo {
 class ParseScriptInfoTest extends AnyFunSuite:
 
     given scalus.compiler.Options = scalus.compiler.Options(
-      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       // debug = true
@@ -145,7 +145,7 @@ class ParseScriptInfoTest extends AnyFunSuite:
 class ParseScriptInfoOldBackendTest extends AnyFunSuite:
 
     given scalus.compiler.Options = scalus.compiler.Options(
-      targetLoweringBackend = scalus.compiler.TargetLoweringBackend.SumOfProductsLowering,
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SumOfProductsLowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

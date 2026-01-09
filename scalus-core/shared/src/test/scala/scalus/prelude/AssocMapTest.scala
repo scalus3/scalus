@@ -37,7 +37,7 @@ private object AssocMapTest {
 class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
 
     given compiler.Options = compiler.Options(
-      targetLoweringBackend = compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetLoweringBackend = compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

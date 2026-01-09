@@ -4,8 +4,8 @@ import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.blueprint.{Application, Blueprint}
-import scalus.compiler.sir.SIR
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.compiler.sir.{SIR, TargetLoweringBackend}
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v2.*
 import scalus.prelude.*
 import scalus.uplc.*

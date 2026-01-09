@@ -12,12 +12,13 @@ import com.bloxbean.cardano.client.function.helper.*
 import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
 import scalus.*
-import scalus.compiler.{compileWithOptions, Options, TargetLoweringBackend}
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
 import scalus.builtin.Data.*
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.SlotConfig
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compileWithOptions, Options}
 import scalus.ledger.api.v1.PubKeyHash
 
 import java.math.BigInteger

@@ -8,6 +8,7 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.ledger.ExUnits.given
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.serialization.flat.Flat
 import scalus.uplc.Term.*
@@ -26,7 +27,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
 
     // SimpleSirToUplcLowering is used to have stable sizes in terms, not in data representation.
     given Options =
-        Options(targetLoweringBackend = scalus.compiler.TargetLoweringBackend.ScottEncodingLowering)
+        Options(targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering)
 
     test("unit bit size is 10") {
         assert(unitSize == 10)

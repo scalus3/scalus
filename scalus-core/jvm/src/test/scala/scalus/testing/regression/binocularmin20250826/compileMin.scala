@@ -4,7 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString.*
-import scalus.compiler.{compile, Options, TargetLoweringBackend}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.uplc.Program
 
 class CompileMin extends AnyFunSuite {
