@@ -54,8 +54,8 @@ object Datum {
 
 /** Actions that can be performed on the auction contract
   *
-  * Bid and End actions include index parameters for O(1) UTxO lookups (indexed UTxO pattern).
-  * The indices are computed off-chain using delayed redeemer pattern.
+  * Bid and End actions include index parameters for O(1) UTxO lookups (indexed UTxO pattern). The
+  * indices are computed off-chain using delayed redeemer pattern.
   */
 enum Action derives Data.FromData, Data.ToData:
     case Start(
@@ -64,6 +64,7 @@ enum Action derives Data.FromData, Data.ToData:
         startingBid: BigInt,
         auctionEndTime: PosixTime
     )
+
     /** Place a bid on the auction
       * @param amount
       *   The bid amount in lovelace
@@ -83,6 +84,7 @@ enum Action derives Data.FromData, Data.ToData:
         outputIdx: BigInt,
         refundOutputIdx: BigInt
     )
+
     /** End the auction and transfer item to highest bidder, funds to seller
       * @param inputIdx
       *   Index of the auction input in txInfo.inputs

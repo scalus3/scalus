@@ -546,7 +546,8 @@ object AuctionValidatorTest extends ScalusTest {
         assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")
         result
 
-    /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted) */
+    /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted)
+      */
     private def runValidatorWithUtxos(
         provider: Emulator,
         tx: Transaction,
@@ -558,9 +559,10 @@ object AuctionValidatorTest extends ScalusTest {
         val allInputs =
             (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
         val remainingInputs = allInputs -- knownUtxos.keySet
-        val providerUtxos = if remainingInputs.nonEmpty then
-            provider.findUtxos(remainingInputs).await().toOption.getOrElse(Map.empty)
-        else Map.empty
+        val providerUtxos =
+            if remainingInputs.nonEmpty then
+                provider.findUtxos(remainingInputs).await().toOption.getOrElse(Map.empty)
+            else Map.empty
         val utxos = knownUtxos ++ providerUtxos
 
         val scriptContext = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(scriptInput))
