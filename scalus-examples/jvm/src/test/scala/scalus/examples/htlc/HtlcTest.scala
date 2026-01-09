@@ -12,7 +12,6 @@ import scalus.utils.await
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.Try
 
 class HtlcTest extends AnyFunSuite, ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
@@ -99,22 +98,23 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     }
 
     /** Verifies that transaction building fails with the expected error. */
-    private def assertBuildFailure(expectedError: String)(buildTx: => Transaction): Unit = {
-        val result = Try(buildTx)
-        assert(result.isFailure, "Transaction building should have failed but succeeded")
-        result.failed.get match {
+    private def assertFail(expectedError: String)(buildTx: => Transaction): Unit = {
+        try
+            val tx = buildTx
+            fail(s"Transaction building should have failed but succeeded: $tx")
+        catch
             case e: TxBuilderException.BalancingException =>
                 val logs = e.scriptLogs.getOrElse(Seq.empty)
                 assert(
                   logs.exists(_.contains(expectedError)),
                   s"Expected error containing '$expectedError' but got logs: ${logs.mkString("\n")}"
                 )
-            case e =>
+            case e: Throwable =>
                 assert(
                   e.getMessage.contains(expectedError),
                   s"Expected error containing '$expectedError' but got: ${e.getMessage}"
                 )
-        }
+
     }
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
@@ -146,7 +146,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertBuildFailure(HtlcValidator.InvalidReceiverPreimage) {
+        assertFail(HtlcValidator.InvalidReceiverPreimage) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -165,7 +165,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertBuildFailure(HtlcValidator.UnsignedReceiverTransaction) {
+        assertFail(HtlcValidator.UnsignedReceiverTransaction) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -184,7 +184,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertBuildFailure(HtlcValidator.InvalidReceiverTimePoint) {
+        assertFail(HtlcValidator.InvalidReceiverTimePoint) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -222,7 +222,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertBuildFailure(HtlcValidator.UnsignedCommitterTransaction) {
+        assertFail(HtlcValidator.UnsignedCommitterTransaction) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -240,7 +240,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        assertBuildFailure(HtlcValidator.InvalidCommitterTimePoint) {
+        assertFail(HtlcValidator.InvalidCommitterTimePoint) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
