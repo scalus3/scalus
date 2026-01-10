@@ -9,15 +9,16 @@ import scalus.crypto.ed25519.Ed25519Signer
 /** HD wallet account implementing CIP-1852 derivation with BIP32-Ed25519.
   *
   * Provides payment, change, staking, and DRep keys derived from a BIP-39 mnemonic using
-  * BIP32-Ed25519 key derivation (Icarus-style) and CIP-1852 path structure.
+  * BIP32-Ed25519 key derivation (Icarus-style) and CIP-1852/CIP-105 path structure.
   *
   * This implementation is compatible with standard Cardano wallets (Daedalus, Yoroi, etc.) because
   * it uses BIP32-Ed25519 which supports both hardened and non-hardened derivation.
   *
-  * Path structure (CIP-1852 standard):
+  * Path structure (CIP-1852 / CIP-105):
   *   - Payment keys: m/1852'/1815'/account'/0/index (role and index are non-hardened)
   *   - Change keys: m/1852'/1815'/account'/1/index
   *   - Staking keys: m/1852'/1815'/account'/2/index
+  *   - DRep keys: m/1852'/1815'/account'/3/index (CIP-105)
   *
   * @param accountIndex
   *   the account index (0, 1, 2, ...)
@@ -29,13 +30,16 @@ import scalus.crypto.ed25519.Ed25519Signer
   *   the change address index (default 0)
   * @param stakingIndex
   *   the staking key index (default 0)
+  * @param drepIndex
+  *   the DRep key index (default 0, CIP-105 recommends only index 0)
   */
 class HdAccount(
     val accountIndex: Int,
     private val accountKey: HdKeyPair,
     val paymentIndex: Int = 0,
     val changeIndex: Int = 0,
-    val stakingIndex: Int = 0
+    val stakingIndex: Int = 0,
+    val drepIndex: Int = 0
 )(using Ed25519Signer)
     extends Account {
 
@@ -53,18 +57,13 @@ class HdAccount(
 
     /** DRep (governance) key - for Cardano governance participation.
       *
-      * IMPORTANT: This is a convention choice, not specified by CIP-1852. CIP-1852 only defines
-      * paths for payment (role 0), change (role 1), and staking (role 2) keys. There is no
-      * standardized derivation path for DRep keys.
+      * Derived according to CIP-105 at path m/1852'/1815'/account'/3/index. CIP-105 recommends
+      * using only index 0 for DRep keys (one DRep per account).
       *
-      * We reuse the staking key (m/1852'/1815'/account'/2/0) as the DRep key because:
-      *   - Governance delegation is conceptually similar to stake delegation
-      *   - This matches behavior of some existing wallet implementations
-      *   - It avoids requiring users to manage additional keys
-      *
-      * If a future CIP standardizes DRep key derivation, this should be updated accordingly.
+      * @see
+      *   https://cips.cardano.org/cip/CIP-0105
       */
-    override lazy val drepKeyPair: KeyPair = stakeKeyPair
+    override lazy val drepKeyPair: KeyPair = deriveDrepKey(drepIndex)
 
     /** Get the payment key hash (Blake2b-224 of verification key). */
     lazy val paymentKeyHash: AddrKeyHash = keyHash(paymentKeyPair)
@@ -140,17 +139,28 @@ class HdAccount(
         accountKey.deriveNormal(Cip1852.RoleStaking).deriveNormal(index)
     }
 
+    /** Derive a DRep key at the given index (non-hardened per CIP-105). */
+    def deriveDrepKey(index: Int): HdKeyPair = {
+        require(index >= 0, s"Index must be non-negative, got $index")
+        // m/1852'/1815'/account'/3/index (role and index are non-hardened per CIP-105)
+        accountKey.deriveNormal(Cip1852.RoleDRep).deriveNormal(index)
+    }
+
     /** Create a new HdAccount with a different payment index. */
     def withPaymentIndex(index: Int): HdAccount =
-        new HdAccount(accountIndex, accountKey, index, changeIndex, stakingIndex)
+        new HdAccount(accountIndex, accountKey, index, changeIndex, stakingIndex, drepIndex)
 
     /** Create a new HdAccount with a different change index. */
     def withChangeIndex(index: Int): HdAccount =
-        new HdAccount(accountIndex, accountKey, paymentIndex, index, stakingIndex)
+        new HdAccount(accountIndex, accountKey, paymentIndex, index, stakingIndex, drepIndex)
 
     /** Create a new HdAccount with a different staking index. */
     def withStakingIndex(index: Int): HdAccount =
-        new HdAccount(accountIndex, accountKey, paymentIndex, changeIndex, index)
+        new HdAccount(accountIndex, accountKey, paymentIndex, changeIndex, index, drepIndex)
+
+    /** Create a new HdAccount with a different DRep index. */
+    def withDrepIndex(index: Int): HdAccount =
+        new HdAccount(accountIndex, accountKey, paymentIndex, changeIndex, stakingIndex, index)
 }
 
 object HdAccount {

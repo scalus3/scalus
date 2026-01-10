@@ -11,17 +11,27 @@ class Cip1852Test extends AnyFunSuite {
         assert(Cip1852.RoleExternal == 0)
         assert(Cip1852.RoleInternal == 1)
         assert(Cip1852.RoleStaking == 2)
+        // CIP-105 roles
+        assert(Cip1852.RoleDRep == 3)
+        assert(Cip1852.RoleCCCold == 4)
+        assert(Cip1852.RoleCCHot == 5)
     }
 
     test("Role enum") {
         assert(Cip1852.Role.External.value == 0)
         assert(Cip1852.Role.Internal.value == 1)
         assert(Cip1852.Role.Staking.value == 2)
+        assert(Cip1852.Role.DRep.value == 3)
+        assert(Cip1852.Role.CCCold.value == 4)
+        assert(Cip1852.Role.CCHot.value == 5)
 
         assert(Cip1852.Role.fromInt(0) == Some(Cip1852.Role.External))
         assert(Cip1852.Role.fromInt(1) == Some(Cip1852.Role.Internal))
         assert(Cip1852.Role.fromInt(2) == Some(Cip1852.Role.Staking))
-        assert(Cip1852.Role.fromInt(3) == None)
+        assert(Cip1852.Role.fromInt(3) == Some(Cip1852.Role.DRep))
+        assert(Cip1852.Role.fromInt(4) == Some(Cip1852.Role.CCCold))
+        assert(Cip1852.Role.fromInt(5) == Some(Cip1852.Role.CCHot))
+        assert(Cip1852.Role.fromInt(6) == None)
     }
 
     test("accountPath") {
@@ -46,6 +56,12 @@ class Cip1852Test extends AnyFunSuite {
         assert(Cip1852.stakingPath(0) == "m/1852'/1815'/0'/2/0")
         assert(Cip1852.stakingPath(0, 0) == "m/1852'/1815'/0'/2/0")
         assert(Cip1852.stakingPath(1, 0) == "m/1852'/1815'/1'/2/0")
+    }
+
+    test("drepPath (CIP-105)") {
+        assert(Cip1852.drepPath(0) == "m/1852'/1815'/0'/3/0")
+        assert(Cip1852.drepPath(0, 0) == "m/1852'/1815'/0'/3/0")
+        assert(Cip1852.drepPath(1, 0) == "m/1852'/1815'/1'/3/0")
     }
 
     test("path with Role enum") {
@@ -75,8 +91,8 @@ class Cip1852Test extends AnyFunSuite {
         // Wrong number of components
         assert(Cip1852.parsePath("m/1852'/1815'/0'") == None)
 
-        // Invalid role
-        assert(Cip1852.parsePath("m/1852'/1815'/0'/5/0") == None)
+        // Invalid role (6 is not defined in CIP-1852/CIP-105)
+        assert(Cip1852.parsePath("m/1852'/1815'/0'/6/0") == None)
     }
 
     test("parseAccountPath - valid paths") {

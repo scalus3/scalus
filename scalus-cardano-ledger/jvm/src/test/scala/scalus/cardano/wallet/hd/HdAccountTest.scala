@@ -128,10 +128,14 @@ class HdAccountTest extends AnyFunSuite {
         assert(accountKey.chainCode.length == 32)
     }
 
-    test("drepKeyPair equals stakeKeyPair") {
+    test("drepKeyPair differs from stakeKeyPair (CIP-105)") {
         val account = HdAccount.fromMnemonic(testMnemonic)
 
-        assert(account.drepKeyPair.verificationKey == account.stakeKeyPair.verificationKey)
+        // DRep uses role 3, staking uses role 2 - they should be different keys
+        assert(
+          account.drepKeyPair.verificationKey != account.stakeKeyPair.verificationKey,
+          "DRep and staking keys should be different (different derivation paths per CIP-105)"
+        )
     }
 
     test("negative index validation") {
@@ -147,6 +151,10 @@ class HdAccountTest extends AnyFunSuite {
 
         intercept[IllegalArgumentException] {
             account.deriveStakingKey(-1)
+        }
+
+        intercept[IllegalArgumentException] {
+            account.deriveDrepKey(-1)
         }
     }
 
@@ -181,6 +189,19 @@ class HdAccountTest extends AnyFunSuite {
         assert(
           hdStakeKey == bbStakeKey,
           s"Staking keys differ:\n  HdAccount: ${hdStakeKey.toHex}\n  Bloxbean:  ${bbStakeKey.toHex}"
+        )
+    }
+
+    test("DRep key matches bloxbean Account (CIP-105)") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), testMnemonic)
+
+        val hdDrepKey = hdAccount.drepKeyPair.verificationKey
+        val bbDrepKey = ByteString.fromArray(bbAccount.drepHdKeyPair().getPublicKey.getKeyData)
+
+        assert(
+          hdDrepKey == bbDrepKey,
+          s"DRep keys differ:\n  HdAccount: ${hdDrepKey.toHex}\n  Bloxbean:  ${bbDrepKey.toHex}"
         )
     }
 

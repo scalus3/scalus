@@ -9,11 +9,13 @@ package scalus.cardano.wallet.hd
   *   - purpose: 1852' (Cardano Shelley-era)
   *   - coin_type: 1815' (Cardano)
   *   - account: 0', 1', 2', ... (hardened)
-  *   - role: 0 (external), 1 (internal/change), 2 (staking)
+  *   - role: 0 (external), 1 (internal/change), 2 (staking), 3 (DRep), 4 (CC cold), 5 (CC hot)
   *   - index: 0, 1, 2, ... (non-hardened)
   *
   * @see
   *   https://cips.cardano.org/cip/CIP-1852
+  * @see
+  *   https://cips.cardano.org/cip/CIP-0105 (Conway era key chains)
   */
 object Cip1852 {
 
@@ -32,17 +34,32 @@ object Cip1852 {
     /** Role for staking keys. */
     val RoleStaking: Int = 2
 
-    /** Represents a key role in CIP-1852 derivation. */
+    /** Role for DRep (governance) keys (CIP-105). */
+    val RoleDRep: Int = 3
+
+    /** Role for Constitutional Committee cold keys (CIP-105). */
+    val RoleCCCold: Int = 4
+
+    /** Role for Constitutional Committee hot keys (CIP-105). */
+    val RoleCCHot: Int = 5
+
+    /** Represents a key role in CIP-1852/CIP-105 derivation. */
     enum Role(val value: Int):
         case External extends Role(0)
         case Internal extends Role(1)
         case Staking extends Role(2)
+        case DRep extends Role(3)
+        case CCCold extends Role(4)
+        case CCHot extends Role(5)
 
     object Role:
         def fromInt(value: Int): Option[Role] = value match
             case 0 => Some(External)
             case 1 => Some(Internal)
             case 2 => Some(Staking)
+            case 3 => Some(DRep)
+            case 4 => Some(CCCold)
+            case 5 => Some(CCHot)
             case _ => None
 
     /** Build the derivation path for an account root key.
@@ -110,6 +127,25 @@ object Cip1852 {
         require(account >= 0, s"Account index must be non-negative, got $account")
         require(index >= 0, s"Staking index must be non-negative, got $index")
         s"m/${Purpose}'/${CoinType}'/${account}'/${RoleStaking}/${index}"
+    }
+
+    /** Build the derivation path for a DRep (governance) key (CIP-105).
+      *
+      * Path: m/1852'/1815'/account'/3/index
+      *
+      * Note: CIP-105 recommends using only index 0 for DRep keys.
+      *
+      * @param account
+      *   the account index
+      * @param index
+      *   the DRep key index (usually 0)
+      * @return
+      *   the path string
+      */
+    def drepPath(account: Int, index: Int = 0): String = {
+        require(account >= 0, s"Account index must be non-negative, got $account")
+        require(index >= 0, s"DRep index must be non-negative, got $index")
+        s"m/${Purpose}'/${CoinType}'/${account}'/${RoleDRep}/${index}"
     }
 
     /** Build a generic derivation path.
