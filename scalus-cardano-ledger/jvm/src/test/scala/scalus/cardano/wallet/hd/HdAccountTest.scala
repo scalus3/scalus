@@ -1,8 +1,11 @@
 package scalus.cardano.wallet.hd
 
+import com.bloxbean.cardano.client.account.Account
+import com.bloxbean.cardano.client.common.model.Networks
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString
-import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
+import scalus.cardano.address.Network
+import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer, Signature}
 
 /** HdAccount tests using JVM Ed25519 signer. */
 class HdAccountTest extends AnyFunSuite {
@@ -168,5 +171,150 @@ class HdAccountTest extends AnyFunSuite {
         intercept[IllegalArgumentException] {
             HdAccount.fromMnemonic(testMnemonic, "", -1)
         }
+    }
+
+    // Bloxbean compatibility tests
+
+    test("payment key matches bloxbean Account") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), testMnemonic)
+
+        val hdPaymentKey = hdAccount.paymentKeyPair.verificationKey
+        val bbPaymentKey = ByteString.fromArray(bbAccount.hdKeyPair().getPublicKey.getKeyData)
+
+        assert(
+          hdPaymentKey == bbPaymentKey,
+          s"Payment keys differ:\n  HdAccount: ${hdPaymentKey.toHex}\n  Bloxbean:  ${bbPaymentKey.toHex}"
+        )
+    }
+
+    test("staking key matches bloxbean Account") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), testMnemonic)
+
+        val hdStakeKey = hdAccount.stakeKeyPair.verificationKey
+        val bbStakeKey = ByteString.fromArray(bbAccount.stakeHdKeyPair().getPublicKey.getKeyData)
+
+        assert(
+          hdStakeKey == bbStakeKey,
+          s"Staking keys differ:\n  HdAccount: ${hdStakeKey.toHex}\n  Bloxbean:  ${bbStakeKey.toHex}"
+        )
+    }
+
+    test("base address matches bloxbean Account on mainnet") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), testMnemonic)
+
+        val hdBaseAddress = hdAccount.baseAddress(Network.Mainnet).toBech32.get
+        val bbBaseAddress = bbAccount.baseAddress()
+
+        assert(
+          hdBaseAddress == bbBaseAddress,
+          s"Base addresses differ:\n  HdAccount: $hdBaseAddress\n  Bloxbean:  $bbBaseAddress"
+        )
+    }
+
+    test("base address matches bloxbean Account on testnet") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.testnet(), testMnemonic)
+
+        val hdBaseAddress = hdAccount.baseAddress(Network.Testnet).toBech32.get
+        val bbBaseAddress = bbAccount.baseAddress()
+
+        assert(
+          hdBaseAddress == bbBaseAddress,
+          s"Base addresses differ:\n  HdAccount: $hdBaseAddress\n  Bloxbean:  $bbBaseAddress"
+        )
+    }
+
+    test("signature from HdAccount is verified by bloxbean") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), testMnemonic)
+
+        val message = ByteString.fromString("Hello, Cardano!")
+        val hdSignature = hdAccount.paymentKeyPair.sign(message)
+
+        // Verify using bloxbean's signing provider
+        val bbPublicKey = bbAccount.hdKeyPair().getPublicKey.getKeyData
+        val isValid = scalus.builtin.platform.verifyEd25519Signature(
+          ByteString.unsafeFromArray(bbPublicKey),
+          message,
+          hdSignature
+        )
+
+        assert(isValid, "Signature from HdAccount should be verifiable")
+    }
+
+    test("signature from bloxbean is verified by HdAccount") {
+        val hdAccount = HdAccount.fromMnemonic(testMnemonic)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), testMnemonic)
+
+        val message = ByteString.fromString("Hello, Cardano!")
+
+        // Sign using bloxbean
+        import com.bloxbean.cardano.client.crypto.config.CryptoConfiguration
+        val signingProvider = CryptoConfiguration.INSTANCE.getSigningProvider
+        val bbSignature = signingProvider.signExtended(
+          message.bytes,
+          bbAccount.hdKeyPair().getPrivateKey.getKeyData
+        )
+
+        // Verify using HdAccount
+        val isValid =
+            hdAccount.paymentKeyPair.verify(message, Signature.unsafeFromArray(bbSignature))
+
+        assert(isValid, "Signature from bloxbean should be verifiable by HdAccount")
+    }
+
+    test("different account indices match bloxbean") {
+        for accountIndex <- Seq(0, 1, 2, 5) do {
+            val hdAccount = HdAccount.fromMnemonic(testMnemonic, "", accountIndex)
+            // createFromMnemonic(Network, String, int account, int index) derives at m/1852'/1815'/account/0/index
+            val bbAccount =
+                Account.createFromMnemonic(Networks.mainnet(), testMnemonic, accountIndex, 0)
+
+            val hdPaymentKey = hdAccount.paymentKeyPair.verificationKey
+            val bbPaymentKey = ByteString.fromArray(bbAccount.hdKeyPair().getPublicKey.getKeyData)
+
+            assert(
+              hdPaymentKey == bbPaymentKey,
+              s"Payment keys differ for account $accountIndex:\n  HdAccount: ${hdPaymentKey.toHex}\n  Bloxbean:  ${bbPaymentKey.toHex}"
+            )
+
+            val hdStakeKey = hdAccount.stakeKeyPair.verificationKey
+            val bbStakeKey =
+                ByteString.fromArray(bbAccount.stakeHdKeyPair().getPublicKey.getKeyData)
+
+            assert(
+              hdStakeKey == bbStakeKey,
+              s"Staking keys differ for account $accountIndex:\n  HdAccount: ${hdStakeKey.toHex}\n  Bloxbean:  ${bbStakeKey.toHex}"
+            )
+        }
+    }
+
+    test("24-word mnemonic produces same keys as bloxbean") {
+        val mnemonic24 =
+            "abandon abandon abandon abandon abandon abandon abandon abandon " +
+                "abandon abandon abandon abandon abandon abandon abandon abandon " +
+                "abandon abandon abandon abandon abandon abandon abandon art"
+
+        val hdAccount = HdAccount.fromMnemonic(mnemonic24)
+        val bbAccount = Account.createFromMnemonic(Networks.mainnet(), mnemonic24)
+
+        val hdPaymentKey = hdAccount.paymentKeyPair.verificationKey
+        val bbPaymentKey = ByteString.fromArray(bbAccount.hdKeyPair().getPublicKey.getKeyData)
+
+        assert(
+          hdPaymentKey == bbPaymentKey,
+          s"Payment keys differ for 24-word mnemonic:\n  HdAccount: ${hdPaymentKey.toHex}\n  Bloxbean:  ${bbPaymentKey.toHex}"
+        )
+
+        val hdBaseAddress = hdAccount.baseAddress(Network.Mainnet).toBech32.get
+        val bbBaseAddress = bbAccount.baseAddress()
+
+        assert(
+          hdBaseAddress == bbBaseAddress,
+          s"Base addresses differ for 24-word mnemonic:\n  HdAccount: $hdBaseAddress\n  Bloxbean:  $bbBaseAddress"
+        )
     }
 }
