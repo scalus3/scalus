@@ -474,11 +474,12 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
               (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala" / "scalus" / "testing" / "kit" / "Party.scala"
           val target =
               (Compile / sourceManaged).value / "scalus" / "testing" / "kit" / "Party.scala"
+          val log = streams.value.log
           if (source.exists) {
               IO.copyFile(source, target)
               Seq(target)
           } else {
-              streams.value.log.error(s"Party.scala does not exist at $source")
+              log.error(s"Party.scala does not exist at $source")
               Seq.empty
           }
       }.taskValue,
