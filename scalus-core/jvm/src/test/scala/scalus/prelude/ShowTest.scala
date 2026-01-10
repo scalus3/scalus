@@ -1,13 +1,13 @@
 package scalus.prelude
 
-import scalus.Compiler.Options
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
+import scalus.compiler.{compileWithOptions, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.Term.asTerm
-import scalus.{toUplc, Compiler}
+import scalus.toUplc
 
 class ShowTest extends StdlibTestKit {
 
@@ -42,9 +42,9 @@ class ShowTest extends StdlibTestKit {
           List(BigInt(0).toData, hex"0011".toData).toData.show,
           "[0, \"0011\"]"
         )
-        given options: Compiler.Options = Compiler.Options.default
+        given options: Options = Options.default
             .copy(targetLoweringBackend = TargetLoweringBackend.SumOfProductsLowering)
-        val sir = Compiler.compileWithOptions(
+        val sir = compileWithOptions(
           options,
           AssocMap(List((BigInt(0).toData, hex"0011".toData))).toData.show
         )

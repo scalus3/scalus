@@ -1,14 +1,14 @@
 package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.Language
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
+import scalus.compiler.{compile, Options}
 import scalus.prelude.List as PList
 import scalus.uplc.*
-import scalus.uplc.eval.PlutusVM
 import scalus.uplc.Term.asTerm
+import scalus.uplc.eval.PlutusVM
 
 class DataPatternMatchingTest extends AnyFunSuite:
 
@@ -35,7 +35,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Pattern match on Data.Constr - extract constructor tag") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Compile the pattern matching function
         val sirFun = compile { (d: Data) =>
@@ -53,7 +53,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Pattern match on Data.I - extract integer") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (d: Data) =>
             d match
@@ -69,7 +69,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Pattern match on Data - type discrimination") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (d: Data) =>
             d match
@@ -88,7 +88,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Pattern match on Data in V4 generates Case instruction") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (d: Data) =>
             d match
@@ -111,7 +111,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct Data.I inside compile block") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.I from an Integer parameter
         val sirFun = compile { (i: BigInt) =>
@@ -126,7 +126,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct Data.B inside compile block") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.B from a ByteString parameter
         val sirFun = compile { (bs: ByteString) =>
@@ -146,7 +146,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct Data.List inside compile block") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.List from a list parameter
         val sirFun = compile { (elements: scalus.prelude.List[Data]) =>
@@ -165,7 +165,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct Data.Map inside compile block") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.Map from a list of pairs parameter
         val sirFun = compile { (entries: scalus.prelude.List[(Data, Data)]) =>
@@ -197,7 +197,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct Data.Constr inside compile block") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.Constr from tag and args parameters
         val sirFun = compile { (tag: BigInt, args: scalus.prelude.List[Data]) =>
@@ -222,7 +222,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct and immediately match on Data.I") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (i: BigInt) =>
             val d: Data = Data.I(i)
@@ -239,7 +239,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Construct and immediately match on Data.B") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val testBytes = ByteString.fromHex("CAFE")
         val sirFun = compile { (bs: ByteString) =>
@@ -265,7 +265,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Select value field from Data.I") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (i: BigInt) =>
             val x = Data.I(i)
@@ -280,7 +280,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Select value field from Data.B") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val testBytes = ByteString.fromHex("DEADBEEF")
         val sirFun = compile { (bs: ByteString) =>
@@ -300,7 +300,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Select values field from Data.List") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val inputList = scalus.prelude.List[Data](Data.I(BigInt(1)), Data.I(BigInt(2)))
         val sirFun = compile { (elements: scalus.prelude.List[Data]) =>
@@ -318,7 +318,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Select values field from Data.Map") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val inputPairs = List(
           (Data.I(BigInt(1)), Data.I(BigInt(10))),
@@ -356,7 +356,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Select constr field from Data.Constr") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (tag: BigInt, args: scalus.prelude.List[Data]) =>
             val x = Data.Constr(tag, args)
@@ -378,7 +378,7 @@ class DataPatternMatchingTest extends AnyFunSuite:
 
     test("Select args field from Data.Constr") {
         given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Compiler.Options = Compiler.Options.default.copy(targetLanguage = Language.PlutusV4)
+        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         val sirFun = compile { (tag: BigInt, args: scalus.prelude.List[Data]) =>
             val x = Data.Constr(tag, args)

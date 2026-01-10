@@ -3,8 +3,10 @@ package scalus.testing.regression.orddata20251106
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
-import scalus.prelude.Ord.{given, *}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.prelude.<=>
+import scalus.prelude.Ord.{*, given}
 
 /** Regression test for Data Ord upcasting issue found in cosmex contract.
   *
@@ -15,15 +17,15 @@ import scalus.prelude.<=>
   */
 class OrdDataUpcastTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false
     )
 
     test("Data comparison should compile without upcasting error") {
         // This should compile and lower to UPLC without errors
-        val sir = Compiler.compile { (d1: Data, d2: Data) =>
+        val sir = compile { (d1: Data, d2: Data) =>
             d1 equiv d2
         }
 
@@ -32,7 +34,7 @@ class OrdDataUpcastTest extends AnyFunSuite {
     }
 
     test("Data less-than comparison should compile") {
-        val sir = Compiler.compile { (d1: Data, d2: Data) =>
+        val sir = compile { (d1: Data, d2: Data) =>
             d1 < d2
         }
 
@@ -41,7 +43,7 @@ class OrdDataUpcastTest extends AnyFunSuite {
     }
 
     test("Data <=> operator should compile") {
-        val sir = Compiler.compile { (d1: Data, d2: Data) =>
+        val sir = compile { (d1: Data, d2: Data) =>
             d1 <=> d2
         }
 

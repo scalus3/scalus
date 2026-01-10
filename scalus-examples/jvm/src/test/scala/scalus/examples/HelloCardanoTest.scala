@@ -2,11 +2,12 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.TargetLoweringBackend
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
@@ -16,7 +17,7 @@ import scala.language.implicitConversions
 
 class HelloCardanoTest extends AnyFunSuite with ScalusTest {
 
-    given Compiler.Options = Compiler.Options(
+    given Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
@@ -37,7 +38,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
           signatories = List(ownerPubKey)
         )
 
-        val compilerOptions = summon[Compiler.Options]
+        val compilerOptions = summon[Options]
         val scalusBudget =
             if compilerOptions.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then {

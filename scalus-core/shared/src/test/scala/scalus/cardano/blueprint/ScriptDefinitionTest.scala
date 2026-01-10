@@ -18,7 +18,8 @@ class ScriptDefinitionTest extends AnyFunSuite {
           Seq(scriptDefinition)
         )
 
-        val program: Program = Compiler.compile(EmptyValidator.validate).toUplcOptimized().plutusV3
+        val program: Program =
+            scalus.compiler.compile(EmptyValidator.validate).toUplcOptimized().plutusV3
         assert(program.cborEncoded sameElements app.contracts.head.program.cborEncoded)
 
     }

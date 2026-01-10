@@ -3,12 +3,12 @@ package scalus.uplc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.compiler.Options
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
-import scalus.Compiler
 
 class CompiledTest extends AnyFunSuite {
-    private given Compiler.Options = Compiler.Options.release
+    private given Options = Options.release
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     test("Compiled apply should work for compiled functions") {

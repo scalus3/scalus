@@ -1,5 +1,7 @@
 package scalus.cardano.blueprint
 
+import scalus.compiler.Options
+
 sealed trait Contract {
     def defaultCompiledContract: CompiledContract
     def debugCompiledContract: CompiledContract
@@ -16,15 +18,11 @@ object Contract {
     object PlutusV3Contract {
         inline def apply[D, R](preamble: Preamble, inline code: Any): PlutusV3Contract = {
             val defaultCompiledContract =
-                PlutusV3CompiledContract.create[D, R](preamble, scalus.Compiler.Options.default)(
-                  code
-                )
+                PlutusV3CompiledContract.create[D, R](preamble, Options.default)(code)
             val debugCompiledContract =
-                PlutusV3CompiledContract.create[D, R](preamble, scalus.Compiler.Options.debug)(code)
+                PlutusV3CompiledContract.create[D, R](preamble, Options.debug)(code)
             val releaseCompiledContract =
-                PlutusV3CompiledContract.create[D, R](preamble, scalus.Compiler.Options.release)(
-                  code
-                )
+                PlutusV3CompiledContract.create[D, R](preamble, Options.release)(code)
 
             PlutusV3Contract(
               defaultCompiledContract = defaultCompiledContract,

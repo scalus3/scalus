@@ -2,13 +2,11 @@ package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
-import scalus.builtin.{Builtins, ByteString}
-import scalus.builtin.ToData
 import scalus.builtin.Data.toData
+import scalus.builtin.{Builtins, ByteString, Data, ToData}
+import scalus.compiler.compile
 import scalus.uplc.*
-import scalus.builtin.Data
 
 import scala.annotation.nowarn
 

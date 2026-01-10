@@ -2,9 +2,9 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
 import scalus.builtin.{BuiltinList, ByteString}
+import scalus.compiler.compile
 
 /** Tests for the dropList builtin function.
   *
@@ -77,8 +77,8 @@ class DropListTest extends AnyFunSuite {
 
     // Test with UPLC evaluation using direct Term construction
     test("dropList UPLC: drop 2 from list of 5 integers") {
-        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
+        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 
         val listConst = Constant.List(
           DefaultUni.Integer,
@@ -117,8 +117,8 @@ class DropListTest extends AnyFunSuite {
     }
 
     test("dropList UPLC: drop 0 returns original list") {
-        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
+        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 
         val listConst = Constant.List(
           DefaultUni.Integer,
@@ -144,8 +144,8 @@ class DropListTest extends AnyFunSuite {
     }
 
     test("dropList UPLC: negative n returns original list") {
-        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
+        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 
         val listConst = Constant.List(
           DefaultUni.Integer,
@@ -172,8 +172,8 @@ class DropListTest extends AnyFunSuite {
 
     // Budget tests - verify cost model behavior
     test("dropList budget: cost increases linearly with n") {
-        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
         import scalus.uplc.Term.*
+        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 
         val listConst = Constant.List(
           DefaultUni.Integer,
@@ -207,8 +207,8 @@ class DropListTest extends AnyFunSuite {
 
     // Test SIR to UPLC compilation produces DropList builtin
     test("SIR dropList compiles to UPLC DropList builtin") {
-        import scalus.uplc.{DefaultFun, Term}
         import scalus.uplc.Term.*
+        import scalus.uplc.{DefaultFun, Term}
 
         // Compile a simple dropList call as a function
         val sir = compile { (n: BigInt, list: BuiltinList[BigInt]) =>

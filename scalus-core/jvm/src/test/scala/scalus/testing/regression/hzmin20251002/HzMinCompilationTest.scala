@@ -1,8 +1,8 @@
 package scalus.testing.regression.hzmin20251002
 
-import scalus.*
-import scalus.Compiler.compile
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.compiler.compile
 
 class HzMinCompilationTest extends AnyFunSuite {
 
@@ -11,10 +11,9 @@ class HzMinCompilationTest extends AnyFunSuite {
         //    HzMinValidator.validate
         // }
 
-        import scalus.prelude.List
-        import scalus.prelude.SortedMap
-        import scalus.ledger.api.v1.Value
         import scalus.builtin.ByteString
+        import scalus.ledger.api.v1.Value
+        import scalus.prelude.{List, SortedMap}
 
         val sir1 = compile { (value: Value) =>
             val headMp = ByteString.fromHex("03")

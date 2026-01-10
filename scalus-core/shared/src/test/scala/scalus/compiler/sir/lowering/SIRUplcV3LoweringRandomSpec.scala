@@ -2,11 +2,11 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.{Data, FromData, ToData}
+import scalus.compiler.compile
 import scalus.compiler.sir.*
-import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.uplc.{Constant, Term}
 
 object SIRUplcV3LoweringRandomSpec {
 
@@ -21,8 +21,8 @@ object SIRUplcV3LoweringRandomSpec {
 
 class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -159,7 +159,7 @@ class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
         import scalus.*
         import scalus.prelude.*
 
-        val sir = scalus.Compiler.compile {
+        val sir = scalus.compiler.compile {
             def go(lst: List[(BigInt, BigInt)]): List[(BigInt, BigInt)] =
                 lst match
                     case List.Nil =>

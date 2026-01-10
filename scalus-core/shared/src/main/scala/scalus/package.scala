@@ -1,5 +1,6 @@
 import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.Language
+import scalus.compiler.Options
 import scalus.compiler.sir.*
 import scalus.compiler.sir.PrettyPrinter.Style
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
@@ -37,10 +38,10 @@ package object scalus {
         def showShort: String = truncateForDisplay(pretty.render(100), 60)
 
         def toUplc(using
-            options: Compiler.Options = Compiler.Options()
+            options: Options = Options()
         )(
             generateErrorTraces: Boolean = options.generateErrorTraces,
-            backend: Compiler.TargetLoweringBackend = options.targetLoweringBackend,
+            backend: TargetLoweringBackend = options.targetLoweringBackend,
             optimizeUplc: Boolean = options.optimizeUplc,
             debug: Boolean = options.debug
         ): Term = {
@@ -66,10 +67,10 @@ package object scalus {
         }
 
         def toUplcOptimized(using
-            options: Compiler.Options = Compiler.Options.default
+            options: Options = Options.default
         )(
             generateErrorTraces: Boolean = options.generateErrorTraces,
-            backend: Compiler.TargetLoweringBackend = options.targetLoweringBackend,
+            backend: TargetLoweringBackend = options.targetLoweringBackend,
             debug: Boolean = options.debug
         ): Term = {
             toUplc(
@@ -81,7 +82,7 @@ package object scalus {
         }
 
         def toLoweredValue(using
-            options: Compiler.Options = Compiler.Options()
+            options: Options = Options()
         )(
             generateErrorTraces: Boolean = options.generateErrorTraces,
             debug: Boolean = options.debug
@@ -95,7 +96,7 @@ package object scalus {
             retval
         }
 
-        def lowerToUplc(using options: Compiler.Options = Compiler.Options()): Term = {
+        def lowerToUplc(using options: Options = Options()): Term = {
             val backend = options.targetLoweringBackend
             val uplc = backend match
                 case TargetLoweringBackend.ScottEncodingLowering =>

@@ -1,11 +1,11 @@
 package scalus
 package examples
 
-import scalus.Compiler.compile
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
-import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.builtin.{ByteString, Data}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1
 import scalus.ledger.api.v1.{PubKeyHash, TxId}
 import scalus.ledger.api.v2.*
@@ -80,8 +80,8 @@ class PreimageExampleTest extends BaseValidatorTest {
 
     }
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

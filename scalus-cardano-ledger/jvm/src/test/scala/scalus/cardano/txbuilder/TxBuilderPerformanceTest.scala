@@ -7,10 +7,11 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.node.Emulator
-import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.compiler.compileInline
 import scalus.prelude.List as PList
+import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.toUplc
 import scalus.utils.await
-import scalus.{toUplc, Compiler}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -29,7 +30,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     val alwaysOkScript: Script.PlutusV3 = {
-        val alwaysOk = Compiler.compileInline((sc: Data) => ())
+        val alwaysOk = compileInline((sc: Data) => ())
         val alwaysOkCborBytes = alwaysOk.toUplc().plutusV3.cborByteString
         Script.PlutusV3(alwaysOkCborBytes)
     }

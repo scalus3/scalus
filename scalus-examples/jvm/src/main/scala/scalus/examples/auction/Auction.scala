@@ -7,12 +7,13 @@ import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, DatumOption, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
+import scalus.compiler.Options
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash}
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.uplc.PlutusV3
-import scalus.{Compile, Compiler}
+import scalus.Compile
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
@@ -385,7 +386,7 @@ object AuctionValidator extends Validator {
         )
 }
 
-private given Compiler.Options = Compiler.Options.release
+private given Options = Options.release
 lazy val AuctionContract = PlutusV3.compile(AuctionValidator.validate)
 lazy val AuctionBlueprint = Blueprint.plutusV3[Datum, Action](
   title = "Auction validator",

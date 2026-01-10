@@ -15,7 +15,7 @@ Scalus can inline constants in your scripts, which is a powerful optimization te
 For example, when you inline a ByteString constant like a public key hash, it appears directly in the compiled SIR as a literal value (`#deadbeef`) rather than being computed or passed as a parameter.
 
 ```scala mdoc:compile-only copy showLineNumbers
-import scalus.*, Compiler.*, builtin.{Data, Builtins, ByteString}, Builtins.*, ByteString.*
+import scalus.*, scalus.compiler.*, builtin.{Data, Builtins, ByteString}, Builtins.*, ByteString.*
 
 inline def validator(inline pubKeyHash: ByteString)(datum: Data, redeemer: Data, ctxData: Data) =
     verifyEd25519Signature(pubKeyHash, datum.toByteString, redeemer.toByteString)
@@ -38,7 +38,7 @@ The `using` macro allows you to conditionally include or exclude code at compile
 ### `dbg` - Trace calls generation
 
 ```scala mdoc:compile-only copy showLineNumbers
-import scalus.*, Compiler.*, builtin.Data, builtin.Builtins
+import scalus.*, scalus.compiler.*, builtin.Data, builtin.Builtins
 // the `dbg` macro will generate `trace` calls only if the `debug` flag is set to `true`
 inline def dbg[A](msg: String)(a: A)(using debug: Boolean): A =
     inline if debug then Builtins.trace(msg)(a) else a

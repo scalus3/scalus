@@ -2,17 +2,18 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Builtins.*
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data.toData
 import scalus.builtin.{BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.ledger.ExUnits.given
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.serialization.flat.Flat
-import scalus.uplc.{Constant, NamedDeBruijn, Term}
 import scalus.uplc.Term.*
 import scalus.uplc.transform.Inliner
+import scalus.uplc.{Constant, NamedDeBruijn, Term}
 
 import scala.math.Ordering.Implicits.*
 
@@ -25,9 +26,8 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
     // SimpleSirToUplcLowering is used to have stable sizes in terms, not in data representation.
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.ScottEncodingLowering
-    )
+    given Options =
+        Options(targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering)
 
     test("unit bit size is 10") {
         assert(unitSize == 10)

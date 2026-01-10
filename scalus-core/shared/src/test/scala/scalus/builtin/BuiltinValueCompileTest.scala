@@ -2,11 +2,11 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.{BuiltinValue, Builtins, ByteString, Data}
+import scalus.compiler.compile
 import scalus.prelude.List as PList
-import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 import scalus.uplc.eval.{BuiltinValueOps, PlutusVM, Result}
+import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 
 /** Tests for BuiltinValue compilation and evaluation through @Compile blocks.
   *

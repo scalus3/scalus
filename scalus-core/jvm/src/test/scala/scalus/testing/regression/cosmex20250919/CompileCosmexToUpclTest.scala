@@ -8,7 +8,7 @@ class CompileCosmexToUpclTest extends AnyFunSuite {
     import scalus.ledger.api.v3.*
 
     test("compile cosmex to uplc") {
-        // import scalus.Compiler.compile
+        // import scalus.compiler.compile
 
         pending
 

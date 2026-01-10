@@ -2,9 +2,10 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.*
 import scalus.builtin.ByteString.hex
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.uplc.*
@@ -18,8 +19,8 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
 
     given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

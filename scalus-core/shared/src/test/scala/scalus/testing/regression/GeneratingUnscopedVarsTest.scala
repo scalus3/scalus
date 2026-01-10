@@ -1,11 +1,10 @@
 package scalus.testing.regression
 
-import scalus.Compiler.compile
-import scalus.*
-import scalus.prelude.*
-import scalus.builtin.Data
-
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.builtin.Data
+import scalus.compiler.compile
+import scalus.prelude.*
 
 @Compile
 object Min20250702 {
@@ -22,8 +21,8 @@ object Min20250702 {
 
 class GeneratingUnscopedVarsTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

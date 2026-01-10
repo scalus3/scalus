@@ -1,15 +1,15 @@
 package scalus.cardano.blueprint
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler
 import scalus.builtin.Data
 import scalus.cardano.blueprint.HtlcValidatorInputs.{Action, ContractDatum}
 import scalus.cardano.ledger.Language
+import scalus.compiler
 import scalus.uplc.PlutusV3
 import scalus.utils.BuildInfo
 class BlueprintTest extends AnyFunSuite {
 
-    private given Compiler.Options = Compiler.Options.release
+    private given scalus.compiler.Options = scalus.compiler.Options.release
 
     test("should be deserializable from JSON") {
         val value = Application

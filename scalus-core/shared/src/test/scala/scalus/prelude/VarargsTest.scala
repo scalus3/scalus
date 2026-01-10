@@ -32,8 +32,8 @@ class VarargsTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -41,7 +41,7 @@ class VarargsTest extends AnyFunSuite {
 
     test("use varasg in non-apply") {
 
-        val sir = scalus.Compiler.compile {
+        val sir = scalus.compiler.compile {
             val p = VarargsTestObj.pos(BigInt(-1), BigInt(2), BigInt(-3), BigInt(4))
             p.head
         }
@@ -57,7 +57,7 @@ class VarargsTest extends AnyFunSuite {
 
     test("use varasg in apply") {
 
-        val sir = Compiler.compile {
+        val sir = scalus.compiler.compile {
             val p = VarargsTestObj(BigInt(-1), BigInt(2), BigInt(-3), BigInt(4))
             p.head
         }
@@ -72,7 +72,7 @@ class VarargsTest extends AnyFunSuite {
     }
 
     test("use varargs in apply without type parameters") {
-        val sir = Compiler.compile {
+        val sir = scalus.compiler.compile {
             VarargsTestObj2(BigInt(1), BigInt(2), BigInt(3), BigInt(4))
         }
         val uplc = sir.toUplc()

@@ -4,6 +4,7 @@ import scalus.*
 import scalus.cardano.address.*
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler.sir.SIR
+import scalus.compiler.{compileInline, compileInlineWithOptions, Options}
 import scalus.uplc.Program
 
 /** A description of a Scalus application, containing one or more contracts.
@@ -95,7 +96,7 @@ object PlutusV3CompiledContract {
         title: String,
         description: String = ""
     )(inline code: Any): PlutusV3CompiledContract = {
-        val sir = Compiler.compileInline(code)
+        val sir = compileInline(code)
         val program = sir.toUplcOptimized().plutusV3
         val datumSchema = PlutusDataSchema.derived[D]
         val redeemerSchema = PlutusDataSchema.derived[R]
@@ -110,9 +111,9 @@ object PlutusV3CompiledContract {
 
     inline def create[D, R](
         preamble: Preamble,
-        inline options: scalus.Compiler.Options
+        inline options: Options
     )(inline code: Any): PlutusV3CompiledContract = {
-        val sir = Compiler.compileInlineWithOptions(options, code)
+        val sir = compileInlineWithOptions(options, code)
         val program = sir.toUplc(using options)().plutusV3
         val datumSchema = PlutusDataSchema.derived[D]
         val redeemerSchema = PlutusDataSchema.derived[R]

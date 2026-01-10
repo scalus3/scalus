@@ -1,11 +1,12 @@
 package scalus.uplc
 
-import scalus.Compiler
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
+import scalus.compiler
 import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType, TargetLoweringBackend}
+import scalus.compiler.{compileInlineWithOptions, Options}
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.transform.*
 
@@ -34,7 +35,7 @@ trait Compiled[A] {
     def sir: SIR
 
     /** The compiler options used during compilation. */
-    def options: Compiler.Options
+    def options: Options
 
     /** The compiled UPLC program ready for on-chain execution. */
     def program: Program
@@ -99,7 +100,7 @@ extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
   *
   * @example
   *   {{{
-  *   given Compiler.Options = Compiler.Options.release
+  *   given scalus.compiler.Options = scalus.compiler.Options.release
   *   val validator = PlutusV3.compile((datum: Data) => ...)
   *   val scriptHash = validator.script.scriptHash
   *   val address = validator.address(Network.Testnet)
@@ -119,7 +120,7 @@ extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
 case class PlutusV3[A](
     lazyCode: () => A,
     sir: SIR,
-    options: Compiler.Options,
+    options: Options,
     optimizer: Optimizer
 ) extends Compiled[A] {
 
@@ -177,7 +178,7 @@ object PlutusV3 {
       *
       * @example
       *   {{{
-      *   given Compiler.Options = Compiler.Options.release
+      *   given scalus.compiler.Options = scalus.compiler.Options.release
       *   val validator = PlutusV3.compile { (datum: Data) =>
       *     val d = datum.to[MyDatum]
       *     require(d.value > 0)
@@ -193,8 +194,8 @@ object PlutusV3 {
       * @return
       *   a [[PlutusV3]] containing the compiled script
       */
-    inline def compile[A](inline code: A)(using opts: Compiler.Options): PlutusV3[A] = {
-        val sir = Compiler.compileInlineWithOptions(opts, code)
+    inline def compile[A](inline code: A)(using opts: Options): PlutusV3[A] = {
+        val sir = compileInlineWithOptions(opts, code)
         PlutusV3(() => code, sir, opts, new V3Optimizer())
     }
 }

@@ -1,7 +1,6 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
@@ -9,6 +8,7 @@ import scalus.cardano.address.Address.{addr, stake}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.AuxiliaryData.Metadata
 import scalus.cardano.node.Emulator
+import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.uplc.eval.PlutusVM
@@ -17,7 +17,7 @@ import scalus.utils.await
 
 import java.time.{Duration, Instant}
 import scala.concurrent.ExecutionContext.Implicits.global
-given Compiler.Options = Compiler.Options.default
+given Options = Options.default
 
 class TxBuilderDemo extends AnyFunSuite {
 

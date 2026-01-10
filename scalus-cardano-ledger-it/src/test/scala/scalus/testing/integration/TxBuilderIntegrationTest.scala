@@ -1,14 +1,14 @@
 package scalus.testing.integration
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compiler.compile
-import scalus.builtin.{ByteString, Data, platform}
+import scalus.builtin.{platform, ByteString, Data}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
+import scalus.compiler.compile
 import scalus.testing.yaci.{TestContext, YaciDevKit}
-import scalus.utils.await
 import scalus.toUplc
+import scalus.utils.await
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.ExecutionContext.Implicits.global

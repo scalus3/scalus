@@ -7,6 +7,8 @@ import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.vault.State
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -33,8 +35,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
     private val defaultWaitTime: Long = 10_000L
     private val commissionAmount = Coin(2_000_000L)
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalusOptions: Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false
     )

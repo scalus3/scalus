@@ -1,8 +1,10 @@
 package scalus.testing.regression.cosmex20251107.full
 import scalus.*
+import scalus.builtin.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.toData
-import scalus.builtin.{Builtins, ByteString, Data, FromData, ToData}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.IntervalBound
 import scalus.ledger.api.v1.IntervalBoundType.Finite
 import scalus.ledger.api.v2
@@ -1027,10 +1029,10 @@ object CosmexContract extends DataParameterizedValidator {
 }
 
 object CosmexValidator {
-    private given Compiler.Options = Compiler.Options(
-      targetLoweringBackend = Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+    private given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering
     )
-    private val compiledValidator = Compiler.compile(CosmexContract.validate)
+    private val compiledValidator = compile(CosmexContract.validate)
 
     def mkCosmexValidator(params: ExchangeParams): Program = {
         val program = compiledValidator.toUplcOptimized().plutusV3

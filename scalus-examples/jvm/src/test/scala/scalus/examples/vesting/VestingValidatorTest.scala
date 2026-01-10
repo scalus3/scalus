@@ -4,17 +4,18 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compileWithOptions, Options}
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.IntervalBoundType.*
-import scalus.ledger.api.v1.{Address, PubKeyHash}
 import scalus.ledger.api.v1.Value.getLovelace
+import scalus.ledger.api.v1.{Address, PubKeyHash}
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
 import scalus.testing.kit.{Mock, ScalusTest}
 import scalus.uplc.eval.*
-import scalus.Compiler.compileWithOptions
 
 import scala.language.implicitConversions
 
@@ -28,14 +29,14 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
     private val defaultInitialAmount: Lovelace = BigInt(20_000_000L)
     private val defaultFee: Lovelace = BigInt(1_000_000L)
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
     )
 
-    private inline def compiled(using options: scalus.Compiler.Options) = {
+    private inline def compiled(using options: Options) = {
         compileWithOptions(options, VestingValidator.validate)
     }
 

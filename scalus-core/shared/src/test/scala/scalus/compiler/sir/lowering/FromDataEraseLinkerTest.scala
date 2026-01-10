@@ -2,16 +2,16 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Data
+import scalus.compiler.compile
+import scalus.compiler.sir.*
 import scalus.ledger.api.v3.ScriptContext
 import scalus.ledger.api.v3.ScriptInfo.SpendingScript
-import scalus.compiler.sir.*
 
 class FromDataEraseLinkerTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

@@ -4,19 +4,20 @@ import monocle.syntax.all.*
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.{hex, utf8}
-import scalus.builtin.{ByteString, Data}
 import scalus.builtin.Data.toData
+import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.node.Emulator
+import scalus.compiler.compile
+import scalus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
-import scalus.prelude.List as PList
+import scalus.toUplc
 import scalus.utils.await
-import scalus.{toUplc, Compiler}
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -32,7 +33,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
     // Test scripts for validation - using PlutusV3
     val script1: Script.PlutusV3 = {
-        val alwaysOk = Compiler.compile((sc: Data) => ())
+        val alwaysOk = compile((sc: Data) => ())
         val alwaysOkCborBytes = alwaysOk.toUplc().plutusV3.cborByteString
         Script.PlutusV3(alwaysOkCborBytes)
     }

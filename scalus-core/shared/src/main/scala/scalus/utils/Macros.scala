@@ -1,6 +1,5 @@
 package scalus.utils
 
-import scalus.Compiler
 import scalus.builtin.Builtins
 import scalus.builtin.Data
 import scalus.cardano.ledger.{ProtocolParams, ProtocolParamsToExpr}
@@ -536,21 +535,21 @@ object Macros {
       *   quoted SIR representation
       */
     def generateCompileCall(code: Expr[Any])(using Quotes): Expr[SIR] = '{
-        Compiler.compile($code)
+        scalus.compiler.compile($code)
     }
 
     /** Compile the provided quoted AST into a SIR using Compiler with options.
       *
       * @param options
-      *   quoted Compiler.Options
+      *   quoted scalus.compiler.Options
       * @param code
       *   quoted code/term to be compiled
       * @return
       *   quoted SIR representation
       */
-    def generateCompileCall(options: Expr[scalus.Compiler.Options], code: Expr[Any])(using
+    def generateCompileCall(options: Expr[scalus.compiler.Options], code: Expr[Any])(using
         Quotes
     ): Expr[SIR] = '{
-        Compiler.compileWithOptions($options, $code)
+        scalus.compiler.compileWithOptions($options, $code)
     }
 }

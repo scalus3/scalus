@@ -1,16 +1,15 @@
 package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
-
-import scalus.Compiler.compile
 import scalus.*
+import scalus.compiler.compile
 import scalus.ledger.api.v1.Value.getLovelace
 import scalus.ledger.api.v3.*
 
 class GenUpcastFailureTest extends AnyFunSuite {
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given scalus.compiler.Options = scalus.compiler.Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false

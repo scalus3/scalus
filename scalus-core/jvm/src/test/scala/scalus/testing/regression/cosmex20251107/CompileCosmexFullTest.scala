@@ -3,6 +3,8 @@ package scalus.testing.regression.cosmex20251107
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v3.*
 
 /** Regression test for cosmex shadowing bug.
@@ -28,10 +30,10 @@ class CompileCosmexFullTest extends AnyFunSuite {
         // This WILL throw CaclulateApplyTypeException while the bug exists
         // causing this test to FAIL
         // Once the bug is fixed, this will compile successfully and test will PASS
-        given Compiler.Options = Compiler.Options(
-          targetLoweringBackend = Compiler.TargetLoweringBackend.SirToUplcV3Lowering
+        given Options = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering
         )
-        val compiledValidator = Compiler.compile(full.CosmexContract.validate)
+        val compiledValidator = compile(full.CosmexContract.validate)
         val uplc = compiledValidator.toUplcOptimized().plutusV3
 
         assert(uplc != null, "Validator should compile successfully once bug is fixed")

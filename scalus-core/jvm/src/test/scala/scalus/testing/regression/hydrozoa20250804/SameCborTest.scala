@@ -1,8 +1,8 @@
 package scalus.testing.regression.hydrozoa20250804
 
-import scalus.*
-import scalus.Compiler.compile
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.compiler.compile
 
 import java.util.concurrent.atomic.AtomicReference
 

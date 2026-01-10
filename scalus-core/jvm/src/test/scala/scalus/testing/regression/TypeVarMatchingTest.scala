@@ -2,14 +2,15 @@ package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.Compiler.compile
 import scalus.builtin.Data.toData
+import scalus.compiler.{compile, Options}
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.ledger.api.v2.OutputDatum
 
 class TypeVarMatchingTest extends AnyFunSuite:
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

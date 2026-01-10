@@ -1,5 +1,6 @@
 package scalus.compiler.sir.linking
 
+import scalus.compiler.Options
 import scalus.compiler.sir.*
 
 import scala.annotation.unused
@@ -15,10 +16,10 @@ case class SIRLinkerOptions(
 )
 
 object SIRLinkerOptions {
-    def fromCompilerOptions(compilerOptions: scalus.Compiler.Options): SIRLinkerOptions = {
+    def fromCompilerOptions(compilerOptions: Options): SIRLinkerOptions = {
         SIRLinkerOptions(
           useUniversalDataConversion =
-              compilerOptions.targetLoweringBackend == scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+              compilerOptions.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering,
           printErrors = true,
           debugLevel = compilerOptions.debugLevel
         )
@@ -35,8 +36,7 @@ object SIRLinkerOptions {
   */
 class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
 
-    import SIRLinker.LinkingDefState
-    import SIRLinker.SIRLinkedBinding
+    import SIRLinker.{LinkingDefState, SIRLinkedBinding}
 
     private val globalDefs: mutable.LinkedHashMap[String, LinkingDefState] =
         mutable.LinkedHashMap.empty

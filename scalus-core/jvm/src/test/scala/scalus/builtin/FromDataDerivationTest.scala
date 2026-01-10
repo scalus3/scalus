@@ -5,7 +5,7 @@ import org.scalacheck.Gen
 import org.scalacheck.Shrink
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.Compiler.compile
+import scalus.compiler.compile
 import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.*

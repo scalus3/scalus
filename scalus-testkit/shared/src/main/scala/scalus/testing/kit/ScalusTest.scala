@@ -17,6 +17,7 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
+import scalus.compiler.Options
 import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
@@ -66,7 +67,7 @@ trait ScalusTest extends ArbitraryInstances {
 
     extension (self: SIR)
         def runScript(using
-            scalusOptions: scalus.Compiler.Options = scalus.Compiler.Options.default
+            scalusOptions: Options = Options.default
         )(
             scriptContext: ScriptContext,
             param: Option[Data] = None
@@ -78,7 +79,7 @@ trait ScalusTest extends ArbitraryInstances {
             appliedScript.evaluateDebug
 
         def scriptV3(using
-            scalusOptions: scalus.Compiler.Options = scalus.Compiler.Options.default
+            scalusOptions: Options = Options.default
         )(errorTraces: Boolean = true): Program =
             self.toUplc(generateErrorTraces = errorTraces).plutusV3
 

@@ -2,18 +2,17 @@ package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.Compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, Data, JVMPlatformSpecific}
-import scalus.compiler.sir.SIRType
 import scalus.compiler.sir.SIR.*
+import scalus.compiler.sir.*
 import scalus.compiler.sir.SIRType.Fun
 import scalus.compiler.sir.SirDSL.{*, given}
-import scalus.compiler.sir.*
-import scalus.uplc.Constant.asConstant
+import scalus.compiler.{compile, Options}
 import scalus.uplc.*
-import scalus.uplc.Term.asTerm
+import scalus.uplc.Constant.asConstant
 import scalus.uplc.DefaultFun.*
+import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
 
 import scala.collection.immutable
@@ -54,8 +53,8 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
     def AnE = AnnotationsDecl.empty
 
-    given scalus.Compiler.Options = scalus.Compiler.Options(
-      targetLoweringBackend = scalus.Compiler.TargetLoweringBackend.SirToUplcV3Lowering,
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false

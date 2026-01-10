@@ -4,13 +4,15 @@ package scalus.testing.regression.hydrozoa20250804
 //import com.bloxbean.cardano.client.address.AddressProvider
 //import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 //import hydrozoa.infra.{encodeHex, toBB}
-import DisputeResolutionValidator.TallyRedeemer.{Continuing, Removed}
-import TreasuryValidator.TreasuryDatum.Unresolved
-import TreasuryValidator.{cip67BeaconTokenPrefix, TreasuryDatum}
+import scalus.builtin.Builtins
+import scalus.compiler.compile
+import scalus.testing.regression.hydrozoa20250804.DisputeResolutionValidator.TallyRedeemer.{Continuing, Removed}
+import scalus.testing.regression.hydrozoa20250804.TreasuryValidator.TreasuryDatum.Unresolved
+import scalus.testing.regression.hydrozoa20250804.TreasuryValidator.{cip67BeaconTokenPrefix, TreasuryDatum}
 //import TreasuryValidatorScript.plutusScript
-import ByteStringExtensions.take
-import TxOutExtensions.inlineDatumOfType
-import ValueExtensions.{containsCurrencySymbol, containsExactlyOneAsset, onlyNonAdaAsset}
+import scalus.testing.regression.hydrozoa20250804.ByteStringExtensions.take
+import scalus.testing.regression.hydrozoa20250804.TxOutExtensions.inlineDatumOfType
+import scalus.testing.regression.hydrozoa20250804.ValueExtensions.{containsCurrencySymbol, containsExactlyOneAsset, onlyNonAdaAsset}
 //import hydrozoa.l2.block.BlockTypeL2
 //import hydrozoa.{PosixTime, *}
 import scalus.*
@@ -18,9 +20,9 @@ import scalus.builtin.Builtins.{serialiseData, verifyEd25519Signature}
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v1.{PosixTime, Value}
 import scalus.ledger.api.v1.IntervalBoundType.Finite
 import scalus.ledger.api.v1.Value.+
+import scalus.ledger.api.v1.{PosixTime, Value}
 import scalus.ledger.api.v3.*
 import scalus.prelude.Option.{None, Some}
 import scalus.prelude.{!==, ===, fail, log, require, Eq, List, Option, SortedMap, Validator}
@@ -514,13 +516,13 @@ end DisputeResolutionValidator
 
 object DisputeResolutionScript {
 
-    lazy val sir = Compiler.compile(DisputeResolutionValidator.validate)
+    lazy val sir = compile(DisputeResolutionValidator.validate)
     lazy val script = sir.toUplcOptimized(generateErrorTraces = true).plutusV3
 
     lazy val cbor = script.cborByteString
 
     // any hash, we need just to check determenism
-    lazy val hash = scalus.builtin.Builtins.sha3_256(cbor)
+    lazy val hash = Builtins.sha3_256(cbor)
 
 }
 
