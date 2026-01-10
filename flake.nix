@@ -122,6 +122,7 @@
               buildInputs = [ pkgs.bashInteractive ];
               packages = with pkgs; [
                 git
+                gh
                 jdk
                 sbt
                 mill
