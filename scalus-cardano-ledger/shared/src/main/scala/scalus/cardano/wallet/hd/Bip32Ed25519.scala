@@ -298,14 +298,15 @@ object Bip32Ed25519 {
 
     /** Add two 32-byte values modulo 2^256.
       *
-      * Both inputs are interpreted as little-endian integers.
+      * Both inputs are interpreted as unsigned little-endian integers. Since bytesToBigIntLE always
+      * returns non-negative values, the sum and modulo result are always non-negative.
       */
     private def addMod256(a: Array[Byte], b: Array[Byte]): Array[Byte] = {
         val aInt = bytesToBigIntLE(a)
         val bInt = bytesToBigIntLE(b)
         val modulus = BigInt(1) << 256
         val sum = (aInt + bInt) % modulus
-        bigIntToBytesLE(if sum < 0 then sum + modulus else sum, 32)
+        bigIntToBytesLE(sum, 32)
     }
 
     /** Convert little-endian bytes to BigInt. */

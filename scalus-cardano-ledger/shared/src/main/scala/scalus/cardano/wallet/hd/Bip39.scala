@@ -106,13 +106,38 @@ object Bip39 {
       *   if mnemonic is invalid (wrong word count, unknown words, or bad checksum)
       */
     def mnemonicToSeed(mnemonic: String, passphrase: String = ""): Array[Byte] = {
-        require(
-          isValidMnemonic(mnemonic),
-          "Invalid mnemonic: checksum verification failed or contains invalid words"
-        )
+        validateMnemonic(mnemonic)
         val normalizedMnemonic = normalizeMnemonic(mnemonic)
         val salt = ("mnemonic" + passphrase).getBytes("UTF-8")
         Pbkdf2.deriveKey(normalizedMnemonic.getBytes("UTF-8"), salt, 2048, 64)
+    }
+
+    /** Validate a mnemonic and throw with specific error messages.
+      *
+      * @throws IllegalArgumentException
+      *   with specific message for word count, invalid words, or checksum errors
+      */
+    private def validateMnemonic(mnemonic: String): Unit = {
+        val words = normalizeWords(mnemonic)
+        val wordCount = words.length
+
+        val validWordCounts = Set(12, 15, 18, 21, 24)
+        require(
+          validWordCounts.contains(wordCount),
+          s"Invalid word count: expected 12, 15, 18, 21, or 24 words, got $wordCount"
+        )
+
+        val indices = words.map(w => Bip39Wordlist.indexOf(w))
+        val invalidWords = words.zip(indices).collect { case (w, idx) if idx < 0 => w }.distinct
+        require(
+          invalidWords.isEmpty,
+          s"Invalid word(s) not in BIP-39 wordlist: ${invalidWords.mkString(", ")}"
+        )
+
+        require(
+          verifyChecksum(indices, wordCount),
+          "Invalid checksum: mnemonic may be corrupted or incorrectly transcribed"
+        )
     }
 
     /** Generate mnemonic from entropy.
