@@ -7,7 +7,7 @@ import scalus.cardano.ledger.{Bech32, CardanoInfo, PoolKeyHash, SlotConfig}
 import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.hd.HdAccount
-import scalus.crypto.ed25519.JvmEd25519Signer
+import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
 import scalus.utils.await
 import sttp.client4.DefaultFutureBackend
 
@@ -15,8 +15,6 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 // Provide sttp backend for BlockfrostProvider
 given sttp.client4.Backend[scala.concurrent.Future] = DefaultFutureBackend()
-// Use JVM Ed25519 signer for key derivation
-given scalus.crypto.ed25519.Ed25519Signer = JvmEd25519Signer
 
 /** Base trait for integration tests using Yaci DevKit with ScalaTest
   *
@@ -44,6 +42,9 @@ given scalus.crypto.ed25519.Ed25519Signer = JvmEd25519Signer
   * }}}
   */
 trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
+
+    // Use JVM Ed25519 signer for key derivation
+    given Ed25519Signer = JvmEd25519Signer
 
     /** Override this to customize the Yaci DevKit configuration */
     def yaciConfig: YaciConfig = YaciConfig()

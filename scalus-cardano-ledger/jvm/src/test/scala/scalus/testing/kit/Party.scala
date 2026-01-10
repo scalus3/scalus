@@ -14,7 +14,7 @@ import scala.annotation.threadUnsafe
 import scala.collection.mutable
 
 // Use JVM Ed25519 signer for key derivation
-given scalus.crypto.ed25519.Ed25519Signer = JvmEd25519Signer
+private given scalus.crypto.ed25519.Ed25519Signer = JvmEd25519Signer
 
 /** Test parties for smart contract testing.
   *
