@@ -51,9 +51,11 @@ object Ed25519MathPlatform {
 
     /** Convert little-endian bytes to BigInt for JS. */
     private def bytesToBigInt(bytes: Array[Byte]): js.BigInt = {
-        // Convert little-endian bytes to hex string (big-endian)
-        val hex = bytes.reverse.map(b => f"${b & 0xff}%02x").mkString
-        js.BigInt("0x" + hex)
+        if bytes.isEmpty then js.BigInt(0)
+        else
+            // Convert little-endian bytes to hex string (big-endian)
+            val hex = bytes.reverse.map(b => f"${b & 0xff}%02x").mkString
+            js.BigInt("0x" + hex)
     }
 
     /** Multiply the Ed25519 base point by a scalar to derive the public key.

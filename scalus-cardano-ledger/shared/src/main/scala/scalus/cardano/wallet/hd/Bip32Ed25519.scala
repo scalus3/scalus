@@ -101,8 +101,9 @@ object Bip32Ed25519 {
             // Derive child kL: kL' = (8 * zL) + kL
             // Per BIP32-Ed25519 spec, zL is trimmed to 28 bytes to ensure the second highest
             // bit in the last byte of child kL remains set (required for Ed25519 clamping).
-            // Reference: "Hierarchical Deterministic Wallets for the Ed25519 Elliptic Curve"
-            // (Ed25519_BIP.pdf in cardano-wallet documentation)
+            // Reference: Cardano wallet BIP32-Ed25519 specification, section "Child key derivation".
+            // See: https://input-output-hk.github.io/adrestia/cardano-wallet/concepts/address-derivation
+            // Original paper: "BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace"
             val zL = zBytes.take(28)
             val zLScaled = scalarMultiply8(zL)
             val kLChild = add256BitLE(zLScaled, kL)
@@ -128,24 +129,26 @@ object Bip32Ed25519 {
                 java.util.Arrays.hashCode(chainCode)
     }
 
-    /** Generate master key from BIP-39 seed using Icarus-style derivation.
+    /** Generate master key from BIP-39 entropy using Icarus-style derivation.
       *
       * Uses PBKDF2-HMAC-SHA512 with:
-      *   - Password: raw entropy bytes from mnemonic
-      *   - Salt: "" (empty)
+      *   - Password: passphrase (empty string if none)
+      *   - Salt: raw entropy bytes from mnemonic
       *   - Iterations: 4096
       *   - Output: 96 bytes
+      *
+      * Note: This differs from standard BIP-39 seed derivation which uses the mnemonic words as
+      * password and "mnemonic" + passphrase as salt.
       *
       * @param entropy
       *   BIP-39 entropy (typically 16-32 bytes)
       * @param passphrase
-      *   Optional passphrase
+      *   Optional passphrase (empty string if none)
       * @return
       *   Master extended key
       */
     def masterKeyFromEntropy(entropy: Array[Byte], passphrase: String = ""): ExtendedKey = {
         // Icarus-style: PBKDF2 with passphrase as password and entropy as salt
-        // Note: This differs from standard BIP-39 which uses "mnemonic" + passphrase as salt
         val derived = Pbkdf2.deriveKey(
           password = passphrase.getBytes("UTF-8"),
           salt = entropy,
@@ -306,7 +309,8 @@ object Bip32Ed25519 {
     private def bigIntToBytesLE(value: BigInt, length: Int): Array[Byte] = {
         val bytes = value.toByteArray
         // BigInt.toByteArray is big-endian and may have leading zeros or sign byte
-        val unsigned = if bytes.length > 0 && bytes(0) == 0 then bytes.drop(1) else bytes
+        // BigInt.toByteArray always returns at least one byte, so no length check needed
+        val unsigned = if bytes(0) == 0 then bytes.drop(1) else bytes
         val padded = if unsigned.length < length then {
             new Array[Byte](length - unsigned.length) ++ unsigned
         } else if unsigned.length > length then {

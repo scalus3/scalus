@@ -141,7 +141,6 @@ object Bip39 {
                 i -= 1
 
         // Copy checksum bits
-        var checksumByte = 0
         var checksumBitIndex = 0
         while checksumBitIndex < checksumBits do
             val byteIndex = checksumBitIndex / 8
