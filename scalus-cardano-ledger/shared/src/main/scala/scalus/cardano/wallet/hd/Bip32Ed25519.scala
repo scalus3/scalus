@@ -204,13 +204,38 @@ object Bip32Ed25519 {
       *   Path like "m/1852'/1815'/0'/0/0"
       * @return
       *   Sequence of indices (hardened indices have high bit set)
+      * @throws IllegalArgumentException
+      *   if path is malformed
       */
     def parsePath(path: String): Seq[Int] = {
-        val segments = path.split("/").drop(1).toSeq // Skip "m"
-        segments.map { segment =>
+        require(path.nonEmpty, "Path cannot be empty")
+        require(
+          path.startsWith("m/") || path.startsWith("M/"),
+          s"Path must start with 'm/' or 'M/', got: $path"
+        )
+
+        val segments = path.drop(2).split("/").toSeq // Skip "m/"
+        require(segments.nonEmpty, s"Path must have at least one segment after 'm/', got: $path")
+
+        segments.zipWithIndex.map { case (segment, idx) =>
+            require(segment.nonEmpty, s"Empty segment at position $idx in path: $path")
+
             val isHardened = segment.endsWith("'") || segment.endsWith("H") || segment.endsWith("h")
             val indexStr = segment.stripSuffix("'").stripSuffix("H").stripSuffix("h")
-            val index = indexStr.toInt
+
+            val index =
+                try indexStr.toInt
+                catch
+                    case _: NumberFormatException =>
+                        throw new IllegalArgumentException(
+                          s"Invalid index '$indexStr' at position $idx in path: $path"
+                        )
+
+            require(
+              index >= 0,
+              s"Index must be non-negative, got $index at position $idx in path: $path"
+            )
+
             if isHardened then index | 0x80000000 else index
         }
     }

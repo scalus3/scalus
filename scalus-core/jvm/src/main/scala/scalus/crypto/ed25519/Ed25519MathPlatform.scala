@@ -2,10 +2,20 @@ package scalus.crypto.ed25519
 
 import org.bouncycastle.math.ec.rfc8032.Ed25519
 
-/** JVM implementation of Ed25519 mathematical operations using BouncyCastle. */
+/** JVM implementation of Ed25519 mathematical operations using BouncyCastle.
+  *
+  * WARNING: This implementation uses reflection to access BouncyCastle's internal
+  * `scalarMultBaseEncoded` method because the public API only exposes key derivation that hashes
+  * the seed first (standard Ed25519), whereas BIP32-Ed25519 requires direct scalar multiplication
+  * with an already-clamped scalar.
+  *
+  * This approach is fragile and may break with future BouncyCastle updates. If BouncyCastle exposes
+  * a public scalar multiplication API in the future, this should be updated to use it instead.
+  */
 object Ed25519MathPlatform {
 
-    // Cache the reflection method for performance
+    // Cache the reflection method for performance.
+    // Uses setAccessible(true) to access package-private method.
     private lazy val scalarMultBaseEncodedMethod = {
         val method = classOf[Ed25519].getDeclaredMethod(
           "scalarMultBaseEncoded",

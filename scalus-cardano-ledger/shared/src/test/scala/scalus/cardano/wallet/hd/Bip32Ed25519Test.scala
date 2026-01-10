@@ -196,4 +196,37 @@ class Bip32Ed25519Test extends AnyFunSuite {
         assert(java.util.Arrays.equals(key1.kR, key2.kR))
         assert(java.util.Arrays.equals(key1.chainCode, key2.chainCode))
     }
+
+    test("parsePath rejects empty path") {
+        val ex = intercept[IllegalArgumentException] {
+            Bip32Ed25519.parsePath("")
+        }
+        assert(ex.getMessage.contains("cannot be empty"))
+    }
+
+    test("parsePath rejects path without m/ prefix") {
+        val ex = intercept[IllegalArgumentException] {
+            Bip32Ed25519.parsePath("1852'/1815'/0'")
+        }
+        assert(ex.getMessage.contains("must start with"))
+    }
+
+    test("parsePath rejects path with invalid index") {
+        val ex = intercept[IllegalArgumentException] {
+            Bip32Ed25519.parsePath("m/abc/1815'/0'")
+        }
+        assert(ex.getMessage.contains("Invalid index"))
+    }
+
+    test("parsePath rejects path with empty segment") {
+        val ex = intercept[IllegalArgumentException] {
+            Bip32Ed25519.parsePath("m/1852'//0'")
+        }
+        assert(ex.getMessage.contains("Empty segment"))
+    }
+
+    test("parsePath accepts uppercase M prefix") {
+        val indices = Bip32Ed25519.parsePath("M/1852'/1815'/0'")
+        assert(indices.length == 3)
+    }
 }

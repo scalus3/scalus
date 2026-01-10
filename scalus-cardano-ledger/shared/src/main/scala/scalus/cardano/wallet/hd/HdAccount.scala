@@ -53,8 +53,16 @@ class HdAccount(
 
     /** DRep (governance) key - for Cardano governance participation.
       *
-      * Note: CIP-1852 doesn't define a specific path for DRep keys. We use the staking path with
-      * index 0 by convention, as governance delegation is conceptually similar to stake delegation.
+      * IMPORTANT: This is a convention choice, not specified by CIP-1852. CIP-1852 only defines
+      * paths for payment (role 0), change (role 1), and staking (role 2) keys. There is no
+      * standardized derivation path for DRep keys.
+      *
+      * We reuse the staking key (m/1852'/1815'/account'/2/0) as the DRep key because:
+      *   - Governance delegation is conceptually similar to stake delegation
+      *   - This matches behavior of some existing wallet implementations
+      *   - It avoids requiring users to manage additional keys
+      *
+      * If a future CIP standardizes DRep key derivation, this should be updated accordingly.
       */
     override lazy val drepKeyPair: KeyPair = stakeKeyPair
 
