@@ -27,6 +27,10 @@ private trait ExtendedPoint extends js.Object:
 /** JS implementation of Ed25519 mathematical operations using @noble/curves. */
 object Ed25519MathPlatform {
 
+    /** Ed25519 curve order L = 2^252 + 27742317777372353535851937790883648493 */
+    private val L: js.BigInt =
+        js.BigInt("7237005577332262213973186563042994240857116359379907606001950938285454250989")
+
     private def toUint8Array(bytes: Array[Byte]): Uint8Array =
         val int8Array = new Int8Array(bytes.toJSArray)
         new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
@@ -53,8 +57,10 @@ object Ed25519MathPlatform {
       */
     def scalarMultiplyBase(scalar: Array[Byte]): Array[Byte] = {
         // Use ExtendedPoint.BASE.multiply for direct scalar multiplication
+        // The scalar must be reduced mod L for @noble/curves which requires 1 <= n < L
         val scalarBigInt = bytesToBigInt(scalar)
-        val point = NobleEd25519Math.ed25519.ExtendedPoint.BASE.multiply(scalarBigInt)
+        val reducedScalar = scalarBigInt % L
+        val point = NobleEd25519Math.ed25519.ExtendedPoint.BASE.multiply(reducedScalar)
         fromUint8Array(point.toRawBytes())
     }
 }

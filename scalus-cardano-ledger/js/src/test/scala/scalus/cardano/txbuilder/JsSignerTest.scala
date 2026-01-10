@@ -1,14 +1,13 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.wallet.hd.HdAccount
 import scalus.builtin.ByteString
-import scalus.crypto.ed25519.JsEd25519Signer
-
-// Use JS Ed25519 signer for key derivation
-given scalus.crypto.ed25519.Ed25519Signer = JsEd25519Signer
+import scalus.cardano.wallet.hd.HdAccount
+import scalus.crypto.ed25519.{Ed25519Signer, JsEd25519Signer}
 
 class JsSignerTest extends AnyFunSuite {
+    // Use JS Ed25519 signer for key derivation
+    private given Ed25519Signer = JsEd25519Signer
 
     private val mnemonic = "test " * 23 + "sauce"
     // An arbitrary known tx hash that, using the above mnemonic signs to a deterministic signature

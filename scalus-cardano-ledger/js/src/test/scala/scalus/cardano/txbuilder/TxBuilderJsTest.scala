@@ -1,16 +1,15 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.{Address, Network}
 import scalus.cardano.address.Address.addr
+import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.cardano.wallet.hd.HdAccount
-import scalus.crypto.ed25519.{JsEd25519Signer, Signature}
-
-// Use JS Ed25519 signer for key derivation
-given scalus.crypto.ed25519.Ed25519Signer = JsEd25519Signer
+import scalus.crypto.ed25519.{Ed25519Signer, JsEd25519Signer, Signature}
 
 class TxBuilderJsTest extends AnyFunSuite {
+    // Use JS Ed25519 signer for key derivation
+    private given Ed25519Signer = JsEd25519Signer
 
     private val mnemonic = "test " * 23 + "sauce"
     private val cardanoInfo = CardanoInfo.mainnet
