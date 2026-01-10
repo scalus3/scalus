@@ -52,9 +52,10 @@ object Plugin {
         isCompilerDebug: Boolean
     )(using Context): tpd.Tree = {
         // Try new package first, fall back to old for backward compatibility
+        // TODO(0.15): Remove scalus.Compiler.Options fallback after removing deprecated API
         val compilerOptionType =
             try requiredClassRef("scalus.compiler.Options")
-            catch case _: Exception => requiredClassRef("scalus.compiler.Options")
+            catch case _: Exception => requiredClassRef("scalus.Compiler.Options")
         if !ctx.phase.allowsImplicitSearch then
             println(
               s"ScalusPhase: Implicit search is not allowed in phase ${ctx.phase.phaseName}. "
@@ -77,6 +78,7 @@ object Plugin {
                 }
                 // Try new package first, fall back to old for backward compatibility
                 // Wrap entirely in try-catch since the module/method might not be available yet
+                // TODO(0.15): Remove scalus.Compiler fallback after removing deprecated API
                 val (scalusCompilerModule, defaultOptionsMethod) = {
                     try
                         val mod = requiredModule(newCompilerModuleName)
@@ -131,6 +133,7 @@ class ScalusPreparePhase(debugLevel: Int) extends PluginPhase with IdentityDenot
     override def transformApply(tree: tpd.Apply)(using Context): tpd.Tree = {
         // Support both old (scalus.Compiler) and new (scalus.compiler.package$package) locations
         // The new module may not exist during compilation of scalus-core itself, so wrap in try-catch
+        // TODO(0.15): Remove old scalus.Compiler symbol handling after removing deprecated API
         val oldCompilerModule = requiredModule("scalus.Compiler")
 
         // Try to get new module symbols - wrap entirely in try-catch since the module
@@ -260,6 +263,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
         try
             // Support both old (scalus.Compiler) and new (scalus.compiler.package$package) locations
             // The new module may not exist during compilation of scalus-core itself, so wrap in try-catch
+            // TODO(0.15): Remove old scalus.Compiler symbol handling after removing deprecated API
             val oldCompilerModule = requiredModule("scalus.Compiler")
 
             // Try to get new module symbols - wrap entirely in try-catch since the module
