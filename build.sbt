@@ -359,6 +359,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     )
     .jsSettings(
       // Add JS-specific settings here
+      // Disable doc due to scaladoc NPE bug on JS platform
+      Compile / doc / sources := Seq.empty,
+      Test / doc / sources := Seq.empty,
       Compile / npmDependencies += "@noble/curves" -> "1.9.1",
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
@@ -369,6 +372,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
     .nativeSettings(
+      // Disable doc due to scaladoc NPE bug on Native platform
+      Compile / doc / sources := Seq.empty,
+      Test / doc / sources := Seq.empty,
       nativeConfig ~= {
           _.withBuildTarget(BuildTarget.libraryStatic)
 //              .withLTO(LTO.thin)
