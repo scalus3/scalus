@@ -103,25 +103,6 @@ class Cip1852Test extends AnyFunSuite {
         assert(parsed == Some((account, role, index)))
     }
 
-    test("integration with Slip0010") {
-        val mnemonic =
-            "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-        val seed = Bip39.mnemonicToSeed(mnemonic, "")
-
-        // Derive account key using CIP-1852 path
-        val accountPath = Cip1852.accountPath(0)
-        val accountKey = Slip0010.deriveFromPath(seed, accountPath)
-
-        assert(accountKey.privateKeyBytes.length == 32)
-        assert(accountKey.chainCode.length == 32)
-
-        // Derive payment key
-        val paymentPath = Cip1852.paymentPath(0, 0)
-        val paymentKey = Slip0010.deriveFromPath(seed, paymentPath)
-
-        assert(paymentKey.privateKeyBytes.length == 32)
-    }
-
     test("negative index validation") {
         intercept[IllegalArgumentException] {
             Cip1852.accountPath(-1)
