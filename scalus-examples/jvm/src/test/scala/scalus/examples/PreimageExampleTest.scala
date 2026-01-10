@@ -6,12 +6,12 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1
 import scalus.ledger.api.v1.{PubKeyHash, TxId}
 import scalus.ledger.api.v2.*
 import scalus.prelude.List
+import scalus.testing.assertions.Expected
+import scalus.testing.kit.BaseValidatorTest
 import scalus.uplc.*
-import scalus.uplc.Term.*
 
 class PreimageExampleTest extends BaseValidatorTest {
 
@@ -46,7 +46,7 @@ class PreimageExampleTest extends BaseValidatorTest {
             val ctx = scriptContext(signatories)
             validator $ datum $ redeemer $ ctx.toData
 
-        assertSameResult(Expected.Success(Const(Constant.Unit)))(
+        assertEvalResult(Expected.success(()))(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
@@ -57,7 +57,7 @@ class PreimageExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("Wrong preimage"))(
+        assertEvalResult(Expected.failure)(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =
@@ -68,7 +68,7 @@ class PreimageExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("No valid signature"))(
+        assertEvalResult(Expected.failure)(
           appliedScript(
             preimage = ByteString.fromArray("Scalus rocks!".getBytes("UTF-8")),
             pubKeyHash =

@@ -33,37 +33,32 @@ abstract class BaseValidatorTest
       *   The program to evaluate
       */
     protected final def assertEvalResult(expected: Expected)(program: Program): Unit =
-        val result = Try(program.deBruijnedProgram.evaluate)
+        import scalus.uplc.eval.Result
+        val result = program.deBruijnedProgram.evaluateDebug
         (expected, result) match
-            case (Expected.SuccessAny, Success(_)) =>
+            case (Expected.SuccessAny, _: Result.Success) =>
                 ()
-            case (Expected.SuccessSame, Success(_)) =>
+            case (Expected.SuccessSame, _: Result.Success) =>
                 // SuccessSame on shared platform just checks success
                 ()
-            case (Expected.Success(expectedTerm), Success(actualTerm)) =>
+            case (Expected.Success(expectedTerm), Result.Success(actualTerm, _, _, _)) =>
                 assert(
                   expectedTerm α_== actualTerm,
                   s"Terms not equal. Expected: $expectedTerm, got: $actualTerm"
                 )
-            case (Expected.Failure(predicate), Failure(e)) =>
-                // Create a mock Result.Failure to check the predicate
-                val mockFailure: scalus.uplc.eval.Result.Failure = scalus.uplc.eval.Result.Failure(
-                  e,
-                  scalus.cardano.ledger.ExUnits(0, 0),
-                  Map.empty,
-                  Seq.empty
-                )
-                assert(predicate(mockFailure), s"Failure predicate not satisfied: $e")
+            case (Expected.Failure(predicate), failure: Result.Failure) =>
+                assert(predicate(failure), s"Failure predicate not satisfied: ${failure.exception}")
             case _ =>
                 result match
-                    case Failure(e) =>
-                        e match
+                    case failure: Result.Failure =>
+                        failure.exception match
                             case eb: BuiltinError =>
                                 println(eb.term.showHighlighted)
                             case _ =>
-                                println(e.getMessage)
-                                e.printStackTrace()
-                    case Success(r) =>
+                                println(failure.exception.getMessage)
+                                failure.exception.printStackTrace()
+                        println(s"Logs: ${failure.logs.mkString("\n")}")
+                    case Result.Success(r, _, _, _) =>
                         println(s"result = ${r.showHighlighted}")
                 fail(s"Expected $expected, but got $result")
 

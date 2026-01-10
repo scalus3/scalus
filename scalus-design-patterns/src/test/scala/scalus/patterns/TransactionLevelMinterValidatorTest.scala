@@ -1,14 +1,17 @@
 package scalus.patterns
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString
 import scalus.builtin.Data.toData
+import scalus.cardano.onchain.RequirementError
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
-import scalus.cardano.onchain.RequirementError
+import scalus.testing.kit.EvalTestKit
 
 class TransactionLevelMinterValidatorTest
-    extends StdlibTestKit
+    extends AnyFunSuite
+    with EvalTestKit
     with scalus.ledger.api.v3.ArbitraryInstances {
 
     // TODO: UPLC error

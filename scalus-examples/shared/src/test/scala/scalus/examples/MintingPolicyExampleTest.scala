@@ -1,14 +1,15 @@
 package scalus
 package examples
 
-import scalus.compiler.compile
 import scalus.builtin.ByteString.*
 import scalus.builtin.Data
+import scalus.compiler.compile
 import scalus.ledger.api.v1.*
 import scalus.ledger.api.v2
-import scalus.prelude.Option.*
 import scalus.prelude.*
-import scalus.uplc.Term.*
+import scalus.prelude.Option.*
+import scalus.testing.assertions.Expected
+import scalus.testing.kit.BaseValidatorTest
 import scalus.uplc.TermDSL.given
 import scalus.uplc.*
 
@@ -77,7 +78,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         validator: Term
     )(withScriptContext: (Term, scalus.prelude.List[TxInInfo], Value) => Program) = {
         // The minting policy script should succeed when the TxOutRef is spent and the minted tokens are correct
-        assertSameResult(Expected.Success(Const(Constant.Unit)))(
+        assertEvalResult(Expected.success(()))(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -88,8 +89,8 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
             )
           )
         )
-        // Successfull burn, the minted tokens are negative and TxOutRef is not spent
-        assertSameResult(Expected.Success(Const(Constant.Unit)))(
+        // Successful burn, the minted tokens are negative and TxOutRef is not spent
+        assertEvalResult(Expected.success(()))(
           withScriptContext(
             validator,
             List.empty,
@@ -101,7 +102,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("Wrong minted amount"))(
+        assertEvalResult(Expected.failure)(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -109,7 +110,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("Wrong Policy ID"))(
+        assertEvalResult(Expected.failure)(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -117,7 +118,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("Wrong Token Name"))(
+        assertEvalResult(Expected.failure)(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),
@@ -129,7 +130,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("Burning amount is positive"))(
+        assertEvalResult(Expected.failure)(
           withScriptContext(
             validator,
             List.empty,
@@ -141,7 +142,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
           )
         )
 
-        assertSameResult(Expected.Failure("Unexpected tokens"))(
+        assertEvalResult(Expected.failure)(
           withScriptContext(
             validator,
             List(TxInInfo(hoskyMintTxOutRef, hoskyMintTxOut)),

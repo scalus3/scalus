@@ -7,6 +7,7 @@ import scalus.examples.BilinearAccumulator.checkMembership
 import scalus.examples.BilinearAccumulator.checkNonMembership
 import scalus.examples.BilinearAccumulator.getFinalPoly
 import scalus.prelude.List
+import scalus.testing.kit.BaseValidatorTest
 
 import scala.language.implicitConversions
 
