@@ -169,22 +169,4 @@ object HdAccount {
         val accountKey = HdKeyPair.fromMnemonic(mnemonic, passphrase, accountPath)
         new HdAccount(accountIndex, accountKey)
     }
-
-    /** Create multiple HdAccounts from a single mnemonic.
-      *
-      * @param mnemonic
-      *   the BIP-39 mnemonic
-      * @param passphrase
-      *   optional passphrase
-      * @param count
-      *   number of accounts to create
-      * @return
-      *   sequence of HD accounts
-      */
-    def multipleFromMnemonic(mnemonic: String, passphrase: String = "", count: Int)(using
-        Ed25519Signer
-    ): Seq[HdAccount] = {
-        require(count > 0, s"Count must be positive, got $count")
-        (0 until count).map(i => fromMnemonic(mnemonic, passphrase, i))
-    }
 }

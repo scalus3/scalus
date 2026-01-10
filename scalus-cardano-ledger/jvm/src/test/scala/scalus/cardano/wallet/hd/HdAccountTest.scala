@@ -108,23 +108,6 @@ class HdAccountTest extends AnyFunSuite {
         )
     }
 
-    test("multipleFromMnemonic creates multiple accounts") {
-        val accounts = HdAccount.multipleFromMnemonic(testMnemonic, "", 3)
-
-        assert(accounts.length == 3)
-        assert(accounts(0).accountIndex == 0)
-        assert(accounts(1).accountIndex == 1)
-        assert(accounts(2).accountIndex == 2)
-
-        // All have different payment keys
-        assert(
-          accounts(0).paymentKeyPair.verificationKey != accounts(1).paymentKeyPair.verificationKey
-        )
-        assert(
-          accounts(1).paymentKeyPair.verificationKey != accounts(2).paymentKeyPair.verificationKey
-        )
-    }
-
     test("passphrase affects all derived keys") {
         val accountNoPass = HdAccount.fromMnemonic(testMnemonic, "")
         val accountWithPass = HdAccount.fromMnemonic(testMnemonic, "secret")
