@@ -63,7 +63,7 @@ object Sodium {
           LibSodium.crypto_hash_sha256
         )
 
-    def sha512(input: Array[Byte]): Array[Byte] =
+    def sha2_512(input: Array[Byte]): Array[Byte] =
         hashWithSodium(
           input,
           crypto_hash_sha512_bytes().toInt,
@@ -697,7 +697,7 @@ trait NativePlatformSpecific extends PlatformSpecific {
         ByteString.unsafeFromArray(Sodium.sha256(bs.bytes))
 
     override def sha2_512(bs: ByteString): ByteString =
-        ByteString.unsafeFromArray(Sodium.sha512(bs.bytes))
+        ByteString.unsafeFromArray(Sodium.sha2_512(bs.bytes))
 
     override def sha3_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Keccak.sha3_256(bs.bytes))

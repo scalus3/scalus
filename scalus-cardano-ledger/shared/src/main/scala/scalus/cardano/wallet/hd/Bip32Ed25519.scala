@@ -98,13 +98,14 @@ object Bip32Ed25519 {
                 (z, cc.drop(32))
             }
 
-            // Derive child kL: kL' = (8 * zL) + kL (mod L)
+            // Derive child kL: kL' = (8 * zL) + kL
             // Per BIP32-Ed25519 spec, zL is trimmed to 28 bytes to ensure the second highest
             // bit in the last byte of child kL remains set (required for Ed25519 clamping).
-            // See: https://cardano-foundation.github.io/cardano-wallet/design/concepts/Ed25519_BIP.pdf
+            // Reference: "Hierarchical Deterministic Wallets for the Ed25519 Elliptic Curve"
+            // (Ed25519_BIP.pdf in cardano-wallet documentation)
             val zL = zBytes.take(28)
             val zLScaled = scalarMultiply8(zL)
-            val kLChild = addScalars(zLScaled, kL)
+            val kLChild = add256BitLE(zLScaled, kL)
 
             // Derive child kR: kR' = zR + kR (mod 2^256)
             val zR = zBytes.drop(32)
@@ -245,13 +246,13 @@ object Bip32Ed25519 {
         bigIntToBytesLE(result, 32)
     }
 
-    /** Add two scalars for child key derivation.
+    /** Add two 256-bit little-endian integers for child key derivation.
       *
       * Both inputs are interpreted as little-endian integers. Per BIP32-Ed25519 spec, the addition
       * is performed as 256-bit integer addition (NOT mod L). The 28-byte truncation of zL and the
       * multiply-by-8 ensure the result stays within bounds and preserves clamping properties.
       */
-    private def addScalars(a: Array[Byte], b: Array[Byte]): Array[Byte] = {
+    private def add256BitLE(a: Array[Byte], b: Array[Byte]): Array[Byte] = {
         val aInt = bytesToBigIntLE(a)
         val bInt = bytesToBigIntLE(b)
         val sum = aInt + bInt
