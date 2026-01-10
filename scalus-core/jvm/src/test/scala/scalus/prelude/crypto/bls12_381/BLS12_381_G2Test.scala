@@ -1,12 +1,14 @@
 package scalus.prelude.crypto.bls12_381
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.*
 import scalus.builtin.PlatformSpecific.{bls12_381_G2_compressed_generator, bls12_381_G2_compressed_zero}
 import scalus.builtin.{Builtins, ByteString}
 import scalus.prelude.*
 import scalus.prelude.crypto.bls12_381.G2.{*, given}
+import scalus.testing.kit.EvalTestKit
 
-class BLS12_381_G2Test extends StdlibTestKit {
+class BLS12_381_G2Test extends AnyFunSuite with EvalTestKit {
 
     test("zero") {
         assert(bls12_381_G2_equal(zero, bls12_381_G2_uncompress(bls12_381_G2_compressed_zero)))

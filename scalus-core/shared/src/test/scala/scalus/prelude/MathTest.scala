@@ -1,10 +1,12 @@
 package scalus.prelude
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.prelude.Math.*
 import scalus.prelude.Option.None
 import scalus.prelude.Option.Some
+import scalus.testing.kit.EvalTestKit
 
-class MathTest extends StdlibTestKit:
+class MathTest extends AnyFunSuite with EvalTestKit:
 
     test("abs"):
         checkEval: (x: BigInt) =>

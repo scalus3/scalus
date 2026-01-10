@@ -1,10 +1,11 @@
 package scalus.builtin
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.*
-import scalus.prelude.StdlibTestKit
+import scalus.testing.kit.EvalTestKit
 import scalus.uplc.eval.BuiltinException
 
-class ByteStringTest extends StdlibTestKit:
+class ByteStringTest extends AnyFunSuite with EvalTestKit:
 
     test("fromBigIntBigEndian"):
         fromBigIntBigEndian(1_000_000, 3).evalEq(1530707, 1401):

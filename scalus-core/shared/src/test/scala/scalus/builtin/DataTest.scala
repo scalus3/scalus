@@ -1,9 +1,9 @@
 package scalus.builtin
 
-import scalus.prelude.StdlibTestKit
-//import scalus.prelude.Ord.*
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.kit.EvalTestKit
 
-class DataTest extends StdlibTestKit {
+class DataTest extends AnyFunSuite with EvalTestKit {
     test("Ord") {
         // TODO: UPLC error
 //        checkEval { (data: Data) => data equiv data }

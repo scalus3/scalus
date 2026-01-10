@@ -1,15 +1,17 @@
 package scalus.prelude
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.{compileWithOptions, Options}
 import scalus.compiler.sir.TargetLoweringBackend
+import scalus.testing.kit.EvalTestKit
 import scalus.uplc.Term.asTerm
 import scalus.toUplc
 
-class ShowTest extends StdlibTestKit {
+class ShowTest extends AnyFunSuite with EvalTestKit {
 
     test("Show[Unit] is ()") {
         assertEvalEq(().show, "()")

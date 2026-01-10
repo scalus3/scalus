@@ -448,7 +448,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
             "scalus/ledger/api/v3/ArbitraryInstances.scala",
             "scalus/cardano/address/ArbitraryInstances.scala",
             "scalus/cardano/ledger/ArbitraryInstances.scala",
-            "scalus/prelude/StdlibTestKit.scala",
+            "scalus/testing/kit/EvalTestKit.scala",
             "scalus/testing/kit/TestKit.scala"
           )
           val baseDir =

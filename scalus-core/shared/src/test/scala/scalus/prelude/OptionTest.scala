@@ -1,14 +1,16 @@
 package scalus.prelude
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data.{fromData, toData}
 import scalus.builtin.ByteString.hex
 import scalus.prelude.Option.{None, Some}
 import scalus.compiler.sir.SIR
+import scalus.testing.kit.EvalTestKit
 
 import scala.language.implicitConversions
 
-class OptionTest extends StdlibTestKit {
+class OptionTest extends AnyFunSuite with EvalTestKit {
 
     test("eq") {
 

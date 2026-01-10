@@ -1,10 +1,12 @@
 package scalus.prelude
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data.{fromData, toData}
 import scalus.prelude.List.{Cons, Nil}
 import scalus.prelude.Option.{None, Some}
+import scalus.testing.kit.EvalTestKit
 
-class ListTest extends StdlibTestKit {
+class ListTest extends AnyFunSuite with EvalTestKit {
 
     test("empty") {
         assertEvalEq(List.empty[BigInt], Nil)

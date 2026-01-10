@@ -1,12 +1,17 @@
 package scalus.ledger.api.v1
+
 import org.scalacheck.Arbitrary
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.prelude.StdlibTestKit
+import scalus.testing.kit.EvalTestKit
 
 import scala.annotation.nowarn
 
 @nowarn("msg=entirelyAfter .* is deprecated")
-class IntervalTest extends StdlibTestKit with scalus.ledger.api.v1.ArbitraryInstances {
+class IntervalTest
+    extends AnyFunSuite
+    with EvalTestKit
+    with scalus.ledger.api.v1.ArbitraryInstances {
 
     test("`never` contains no values") {
         checkEval { (time: PosixTime) =>

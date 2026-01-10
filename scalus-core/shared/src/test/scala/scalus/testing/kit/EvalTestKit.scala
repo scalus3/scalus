@@ -10,14 +10,12 @@ import scalus.builtin.Data
 import scalus.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.{compileInline, Options}
-import scalus.compiler.sir.{SIR, TargetLoweringBackend}
-import scalus.prelude.Eq
-import scalus.testing.assertions.{Expected, ResultAssertions}
-import scalus.testing.dsl.{EvalSubject, EvalTestBuilder, EvalTestDsl}
-import scalus.testing.eval.{EvalConfig, Evaluator}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.prelude.{Eq, Option as ScalusOption}
 import scalus.toUplc
-import scalus.uplc.{Compiled, DeBruijn, Term}
+import scalus.uplc.{DeBruijn, Term}
 import scalus.uplc.Term.asTerm
+import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.eval.*
 
 import scala.annotation.targetName
@@ -27,20 +25,17 @@ import scala.util.control.NonFatal
 /** ScalaTest integration trait for evaluation testing.
   *
   * Provides:
-  *   - Fluent DSL via `eval(...)` entry points
   *   - Inline compilation via `assertEval*` methods
   *   - Given-based configuration injection
   *   - Property-based testing support via `checkEval`
+  *   - Infix syntax: `code evalEq expected`
   *
-  * This trait merges the functionality from the old StdlibTestKit.
+  * This trait provides the core functionality for testing Scalus code evaluation.
   */
 trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with ArbitraryInstances {
     export org.scalatestplus.scalacheck.Checkers.*
     export org.scalacheck.{Arbitrary, Gen, Shrink}
     export scalus.prelude.{!==, <=>, ===}
-
-    // Configuration via givens
-    given evalConfig: EvalConfig = EvalConfig.default
 
     given compilerOptions: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
@@ -51,25 +46,11 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
     protected given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    // ----- Fluent DSL Entry Points -----
-
-    /** Start fluent evaluation test from SIR */
-    protected def eval(sir: SIR): EvalTestBuilder[SIR] =
-        EvalTestDsl.eval(sir)
-
-    /** Start fluent evaluation test from Compiled script */
-    protected def eval[A](compiled: Compiled[A]): EvalTestBuilder[A] =
-        EvalTestDsl.eval(compiled)
-
-    /** Start fluent evaluation test from Term */
-    protected def eval(term: Term): EvalTestBuilder[Term] =
-        EvalTestDsl.eval(term)
-
     // ----- Utility -----
 
-    protected final inline def liftThrowableToOption[A](inline code: A): scala.Option[A] =
-        try scala.Some(code)
-        catch case NonFatal(_) => scala.None
+    protected final inline def liftThrowableToOption[A](inline code: A): ScalusOption[A] =
+        try ScalusOption.Some(code)
+        catch case NonFatal(_) => ScalusOption.None
 
     // ----- Inline Compilation Assertions -----
 

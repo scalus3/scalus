@@ -1,9 +1,11 @@
 package scalus.prelude
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.RequirementError
 import scalus.builtin.Data.{fromData, toData, FromData, ToData}
+import scalus.testing.kit.EvalTestKit
 
-class SortedMapTest extends StdlibTestKit {
+class SortedMapTest extends AnyFunSuite with EvalTestKit {
 
     test("empty") {
         assertEvalEq(SortedMap.empty[BigInt, BigInt].toList, List.empty[(BigInt, BigInt)])

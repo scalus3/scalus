@@ -1,11 +1,13 @@
 package scalus.ledger.api.v1
 
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data.{fromData, toData}
 import scalus.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.ledger.LedgerToPlutusTranslation
 import scalus.prelude.*
+import scalus.testing.kit.EvalTestKit
 
-class ValueTest extends StdlibTestKit with ArbitraryInstances {
+class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     given [T: Arbitrary]: Arbitrary[List[T]] = Arbitrary {
         for
             size <- Gen.choose(0, 10)
