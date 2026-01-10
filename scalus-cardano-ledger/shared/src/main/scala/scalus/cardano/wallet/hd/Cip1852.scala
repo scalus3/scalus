@@ -43,25 +43,6 @@ object Cip1852 {
     /** Role for Constitutional Committee hot keys (CIP-105). */
     val RoleCCHot: Int = 5
 
-    /** Represents a key role in CIP-1852/CIP-105 derivation. */
-    enum Role(val value: Int):
-        case External extends Role(0)
-        case Internal extends Role(1)
-        case Staking extends Role(2)
-        case DRep extends Role(3)
-        case CCCold extends Role(4)
-        case CCHot extends Role(5)
-
-    object Role:
-        def fromInt(value: Int): Option[Role] = value match
-            case 0 => Some(External)
-            case 1 => Some(Internal)
-            case 2 => Some(Staking)
-            case 3 => Some(DRep)
-            case 4 => Some(CCCold)
-            case 5 => Some(CCHot)
-            case _ => None
-
     /** Build the derivation path for an account root key.
       *
       * Path: m/1852'/1815'/account'
@@ -153,16 +134,17 @@ object Cip1852 {
       * @param account
       *   the account index
       * @param role
-      *   the key role
+      *   the key role (0=external, 1=internal, 2=staking, 3=drep, 4=cc-cold, 5=cc-hot)
       * @param index
       *   the address/key index
       * @return
       *   the path string
       */
-    def path(account: Int, role: Role, index: Int): String = {
+    def path(account: Int, role: Int, index: Int): String = {
         require(account >= 0, s"Account index must be non-negative, got $account")
+        require(role >= 0, s"Role must be non-negative, got $role")
         require(index >= 0, s"Index must be non-negative, got $index")
-        s"m/${Purpose}'/${CoinType}'/${account}'/${role.value}/${index}"
+        s"m/${Purpose}'/${CoinType}'/${account}'/${role}/${index}"
     }
 
     /** Parse a CIP-1852 path string into components.
@@ -172,7 +154,7 @@ object Cip1852 {
       * @return
       *   Some((account, role, index)) if valid CIP-1852 path, None otherwise
       */
-    def parsePath(pathStr: String): Option[(Int, Role, Int)] = {
+    def parsePath(pathStr: String): Option[(Int, Int, Int)] = {
         val trimmed = pathStr.trim
         val normalized = if trimmed.startsWith("m/") then trimmed.drop(2) else trimmed
 
@@ -183,12 +165,11 @@ object Cip1852 {
             val purpose = parseHardenedIndex(parts(0))
             val coinType = parseHardenedIndex(parts(1))
             val account = parseHardenedIndex(parts(2))
-            val roleValue = parts(3).toInt
+            val role = parts(3).toInt
             val index = parts(4).toInt
 
-            if purpose != Purpose || coinType != CoinType then return None
-
-            Role.fromInt(roleValue).map(role => (account, role, index))
+            if purpose != Purpose || coinType != CoinType then None
+            else Some((account, role, index))
         } catch {
             case _: NumberFormatException => None
         }
