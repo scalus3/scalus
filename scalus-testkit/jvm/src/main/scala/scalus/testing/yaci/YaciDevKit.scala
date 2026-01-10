@@ -1,14 +1,13 @@
 package scalus.testing.yaci
 
-import com.bloxbean.cardano.client.account.Account
-import com.bloxbean.cardano.client.common.model.Network as BloxbeanNetwork
 import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
 import org.scalatest.{BeforeAndAfterAll, Suite}
-import scalus.cardano.address.{Address, Network, StakeAddress}
+import scalus.cardano.address.Network
 import scalus.cardano.ledger.{Bech32, CardanoInfo, PoolKeyHash, SlotConfig}
 import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.BloxbeanAccount
+import scalus.cardano.wallet.hd.HdAccount
+import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
 import scalus.utils.await
 import sttp.client4.DefaultFutureBackend
 
@@ -44,6 +43,9 @@ given sttp.client4.Backend[scala.concurrent.Future] = DefaultFutureBackend()
   */
 trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
 
+    // Use JVM Ed25519 signer for key derivation
+    given Ed25519Signer = JvmEd25519Signer
+
     /** Override this to customize the Yaci DevKit configuration */
     def yaciConfig: YaciConfig = YaciConfig()
 
@@ -51,14 +53,8 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
     val testMnemonic: String =
         "test test test test test test test test test test test test test test test test test test test test test test test sauce"
 
-    /** Network configuration matching Yaci DevKit */
-    val yaciNetwork: BloxbeanNetwork = new BloxbeanNetwork(0, 42)
-
-    /** Test account created from the fixed mnemonic */
-    lazy val testAccount: Account = Account.createFromMnemonic(yaciNetwork, testMnemonic)
-
-    /** Standard derivation path for Cardano payment keys */
-    private val PaymentDerivationPath = "m/1852'/1815'/0'/0/0"
+    /** Test HD account created from the fixed mnemonic (CIP-1852 compatible) */
+    lazy val testHdAccount: HdAccount = HdAccount.fromMnemonic(testMnemonic)
 
     /** Pre-registered pool ID in Yaci DevKit */
     val preRegisteredPoolId: PoolKeyHash = {
@@ -87,7 +83,7 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
       *   - BlockfrostProvider connected to Yaci Store API
       *   - Protocol parameters from the devnet
       *   - Slot configuration (1 second slots, zero start time)
-      *   - BloxbeanAccount with HD wallet support
+      *   - HdAccount with CIP-1852 compatible HD wallet support
       *   - Transaction signer with payment key
       *   - Base and stake addresses
       *
@@ -111,19 +107,16 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
 
         val cardanoInfo = CardanoInfo(protocolParams, Network.Testnet, yaciSlotConfig)
 
-        // Use BloxbeanAccount for proper HD key signing
-        val bloxbeanAccount =
-            BloxbeanAccount(Network.Testnet, testMnemonic, PaymentDerivationPath)
         // Default signer with only payment key - sufficient for most transactions
-        val signer = new TransactionSigner(Set(bloxbeanAccount.paymentKeyPair))
+        val signer = new TransactionSigner(Set(testHdAccount.paymentKeyPair))
 
-        val address = Address.fromBech32(testAccount.baseAddress())
-        val stakeAddress = Address.fromBech32(testAccount.stakeAddress()).asInstanceOf[StakeAddress]
+        val address = testHdAccount.baseAddress(Network.Testnet)
+        val stakeAddress = testHdAccount.stakeAddress(Network.Testnet)
 
         TestContext(
           cardanoInfo,
           provider,
-          bloxbeanAccount,
+          testHdAccount,
           signer,
           address,
           stakeAddress

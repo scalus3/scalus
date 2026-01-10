@@ -1,21 +1,22 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.Address
 import scalus.cardano.address.Address.addr
+import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
-import scalus.cardano.wallet.LucidAccount
-import scalus.crypto.ed25519.Signature
+import scalus.cardano.wallet.hd.HdAccount
+import scalus.crypto.ed25519.{Ed25519Signer, JsEd25519Signer, Signature}
 
 class TxBuilderJsTest extends AnyFunSuite {
+    // Use JS Ed25519 signer for key derivation
+    private given Ed25519Signer = JsEd25519Signer
 
     private val mnemonic = "test " * 23 + "sauce"
-    private val derivationPath = "m/1852'/1815'/0'/0/0"
     private val cardanoInfo = CardanoInfo.mainnet
 
-    private val account = LucidAccount(cardanoInfo.network, mnemonic, derivationPath)
+    private val account = HdAccount.fromMnemonic(mnemonic)
 
-    private val alice = Address.fromBech32(account.baseAddress)
+    private val alice = account.baseAddress(Network.Mainnet)
     // arbitrary test address
     private val bob: Address =
         addr"addr1qynntmjxqafgf4mpwhu5q5cu2g2zqwrfw60t4cgkk93k4cmafkn40uny60sfaeczvqrgc7h54329supn6pndsgey79yquafyhe"

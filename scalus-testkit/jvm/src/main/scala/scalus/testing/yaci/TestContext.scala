@@ -1,10 +1,10 @@
 package scalus.testing.yaci
 
-import scalus.cardano.address.{Address, StakeAddress}
+import scalus.cardano.address.{ShelleyAddress, StakeAddress}
 import scalus.cardano.ledger.{CardanoInfo, Transaction}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.BloxbeanAccount
+import scalus.cardano.wallet.Account
 import scalus.utils.await
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -20,7 +20,7 @@ import scala.concurrent.duration.*
   * @param provider
   *   Provider for blockchain queries (typically BlockfrostProvider for Yaci DevKit)
   * @param account
-  *   Bloxbean account with HD wallet support
+  *   Account with HD wallet support (CIP-1852 compatible)
   * @param signer
   *   Transaction signer configured with the account's keys
   * @param address
@@ -31,9 +31,9 @@ import scala.concurrent.duration.*
 case class TestContext(
     cardanoInfo: CardanoInfo,
     provider: Provider,
-    account: BloxbeanAccount,
+    account: Account,
     signer: TransactionSigner,
-    address: Address,
+    address: ShelleyAddress,
     stakeAddress: StakeAddress
 ):
     /** Submit a transaction and wait for confirmation

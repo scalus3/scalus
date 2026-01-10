@@ -24,6 +24,11 @@ object Utils:
         digest.update(bytes)
         digest.digest()
 
+    def sha2_512(bytes: Array[Byte]): Array[Byte] =
+        val digest = java.security.MessageDigest.getInstance("SHA-512")
+        digest.update(bytes)
+        digest.digest()
+
     def writePlutusFile(
         path: String,
         program: DeBruijnedProgram,

@@ -19,6 +19,9 @@ trait JVMPlatformSpecific extends PlatformSpecific {
     override def sha2_256(bs: ByteString): ByteString =
         ByteString.unsafeFromArray(Utils.sha2_256(bs.bytes))
 
+    override def sha2_512(bs: ByteString): ByteString =
+        ByteString.unsafeFromArray(Utils.sha2_512(bs.bytes))
+
     override def sha3_256(bs: ByteString): ByteString =
         val digestSHA3 = new SHA3.Digest256()
         ByteString.unsafeFromArray(digestSHA3.digest(bs.bytes))
