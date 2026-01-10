@@ -5,6 +5,11 @@ type Utxos = Map[TransactionInput, TransactionOutput]
 
 object Utxos:
     def empty: Utxos = Map.empty
+    def apply(utxos: Utxo*): Utxos = Map(utxos.map(_.toTuple)*)
+
+    extension (utxos: Utxos) {
+        def utxos: Seq[Utxo] = utxos.map(Utxo.apply).toSeq
+    }
 
 /** Unspent Transaction Output
   *
