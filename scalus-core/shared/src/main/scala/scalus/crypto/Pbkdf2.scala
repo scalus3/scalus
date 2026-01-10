@@ -9,6 +9,12 @@ package scalus.crypto
   */
 object Pbkdf2 {
 
+    /** Maximum allowed iterations to prevent resource exhaustion. */
+    private val MaxIterations: Int = 1_000_000
+
+    /** Maximum allowed key length in bytes to prevent excessive memory allocation. */
+    private val MaxKeyLength: Int = 1024
+
     /** Derive a key using PBKDF2 with HMAC-SHA512.
       *
       * @param password
@@ -29,7 +35,9 @@ object Pbkdf2 {
         keyLength: Int
     ): Array[Byte] = {
         require(iterations > 0, "iterations must be positive")
+        require(iterations <= MaxIterations, s"iterations must be <= $MaxIterations")
         require(keyLength > 0, "keyLength must be positive")
+        require(keyLength <= MaxKeyLength, s"keyLength must be <= $MaxKeyLength")
 
         // HMAC-SHA512 output is 64 bytes
         val hLen = 64

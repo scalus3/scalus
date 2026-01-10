@@ -97,13 +97,19 @@ object Bip39 {
       * Uses PBKDF2-HMAC-SHA512 with 2048 iterations.
       *
       * @param mnemonic
-      *   the mnemonic sentence
+      *   the mnemonic sentence (must be valid per BIP-39)
       * @param passphrase
       *   optional passphrase (empty string if none)
       * @return
       *   64-byte seed
+      * @throws IllegalArgumentException
+      *   if mnemonic is invalid (wrong word count, unknown words, or bad checksum)
       */
     def mnemonicToSeed(mnemonic: String, passphrase: String = ""): Array[Byte] = {
+        require(
+          isValidMnemonic(mnemonic),
+          "Invalid mnemonic: checksum verification failed or contains invalid words"
+        )
         val normalizedMnemonic = normalizeMnemonic(mnemonic)
         val salt = ("mnemonic" + passphrase).getBytes("UTF-8")
         Pbkdf2.deriveKey(normalizedMnemonic.getBytes("UTF-8"), salt, 2048, 64)

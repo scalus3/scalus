@@ -60,11 +60,13 @@ object Bip32Ed25519 {
         /** Derive a non-hardened (normal) child key.
           *
           * @param index
-          *   Child index (must be < 0x80000000)
+          *   Child index (must be in range [0, 2^31))
           * @return
           *   Derived child key
           */
         def deriveNormal(index: Int): ExtendedKey = {
+            // Explicit non-negative check for clarity (also rejects negative values)
+            require(index >= 0, s"Index must be non-negative, got $index")
             // Check that high bit is not set (i.e., index is in [0, 2^31))
             require((index & 0x80000000) == 0, s"Normal index must be < 2^31, got $index")
             deriveChild(index)
@@ -99,11 +101,17 @@ object Bip32Ed25519 {
             }
 
             // Derive child kL: kL' = (8 * zL) + kL
-            // Per BIP32-Ed25519 spec, zL is trimmed to 28 bytes to ensure the second highest
-            // bit in the last byte of child kL remains set (required for Ed25519 clamping).
-            // Reference: Cardano wallet BIP32-Ed25519 specification, section "Child key derivation".
-            // See: https://input-output-hk.github.io/adrestia/cardano-wallet/concepts/address-derivation
-            // Original paper: "BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace"
+            //
+            // Critical: zL is truncated to 28 bytes (224 bits) for two reasons:
+            // 1. Prevents arithmetic overflow: 8 * (28-byte value) + (32-byte kL) stays within
+            //    256 bits, avoiding the need for modular reduction which would break key validity.
+            // 2. Preserves Ed25519 clamping: The parent kL has bit 254 set (from clamping).
+            //    With 8 * zL being at most 227 bits, the addition cannot overflow into bit 254,
+            //    ensuring the child kL retains this required property.
+            //
+            // Reference: "BIP32-Ed25519 Hierarchical Deterministic Keys over a Non-linear Keyspace"
+            // by Khovratovich and Law. Also see Cardano wallet design documentation:
+            // https://input-output-hk.github.io/adrestia/cardano-wallet/concepts/address-derivation
             val zL = zBytes.take(28)
             val zLScaled = scalarMultiply8(zL)
             val kLChild = add256BitLE(zLScaled, kL)
@@ -305,19 +313,28 @@ object Bip32Ed25519 {
         BigInt(1, bytes.reverse)
     }
 
-    /** Convert BigInt to little-endian bytes with specified length. */
+    /** Convert BigInt to little-endian bytes with specified length.
+      *
+      * For BIP32-Ed25519 child key derivation, this is safe because:
+      *   - The 28-byte truncation of zL before multiplication by 8 ensures the result of
+      *     add256BitLE stays within 256 bits
+      *   - addMod256 explicitly reduces modulo 2^256
+      *
+      * @throws IllegalArgumentException
+      *   if value does not fit in the specified length
+      */
     private def bigIntToBytesLE(value: BigInt, length: Int): Array[Byte] = {
+        require(value >= 0, s"Value must be non-negative, got $value")
         val bytes = value.toByteArray
         // BigInt.toByteArray is big-endian and may have leading zeros or sign byte
-        // BigInt.toByteArray always returns at least one byte, so no length check needed
-        val unsigned = if bytes(0) == 0 then bytes.drop(1) else bytes
-        val padded = if unsigned.length < length then {
-            new Array[Byte](length - unsigned.length) ++ unsigned
-        } else if unsigned.length > length then {
-            unsigned.takeRight(length)
-        } else {
-            unsigned
-        }
+        val unsigned = if bytes.length > 1 && bytes(0) == 0 then bytes.drop(1) else bytes
+        require(
+          unsigned.length <= length,
+          s"Value does not fit in $length bytes (requires ${unsigned.length} bytes)"
+        )
+        val padded =
+            if unsigned.length < length then new Array[Byte](length - unsigned.length) ++ unsigned
+            else unsigned
         padded.reverse // Convert to little-endian
     }
 

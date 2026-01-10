@@ -1,5 +1,7 @@
 package scalus.cardano.wallet.hd
 
+import scala.util.control.NonFatal
+
 /** CIP-1852 derivation paths for Cardano HD wallets.
   *
   * CIP-1852 defines the hierarchical deterministic wallet structure for Cardano Shelley-era
@@ -171,7 +173,7 @@ object Cip1852 {
             if purpose != Purpose || coinType != CoinType then None
             else Some((account, role, index))
         } catch {
-            case _: NumberFormatException => None
+            case NonFatal(_) => None
         }
     }
 
@@ -197,7 +199,7 @@ object Cip1852 {
             if purpose != Purpose || coinType != CoinType then None
             else Some(account)
         } catch {
-            case _: NumberFormatException => None
+            case NonFatal(_) => None
         }
     }
 

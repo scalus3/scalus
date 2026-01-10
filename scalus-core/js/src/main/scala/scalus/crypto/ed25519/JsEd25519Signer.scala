@@ -70,11 +70,11 @@ object JsEd25519Signer extends Ed25519Signer:
 
     /** Convert BigInt to 32-byte little-endian array. */
     private def bigIntToBytes32(n: js.BigInt): Array[Byte] =
-        // Convert to hex string, pad to 64 chars, convert to bytes
-        var hex = n.toString(16)
-        while hex.length < 64 do hex = "0" + hex
+        // Convert to hex string, pad to 64 chars, convert to bytes (big-endian)
+        val hex = n.toString(16).reverse.padTo(64, '0').reverse.mkString
         val bytes = hex.grouped(2).map(s => Integer.parseInt(s, 16).toByte).toArray.reverse
-        bytes.take(32) // Ensure exactly 32 bytes
+        // takeRight ensures we keep the least significant bytes after little-endian reversal
+        bytes.takeRight(32)
 
     override def sign(signingKey: SigningKey, message: ByteString): Signature =
         val sig = NobleEd25519.ed25519.sign(toUint8Array(message), toUint8Array(signingKey))

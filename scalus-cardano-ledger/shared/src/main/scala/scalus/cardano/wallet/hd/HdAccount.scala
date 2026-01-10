@@ -57,8 +57,11 @@ class HdAccount(
 
     /** DRep (governance) key - for Cardano governance participation.
       *
-      * Derived according to CIP-105 at path m/1852'/1815'/account'/3/index. CIP-105 recommends
-      * using only index 0 for DRep keys (one DRep per account).
+      * This is a dedicated key derived at role 3 (m/1852'/1815'/account'/3/index) per CIP-105,
+      * separate from the staking key at role 2. Using a distinct key for governance provides better
+      * security isolation between staking delegation and governance voting.
+      *
+      * Note: CIP-105 recommends using only index 0 for DRep keys (one DRep per account).
       *
       * @see
       *   https://cips.cardano.org/cip/CIP-0105
