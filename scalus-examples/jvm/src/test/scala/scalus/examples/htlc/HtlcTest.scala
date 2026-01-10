@@ -3,17 +3,15 @@ package scalus.examples.htlc
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.TxBuilderException
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
-import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.testing.kit.{ScalusTest, TestUtil, TxTestKit}
 import scalus.utils.await
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
 
-class HtlcTest extends AnyFunSuite, ScalusTest {
+class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val compiledContract = HtlcContract.withErrorTraces
 
@@ -58,64 +56,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         Utxo(lockedUtxo)
     }
 
-    /** Verifies successful transaction with real script evaluation. Checks:
-      *   - Execution units are within expected bounds
-      *   - Execution fee is positive
-      *   - Transaction fee covers minimum required fee
-      *   - Emulator submission succeeds
-      */
-    private def assertSuccess(provider: Emulator, tx: Transaction): Unit = {
-        // Verify execution units are reasonable (not max budget)
-        val totalExUnits = tx.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
-        assert(totalExUnits.memory > 0, "Execution units memory should be positive")
-        assert(totalExUnits.steps > 0, "Execution units steps should be positive")
-        assert(
-          totalExUnits.memory < env.protocolParams.maxTxExecutionUnits.memory,
-          s"ExUnits memory ${totalExUnits.memory} should be less than max ${env.protocolParams.maxTxExecutionUnits.memory}"
-        )
-        assert(
-          totalExUnits.steps < env.protocolParams.maxTxExecutionUnits.steps,
-          s"ExUnits steps ${totalExUnits.steps} should be less than max ${env.protocolParams.maxTxExecutionUnits.steps}"
-        )
-
-        // Verify execution fee
-        val executionFee = totalExUnits.fee(env.protocolParams.executionUnitPrices)
-        assert(executionFee.value > 0, "Execution fee should be positive")
-
-        // Verify transaction fee covers minimum
-        val txFee = tx.body.value.fee
-        val allInputs = tx.body.value.inputs.toSet ++ tx.body.value.referenceInputs.toSet
-        val utxos = provider.findUtxos(allInputs).await().toOption.get
-        val minFee = MinTransactionFee.computeMinFee(tx, utxos, env.protocolParams).toOption.get
-        assert(
-          txFee >= minFee,
-          s"Transaction fee $txFee should be >= minimum fee $minFee"
-        )
-
-        // Verify emulator submission succeeds
-        val submissionResult = provider.submit(tx).await()
-        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
-    }
-
-    /** Verifies that transaction building fails with the expected error. */
-    private def assertFail(expectedError: String)(buildTx: => Transaction): Unit = {
-        try
-            val tx = buildTx
-            fail(s"Transaction building should have failed but succeeded: $tx")
-        catch
-            case e: TxBuilderException.BalancingException =>
-                val logs = e.scriptLogs.getOrElse(Seq.empty)
-                assert(
-                  logs.exists(_.contains(expectedError)),
-                  s"Expected error containing '$expectedError' but got logs: ${logs.mkString("\n")}"
-                )
-            case e: Throwable =>
-                assert(
-                  e.getMessage.contains(expectedError),
-                  s"Expected error containing '$expectedError' but got: ${e.getMessage}"
-                )
-
-    }
+    // Transaction assertions provided by TxTestKit
 
     test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
         assert(HtlcContract.script.script.size == 569)
@@ -138,7 +79,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertSuccess(provider, revealTx)
+        assertTxSuccess(provider, revealTx)
     }
 
     test("receiver fails with wrong preimage") {
@@ -146,7 +87,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertFail(HtlcValidator.InvalidReceiverPreimage) {
+        assertTxFail(HtlcValidator.InvalidReceiverPreimage) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -165,7 +106,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertFail(HtlcValidator.UnsignedReceiverTransaction) {
+        assertTxFail(HtlcValidator.UnsignedReceiverTransaction) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -184,7 +125,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertFail(HtlcValidator.InvalidReceiverTimePoint) {
+        assertTxFail(HtlcValidator.InvalidReceiverTimePoint) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -214,7 +155,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(afterSlot)
-        assertSuccess(provider, timeoutTx)
+        assertTxSuccess(provider, timeoutTx)
     }
 
     test("committer fails with wrong committer pubkey hash") {
@@ -222,7 +163,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertFail(HtlcValidator.UnsignedCommitterTransaction) {
+        assertTxFail(HtlcValidator.UnsignedCommitterTransaction) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -240,7 +181,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        assertFail(HtlcValidator.InvalidCommitterTimePoint) {
+        assertTxFail(HtlcValidator.InvalidCommitterTimePoint) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,

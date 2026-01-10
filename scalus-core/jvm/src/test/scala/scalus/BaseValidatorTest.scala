@@ -14,11 +14,18 @@ import scala.util.Failure
 import scala.util.Success
 import scala.util.Try
 
+/** @deprecated Use scalus.testing.assertions.Expected instead */
+@deprecated("Use scalus.testing.assertions.Expected from scalus-testkit module instead", "0.14.2")
 enum Expected:
     case SuccessSame
     case Success(term: Term)
     case Failure(description: String)
 
+/** @deprecated Use scalus.testing.kit.BaseValidatorTestJvm instead */
+@deprecated(
+  "Use scalus.testing.kit.BaseValidatorTestJvm from scalus-testkit module instead",
+  "0.14.2"
+)
 abstract class BaseValidatorTest
     extends AnyFunSuite
     with ScalaCheckPropertyChecks

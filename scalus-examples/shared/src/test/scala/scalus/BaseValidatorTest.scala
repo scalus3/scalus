@@ -11,11 +11,15 @@ import scalus.uplc.eval.{BuiltinError, PlutusVM}
 
 import scala.util.{Failure, Success, Try}
 
+/** @deprecated Use scalus.testing.assertions.Expected instead */
+@deprecated("Use scalus.testing.assertions.Expected from scalus-testkit module instead", "0.14.2")
 enum Expected:
     case SuccessAny
     case Success(term: Term)
     case Failure(description: String)
 
+/** @deprecated Use scalus.testing.kit.BaseValidatorTest instead */
+@deprecated("Use scalus.testing.kit.BaseValidatorTest from scalus-testkit module instead", "0.14.2")
 abstract class BaseValidatorTest
     extends AnyFunSuite
     with ScalaCheckPropertyChecks

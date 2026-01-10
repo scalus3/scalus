@@ -12,6 +12,7 @@ import scala.reflect.ClassTag
 class PreludeTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
+
     test("fail() should throw an exception") {
         assertEvalFails[OnchainError] {
             scalus.prelude.fail()
@@ -25,7 +26,6 @@ class PreludeTest extends AnyFunSuite {
         assertEvalFails[RequirementError] {
             require(false, "Condition failed")
         }
-
     }
 
     test("require() should return () when condition is true") {
@@ -44,11 +44,14 @@ class PreludeTest extends AnyFunSuite {
         }
     }
 
+    // Simple assertion that checks:
+    // 1. The code throws the expected exception at runtime
+    // 2. The compiled UPLC evaluates to failure
     private inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit = {
         import scalus.*
         assertThrows[E](code)
         val result = compileInline(code).toUplc(true).evaluateDebug
-        assert(result.isFailure)
+        assert(result.isFailure, s"Expected UPLC evaluation to fail, but got: $result")
     }
 
     private inline def assertEvalEq(inline code: Any, expected: Any): Unit = {
@@ -59,5 +62,4 @@ class PreludeTest extends AnyFunSuite {
             case Term.Const(const) => assert(toValue(const) == expected)
             case _                 => fail(s"Unexpected term: $term")
     }
-
 }

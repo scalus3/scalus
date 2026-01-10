@@ -1,177 +1,94 @@
-package scalus.prelude
+package scalus.testing.kit
 
 import org.scalacheck.util.Pretty
-import org.scalacheck.{Arbitrary, Prop}
+import org.scalacheck.Arbitrary
 import org.scalactic.{source, Prettifier}
 import org.scalatest.Assertion
-import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.Assertions
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.sir.{SIR, TargetLoweringBackend}
 import scalus.compiler.{compileInline, Options}
+import scalus.compiler.sir.{SIR, TargetLoweringBackend}
+import scalus.prelude.Eq
+import scalus.testing.assertions.{Expected, ResultAssertions}
+import scalus.testing.dsl.{EvalSubject, EvalTestBuilder, EvalTestDsl}
+import scalus.testing.eval.{EvalConfig, Evaluator}
+import scalus.toUplc
+import scalus.uplc.{Compiled, DeBruijn, Term}
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.*
-import scalus.uplc.test.ArbitraryInstances
-import scalus.uplc.{Constant, DeBruijn, Term}
 
 import scala.annotation.targetName
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-/** Deprecated: Use `scalus.testing.kit.EvalTestKit` trait from scalus-testkit module instead.
+/** ScalaTest integration trait for evaluation testing.
   *
-  * This class is kept for backwards compatibility in scalus-core tests.
+  * Provides:
+  *   - Fluent DSL via `eval(...)` entry points
+  *   - Inline compilation via `assertEval*` methods
+  *   - Given-based configuration injection
+  *   - Property-based testing support via `checkEval`
+  *
+  * This trait merges the functionality from the old StdlibTestKit.
   */
-@deprecated("Use scalus.testing.kit.EvalTestKit from scalus-testkit module instead", "0.14.2")
-class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
+trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with ArbitraryInstances {
     export org.scalatestplus.scalacheck.Checkers.*
     export org.scalacheck.{Arbitrary, Gen, Shrink}
-    // export scalus.builtin.Data
-    // export scalus.builtin.Data.{fromData, toData, FromData, ToData}
     export scalus.prelude.{!==, <=>, ===}
-    // export scalus.prelude.{Eq, Ord}
 
-    given Options = Options(
+    // Configuration via givens
+    given evalConfig: EvalConfig = EvalConfig.default
+
+    given compilerOptions: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
     )
 
-    protected final inline def liftThrowableToOption[A](inline code: A): Option[A] = {
-        try Option.Some(code)
-        catch case NonFatal(_) => Option.None
-    }
+    protected given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    protected final inline def assertEvalFails[E <: Throwable: ClassTag](cpu: Long, memory: Long)(
-        inline code: Any
-    ): Unit = assertEvalBudgetFails(code, Some(ExUnits(memory = memory, steps = cpu)))
+    // ----- Fluent DSL Entry Points -----
 
-    protected final inline def assertEvalBudgetFails[E <: Throwable: ClassTag](
-        inline code: Any,
-        budget: scala.Option[ExUnits] = None
-    ): Unit = {
-        var isExceptionThrown = false
+    /** Start fluent evaluation test from SIR */
+    protected def eval(sir: SIR): EvalTestBuilder[SIR] =
+        EvalTestDsl.eval(sir)
 
-        val _ =
-            try code
-            catch
-                case NonFatal(exception) =>
-                    assert(
-                      summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
-                      s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
-                    )
-                    val result = compileInline(code).toUplc(true).evaluateDebug
-                    result match
-                        case failure: Result.Failure =>
-                            result.logs.lastOption match {
-                                case Some(message) =>
-                                    assert(message.contains(exception.getMessage))
-                                case None =>
-                                    // if the error occurred due to an erroneously called builtin, e.g. / by zero,
-                                    // there won't be a respective log, but the CEK exception message is going to include
-                                    // the root error.
-                                    assert(
-                                      failure.exception.getMessage.contains(
-                                        exception.getClass.getName
-                                      )
-                                    )
-                                    if budget.exists: budget =>
-                                            result.budget.steps > budget.steps ||
-                                                result.budget.memory > budget.memory
-                                    then
-                                        fail:
-                                            s"""Performance regression,
-                                            |expected: ${budget.get},
-                                            |but got: ${result.budget};
-                                            |costs: ${result.costs}""".stripMargin
-                            }
-                        case _ =>
-                            fail(s"Expected failure, but got success: $result")
+    /** Start fluent evaluation test from Compiled script */
+    protected def eval[A](compiled: Compiled[A]): EvalTestBuilder[A] =
+        EvalTestDsl.eval(compiled)
 
-                    isExceptionThrown = true
+    /** Start fluent evaluation test from Term */
+    protected def eval(term: Term): EvalTestBuilder[Term] =
+        EvalTestDsl.eval(term)
 
-        if !isExceptionThrown then
-            fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
-    }
+    // ----- Utility -----
 
-    protected final inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit =
-        assertEvalBudgetFails(code)
+    protected final inline def liftThrowableToOption[A](inline code: A): scala.Option[A] =
+        try scala.Some(code)
+        catch case NonFatal(_) => scala.None
 
-    protected final inline def assertEvalFailsWithMessage[E <: Throwable: ClassTag](
-        expectedMessage: String
-    )(inline code: Any): Unit = {
-        var isExceptionThrown = false
+    // ----- Inline Compilation Assertions -----
 
-        val _ =
-            try code
-            catch
-                case NonFatal(exception) =>
-                    assert(
-                      summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
-                      s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
-                    )
+    /** Assert that code evaluates to true on both JVM and PlutusVM. */
+    protected final inline def assertEval(inline code: Boolean): Unit =
+        assert(code)
+        val codeTerm = compileInline(code).toUplc(true).evaluate
+        assert(codeTerm α_== trueTerm)
 
-                    assert(
-                      exception.getMessage == expectedMessage,
-                      s"Expected message '$expectedMessage', but got '${exception.getMessage}'"
-                    )
+    /** Assert that code evaluates to expected value on both JVM and PlutusVM. */
+    protected final inline def assertEvalEq[T: Eq](inline code: T, inline expected: T): Unit =
+        assertEvalEqBudget(code, expected)
 
-                    val result = compileInline(code).toUplc(true).evaluateDebug
-                    result match
-                        case failure: Result.Failure =>
-                            result.logs.lastOption match {
-                                case Some(message) =>
-                                    assert(message.contains(exception.getMessage))
-                                case None =>
-                                    // if the error occurred due to an erroneously called builtin, e.g. / by zero,
-                                    // there won't be a respective log, but the CEK exception message is going to include
-                                    // the root error.
-                                    assert(
-                                      failure.exception.getMessage.contains(
-                                        exception.getClass.getName
-                                      )
-                                    )
-                            }
-                        case _ =>
-                            fail(s"Expected failure, but got success: $result")
-
-                    isExceptionThrown = true
-
-        if !isExceptionThrown then
-            fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
-    }
-
-    protected final inline def assertEvalSuccess(inline code: Any): Unit = {
-        val _ =
-            try code
-            catch
-                case NonFatal(exception) => fail(s"Expected success, but got exception: $exception")
-
-        val result = compileInline(code).toUplc(true).evaluateDebug
-        result match
-            case failure: Result.Failure =>
-                fail(s"Expected success, but got failure: $failure")
-            case _ =>
-    }
-
-    extension [T: Eq](inline code: T)
-        @targetName("assertEvalEqBudgetTo")
-        protected final inline infix def evalEq(cpu: Long, memory: Long)(inline expected: T): Unit =
-            assertEvalEqBudget(code, expected, Some(ExUnits(memory = memory, steps = cpu)))
-
-        @targetName("assertEvalEqTo")
-        protected final inline infix def evalEq(inline expected: T): Unit =
-            assertEvalEqBudget(code, expected)
-
+    /** Assert that code evaluates to expected value with budget check. */
     protected final inline def assertEvalEqBudget[T: Eq](
         inline code: T,
         inline expected: T,
         budget: scala.Option[ExUnits] = None
-    ): Unit = {
+    ): Unit =
         assert(code === expected, s"Expected $expected, but got $code")
 
         val vm = summon[PlutusVM]
@@ -203,12 +120,9 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
           codeTerm α_== expectedTerm,
           s"Expected term $expectedTerm, but got $codeTerm"
         )
-    }
 
-    protected final inline def assertEvalEq[T: Eq](inline code: T, inline expected: T): Unit =
-        assertEvalEqBudget(code, expected)
-
-    protected final inline def assertEvalNotEq[T: Eq](inline code: T, inline expected: T): Unit = {
+    /** Assert that code evaluates to different value than expected. */
+    protected final inline def assertEvalNotEq[T: Eq](inline code: T, inline expected: T): Unit =
         assert(code !== expected, s"Expected not equal to $expected, but got $code")
 
         val codeTerm = compileInline(code).toUplc(true).evaluate
@@ -217,18 +131,143 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
           !(codeTerm α_== expectedTerm),
           s"Expected term not equal to $expectedTerm, but got $codeTerm"
         )
-    }
 
-    protected final inline def assertEval(inline code: Boolean): Unit = {
-        assert(code)
+    /** Assert that code evaluation fails with expected exception type. */
+    protected final inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit =
+        assertEvalBudgetFails[E](code)
 
-        val codeTerm = compileInline(code).toUplc(true).evaluate
-        assert(codeTerm α_== trueTerm)
-    }
+    /** Assert that code evaluation fails with expected exception type and budget check. */
+    protected final inline def assertEvalFails[E <: Throwable: ClassTag](cpu: Long, memory: Long)(
+        inline code: Any
+    ): Unit = assertEvalBudgetFails[E](code, Some(ExUnits(memory = memory, steps = cpu)))
 
-    protected final inline def assertEvalCompile(inline code: Any): Unit = {
+    /** Assert that code evaluation fails with budget verification. */
+    protected final inline def assertEvalBudgetFails[E <: Throwable: ClassTag](
+        inline code: Any,
+        budget: scala.Option[ExUnits] = None
+    ): Unit =
+        var isExceptionThrown = false
+
+        val _ =
+            try code
+            catch
+                case NonFatal(exception) =>
+                    assert(
+                      summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
+                      s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
+                    )
+                    val result = compileInline(code).toUplc(true).evaluateDebug
+                    result match
+                        case failure: Result.Failure =>
+                            result.logs.lastOption match
+                                case Some(message) =>
+                                    assert(message.contains(exception.getMessage))
+                                case None =>
+                                    assert(
+                                      failure.exception.getMessage.contains(
+                                        exception.getClass.getName
+                                      )
+                                    )
+                                    if budget.exists: budget =>
+                                            result.budget.steps > budget.steps ||
+                                                result.budget.memory > budget.memory
+                                    then
+                                        fail:
+                                            s"""Performance regression,
+                                            |expected: ${budget.get},
+                                            |but got: ${result.budget};
+                                            |costs: ${result.costs}""".stripMargin
+                        case _ =>
+                            fail(s"Expected failure, but got success: $result")
+
+                    isExceptionThrown = true
+
+        if !isExceptionThrown then
+            fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
+
+    /** Assert that code evaluation fails with specific error message. */
+    protected final inline def assertEvalFailsWithMessage[E <: Throwable: ClassTag](
+        expectedMessage: String
+    )(inline code: Any): Unit =
+        var isExceptionThrown = false
+
+        val _ =
+            try code
+            catch
+                case NonFatal(exception) =>
+                    assert(
+                      summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
+                      s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
+                    )
+
+                    assert(
+                      exception.getMessage == expectedMessage,
+                      s"Expected message '$expectedMessage', but got '${exception.getMessage}'"
+                    )
+
+                    val result = compileInline(code).toUplc(true).evaluateDebug
+                    result match
+                        case failure: Result.Failure =>
+                            result.logs.lastOption match
+                                case Some(message) =>
+                                    assert(message.contains(exception.getMessage))
+                                case None =>
+                                    assert(
+                                      failure.exception.getMessage.contains(
+                                        exception.getClass.getName
+                                      )
+                                    )
+                        case _ =>
+                            fail(s"Expected failure, but got success: $result")
+
+                    isExceptionThrown = true
+
+        if !isExceptionThrown then
+            fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
+
+    /** Assert code evaluates successfully (no exception). */
+    protected final inline def assertEvalSuccess(inline code: Any): Unit =
+        val _ =
+            try code
+            catch
+                case NonFatal(exception) => fail(s"Expected success, but got exception: $exception")
+
+        val result = compileInline(code).toUplc(true).evaluateDebug
+        result match
+            case failure: Result.Failure =>
+                fail(s"Expected success, but got failure: $failure")
+            case _ =>
+
+    /** Assert code compiles and evaluates without checking result. */
+    protected final inline def assertEvalCompile(inline code: Any): Unit =
         compileInline(code).toUplc(true).evaluate
-    }
+
+    // ----- Infix Extension Methods -----
+
+    extension [T: Eq](inline code: T)
+        /** Infix syntax with budget: `code evalEq (cpu, mem) (expected)` */
+        @targetName("assertEvalEqBudgetTo")
+        protected final inline infix def evalEq(cpu: Long, memory: Long)(inline expected: T): Unit =
+            assertEvalEqBudget(code, expected, Some(ExUnits(memory = memory, steps = cpu)))
+
+        /** Infix syntax: `code evalEq expected` */
+        @targetName("assertEvalEqTo")
+        protected final inline infix def evalEq(inline expected: T): Unit =
+            assertEvalEqBudget(code, expected)
+
+    // ----- Term-Level Assertions -----
+
+    /** Assert two terms evaluate to the same result */
+    protected def assertTermEvalEq(a: Term, b: Term): Unit =
+        val aResult = a.evaluate
+        val bResult = b.evaluate
+        assert(aResult α_== bResult, s"Terms not equal: $aResult vs $bResult")
+
+    /** Assert term evaluation throws expected exception */
+    protected def assertTermEvalThrows[E <: Throwable: ClassTag](term: Term): Unit =
+        assertThrows[E](term.evaluate)
+
+    // ----- Property-based Testing -----
 
     protected inline final def checkEval[A1](
         inline f: A1 => Boolean,
@@ -242,22 +281,16 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         pp1: A1 => Pretty,
         prettifier: Prettifier,
         pos: source.Position
-    ): Assertion = {
-        import scala.compiletime.summonInline
-
+    ): Assertion =
         val sir = compileInline { (data: Data) => f(fromData[A1](data)) }
         val uplc = sir.toUplc(true)
 
-        def handler(payload: A1): Boolean = {
-            // val applied =
-            //    sir $ SIR.Const(Constant.Data(payload.toData), SIRType.Data, AnnotationsDecl.empty)
+        def handler(payload: A1): Boolean =
             val applied = uplc $ toData[A1](payload).asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload)
-        }
 
         check(handler, configParams*)
-    }
 
     protected inline final def checkEval[A1, A2](
         inline f: (A1, A2) => Boolean,
@@ -276,21 +309,19 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         pp2: A2 => Pretty,
         prettifier: Prettifier,
         pos: source.Position
-    ): Assertion = {
+    ): Assertion =
         val sir = compileInline { (d1: Data, d2: Data) =>
             f(fromData[A1](d1), fromData[A2](d2))
         }
 
         val uplc = sir.toUplc(true)
 
-        def handler(payload1: A1, payload2: A2): Boolean = {
+        def handler(payload1: A1, payload2: A2): Boolean =
             val applied = uplc $ payload1.toData.asTerm $ payload2.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2)
-        }
 
         check(handler, configParams*)
-    }
 
     protected inline final def checkEval[A1, A2, A3](
         inline f: (A1, A2, A3) => Boolean,
@@ -314,22 +345,20 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         pp3: A3 => Pretty,
         prettifier: Prettifier,
         pos: source.Position
-    ): Assertion = {
+    ): Assertion =
         val sir = compileInline { (d1: Data, d2: Data, d3: Data) =>
             f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3))
         }
 
         val uplc = sir.toUplc(true)
 
-        def handler(payload1: A1, payload2: A2, payload3: A3): Boolean = {
+        def handler(payload1: A1, payload2: A2, payload3: A3): Boolean =
             val applied =
                 uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2, payload3)
-        }
 
         check(handler, configParams*)
-    }
 
     protected inline final def checkEval[A1, A2, A3, A4](
         inline f: (A1, A2, A3, A4) => Boolean,
@@ -358,22 +387,20 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         pp4: A4 => Pretty,
         prettifier: Prettifier,
         pos: source.Position
-    ): Assertion = {
+    ): Assertion =
         val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data) =>
             f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3), fromData[A4](d4))
         }
 
         val uplc = sir.toUplc(true)
 
-        def handler(payload1: A1, payload2: A2, payload3: A3, payload4: A4): Boolean = {
+        def handler(payload1: A1, payload2: A2, payload3: A3, payload4: A4): Boolean =
             val applied =
                 uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2, payload3, payload4)
-        }
 
         check(handler, configParams*)
-    }
 
     protected inline final def checkEval[A1, A2, A3, A4, A5](
         inline f: (A1, A2, A3, A4, A5) => Boolean,
@@ -407,7 +434,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         pp5: A5 => Pretty,
         prettifier: Prettifier,
         pos: source.Position
-    ): Assertion = {
+    ): Assertion =
         val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data) =>
             f(
               fromData[A1](d1),
@@ -426,21 +453,13 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
             payload3: A3,
             payload4: A4,
             payload5: A5
-        ): Boolean = {
+        ): Boolean =
             val applied =
                 uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm $ payload5.toData.asTerm
             val resultTerm = applied.evaluate
-            (resultTerm α_== trueTerm) && f(
-              payload1,
-              payload2,
-              payload3,
-              payload4,
-              payload5
-            )
-        }
+            (resultTerm α_== trueTerm) && f(payload1, payload2, payload3, payload4, payload5)
 
         check(handler, configParams*)
-    }
 
     protected inline final def checkEval[A1, A2, A3, A4, A5, A6](
         inline f: (A1, A2, A3, A4, A5, A6) => Boolean,
@@ -479,17 +498,18 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
         pp6: A6 => Pretty,
         prettifier: Prettifier,
         pos: source.Position
-    ): Assertion = {
-        val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data, d6: Data) =>
-            f(
-              fromData[A1](d1),
-              fromData[A2](d2),
-              fromData[A3](d3),
-              fromData[A4](d4),
-              fromData[A5](d5),
-              fromData[A6](d6)
-            )
-        }
+    ): Assertion =
+        val sir =
+            compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data, d6: Data) =>
+                f(
+                  fromData[A1](d1),
+                  fromData[A2](d2),
+                  fromData[A3](d3),
+                  fromData[A4](d4),
+                  fromData[A5](d5),
+                  fromData[A6](d6)
+                )
+            }
 
         val uplc = sir.toUplc(true)
 
@@ -500,7 +520,7 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
             payload4: A4,
             payload5: A5,
             payload6: A6
-        ): Boolean = {
+        ): Boolean =
             val applied =
                 uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm $ payload5.toData.asTerm $ payload6.toData.asTerm
             val resultTerm = applied.evaluate
@@ -512,11 +532,8 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
               payload5,
               payload6
             )
-        }
 
         check(handler, configParams*)
-    }
 
     private val trueTerm = compileInline(true).toUplc(true).evaluate
-    protected given PlutusVM = PlutusVM.makePlutusV3VM()
 }
