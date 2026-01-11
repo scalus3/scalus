@@ -71,8 +71,6 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     def scriptUtxo(index: Int, ada: Int, datum: DatumOption = inlineDatum42): Utxo =
         Utxo(input(index), scriptOutput(ada, datum))
 
-    lazy val aliceSigner: TransactionSigner = Alice.signer
-
     private def outputsOf(party: Party, tx: Transaction) =
         tx.body.value.outputs.toSeq.filter(_.value.address == party.address)
 
@@ -112,7 +110,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
             .await()
-            .sign(aliceSigner)
+            .sign(Alice.signer)
             .transaction
 
         assert(
@@ -133,7 +131,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .payTo(Bob.address, Value.ada(20))
             .complete(provider, Alice.address)
             .await()
-            .sign(aliceSigner)
+            .sign(Alice.signer)
             .transaction
 
         assert(signedTx.witnessSet.vkeyWitnesses.toSeq.nonEmpty, "Should have vkey witnesses")
@@ -802,7 +800,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
             .await()
 
         val unsignedTx = completedBuilder.transaction
-        val signedTx = completedBuilder.sign(aliceSigner).transaction
+        val signedTx = completedBuilder.sign(Alice.signer).transaction
 
         // Calculate the minimum fee required for the signed transaction
         // For simple pubkey transactions without reference scripts, pass the input UTXOs
@@ -1028,7 +1026,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val signedTx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
             .complete(availableUtxos, Alice.address)
-            .sign(aliceSigner)
+            .sign(Alice.signer)
             .transaction
 
         assert(

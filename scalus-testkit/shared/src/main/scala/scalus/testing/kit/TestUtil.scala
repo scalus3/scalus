@@ -99,6 +99,7 @@ object TestUtil extends ScalusTest {
         }
     }
 
+    @deprecated("will be removed", "0.14.2")
     def getScriptUtxo(tx: Transaction): (TransactionInput, TransactionOutput) = {
         val (transactionOutput, index) = tx.body.value.outputs.view
             .map(_.value)
@@ -109,6 +110,7 @@ object TestUtil extends ScalusTest {
         (TransactionInput(tx.id, index), transactionOutput)
     }
 
+    @deprecated("will be removed", "0.14.2")
     def findUtxoByAddressAndDatum(
         tx: Transaction,
         address: Address,
