@@ -40,8 +40,7 @@ class HdAccount(
     val changeIndex: Int = 0,
     val stakingIndex: Int = 0,
     val drepIndex: Int = 0
-)(using Ed25519Signer)
-    extends Account {
+) extends Account {
 
     /** The account-level extended key (m/1852'/1815'/account'). */
     def accountKeyPair: HdKeyPair = accountKey

@@ -18,7 +18,7 @@ import scalus.crypto.ed25519.{Ed25519Signer, ExtendedSigningKey, Signature, Sign
 class HdKeyPair(
     val extendedKey: Bip32Ed25519.ExtendedKey,
     override val verificationKey: VerificationKey
-)(using signer: Ed25519Signer)
+)(using val signer: Ed25519Signer)
     extends ExtendedKeyPair {
 
     override type Underlying = Bip32Ed25519.ExtendedKey

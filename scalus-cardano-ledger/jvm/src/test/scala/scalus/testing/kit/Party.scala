@@ -1,20 +1,15 @@
 package scalus.testing.kit
 
 import org.scalacheck.{Arbitrary, Gen}
+import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
-import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.{AddrKeyHash, CardanoInfo}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.hd.HdAccount
-import scalus.crypto.ed25519.JvmEd25519Signer
-import scalus.testing.kit.Party.{accountCache, mnemonic}
+import scalus.crypto.ed25519.given
 
 import scala.annotation.threadUnsafe
-import scala.collection.mutable
-
-// Use JVM Ed25519 signer for key derivation
-private given scalus.crypto.ed25519.Ed25519Signer = JvmEd25519Signer
 
 /** Test parties for smart contract testing.
   *
@@ -54,21 +49,18 @@ enum Party derives CanEqual {
     case Wendy // Whistleblower
 
     /** HD wallet account for this party (CIP-1852 compatible). */
-    def hdAccount: HdAccount = accountCache.getOrElseUpdate(
-      this,
-      HdAccount.fromMnemonic(mnemonic, "", this.ordinal)
-    )
+    @threadUnsafe
+    lazy val account: HdAccount = HdAccount.fromMnemonic(Party.mnemonic, "", this.ordinal)
 
     @threadUnsafe
-    lazy val addrKeyHash: AddrKeyHash = hdAccount.paymentKeyHash
+    lazy val addrKeyHash: AddrKeyHash = account.paymentKeyHash
 
     def address(using env: CardanoInfo): ShelleyAddress = {
         ShelleyAddress(env.network, Key(addrKeyHash), Null)
     }
 
-    def signer: TransactionSigner = {
-        new TransactionSigner(Set(hdAccount.paymentKeyPair))
-    }
+    @threadUnsafe
+    lazy val signer: TransactionSigner = new TransactionSigner(Set(account.paymentKeyPair))
 }
 
 object Party {
@@ -79,8 +71,6 @@ object Party {
             "test test test test " +
             "test test test test " +
             "test test test sauce"
-
-    private val accountCache: mutable.Map[Party, HdAccount] = mutable.Map.empty
 
     /////////////////////////////
     // Generators
