@@ -15,7 +15,7 @@ object ChildProcess extends js.Object {
 }
 
 class CekBuiltinsJsTest extends CekBuiltinsTest:
-    def eval(t: Term): Term =
+    def evalUplcCli(t: Term): Term =
         import js.Dynamic.global as g
 
         val program = Program((1, 0, 0), t)
@@ -26,14 +26,15 @@ class CekBuiltinsJsTest extends CekBuiltinsTest:
           js.Dynamic.literal(input = program.show)
         )
         if r.status.asInstanceOf[Int] != 0 then throw new Exception(r.stderr.toString)
-//    println(r.stdout.toString())
         Term.parseUplc(r.stdout.toString()) match
             case Left(value)  => throw new Exception(s"Parse error: $value")
             case Right(value) => value
 
-    override def assertEvalEq(a: Term, b: Term): Unit =
-        assert(eval(a) == b, s"$a != $b")
-        assert(a.evaluate == b, s"$a != $b")
+    override def assertTermEvalEq(a: Term, b: Term): Unit =
+        // First evaluate with UPLC CLI
+        assert(evalUplcCli(a) == b.evaluate, s"UPLC CLI: $a != $b")
+        // Then also evaluate with Scalus VM
+        super.assertTermEvalEq(a, b)
 
-    override def assertEvalThrows[A <: AnyRef: ClassTag](a: Term): Unit =
-        assertThrows[A](a.evaluate)
+    override def assertTermEvalThrows[E <: Throwable: ClassTag](term: Term): Unit =
+        super.assertTermEvalThrows[E](term)

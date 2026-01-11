@@ -44,7 +44,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
       debug = false
     )
 
-    protected given PlutusVM = PlutusVM.makePlutusV3VM()
+    protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
+    protected given PlutusVM = plutusVM
 
     // ----- Utility -----
 
