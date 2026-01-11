@@ -8,4 +8,6 @@ class RequirementError(msg: String) extends OnchainError(msg) {
     def this() = this("Requirement error")
 }
 
-class ImpossibleLedgerStateError extends OnchainError("impossible ledger state error")
+class ImpossibleLedgerStateError(msg: String) extends OnchainError(msg) {
+    def this() = this("impossible ledger state error")
+}

@@ -148,7 +148,7 @@ inline def fail(inline message: String): Nothing = throw new OnchainError(messag
   * @throws scalus.cardano.onchain.OnchainError
   *   when invoked off-chain.
   */
-inline def fail(): Nothing = throw new OnchainError()
+inline def fail(): Nothing = throw new OnchainError("ERROR")
 
 /** Fails the onchain evaluation with an `ERROR` term indicating an impossible situation.
   *
@@ -157,13 +157,14 @@ inline def fail(): Nothing = throw new OnchainError()
   * @throws scalus.cardano.onchain.ImpossibleLedgerStateError
   *   when invoked off-chain.
   */
-inline def impossible(): Nothing = throw new ImpossibleLedgerStateError
+inline def impossible(): Nothing =
+    throw new ImpossibleLedgerStateError("impossible ledger state error")
 
 /** `???` can be used for marking methods that remain to be implemented.
   * @throws NotImplementedError
   *   when `???` is invoked.
   */
-inline def ??? : Nothing = throw new NotImplementedError
+inline def ??? : Nothing = throw new NotImplementedError("an implementation is missing")
 
 enum These[+A, +B]:
     case This(a: A)
