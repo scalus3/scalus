@@ -1,4 +1,3 @@
-import com.typesafe.tools.mima.core.{IncompatibleMethTypeProblem, IncompatibleResultTypeProblem, MissingClassProblem, ProblemFilters}
 import sbt.internal.util.ManagedLogger
 import sbtwelcome.*
 
@@ -477,7 +476,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Copy Party.scala (JVM-only due to Bloxbean dependencies)
       Compile / sourceGenerators += Def.task {
           val source =
-              (scalusCardanoLedger.jvm / Test / sourceDirectory).value / "scala" / "scalus" / "testing" / "kit" / "Party.scala"
+              (scalusCardanoLedger.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala" / "scalus" / "testing" / "kit" / "Party.scala"
           val target =
               (Compile / sourceManaged).value / "scalus" / "testing" / "kit" / "Party.scala"
           val log = streams.value.log
@@ -680,7 +679,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           }
       },
       runNpmTests := {
-          import scala.sys.process._
+          import scala.sys.process.*
           val npmDir = (Compile / sourceDirectory).value / "npm"
           val log = streams.value.log
           log.info("Installing npm dependencies...")
