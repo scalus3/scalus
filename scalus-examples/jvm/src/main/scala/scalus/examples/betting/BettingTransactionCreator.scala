@@ -3,19 +3,19 @@ package scalus.examples.betting
 import scalus.builtin.ByteString.{hex, utf8}
 import scalus.builtin.Data
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
+import scalus.uplc.PlutusV3
 
 case class BettingTransactionCreator(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,
-    compiledContract: PlutusV3CompiledContract = BettingContract.defaultCompiledContract
+    contract: PlutusV3[Data => Unit]
 ) {
-    def script: Script.PlutusV3 = compiledContract.script
-    val scriptAddress: Address = compiledContract.address(env.network)
+    def script: Script.PlutusV3 = contract.script
+    val scriptAddress: Address = contract.address(env.network)
 
     def deploy(
         utxos: Utxos,

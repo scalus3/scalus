@@ -17,7 +17,7 @@ import scalus.testing.kit.{ScalusTest, TestUtil}
 import scala.language.implicitConversions
 
 class BettingValidatorTest extends AnyFunSuite, ScalusTest:
-    private lazy val program = BettingContract.debugCompiledContract.program
+    private val contract = BettingContract.withErrorTraces
 
     /*
     case class TestCase(
@@ -72,7 +72,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           // 20th of July 2025 - for 5 minutes
           validRange = Interval.between(1752989540, 1752990020)
         )
-        val result = program.runWithDebug(
+        val result = contract.program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,
             scriptInfo = ScriptInfo.MintingScript(policyId = policyId)
@@ -140,7 +140,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           validRange = Interval.between(1753162820, 1753163120)
         )
         val joinAction: Action = Action.Join
-        val result = program.runWithDebug(
+        val result = contract.program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,
             redeemer = joinAction.toData,
@@ -204,7 +204,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           validRange = Interval.between(1754027120, 1754027420)
         )
         val announceWinnerAction: Action = Action.AnnounceWinner(player2)
-        val result = program.runWithDebug(
+        val result = contract.program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,
             redeemer = announceWinnerAction.toData,

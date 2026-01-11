@@ -1,18 +1,15 @@
 package scalus.examples.vesting
 
-import scalus.cardano.blueprint.{CompilerInfo, Contract, Preamble}
-import scalus.cardano.ledger.Language
+import scalus.cardano.blueprint.Blueprint
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
 
-lazy val VestingContract = Contract.PlutusV3Contract[Config, Action](
-  Preamble(
-    title = "Vesting validator",
-    description = Some(
-      "Time-locked token distribution with linear vesting schedule"
-    ),
-    version = Some("1.0.0"),
-    compiler = Some(CompilerInfo.currentScalus),
-    plutusVersion = Some(Language.PlutusV3),
-    license = None
-  ),
-  VestingValidator.validate
+private given Options = Options.release
+lazy val VestingContract = PlutusV3.compile(VestingValidator.validate)
+lazy val VestingBlueprint = Blueprint.plutusV3[Config, Action](
+  title = "Vesting validator",
+  description = "Time-locked token distribution with linear vesting schedule",
+  version = "1.0.0",
+  license = None,
+  compiled = VestingContract
 )

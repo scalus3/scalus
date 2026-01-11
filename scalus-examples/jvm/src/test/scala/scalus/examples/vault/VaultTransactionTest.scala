@@ -7,8 +7,6 @@ import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
-import scalus.compiler.Options
-import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.vault.State
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -21,8 +19,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val compiledContract = VaultContract.defaultCompiledContract
-    private val scriptAddress = compiledContract.address(env.network)
+    private val contract = VaultContract.withErrorTraces
+    private val scriptAddress = contract.address(env.network)
 
     // Generate real key pairs
     private val ownerKeyPair @ (ownerPrivateKey, ownerPublicKey) = generateKeyPair()
@@ -35,18 +33,12 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
     private val defaultWaitTime: Long = 10_000L
     private val commissionAmount = Coin(2_000_000L)
 
-    given scalusOptions: Options = Options(
-      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      generateErrorTraces = true,
-      optimizeUplc = false
-    )
-
     // Transaction creator factories
     private def transactionCreatorFor(signer: TransactionSigner) = VaultTransactionCreator(
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
       signer = signer,
-      compiledContract = compiledContract
+      contract = contract
     )
 
     private def transactionCreatorWithConstEvaluatorFor(signer: TransactionSigner) =
@@ -54,7 +46,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
           env = env,
           evaluator = PlutusScriptEvaluator.constMaxBudget(env),
           signer = signer,
-          compiledContract = compiledContract
+          contract = contract
         )
 
     // Provider factory

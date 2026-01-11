@@ -21,8 +21,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val compiledContract = BettingContract.debugCompiledContract
-    private val scriptAddress = compiledContract.address(env.network)
+    private val contract = BettingContract.withErrorTraces
+    private val scriptAddress = contract.address(env.network)
 
     // Generate real key pairs for all participants
     private val player1KeyPair @ (player1PrivateKey, player1PublicKey) = generateKeyPair()
@@ -53,7 +53,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
       signer = signer,
-      compiledContract = compiledContract
+      contract = contract
     )
 
     private def transactionCreatorWithConstEvaluatorFor(signer: TransactionSigner) =
@@ -61,7 +61,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
           env = env,
           evaluator = PlutusScriptEvaluator.constMaxBudget(env),
           signer = signer,
-          compiledContract = compiledContract
+          contract = contract
         )
 
     // Test parameters

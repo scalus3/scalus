@@ -5,8 +5,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
-import scalus.compiler.sir.TargetLoweringBackend
-import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
@@ -14,17 +12,11 @@ import scalus.testing.kit.ScalusTest
 
 class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
     val fee = 10
-    given Options = Options(
-      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      generateErrorTraces = true,
-      optimizeUplc = true,
-      // debug = false
-    )
 
-    private val sir = compile(SimpleTransferValidator.validate)
+    private val contract = SimpleTransferContract.withErrorTraces
 
     private val hash: Gen[Hash] = genByteStringOfN(28)
-    private val contract = hash.sample.get
+    private val scriptHash = hash.sample.get
     private val owner = hash.sample.get
     private val receiver = hash.sample.get
 
@@ -41,10 +33,10 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
               List(PubKeyHash(owner)),
               List(makePubKeyHashInput(owner, BigInt(1000))),
               List(
-                makeScriptHashOutput(contract, BigInt(1000), outputDatum)
+                makeScriptHashOutput(scriptHash, BigInt(1000), outputDatum)
               ),
             )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
     }
 
@@ -56,10 +48,10 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
               List(PubKeyHash(receiver)),
               List(makePubKeyHashInput(owner, BigInt(1000))),
               List(
-                makeScriptHashOutput(contract, BigInt(1000), outputDatum)
+                makeScriptHashOutput(scriptHash, BigInt(1000), outputDatum)
               ),
             )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(!res.isSuccess, res.logs)
     }
 
@@ -71,11 +63,11 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
               List(PubKeyHash(owner)),
               List(makePubKeyHashInput(owner, BigInt(1))),
               List(
-                makeScriptHashOutput(contract, BigInt(1), outputDatum),
+                makeScriptHashOutput(scriptHash, BigInt(1), outputDatum),
                 makePubKeyHashOutput(owner, BigInt(1000), outputDatum)
               ),
             )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(!res.isSuccess, res.logs)
         assert(res.logs.find(_.contains("Negative amount")).isDefined, res.logs)
     }
@@ -87,10 +79,10 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
           List(PubKeyHash(receiver)),
           outputs = List(
             makePubKeyHashOutput(receiver, BigInt(500 - fee)),
-            makeScriptHashOutput(contract, BigInt(500), outputDatum)
+            makeScriptHashOutput(scriptHash, BigInt(500), outputDatum)
           ),
         )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
     }
 
@@ -101,10 +93,10 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
           List(PubKeyHash(owner)),
           outputs = List(
             makePubKeyHashOutput(owner, BigInt(500 - fee)),
-            makeScriptHashOutput(contract, BigInt(500), outputDatum)
+            makeScriptHashOutput(scriptHash, BigInt(500), outputDatum)
           ),
         )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(!res.isSuccess, res.logs)
     }
 
@@ -117,7 +109,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
             makePubKeyHashOutput(receiver, BigInt(500 - fee))
           ),
         )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
     }
 
@@ -130,7 +122,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
             makePubKeyHashOutput(receiver, BigInt(1500 - fee))
           ),
         )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(!res.isSuccess, res.logs)
     }
 
@@ -142,10 +134,10 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
               List(PubKeyHash(receiver)),
               List(),
               List(
-                makeScriptHashOutput(contract, BigInt(2000), outputDatum),
+                makeScriptHashOutput(scriptHash, BigInt(2000), outputDatum),
               ),
             )
-        val res = sir.runScript(ctx)
+        val res = contract.program.runWithDebug(ctx)
         assert(!res.isSuccess, res.logs)
         assert(res.logs.find(_.contains("Negative amount")).isDefined, res.logs)
     }
@@ -162,7 +154,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
               outRef = random[TxOutRef],
               resolved = TxOut(
                 address = Address(
-                  Credential.ScriptCredential(contract),
+                  Credential.ScriptCredential(scriptHash),
                   Option.None
                 ),
                 value = balance

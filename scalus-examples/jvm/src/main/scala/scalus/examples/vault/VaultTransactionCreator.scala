@@ -1,18 +1,19 @@
 package scalus.examples.vault
 
+import scalus.builtin.Data
 import scalus.cardano.address.Address
-import scalus.cardano.blueprint.PlutusV3CompiledContract
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
+import scalus.uplc.PlutusV3
 
 case class VaultTransactionCreator(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,
-    compiledContract: PlutusV3CompiledContract = VaultContract.defaultCompiledContract
+    contract: PlutusV3[Data => Unit]
 ) {
-    def script: Script.PlutusV3 = compiledContract.script
-    val scriptAddress: Address = compiledContract.address(env.network)
+    def script: Script.PlutusV3 = contract.script
+    val scriptAddress: Address = contract.address(env.network)
 
     def lock(
         utxos: Utxos,

@@ -5,8 +5,6 @@ import scalus.*
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, ToData}
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.Options
-import scalus.compiler.sir.TargetLoweringBackend
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
@@ -14,7 +12,7 @@ import scalus.ledger.api.v3.*
 import scalus.ledger.api.v3.ScriptInfo.SpendingScript
 import scalus.prelude.{List, Option, *}
 import scalus.testing.kit.ScalusTest
-import scalus.uplc.{PlutusV3, Program}
+import scalus.uplc.Program
 
 import scala.util.control.NonFatal
 
@@ -235,14 +233,7 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
         )
     }
 
-    given Options = Options(
-      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      // generateErrorTraces = true,
-      optimizeUplc = true,
-      debug = false
-    )
-
-    private val contract = PlutusV3.compile(PaymentSplitterValidator.validate)
+    private val contract = PaymentSplitterContract.withErrorTraces
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]
