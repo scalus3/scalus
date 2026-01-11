@@ -3,7 +3,7 @@ package scalus.benchmarks
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.{ExUnits, Language}
-import scalus.compiler.Options
+import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
@@ -30,13 +30,12 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
     )
 
     test("F1") {
-        val sir = Compiler
-            .compile {
-                // (a = a) = (a = a) = (a = a)
-                val formula = (1 <-> 1) <-> ((1 <-> 1) <-> (1 <-> 1))
-                val expected = List.empty[LRVars]
-                require(formula.clauses === expected)
-            }
+        val sir = compile {
+            // (a = a) = (a = a) = (a = a)
+            val formula = (1 <-> 1) <-> ((1 <-> 1) <-> (1 <-> 1))
+            val expected = List.empty[LRVars]
+            require(formula.clauses === expected)
+        }
         val uplc = sir.toUplcOptimized(generateErrorTraces = false)
 
         val result = uplc.evaluateDebug
@@ -65,13 +64,12 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
     }
 
     test("F2") {
-        val result = Compiler
-            .compile {
-                // (a = a = a) = (a = a = a)
-                val formula = (1 <-> (1 <-> 1)) <-> (1 <-> (1 <-> 1))
-                val expected = List.empty[LRVars]
-                require(formula.clauses === expected)
-            }
+        val result = compile {
+            // (a = a = a) = (a = a = a)
+            val formula = (1 <-> (1 <-> 1)) <-> (1 <-> (1 <-> 1))
+            val expected = List.empty[LRVars]
+            require(formula.clauses === expected)
+        }
             .toUplcOptimized(false)
             .evaluateDebug
 
@@ -102,13 +100,12 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
     }
 
     test("F3") {
-        val result = Compiler
-            .compile {
-                // (a = a = a) = (a = a) = (a = a)
-                val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> 1) <-> (1 <-> 1))
-                val expected = List.single[LRVars]((List.single[Var](1), List.empty[Var]))
-                require(formula.clauses === expected)
-            }
+        val result = compile {
+            // (a = a = a) = (a = a) = (a = a)
+            val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> 1) <-> (1 <-> 1))
+            val expected = List.single[LRVars]((List.single[Var](1), List.empty[Var]))
+            require(formula.clauses === expected)
+        }
             .toUplcOptimized(false)
             .evaluateDebug
 
@@ -131,102 +128,120 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
     }
 
     test("F4") {
-        val result = Compiler
-            .compile {
-                // (a = b = c) = (d = e) = (f = g)
-                val formula = (1 <-> (2 <-> 3)) <-> ((4 <-> 5) <-> (6 <-> 7))
+        val result = compile {
+            // (a = b = c) = (d = e) = (f = g)
+            val formula = (1 <-> (2 <-> 3)) <-> ((4 <-> 5) <-> (6 <-> 7))
 
-                import scalus.prelude.List.*
-                val expected = Cons[LRVars](
-                  (Cons(1, Nil), Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Nil))))))),
+            import scalus.prelude.List.*
+            val expected = Cons[LRVars](
+              (Cons(1, Nil), Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Nil))))))),
+              Cons(
+                (Cons(1, Cons(2, Cons(3, Nil))), Cons(4, Cons(5, Cons(6, Cons(7, Nil))))),
+                Cons(
+                  (Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Nil))))), Cons(6, Cons(7, Nil))),
                   Cons(
-                    (Cons(1, Cons(2, Cons(3, Nil))), Cons(4, Cons(5, Cons(6, Cons(7, Nil))))),
+                    (Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Nil))))))), Nil),
                     Cons(
-                      (Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Nil))))), Cons(6, Cons(7, Nil))),
+                      (Cons(1, Cons(2, Cons(3, Cons(4, Cons(6, Nil))))), Cons(5, Cons(7, Nil))),
                       Cons(
-                        (Cons(1, Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Nil))))))), Nil),
+                        (
+                          Cons(1, Cons(2, Cons(3, Cons(4, Cons(7, Nil))))),
+                          Cons(5, Cons(6, Nil))
+                        ),
                         Cons(
-                          (Cons(1, Cons(2, Cons(3, Cons(4, Cons(6, Nil))))), Cons(5, Cons(7, Nil))),
+                          (
+                            Cons(1, Cons(2, Cons(3, Cons(5, Cons(6, Nil))))),
+                            Cons(4, Cons(7, Nil))
+                          ),
                           Cons(
                             (
-                              Cons(1, Cons(2, Cons(3, Cons(4, Cons(7, Nil))))),
-                              Cons(5, Cons(6, Nil))
+                              Cons(1, Cons(2, Cons(3, Cons(5, Cons(7, Nil))))),
+                              Cons(4, Cons(6, Nil))
                             ),
                             Cons(
                               (
-                                Cons(1, Cons(2, Cons(3, Cons(5, Cons(6, Nil))))),
-                                Cons(4, Cons(7, Nil))
+                                Cons(1, Cons(2, Cons(3, Cons(6, Cons(7, Nil))))),
+                                Cons(4, Cons(5, Nil))
                               ),
                               Cons(
                                 (
-                                  Cons(1, Cons(2, Cons(3, Cons(5, Cons(7, Nil))))),
-                                  Cons(4, Cons(6, Nil))
+                                  Cons(1, Cons(2, Cons(4, Nil))),
+                                  Cons(3, Cons(5, Cons(6, Cons(7, Nil))))
                                 ),
                                 Cons(
                                   (
-                                    Cons(1, Cons(2, Cons(3, Cons(6, Cons(7, Nil))))),
-                                    Cons(4, Cons(5, Nil))
+                                    Cons(1, Cons(2, Cons(4, Cons(5, Cons(6, Nil))))),
+                                    Cons(3, Cons(7, Nil))
                                   ),
                                   Cons(
                                     (
-                                      Cons(1, Cons(2, Cons(4, Nil))),
-                                      Cons(3, Cons(5, Cons(6, Cons(7, Nil))))
+                                      Cons(1, Cons(2, Cons(4, Cons(5, Cons(7, Nil))))),
+                                      Cons(3, Cons(6, Nil))
                                     ),
                                     Cons(
                                       (
-                                        Cons(1, Cons(2, Cons(4, Cons(5, Cons(6, Nil))))),
-                                        Cons(3, Cons(7, Nil))
+                                        Cons(1, Cons(2, Cons(4, Cons(6, Cons(7, Nil))))),
+                                        Cons(3, Cons(5, Nil))
                                       ),
                                       Cons(
                                         (
-                                          Cons(1, Cons(2, Cons(4, Cons(5, Cons(7, Nil))))),
-                                          Cons(3, Cons(6, Nil))
+                                          Cons(1, Cons(2, Cons(5, Nil))),
+                                          Cons(3, Cons(4, Cons(6, Cons(7, Nil))))
                                         ),
                                         Cons(
                                           (
-                                            Cons(1, Cons(2, Cons(4, Cons(6, Cons(7, Nil))))),
-                                            Cons(3, Cons(5, Nil))
+                                            Cons(1, Cons(2, Cons(5, Cons(6, Cons(7, Nil))))),
+                                            Cons(3, Cons(4, Nil))
                                           ),
                                           Cons(
                                             (
-                                              Cons(1, Cons(2, Cons(5, Nil))),
-                                              Cons(3, Cons(4, Cons(6, Cons(7, Nil))))
+                                              Cons(1, Cons(2, Cons(6, Nil))),
+                                              Cons(3, Cons(4, Cons(5, Cons(7, Nil))))
                                             ),
                                             Cons(
                                               (
-                                                Cons(1, Cons(2, Cons(5, Cons(6, Cons(7, Nil))))),
-                                                Cons(3, Cons(4, Nil))
+                                                Cons(1, Cons(2, Cons(7, Nil))),
+                                                Cons(3, Cons(4, Cons(5, Cons(6, Nil))))
                                               ),
                                               Cons(
                                                 (
-                                                  Cons(1, Cons(2, Cons(6, Nil))),
-                                                  Cons(3, Cons(4, Cons(5, Cons(7, Nil))))
+                                                  Cons(1, Cons(3, Cons(4, Nil))),
+                                                  Cons(2, Cons(5, Cons(6, Cons(7, Nil))))
                                                 ),
                                                 Cons(
                                                   (
-                                                    Cons(1, Cons(2, Cons(7, Nil))),
-                                                    Cons(3, Cons(4, Cons(5, Cons(6, Nil))))
+                                                    Cons(
+                                                      1,
+                                                      Cons(3, Cons(4, Cons(5, Cons(6, Nil))))
+                                                    ),
+                                                    Cons(2, Cons(7, Nil))
                                                   ),
                                                   Cons(
                                                     (
-                                                      Cons(1, Cons(3, Cons(4, Nil))),
-                                                      Cons(2, Cons(5, Cons(6, Cons(7, Nil))))
+                                                      Cons(
+                                                        1,
+                                                        Cons(3, Cons(4, Cons(5, Cons(7, Nil))))
+                                                      ),
+                                                      Cons(2, Cons(6, Nil))
                                                     ),
                                                     Cons(
                                                       (
                                                         Cons(
                                                           1,
-                                                          Cons(3, Cons(4, Cons(5, Cons(6, Nil))))
+                                                          Cons(
+                                                            3,
+                                                            Cons(4, Cons(6, Cons(7, Nil)))
+                                                          )
                                                         ),
-                                                        Cons(2, Cons(7, Nil))
+                                                        Cons(2, Cons(5, Nil))
                                                       ),
                                                       Cons(
                                                         (
+                                                          Cons(1, Cons(3, Cons(5, Nil))),
                                                           Cons(
-                                                            1,
-                                                            Cons(3, Cons(4, Cons(5, Cons(7, Nil))))
-                                                          ),
-                                                          Cons(2, Cons(6, Nil))
+                                                            2,
+                                                            Cons(4, Cons(6, Cons(7, Nil)))
+                                                          )
                                                         ),
                                                         Cons(
                                                           (
@@ -234,57 +249,66 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                               1,
                                                               Cons(
                                                                 3,
-                                                                Cons(4, Cons(6, Cons(7, Nil)))
+                                                                Cons(5, Cons(6, Cons(7, Nil)))
                                                               )
                                                             ),
-                                                            Cons(2, Cons(5, Nil))
+                                                            Cons(2, Cons(4, Nil))
                                                           ),
                                                           Cons(
                                                             (
-                                                              Cons(1, Cons(3, Cons(5, Nil))),
+                                                              Cons(1, Cons(3, Cons(6, Nil))),
                                                               Cons(
                                                                 2,
-                                                                Cons(4, Cons(6, Cons(7, Nil)))
+                                                                Cons(4, Cons(5, Cons(7, Nil)))
                                                               )
                                                             ),
                                                             Cons(
                                                               (
+                                                                Cons(1, Cons(3, Cons(7, Nil))),
                                                                 Cons(
-                                                                  1,
-                                                                  Cons(
-                                                                    3,
-                                                                    Cons(5, Cons(6, Cons(7, Nil)))
-                                                                  )
-                                                                ),
-                                                                Cons(2, Cons(4, Nil))
+                                                                  2,
+                                                                  Cons(4, Cons(5, Cons(6, Nil)))
+                                                                )
                                                               ),
                                                               Cons(
                                                                 (
-                                                                  Cons(1, Cons(3, Cons(6, Nil))),
+                                                                  Cons(
+                                                                    1,
+                                                                    Cons(4, Cons(5, Nil))
+                                                                  ),
                                                                   Cons(
                                                                     2,
-                                                                    Cons(4, Cons(5, Cons(7, Nil)))
+                                                                    Cons(
+                                                                      3,
+                                                                      Cons(6, Cons(7, Nil))
+                                                                    )
                                                                   )
                                                                 ),
                                                                 Cons(
                                                                   (
-                                                                    Cons(1, Cons(3, Cons(7, Nil))),
                                                                     Cons(
-                                                                      2,
-                                                                      Cons(4, Cons(5, Cons(6, Nil)))
-                                                                    )
+                                                                      1,
+                                                                      Cons(
+                                                                        4,
+                                                                        Cons(
+                                                                          5,
+                                                                          Cons(6, Cons(7, Nil))
+                                                                        )
+                                                                      )
+                                                                    ),
+                                                                    Cons(2, Cons(3, Nil))
                                                                   ),
                                                                   Cons(
                                                                     (
                                                                       Cons(
                                                                         1,
-                                                                        Cons(4, Cons(5, Nil))
+                                                                        Cons(4, Cons(6, Nil))
                                                                       ),
                                                                       Cons(
                                                                         2,
                                                                         Cons(
                                                                           3,
-                                                                          Cons(6, Cons(7, Nil))
+                                                                          Cons(5, Cons(7, Nil))
                                                                         )
                                                                       )
                                                                     ),
@@ -292,27 +316,36 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                       (
                                                                         Cons(
                                                                           1,
+                                                                          Cons(4, Cons(7, Nil))
+                                                                        ),
+                                                                        Cons(
+                                                                          2,
                                                                           Cons(
-                                                                            4,
+                                                                            3,
                                                                             Cons(
                                                                               5,
-                                                                              Cons(6, Cons(7, Nil))
+                                                                              Cons(6, Nil)
                                                                             )
                                                                           )
-                                                                        ),
-                                                                        Cons(2, Cons(3, Nil))
+                                                                        )
                                                                       ),
                                                                       Cons(
                                                                         (
                                                                           Cons(
                                                                             1,
-                                                                            Cons(4, Cons(6, Nil))
+                                                                            Cons(
+                                                                              5,
+                                                                              Cons(6, Nil)
+                                                                            )
                                                                           ),
                                                                           Cons(
                                                                             2,
                                                                             Cons(
                                                                               3,
-                                                                              Cons(5, Cons(7, Nil))
+                                                                              Cons(
+                                                                                4,
+                                                                                Cons(7, Nil)
+                                                                              )
                                                                             )
                                                                           )
                                                                         ),
@@ -320,14 +353,17 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                           (
                                                                             Cons(
                                                                               1,
-                                                                              Cons(4, Cons(7, Nil))
+                                                                              Cons(
+                                                                                5,
+                                                                                Cons(7, Nil)
+                                                                              )
                                                                             ),
                                                                             Cons(
                                                                               2,
                                                                               Cons(
                                                                                 3,
                                                                                 Cons(
-                                                                                  5,
+                                                                                  4,
                                                                                   Cons(6, Nil)
                                                                                 )
                                                                               )
@@ -338,8 +374,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                               Cons(
                                                                                 1,
                                                                                 Cons(
-                                                                                  5,
-                                                                                  Cons(6, Nil)
+                                                                                  6,
+                                                                                  Cons(7, Nil)
                                                                                 )
                                                                               ),
                                                                               Cons(
@@ -348,27 +384,30 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                   3,
                                                                                   Cons(
                                                                                     4,
-                                                                                    Cons(7, Nil)
+                                                                                    Cons(5, Nil)
                                                                                   )
                                                                                 )
                                                                               )
                                                                             ),
                                                                             Cons(
                                                                               (
+                                                                                Cons(2, Nil),
                                                                                 Cons(
                                                                                   1,
-                                                                                  Cons(
-                                                                                    5,
-                                                                                    Cons(7, Nil)
-                                                                                  )
-                                                                                ),
-                                                                                Cons(
-                                                                                  2,
                                                                                   Cons(
                                                                                     3,
                                                                                     Cons(
                                                                                       4,
-                                                                                      Cons(6, Nil)
+                                                                                      Cons(
+                                                                                        5,
+                                                                                        Cons(
+                                                                                          6,
+                                                                                          Cons(
+                                                                                            7,
+                                                                                            Nil
+                                                                                          )
+                                                                                        )
+                                                                                      )
                                                                                     )
                                                                                   )
                                                                                 )
@@ -376,28 +415,33 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                               Cons(
                                                                                 (
                                                                                   Cons(
-                                                                                    1,
-                                                                                    Cons(
-                                                                                      6,
-                                                                                      Cons(7, Nil)
-                                                                                    )
-                                                                                  ),
-                                                                                  Cons(
                                                                                     2,
                                                                                     Cons(
                                                                                       3,
                                                                                       Cons(
                                                                                         4,
-                                                                                        Cons(5, Nil)
+                                                                                        Nil
+                                                                                      )
+                                                                                    )
+                                                                                  ),
+                                                                                  Cons(
+                                                                                    1,
+                                                                                    Cons(
+                                                                                      5,
+                                                                                      Cons(
+                                                                                        6,
+                                                                                        Cons(
+                                                                                          7,
+                                                                                          Nil
+                                                                                        )
                                                                                       )
                                                                                     )
                                                                                   )
                                                                                 ),
                                                                                 Cons(
                                                                                   (
-                                                                                    Cons(2, Nil),
                                                                                     Cons(
-                                                                                      1,
+                                                                                      2,
                                                                                       Cons(
                                                                                         3,
                                                                                         Cons(
@@ -406,13 +450,17 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                             5,
                                                                                             Cons(
                                                                                               6,
-                                                                                              Cons(
-                                                                                                7,
-                                                                                                Nil
-                                                                                              )
+                                                                                              Nil
                                                                                             )
                                                                                           )
                                                                                         )
+                                                                                      )
+                                                                                    ),
+                                                                                    Cons(
+                                                                                      1,
+                                                                                      Cons(
+                                                                                        7,
+                                                                                        Nil
                                                                                       )
                                                                                     )
                                                                                   ),
@@ -424,21 +472,21 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                           3,
                                                                                           Cons(
                                                                                             4,
-                                                                                            Nil
+                                                                                            Cons(
+                                                                                              5,
+                                                                                              Cons(
+                                                                                                7,
+                                                                                                Nil
+                                                                                              )
+                                                                                            )
                                                                                           )
                                                                                         )
                                                                                       ),
                                                                                       Cons(
                                                                                         1,
                                                                                         Cons(
-                                                                                          5,
-                                                                                          Cons(
-                                                                                            6,
-                                                                                            Cons(
-                                                                                              7,
-                                                                                              Nil
-                                                                                            )
-                                                                                          )
+                                                                                          6,
+                                                                                          Nil
                                                                                         )
                                                                                       )
                                                                                     ),
@@ -451,9 +499,9 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                             Cons(
                                                                                               4,
                                                                                               Cons(
-                                                                                                5,
+                                                                                                6,
                                                                                                 Cons(
-                                                                                                  6,
+                                                                                                  7,
                                                                                                   Nil
                                                                                                 )
                                                                                               )
@@ -463,7 +511,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                         Cons(
                                                                                           1,
                                                                                           Cons(
-                                                                                            7,
+                                                                                            5,
                                                                                             Nil
                                                                                           )
                                                                                         )
@@ -475,22 +523,22 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                             Cons(
                                                                                               3,
                                                                                               Cons(
-                                                                                                4,
-                                                                                                Cons(
-                                                                                                  5,
-                                                                                                  Cons(
-                                                                                                    7,
-                                                                                                    Nil
-                                                                                                  )
-                                                                                                )
+                                                                                                5,
+                                                                                                Nil
                                                                                               )
                                                                                             )
                                                                                           ),
                                                                                           Cons(
                                                                                             1,
                                                                                             Cons(
-                                                                                              6,
-                                                                                              Nil
+                                                                                              4,
+                                                                                              Cons(
+                                                                                                6,
+                                                                                                Cons(
+                                                                                                  7,
+                                                                                                  Nil
+                                                                                                )
+                                                                                              )
                                                                                             )
                                                                                           )
                                                                                         ),
@@ -501,7 +549,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                               Cons(
                                                                                                 3,
                                                                                                 Cons(
-                                                                                                  4,
+                                                                                                  5,
                                                                                                   Cons(
                                                                                                     6,
                                                                                                     Cons(7, Nil)
@@ -512,7 +560,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                             Cons(
                                                                                               1,
                                                                                               Cons(
-                                                                                                5,
+                                                                                                4,
                                                                                                 Nil
                                                                                               )
                                                                                             )
@@ -524,7 +572,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                 Cons(
                                                                                                   3,
                                                                                                   Cons(
-                                                                                                    5,
+                                                                                                    6,
                                                                                                     Nil
                                                                                                   )
                                                                                                 )
@@ -534,7 +582,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                 Cons(
                                                                                                   4,
                                                                                                   Cons(
-                                                                                                    6,
+                                                                                                    5,
                                                                                                     Cons(7, Nil)
                                                                                                   )
                                                                                                 )
@@ -546,20 +594,17 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                   2,
                                                                                                   Cons(
                                                                                                     3,
-                                                                                                    Cons(
-                                                                                                      5,
-                                                                                                      Cons(
-                                                                                                        6,
-                                                                                                        Cons(7, Nil)
-                                                                                                      )
-                                                                                                    )
+                                                                                                    Cons(7, Nil)
                                                                                                   )
                                                                                                 ),
                                                                                                 Cons(
                                                                                                   1,
                                                                                                   Cons(
                                                                                                     4,
-                                                                                                    Nil
+                                                                                                    Cons(
+                                                                                                      5,
+                                                                                                      Cons(6, Nil)
+                                                                                                    )
                                                                                                   )
                                                                                                 )
                                                                                               ),
@@ -568,16 +613,16 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                   Cons(
                                                                                                     2,
                                                                                                     Cons(
-                                                                                                      3,
-                                                                                                      Cons(6, Nil)
+                                                                                                      4,
+                                                                                                      Cons(5, Nil)
                                                                                                     )
                                                                                                   ),
                                                                                                   Cons(
                                                                                                     1,
                                                                                                     Cons(
-                                                                                                      4,
+                                                                                                      3,
                                                                                                       Cons(
-                                                                                                        5,
+                                                                                                        6,
                                                                                                         Cons(7, Nil)
                                                                                                       )
                                                                                                     )
@@ -588,19 +633,19 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                     Cons(
                                                                                                       2,
                                                                                                       Cons(
-                                                                                                        3,
-                                                                                                        Cons(7, Nil)
+                                                                                                        4,
+                                                                                                        Cons(
+                                                                                                          5,
+                                                                                                          Cons(
+                                                                                                            6,
+                                                                                                            Cons(7, Nil)
+                                                                                                          )
+                                                                                                        )
                                                                                                       )
                                                                                                     ),
                                                                                                     Cons(
                                                                                                       1,
-                                                                                                      Cons(
-                                                                                                        4,
-                                                                                                        Cons(
-                                                                                                          5,
-                                                                                                          Cons(6, Nil)
-                                                                                                        )
-                                                                                                      )
+                                                                                                      Cons(3, Nil)
                                                                                                     )
                                                                                                   ),
                                                                                                   Cons(
@@ -609,7 +654,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                         2,
                                                                                                         Cons(
                                                                                                           4,
-                                                                                                          Cons(5, Nil)
+                                                                                                          Cons(6, Nil)
                                                                                                         )
                                                                                                       ),
                                                                                                       Cons(
@@ -617,7 +662,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                         Cons(
                                                                                                           3,
                                                                                                           Cons(
-                                                                                                            6,
+                                                                                                            5,
                                                                                                             Cons(7, Nil)
                                                                                                           )
                                                                                                         )
@@ -629,18 +674,18 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                           2,
                                                                                                           Cons(
                                                                                                             4,
-                                                                                                            Cons(
-                                                                                                              5,
-                                                                                                              Cons(
-                                                                                                                6,
-                                                                                                                Cons(7, Nil)
-                                                                                                              )
-                                                                                                            )
+                                                                                                            Cons(7, Nil)
                                                                                                           )
                                                                                                         ),
                                                                                                         Cons(
                                                                                                           1,
-                                                                                                          Cons(3, Nil)
+                                                                                                          Cons(
+                                                                                                            3,
+                                                                                                            Cons(
+                                                                                                              5,
+                                                                                                              Cons(6, Nil)
+                                                                                                            )
+                                                                                                          )
                                                                                                         )
                                                                                                       ),
                                                                                                       Cons(
@@ -648,7 +693,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                           Cons(
                                                                                                             2,
                                                                                                             Cons(
-                                                                                                              4,
+                                                                                                              5,
                                                                                                               Cons(6, Nil)
                                                                                                             )
                                                                                                           ),
@@ -657,7 +702,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                             Cons(
                                                                                                               3,
                                                                                                               Cons(
-                                                                                                                5,
+                                                                                                                4,
                                                                                                                 Cons(7, Nil)
                                                                                                               )
                                                                                                             )
@@ -668,7 +713,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                             Cons(
                                                                                                               2,
                                                                                                               Cons(
-                                                                                                                4,
+                                                                                                                5,
                                                                                                                 Cons(7, Nil)
                                                                                                               )
                                                                                                             ),
@@ -677,7 +722,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                               Cons(
                                                                                                                 3,
                                                                                                                 Cons(
-                                                                                                                  5,
+                                                                                                                  4,
                                                                                                                   Cons(6, Nil)
                                                                                                                 )
                                                                                                               )
@@ -688,8 +733,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                               Cons(
                                                                                                                 2,
                                                                                                                 Cons(
-                                                                                                                  5,
-                                                                                                                  Cons(6, Nil)
+                                                                                                                  6,
+                                                                                                                  Cons(7, Nil)
                                                                                                                 )
                                                                                                               ),
                                                                                                               Cons(
@@ -698,70 +743,88 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                   3,
                                                                                                                   Cons(
                                                                                                                     4,
-                                                                                                                    Cons(7, Nil)
+                                                                                                                    Cons(5, Nil)
                                                                                                                   )
                                                                                                                 )
                                                                                                               )
                                                                                                             ),
                                                                                                             Cons(
                                                                                                               (
-                                                                                                                Cons(
-                                                                                                                  2,
-                                                                                                                  Cons(
-                                                                                                                    5,
-                                                                                                                    Cons(7, Nil)
-                                                                                                                  )
-                                                                                                                ),
+                                                                                                                Cons(3, Nil),
                                                                                                                 Cons(
                                                                                                                   1,
                                                                                                                   Cons(
-                                                                                                                    3,
-                                                                                                                    Cons(4, Cons(6, Nil))
+                                                                                                                    2,
+                                                                                                                    Cons(
+                                                                                                                      4,
+                                                                                                                      Cons(
+                                                                                                                        5,
+                                                                                                                        Cons(
+                                                                                                                          6,
+                                                                                                                          Cons(7, Nil)
+                                                                                                                        )
+                                                                                                                      )
+                                                                                                                    )
                                                                                                                   )
                                                                                                                 )
                                                                                                               ),
                                                                                                               Cons(
                                                                                                                 (
                                                                                                                   Cons(
-                                                                                                                    2,
-                                                                                                                    Cons(6, Cons(7, Nil))
+                                                                                                                    3,
+                                                                                                                    Cons(
+                                                                                                                      4,
+                                                                                                                      Cons(5, Nil)
+                                                                                                                    )
                                                                                                                   ),
                                                                                                                   Cons(
                                                                                                                     1,
                                                                                                                     Cons(
-                                                                                                                      3,
-                                                                                                                      Cons(4, Cons(5, Nil))
+                                                                                                                      2,
+                                                                                                                      Cons(
+                                                                                                                        6,
+                                                                                                                        Cons(7, Nil)
+                                                                                                                      )
                                                                                                                     )
                                                                                                                   )
                                                                                                                 ),
                                                                                                                 Cons(
                                                                                                                   (
-                                                                                                                    Cons(3, Nil),
                                                                                                                     Cons(
-                                                                                                                      1,
+                                                                                                                      3,
                                                                                                                       Cons(
-                                                                                                                        2,
+                                                                                                                        4,
                                                                                                                         Cons(
-                                                                                                                          4,
+                                                                                                                          5,
                                                                                                                           Cons(
-                                                                                                                            5,
-                                                                                                                            Cons(6, Cons(7, Nil))
+                                                                                                                            6,
+                                                                                                                            Cons(7, Nil)
                                                                                                                           )
                                                                                                                         )
                                                                                                                       )
+                                                                                                                    ),
+                                                                                                                    Cons(
+                                                                                                                      1,
+                                                                                                                      Cons(2, Nil)
                                                                                                                     )
                                                                                                                   ),
                                                                                                                   Cons(
                                                                                                                     (
                                                                                                                       Cons(
                                                                                                                         3,
-                                                                                                                        Cons(4, Cons(5, Nil))
+                                                                                                                        Cons(
+                                                                                                                          4,
+                                                                                                                          Cons(6, Nil)
+                                                                                                                        )
                                                                                                                       ),
                                                                                                                       Cons(
                                                                                                                         1,
                                                                                                                         Cons(
                                                                                                                           2,
-                                                                                                                          Cons(6, Cons(7, Nil))
+                                                                                                                          Cons(
+                                                                                                                            5,
+                                                                                                                            Cons(7, Nil)
+                                                                                                                          )
                                                                                                                         )
                                                                                                                       )
                                                                                                                     ),
@@ -771,25 +834,28 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                           3,
                                                                                                                           Cons(
                                                                                                                             4,
-                                                                                                                            Cons(
-                                                                                                                              5,
-                                                                                                                              Cons(6, Cons(7, Nil))
-                                                                                                                            )
+                                                                                                                            Cons(7, Nil)
                                                                                                                           )
                                                                                                                         ),
-                                                                                                                        Cons(1, Cons(2, Nil))
+                                                                                                                        Cons(
+                                                                                                                          1,
+                                                                                                                          Cons(
+                                                                                                                            2,
+                                                                                                                            Cons(5, Cons(6, Nil))
+                                                                                                                          )
+                                                                                                                        )
                                                                                                                       ),
                                                                                                                       Cons(
                                                                                                                         (
                                                                                                                           Cons(
                                                                                                                             3,
-                                                                                                                            Cons(4, Cons(6, Nil))
+                                                                                                                            Cons(5, Cons(6, Nil))
                                                                                                                           ),
                                                                                                                           Cons(
                                                                                                                             1,
                                                                                                                             Cons(
                                                                                                                               2,
-                                                                                                                              Cons(5, Cons(7, Nil))
+                                                                                                                              Cons(4, Cons(7, Nil))
                                                                                                                             )
                                                                                                                           )
                                                                                                                         ),
@@ -797,13 +863,13 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                           (
                                                                                                                             Cons(
                                                                                                                               3,
-                                                                                                                              Cons(4, Cons(7, Nil))
+                                                                                                                              Cons(5, Cons(7, Nil))
                                                                                                                             ),
                                                                                                                             Cons(
                                                                                                                               1,
                                                                                                                               Cons(
                                                                                                                                 2,
-                                                                                                                                Cons(5, Cons(6, Nil))
+                                                                                                                                Cons(4, Cons(6, Nil))
                                                                                                                               )
                                                                                                                             )
                                                                                                                           ),
@@ -811,58 +877,58 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                             (
                                                                                                                               Cons(
                                                                                                                                 3,
-                                                                                                                                Cons(5, Cons(6, Nil))
+                                                                                                                                Cons(6, Cons(7, Nil))
                                                                                                                               ),
                                                                                                                               Cons(
                                                                                                                                 1,
                                                                                                                                 Cons(
                                                                                                                                   2,
-                                                                                                                                  Cons(4, Cons(7, Nil))
+                                                                                                                                  Cons(4, Cons(5, Nil))
                                                                                                                                 )
                                                                                                                               )
                                                                                                                             ),
                                                                                                                             Cons(
                                                                                                                               (
-                                                                                                                                Cons(
-                                                                                                                                  3,
-                                                                                                                                  Cons(5, Cons(7, Nil))
-                                                                                                                                ),
+                                                                                                                                Cons(4, Nil),
                                                                                                                                 Cons(
                                                                                                                                   1,
                                                                                                                                   Cons(
                                                                                                                                     2,
-                                                                                                                                    Cons(4, Cons(6, Nil))
+                                                                                                                                    Cons(
+                                                                                                                                      3,
+                                                                                                                                      Cons(
+                                                                                                                                        5,
+                                                                                                                                        Cons(6, Cons(7, Nil))
+                                                                                                                                      )
+                                                                                                                                    )
                                                                                                                                   )
                                                                                                                                 )
                                                                                                                               ),
                                                                                                                               Cons(
                                                                                                                                 (
                                                                                                                                   Cons(
-                                                                                                                                    3,
-                                                                                                                                    Cons(6, Cons(7, Nil))
+                                                                                                                                    4,
+                                                                                                                                    Cons(5, Cons(6, Nil))
                                                                                                                                   ),
                                                                                                                                   Cons(
                                                                                                                                     1,
                                                                                                                                     Cons(
                                                                                                                                       2,
-                                                                                                                                      Cons(4, Cons(5, Nil))
+                                                                                                                                      Cons(3, Cons(7, Nil))
                                                                                                                                     )
                                                                                                                                   )
                                                                                                                                 ),
                                                                                                                                 Cons(
                                                                                                                                   (
-                                                                                                                                    Cons(4, Nil),
+                                                                                                                                    Cons(
+                                                                                                                                      4,
+                                                                                                                                      Cons(5, Cons(7, Nil))
+                                                                                                                                    ),
                                                                                                                                     Cons(
                                                                                                                                       1,
                                                                                                                                       Cons(
                                                                                                                                         2,
-                                                                                                                                        Cons(
-                                                                                                                                          3,
-                                                                                                                                          Cons(
-                                                                                                                                            5,
-                                                                                                                                            Cons(6, Cons(7, Nil))
-                                                                                                                                          )
-                                                                                                                                        )
+                                                                                                                                        Cons(3, Cons(6, Nil))
                                                                                                                                       )
                                                                                                                                     )
                                                                                                                                   ),
@@ -870,47 +936,50 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                                     (
                                                                                                                                       Cons(
                                                                                                                                         4,
-                                                                                                                                        Cons(5, Cons(6, Nil))
+                                                                                                                                        Cons(6, Cons(7, Nil))
                                                                                                                                       ),
                                                                                                                                       Cons(
                                                                                                                                         1,
                                                                                                                                         Cons(
                                                                                                                                           2,
-                                                                                                                                          Cons(3, Cons(7, Nil))
+                                                                                                                                          Cons(3, Cons(5, Nil))
                                                                                                                                         )
                                                                                                                                       )
                                                                                                                                     ),
                                                                                                                                     Cons(
                                                                                                                                       (
-                                                                                                                                        Cons(
-                                                                                                                                          4,
-                                                                                                                                          Cons(5, Cons(7, Nil))
-                                                                                                                                        ),
+                                                                                                                                        Cons(5, Nil),
                                                                                                                                         Cons(
                                                                                                                                           1,
                                                                                                                                           Cons(
                                                                                                                                             2,
-                                                                                                                                            Cons(3, Cons(6, Nil))
+                                                                                                                                            Cons(
+                                                                                                                                              3,
+                                                                                                                                              Cons(
+                                                                                                                                                4,
+                                                                                                                                                Cons(6, Cons(7, Nil))
+                                                                                                                                              )
+                                                                                                                                            )
                                                                                                                                           )
                                                                                                                                         )
                                                                                                                                       ),
                                                                                                                                       Cons(
                                                                                                                                         (
                                                                                                                                           Cons(
-                                                                                                                                            4,
+                                                                                                                                            5,
                                                                                                                                             Cons(6, Cons(7, Nil))
                                                                                                                                           ),
                                                                                                                                           Cons(
                                                                                                                                             1,
                                                                                                                                             Cons(
                                                                                                                                               2,
-                                                                                                                                              Cons(3, Cons(5, Nil))
+                                                                                                                                              Cons(3, Cons(4, Nil))
                                                                                                                                             )
                                                                                                                                           )
                                                                                                                                         ),
                                                                                                                                         Cons(
                                                                                                                                           (
-                                                                                                                                            Cons(5, Nil),
+                                                                                                                                            Cons(6, Nil),
                                                                                                                                             Cons(
                                                                                                                                               1,
                                                                                                                                               Cons(
@@ -919,7 +988,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                                                   3,
                                                                                                                                                   Cons(
                                                                                                                                                     4,
-                                                                                                                                                    Cons(6, Cons(7, Nil))
+                                                                                                                                                    Cons(5, Cons(7, Nil))
                                                                                                                                                   )
                                                                                                                                                 )
                                                                                                                                               )
@@ -927,55 +996,22 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                                                                                                                                           ),
                                                                                                                                           Cons(
                                                                                                                                             (
-                                                                                                                                              Cons(
-                                                                                                                                                5,
-                                                                                                                                                Cons(6, Cons(7, Nil))
-                                                                                                                                              ),
+                                                                                                                                              Cons(7, Nil),
                                                                                                                                               Cons(
                                                                                                                                                 1,
                                                                                                                                                 Cons(
                                                                                                                                                   2,
-                                                                                                                                                  Cons(3, Cons(4, Nil))
+                                                                                                                                                  Cons(
+                                                                                                                                                    3,
+                                                                                                                                                    Cons(
+                                                                                                                                                      4,
+                                                                                                                                                      Cons(5, Cons(6, Nil))
+                                                                                                                                                    )
+                                                                                                                                                  )
                                                                                                                                                 )
                                                                                                                                               )
                                                                                                                                             ),
-                                                                                                                                            Cons(
-                                                                                                                                              (
-                                                                                                                                                Cons(6, Nil),
-                                                                                                                                                Cons(
-                                                                                                                                                  1,
-                                                                                                                                                  Cons(
-                                                                                                                                                    2,
-                                                                                                                                                    Cons(
-                                                                                                                                                      3,
-                                                                                                                                                      Cons(
-                                                                                                                                                        4,
-                                                                                                                                                        Cons(5, Cons(7, Nil))
-                                                                                                                                                      )
-                                                                                                                                                    )
-                                                                                                                                                  )
-                                                                                                                                                )
-                                                                                                                                              ),
-                                                                                                                                              Cons(
-                                                                                                                                                (
-                                                                                                                                                  Cons(7, Nil),
-                                                                                                                                                  Cons(
-                                                                                                                                                    1,
-                                                                                                                                                    Cons(
-                                                                                                                                                      2,
-                                                                                                                                                      Cons(
-                                                                                                                                                        3,
-                                                                                                                                                        Cons(
-                                                                                                                                                          4,
-                                                                                                                                                          Cons(5, Cons(6, Nil))
-                                                                                                                                                        )
-                                                                                                                                                      )
-                                                                                                                                                    )
-                                                                                                                                                  )
-                                                                                                                                                ),
-                                                                                                                                                Nil
-                                                                                                                                              )
-                                                                                                                                            )
+                                                                                                                                            Nil
                                                                                                                                           )
                                                                                                                                         )
                                                                                                                                       )
@@ -1038,8 +1074,10 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
                     )
                   )
                 )
-                require(formula.clauses === expected)
-            }
+              )
+            )
+            require(formula.clauses === expected)
+        }
             .toUplcOptimized(false)
             .evaluateDebug
 
@@ -1061,13 +1099,12 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
     }
 
     test("F5") {
-        val result = Compiler
-            .compile {
-                // (a = a = a) = (a = a = a) = (a = a)
-                val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> (1 <-> 1)) <-> (1 <-> 1))
-                val expected = List.empty[LRVars]
-                require(formula.clauses === expected)
-            }
+        val result = compile {
+            // (a = a = a) = (a = a = a) = (a = a)
+            val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> (1 <-> 1)) <-> (1 <-> 1))
+            val expected = List.empty[LRVars]
+            require(formula.clauses === expected)
+        }
             .toUplcOptimized(false)
             .evaluateDebug
 

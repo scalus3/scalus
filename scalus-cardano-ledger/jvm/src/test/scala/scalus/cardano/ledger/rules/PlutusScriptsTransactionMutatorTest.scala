@@ -1171,19 +1171,13 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
     private def validPlutusV1Script = {
         import scalus.*
-        val program = scalus.Compiler
-            .compile((data1: Data, data2: Data, data3: Data) => ())
-            .toUplc(true)
-            .plutusV1
+        val program = compile((data1: Data, data2: Data, data3: Data) => ()).toUplc(true).plutusV1
         Script.PlutusV1(program.cborByteString)
     }
 
     private def validPlutusV2Script = {
         import scalus.*
-        val program = scalus.Compiler
-            .compile((data1: Data, data2: Data, data3: Data) => ())
-            .toUplc(true)
-            .plutusV2
+        val program = compile((data1: Data, data2: Data, data3: Data) => ()).toUplc(true).plutusV2
         Script.PlutusV2(program.cborByteString)
     }
 
@@ -1195,8 +1189,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
     private def invalidPlutusV3Script = {
         import scalus.*
-        val program =
-            compile((data: Data) => scalus.prelude.fail()).toUplc(true).plutusV3
+        val program = compile((data: Data) => scalus.prelude.fail()).toUplc(true).plutusV3
         Script.PlutusV3(program.cborByteString)
     }
 }

@@ -1,7 +1,6 @@
 package scalus.crypto.ed25519
 
 import scala.scalanative.unsafe.*
-import scala.scalanative.unsigned.*
 
 /** Libsodium bindings for Ed25519 scalar operations. */
 @link("sodium")

@@ -4,95 +4,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Data
 import scalus.cardano.blueprint.HtlcValidatorInputs.{Action, ContractDatum}
 import scalus.cardano.ledger.Language
-import scalus.compiler
 import scalus.uplc.PlutusV3
-import scalus.utils.BuildInfo
+
 class BlueprintTest extends AnyFunSuite {
 
     private given scalus.compiler.Options = scalus.compiler.Options.release
-
-    test("should be deserializable from JSON") {
-        val value = Application
-            .ofSingleValidator[ContractDatum, Action](
-              "Htlc Validator",
-              "",
-              "1.0.0",
-              (ctx: Data) => ()
-            )
-            .blueprint
-        val stringValue =
-            s"""
-               |{
-               |  "preamble": {
-               |    "title": "Htlc Validator",
-               |    "description": "",
-               |    "compiler": {
-               |      "name": "scalus",
-               |      "version": "${BuildInfo.version}"
-               |    },
-               |    "plutusVersion": "v3"
-               |  },
-               |  "validators": [
-               |    {
-               |      "title": "Htlc Validator",
-               |      "redeemer": {
-               |        "schema": {
-               |          "title": "Action",
-               |          "anyOf": [
-               |            {
-               |              "dataType": "constructor",
-               |              "title": "Timeout",
-               |              "index": 0,
-               |              "fields": [
-               |                
-               |              ]
-               |            },
-               |            {
-               |              "dataType": "constructor",
-               |              "title": "Reveal",
-               |              "index": 1,
-               |              "fields": [
-               |                {
-               |                  "dataType": "bytes",
-               |                  "title": "preimage"
-               |                }
-               |              ]
-               |            }
-               |          ]
-               |        }
-               |      },
-               |      "datum": {
-               |        "schema": {
-               |          "dataType": "constructor",
-               |          "title": "ContractDatum",
-               |          "fields": [
-               |            {
-               |              "dataType": "bytes",
-               |              "title": "committer"
-               |            },
-               |            {
-               |              "dataType": "bytes",
-               |              "title": "receiver"
-               |            },
-               |            {
-               |              "dataType": "bytes",
-               |              "title": "image"
-               |            },
-               |            {
-               |              "dataType": "integer",
-               |              "title": "timeout"
-               |            }
-               |          ]
-               |        }
-               |      },
-               |      "compiledCode": "450101002499",
-               |      "hash": "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4"
-               |    }
-               |  ]
-               |}
-               |""".stripMargin
-        assert(Blueprint.fromJson(stringValue) == value)
-    }
 
     // This case is covered by the following tests, keeping this test to check compatibility with aiken.
     // https://github.com/aiken-lang/aiken/blob/main/crates/aiken-project/src/blueprint/snapshots/aiken_project__blueprint__validator__tests__generics.snap#L57

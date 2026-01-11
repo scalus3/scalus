@@ -61,18 +61,17 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     }
 
     test("100_6x6") {
-        val result = Compiler
-            .compile {
-                val result = runKnights(100, 6)
+        val result = compile {
+            val result = runKnights(100, 6)
 
-                val expected: Solution = List(
-                  (
-                    0,
-                    ChessSet(
-                      size = 6,
-                      moveNumber = 36,
-                      start = Option.Some((1, 1)),
-                      visited = List(
+            val expected: Solution = List(
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
                         // format: off
                         (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 6), (4, 5), (6, 6), (5, 4),
                         (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
@@ -80,15 +79,15 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                         (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
-                    )
-                  ),
-                  (
-                    0,
-                    ChessSet(
-                      size = 6,
-                      moveNumber = 36,
-                      start = Option.Some((1, 1)),
-                      visited = List(
+                )
+              ),
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
                         // format: off
                         (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 2), (4, 1), (6, 2), (5, 4),
                         (6, 6), (4, 5), (2, 6), (1, 4), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
@@ -96,15 +95,15 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                         (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
-                    )
-                  ),
-                  (
-                    0,
-                    ChessSet(
-                      size = 6,
-                      moveNumber = 36,
-                      start = Option.Some((1, 1)),
-                      visited = List(
+                )
+              ),
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
                         // format: off
                         (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 2), (1, 4), (2, 6), (4, 5),
                         (6, 6), (5, 4), (6, 2), (4, 1), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
@@ -112,15 +111,15 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                         (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
-                    )
-                  ),
-                  (
-                    0,
-                    ChessSet(
-                      size = 6,
-                      moveNumber = 36,
-                      start = Option.Some((1, 1)),
-                      visited = List(
+                )
+              ),
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
                         // format: off
                         (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 6), (1, 4), (2, 2), (4, 1),
                         (6, 2), (5, 4), (6, 6), (4, 5), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
@@ -128,12 +127,12 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                         (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
-                    )
-                  ),
                 )
+              ),
+            )
 
-                require(result === expected)
-            }
+            require(result === expected)
+        }
             .toUplcOptimized(false)
             .evaluateDebug
 
@@ -162,19 +161,18 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     }
 
     test("100_8x8") {
-        val result = Compiler
-            .compile {
-                val result = runKnights(100, 8)
+        val result = compile {
+            val result = runKnights(100, 8)
 
-                import scalus.prelude.List.*
-                val expected: Solution = Cons(
-                  (
-                    0,
-                    ChessSet(
-                      size = 8,
-                      moveNumber = 64,
-                      start = Option.Some((1, 1)),
-                      visited = List(
+            import scalus.prelude.List.*
+            val expected: Solution = Cons(
+              (
+                0,
+                ChessSet(
+                  size = 8,
+                  moveNumber = 64,
+                  start = Option.Some((1, 1)),
+                  visited = List(
                         // format: off
                         (3, 2), (4, 4), (5, 6), (6, 4), (8, 5), (7, 7), (6, 5), (8, 4), (7, 2),
                         (5, 3), (3, 4), (4, 6), (5, 8), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
@@ -186,16 +184,16 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                         (1, 1)
                         // format: on
                       )
-                    )
-                  ),
-                  Cons(
-                    (
-                      0,
-                      ChessSet(
-                        size = 8,
-                        moveNumber = 64,
-                        start = Option.Some((1, 1)),
-                        visited = List(
+                )
+              ),
+              Cons(
+                (
+                  0,
+                  ChessSet(
+                    size = 8,
+                    moveNumber = 64,
+                    start = Option.Some((1, 1)),
+                    visited = List(
                           // format: off
                           (3, 2), (4, 4), (5, 6), (7, 7), (8, 5), (6, 4), (7, 2), (8, 4), (6, 5),
                           (5, 3), (3, 4), (4, 6), (5, 8), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
@@ -207,16 +205,16 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                           (1, 1)
                           // format: on
                         )
-                      )
-                    ),
-                    Cons(
-                      (
-                        0,
-                        ChessSet(
-                          size = 8,
-                          moveNumber = 64,
-                          start = Option.Some((1, 1)),
-                          visited = List(
+                  )
+                ),
+                Cons(
+                  (
+                    0,
+                    ChessSet(
+                      size = 8,
+                      moveNumber = 64,
+                      start = Option.Some((1, 1)),
+                      visited = List(
                             // format: off
                             (3, 2), (4, 4), (6, 5), (8, 4), (7, 2), (5, 3), (3, 4), (4, 6), (5, 8),
                             (7, 7), (5, 6), (6, 4), (8, 5), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
@@ -228,15 +226,15 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                             (1, 1),
                             // format: on
                           )
-                        )
-                      ),
-                      Nil
                     )
-                  )
+                  ),
+                  Nil
                 )
+              )
+            )
 
-                require(result === expected)
-            }
+            require(result === expected)
+        }
             .toUplcOptimized(false)
             .evaluateDebug
 

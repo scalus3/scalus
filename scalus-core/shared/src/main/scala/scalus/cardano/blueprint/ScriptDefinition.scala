@@ -1,5 +1,6 @@
 package scalus.cardano.blueprint
 
+import scala.annotation.nowarn
 import scalus.*
 import scalus.cardano.address.*
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
@@ -33,6 +34,7 @@ object Application {
         new Application(preamble, contracts)
     }
 
+    @nowarn("cat=deprecation")
     inline def ofSingleValidator[D, R](
         title: String,
         description: String,
@@ -95,6 +97,7 @@ class PlutusV3CompiledContract(
 }
 
 @deprecated("use scalus.uplc.PlutusV3 instead", "0.14.2")
+@nowarn("cat=deprecation")
 object PlutusV3CompiledContract {
 
     inline def create[D, R](
