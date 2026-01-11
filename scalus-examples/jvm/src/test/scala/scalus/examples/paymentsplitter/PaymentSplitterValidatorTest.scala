@@ -5,8 +5,8 @@ import scalus.*
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, ToData}
 import scalus.cardano.ledger.ExUnits
+import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.compiler.{compile, Options}
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
@@ -14,7 +14,7 @@ import scalus.ledger.api.v3.*
 import scalus.ledger.api.v3.ScriptInfo.SpendingScript
 import scalus.prelude.{List, Option, *}
 import scalus.testing.kit.ScalusTest
-import scalus.uplc.Program
+import scalus.uplc.{PlutusV3, Program}
 
 import scala.util.control.NonFatal
 
@@ -242,30 +242,11 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
       debug = false
     )
 
-    private val script = {
-        try {
-            val sir = compile(PaymentSplitterValidator.validate)
-            // println(s"sir=${sir.pretty.render(100)}")
-            val lw = sir.toLoweredValue(generateErrorTraces = true)
-            // println(s"lw=${lw.pretty.render(100)}")
-            val uplc = sir.toUplc(
-              generateErrorTraces = true,
-              backend = TargetLoweringBackend.SirToUplcV3Lowering
-            )
-            // println(s"uplc=${uplc.pretty.render(100)}")
-            uplc.plutusV3
-        } catch {
-            case NonFatal(ex) =>
-                println("Can't compile script PaymentSplitter.validate")
-                ex.printStackTrace()
-                throw ex
-        }
-    }
-
+    private val contract = PlutusV3.compile(PaymentSplitterValidator.validate)
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]
-    private val scriptHash = script.hash
+    private val scriptHash = contract.script.scriptHash
 
     private val runScalaVersion = true
 
@@ -275,7 +256,7 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
         outputs: List[(ByteString, BigInt)],
         fee: BigInt,
         expected: (String | Unit, Option[ExUnits])
-    ): Unit = assertCase(script)(payees, inputs, outputs, fee, expected)
+    ): Unit = assertCase(contract.program)(payees, inputs, outputs, fee, expected)
 
     private def assertCase(script: Program)(
         payees: List[ByteString],
@@ -284,7 +265,7 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
         fee: BigInt,
         expected: (String | Unit, Option[ExUnits])
     ): Unit = {
-        // Create script with payees parameter
+        // Create contract with payees parameter
 
         val payeesData = payees.toData
 
@@ -301,7 +282,7 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
             )
         }
 
-        // Create script context with given inputs, outputs and fee
+        // Create contract context with given inputs, outputs and fee
         val pkh = PubKeyHash(
           ByteString.fromHex("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
         )
@@ -326,11 +307,11 @@ class PaymentSplitterValidatorTest extends AnyFunSuite, ScalusTest {
 
         assert(context.scriptInfo == SpendingScript(txOutRef, Option.None))
 
-        // Apply script to the context
+        // Apply contract to the context
         val programWithContext = applied $ context.toData
 
         if runScalaVersion then
-            try PaymentSplitterValidator.validate(payees.toData)(context.toData)
+            try contract.code(payees.toData)(context.toData)
             catch
                 case NonFatal(ex) =>
                     if expected._1.isInstanceOf[Unit] then throw ex

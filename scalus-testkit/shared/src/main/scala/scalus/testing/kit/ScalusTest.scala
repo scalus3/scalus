@@ -62,6 +62,7 @@ trait ScalusTest extends ArbitraryInstances {
             val appliedScript = self $ scriptContext.toData
             appliedScript.evaluateDebug
 
+        @deprecated("will be removed", "0.14.2")
         def hash: ValidatorHash = blake2b_224(ByteString.fromArray(3 +: self.cborEncoded))
 
     protected def random[A: Arbitrary]: A = {

@@ -6,6 +6,7 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, FromData, ToData}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.Script.PlutusV3
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.testing.kit.ScalusTest
@@ -104,7 +105,7 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
               ByteString.fromHex("06cae4f91a7e73521cfb42a0dcfe0d90feff52ffa096467995bfb503")
             )
 
-    private lazy val aikenScript = {
+    private lazy val aikenProgram = {
         val fname = "/scalus/examples/PaymentSplitterAikenData/plutus.json"
         val inputStream = this.getClass.getResourceAsStream(fname)
         if inputStream == null then {
@@ -117,7 +118,7 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]
-    private val scriptHash = aikenScript.hash
+    private val scriptHash = PlutusV3(aikenProgram.cborByteString).scriptHash
 
     private def assertCase(
         payeesBytes: List[ByteString],
@@ -166,7 +167,7 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
           scriptInfo = ScriptInfo.SpendingScript(txOutRef = txOutRef),
         )
 
-        val aikenApplied = aikenScript $ payeesData
+        val aikenApplied = aikenProgram $ payeesData
         val aikenWithContext = aikenApplied $ context.toData
 
         val result = aikenWithContext.evaluateDebug
