@@ -14,15 +14,15 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.testing.kit.{Mock, ScalusTest}
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.*
 
 import scala.language.implicitConversions
 
 class VestingValidatorTest extends AnyFunSuite, ScalusTest {
-    private val ownerPKH: PubKeyHash = Mock.mockPubKeyHash(0)
-    private val beneficiaryPKH: PubKeyHash = Mock.mockPubKeyHash(1)
-    private val contractHash: ValidatorHash = Mock.mockScriptHash(0)
+    private val ownerPKH: PubKeyHash = TestUtil.mockPubKeyHash(0)
+    private val beneficiaryPKH: PubKeyHash = TestUtil.mockPubKeyHash(1)
+    private val contractHash: ValidatorHash = TestUtil.mockScriptHash(0)
 
     private val defaultStartTime: PosixTime = BigInt(1609459200000L)
     private val defaultDuration: PosixTime = BigInt(31536000000L)

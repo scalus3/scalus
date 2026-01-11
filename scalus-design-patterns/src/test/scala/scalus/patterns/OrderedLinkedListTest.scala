@@ -14,7 +14,7 @@ import scalus.ledger.api.v3.*
 import scalus.patterns.OrderedLinkedList as LinkedList
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.testing.kit.{Mock, ScalusTest}
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
 
 import scala.language.implicitConversions
@@ -30,11 +30,11 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
 
     extension (self: TxOut) def token: Value = self.value.withoutLovelace
 
-    val policyId = Mock.mockScriptHash(1)
-    val initRef = Mock.mockTxOutRef(1, 1)
-    val removeRef = Mock.mockTxOutRef(3, 2)
-    val parentRef = Mock.mockTxOutRef(3, 1)
-    val royalty = Mock.mockScriptHash(2)
+    val policyId = TestUtil.mockScriptHash(1)
+    val initRef = TestUtil.mockTxOutRef(1, 1)
+    val removeRef = TestUtil.mockTxOutRef(3, 2)
+    val parentRef = TestUtil.mockTxOutRef(3, 1)
+    val royalty = TestUtil.mockScriptHash(2)
     val scriptAddress = Address.fromScriptHash(policyId)
     val config = Config(
       init = initRef,
@@ -42,9 +42,9 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
       penalty = Address.fromScriptHash(royalty)
     )
     // hashes must be ordered
-    val user1 = Mock.mockPubKeyHash(8).hash
-    val user2 = Mock.mockPubKeyHash(16).hash
-    val user3 = Mock.mockPubKeyHash(32).hash
+    val user1 = TestUtil.mockPubKeyHash(8).hash
+    val user2 = TestUtil.mockPubKeyHash(16).hash
+    val user3 = TestUtil.mockPubKeyHash(32).hash
     val emptyKey = hex""
 
     def nodeToken(key: TokenName = hex""): TokenName = LinkedList.nodeToken() ++ key
@@ -93,7 +93,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
           mint = mint,
           validRange = validRange,
           signatories = signedBy.map(key => List.single(PubKeyHash(key))).getOrElse(List.Nil),
-          id = Mock.mockTxOutRef(2, 1).id
+          id = TestUtil.mockTxOutRef(2, 1).id
         )
         val result = OrderedLinkedListContract
             .make(config)
@@ -341,7 +341,7 @@ class OrderedLinkedListTest extends AnyFunSuite, ScalusTest:
         val remCell = cons(user2)
         val parentIn = node(parentCell, user1, lovelace = 9_000_000)
         val removeIn = node(remCell, user2, burn = true, lovelace = parentIn.value.getLovelace)
-        val removeRef = Mock.mockTxOutRef(3, 2)
+        val removeRef = TestUtil.mockTxOutRef(3, 2)
         val updatedCell = parentCell.copy(ref = remCell.ref)
         val parentOut = parentIn.copy(datum = OutputDatum.OutputDatum(updatedCell.toData))
         TestCase(

@@ -12,7 +12,7 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.prelude.Option.*
-import scalus.testing.kit.{Mock, ScalusTest}
+import scalus.testing.kit.{ScalusTest, TestUtil}
 
 import scala.language.implicitConversions
 
@@ -43,17 +43,17 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
     // TODO: test wrong tx fails
 
     test("Verify that a bet can be properly initialized"):
-        val player1 = Mock.mockPubKeyHash(1)
+        val player1 = TestUtil.mockPubKeyHash(1)
         // Create test betting config for a new bet
         val initialBettingConfig = Config(
           player1,
           // No second player yet
           player2 = pkh"",
-          oracle = Mock.mockPubKeyHash(3),
+          oracle = TestUtil.mockPubKeyHash(3),
           // 31th of July 2025
           expiration = 1753939940,
         )
-        val policyId = Mock.mockScriptHash(1)
+        val policyId = TestUtil.mockScriptHash(1)
         // Create test transaction that mints a bet token
         val testTransaction = TxInfo.placeholder.copy(
           outputs = List(
@@ -84,9 +84,9 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess, "Script execution should succeed for initial minting")
 
     test("Verify that player2 can join an existing bet"):
-        val player1 = Mock.mockPubKeyHash(1)
-        val player2 = Mock.mockPubKeyHash(2)
-        val oracle = Mock.mockPubKeyHash(3)
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val player2 = TestUtil.mockPubKeyHash(2)
+        val oracle = TestUtil.mockPubKeyHash(3)
         // Initial state: bet created by player1
         val initialBettingConfig = Config(
           player1,
@@ -104,8 +104,8 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           // 31th of July 2025
           expiration = 1753939940,
         )
-        val policyId = Mock.mockScriptHash(1)
-        val tx = Mock.mockTxOutRef(1, 0)
+        val policyId = TestUtil.mockScriptHash(1)
+        val tx = TestUtil.mockTxOutRef(1, 0)
         // Create test transaction where player2 joins
         val testTransaction = TxInfo.placeholder.copy(
           inputs = List(
@@ -156,9 +156,9 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
 
     test("Verify that the oracle can announce winner and trigger payout"):
-        val player1 = Mock.mockPubKeyHash(1)
-        val player2 = Mock.mockPubKeyHash(2)
-        val oracle = Mock.mockPubKeyHash(3)
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val player2 = TestUtil.mockPubKeyHash(2)
+        val oracle = TestUtil.mockPubKeyHash(3)
         // Final bet state with both players
         val finalBettingConfig = Config(
           player1,
@@ -167,8 +167,8 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           // 31th of July 2025
           expiration = 1753939940,
         )
-        val policyId = Mock.mockScriptHash(1)
-        val tx = Mock.mockTxOutRef(1, 0)
+        val policyId = TestUtil.mockScriptHash(1)
+        val tx = TestUtil.mockTxOutRef(1, 0)
         // Create test transaction where oracle announces player2 as winner
         val testTransaction = TxInfo.placeholder.copy(
           inputs = List(

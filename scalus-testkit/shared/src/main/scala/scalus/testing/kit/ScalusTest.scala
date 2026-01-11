@@ -3,12 +3,10 @@ package scalus.testing.kit
 import org.scalacheck.Arbitrary
 import scalus.*
 import scalus.builtin.Builtins.blake2b_224
-import scalus.builtin.Builtins.blake2b_256
 import scalus.builtin.ByteString
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.cardano.ledger.TransactionHash
 import scalus.cardano.ledger.TransactionInput
 import scalus.ledger.api.v1.Credential.PubKeyCredential
 import scalus.ledger.api.v1.Credential.ScriptCredential
@@ -26,40 +24,16 @@ import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.{Ed25519KeyGenerationParameters, Ed25519PrivateKeyParameters, Ed25519PublicKeyParameters}
 import java.security.SecureRandom
 
+@deprecated("Use TestUtil instead", "0.14.2")
 object Mock:
-    import scalus.builtin.ByteString.*
-    import scalus.builtin.Builtins.appendByteString
-
-    val rootKeyHash: ByteString =
-        hex"a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"
-
-    val rootTxHash: ByteString =
-        hex"5a077cbcdffb88b104f292aacb9687ce93e2191e103a30a0cc5505c18b719f98"
-
-    private def mockHash(
-        variation: BigInt,
-        root: ByteString,
-        hash: ByteString => ByteString
-    ): ByteString = hash:
-        appendByteString(ByteString.fromArray(variation.toByteArray), root)
-
-    private def mockKeyHash(variation: BigInt): ByteString =
-        mockHash(variation, rootKeyHash, blake2b_224)
-
-    private def mockTxHash(variation: BigInt): TxId =
-        TxId(mockHash(variation, rootTxHash, blake2b_256))
-
-    def mockPubKeyHash(variation: BigInt): PubKeyHash = PubKeyHash(mockKeyHash(variation))
-
-    def mockScriptHash(variation: BigInt): ValidatorHash =
-        mockKeyHash(variation + 200)
-
+    def rootKeyHash: ByteString = TestUtil.rootKeyHash
+    def rootTxHash: ByteString = TestUtil.rootTxHash
+    def mockPubKeyHash(variation: BigInt): PubKeyHash = TestUtil.mockPubKeyHash(variation)
+    def mockScriptHash(variation: BigInt): ValidatorHash = TestUtil.mockScriptHash(variation)
     def mockTxOutRef(variation: BigInt, idx: BigInt): TxOutRef =
-        TxOutRef(mockTxHash(variation), idx)
-
+        TestUtil.mockTxOutRef(variation, idx)
     def mockTxInput(variation: BigInt, idx: BigInt): TransactionInput =
-        val TxOutRef(id, index) = mockTxOutRef(variation, idx)
-        TransactionInput(TransactionHash.fromByteString(id.hash), index.toInt)
+        TestUtil.mockTxInput(variation, idx)
 
 trait ScalusTest extends ArbitraryInstances {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()

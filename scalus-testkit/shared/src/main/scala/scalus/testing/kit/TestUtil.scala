@@ -1,15 +1,51 @@
 package scalus.testing.kit
 
+import scalus.builtin.Builtins.{appendByteString, blake2b_224, blake2b_256}
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 import scalus.cardano.txbuilder.{PubKeyWitness, RedeemerManagement, RedeemerPurpose, Wallet as WalletTrait, Witness}
+import scalus.ledger.api.v1.PubKeyHash
+import scalus.ledger.api.v3.{TxId, TxOutRef, ValidatorHash}
 import scalus.ledger.api.{v1, v2, v3, ScriptContext}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 
 object TestUtil extends ScalusTest {
+    import scalus.builtin.ByteString.*
+
+    // Mock data generation constants and methods
+    val rootKeyHash: ByteString =
+        hex"a2c20c77887ace1cd986193e4e75babd8993cfd56995cd5cfce609c2"
+
+    val rootTxHash: ByteString =
+        hex"5a077cbcdffb88b104f292aacb9687ce93e2191e103a30a0cc5505c18b719f98"
+
+    private def mockHash(
+        variation: BigInt,
+        root: ByteString,
+        hash: ByteString => ByteString
+    ): ByteString = hash:
+        appendByteString(ByteString.fromArray(variation.toByteArray), root)
+
+    private def mockKeyHash(variation: BigInt): ByteString =
+        mockHash(variation, rootKeyHash, blake2b_224)
+
+    private def mockTxHash(variation: BigInt): TxId =
+        TxId(mockHash(variation, rootTxHash, blake2b_256))
+
+    def mockPubKeyHash(variation: BigInt): PubKeyHash = PubKeyHash(mockKeyHash(variation))
+
+    def mockScriptHash(variation: BigInt): ValidatorHash =
+        mockKeyHash(variation + 200)
+
+    def mockTxOutRef(variation: BigInt, idx: BigInt): TxOutRef =
+        TxOutRef(mockTxHash(variation), idx)
+
+    def mockTxInput(variation: BigInt, idx: BigInt): TransactionInput =
+        val TxOutRef(id, index) = mockTxOutRef(variation, idx)
+        TransactionInput(TransactionHash.fromByteString(id.hash), index.toInt)
 
     val testEnvironment: CardanoInfo = CardanoInfo.mainnet
 
