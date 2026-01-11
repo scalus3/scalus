@@ -11,6 +11,7 @@ import scalus.{prelude, Compile}
 type Preimage = ByteString
 type Secret = ByteString
 
+// Datum
 case class State(
     playerOneSecret: Secret,
     playerTwoSecret: Secret,
@@ -30,6 +31,7 @@ enum LotteryState derives FromData, ToData:
 @Compile
 object LotteryState
 
+// Redeemer
 enum Action derives ToData, FromData:
     case RevealPlayerOne(preimage: Preimage)
     case RevealPlayerTwo(preimage: Preimage)
@@ -109,6 +111,7 @@ object LotteryValidator extends Validator {
                             case _ => fail("continuation out must have an inline datum")
                         }
 
+                        // Verify state transition is valid
                         newState.lotteryState match {
                             case LotteryState.PlayerOneRevealed(length, pkh) =>
                                 require(length === preimage.length, "Length mismatch")
@@ -118,6 +121,20 @@ object LotteryValidator extends Validator {
                                 )
                             case _ => fail("Invalid state transition")
                         }
+
+                        // Verify secrets and deadline are unchanged
+                        require(
+                          newState.playerOneSecret === state.playerOneSecret,
+                          "Player one secret must not change"
+                        )
+                        require(
+                          newState.playerTwoSecret === state.playerTwoSecret,
+                          "Player two secret must not change"
+                        )
+                        require(
+                          newState.revealDeadline === state.revealDeadline,
+                          "Reveal deadline must not change"
+                        )
 
                     case Action.RevealPlayerTwo(preimage) =>
                         // Verify preimage hash matches
@@ -138,6 +155,7 @@ object LotteryValidator extends Validator {
                             case _ => fail("continuation out must have an inline datum")
                         }
 
+                        // Verify state transition is valid
                         newState.lotteryState match {
                             case LotteryState.PlayerTwoRevealed(length, pkh) =>
                                 require(length === preimage.length, "Length mismatch")
@@ -147,6 +165,20 @@ object LotteryValidator extends Validator {
                                 )
                             case _ => fail("Invalid state transition")
                         }
+
+                        // Verify secrets and deadline are unchanged
+                        require(
+                          newState.playerOneSecret === state.playerOneSecret,
+                          "Player one secret must not change"
+                        )
+                        require(
+                          newState.playerTwoSecret === state.playerTwoSecret,
+                          "Player two secret must not change"
+                        )
+                        require(
+                          newState.revealDeadline === state.revealDeadline,
+                          "Reveal deadline must not change"
+                        )
 
                     case _ =>
                         fail("Too early to give up or claim a timeout -- need to reveal first")

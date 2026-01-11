@@ -136,6 +136,56 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
         assertFailure(provider, revealTx, lotteryUtxo._1, "Fraudulent attempt")
     }
 
+    test("FAIL: P1 reveal attempts to change player two secret") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+
+        // Create a different secret that P1 will try to substitute
+        val maliciousSecret = sha2_256(genByteStringOfN(20).sample.get)
+
+        val revealTx = txCreator.revealPlayerOne(
+          utxos = utxos,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage1,
+          playerOnePkh = Alice.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = maliciousSecret, // Trying to change P2's secret!
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Alice.address,
+          validTo = deadline,
+          signer = Alice.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, revealTx, lotteryUtxo._1, "Player two secret must not change")
+    }
+
+    test("FAIL: P2 reveal attempts to change deadline") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+        val utxos = provider.findUtxos(Bob.address).await().toOption.get
+
+        // Try to extend the deadline
+        val extendedDeadline = afterDeadline.toEpochMilli
+
+        val revealTx = txCreator.revealPlayerTwo(
+          utxos = utxos,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage2,
+          playerTwoPkh = Bob.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = extendedDeadline, // Trying to change deadline!
+          sponsor = Bob.address,
+          validTo = deadline,
+          signer = Bob.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, revealTx, lotteryUtxo._1, "Reveal deadline must not change")
+    }
+
     test("P2 reveals with even sum (32 + 16 = 48)") {
         val provider = createProvider()
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
@@ -447,6 +497,129 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(beforeSlot)
         assertSuccess(provider, loseTx, lotteryUtxo2._1)
+    }
+
+    test("FAIL: P2 second reveal with wrong preimage") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+
+        // P1 reveals first
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val p1RevealTx = txCreator.revealPlayerOne(
+          utxos = utxos1,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage1,
+          playerOnePkh = Alice.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Alice.address,
+          validTo = deadline,
+          signer = Alice.signer
+        )
+        provider.setSlot(beforeSlot)
+        provider.submit(p1RevealTx).await()
+
+        val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
+
+        // P2 tries to reveal with wrong preimage
+        val utxos2 = provider.findUtxos(Bob.address).await().toOption.get
+        val p2RevealTx = txCreator.revealPlayerTwo(
+          utxos = utxos2,
+          lotteryUtxo = lotteryUtxo2,
+          preimage = wrongPreimage,
+          playerTwoPkh = Bob.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Bob.address,
+          validTo = deadline,
+          signer = Bob.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, p2RevealTx, lotteryUtxo2._1, "Fraudulent attempt")
+    }
+
+    test("FAIL: P2 lose with wrong preimage") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+
+        // P1 reveals first
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val p1RevealTx = txCreator.revealPlayerOne(
+          utxos = utxos1,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage1,
+          playerOnePkh = Alice.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Alice.address,
+          validTo = deadline,
+          signer = Alice.signer
+        )
+        provider.setSlot(beforeSlot)
+        provider.submit(p1RevealTx).await()
+
+        val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
+
+        // P2 tries to concede with wrong preimage
+        val utxos2 = provider.findUtxos(Bob.address).await().toOption.get
+        val loseTx = txCreator.lose(
+          utxos = utxos2,
+          lotteryUtxo = lotteryUtxo2,
+          preimage = wrongPreimage,
+          loserPkh = Bob.addrKeyHash,
+          winnerAddress = Alice.address,
+          winnerOutputIdx = BigInt(0),
+          sponsor = Bob.address,
+          validTo = deadline,
+          signer = Bob.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, loseTx, lotteryUtxo2._1, "Fraudulent attempt")
+    }
+
+    test("FAIL: P1 timeout with wrong preimage") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+
+        // P1 reveals first
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val p1RevealTx = txCreator.revealPlayerOne(
+          utxos = utxos1,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage1,
+          playerOnePkh = Alice.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Alice.address,
+          validTo = deadline,
+          signer = Alice.signer
+        )
+        provider.setSlot(beforeSlot)
+        provider.submit(p1RevealTx).await()
+
+        val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
+
+        // P1 tries to timeout with wrong preimage
+        val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
+        val timeoutTx = txCreator.timeout(
+          utxos = utxos2,
+          lotteryUtxo = lotteryUtxo2,
+          preimage = wrongPreimage,
+          claimantPkh = Alice.addrKeyHash,
+          payeeAddress = Alice.address,
+          sponsor = Alice.address,
+          validFrom = afterDeadline,
+          signer = Alice.signer
+        )
+
+        provider.setSlot(afterSlot)
+        assertFailure(provider, timeoutTx, lotteryUtxo2._1, "Fraudulent attempt")
     }
 
     test("P1 reveals with even sum (32 + 16 = 48) after P2 revealed") {
