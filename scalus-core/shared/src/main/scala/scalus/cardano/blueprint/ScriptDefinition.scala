@@ -9,6 +9,7 @@ import scalus.uplc.Program
 
 /** A description of a Scalus application, containing one or more contracts.
   */
+@deprecated("use Blueprint instead", "0.14.2")
 case class Application(
     preamble: Preamble,
     contracts: Seq[CompiledContract],
@@ -20,6 +21,7 @@ case class Application(
     }
 }
 
+@deprecated("use Blueprint instead", "0.14.2")
 object Application {
     def apply(
         title: String,
@@ -43,6 +45,7 @@ object Application {
 }
 
 /** A smart contract compiled with Scalus. */
+@deprecated("use Compiled instead", "0.14.2")
 trait CompiledContract {
     def sir: SIR
     def program: Program
@@ -56,6 +59,7 @@ trait CompiledContract {
     )
 }
 
+@deprecated("use scalus.uplc.PlutusV3 instead", "0.14.2")
 class PlutusV3CompiledContract(
     preamble: Preamble,
     override val sir: SIR,
@@ -90,6 +94,7 @@ class PlutusV3CompiledContract(
     override lazy val blueprint: Blueprint = Blueprint(preamble, Seq(describeValidator))
 }
 
+@deprecated("use scalus.uplc.PlutusV3 instead", "0.14.2")
 object PlutusV3CompiledContract {
 
     inline def create[D, R](

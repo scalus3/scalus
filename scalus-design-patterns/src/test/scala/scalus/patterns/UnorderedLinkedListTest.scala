@@ -3,11 +3,8 @@ package scalus.patterns
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString.*
-import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.Options
-import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.{UnorderedLinkedListContract, UnorderedNodeAction}
 import scalus.ledger.api.v2.{OutputDatum, TxOut}
 import scalus.ledger.api.v3.*
@@ -20,12 +17,6 @@ import scalus.uplc.eval.Result
 import scala.language.implicitConversions
 
 class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
-    given Options = Options(
-      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      generateErrorTraces = true,
-      optimizeUplc = true,
-      debug = false
-    )
     import Cons.{cons, head}
 
     extension (self: TxOut) def token: Value = self.value.withoutLovelace
@@ -77,6 +68,8 @@ class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
         lovelace: BigInt = 0
     ): TxOut = txOut(None, burn, lovelace)
 
+    private val contract = UnorderedLinkedListContract.withErrorTraces
+
     case class TestCase(
         budget: ExUnits,
         inputs: List[TxInInfo],
@@ -95,8 +88,7 @@ class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
           signatories = signedBy.map(key => List.single(PubKeyHash(key))).getOrElse(List.Nil),
           id = TestUtil.mockTxOutRef(2, 1).id
         )
-        val result = UnorderedLinkedListContract
-            .make(config)
+        val result = (contract.program $ config.toData)
             .runWithDebug(
               scriptContext = ScriptContext(
                 txInfo = tx,
@@ -115,8 +107,8 @@ class UnorderedLinkedListTest extends AnyFunSuite, ScalusTest:
         else
             result.logs.foreach(println)
             val reason = result match
-                case Result.Failure(exception, _, _, _) =>
-                    s"Script failed with exception: ${exception.getMessage}"
+                case Result.Failure(ex, _, _, _) =>
+                    s"Script failed with exception: ${ex.getMessage}"
                 case _ => "Script should fail, but didn't"
             fail(reason)
 

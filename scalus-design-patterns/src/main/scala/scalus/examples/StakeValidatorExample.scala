@@ -2,9 +2,11 @@ package scalus.examples
 
 import scalus.*
 import scalus.builtin.Data
+import scalus.compiler.Options
 import scalus.ledger.api.v3.*
 import scalus.patterns.StakeValidator
 import scalus.prelude.*
+import scalus.uplc.PlutusV3
 
 /** Example for a validator that requires a withdrawal from its script for each spend. Note that
   * depending on an external script is typically more performant.
@@ -36,3 +38,6 @@ object StakeValidatorExample extends Validator {
         )
     }
 }
+
+private given stakeValidatorOptions: Options = Options.release
+lazy val StakeValidatorExampleContract = PlutusV3.compile(StakeValidatorExample.validate)

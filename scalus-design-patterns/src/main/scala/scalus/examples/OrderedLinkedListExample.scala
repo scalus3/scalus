@@ -1,14 +1,16 @@
 package scalus.examples
 
-import scalus.builtin.{Builtins, Data}
 import scalus.builtin.Data.{FromData, ToData}
-import scalus.cardano.blueprint.{Application, Blueprint}
-import scalus.compiler.{compileWithOptions, Options}
+import scalus.builtin.{Builtins, Data}
+import scalus.cardano.blueprint.{Blueprint, HasTypeDescription, Preamble, Validator}
+import scalus.compiler.Options
 import scalus.ledger.api.v1.Address
 import scalus.ledger.api.v3.*
-import scalus.patterns.{Config, Cons}
 import scalus.patterns.OrderedLinkedList.*
+import scalus.patterns.{Config, Cons}
 import scalus.prelude.*
+import scalus.uplc.PlutusV3
+import scalus.utils.Hex.toHex
 import scalus.{show as _, *}
 
 /** Actions that can be performed on the linked list
@@ -209,21 +211,31 @@ object OrderedLinkedList extends DataParameterizedValidator:
                   "Must satisfy removal broke phase rules"
                 )
 
-object OrderedLinkedListContract:
+private given orderedLinkedListOptions: Options = Options.release
+lazy val OrderedLinkedListContract = PlutusV3.compile(OrderedLinkedList.validate)
 
-    inline def make(param: Config)(using options: Options) =
-        import scalus.builtin.Data.toData
-        compileWithOptions(options, OrderedLinkedList.validate).toUplc().plutusV3 $ param.toData
-
-    inline def compiled(using options: Options) =
-        compileWithOptions(options, OrderedLinkedList.validate)
-
-    def application: Application = Application
-        .ofSingleValidator[Config, OrderedNodeAction](
-          "OrderedLinkedList validator",
-          "Linked list structures leverage the EUTXO model to enhancing scalability and throughput significantly. By linking multiple UTXOs together through a series of minting policies and validators, it can improve the user experience interacting with smart contract concurrently.",
-          "1.0.0",
-          OrderedLinkedList.validate
+lazy val OrderedLinkedListBlueprint: Blueprint = {
+    val title = "OrderedLinkedList validator"
+    val description =
+        "Linked list structures leverage the EUTXO model to enhancing scalability and throughput significantly. By linking multiple UTXOs together through a series of minting policies and validators, it can improve the user experience interacting with smart contract concurrently."
+    val compiled = OrderedLinkedListContract
+    Blueprint(
+      preamble = Preamble(
+        title,
+        description,
+        "1.0.0",
+        plutusVersion = compiled.language,
+        license = Some("Apache-2.0")
+      ),
+      validators = Seq(
+        Validator(
+          title = title,
+          description = Some(description),
+          redeemer = Some(summon[HasTypeDescription[OrderedNodeAction]].typeDescription),
+          parameters = Some(scala.List(summon[HasTypeDescription[Config]].typeDescription)),
+          compiledCode = Some(compiled.program.cborEncoded.toHex),
+          hash = Some(compiled.script.scriptHash.toHex)
         )
-
-    def blueprint: Blueprint = application.blueprint
+      )
+    )
+}

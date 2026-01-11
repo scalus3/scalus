@@ -4,11 +4,11 @@ import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data
 import scalus.builtin.Data.{FromData, ToData}
-import scalus.compiler.compile
+import scalus.compiler.Options
 import scalus.ledger.api.v3.{TxInfo, TxOutRef}
 import scalus.patterns.UtxoIndexer
 import scalus.prelude.Validator
-import scalus.uplc.Program
+import scalus.uplc.PlutusV3
 
 /** Example validator using the UTxO Indexer pattern. */
 
@@ -42,15 +42,13 @@ object IndexerValidator extends Validator:
         )
     }
 
-object IndexerValidatorContract:
-    val compiledValidator = compile(IndexerValidator.validate)
-    val script: Program = compiledValidator.toUplc(generateErrorTraces = true).plutusV3
+private given indexerOptions: Options = Options.release
+lazy val IndexerValidatorContract = PlutusV3.compile(IndexerValidator.validate)
 
 /** Off-chain code demonstrating how to use SpendWithDelayedRedeemer to compute the indices. */
 object Offchain:
     import scalus.builtin.Data.toData
     import scalus.cardano.address.Address
-    import scalus.cardano.ledger.Script.PlutusV3
     import scalus.cardano.ledger.{CardanoInfo, Transaction, Utxo}
     import scalus.cardano.txbuilder.TxBuilder
 
@@ -59,8 +57,6 @@ object Offchain:
         scriptUtxo: Utxo,
         recipientAddress: Address
     ): TxBuilder = {
-        val plutusScript = PlutusV3(IndexerValidatorContract.script.cborByteString)
-
         TxBuilder(env)
             .spend(
               scriptUtxo,
@@ -72,7 +68,7 @@ object Offchain:
 
                   IndexerRedeemer(BigInt(inputIdx), BigInt(outputIdx)).toData
               },
-              plutusScript
+              IndexerValidatorContract.script
             )
             .payTo(recipientAddress, scriptUtxo.output.value)
         // Caller should call .build(changeTo = address)

@@ -3,9 +3,11 @@ package scalus.examples
 import scalus.*
 import scalus.builtin.{ByteString, Data, FromData}
 import scalus.builtin.ByteString.utf8
+import scalus.compiler.Options
 import scalus.ledger.api.v3.*
 import scalus.patterns.TransactionLevelMinterValidator
 import scalus.prelude.*
+import scalus.uplc.PlutusV3
 
 @Compile
 object TransactionLevelMinterValidatorExample extends Validator {
@@ -71,3 +73,7 @@ object TransactionLevelMinterValidatorExample extends Validator {
         require(scriptInputsCount === sampleMintRedeemer.maxUtxosToSpend)
     }
 }
+
+private given txLevelMinterOptions: Options = Options.release
+lazy val TransactionLevelMinterValidatorExampleContract =
+    PlutusV3.compile(TransactionLevelMinterValidatorExample.validate)
