@@ -9,26 +9,24 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.Data
 import scalus.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.{compileInline, Options}
+import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.prelude.{Eq, Option as ScalusOption}
-import scalus.toUplc
-import scalus.uplc.{DeBruijn, Term}
+import scalus.uplc.{DeBruijn, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
 import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.eval.*
 
-import scala.annotation.targetName
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 /** ScalaTest integration trait for evaluation testing.
   *
   * Provides:
-  *   - Inline compilation via `assertEval*` methods
+  *   - Inline compilation via `assertEval*` methods using `PlutusV3.compile`
   *   - Given-based configuration injection
   *   - Property-based testing support via `checkEval`
-  *   - Infix syntax: `code evalEq expected`
+  *   - Configurable PlutusVM via `using` parameters
   *
   * This trait provides the core functionality for testing Scalus code evaluation.
   */
@@ -44,7 +42,10 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
       debug = false
     )
 
+    /** Default PlutusVM - can be overridden by subclasses */
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
+
+    /** Given PlutusVM using plutusVM - methods can override via `using` parameter */
     protected given PlutusVM = plutusVM
 
     // ----- Utility -----
@@ -56,78 +57,95 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     // ----- Inline Compilation Assertions -----
 
     /** Assert that code evaluates to true on both JVM and PlutusVM. */
-    protected final inline def assertEval(inline code: Boolean): Unit =
+    protected final inline def assertEval(inline code: Boolean)(using vm: PlutusVM): Unit =
         assert(code)
-        val codeTerm = compileInline(code).toUplc(true).evaluate
+        val compiled = PlutusV3.compile(code)
+        val codeTerm = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiled.program.term))
         assert(codeTerm α_== trueTerm)
 
     /** Assert that code evaluates to expected value on both JVM and PlutusVM. */
-    protected final inline def assertEvalEq[T: Eq](inline code: T, inline expected: T): Unit =
-        assertEvalEqBudget(code, expected)
+    protected final inline def assertEvalEq[T: Eq](
+        inline code: T,
+        inline expected: T
+    )(using vm: PlutusVM): Unit =
+        val compiled = PlutusV3.compile(code)
+        val compiledExpected = PlutusV3.compile(expected)
 
-    /** Assert that code evaluates to expected value with budget check. */
-    protected final inline def assertEvalEqBudget[T: Eq](
+        assert(
+          compiled.code === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${compiled.code}"
+        )
+
+        val codeTerm = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiled.program.term))
+        val expectedTerm =
+            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiledExpected.program.term))
+        assert(
+          codeTerm α_== expectedTerm,
+          s"Expected term $expectedTerm, but got $codeTerm"
+        )
+
+    /** Assert that code evaluates to expected value with budget limit check. */
+    protected final inline def assertEvalWithinBudget[T: Eq](
         inline code: T,
         inline expected: T,
-        budget: scala.Option[ExUnits] = None
-    ): Unit =
-        assert(code === expected, s"Expected $expected, but got $code")
+        budget: ExUnits
+    )(using vm: PlutusVM): Unit =
+        val compiled = PlutusV3.compile(code)
+        val compiledExpected = PlutusV3.compile(expected)
 
-        val vm = summon[PlutusVM]
-        val spender =
-            if budget.nonEmpty
-            then TallyingBudgetSpenderLogger(CountingBudgetSpender())
-            else NoBudgetSpender
+        assert(
+          compiled.code === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${compiled.code}"
+        )
+
+        val spender = TallyingBudgetSpenderLogger(CountingBudgetSpender())
 
         val codeTerm = vm.evaluateDeBruijnedTerm(
-          DeBruijn.deBruijnTerm(compileInline(code).toUplc(true)),
+          DeBruijn.deBruijnTerm(compiled.program.term),
           budgetSpender = spender
         )
 
-        if budget.exists: budget =>
-                spender.getSpentBudget.steps > budget.steps ||
-                    spender.getSpentBudget.memory > budget.memory
+        if spender.getSpentBudget.steps > budget.steps ||
+            spender.getSpentBudget.memory > budget.memory
         then
             fail:
                 s"""Performance regression,
-                |expected: ${budget.get},
+                |expected: $budget,
                 |but got: ${spender.getSpentBudget};
-                |costs: ${spender
-                      .asInstanceOf[TallyingBudgetSpenderLogger]
-                      .costs
-                      .toMap}""".stripMargin
+                |costs: ${spender.costs.toMap}""".stripMargin
 
-        val expectedTerm = compileInline(expected).toUplc(true).evaluate
+        val expectedTerm =
+            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiledExpected.program.term))
         assert(
           codeTerm α_== expectedTerm,
           s"Expected term $expectedTerm, but got $codeTerm"
         )
 
     /** Assert that code evaluates to different value than expected. */
-    protected final inline def assertEvalNotEq[T: Eq](inline code: T, inline expected: T): Unit =
-        assert(code !== expected, s"Expected not equal to $expected, but got $code")
+    protected final inline def assertEvalNotEq[T: Eq](
+        inline code: T,
+        inline expected: T
+    )(using vm: PlutusVM): Unit =
+        val compiled = PlutusV3.compile(code)
+        val compiledExpected = PlutusV3.compile(expected)
 
-        val codeTerm = compileInline(code).toUplc(true).evaluate
-        val expectedTerm = compileInline(expected).toUplc(true).evaluate
+        assert(
+          compiled.code !== compiledExpected.code,
+          s"Expected not equal to ${compiledExpected.code}, but got ${compiled.code}"
+        )
+
+        val codeTerm = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiled.program.term))
+        val expectedTerm =
+            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiledExpected.program.term))
         assert(
           !(codeTerm α_== expectedTerm),
           s"Expected term not equal to $expectedTerm, but got $codeTerm"
         )
 
     /** Assert that code evaluation fails with expected exception type. */
-    protected final inline def assertEvalFails[E <: Throwable: ClassTag](inline code: Any): Unit =
-        assertEvalBudgetFails[E](code)
-
-    /** Assert that code evaluation fails with expected exception type and budget check. */
-    protected final inline def assertEvalFails[E <: Throwable: ClassTag](cpu: Long, memory: Long)(
+    protected final inline def assertEvalFails[E <: Throwable: ClassTag](
         inline code: Any
-    ): Unit = assertEvalBudgetFails[E](code, Some(ExUnits(memory = memory, steps = cpu)))
-
-    /** Assert that code evaluation fails with budget verification. */
-    protected final inline def assertEvalBudgetFails[E <: Throwable: ClassTag](
-        inline code: Any,
-        budget: scala.Option[ExUnits] = None
-    ): Unit =
+    )(using vm: PlutusVM): Unit =
         var isExceptionThrown = false
 
         val _ =
@@ -138,7 +156,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                       summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
                       s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
                     )
-                    val result = compileInline(code).toUplc(true).evaluateDebug
+                    val compiled = PlutusV3.compile(code)
+                    val result = compiled.program.evaluateDebug
                     result match
                         case failure: Result.Failure =>
                             result.logs.lastOption match
@@ -150,13 +169,48 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                                         exception.getClass.getName
                                       )
                                     )
-                                    if budget.exists: budget =>
-                                            result.budget.steps > budget.steps ||
-                                                result.budget.memory > budget.memory
+                        case _ =>
+                            fail(s"Expected failure, but got success: $result")
+
+                    isExceptionThrown = true
+
+        if !isExceptionThrown then
+            fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
+
+    /** Assert that code evaluation fails with expected exception type and budget limit check. */
+    protected final inline def assertEvalFailsWithinBudget[E <: Throwable: ClassTag](
+        inline code: Any,
+        budget: ExUnits
+    )(using vm: PlutusVM): Unit =
+        var isExceptionThrown = false
+
+        val _ =
+            try code
+            catch
+                case NonFatal(exception) =>
+                    assert(
+                      summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
+                      s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
+                    )
+                    val compiled = PlutusV3.compile(code)
+                    val result = compiled.program.evaluateDebug
+                    result match
+                        case failure: Result.Failure =>
+                            result.logs.lastOption match
+                                case Some(message) =>
+                                    assert(message.contains(exception.getMessage))
+                                case None =>
+                                    assert(
+                                      failure.exception.getMessage.contains(
+                                        exception.getClass.getName
+                                      )
+                                    )
+                                    if result.budget.steps > budget.steps ||
+                                        result.budget.memory > budget.memory
                                     then
                                         fail:
                                             s"""Performance regression,
-                                            |expected: ${budget.get},
+                                            |expected: $budget,
                                             |but got: ${result.budget};
                                             |costs: ${result.costs}""".stripMargin
                         case _ =>
@@ -170,7 +224,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     /** Assert that code evaluation fails with specific error message. */
     protected final inline def assertEvalFailsWithMessage[E <: Throwable: ClassTag](
         expectedMessage: String
-    )(inline code: Any): Unit =
+    )(inline code: Any)(using vm: PlutusVM): Unit =
         var isExceptionThrown = false
 
         val _ =
@@ -187,7 +241,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                       s"Expected message '$expectedMessage', but got '${exception.getMessage}'"
                     )
 
-                    val result = compileInline(code).toUplc(true).evaluateDebug
+                    val compiled = PlutusV3.compile(code)
+                    val result = compiled.program.evaluateDebug
                     result match
                         case failure: Result.Failure =>
                             result.logs.lastOption match
@@ -208,45 +263,36 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
             fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
 
     /** Assert code evaluates successfully (no exception). */
-    protected final inline def assertEvalSuccess(inline code: Any): Unit =
+    protected final inline def assertEvalSuccess(inline code: Any)(using vm: PlutusVM): Unit =
         val _ =
             try code
             catch
                 case NonFatal(exception) => fail(s"Expected success, but got exception: $exception")
 
-        val result = compileInline(code).toUplc(true).evaluateDebug
+        val compiled = PlutusV3.compile(code)
+        val result = compiled.program.evaluateDebug
         result match
             case failure: Result.Failure =>
                 fail(s"Expected success, but got failure: $failure")
             case _ =>
 
     /** Assert code compiles and evaluates without checking result. */
-    protected final inline def assertEvalCompile(inline code: Any): Unit =
-        compileInline(code).toUplc(true).evaluate
-
-    // ----- Infix Extension Methods -----
-
-    extension [T: Eq](inline code: T)
-        /** Infix syntax with budget: `code evalEq (cpu, mem) (expected)` */
-        @targetName("assertEvalEqBudgetTo")
-        protected final inline infix def evalEq(cpu: Long, memory: Long)(inline expected: T): Unit =
-            assertEvalEqBudget(code, expected, Some(ExUnits(memory = memory, steps = cpu)))
-
-        /** Infix syntax: `code evalEq expected` */
-        @targetName("assertEvalEqTo")
-        protected final inline infix def evalEq(inline expected: T): Unit =
-            assertEvalEqBudget(code, expected)
+    protected final inline def assertEvalCompile(inline code: Any)(using vm: PlutusVM): Unit =
+        val compiled = PlutusV3.compile(code)
+        compiled.program.term.evaluate
 
     // ----- Term-Level Assertions -----
 
     /** Assert two terms evaluate to the same result */
-    protected def assertTermEvalEq(a: Term, b: Term): Unit =
+    protected def assertTermEvalEq(a: Term, b: Term)(using vm: PlutusVM): Unit =
         val aResult = a.evaluate
         val bResult = b.evaluate
         assert(aResult α_== bResult, s"Terms not equal: $aResult vs $bResult")
 
     /** Assert term evaluation throws expected exception */
-    protected def assertTermEvalThrows[E <: Throwable: ClassTag](term: Term): Unit =
+    protected def assertTermEvalThrows[E <: Throwable: ClassTag](term: Term)(using
+        vm: PlutusVM
+    ): Unit =
         assertThrows[E](term.evaluate)
 
     // ----- Property-based Testing -----
@@ -254,6 +300,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected inline final def checkEval[A1](
         inline f: A1 => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -264,11 +312,10 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val sir = compileInline { (data: Data) => f(fromData[A1](data)) }
-        val uplc = sir.toUplc(true)
+        val compiled = PlutusV3.compile { (data: Data) => f(fromData[A1](data)) }
 
         def handler(payload: A1): Boolean =
-            val applied = uplc $ toData[A1](payload).asTerm
+            val applied = compiled.program.term $ toData[A1](payload).asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload)
 
@@ -277,6 +324,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected inline final def checkEval[A1, A2](
         inline f: (A1, A2) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -292,14 +341,12 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val sir = compileInline { (d1: Data, d2: Data) =>
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data) =>
             f(fromData[A1](d1), fromData[A2](d2))
         }
 
-        val uplc = sir.toUplc(true)
-
         def handler(payload1: A1, payload2: A2): Boolean =
-            val applied = uplc $ payload1.toData.asTerm $ payload2.toData.asTerm
+            val applied = compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2)
 
@@ -308,6 +355,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected inline final def checkEval[A1, A2, A3](
         inline f: (A1, A2, A3) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -328,15 +377,13 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val sir = compileInline { (d1: Data, d2: Data, d3: Data) =>
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data, d3: Data) =>
             f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3))
         }
 
-        val uplc = sir.toUplc(true)
-
         def handler(payload1: A1, payload2: A2, payload3: A3): Boolean =
             val applied =
-                uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm
+                compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2, payload3)
 
@@ -345,6 +392,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected inline final def checkEval[A1, A2, A3, A4](
         inline f: (A1, A2, A3, A4) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -370,15 +419,13 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data) =>
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data, d3: Data, d4: Data) =>
             f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3), fromData[A4](d4))
         }
 
-        val uplc = sir.toUplc(true)
-
         def handler(payload1: A1, payload2: A2, payload3: A3, payload4: A4): Boolean =
             val applied =
-                uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm
+                compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2, payload3, payload4)
 
@@ -387,6 +434,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected inline final def checkEval[A1, A2, A3, A4, A5](
         inline f: (A1, A2, A3, A4, A5) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -417,7 +466,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val sir = compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data) =>
+        val compiled = PlutusV3.compile { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data) =>
             f(
               fromData[A1](d1),
               fromData[A2](d2),
@@ -427,8 +476,6 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
             )
         }
 
-        val uplc = sir.toUplc(true)
-
         def handler(
             payload1: A1,
             payload2: A2,
@@ -437,7 +484,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
             payload5: A5
         ): Boolean =
             val applied =
-                uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm $ payload5.toData.asTerm
+                compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm $ payload5.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(payload1, payload2, payload3, payload4, payload5)
 
@@ -446,6 +493,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected inline final def checkEval[A1, A2, A3, A4, A5, A6](
         inline f: (A1, A2, A3, A4, A5, A6) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
+    )(using
+        vm: PlutusVM
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -481,8 +530,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val sir =
-            compileInline { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data, d6: Data) =>
+        val compiled =
+            PlutusV3.compile { (d1: Data, d2: Data, d3: Data, d4: Data, d5: Data, d6: Data) =>
                 f(
                   fromData[A1](d1),
                   fromData[A2](d2),
@@ -493,8 +542,6 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                 )
             }
 
-        val uplc = sir.toUplc(true)
-
         def handler(
             payload1: A1,
             payload2: A2,
@@ -504,7 +551,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
             payload6: A6
         ): Boolean =
             val applied =
-                uplc $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm $ payload5.toData.asTerm $ payload6.toData.asTerm
+                compiled.program.term $ payload1.toData.asTerm $ payload2.toData.asTerm $ payload3.toData.asTerm $ payload4.toData.asTerm $ payload5.toData.asTerm $ payload6.toData.asTerm
             val resultTerm = applied.evaluate
             (resultTerm α_== trueTerm) && f(
               payload1,
@@ -517,5 +564,5 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
         check(handler, configParams*)
 
-    private val trueTerm = compileInline(true).toUplc(true).evaluate
+    private val trueTerm = PlutusV3.compile(true).program.term.evaluate
 }

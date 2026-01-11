@@ -7,7 +7,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.compiler.compile
 import scalus.prelude.List as PList
 import scalus.testing.kit.EvalTestKit
-import scalus.uplc.Constant.{Pair, asConstant}
+import scalus.uplc.Constant.{asConstant, Pair}
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given

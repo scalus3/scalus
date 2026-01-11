@@ -2,48 +2,82 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.*
+import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.eval.BuiltinException
 
 class ByteStringTest extends AnyFunSuite with EvalTestKit:
 
     test("fromBigIntBigEndian"):
-        fromBigIntBigEndian(1_000_000, 3).evalEq(1530707, 1401):
-            hex"0f4240"
-        fromBigIntBigEndian(1_000_000, 5).evalEq(1530707, 1401):
-            hex"00000f4240"
-        fromBigIntBigEndian(0, 8).evalEq(1530707, 1401):
-            hex"0000000000000000"
-        assertEvalFails[BuiltinException](1530707, 1401):
-            fromBigIntBigEndian(1_000_000, 1)
+        assertEvalWithinBudget(
+          fromBigIntBigEndian(1_000_000, 3),
+          hex"0f4240",
+          ExUnits(memory = 1401, steps = 1530707)
+        )
+        assertEvalWithinBudget(
+          fromBigIntBigEndian(1_000_000, 5),
+          hex"00000f4240",
+          ExUnits(memory = 1401, steps = 1530707)
+        )
+        assertEvalWithinBudget(
+          fromBigIntBigEndian(0, 8),
+          hex"0000000000000000",
+          ExUnits(memory = 1401, steps = 1530707)
+        )
+        assertEvalFailsWithinBudget[BuiltinException](
+          fromBigIntBigEndian(1_000_000, 1),
+          ExUnits(memory = 1401, steps = 1530707)
+        )
 
     test("fromBigIntLittleEndian"):
-        fromBigIntLittleEndian(1_000_000, 3).evalEq(1530707, 1401):
-            hex"40420f"
-        fromBigIntLittleEndian(1_000_000, 5).evalEq(1530707, 1401):
-            hex"40420f0000"
-        fromBigIntLittleEndian(0, 8).evalEq(1530707, 1401):
-            hex"0000000000000000"
-        assertEvalFails[BuiltinException](1530707, 1401):
-            fromBigIntLittleEndian(1_000_000, 1)
+        assertEvalWithinBudget(
+          fromBigIntLittleEndian(1_000_000, 3),
+          hex"40420f",
+          ExUnits(memory = 1401, steps = 1530707)
+        )
+        assertEvalWithinBudget(
+          fromBigIntLittleEndian(1_000_000, 5),
+          hex"40420f0000",
+          ExUnits(memory = 1401, steps = 1530707)
+        )
+        assertEvalWithinBudget(
+          fromBigIntLittleEndian(0, 8),
+          hex"0000000000000000",
+          ExUnits(memory = 1401, steps = 1530707)
+        )
+        assertEvalFailsWithinBudget[BuiltinException](
+          fromBigIntLittleEndian(1_000_000, 1),
+          ExUnits(memory = 1401, steps = 1530707)
+        )
 
     test("utf8 string interpolator"):
         // Test simple ASCII string
-        utf8"hello".evalEq(1530707, 1401):
-            fromString("hello")
+        assertEvalWithinBudget(
+          utf8"hello",
+          fromString("hello"),
+          ExUnits(memory = 1401, steps = 1530707)
+        )
 
         // Test with special characters
-        utf8"Hello, World!".evalEq(1530707, 1401):
-            fromString("Hello, World!")
+        assertEvalWithinBudget(
+          utf8"Hello, World!",
+          fromString("Hello, World!"),
+          ExUnits(memory = 1401, steps = 1530707)
+        )
 
         // Test with Unicode
-        utf8"Hello, 世界".evalEq(1530707, 1401):
-            fromString("Hello, 世界")
+        assertEvalWithinBudget(
+          utf8"Hello, 世界",
+          fromString("Hello, 世界"),
+          ExUnits(memory = 1401, steps = 1530707)
+        )
 
         // Test empty string
-        utf8"".evalEq(1530707, 1401):
-            fromString("")
+        assertEvalWithinBudget(utf8"", fromString(""), ExUnits(memory = 1401, steps = 1530707))
 
         // Test numbers and symbols
-        utf8"123!@#$$%^&*()".evalEq(1530707, 1401):
-            fromString("123!@#$%^&*()")
+        assertEvalWithinBudget(
+          utf8"123!@#$$%^&*()",
+          fromString("123!@#$%^&*()"),
+          ExUnits(memory = 1401, steps = 1530707)
+        )

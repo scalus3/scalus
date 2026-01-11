@@ -1,6 +1,7 @@
 package scalus.uplc
 
 import scalus.*
+import scalus.uplc.eval.PlutusVM
 
 import scala.reflect.ClassTag
 import scala.scalajs.js
@@ -30,11 +31,13 @@ class CekBuiltinsJsTest extends CekBuiltinsTest:
             case Left(value)  => throw new Exception(s"Parse error: $value")
             case Right(value) => value
 
-    override def assertTermEvalEq(a: Term, b: Term): Unit =
+    override def assertTermEvalEq(a: Term, b: Term)(using vm: PlutusVM): Unit =
         // First evaluate with UPLC CLI
         assert(evalUplcCli(a) == b.evaluate, s"UPLC CLI: $a != $b")
         // Then also evaluate with Scalus VM
         super.assertTermEvalEq(a, b)
 
-    override def assertTermEvalThrows[E <: Throwable: ClassTag](term: Term): Unit =
+    override def assertTermEvalThrows[E <: Throwable: ClassTag](term: Term)(using
+        vm: PlutusVM
+    ): Unit =
         super.assertTermEvalThrows[E](term)
