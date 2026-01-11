@@ -9,8 +9,6 @@ import scalus.testing.assertions.Expected
 import scalus.uplc.*
 import scalus.uplc.eval.{BuiltinError, PlutusVM}
 
-import scala.util.{Failure, Success, Try}
-
 /** Base test class for validator testing.
   *
   * Provides assertion methods for evaluating Programs and checking results. This base class works

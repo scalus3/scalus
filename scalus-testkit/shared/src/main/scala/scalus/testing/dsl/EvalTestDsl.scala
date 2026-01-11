@@ -1,9 +1,8 @@
 package scalus.testing.dsl
 
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.Options
 import scalus.compiler.sir.{SIR, TargetLoweringBackend}
-import scalus.testing.assertions.{Expected, MultiResultAssertions, ResultAssertions}
+import scalus.testing.assertions.{MultiResultAssertions, ResultAssertions}
 import scalus.testing.eval.{EvalConfig, Evaluator, MultiEvalResult}
 import scalus.uplc.{Compiled, Constant, Program, Term}
 import scalus.uplc.eval.{PlutusVM, Result}

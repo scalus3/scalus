@@ -1,10 +1,10 @@
 package scalus.examples.lottery
 
-import scalus.Compiler
 import scalus.cardano.blueprint.Blueprint
+import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 
-private given Compiler.Options = Compiler.Options.release
+private given Options = Options.release
 lazy val LotteryContract = PlutusV3.compile(LotteryValidator.validate)
 lazy val LotteryBlueprint = Blueprint.plutusV3[State, Action](
   title = "Two-player lottery contract",

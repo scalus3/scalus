@@ -3,9 +3,10 @@ package scalus.examples
 import scalus.*
 import scalus.builtin.Builtins.*
 import scalus.builtin.{ByteString, Data}
-import scalus.cardano.blueprint.{Application, Blueprint}
+import scalus.cardano.blueprint.Blueprint
+import scalus.compiler.Options
 import scalus.compiler.sir.{SIR, TargetLoweringBackend}
-import scalus.compiler.{compile, Options}
+import scalus.compiler.compile
 import scalus.ledger.api.v2.*
 import scalus.prelude.*
 import scalus.uplc.*
@@ -83,15 +84,15 @@ object OptimizedPreimage {
     val doubleCborHex: String = programV1.doubleCborHex
 }
 
-object PreimageValidatorContract:
-    def application: Application = Application
-        .ofSingleValidator[(ByteString, ByteString), ByteString](
-          "Preimage validator",
-          "Hash preimage verification with signature validation",
-          "1.0.0",
-          PreimageValidatorV3.validate
-        )
+private object PreimageValidatorCompiler:
+    given Options = Options.release
+    lazy val contract = PlutusV3.compile(PreimageValidatorV3.validate)
 
-    def blueprint: Blueprint = application.blueprint
-
-end PreimageValidatorContract
+lazy val PreimageValidatorContract = PreimageValidatorCompiler.contract
+lazy val PreimageValidatorBlueprint = Blueprint.plutusV3[(ByteString, ByteString), ByteString](
+  title = "Preimage validator",
+  description = "Hash preimage verification with signature validation",
+  version = "1.0.0",
+  compiled = PreimageValidatorContract,
+  license = None
+)

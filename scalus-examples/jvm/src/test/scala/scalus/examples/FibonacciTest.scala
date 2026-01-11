@@ -16,6 +16,7 @@ import scala.annotation.tailrec
 import scala.language.implicitConversions
 
 class FibonacciTest extends AnyFunSuite with ScalusTest {
+    given Options = Options.default
 
     /** Fibonacci Lookup Implementation using Pre-packed ByteString
       *
