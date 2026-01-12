@@ -179,19 +179,32 @@ object AuctionValidator extends Validator {
           "Bidder must sign the transaction"
         )
 
-        // 3. New bid must be higher than current highest bid
+        // 3. Bidder cannot be the seller (prevents self-bidding manipulation)
+        require(
+          !(bidder === seller),
+          "Seller cannot bid on their own auction"
+        )
+
+        // 4. New bid must be higher than current highest bid
         require(
           bidAmount > currentHighestBid,
           "Bid must be higher than current highest bid"
         )
 
-        // 4. Use indexed lookup for continuing output (O(1) instead of O(n))
+        // 5. Use indexed lookup for continuing output (O(1) instead of O(n))
         val continuingOutput = txInfo.outputs.at(outputIdx)
+
+        // 6. Verify continuing output goes to the same script address (prevents redirect attack)
+        require(
+          continuingOutput.address === Address.fromScriptHash(scriptHash),
+          "Continuing output must go to auction script address"
+        )
+
         val newDatum = continuingOutput.datum match
             case OutputDatum.OutputDatum(newDatumData) => newDatumData.to[Datum]
             case _ => fail("Continuing auction output must have inline datum")
 
-        // 5. Verify the new datum is correct
+        // 7. Verify the new datum is correct
         val expectedNewDatum = Datum(
           seller = seller,
           highestBidder = Option.Some(bidder),
@@ -204,19 +217,19 @@ object AuctionValidator extends Validator {
           "New datum must reflect the new bid"
         )
 
-        // 6. Verify the auction NFT is preserved in the continuing output
+        // 8. Verify the auction NFT is preserved in the continuing output
         require(
           continuingOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
           "Auction NFT must be preserved"
         )
 
-        // 7. Verify the continuing output has at least the bid amount in lovelace
+        // 9. Verify the continuing output has at least the bid amount in lovelace
         require(
           continuingOutput.value.getLovelace >= bidAmount,
           "Continuing output must contain at least the bid amount"
         )
 
-        // 8. If there was a previous bidder, verify they get refunded using indexed lookup
+        // 10. If there was a previous bidder, verify they get refunded using indexed lookup
         currentHighestBidder match
             case Option.Some(previousBidder) =>
                 // refundOutputIdx >= 0 means there should be a refund output
@@ -230,8 +243,8 @@ object AuctionValidator extends Validator {
                   "Refund output must go to previous bidder"
                 )
                 require(
-                  refundOutput.value.getLovelace >= currentHighestBid,
-                  "Previous bidder must receive at least their bid amount"
+                  refundOutput.value.getLovelace === currentHighestBid,
+                  "Previous bidder must receive exactly their bid amount"
                 )
             case Option.None =>
                 // No previous bidder, no refund needed
@@ -255,7 +268,13 @@ object AuctionValidator extends Validator {
 
         currentHighestBidder match
             case Option.Some(winner) =>
-                // 2. Winner must receive the NFT (the auctioned item) - use indexed lookup
+                // 2. Winner cannot be the seller (defense in depth - also checked in handleBid)
+                require(
+                  !(winner === seller),
+                  "Seller cannot be the winner"
+                )
+
+                // 3. Winner must receive the NFT (the auctioned item) - use indexed lookup
                 require(
                   winnerOutputIdx >= BigInt(0),
                   "Winner output index required when there is a winner"

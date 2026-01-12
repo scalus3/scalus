@@ -63,7 +63,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
     // Budget assertion tests - limits should decrease as the compiler improves
     test("budget: first bid") {
         val cpuLimit = 150_000_000L
-        val memLimit = 430_000L
+        val memLimit = 450_000L
         val budget = TestCase(
           action = TestAction.Bid(bidAmount = 3_000_000L),
           expected = Expected.Success
@@ -80,7 +80,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 
     test("budget: outbid with refund") {
         val cpuLimit = 200_000_000L
-        val memLimit = 570_000L
+        val memLimit = 590_000L
         val budget = TestCase(
           action = TestAction.Outbid(newBidAmount = 5_000_000L),
           expected = Expected.Success
