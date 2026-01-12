@@ -7,12 +7,13 @@ import org.scalatest.Assertion
 import org.scalatest.Assertions
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.Data
-import scalus.builtin.Data.{fromData, toData, FromData, ToData}
+import scalus.builtin.Data.{toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.prelude.{Eq, Option as ScalusOption}
-import scalus.uplc.{DeBruijn, PlutusV3, Term}
+import scalus.uplc.*
+import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
 import scalus.uplc.test.ArbitraryInstances
 import scalus.uplc.eval.*
@@ -58,9 +59,9 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
     /** Assert that code evaluates to true on both JVM and PlutusVM. */
     protected final inline def assertEval(inline code: Boolean)(using vm: PlutusVM): Unit =
-        assert(code)
         val compiled = PlutusV3.compile(code)
-        val codeTerm = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiled.program.term))
+        assert(compiled.code)
+        val codeTerm = compiled.program.term.evaluate
         assert(codeTerm α_== trueTerm)
 
     /** Assert that code evaluates to expected value on both JVM and PlutusVM. */
@@ -76,9 +77,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
           s"Expected ${compiledExpected.code}, but got ${compiled.code}"
         )
 
-        val codeTerm = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiled.program.term))
-        val expectedTerm =
-            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiledExpected.program.term))
+        val codeTerm = compiled.program.term.evaluate
+        val expectedTerm = compiledExpected.program.term.evaluate
         assert(
           codeTerm α_== expectedTerm,
           s"Expected term $expectedTerm, but got $codeTerm"
@@ -114,8 +114,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                 |but got: ${spender.getSpentBudget};
                 |costs: ${spender.costs.toMap}""".stripMargin
 
-        val expectedTerm =
-            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiledExpected.program.term))
+        val expectedTerm = compiledExpected.program.term.evaluate
         assert(
           codeTerm α_== expectedTerm,
           s"Expected term $expectedTerm, but got $codeTerm"
@@ -134,9 +133,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
           s"Expected not equal to ${compiledExpected.code}, but got ${compiled.code}"
         )
 
-        val codeTerm = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiled.program.term))
-        val expectedTerm =
-            vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(compiledExpected.program.term))
+        val codeTerm = compiled.program.term.evaluate
+        val expectedTerm = compiledExpected.program.term.evaluate
         assert(
           !(codeTerm α_== expectedTerm),
           s"Expected term not equal to $expectedTerm, but got $codeTerm"
@@ -312,7 +310,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         prettifier: Prettifier,
         pos: source.Position
     ): Assertion =
-        val compiled = PlutusV3.compile { (data: Data) => f(fromData[A1](data)) }
+        val compiled = PlutusV3.compile { (data: Data) => f(data.to[A1]) }
 
         def handler(payload: A1): Boolean =
             val applied = compiled.program.term $ toData[A1](payload).asTerm
@@ -342,7 +340,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         pos: source.Position
     ): Assertion =
         val compiled = PlutusV3.compile { (d1: Data, d2: Data) =>
-            f(fromData[A1](d1), fromData[A2](d2))
+            f(d1.to[A1], d2.to[A2])
         }
 
         def handler(payload1: A1, payload2: A2): Boolean =
@@ -378,7 +376,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         pos: source.Position
     ): Assertion =
         val compiled = PlutusV3.compile { (d1: Data, d2: Data, d3: Data) =>
-            f(fromData[A1](d1), fromData[A2](d2), fromData[A3](d3))
+            f(d1.to[A1], d2.to[A2], d3.to[A3])
         }
 
         def handler(payload1: A1, payload2: A2, payload3: A3): Boolean =
