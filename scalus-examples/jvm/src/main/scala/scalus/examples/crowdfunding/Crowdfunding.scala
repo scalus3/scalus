@@ -643,18 +643,22 @@ object CrowdfundingValidator extends Validator {
         donationPolicyId: PolicyId,
         donationInputIndices: List[BigInt]
     ): Unit =
-        donationInputIndices.foreach { idx =>
+        val tokenName = DonationMintingPolicy.donationTokenName
+        // Count donation tokens and verify each input has exactly 1
+        val tokenCount = donationInputIndices.foldLeft(BigInt(0)) { (count, idx) =>
             val donationInput = txInfo.inputs.at(idx)
-            // Get the donation token from the input and verify it's burned
             val tokens = donationInput.resolved.value.tokens(donationPolicyId)
-            require(
-              tokens.forall { case (tokenName, qty) =>
-                  qty === BigInt(1) &&
-                  txInfo.mint.quantityOf(donationPolicyId, tokenName) < BigInt(0)
-              },
-              "Donation token must be burned"
-            )
+            val hasOneToken = tokens.get(tokenName) match
+                case Option.Some(qty) => tokens.size === BigInt(1) && qty === BigInt(1)
+                case Option.None      => false
+            require(hasOneToken, "Donation input must have exactly 1 donation token")
+            count + BigInt(1)
         }
+        // Verify exact number of tokens are burned
+        require(
+          txInfo.mint.quantityOf(donationPolicyId, tokenName) === -tokenCount,
+          "All donation tokens must be burned"
+        )
 
     inline override def mint(
         redeemer: Data,
