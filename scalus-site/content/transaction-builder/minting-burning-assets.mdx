@@ -191,6 +191,57 @@ TxBuilder(env)
 
 The redeemer function receives the assembled transaction and computes the appropriate redeemer data.
 
+## Unified Mint API with Script Witness
+
+For consistency with other script operations (staking, governance), you can use the unified `mint()` API with explicit script witnesses:
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// With attached script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .mint(policyId, assets, attached(mintingPolicy, redeemer))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+
+// With reference script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .references(mintingPolicyRefUtxo)
+  .mint(policyId, assets, reference(redeemer))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+
+// With delayed redeemer
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .mint(policyId, assets, attached(mintingPolicy, tx => computeRedeemer(tx)))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
+<Callout type="info">
+  The unified API always uses `policyId` as the first parameter, with the witness determining whether the script is attached or referenced.
+</Callout>
+
+### Native Script Minting
+
+For native script minting policies:
+
+```scala copy
+import scalus.cardano.txbuilder.NativeScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .mint(policyId, assets, attached(nativeScript))
+  .payTo(recipient, Value.asset(policyId, assetName, 1000L, Coin.ada(2)))
+  .build(changeTo = changeAddress)
+```
+
 ## Next Steps
 
 - **[Validator Interactions](/docs/transaction-builder/validator-interactions)** - Work with spending validators and minting policies

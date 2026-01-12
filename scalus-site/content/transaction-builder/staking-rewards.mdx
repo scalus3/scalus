@@ -123,6 +123,103 @@ val stakeAddress = shelleyAddress.delegation match {
 }
 ```
 
+## Script-Based Staking Operations
+
+Scalus supports script-based stake credentials (post-Conway). Use the `ScriptWitness` factory methods to authorize operations from script-controlled stake addresses.
+
+### Creating Script Stake Addresses
+
+```scala copy
+import scalus.cardano.address.{StakeAddress, StakePayload}
+
+// Create a stake address controlled by a script
+val scriptStakeAddress = StakeAddress(
+  Network.Mainnet,
+  StakePayload.Script(stakingScript.scriptHash)
+)
+```
+
+### Withdrawing Rewards from Script Stake Address
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// With attached script (included in transaction)
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .withdrawRewards(scriptStakeAddress, rewardAmount, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// With reference script (script already deployed on-chain)
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .references(scriptRefUtxo)
+  .withdrawRewards(scriptStakeAddress, rewardAmount, reference(redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Delegating Script Stake Address
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .delegateTo(scriptStakeAddress, poolId, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Registering Script Stake Key
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerStake(scriptStakeAddress, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Deregistering Script Stake Key
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .deregisterStake(scriptStakeAddress, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// With explicit refund amount
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .deregisterStake(scriptStakeAddress, Some(Coin.ada(2)), attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+<Callout type="info">
+  For delayed redeemers (computed from the final transaction), pass a lambda: `attached(script, tx => computeRedeemer(tx))`
+</Callout>
+
+### Native Script Staking
+
+You can also use native scripts for staking operations:
+
+```scala copy
+import scalus.cardano.txbuilder.NativeScriptWitness.*
+
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .withdrawRewards(nativeScriptStakeAddress, rewardAmount, attached(nativeScript))
+  .complete(provider, sponsorAddress)
+```
+
 ## See Also
 
 - [Governance](/docs/transaction-builder/governance)

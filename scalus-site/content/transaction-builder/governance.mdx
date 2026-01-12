@@ -138,6 +138,93 @@ val tx = TxBuilder(env)
   .complete(provider, sponsorAddress)
 ```
 
+## Script-Based Governance Operations
+
+Scalus supports script-based stake credentials and DRep credentials for governance operations. Use the `ScriptWitness` factory methods to authorize operations from script-controlled addresses.
+
+### Delegating Voting Power from Script Stake Address
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// With attached script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .delegateVoteToDRep(scriptStakeAddress, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// With reference script
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .references(scriptRefUtxo)
+  .delegateVoteToDRep(scriptStakeAddress, drep, reference(redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Combined Registration and Delegation with Script
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+// Register stake and delegate to DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerAndDelegateVoteToDRep(scriptStakeAddress, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Delegate to both pool and DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .delegateToPoolAndDRep(scriptStakeAddress, poolId, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Register and delegate to both pool and DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerAndDelegateToPoolAndDRep(scriptStakeAddress, poolId, drep, attached(stakingScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+### Script-Based DRep Operations
+
+Script-based DReps enable programmatic, automated governance participation:
+
+```scala copy
+import scalus.cardano.txbuilder.TwoArgumentPlutusScriptWitness.*
+
+val scriptDrepCredential = Credential.ScriptHash(drepScript.scriptHash)
+
+// Register script-based DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .registerDRep(scriptDrepCredential, anchor, attached(drepScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Update script-based DRep metadata
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .updateDRep(scriptDrepCredential, newAnchor, attached(drepScript, redeemer))
+  .complete(provider, sponsorAddress)
+
+// Unregister script-based DRep
+val tx = TxBuilder(env)
+  .spend(utxo)
+  .collaterals(collateralUtxo)
+  .unregisterDRep(scriptDrepCredential, Coin.ada(500), attached(drepScript, redeemer))
+  .complete(provider, sponsorAddress)
+```
+
+<Callout type="info">
+  For delayed redeemers (computed from the final transaction), pass a lambda: `attached(script, tx => computeRedeemer(tx))`
+</Callout>
+
 ## See Also
 
 - [Staking & Rewards](/docs/transaction-builder/staking-rewards)
