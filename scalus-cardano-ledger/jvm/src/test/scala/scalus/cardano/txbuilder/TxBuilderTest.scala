@@ -538,4 +538,210 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
             provider.findUtxo(address = Alice.address, transactionId = Some(tx2.id)).await()
         assert(aliceUtxo.isRight, "Alice should have received the UTXO from tx2")
     }
+
+    // ============================================================================
+    // Script Witness Factory Methods Tests
+    // ============================================================================
+
+    test("TxBuilder mint with unified ScriptWitness API (attached)") {
+        import TwoArgumentPlutusScriptWitness.*
+
+        val policyId: PolicyId = mintingPolicy.scriptHash
+        val redeemer = Data.List(PList.Nil)
+        val assets = Map(AssetName(hex"deadbeef") -> 100L)
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = java.time.Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .mint(policyId, assets, attached(mintingPolicy, redeemer))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert script is in witness set
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
+        assert(plutusV3Scripts.exists(_.scriptHash == mintingPolicy.scriptHash))
+        // Assert mint is present
+        assert(tx.body.value.mint.isDefined)
+    }
+
+    test("TxBuilder mint with unified ScriptWitness API (reference)") {
+        import TwoArgumentPlutusScriptWitness.*
+
+        val policyId: PolicyId = mintingPolicy.scriptHash
+        val redeemer = Data.List(PList.Nil)
+        val assets = Map(AssetName(hex"deadbeef") -> 100L)
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        // Create reference script UTxO
+        val refScriptUtxo = (
+          Arbitrary.arbitrary[TransactionInput].sample.get,
+          TransactionOutput(Alice.address, Value.ada(5), None, Some(ScriptRef(mintingPolicy)))
+        )
+
+        val validFrom = java.time.Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .references(Utxo(refScriptUtxo))
+            .mint(policyId, assets, reference(redeemer))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert mint is present
+        assert(tx.body.value.mint.isDefined)
+        // Assert reference input is present
+        assert(tx.body.value.referenceInputs.toSeq.nonEmpty)
+    }
+
+    test("TxBuilder withdrawRewards with script witness builds correctly") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(
+          Mainnet,
+          StakePayload.Script(script1.scriptHash)
+        )
+        val redeemer = Data.unit
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = java.time.Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .withdrawRewards(scriptStakeAddress, Coin(1_000_000), attached(script1, redeemer))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert script is in witness set
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
+        assert(plutusV3Scripts.exists(_.scriptHash == script1.scriptHash))
+        // Assert withdrawal is present
+        assert(tx.body.value.withdrawals.isDefined)
+        // Assert redeemer has Rewarding tag
+        assert(tx.witnessSet.redeemers.isDefined)
+        val redeemers = tx.witnessSet.redeemers.get.value.toSeq
+        assert(redeemers.exists(_.tag == RedeemerTag.Reward))
+    }
+
+    test("TxBuilder delegateTo with script witness builds correctly") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(
+          Mainnet,
+          StakePayload.Script(script1.scriptHash)
+        )
+        val poolId = PoolKeyHash.fromHex("0" * 56)
+        val redeemer = Data.unit
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = java.time.Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .delegateTo(scriptStakeAddress, poolId, attached(script1, redeemer))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert script is in witness set
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
+        assert(plutusV3Scripts.exists(_.scriptHash == script1.scriptHash))
+        // Assert certificate is present
+        val certs = tx.body.value.certificates.toSeq
+        assert(certs.exists {
+            case Certificate.StakeDelegation(cred, pid) =>
+                cred == scriptStakeAddress.credential && pid == poolId
+            case _ => false
+        })
+    }
+
+    test("TxBuilder registerStake with script witness builds correctly") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(
+          Mainnet,
+          StakePayload.Script(script1.scriptHash)
+        )
+        val redeemer = Data.unit
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = java.time.Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .registerStake(scriptStakeAddress, attached(script1, redeemer))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert script is in witness set
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
+        assert(plutusV3Scripts.exists(_.scriptHash == script1.scriptHash))
+        // Assert certificate is present
+        val certs = tx.body.value.certificates.toSeq
+        assert(certs.exists {
+            case Certificate.RegCert(cred, _) =>
+                cred == scriptStakeAddress.credential
+            case _ => false
+        })
+    }
+
+    test("TxBuilder registerDRep with script witness builds correctly") {
+        import TwoArgumentPlutusScriptWitness.*
+
+        val scriptCredential = Credential.ScriptHash(script1.scriptHash)
+        val redeemer = Data.unit
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 550_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = java.time.Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .registerDRep(scriptCredential, None, attached(script1, redeemer))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert script is in witness set
+        val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
+        assert(plutusV3Scripts.exists(_.scriptHash == script1.scriptHash))
+        // Assert certificate is present
+        val certs = tx.body.value.certificates.toSeq
+        assert(certs.exists {
+            case Certificate.RegDRepCert(cred, _, _) =>
+                cred == scriptCredential
+            case _ => false
+        })
+    }
 }

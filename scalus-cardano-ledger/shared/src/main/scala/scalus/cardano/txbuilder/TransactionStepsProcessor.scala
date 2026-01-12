@@ -698,8 +698,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               witness,
               step
             )
-        // FIXME: verify
-        case Certificate.RegCert(_, _)                               => Ok
+        case Certificate.RegCert(credential, _) =>
+            useNonSpendingWitness(
+              Operation.CertificateOperation(cert),
+              credential,
+              witness,
+              step
+            )
         case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) => Ok
         case Certificate.PoolRetirement(_, _)                        => Ok
         case Certificate.VoteDelegCert(credential, _) =>

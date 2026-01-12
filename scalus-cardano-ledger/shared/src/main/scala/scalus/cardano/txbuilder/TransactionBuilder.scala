@@ -9,7 +9,8 @@ package scalus.cardano.txbuilder
 import io.bullet.borer.Encoder
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
-import scalus.builtin.{ByteString, Data}
+import scalus.builtin.Data.toData
+import scalus.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS.Validator
@@ -72,6 +73,42 @@ case class NativeScriptWitness(
     def witnessKind: WitnessKind = WitnessKind.ScriptBased
 }
 
+object NativeScriptWitness {
+
+    /** Creates a witness for an attached native script.
+      *
+      * The script will be included in the transaction witness set.
+      *
+      * @param script
+      *   the native script to attach
+      * @param signers
+      *   additional signers required by the script
+      */
+    def attached(
+        script: Script.Native,
+        signers: Set[AddrKeyHash] = Set.empty
+    ): NativeScriptWitness =
+        NativeScriptWitness(
+          ScriptSource.NativeScriptValue(script),
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for a reference native script.
+      *
+      * The script must be provided via a reference input (using `references` method).
+      *
+      * @param signers
+      *   additional signers required by the script
+      */
+    def reference(
+        signers: Set[AddrKeyHash] = Set.empty
+    ): NativeScriptWitness =
+        NativeScriptWitness(
+          ScriptSource.NativeScriptAttached,
+          signers.map(ExpectedSigner.apply)
+        )
+}
+
 // For operations that only take a redeemer and script context
 case class TwoArgumentPlutusScriptWitness(
     scriptSource: ScriptSource[PlutusScript],
@@ -88,6 +125,90 @@ object TwoArgumentPlutusScriptWitness {
         additionalSigners: Set[ExpectedSigner]
     ): TwoArgumentPlutusScriptWitness =
         apply(scriptSource, _ => redeemer, additionalSigners)
+
+    /** Creates a witness for an attached Plutus script with immediate redeemer.
+      *
+      * The script will be included in the transaction witness set.
+      *
+      * @param script
+      *   the Plutus script to attach
+      * @param redeemer
+      *   the redeemer data
+      * @param signers
+      *   additional signers required by the script
+      */
+    def attached[T: ToData](
+        script: PlutusScript,
+        redeemer: T,
+        signers: Set[AddrKeyHash] = Set.empty
+    ): TwoArgumentPlutusScriptWitness =
+        TwoArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptValue(script),
+          redeemer.toData,
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for an attached Plutus script with delayed redeemer.
+      *
+      * The script will be included in the transaction witness set. The redeemer will be computed
+      * from the final transaction.
+      *
+      * @param script
+      *   the Plutus script to attach
+      * @param redeemerBuilder
+      *   function to compute redeemer from the built transaction
+      * @param signers
+      *   additional signers required by the script
+      */
+    def attached(
+        script: PlutusScript,
+        redeemerBuilder: Transaction => Data,
+        signers: Set[AddrKeyHash]
+    ): TwoArgumentPlutusScriptWitness =
+        TwoArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptValue(script),
+          redeemerBuilder,
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for a reference Plutus script with immediate redeemer.
+      *
+      * The script must be provided via a reference input (using `references` method).
+      *
+      * @param redeemer
+      *   the redeemer data
+      * @param signers
+      *   additional signers required by the script
+      */
+    def reference[T: ToData](
+        redeemer: T,
+        signers: Set[AddrKeyHash] = Set.empty
+    ): TwoArgumentPlutusScriptWitness =
+        TwoArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptAttached,
+          redeemer.toData,
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for a reference Plutus script with delayed redeemer.
+      *
+      * The script must be provided via a reference input (using `references` method). The redeemer
+      * will be computed from the final transaction.
+      *
+      * @param redeemerBuilder
+      *   function to compute redeemer from the built transaction
+      * @param signers
+      *   additional signers required by the script
+      */
+    def reference(
+        redeemerBuilder: Transaction => Data,
+        signers: Set[AddrKeyHash]
+    ): TwoArgumentPlutusScriptWitness =
+        TwoArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptAttached,
+          redeemerBuilder,
+          signers.map(ExpectedSigner.apply)
+        )
 }
 
 // For operations that take a datum, redeemer, and script context
@@ -109,6 +230,21 @@ object ThreeArgumentPlutusScriptWitness {
     ): ThreeArgumentPlutusScriptWitness =
         apply(scriptSource, tx => redeemer, datum, additionalSigners)
 }
+
+/** Witness type for minting, certificates, withdrawals, and voting operations.
+  *
+  * Supports both native scripts and Plutus scripts. Use the factory methods on the companion
+  * objects to create witnesses:
+  * {{{
+  * import TwoArgumentPlutusScriptWitness.*
+  * val plutusWitness = attached(script, redeemer)
+  * val refWitness = reference(redeemer)
+  *
+  * import NativeScriptWitness.*
+  * val nativeWitness = attached(nativeScript)
+  * }}}
+  */
+type ScriptWitness = NativeScriptWitness | TwoArgumentPlutusScriptWitness
 
 // -----------------------------------------------------------------------------
 // ScriptSource

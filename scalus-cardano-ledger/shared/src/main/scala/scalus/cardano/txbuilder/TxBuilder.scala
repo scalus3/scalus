@@ -764,6 +764,51 @@ case class TxBuilder(
         requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = mint(script, assets, redeemer, requiredSigners)
 
+    /** Mints or burns native tokens using a script witness.
+      *
+      * This is the unified API for minting operations. Use the factory methods to create the
+      * witness:
+      * {{{
+      * // Plutus script with attached script (included in transaction)
+      * import TwoArgumentPlutusScriptWitness.*
+      * builder.mint(policyId, assets, attached(script, redeemer))
+      *
+      * // Plutus script with reference script (must be in a reference input)
+      * builder.references(scriptRefUtxo)
+      *        .mint(policyId, assets, reference(redeemer))
+      *
+      * // Plutus script with delayed redeemer (computed from final transaction)
+      * builder.mint(policyId, assets, attached(script, tx => computeRedeemer(tx)))
+      *
+      * // Native script
+      * import NativeScriptWitness.*
+      * builder.mint(policyId, assets, attached(nativeScript))
+      * }}}
+      *
+      * @param policyId
+      *   the minting policy ID (script hash)
+      * @param assets
+      *   map of asset names to amounts (positive to mint, negative to burn)
+      * @param witness
+      *   the script witness authorizing the mint (NativeScriptWitness or
+      *   TwoArgumentPlutusScriptWitness)
+      */
+    def mint(
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val mintSteps = assets.map { case (assetName, amount) =>
+            TransactionBuilderStep.Mint(
+              scriptHash = policyId,
+              assetName = assetName,
+              amount = amount,
+              witness = witness
+            )
+        }
+        addSteps(mintSteps.toSeq*)
+    }
+
     /** Registers a stake key with the network.
       *
       * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
@@ -772,6 +817,39 @@ case class TxBuilder(
         val credential = stakeAddress.credential
         val cert = Certificate.RegCert(credential, None)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers a script-based stake key with the network.
+      *
+      * Post-Conway, script-based registrations require authorization. Use the factory methods to
+      * create the witness:
+      * {{{
+      * import TwoArgumentPlutusScriptWitness.*
+      *
+      * // With attached Plutus script
+      * builder.registerStake(scriptStakeAddr, attached(script, redeemer))
+      *
+      * // With reference Plutus script
+      * builder.references(scriptRefUtxo)
+      *        .registerStake(scriptStakeAddr, reference(redeemer))
+      *
+      * // With native script
+      * import NativeScriptWitness.*
+      * builder.registerStake(scriptStakeAddr, attached(nativeScript))
+      * }}}
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to register
+      * @param witness
+      *   the script witness authorizing the registration
+      */
+    def registerStake(stakeAddress: StakeAddress, witness: ScriptWitness): TxBuilder = {
+        val credential = stakeAddress.credential
+        val cert = Certificate.RegCert(credential, None)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Deregisters a stake key from the network.
@@ -795,11 +873,85 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
+    /** Deregisters a script-based stake key from the network.
+      *
+      * Use the factory methods to create the witness:
+      * {{{
+      * import TwoArgumentPlutusScriptWitness.*
+      *
+      * // With attached Plutus script
+      * builder.deregisterStake(scriptStakeAddr, attached(script, redeemer))
+      *
+      * // With explicit refund amount
+      * builder.deregisterStake(scriptStakeAddr, Some(Coin.ada(2)), attached(script, redeemer))
+      * }}}
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to deregister
+      * @param witness
+      *   the script witness authorizing the deregistration
+      */
+    def deregisterStake(stakeAddress: StakeAddress, witness: ScriptWitness): TxBuilder =
+        deregisterStake(stakeAddress, None, witness)
+
+    /** Deregisters a script-based stake key from the network with explicit refund.
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to deregister
+      * @param refund
+      *   optional refund amount (must match ledger state for explicit refund)
+      * @param witness
+      *   the script witness authorizing the deregistration
+      */
+    def deregisterStake(
+        stakeAddress: StakeAddress,
+        refund: Option[Coin],
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val cert = Certificate.UnregCert(credential, refund)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
+    }
+
     /** Delegates a stake key to the specified stake pool. */
     def delegateTo(stakeAddress: StakeAddress, poolId: PoolKeyHash): TxBuilder = {
         val credential = stakeAddress.credential
         val cert = Certificate.StakeDelegation(credential, poolId)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Delegates a script-based stake key to the specified stake pool.
+      *
+      * Use the factory methods to create the witness:
+      * {{{
+      * import TwoArgumentPlutusScriptWitness.*
+      * builder.delegateTo(scriptStakeAddr, poolId, attached(script, redeemer))
+      * }}}
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to delegate
+      * @param poolId
+      *   the pool key hash to delegate to
+      * @param witness
+      *   the script witness authorizing the delegation
+      */
+    def delegateTo(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val cert = Certificate.StakeDelegation(credential, poolId)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Registers a stake key and delegates to a stake pool in a single transaction.
@@ -811,6 +963,31 @@ case class TxBuilder(
         val deposit = Coin(env.protocolParams.stakeAddressDeposit)
         val cert = Certificate.StakeRegDelegCert(credential, poolId, deposit)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers a script-based stake key and delegates to a stake pool.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to register and delegate
+      * @param poolId
+      *   the pool key hash to delegate to
+      * @param witness
+      *   the script witness authorizing the registration and delegation
+      */
+    def stakeAndDelegate(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
+        val cert = Certificate.StakeRegDelegCert(credential, poolId, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Withdraws staking rewards. */
@@ -825,11 +1002,64 @@ case class TxBuilder(
         )
     }
 
+    /** Withdraws staking rewards from a script-based stake address.
+      *
+      * Use the factory methods to create the witness:
+      * {{{
+      * import TwoArgumentPlutusScriptWitness.*
+      * builder.withdrawRewards(scriptAddr, amount, attached(script, redeemer))
+      * builder.withdrawRewards(scriptAddr, amount, reference(redeemer))
+      * }}}
+      *
+      * @param stakeAddress
+      *   stake address to withdraw from (must have script credential)
+      * @param amount
+      *   withdrawal amount
+      * @param witness
+      *   the script witness authorizing the withdrawal
+      */
+    def withdrawRewards(
+        stakeAddress: StakeAddress,
+        amount: Coin,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        addSteps(
+          TransactionBuilderStep.WithdrawRewards(
+            credential,
+            amount,
+            witness
+          )
+        )
+    }
+
     /** Delegates voting power to a DRep. */
     def delegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
         val credential = stakeAddress.credential
         val cert = Certificate.VoteDelegCert(credential, drep)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Delegates voting power from a script-based stake address to a DRep.
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address
+      * @param drep
+      *   the DRep to delegate voting power to
+      * @param witness
+      *   the script witness authorizing the delegation
+      */
+    def delegateVoteToDRep(
+        stakeAddress: StakeAddress,
+        drep: DRep,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val cert = Certificate.VoteDelegCert(credential, drep)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Registers stake address and delegates voting power to a DRep in one transaction.
@@ -843,6 +1073,31 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
+    /** Registers a script-based stake address and delegates voting power to a DRep.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to register
+      * @param drep
+      *   the DRep to delegate voting power to
+      * @param witness
+      *   the script witness authorizing the registration and delegation
+      */
+    def registerAndDelegateVoteToDRep(
+        stakeAddress: StakeAddress,
+        drep: DRep,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
+        val cert = Certificate.VoteRegDelegCert(credential, drep, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
+    }
+
     /** Delegates to both a stake pool and a DRep. */
     def delegateToPoolAndDRep(
         stakeAddress: StakeAddress,
@@ -852,6 +1107,31 @@ case class TxBuilder(
         val credential = stakeAddress.credential
         val cert = Certificate.StakeVoteDelegCert(credential, poolId, drep)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Delegates a script-based stake address to both a stake pool and a DRep.
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address
+      * @param poolId
+      *   the pool key hash to delegate to
+      * @param drep
+      *   the DRep to delegate voting power to
+      * @param witness
+      *   the script witness authorizing the delegation
+      */
+    def delegateToPoolAndDRep(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        drep: DRep,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val cert = Certificate.StakeVoteDelegCert(credential, poolId, drep)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Registers stake address and delegates to both stake pool and DRep in one transaction.
@@ -869,6 +1149,34 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
+    /** Registers a script-based stake address and delegates to both stake pool and DRep.
+      *
+      * The deposit amount is taken from protocol parameters (stakeAddressDeposit).
+      *
+      * @note
+      *   The stake address must have a script credential. Using a key-based credential with a
+      *   script witness will cause validation errors.
+      * @param stakeAddress
+      *   the script-based stake address to register
+      * @param poolId
+      *   the pool key hash to delegate to
+      * @param drep
+      *   the DRep to delegate voting power to
+      * @param witness
+      *   the script witness authorizing the registration and delegation
+      */
+    def registerAndDelegateToPoolAndDRep(
+        stakeAddress: StakeAddress,
+        poolId: PoolKeyHash,
+        drep: DRep,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val credential = stakeAddress.credential
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
+        val cert = Certificate.StakeVoteRegDelegCert(credential, poolId, drep, deposit)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
+    }
+
     /** Registers as a DRep.
       *
       * The deposit amount is taken from protocol parameters (dRepDeposit).
@@ -877,6 +1185,36 @@ case class TxBuilder(
         val deposit = Coin(env.protocolParams.dRepDeposit)
         val cert = Certificate.RegDRepCert(drepCredential, deposit, anchor)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Registers a script-based DRep.
+      *
+      * The deposit amount is taken from protocol parameters (dRepDeposit). Post-Conway,
+      * script-based DRep registrations require authorization.
+      *
+      * {{{
+      * import TwoArgumentPlutusScriptWitness.*
+      * builder.registerDRep(scriptCredential, Some(anchor), attached(script, redeemer))
+      * }}}
+      *
+      * @note
+      *   The credential must be a script credential (Credential.ScriptHash). Using a key-based
+      *   credential with a script witness will cause validation errors.
+      * @param drepCredential
+      *   the script-based DRep credential
+      * @param anchor
+      *   optional metadata anchor for the DRep
+      * @param witness
+      *   the script witness authorizing the registration
+      */
+    def registerDRep(
+        drepCredential: Credential,
+        anchor: Option[Anchor],
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val deposit = Coin(env.protocolParams.dRepDeposit)
+        val cert = Certificate.RegDRepCert(drepCredential, deposit, anchor)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Unregisters as a DRep.
@@ -889,10 +1227,52 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
     }
 
+    /** Unregisters a script-based DRep.
+      *
+      * @note
+      *   The credential must be a script credential (Credential.ScriptHash). Using a key-based
+      *   credential with a script witness will cause validation errors.
+      * @param drepCredential
+      *   the script-based DRep credential
+      * @param refund
+      *   the amount originally deposited during registration (must match ledger state)
+      * @param witness
+      *   the script witness authorizing the unregistration
+      */
+    def unregisterDRep(
+        drepCredential: Credential,
+        refund: Coin,
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val cert = Certificate.UnregDRepCert(drepCredential, refund)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
+    }
+
     /** Updates DRep metadata anchor. */
     def updateDRep(drepCredential: Credential, anchor: Option[Anchor]): TxBuilder = {
         val cert = Certificate.UpdateDRepCert(drepCredential, anchor)
         addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
+    }
+
+    /** Updates a script-based DRep metadata anchor.
+      *
+      * @note
+      *   The credential must be a script credential (Credential.ScriptHash). Using a key-based
+      *   credential with a script witness will cause validation errors.
+      * @param drepCredential
+      *   the script-based DRep credential
+      * @param anchor
+      *   optional new metadata anchor
+      * @param witness
+      *   the script witness authorizing the update
+      */
+    def updateDRep(
+        drepCredential: Credential,
+        anchor: Option[Anchor],
+        witness: ScriptWitness
+    ): TxBuilder = {
+        val cert = Certificate.UpdateDRepCert(drepCredential, anchor)
+        addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
     /** Sets a minimum fee for the transaction.
@@ -966,9 +1346,7 @@ case class TxBuilder(
         // Could be a good idea to immediately `modify` on every step, maybe not tho.
         val finalizedContext = for {
             built <- TransactionBuilder.modify(context, steps)
-            withAttachments = addAttachmentsToContext(
-              built
-            ) // TODO: remove after fixes with attachments
+            withAttachments = addAttachmentsToContext(built)
             finalized <- withAttachments.finalizeContext(
               params,
               diffHandler,
@@ -1107,7 +1485,10 @@ case class TxBuilder(
         // Determine if we need collateral (transaction has scripts)
         val needsCollateral = initialCtx.redeemers.nonEmpty
 
-        // Create UTXO pool and select initial collateral if needed
+        // Create UTXO pool and select initial collateral if needed.
+        // Initial collateral of 5 ADA is a conservative estimate that covers most script
+        // transactions. The actual required collateral is protocol_params.collateralPercentage
+        // of the transaction fee, which is finalized during balancing.
         val emptyPool = UtxoPool(availableUtxos)
         val pool =
             if needsCollateral then {
