@@ -3,7 +3,6 @@ package scalus.examples.lottery
 import org.junit.jupiter.api.Assertions.fail
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha2_256
-import scalus.builtin.ByteString
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context

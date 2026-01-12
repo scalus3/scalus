@@ -449,7 +449,6 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
             "scalus/cardano/address/ArbitraryInstances.scala",
             "scalus/cardano/ledger/ArbitraryInstances.scala",
             "scalus/testing/kit/EvalTestKit.scala",
-            "scalus/testing/kit/TestKit.scala"
           )
           val baseDir =
               (scalus.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"

@@ -4,10 +4,11 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString.utf8
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, Network, ShelleyAddress, ShelleyDelegationPart}
+import scalus.cardano.address.Network.Mainnet
+import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
-import scalus.testing.kit.TestKit.genPubkeyAddr
 
 class ChangeTest
     extends AnyFunSuite,
@@ -468,4 +469,14 @@ class ChangeTest
           TransactionWitnessSet.empty
         )
     }
+
+    private def genPubkeyAddr(
+        network: Network = Mainnet,
+        delegation: ShelleyDelegationPart = ShelleyDelegationPart.Null
+    ): Gen[Address] =
+        Arbitrary
+            .arbitrary[AddrKeyHash]
+            .flatMap(akh =>
+                ShelleyAddress(network = network, payment = Key(akh), delegation = delegation)
+            )
 }
