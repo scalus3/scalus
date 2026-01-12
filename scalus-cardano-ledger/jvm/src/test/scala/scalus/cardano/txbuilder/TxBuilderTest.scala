@@ -26,6 +26,9 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet
 
+    val genesisHash: TransactionHash =
+        TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
     // Deterministic test mnemonic for cross-platform signature comparison
     private val testMnemonic =
         "test walk nut penalty hip pave soap entry language right filter choice"
@@ -470,8 +473,6 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     }
 
     test("transaction chaining - use outputs from tx1 as inputs in tx2") {
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
         // Use Emulator to build transactions - disable validators for simplicity
         // (signature verification is tested elsewhere in TransactionSignerTest)
         val provider = Emulator(

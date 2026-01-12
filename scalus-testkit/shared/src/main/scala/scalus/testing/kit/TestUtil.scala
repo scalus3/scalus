@@ -49,6 +49,13 @@ object TestUtil extends ScalusTest {
 
     val testEnvironment: CardanoInfo = CardanoInfo.mainnet
 
+    /** A deterministic genesis transaction hash (all zeros) for creating initial UTxOs in tests.
+      *
+      * Use this when setting up test fixtures with `Emulator` or creating mock transaction inputs.
+      */
+    val genesisHash: TransactionHash =
+        TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
     val testEvaluator: PlutusScriptEvaluator =
         PlutusScriptEvaluator(testEnvironment, EvaluatorMode.EvaluateAndComputeCost)
 

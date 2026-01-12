@@ -1,7 +1,6 @@
 package scalus.examples.auction
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
 import scalus.builtin.ByteString.*
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
@@ -11,7 +10,7 @@ import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.ledger.api.v1.PosixTime
 import scalus.testing.kit.{ScalusTest, TestUtil}
-import scalus.testing.kit.TestUtil.getScriptContextV3
+import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
@@ -606,8 +605,6 @@ object AuctionValidatorTest extends ScalusTest {
         result
 
     private def createProvider(): Emulator =
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
         Emulator(
           initialUtxos = Map(
             Input(genesisHash, 0) ->

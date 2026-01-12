@@ -8,7 +8,7 @@ import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
 import scalus.examples.vault.State
-import scalus.testing.kit.TestUtil.getScriptContextV3
+import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
@@ -51,8 +51,6 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
     // Provider factory
     private def createProvider(): Emulator = {
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
         Emulator(
           initialUtxos = Map(
             Input(genesisHash, 0) ->

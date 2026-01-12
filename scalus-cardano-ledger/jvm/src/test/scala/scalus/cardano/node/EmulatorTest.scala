@@ -14,10 +14,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet
+    val genesisHash: TransactionHash =
+        TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     test("Emulator.utxos returns all UTXOs") {
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
         val initialUtxos = Map(
           Input(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100)),
           Input(genesisHash, 1) -> TransactionOutput(Bob.address, Value.ada(50))
@@ -57,8 +57,6 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           Gen.choose(10L, 50L)
         ) { (initialAmount: Long, paymentAmount: Long) =>
             whenever(initialAmount > paymentAmount + 1) {
-                val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
                 val initialUtxos = Map(
                   Input(genesisHash, 0) -> TransactionOutput(
                     Alice.address,
@@ -112,8 +110,6 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     test("Property: invalid transaction (double spend) is rejected") {
         forAll(Gen.choose(100L, 1000L)) { initialAmount =>
-            val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
             val initialUtxos = Map(
               Input(genesisHash, 0) -> TransactionOutput(
                 Alice.address,

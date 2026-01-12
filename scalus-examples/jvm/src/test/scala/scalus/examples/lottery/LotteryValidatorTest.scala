@@ -11,7 +11,7 @@ import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.ledger.api.v3.ScriptContext
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
-import scalus.testing.kit.TestUtil.getScriptContextV3
+import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -696,7 +696,6 @@ object LotteryValidatorTest extends ScalusTest {
 
     private def createProvider(): Emulator = {
         // Create multiple UTXOs per player so they have funds after initiate tx
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val initialUtxos = Map(
           // Alice gets 2 UTXOs
           TransactionInput(genesisHash, 0) -> TransactionOutput

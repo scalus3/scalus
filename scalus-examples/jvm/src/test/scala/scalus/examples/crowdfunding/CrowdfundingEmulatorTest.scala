@@ -1,13 +1,13 @@
 package scalus.examples.crowdfunding
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.Emulator
 import scalus.ledger.api.v1.PosixTime
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
+import scalus.testing.kit.TestUtil.genesisHash
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -318,8 +318,6 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                     )
 
     private def createProvider(): Emulator =
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-
         // Each party gets multiple UTxOs - one for spending/fees, one for collateral
         Emulator(
           initialUtxos = Map(
