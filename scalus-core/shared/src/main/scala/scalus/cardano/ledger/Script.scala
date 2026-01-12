@@ -20,6 +20,10 @@ sealed trait PlutusScript extends Script {
     /** Get script language */
     def language: Language
 
+    /** Get the De Bruijn-indexed program from the script bytes */
+    def deBruijnedProgram: DeBruijnedProgram =
+        DeBruijnedProgram.fromCbor(script.bytes)
+
     def toHex: String = script.toHex
 
     def isWellFormed(majorProtocolVersion: MajorProtocolVersion): Boolean = {

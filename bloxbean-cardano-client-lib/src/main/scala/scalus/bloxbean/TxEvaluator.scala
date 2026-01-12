@@ -17,9 +17,8 @@ import scalus.ledger
 import scalus.ledger.api
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.{v1, v2, v3, ScriptContext}
-import scalus.uplc.Term.asTerm
+import scalus.uplc.eval
 import scalus.uplc.eval.*
-import scalus.uplc.{eval, Constant, DeBruijnedProgram}
 import scalus.utils.Hex.hexToBytes
 import upickle.default.*
 
@@ -304,7 +303,7 @@ class TxEvaluator(
         val result = findScript(tx, redeemer, lookupTable, utxos) match
             case (_: Script.Native, _) =>
                 throw new IllegalStateException("Native script not supported")
-            case (Script.PlutusV1(script), datum) =>
+            case (ps: Script.PlutusV1, datum) =>
                 val rdmr = toScalusData(redeemer.getData)
                 val txInfoV1 =
                     getTxInfoV1(tx, txhash, datums, utxos, slotConfig, protocolMajorVersion)
@@ -323,7 +322,7 @@ class TxEvaluator(
                               redeemer,
                               txhash,
                               plutusV1VM,
-                              script,
+                              ps,
                               datum,
                               rdmr,
                               ctxData
@@ -333,7 +332,7 @@ class TxEvaluator(
                               redeemer,
                               txhash,
                               plutusV1VM,
-                              script,
+                              ps,
                               rdmr,
                               ctxData
                             ) -> scriptContext
@@ -342,7 +341,7 @@ class TxEvaluator(
                         throw e.withContext(scriptContext)
                 }
 
-            case (Script.PlutusV2(script), datum) =>
+            case (ps: Script.PlutusV2, datum) =>
                 val rdmr = toScalusData(redeemer.getData)
                 val txInfo =
                     getTxInfoV2(tx, txhash, datums, utxos, slotConfig, protocolMajorVersion)
@@ -361,7 +360,7 @@ class TxEvaluator(
                               redeemer,
                               txhash,
                               plutusV2VM,
-                              script,
+                              ps,
                               datum,
                               rdmr,
                               ctxData
@@ -371,7 +370,7 @@ class TxEvaluator(
                               redeemer,
                               txhash,
                               plutusV2VM,
-                              script,
+                              ps,
                               rdmr,
                               ctxData
                             ) -> scriptContext
@@ -380,7 +379,7 @@ class TxEvaluator(
                         throw e.withContext(scriptContext)
                 }
 
-            case (Script.PlutusV3(script), datum) =>
+            case (ps: Script.PlutusV3, datum) =>
                 val rdmr = toScalusData(redeemer.getData)
                 val txInfo =
                     getTxInfoV3(tx, txhash, datums, utxos, slotConfig, protocolMajorVersion)
@@ -392,7 +391,7 @@ class TxEvaluator(
                     log.debug(s"Datum: ${datum.map(_.toJson)}")
                     log.debug(s"Redeemer: ${rdmr.toJson}")
                     log.debug(s"Script context: ${ctxData.toJson}")
-                try evalScript(redeemer, txhash, plutusV3VM, script, ctxData) -> scriptContext
+                try evalScript(redeemer, txhash, plutusV3VM, ps, ctxData) -> scriptContext
                 catch {
                     case e: TxEvaluationException => throw e.withContext(scriptContext)
                 }
@@ -414,17 +413,15 @@ class TxEvaluator(
         redeemer: Redeemer,
         txhash: String,
         vm: PlutusVM,
-        script: ByteString,
+        plutusScript: scalus.cardano.ledger.PlutusScript,
         args: Data*
     ) = {
         val budget = scalus.cardano.ledger.ExUnits(
           memory = redeemer.getExUnits.getMem.longValue,
           steps = redeemer.getExUnits.getSteps.longValue
         )
-        val program = DeBruijnedProgram.fromCbor(script.bytes)
-        val applied = args.foldLeft(program) { (acc, arg) =>
-            acc $ arg.asTerm
-        }
+        val program = plutusScript.deBruijnedProgram
+        val applied = args.foldLeft(program) { (acc, arg) => acc $ arg }
         if debugDumpFilesForTesting then
             Files.write(
               Paths.get(s"script-$txhash-${redeemer.getTag}-${redeemer.getIndex}.flat"),

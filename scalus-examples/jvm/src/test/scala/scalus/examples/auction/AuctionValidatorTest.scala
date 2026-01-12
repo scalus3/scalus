@@ -12,7 +12,6 @@ import scalus.ledger.api.v1.PosixTime
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
-import scalus.uplc.Program
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
@@ -567,7 +566,7 @@ object AuctionValidatorTest extends ScalusTest {
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
         val plutusScript =
             scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
-        val program = Program.fromCborByteString(plutusScript.script)
+        val program = plutusScript.deBruijnedProgram.toProgram
 
         val result = program.runWithDebug(scriptContext)
         assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")
@@ -598,7 +597,7 @@ object AuctionValidatorTest extends ScalusTest {
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
         val plutusScript =
             scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
-        val program = Program.fromCborByteString(plutusScript.script)
+        val program = plutusScript.deBruijnedProgram.toProgram
 
         val result = program.runWithDebug(scriptContext)
         assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")

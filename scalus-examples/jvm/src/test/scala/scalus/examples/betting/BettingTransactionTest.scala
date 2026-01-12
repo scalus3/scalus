@@ -13,7 +13,6 @@ import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
-import scalus.uplc.Program
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
@@ -123,7 +122,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
         val plutusScript =
             scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
-        val program = Program.fromCborByteString(plutusScript.script)
+        val program = plutusScript.deBruijnedProgram.toProgram
 
         program.runWithDebug(scriptContext)
     }
