@@ -139,25 +139,11 @@ object TestUtil extends ScalusTest {
             }
     }
 
+    @deprecated("Use TransactionOutput.resolveDatum(tx) instead", "0.14.2")
     def extractDatumFromOutput(
         tx: Transaction,
         output: TransactionOutput
-    ): Option[Data] = {
-        def getDatum(dataHash: DataHash) =
-            tx.witnessSet.plutusData.value.toMap
-                .get(dataHash)
-                .map(_.value)
-
-        output match
-            case TransactionOutput.Shelley(_, _, Some(datumHash)) =>
-                getDatum(datumHash)
-            case TransactionOutput.Babbage(_, _, datumOption, _) =>
-                datumOption match
-                    case Some(DatumOption.Hash(hash))   => getDatum(hash)
-                    case Some(DatumOption.Inline(data)) => Some(data)
-                    case None                           => None
-            case _ => None
-    }
+    ): Option[Data] = output.resolveDatum(tx)
 
     @deprecated("Will be removed", "0.13.0")
     def runValidator(
@@ -208,7 +194,7 @@ object TestUtil extends ScalusTest {
                     (data, exUnits) <- redeemersMap.get((tag, index))
                 yield
                     val redeemer = Redeemer(tag, index, data, exUnits)
-                    val datum = outputOpt.flatMap(extractDatumFromOutput(tx, _))
+                    val datum = outputOpt.flatMap(_.resolveDatum(tx))
                     val context: ScriptContext = plutusScript match
                         case _: Script.PlutusV1 =>
                             LedgerToPlutusTranslation.getScriptContextV1(

@@ -50,6 +50,21 @@ object TransactionOutput:
             case shelley: Shelley => shelley.copy(value = amount)
             case babbage: Babbage => babbage.copy(value = amount)
         }
+
+        /** Resolve datum from output - either inline or by looking up hash in transaction witness
+          * set.
+          *
+          * @param tx
+          *   The transaction containing the witness set with plutus data
+          * @return
+          *   The resolved datum data, or None if no datum is present or if the hash is not found
+          */
+        def resolveDatum(tx: Transaction): Option[scalus.builtin.Data] =
+            txo.datumOption match
+                case Some(DatumOption.Hash(hash)) =>
+                    tx.witnessSet.plutusData.value.toSortedMap.get(hash).map(_.value)
+                case Some(DatumOption.Inline(data)) => Some(data)
+                case None                           => None
     }
 
     def unapply(

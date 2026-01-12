@@ -15,8 +15,8 @@ import scalus.prelude.{asScalus, List, SortedMap}
 import scalus.uplc.eval.*
 import scalus.{builtin, ledger, prelude}
 
-import scala.annotation.nowarn
-import scala.collection.{immutable, mutable}
+import scala.annotation.{nowarn, unused}
+import scala.collection.mutable
 import scala.math.BigInt
 
 /** Advanced interoperability layer for scalus.cardano.ledger domain model.
@@ -594,7 +594,6 @@ object LedgerToPlutusTranslation {
       */
     def getTxInfoV1(
         tx: Transaction,
-        datums: collection.Seq[(ByteString, Data)],
         utxos: Map[TransactionInput, TransactionOutput],
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
@@ -603,6 +602,7 @@ object LedgerToPlutusTranslation {
         validatePlutusV1OnInlineDatumsAndByronAddresses(tx, utxos)
 
         val body = tx.body.value
+        val datums = tx.witnessSet.plutusData.value.toSortedMap.view.mapValues(_.value)
 
         v1.TxInfo(
           inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV1(_, utxos))),
@@ -616,10 +616,25 @@ object LedgerToPlutusTranslation {
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
-          data = prelude.List.from(datums.to(immutable.SortedMap)),
+          data = prelude.List.from(datums),
           id = v1.TxId(tx.id)
         )
     }
+
+    /** Build TxInfo for Plutus V1 script contexts.
+      *
+      * @deprecated
+      *   Use getTxInfoV1 without datums parameter. Datums are now extracted from the transaction
+      *   witness set directly.
+      */
+    @deprecated("Use getTxInfoV1 without datums parameter", "0.14.2")
+    def getTxInfoV1(
+        tx: Transaction,
+        @unused datums: collection.Seq[(ByteString, Data)],
+        utxos: Map[TransactionInput, TransactionOutput],
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion
+    ): v1.TxInfo = getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
 
     /** Build TxInfo for Plutus V2 script contexts.
       *
@@ -628,7 +643,6 @@ object LedgerToPlutusTranslation {
       */
     def getTxInfoV2(
         tx: Transaction,
-        datums: collection.Seq[(ByteString, Data)],
         utxos: Map[TransactionInput, TransactionOutput],
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
@@ -636,6 +650,7 @@ object LedgerToPlutusTranslation {
         guardConwayFeaturesForPlutusV1V2(tx)
 
         val body = tx.body.value
+        val datums = tx.witnessSet.plutusData.value.toSortedMap.view.mapValues(_.value)
         val redeemers =
             tx.witnessSet.redeemers.map(_.value.toIndexedSeq).getOrElse(IndexedSeq.empty)
 
@@ -662,6 +677,21 @@ object LedgerToPlutusTranslation {
         )
     }
 
+    /** Build TxInfo for Plutus V2 script contexts.
+      *
+      * @deprecated
+      *   Use getTxInfoV2 without datums parameter. Datums are now extracted from the transaction
+      *   witness set directly.
+      */
+    @deprecated("Use getTxInfoV2 without datums parameter", "0.14.2")
+    def getTxInfoV2(
+        tx: Transaction,
+        @unused datums: collection.Seq[(ByteString, Data)],
+        utxos: Map[TransactionInput, TransactionOutput],
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion
+    ): v2.TxInfo = getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
+
     /** Build TxInInfo for Plutus V3 script contexts.
       */
     def getTxInInfoV3(
@@ -682,12 +712,12 @@ object LedgerToPlutusTranslation {
       */
     def getTxInfoV3(
         tx: Transaction,
-        datums: collection.Seq[(ByteString, Data)],
         utxos: Map[TransactionInput, TransactionOutput],
         slotConfig: SlotConfig,
         protocolVersion: MajorProtocolVersion
     ): v3.TxInfo = {
         val body = tx.body.value
+        val datums = tx.witnessSet.plutusData.value.toSortedMap.view.mapValues(_.value)
         val redeemers =
             tx.witnessSet.redeemers.map(_.value.toIndexedSeq).getOrElse(IndexedSeq.empty)
 
@@ -729,6 +759,21 @@ object LedgerToPlutusTranslation {
               .getOrElse(prelude.Option.None)
         )
     }
+
+    /** Build TxInfo for Plutus V3 script contexts.
+      *
+      * @deprecated
+      *   Use getTxInfoV3 without datums parameter. Datums are now extracted from the transaction
+      *   witness set directly.
+      */
+    @deprecated("Use getTxInfoV3 without datums parameter", "0.14.2")
+    def getTxInfoV3(
+        tx: Transaction,
+        @unused datums: collection.Seq[(ByteString, Data)],
+        utxos: Map[TransactionInput, TransactionOutput],
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion
+    ): v3.TxInfo = getTxInfoV3(tx, utxos, slotConfig, protocolVersion)
 
     /** Get script purpose for Plutus V1/V2 contexts from redeemer.
       */
@@ -1001,8 +1046,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v1.ScriptContext = {
         val purpose = getScriptPurposeV1(tx, redeemer)
-        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
-        val txInfo = getTxInfoV1(tx, datums, utxos, slotConfig, protocolVersion)
+        val txInfo = getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
         v1.ScriptContext(txInfo, purpose)
     }
 
@@ -1016,8 +1060,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v2.ScriptContext = {
         val purpose = getScriptPurposeV2(tx, redeemer)
-        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
-        val txInfo = getTxInfoV2(tx, datums, utxos, slotConfig, protocolVersion)
+        val txInfo = getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
         v2.ScriptContext(txInfo, purpose)
     }
 
@@ -1032,8 +1075,7 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v3.ScriptContext = {
         val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
-        val datums = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
-        val txInfo = getTxInfoV3(tx, datums, utxos, slotConfig, protocolVersion)
+        val txInfo = getTxInfoV3(tx, utxos, slotConfig, protocolVersion)
         v3.ScriptContext(txInfo, redeemer.data, scriptInfo)
     }
 

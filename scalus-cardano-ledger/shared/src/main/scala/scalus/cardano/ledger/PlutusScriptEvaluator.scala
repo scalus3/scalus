@@ -257,26 +257,14 @@ object PlutusScriptEvaluator {
 
             val redeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
 
-            // Build datum lookup table with hash mapping
-            // According to Babbage spec, we lookup datums only in witness set
-            // and do not consider reference input inline datums
-            // (getDatum, Figure 3: Functions related to scripts)
-            val datumsMapping = tx.witnessSet.plutusData.value.toMap.view.mapValues(_.value).toSeq
-
-            val lookupTable = LookupTable(allResolvedScripts(tx, utxos), datumsMapping.toMap)
-
-            log.debug(
-              s"Built lookup table with ${lookupTable.scripts.size} scripts and ${lookupTable.datums.size} datums"
-            )
+            // Resolve all scripts from transaction and UTxOs
+            val scriptsMap = allResolvedScripts(tx, utxos)
 
             // Pre-compute TxInfo for each Plutus version to reuse across redeemers
             // This is lazily initialized only if needed
-            lazy val txInfoV1 =
-                getTxInfoV1(tx, datumsMapping, utxos, slotConfig, protocolMajorVersion)
-            lazy val txInfoV2 =
-                getTxInfoV2(tx, datumsMapping, utxos, slotConfig, protocolMajorVersion)
-            lazy val txInfoV3 =
-                getTxInfoV3(tx, datumsMapping, utxos, slotConfig, protocolMajorVersion)
+            lazy val txInfoV1 = getTxInfoV1(tx, utxos, slotConfig, protocolMajorVersion)
+            lazy val txInfoV2 = getTxInfoV2(tx, utxos, slotConfig, protocolMajorVersion)
+            lazy val txInfoV3 = getTxInfoV3(tx, utxos, slotConfig, protocolMajorVersion)
 
             // Evaluate each redeemer
             var remainingBudget = initialBudget
@@ -285,7 +273,7 @@ object PlutusScriptEvaluator {
                 AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
                     case Right(data) =>
                         data.map { case (tag, index, hash, outputOpt) =>
-                            val datum = outputOpt.flatMap(extractDatumFromOutput(_, lookupTable))
+                            val datum = outputOpt.flatMap(_.resolveDatum(tx))
                             (tag, index, hash, datum)
                         }
                     case Left(error) => throw error
@@ -293,7 +281,7 @@ object PlutusScriptEvaluator {
             val evaluatedRedeemers =
                 for
                     (redeemerTag, index, scriptHash, datum) <- neededScriptsData
-                    plutusScript <- lookupTable.scripts.get(scriptHash) match {
+                    plutusScript <- scriptsMap.get(scriptHash) match {
                         case Some(plutusScript: PlutusScript) => Some(plutusScript)
                         case Some(other)                      => None
                         case None =>
@@ -367,16 +355,6 @@ object PlutusScriptEvaluator {
 
             log.debug(s"Phase 2 evaluation completed. Remaining budget: $remainingBudget")
             evaluatedRedeemers.toSeq
-        }
-
-        private def extractDatumFromOutput(
-            output: TransactionOutput,
-            lookupTable: LookupTable
-        ): Option[Data] = {
-            output.datumOption match
-                case Some(DatumOption.Hash(hash))   => lookupTable.datums.get(hash)
-                case Some(DatumOption.Inline(data)) => Some(data)
-                case None                           => None
         }
 
         /** Evaluate a Plutus V1 script with the V1 script context.
@@ -572,17 +550,4 @@ object PlutusScriptEvaluator {
                 case Left(error)                  => throw error
 
     }
-
-    /** Lookup table for resolving scripts and datums during evaluation.
-      *
-      * @param scripts
-      *   Map from script hash to script
-      * @param datums
-      *   Map from datum hash to datum data
-      */
-    private case class LookupTable(
-        scripts: Map[ScriptHash, Script],
-        // cache of `getDatum`
-        datums: Map[DataHash, Data]
-    )
 }
