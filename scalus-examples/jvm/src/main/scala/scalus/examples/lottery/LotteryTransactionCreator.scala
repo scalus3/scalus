@@ -9,10 +9,6 @@ import scalus.uplc.PlutusV3
 
 import java.time.Instant
 
-// TODO:
-//   - enforce secret lengths to protect from brute force against the secrets
-//   - add multisig for the initiation
-//   - look for optimisations and refactor opportunities in the validator code
 case class LotteryTransactionCreator(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
