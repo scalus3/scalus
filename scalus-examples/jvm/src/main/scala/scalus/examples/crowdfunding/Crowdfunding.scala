@@ -531,6 +531,8 @@ object CrowdfundingValidator extends Validator {
               newDatum.withdrawn === newWithdrawn,
               "Withdrawn amount must be updated"
             )
+            // Verify campaign NFT is preserved in output
+            verifyCampaignNftPresent(campaignOutput.value, scriptHash)
 
     /** Handle reclaim spend - validates fund return to token holders */
     private inline def handleReclaimSpend(
@@ -601,6 +603,8 @@ object CrowdfundingValidator extends Validator {
               newDatum.withdrawn === newWithdrawn,
               "Withdrawn amount must be updated"
             )
+            // Verify campaign NFT is preserved in output
+            verifyCampaignNftPresent(campaignOutput.value, scriptHash)
 
     /** Verify that the campaign UTxO contains exactly one campaign NFT.
       *
