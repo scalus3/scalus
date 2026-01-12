@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.*
@@ -12,6 +12,7 @@ import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{MachineParams, PlutusVM, Result}
+import scalus.toUplc
 
 import scala.language.implicitConversions
 

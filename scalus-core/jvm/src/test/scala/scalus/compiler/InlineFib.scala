@@ -1,10 +1,11 @@
-package scalus.misc
+package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile
 import scalus.uplc.*
 import scalus.uplc.eval.PlutusVM
+import scalus.toUplc
 
 object InlineFib {
 

@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{ByteString, Data}
@@ -9,6 +9,7 @@ import scalus.prelude.List as PList
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
+import scalus.toUplc
 
 class DataPatternMatchingTest extends AnyFunSuite:
 

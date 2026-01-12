@@ -1,9 +1,9 @@
-package scalus
+package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin.ByteString.*
-import scalus.builtin.{Builtins, ByteString, Data}
+import scalus.builtin.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.{Boolean, Fun, TypeVar}
@@ -13,6 +13,7 @@ import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.{builtin, pretty, toUplc, toUplcOptimized, uplc, Ignore}
 
 import scala.annotation.{nowarn, tailrec}
 import scala.collection.immutable

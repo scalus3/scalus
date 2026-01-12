@@ -1,11 +1,12 @@
-package scalus
+package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scalus.builtin
 import scalus.builtin.ByteString.*
 import scalus.builtin.{Builtins, ByteString, Data, JVMPlatformSpecific}
-import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.*
+import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.Fun
 import scalus.compiler.sir.SirDSL.{*, given}
 import scalus.compiler.{compile, Options}
@@ -14,6 +15,7 @@ import scalus.uplc.Constant.asConstant
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
+import scalus.toUplc
 
 import scala.collection.immutable
 import scala.language.implicitConversions

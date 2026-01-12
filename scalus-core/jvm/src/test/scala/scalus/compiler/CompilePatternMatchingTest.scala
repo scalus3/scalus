@@ -1,4 +1,4 @@
-package scalus
+package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.*
@@ -8,6 +8,7 @@ import scalus.ledger.api.v1.*
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
+import scalus.toUplc
 
 import scala.language.implicitConversions
 
