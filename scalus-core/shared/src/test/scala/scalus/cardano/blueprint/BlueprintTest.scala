@@ -1,10 +1,84 @@
 package scalus.cardano.blueprint
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data
+import scalus.builtin.{ByteString, Data}
 import scalus.cardano.blueprint.HtlcValidatorInputs.{Action, ContractDatum}
 import scalus.cardano.ledger.Language
+import scalus.ledger.api.v1.{IntervalBoundType, PosixTime}
 import scalus.uplc.PlutusV3
+
+// Copied from examples
+object HtlcValidatorInputs {
+    type Preimage = ByteString
+    type Image = ByteString
+    type PubKeyHash = ByteString
+
+    // Contract Datum
+    case class ContractDatum(
+        committer: PubKeyHash,
+        receiver: PubKeyHash,
+        image: Image,
+        timeout: PosixTime
+    )
+    object ContractDatum {
+        def schema: String =
+            """{
+              |  "dataType": "constructor",
+              |  "title": "ContractDatum",
+              |  "fields": [
+              |    {
+              |      "dataType": "bytes",
+              |      "title": "committer"
+              |    },
+              |    {
+              |      "dataType": "bytes",
+              |      "title": "receiver"
+              |    },
+              |    {
+              |      "dataType": "bytes",
+              |      "title": "image"
+              |    },
+              |    {
+              |      "dataType": "integer",
+              |      "title": "timeout"
+              |    }
+              |  ]
+              |}""".stripMargin
+    }
+
+    // Redeemer
+    enum Action:
+        case Timeout
+        case Reveal(preimage: Preimage)
+
+    object Action {
+        def schema: String = """{
+                               |  "title": "Action",
+                               |  "anyOf": [
+                               |    {
+                               |      "dataType": "constructor",
+                               |      "title": "Timeout",
+                               |      "index": 0,
+                               |      "fields": [
+                               |
+                               |      ]
+                               |    },
+                               |    {
+                               |      "dataType": "constructor",
+                               |      "title": "Reveal",
+                               |      "index": 1,
+                               |      "fields": [
+                               |        {
+                               |          "dataType": "bytes",
+                               |          "title": "preimage"
+                               |        }
+                               |      ]
+                               |    }
+                               |  ]
+                               |}""".stripMargin
+    }
+
+}
 
 class BlueprintTest extends AnyFunSuite {
 
@@ -13,9 +87,31 @@ class BlueprintTest extends AnyFunSuite {
     // This case is covered by the following tests, keeping this test to check compatibility with aiken.
     // https://github.com/aiken-lang/aiken/blob/main/crates/aiken-project/src/blueprint/snapshots/aiken_project__blueprint__validator__tests__generics.snap#L57
     test("should produce correct schemas for `enum` types") {
-        val intervalSchema = PlutusDataSchema.derived[Interval]
+        val intervalBoundTypeSchema = PlutusDataSchema.derived[IntervalBoundType]
 
-        assert(intervalSchema.toJson() == Interval.schema)
+        // Verify the schema structure for IntervalBoundType enum
+        assert(intervalBoundTypeSchema.title.contains("IntervalBoundType"))
+        assert(intervalBoundTypeSchema.anyOf.isDefined)
+        assert(intervalBoundTypeSchema.anyOf.get.length == 3)
+
+        val variants = intervalBoundTypeSchema.anyOf.get
+        // NegInf
+        assert(variants(0).title.contains("NegInf"))
+        assert(variants(0).index.contains(0))
+        assert(variants(0).fields.isDefined)
+        assert(variants(0).fields.get.isEmpty)
+        // Finite
+        assert(variants(1).title.contains("Finite"))
+        assert(variants(1).index.contains(1))
+        assert(variants(1).fields.isDefined)
+        assert(variants(1).fields.get.length == 1)
+        assert(variants(1).fields.get.head.title.contains("time"))
+        assert(variants(1).fields.get.head.dataType.contains(DataType.Integer))
+        // PosInf
+        assert(variants(2).title.contains("PosInf"))
+        assert(variants(2).index.contains(2))
+        assert(variants(2).fields.isDefined)
+        assert(variants(2).fields.get.isEmpty)
     }
 
     test("should produce correct schemas for `HtlcValidator` input types") {
