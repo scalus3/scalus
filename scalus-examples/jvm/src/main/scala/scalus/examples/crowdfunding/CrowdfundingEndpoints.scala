@@ -50,6 +50,12 @@ class CrowdfundingEndpoints(
           ShelleyDelegationPart.Null
         )
 
+    /** Validates that an index was found (not -1) and returns it, or throws with descriptive error.
+      */
+    private def requireFound(idx: Int, msg: String): Int =
+        if idx == -1 then throw RuntimeException(msg)
+        else idx
+
     /** Apply campaign ID to donation minting policy and get the script.
       *
       * The donation minting policy is parameterized by campaignId, resulting in a unique policyId
@@ -210,62 +216,42 @@ class CrowdfundingEndpoints(
             donationDatum = DonationDatum(donorPkh, BigInt(amount))
 
             // Build transaction with delayed redeemer
-            tx <- TxBuilder(env)
-                .spend(
-                  campaignUtxo,
-                  redeemerBuilder = (tx: Transaction) => {
-                      val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
-                      val campaignOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                          sized.value.address == scriptAddress &&
-                          sized.value.value.assets.assets
-                              .get(crowdfundingPolicyId)
-                              .exists(_.get(nftAsset).exists(_ > 0))
-                      }
-                      val donationOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                          sized.value.address == scriptAddress &&
-                          !sized.value.value.assets.assets
-                              .get(crowdfundingPolicyId)
-                              .exists(_.get(nftAsset).exists(_ > 0))
-                      }
-                      Action
-                          .Donate(
-                            BigInt(amount),
-                            BigInt(inputIdx),
-                            BigInt(campaignOutputIdx),
-                            BigInt(donationOutputIdx)
-                          )
-                          .toData
+            donateRedeemer = (tx: Transaction) => {
+                val inputIdx = requireFound(
+                  tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input),
+                  "Campaign input not found in transaction"
+                )
+                val campaignOutputIdx = requireFound(
+                  tx.body.value.outputs.indexWhere { sized =>
+                      sized.value.address == scriptAddress &&
+                      sized.value.value.assets.assets
+                          .get(crowdfundingPolicyId)
+                          .exists(_.get(nftAsset).exists(_ > 0))
                   },
-                  crowdfundingScript,
-                  Set.empty
+                  "Campaign output not found in transaction"
                 )
-                .mint(
-                  donationScript,
-                  Map(donationAsset -> 1L),
-                  (tx: Transaction) => {
-                      val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
-                      val campaignOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                          sized.value.address == scriptAddress &&
-                          sized.value.value.assets.assets
-                              .get(crowdfundingPolicyId)
-                              .exists(_.get(nftAsset).exists(_ > 0))
-                      }
-                      val donationOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                          sized.value.address == scriptAddress &&
-                          !sized.value.value.assets.assets
-                              .get(crowdfundingPolicyId)
-                              .exists(_.get(nftAsset).exists(_ > 0))
-                      }
-                      Action
-                          .Donate(
-                            BigInt(amount),
-                            BigInt(inputIdx),
-                            BigInt(campaignOutputIdx),
-                            BigInt(donationOutputIdx)
-                          )
-                          .toData
-                  }
+                val donationOutputIdx = requireFound(
+                  tx.body.value.outputs.indexWhere { sized =>
+                      sized.value.address == scriptAddress &&
+                      !sized.value.value.assets.assets
+                          .get(crowdfundingPolicyId)
+                          .exists(_.get(nftAsset).exists(_ > 0))
+                  },
+                  "Donation output not found in transaction"
                 )
+                Action
+                    .Donate(
+                      BigInt(amount),
+                      BigInt(inputIdx),
+                      BigInt(campaignOutputIdx),
+                      BigInt(donationOutputIdx)
+                    )
+                    .toData
+            }
+
+            tx <- TxBuilder(env)
+                .spend(campaignUtxo, donateRedeemer, crowdfundingScript, Set.empty)
+                .mint(donationScript, Map(donationAsset -> 1L), donateRedeemer)
                 .payTo(scriptAddress, newCampaignValue, newDatum) // Updated campaign UTxO
                 // Unified donation UTxO: ADA + donation token + DonationDatum (at script address)
                 .payTo(scriptAddress, donationUtxoValue, donationDatum)
@@ -337,22 +323,36 @@ class CrowdfundingEndpoints(
 
             // Helper to build the Withdraw redeemer
             withdrawRedeemer = (tx: Transaction) => {
-                val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
+                val inputIdx = requireFound(
+                  tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input),
+                  "Campaign input not found in transaction"
+                )
                 val campaignOutputIdx =
                     if isFullWithdrawal then -1
                     else
-                        tx.body.value.outputs.indexWhere { sized =>
-                            sized.value.address == scriptAddress &&
-                            sized.value.value.assets.assets
-                                .get(crowdfundingPolicyId)
-                                .exists(_.get(nftAsset).exists(_ > 0))
-                        }
-                val recipientOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                    sized.value.address == recipientAddress
-                }
+                        requireFound(
+                          tx.body.value.outputs.indexWhere { sized =>
+                              sized.value.address == scriptAddress &&
+                              sized.value.value.assets.assets
+                                  .get(crowdfundingPolicyId)
+                                  .exists(_.get(nftAsset).exists(_ > 0))
+                          },
+                          "Campaign output not found for partial withdrawal"
+                        )
+                val recipientOutputIdx = requireFound(
+                  tx.body.value.outputs.indexWhere { sized =>
+                      sized.value.address == recipientAddress
+                  },
+                  "Recipient output not found in transaction"
+                )
                 // Sort indices to satisfy validator's strictly ascending requirement
                 val donationInputIndices = donationUtxos.map { utxo =>
-                    BigInt(tx.body.value.inputs.toSeq.indexOf(utxo.input))
+                    BigInt(
+                      requireFound(
+                        tx.body.value.inputs.toSeq.indexOf(utxo.input),
+                        "Donation input not found in transaction"
+                      )
+                    )
                 }.sorted
                 Action
                     .Withdraw(
@@ -464,25 +464,39 @@ class CrowdfundingEndpoints(
 
             // Helper to build Reclaim redeemer
             reclaimRedeemer = (tx: Transaction) => {
-                val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
+                val inputIdx = requireFound(
+                  tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input),
+                  "Campaign input not found in transaction"
+                )
                 val campaignOutputIdx =
                     if isFullReclaim then -1
                     else
-                        tx.body.value.outputs.indexWhere { sized =>
-                            sized.value.address == scriptAddress &&
-                            sized.value.value.assets.assets
-                                .get(crowdfundingPolicyId)
-                                .exists(_.get(nftAsset).exists(_ > 0))
-                        }
+                        requireFound(
+                          tx.body.value.outputs.indexWhere { sized =>
+                              sized.value.address == scriptAddress &&
+                              sized.value.value.assets.assets
+                                  .get(crowdfundingPolicyId)
+                                  .exists(_.get(nftAsset).exists(_ > 0))
+                          },
+                          "Campaign output not found for partial reclaim"
+                        )
                 // Create pairs of (donationInputIdx, reclaimerOutputIdx) and sort by input idx
                 // to satisfy validator's strictly ascending requirement
                 val sortedPairs = donationUtxos
                     .zip(donorInfos)
                     .map { case (utxo, (donorAddr, _, _)) =>
-                        val donationIdx =
-                            BigInt(tx.body.value.inputs.toSeq.indexOf(utxo.input))
-                        val reclaimerOutIdx =
-                            BigInt(tx.body.value.outputs.indexWhere(_.value.address == donorAddr))
+                        val donationIdx = BigInt(
+                          requireFound(
+                            tx.body.value.inputs.toSeq.indexOf(utxo.input),
+                            "Donation input not found in transaction"
+                          )
+                        )
+                        val reclaimerOutIdx = BigInt(
+                          requireFound(
+                            tx.body.value.outputs.indexWhere(_.value.address == donorAddr),
+                            s"Reclaimer output not found for donor"
+                          )
+                        )
                         (donationIdx, reclaimerOutIdx)
                     }
                     .sortBy(_._1)
