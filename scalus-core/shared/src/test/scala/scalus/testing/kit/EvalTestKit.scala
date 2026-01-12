@@ -387,5 +387,5 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
         check(handler, configParams*)
 
-    private val trueTerm = PlutusV3.compile(true).program.term.evaluate
+    private val trueTerm = true.asTerm
 }
