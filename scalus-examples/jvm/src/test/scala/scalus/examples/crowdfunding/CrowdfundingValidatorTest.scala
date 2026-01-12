@@ -1,0 +1,317 @@
+package scalus.examples.crowdfunding
+
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.builtin.ByteString
+import scalus.builtin.Data.toData
+import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
+import scalus.ledger.api.v2.OutputDatum
+import scalus.ledger.api.v3.*
+import scalus.ledger.api.v3.ScriptInfo.SpendingScript
+import scalus.prelude.{List, Option}
+import scalus.testing.kit.ScalusTest
+
+class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
+
+    private val crowdfundingContract = CrowdfundingContract.withErrorTraces
+    private val donationContract = DonationMintingContract.withErrorTraces
+
+    test(s"Crowdfunding validator size is ${CrowdfundingContract.script.script.size} bytes") {
+        println(s"Crowdfunding validator size: ${CrowdfundingContract.script.script.size} bytes")
+        assert(CrowdfundingContract.script.script.size > 0)
+    }
+
+    test(s"Donation minting policy size is ${DonationMintingContract.script.script.size} bytes") {
+        println(
+          s"Donation minting policy size: ${DonationMintingContract.script.script.size} bytes"
+        )
+        assert(DonationMintingContract.script.script.size > 0)
+    }
+
+    test("encodeAmount and decodeAmount are inverse") {
+        val amounts = Seq(
+          BigInt(1_000_000),
+          BigInt(5_000_000),
+          BigInt(100_000_000),
+          BigInt(1_000_000_000_000L)
+        )
+        amounts.foreach { amount =>
+            val encoded = DonationMintingPolicy.encodeAmount(amount)
+            val decoded = DonationMintingPolicy.decodeAmount(encoded)
+            assert(decoded == amount, s"Round-trip failed for $amount")
+        }
+    }
+
+    test("Create campaign - validates recipient signature required") {
+        val recipientPkh = random[PubKeyHash]
+        val otherPkh = random[PubKeyHash]
+        val deadline = BigInt(System.currentTimeMillis() + 86400000) // 1 day from now
+        val goal = BigInt(10_000_000)
+
+        val txOutRef = random[TxOutRef]
+        val campaignId = scalus.builtin.Builtins.blake2b_256(
+          scalus.builtin.Builtins.serialiseData(txOutRef.toData)
+        )
+        val policyId = crowdfundingContract.script.scriptHash
+
+        // Donation policy ID would be computed from applied program
+        val donationPolicyId = ByteString.fromHex("00" * 28)
+
+        val datum = CampaignDatum(
+          totalSum = BigInt(0),
+          goal = goal,
+          recipient = recipientPkh,
+          deadline = deadline,
+          withdrawn = BigInt(0),
+          donationPolicyId = donationPolicyId
+        )
+
+        val redeemer = Action.Create(goal, recipientPkh, deadline)
+
+        // Create a transaction context where recipient did NOT sign
+        val context = ScriptContext(
+          txInfo = TxInfo(
+            inputs = List(
+              TxInInfo(
+                outRef = txOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.PubKeyCredential(otherPkh), Option.None),
+                  value = Value.lovelace(10_000_000)
+                )
+              )
+            ),
+            outputs = List(
+              TxOut(
+                address = Address(Credential.ScriptCredential(policyId), Option.None),
+                value = Value.lovelace(5_000_000) + Value(policyId, campaignId, BigInt(1)),
+                datum = OutputDatum.OutputDatum(datum.toData)
+              )
+            ),
+            mint = Value(policyId, campaignId, BigInt(1)),
+            signatories = List(otherPkh), // NOT the recipient!
+            validRange = Interval.before(deadline),
+            id = random[TxId]
+          ),
+          redeemer = redeemer.toData,
+          scriptInfo = ScriptInfo.MintingScript(policyId)
+        )
+
+        val program = crowdfundingContract.program $ context.toData
+        val result = program.evaluateDebug
+
+        assert(result.isFailure, "Should fail when recipient doesn't sign")
+        assert(
+          result.logs.exists(_.contains("Recipient must sign")),
+          s"Expected 'Recipient must sign' error, got: ${result.logs.mkString(", ")}"
+        )
+    }
+
+    test("Create campaign - validates goal must be positive") {
+        val recipientPkh = random[PubKeyHash]
+        val deadline = BigInt(System.currentTimeMillis() + 86400000)
+        val goal = BigInt(0) // Invalid: zero goal
+
+        val txOutRef = random[TxOutRef]
+        val policyId = crowdfundingContract.script.scriptHash
+
+        val redeemer = Action.Create(goal, recipientPkh, deadline)
+
+        val context = ScriptContext(
+          txInfo = TxInfo(
+            inputs = List(
+              TxInInfo(
+                outRef = txOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.PubKeyCredential(recipientPkh), Option.None),
+                  value = Value.lovelace(10_000_000)
+                )
+              )
+            ),
+            outputs = List.Nil,
+            mint = Value.zero,
+            signatories = List(recipientPkh),
+            validRange = Interval.before(deadline),
+            id = random[TxId]
+          ),
+          redeemer = redeemer.toData,
+          scriptInfo = ScriptInfo.MintingScript(policyId)
+        )
+
+        val program = crowdfundingContract.program $ context.toData
+        val result = program.evaluateDebug
+
+        assert(result.isFailure, "Should fail when goal is zero")
+        assert(
+          result.logs.exists(_.contains("Goal must be positive")),
+          s"Expected 'Goal must be positive' error, got: ${result.logs.mkString(", ")}"
+        )
+    }
+
+    test("Donate - validates before deadline") {
+        val recipientPkh = random[PubKeyHash]
+        val deadline = BigInt(1000) // In the past
+        val donationPolicyId = ByteString.fromHex("11" * 28)
+
+        val currentDatum = CampaignDatum(
+          totalSum = BigInt(0),
+          goal = BigInt(10_000_000),
+          recipient = recipientPkh,
+          deadline = deadline,
+          withdrawn = BigInt(0),
+          donationPolicyId = donationPolicyId
+        )
+
+        val txOutRef = random[TxOutRef]
+        val policyId = crowdfundingContract.script.scriptHash
+        val amount = BigInt(5_000_000)
+
+        val redeemer = Action.Donate(
+          amount = amount,
+          campaignInputIdx = BigInt(0),
+          campaignOutputIdx = BigInt(0),
+          donationOutputIdx = BigInt(1)
+        )
+
+        val context = ScriptContext(
+          txInfo = TxInfo(
+            inputs = List(
+              TxInInfo(
+                outRef = txOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.ScriptCredential(policyId), Option.None),
+                  value = Value.lovelace(5_000_000),
+                  datum = OutputDatum.OutputDatum(currentDatum.toData)
+                )
+              )
+            ),
+            outputs = List.Nil,
+            mint = Value.zero,
+            signatories = List.Nil,
+            validRange = Interval.after(deadline + 1000), // After deadline!
+            id = random[TxId]
+          ),
+          redeemer = redeemer.toData,
+          scriptInfo = SpendingScript(txOutRef, Option.None)
+        )
+
+        val program = crowdfundingContract.program $ context.toData
+        val result = program.evaluateDebug
+
+        assert(result.isFailure, "Should fail when donating after deadline")
+        assert(
+          result.logs.exists(_.contains("before deadline")),
+          s"Expected deadline error, got: ${result.logs.mkString(", ")}"
+        )
+    }
+
+    test("Withdraw - validates goal must be reached") {
+        val recipientPkh = random[PubKeyHash]
+        val deadline = BigInt(1000)
+        val donationPolicyId = ByteString.fromHex("11" * 28)
+
+        val currentDatum = CampaignDatum(
+          totalSum = BigInt(5_000_000), // Less than goal
+          goal = BigInt(10_000_000),
+          recipient = recipientPkh,
+          deadline = deadline,
+          withdrawn = BigInt(0),
+          donationPolicyId = donationPolicyId
+        )
+
+        val txOutRef = random[TxOutRef]
+        val policyId = crowdfundingContract.script.scriptHash
+
+        val redeemer = Action.Withdraw(
+          campaignInputIdx = BigInt(0),
+          campaignOutputIdx = BigInt(-1),
+          recipientOutputIdx = BigInt(0),
+          donationInputIndices = List.Nil
+        )
+
+        val context = ScriptContext(
+          txInfo = TxInfo(
+            inputs = List(
+              TxInInfo(
+                outRef = txOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.ScriptCredential(policyId), Option.None),
+                  value = Value.lovelace(5_000_000),
+                  datum = OutputDatum.OutputDatum(currentDatum.toData)
+                )
+              )
+            ),
+            outputs = List.Nil,
+            mint = Value.zero,
+            signatories = List(recipientPkh),
+            validRange = Interval.after(deadline + 1), // Must start AFTER deadline
+            id = random[TxId]
+          ),
+          redeemer = redeemer.toData,
+          scriptInfo = SpendingScript(txOutRef, Option.None)
+        )
+
+        val program = crowdfundingContract.program $ context.toData
+        val result = program.evaluateDebug
+
+        assert(result.isFailure, "Should fail when goal not reached")
+        assert(
+          result.logs.exists(_.contains("Goal must be reached")),
+          s"Expected goal error, got: ${result.logs.mkString(", ")}"
+        )
+    }
+
+    test("Reclaim - validates goal must NOT be reached") {
+        val recipientPkh = random[PubKeyHash]
+        val deadline = BigInt(1000)
+        val donationPolicyId = ByteString.fromHex("11" * 28)
+
+        val currentDatum = CampaignDatum(
+          totalSum = BigInt(15_000_000), // More than goal - success!
+          goal = BigInt(10_000_000),
+          recipient = recipientPkh,
+          deadline = deadline,
+          withdrawn = BigInt(0),
+          donationPolicyId = donationPolicyId
+        )
+
+        val txOutRef = random[TxOutRef]
+        val policyId = crowdfundingContract.script.scriptHash
+
+        val redeemer = Action.Reclaim(
+          campaignInputIdx = BigInt(0),
+          campaignOutputIdx = BigInt(-1),
+          donationInputIndices = List.Nil,
+          reclaimerOutputIndices = List.Nil
+        )
+
+        val context = ScriptContext(
+          txInfo = TxInfo(
+            inputs = List(
+              TxInInfo(
+                outRef = txOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.ScriptCredential(policyId), Option.None),
+                  value = Value.lovelace(15_000_000),
+                  datum = OutputDatum.OutputDatum(currentDatum.toData)
+                )
+              )
+            ),
+            outputs = List.Nil,
+            mint = Value.zero,
+            signatories = List.Nil,
+            validRange = Interval.after(deadline + 1), // Must start AFTER deadline
+            id = random[TxId]
+          ),
+          redeemer = redeemer.toData,
+          scriptInfo = SpendingScript(txOutRef, Option.None)
+        )
+
+        val program = crowdfundingContract.program $ context.toData
+        val result = program.evaluateDebug
+
+        assert(result.isFailure, "Should fail when goal was reached")
+        assert(
+          result.logs.exists(_.contains("Cannot reclaim if goal was reached")),
+          s"Expected reclaim error, got: ${result.logs.mkString(", ")}"
+        )
+    }
+}
