@@ -314,4 +314,88 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
           s"Expected reclaim error, got: ${result.logs.mkString(", ")}"
         )
     }
+
+    test("Reclaim - rejects duplicate donation input indices (double-spend prevention)") {
+        val recipientPkh = random[PubKeyHash]
+        val donorPkh = random[PubKeyHash]
+        val deadline = BigInt(1000)
+        val donationPolicyId = ByteString.fromHex("11" * 28)
+        val donationAmount = BigInt(5_000_000)
+        val tokenName = DonationMintingPolicy.encodeAmount(donationAmount)
+
+        val currentDatum = CampaignDatum(
+          totalSum = donationAmount, // Less than goal - reclaim allowed
+          goal = BigInt(10_000_000),
+          recipient = recipientPkh,
+          deadline = deadline,
+          withdrawn = BigInt(0),
+          donationPolicyId = donationPolicyId
+        )
+
+        val donationDatum = DonationDatum(donor = donorPkh)
+
+        val campaignTxOutRef = random[TxOutRef]
+        val donationTxOutRef = random[TxOutRef]
+        val policyId = crowdfundingContract.script.scriptHash
+
+        // Attacker tries to use the same donation input index twice
+        val redeemer = Action.Reclaim(
+          campaignInputIdx = BigInt(0),
+          campaignOutputIdx = BigInt(-1),
+          donationInputIndices = List(BigInt(1), BigInt(1)), // DUPLICATE INDEX - attack attempt
+          reclaimerOutputIndices = List(BigInt(0), BigInt(1)) // Two outputs to drain funds
+        )
+
+        val context = ScriptContext(
+          txInfo = TxInfo(
+            inputs = List(
+              TxInInfo(
+                outRef = campaignTxOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.ScriptCredential(policyId), Option.None),
+                  value = Value.lovelace(2_000_000),
+                  datum = OutputDatum.OutputDatum(currentDatum.toData)
+                )
+              ),
+              TxInInfo(
+                outRef = donationTxOutRef,
+                resolved = TxOut(
+                  address = Address(Credential.ScriptCredential(policyId), Option.None),
+                  value = Value
+                      .lovelace(donationAmount) + Value(donationPolicyId, tokenName, BigInt(1)),
+                  datum = OutputDatum.OutputDatum(donationDatum.toData)
+                )
+              )
+            ),
+            outputs = List(
+              // Two outputs trying to claim the same donation
+              TxOut(
+                address = Address(Credential.PubKeyCredential(donorPkh), Option.None),
+                value = Value.lovelace(donationAmount),
+                datum = OutputDatum.NoOutputDatum
+              ),
+              TxOut(
+                address = Address(Credential.PubKeyCredential(donorPkh), Option.None),
+                value = Value.lovelace(donationAmount),
+                datum = OutputDatum.NoOutputDatum
+              )
+            ),
+            mint = Value(donationPolicyId, tokenName, BigInt(-1)),
+            signatories = List(donorPkh),
+            validRange = Interval.after(deadline + 1),
+            id = random[TxId]
+          ),
+          redeemer = redeemer.toData,
+          scriptInfo = SpendingScript(campaignTxOutRef, Option.None)
+        )
+
+        val program = crowdfundingContract.program $ context.toData
+        val result = program.evaluateDebug
+
+        assert(result.isFailure, "Should fail when duplicate donation indices are used")
+        assert(
+          result.logs.exists(_.contains("strictly ascending")),
+          s"Expected duplicate index error, got: ${result.logs.mkString(", ")}"
+        )
+    }
 }

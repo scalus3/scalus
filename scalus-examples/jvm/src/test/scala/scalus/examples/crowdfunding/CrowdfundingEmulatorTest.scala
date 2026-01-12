@@ -1,16 +1,20 @@
 package scalus.examples.crowdfunding
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.ShelleyAddress
+import scalus.builtin.ByteString
+import scalus.builtin.Data.toData
+import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.Emulator
-import scalus.ledger.api.v1.PosixTime
+import scalus.cardano.txbuilder.TransactionSigner
+import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.testing.kit.TestUtil.genesisHash
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 /** Integration tests for crowdfunding contract using Emulator.
@@ -54,6 +58,13 @@ class CrowdfundingEmulatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).run()
     }
+
+    test("reclaim rejects duplicate donation indices (double-spend prevention)") {
+        TestCase(
+          action = TestAction.ReclaimDuplicateIndices,
+          expected = Expected.Failure("script evaluation failed") // Validator rejects duplicate indices
+        ).run()
+    }
 }
 
 object CrowdfundingEmulatorTest extends ScalusTest {
@@ -84,6 +95,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
         case MultipleDonations
         case WithdrawSuccess
         case ReclaimSuccess
+        case ReclaimDuplicateIndices
 
     enum Expected:
         case Success
@@ -113,6 +125,8 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                     runWithdrawSuccessTest(provider, endpoints)
                 case TestAction.ReclaimSuccess =>
                     runReclaimSuccessTest(provider, endpoints)
+                case TestAction.ReclaimDuplicateIndices =>
+                    runReclaimDuplicateIndicesTest(provider, endpoints)
 
         private def runCreateTest(provider: Emulator, endpoints: CrowdfundingEndpoints): Unit =
             provider.setSlot(beforeSlot)
@@ -301,6 +315,158 @@ object CrowdfundingEmulatorTest extends ScalusTest {
             }
 
             verifyResult(result)
+
+        private def runReclaimDuplicateIndicesTest(
+            provider: Emulator,
+            endpoints: CrowdfundingEndpoints
+        ): Unit =
+            // Create campaign
+            provider.setSlot(beforeSlot)
+            val (_, campaignId) = endpoints
+                .createCampaign(
+                  recipientAddress = recipientAddress,
+                  goal = goal,
+                  deadline = deadline.toLong,
+                  initialValue = initialCampaignValue,
+                  signer = recipientParty.signer
+                )
+                .await()
+
+            // Donate less than goal
+            endpoints
+                .donate(
+                  campaignId = campaignId,
+                  donorAddress = donor1Address,
+                  amount = 3_000_000L,
+                  signer = donor1Party.signer
+                )
+                .await()
+
+            // Move past deadline
+            provider.setSlot(afterSlot)
+
+            // Find donation UTxOs
+            val donationUtxos = endpoints.findDonationUtxos(campaignId).await()
+
+            // Build malicious transaction with duplicate indices
+            val result = scala.util.Try {
+                buildMaliciousReclaimTx(
+                  provider,
+                  endpoints,
+                  campaignId,
+                  donationUtxos,
+                  donor1Party.signer
+                ).await()
+            }
+
+            verifyResult(result)
+
+        /** Build a malicious reclaim transaction with duplicate donation indices.
+          *
+          * This simulates an attacker trying to double-claim a donation.
+          */
+        private def buildMaliciousReclaimTx(
+            provider: Emulator,
+            endpoints: CrowdfundingEndpoints,
+            campaignId: ByteString,
+            donationUtxos: Seq[Utxo],
+            signer: TransactionSigner
+        )(using ExecutionContext): Future[Transaction] =
+            import scalus.cardano.txbuilder.TxBuilder
+            import scalus.builtin.Data.toData
+            import java.time.Instant
+
+            for
+                campaignUtxo <- endpoints.findCampaignUtxo(campaignId).map(_.get)
+                currentDatum = extractCampaignDatum(campaignUtxo)
+
+                donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
+                donationScript = getDonationScript(endpoints, campaignId)
+
+                // Build burn map
+                burnMap = donationUtxos
+                    .flatMap { utxo =>
+                        utxo.output.value.assets.assets
+                            .getOrElse(donationPolicyId, Map.empty)
+                            .map { case (name, qty) => (name, -qty.toLong) }
+                    }
+                    .groupBy(_._1)
+                    .map { case (name, pairs) => (name, pairs.map(_._2).sum) }
+
+                nftAsset = AssetName(campaignId)
+                crowdfundingPolicyId = crowdfundingContract.script.scriptHash
+
+                // MALICIOUS: Use duplicate indices to try double-claiming
+                maliciousRedeemer = (tx: Transaction) => {
+                    val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
+                    val donationIdx = donationUtxos.headOption
+                        .map(u => tx.body.value.inputs.toSeq.indexOf(u.input))
+                        .getOrElse(1)
+                    // Attack: same index twice!
+                    val duplicateIndices = scalus.prelude.List(BigInt(donationIdx), BigInt(donationIdx))
+                    val outputIndices = scalus.prelude.List(BigInt(0), BigInt(1))
+                    Action
+                        .Reclaim(
+                          BigInt(inputIdx),
+                          BigInt(-1),
+                          duplicateIndices, // DUPLICATE!
+                          outputIndices
+                        )
+                        .toData
+                }
+
+                donorPkh = extractDonorPkh(donor1Address)
+                donorKeyHash = AddrKeyHash.fromByteString(donorPkh.hash)
+
+                // Build the malicious transaction
+                builderWithCampaign = TxBuilder(env).spend(
+                  campaignUtxo,
+                  redeemerBuilder = maliciousRedeemer,
+                  crowdfundingContract.script,
+                  Set(donorKeyHash)
+                )
+
+                builderWithDonations = donationUtxos.foldLeft(builderWithCampaign) { (builder, utxo) =>
+                    builder.spend(utxo, maliciousRedeemer, crowdfundingContract.script, Set.empty)
+                }
+
+                builderWithBurn = builderWithDonations.mint(donationScript, burnMap, maliciousRedeemer)
+
+                // Two outputs to try double-claiming
+                amount = 3_000_000L
+                builderWithPayments = builderWithBurn
+                    .payTo(donor1Address, Value.lovelace(amount))
+                    .payTo(donor1Address, Value.lovelace(amount)) // Second output for double-claim
+
+                tx <- builderWithPayments
+                    .validFrom(Instant.ofEpochMilli(currentDatum.deadline.toLong + 1000))
+                    .complete(provider, donor1Address)
+                    .map(_.sign(signer).transaction)
+
+                _ <- provider.submit(tx).map {
+                    case Right(_)    => ()
+                    case Left(error) => throw RuntimeException(s"Failed to submit: $error")
+                }
+            yield tx
+
+        private def extractCampaignDatum(utxo: Utxo): CampaignDatum =
+            utxo.output.datumOption match
+                case Some(DatumOption.Inline(data)) =>
+                    scalus.builtin.Data.fromData[CampaignDatum](data)
+                case _ =>
+                    throw IllegalStateException("Expected inline datum")
+
+        private def getDonationScript(
+            endpoints: CrowdfundingEndpoints,
+            campaignId: ByteString
+        ): Script.PlutusV3 =
+            val appliedProgram = donationMintingContract.program $ campaignId.toData
+            Script.PlutusV3(appliedProgram.cborByteString)
+
+        private def extractDonorPkh(address: ShelleyAddress): PubKeyHash =
+            address.payment match
+                case ShelleyPaymentPart.Key(hash) => PubKeyHash(hash)
+                case _ => throw IllegalArgumentException("Expected key payment")
 
         private def verifyResult(result: scala.util.Try[Transaction]): Unit =
             expected match

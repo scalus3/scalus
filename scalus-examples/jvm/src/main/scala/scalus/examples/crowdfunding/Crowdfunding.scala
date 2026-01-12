@@ -482,13 +482,16 @@ object CrowdfundingValidator extends Validator {
           "Recipient must sign withdrawal"
         )
 
-        // 4. Calculate total being withdrawn from donation inputs
+        // 4. Verify donation indices are unique (prevents double-spend attack)
+        requireStrictlyAscending(donationInputIndices)
+
+        // 5. Calculate total being withdrawn from donation inputs
         val totalWithdrawn = donationInputIndices.foldLeft(BigInt(0)) { (sum, idx) =>
             val donationInput = txInfo.inputs.at(idx)
             sum + donationInput.resolved.value.getLovelace
         }
 
-        // 5. Verify recipient receives the funds
+        // 6. Verify recipient receives the funds
         val recipientOutput = txInfo.outputs.at(recipientOutputIdx)
         require(
           recipientOutput.address === Address.fromPubKeyHash(currentDatum.recipient),
@@ -499,10 +502,10 @@ object CrowdfundingValidator extends Validator {
           "Recipient must receive withdrawn amount"
         )
 
-        // 6. Verify donation tokens are burned
+        // 7. Verify donation tokens are burned
         verifyDonationsBurned(txInfo, currentDatum.donationPolicyId, donationInputIndices)
 
-        // 7. Verify campaign output or removal
+        // 8. Verify campaign output or removal
         val newWithdrawn = currentDatum.withdrawn + totalWithdrawn
         if newWithdrawn === currentDatum.totalSum then
             // Full withdrawal - campaign is complete
@@ -539,7 +542,10 @@ object CrowdfundingValidator extends Validator {
           "Cannot reclaim if goal was reached"
         )
 
-        // 3. Verify each donation is returned to the original donor (from DonationDatum)
+        // 3. Verify donation indices are unique (prevents double-spend attack)
+        requireStrictlyAscending(donationInputIndices)
+
+        // 4. Verify each donation is returned to the original donor (from DonationDatum)
         val totalReclaimed =
             donationInputIndices.zip(reclaimerOutputIndices).foldLeft(BigInt(0)) {
                 case (sum, (donationIdx, reclaimerOutIdx)) =>
@@ -570,10 +576,10 @@ object CrowdfundingValidator extends Validator {
                     sum + donationAmount
             }
 
-        // 4. Verify donation tokens are burned
+        // 5. Verify donation tokens are burned
         verifyDonationsBurned(txInfo, currentDatum.donationPolicyId, donationInputIndices)
 
-        // 5. Verify campaign output or removal
+        // 6. Verify campaign output or removal
         val newWithdrawn = currentDatum.withdrawn + totalReclaimed
         if newWithdrawn === currentDatum.totalSum then
             // Full reclaim - campaign is complete
@@ -588,6 +594,20 @@ object CrowdfundingValidator extends Validator {
               newDatum.withdrawn === newWithdrawn,
               "Withdrawn amount must be updated"
             )
+
+    /** Verify that indices are strictly ascending (which guarantees uniqueness).
+      *
+      * This prevents double-spending attacks where the same donation UTxO index is referenced
+      * multiple times in the redeemer.
+      */
+    def requireStrictlyAscending(indices: List[BigInt]): Unit =
+        // Use fold to check consecutive pairs: track previous value, verify each is greater
+        // Start with minimum possible value so first element always passes
+        indices.foldLeft(BigInt(-1)) { (prev, curr) =>
+            require(prev < curr, "Donation indices must be strictly ascending (no duplicates)")
+            curr
+        }
+        ()
 
     /** Verify that donation tokens are burned for the given donation inputs.
       *

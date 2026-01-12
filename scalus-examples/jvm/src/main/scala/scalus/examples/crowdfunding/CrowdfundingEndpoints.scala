@@ -359,9 +359,10 @@ class CrowdfundingEndpoints(
                 val recipientOutputIdx = tx.body.value.outputs.indexWhere { sized =>
                     sized.value.address == recipientAddress
                 }
+                // Sort indices to satisfy validator's strictly ascending requirement
                 val donationInputIndices = donationUtxos.map { utxo =>
                     BigInt(tx.body.value.inputs.toSeq.indexOf(utxo.input))
-                }
+                }.sorted
                 Action
                     .Withdraw(
                       BigInt(inputIdx),
@@ -491,13 +492,20 @@ class CrowdfundingEndpoints(
                                 .get(crowdfundingPolicyId)
                                 .exists(_.get(nftAsset).exists(_ > 0))
                         }
-                val donationInputIndices = donationUtxos.map { utxo =>
-                    BigInt(tx.body.value.inputs.toSeq.indexOf(utxo.input))
-                }
-                // Find output index for each donor
-                val reclaimerOutputIndices = donorInfos.map { case (donorAddr, _, _) =>
-                    BigInt(tx.body.value.outputs.indexWhere(_.value.address == donorAddr))
-                }
+                // Create pairs of (donationInputIdx, reclaimerOutputIdx) and sort by input idx
+                // to satisfy validator's strictly ascending requirement
+                val sortedPairs = donationUtxos
+                    .zip(donorInfos)
+                    .map { case (utxo, (donorAddr, _, _)) =>
+                        val donationIdx =
+                            BigInt(tx.body.value.inputs.toSeq.indexOf(utxo.input))
+                        val reclaimerOutIdx =
+                            BigInt(tx.body.value.outputs.indexWhere(_.value.address == donorAddr))
+                        (donationIdx, reclaimerOutIdx)
+                    }
+                    .sortBy(_._1)
+                val donationInputIndices = sortedPairs.map(_._1)
+                val reclaimerOutputIndices = sortedPairs.map(_._2)
                 Action
                     .Reclaim(
                       BigInt(inputIdx),
