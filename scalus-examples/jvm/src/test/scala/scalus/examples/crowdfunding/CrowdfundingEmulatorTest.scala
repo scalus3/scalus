@@ -62,7 +62,8 @@ class CrowdfundingEmulatorTest extends AnyFunSuite, ScalusTest {
     test("reclaim rejects duplicate donation indices (double-spend prevention)") {
         TestCase(
           action = TestAction.ReclaimDuplicateIndices,
-          expected = Expected.Failure("script evaluation failed") // Validator rejects duplicate indices
+          expected =
+              Expected.Failure("script evaluation failed") // Validator rejects duplicate indices
         ).run()
     }
 }
@@ -403,7 +404,8 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                         .map(u => tx.body.value.inputs.toSeq.indexOf(u.input))
                         .getOrElse(1)
                     // Attack: same index twice!
-                    val duplicateIndices = scalus.prelude.List(BigInt(donationIdx), BigInt(donationIdx))
+                    val duplicateIndices =
+                        scalus.prelude.List(BigInt(donationIdx), BigInt(donationIdx))
                     val outputIndices = scalus.prelude.List(BigInt(0), BigInt(1))
                     Action
                         .Reclaim(
@@ -426,11 +428,21 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                   Set(donorKeyHash)
                 )
 
-                builderWithDonations = donationUtxos.foldLeft(builderWithCampaign) { (builder, utxo) =>
-                    builder.spend(utxo, maliciousRedeemer, crowdfundingContract.script, Set.empty)
+                builderWithDonations = donationUtxos.foldLeft(builderWithCampaign) {
+                    (builder, utxo) =>
+                        builder.spend(
+                          utxo,
+                          maliciousRedeemer,
+                          crowdfundingContract.script,
+                          Set.empty
+                        )
                 }
 
-                builderWithBurn = builderWithDonations.mint(donationScript, burnMap, maliciousRedeemer)
+                builderWithBurn = builderWithDonations.mint(
+                  donationScript,
+                  burnMap,
+                  maliciousRedeemer
+                )
 
                 // Two outputs to try double-claiming
                 amount = 3_000_000L

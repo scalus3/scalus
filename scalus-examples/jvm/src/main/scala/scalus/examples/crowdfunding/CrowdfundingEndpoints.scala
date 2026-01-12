@@ -189,9 +189,8 @@ class CrowdfundingEndpoints(
               totalSum = currentDatum.totalSum + BigInt(amount)
             )
 
-            // Donation token: name = encoded amount
-            tokenName = DonationMintingPolicy.encodeAmount(BigInt(amount))
-            donationAsset = AssetName(tokenName)
+            // Donation token: fixed name (amount stored in DonationDatum)
+            donationAsset = AssetName(DonationMintingPolicy.donationTokenName)
             donationTokenValue = LedgerValue.asset(donationPolicyId, donationAsset, 1L)
 
             // Campaign NFT must be preserved
@@ -206,9 +205,9 @@ class CrowdfundingEndpoints(
             // Unified donation UTxO: ADA + donation token (at script address)
             donationUtxoValue = LedgerValue.lovelace(amount) + donationTokenValue
 
-            // DonationDatum identifies the original donor (for reclaim authorization)
+            // DonationDatum stores donor and amount (for reclaim)
             donorPkh = extractPkh(donorAddress)
-            donationDatum = DonationDatum(donorPkh)
+            donationDatum = DonationDatum(donorPkh, BigInt(amount))
 
             // Build transaction with delayed redeemer
             tx <- TxBuilder(env)
@@ -319,28 +318,20 @@ class CrowdfundingEndpoints(
             donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
             donationScript = getDonationScript(campaignId)
 
-            // Calculate total amount being withdrawn from donation UTxOs (get amount from tokens)
-            tokenAmounts: Seq[BigInt] = donationUtxos.map { utxo =>
-                val tokens = utxo.output.value.assets.assets.getOrElse(donationPolicyId, Map.empty)
-                tokens.foldLeft(BigInt(0)) { case (acc, (name, qty)) =>
-                    acc + DonationMintingPolicy.decodeAmount(name.bytes) * qty.toLong
-                }
+            // Calculate total amount being withdrawn from donation UTxOs (get amount from DonationDatum)
+            donationAmounts: Seq[BigInt] = donationUtxos.map { utxo =>
+                extractDonationDatum(utxo).amount
             }
-            totalWithdrawAmount: BigInt = tokenAmounts.foldLeft(BigInt(0))(_ + _)
+            totalWithdrawAmount: BigInt = donationAmounts.foldLeft(BigInt(0))(_ + _)
 
             // Calculate if this is full or partial withdrawal
             newWithdrawn = currentDatum.withdrawn + totalWithdrawAmount
             isFullWithdrawal = newWithdrawn == currentDatum.totalSum
 
-            // Build burn map for donation tokens
-            burnMap = donationUtxos
-                .flatMap { utxo =>
-                    utxo.output.value.assets.assets.getOrElse(donationPolicyId, Map.empty).map {
-                        case (name, qty) => (name, -qty.toLong)
-                    }
-                }
-                .groupBy(_._1)
-                .map { case (name, pairs) => (name, pairs.map(_._2).sum) }
+            // Build burn map for donation tokens (all have same fixed name)
+            donationAsset = AssetName(DonationMintingPolicy.donationTokenName)
+            totalTokensToBurn = donationUtxos.size.toLong
+            burnMap = Map(donationAsset -> -totalTokensToBurn)
 
             nftAsset = AssetName(campaignId)
 
@@ -447,15 +438,11 @@ class CrowdfundingEndpoints(
             donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
             donationScript = getDonationScript(campaignId)
 
-            // Extract donor info from DonationDatum and calculate amounts from tokens
+            // Extract donor info from DonationDatum (amount now stored in datum, not token name)
             donorInfos: Seq[(ShelleyAddress, PubKeyHash, BigInt)] = donationUtxos.map { utxo =>
-                val donorPkh = extractDonationDatum(utxo).donor
-                val donorAddress = addressFromPkh(donorPkh)
-                val tokens = utxo.output.value.assets.assets.getOrElse(donationPolicyId, Map.empty)
-                val amount = tokens.foldLeft(BigInt(0)) { case (acc, (name, qty)) =>
-                    acc + DonationMintingPolicy.decodeAmount(name.bytes) * qty.toLong
-                }
-                (donorAddress, donorPkh, amount)
+                val donationDatum = extractDonationDatum(utxo)
+                val donorAddress = addressFromPkh(donationDatum.donor)
+                (donorAddress, donationDatum.donor, donationDatum.amount)
             }
             totalReclaimAmount: BigInt = donorInfos.map(_._3).foldLeft(BigInt(0))(_ + _)
 
@@ -468,15 +455,10 @@ class CrowdfundingEndpoints(
             newWithdrawn = currentDatum.withdrawn + totalReclaimAmount
             isFullReclaim = newWithdrawn == currentDatum.totalSum
 
-            // Build burn map
-            burnMap = donationUtxos
-                .flatMap { utxo =>
-                    utxo.output.value.assets.assets.getOrElse(donationPolicyId, Map.empty).map {
-                        case (name, qty) => (name, -qty.toLong)
-                    }
-                }
-                .groupBy(_._1)
-                .map { case (name, pairs) => (name, pairs.map(_._2).sum) }
+            // Build burn map (all donation tokens have same fixed name)
+            donationAsset = AssetName(DonationMintingPolicy.donationTokenName)
+            totalTokensToBurn = donationUtxos.size.toLong
+            burnMap = Map(donationAsset -> -totalTokensToBurn)
 
             nftAsset = AssetName(campaignId)
 

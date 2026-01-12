@@ -27,18 +27,11 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
         assert(DonationMintingContract.script.script.size > 0)
     }
 
-    test("encodeAmount and decodeAmount are inverse") {
-        val amounts = Seq(
-          BigInt(1_000_000),
-          BigInt(5_000_000),
-          BigInt(100_000_000),
-          BigInt(1_000_000_000_000L)
+    test("donationTokenName is fixed empty ByteString") {
+        assert(
+          DonationMintingPolicy.donationTokenName == ByteString.empty,
+          "Donation token name should be empty ByteString"
         )
-        amounts.foreach { amount =>
-            val encoded = DonationMintingPolicy.encodeAmount(amount)
-            val decoded = DonationMintingPolicy.decodeAmount(encoded)
-            assert(decoded == amount, s"Round-trip failed for $amount")
-        }
     }
 
     test("Create campaign - validates recipient signature required") {
@@ -207,6 +200,7 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
         val recipientPkh = random[PubKeyHash]
         val deadline = BigInt(1000)
         val donationPolicyId = ByteString.fromHex("11" * 28)
+        val campaignId = ByteString.fromHex("cc" * 32) // Mock campaign NFT token name
 
         val currentDatum = CampaignDatum(
           totalSum = BigInt(5_000_000), // Less than goal
@@ -234,7 +228,8 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
                 outRef = txOutRef,
                 resolved = TxOut(
                   address = Address(Credential.ScriptCredential(policyId), Option.None),
-                  value = Value.lovelace(5_000_000),
+                  // Include campaign NFT in the value
+                  value = Value.lovelace(5_000_000) + Value(policyId, campaignId, BigInt(1)),
                   datum = OutputDatum.OutputDatum(currentDatum.toData)
                 )
               )
@@ -263,6 +258,7 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
         val recipientPkh = random[PubKeyHash]
         val deadline = BigInt(1000)
         val donationPolicyId = ByteString.fromHex("11" * 28)
+        val campaignId = ByteString.fromHex("cc" * 32) // Mock campaign NFT token name
 
         val currentDatum = CampaignDatum(
           totalSum = BigInt(15_000_000), // More than goal - success!
@@ -290,7 +286,8 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
                 outRef = txOutRef,
                 resolved = TxOut(
                   address = Address(Credential.ScriptCredential(policyId), Option.None),
-                  value = Value.lovelace(15_000_000),
+                  // Include campaign NFT in the value
+                  value = Value.lovelace(15_000_000) + Value(policyId, campaignId, BigInt(1)),
                   datum = OutputDatum.OutputDatum(currentDatum.toData)
                 )
               )
@@ -320,8 +317,9 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
         val donorPkh = random[PubKeyHash]
         val deadline = BigInt(1000)
         val donationPolicyId = ByteString.fromHex("11" * 28)
+        val campaignId = ByteString.fromHex("cc" * 32) // Mock campaign NFT token name
         val donationAmount = BigInt(5_000_000)
-        val tokenName = DonationMintingPolicy.encodeAmount(donationAmount)
+        val tokenName = DonationMintingPolicy.donationTokenName // Fixed token name
 
         val currentDatum = CampaignDatum(
           totalSum = donationAmount, // Less than goal - reclaim allowed
@@ -332,7 +330,7 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
           donationPolicyId = donationPolicyId
         )
 
-        val donationDatum = DonationDatum(donor = donorPkh)
+        val donationDatum = DonationDatum(donorPkh, donationAmount)
 
         val campaignTxOutRef = random[TxOutRef]
         val donationTxOutRef = random[TxOutRef]
@@ -353,7 +351,8 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
                 outRef = campaignTxOutRef,
                 resolved = TxOut(
                   address = Address(Credential.ScriptCredential(policyId), Option.None),
-                  value = Value.lovelace(2_000_000),
+                  // Include campaign NFT in the value
+                  value = Value.lovelace(2_000_000) + Value(policyId, campaignId, BigInt(1)),
                   datum = OutputDatum.OutputDatum(currentDatum.toData)
                 )
               ),

@@ -50,24 +50,28 @@ object CampaignDatum {
             a.donationPolicyId === b.donationPolicyId
 }
 
-/** Donation datum identifying the original donor.
+/** Datum for donation UTxOs at the script address.
   *
   * Each donation UTxO at the script address contains:
-  *   - Donated ADA
-  *   - Donation token (proves donation amount)
-  *   - This datum (identifies donor for reclaim authorization)
+  *   - Donated ADA (may include extra for min UTxO)
+  *   - Donation token (proves donation exists)
+  *   - This datum (identifies donor and stores actual donation amount)
   *
   * @param donor
   *   Public key hash of the original donor (for reclaim authorization)
+  * @param amount
+  *   The actual donation amount in lovelace
   */
 case class DonationDatum(
-    donor: PubKeyHash
+    donor: PubKeyHash,
+    amount: BigInt
 ) derives Data.FromData,
       Data.ToData
 
 @Compile
 object DonationDatum {
-    given Eq[DonationDatum] = (a: DonationDatum, b: DonationDatum) => a.donor === b.donor
+    given Eq[DonationDatum] = (a: DonationDatum, b: DonationDatum) =>
+        a.donor === b.donor && a.amount === b.amount
 }
 
 /** Actions that can be performed on the crowdfunding contract
@@ -148,13 +152,12 @@ object Action
 @Compile
 object DonationMintingPolicy extends DataParameterizedValidator {
 
-    /** Encode a BigInt amount as a ByteString token name */
-    inline def encodeAmount(amount: BigInt): ByteString =
-        scalus.builtin.Builtins.integerToByteString(true, 8, amount)
-
-    /** Decode a ByteString token name back to BigInt amount */
-    inline def decodeAmount(tokenName: ByteString): BigInt =
-        scalus.builtin.Builtins.byteStringToInteger(true, tokenName)
+    /** Fixed token name for all donation tokens.
+      *
+      * The donation amount is stored in the UTxO's lovelace value, not encoded in the token name.
+      * This simplifies the design and avoids integer encoding/overflow issues.
+      */
+    val donationTokenName: ByteString = ByteString.empty
 
     inline override def spend(
         param: Data,
@@ -211,10 +214,9 @@ object DonationMintingPolicy extends DataParameterizedValidator {
           "Donations must be before deadline"
         )
 
-        // 5. Verify exactly one donation token is minted with the correct amount
-        val tokenName = encodeAmount(amount)
+        // 5. Verify exactly one donation token is minted
         require(
-          txInfo.mint.quantityOf(policyId, tokenName) === BigInt(1),
+          txInfo.mint.quantityOf(policyId, donationTokenName) === BigInt(1),
           "Exactly one donation token must be minted"
         )
 
@@ -329,10 +331,12 @@ object CrowdfundingValidator extends Validator {
                     val (scriptHash, currentDatum) = campaignInput.resolved match
                         case TxOut(
                               Address(Credential.ScriptCredential(sh), _),
-                              _,
+                              value,
                               OutputDatum.OutputDatum(inlineDatum),
                               _
                             ) =>
+                            // Verify campaign NFT exists (policyId = scriptHash)
+                            verifyCampaignNftPresent(value, sh)
                             (sh, inlineDatum.to[CampaignDatum])
                         case _ =>
                             fail("Campaign input must have script credential and inline datum")
@@ -366,10 +370,12 @@ object CrowdfundingValidator extends Validator {
                     val (scriptHash, currentDatum) = campaignInput.resolved match
                         case TxOut(
                               Address(Credential.ScriptCredential(sh), _),
-                              _,
+                              value,
                               OutputDatum.OutputDatum(inlineDatum),
                               _
                             ) =>
+                            // Verify campaign NFT exists (policyId = scriptHash)
+                            verifyCampaignNftPresent(value, sh)
                             (sh, inlineDatum.to[CampaignDatum])
                         case _ =>
                             fail("Campaign input must have script credential and inline datum")
@@ -439,7 +445,8 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 6. Verify donation token is minted and goes to donation UTxO
-        val tokenName = DonationMintingPolicy.encodeAmount(amount)
+        // 6. Verify donation token is minted and goes to donation UTxO
+        val tokenName = DonationMintingPolicy.donationTokenName
         require(
           txInfo.mint.quantityOf(currentDatum.donationPolicyId, tokenName) === BigInt(1),
           "Donation token must be minted"
@@ -449,10 +456,14 @@ object CrowdfundingValidator extends Validator {
           "Donation token must be in donation UTxO"
         )
 
-        // 7. Verify donation UTxO has DonationDatum (donor identity for reclaim)
+        // 7. Verify donation UTxO has DonationDatum with correct amount
         donationOutput.datum match
             case OutputDatum.OutputDatum(d) =>
-                val _ = d.to[DonationDatum] // Just verify it parses as DonationDatum
+                val donationDatum = d.to[DonationDatum]
+                require(
+                  donationDatum.amount === amount,
+                  "DonationDatum must contain correct amount"
+                )
             case _ => fail("Donation output must have inline DonationDatum")
 
     /** Handle withdraw spend - validates fund transfer to recipient */
@@ -551,16 +562,12 @@ object CrowdfundingValidator extends Validator {
                 case (sum, (donationIdx, reclaimerOutIdx)) =>
                     val donationInput = txInfo.inputs.at(donationIdx)
 
-                    // Get donation amount from the token name (not lovelace, which may have min UTxO extra)
-                    val tokens = donationInput.resolved.value.tokens(currentDatum.donationPolicyId)
-                    val donationAmount = tokens.foldLeft(BigInt(0)) { case (acc, (tokenName, _)) =>
-                        acc + DonationMintingPolicy.decodeAmount(tokenName)
-                    }
-
-                    // Get original donor from DonationDatum
-                    val donorPkh = donationInput.resolved.datum match
-                        case OutputDatum.OutputDatum(d) => d.to[DonationDatum].donor
+                    // Get donor and amount from DonationDatum
+                    val donationDatum = donationInput.resolved.datum match
+                        case OutputDatum.OutputDatum(d) => d.to[DonationDatum]
                         case _ => fail("Donation input must have inline DonationDatum")
+                    val donorPkh = donationDatum.donor
+                    val donationAmount = donationDatum.amount
 
                     // Verify funds go to the original donor
                     val reclaimerOutput = txInfo.outputs.at(reclaimerOutIdx)
@@ -594,6 +601,19 @@ object CrowdfundingValidator extends Validator {
               newDatum.withdrawn === newWithdrawn,
               "Withdrawn amount must be updated"
             )
+
+    /** Verify that the campaign UTxO contains exactly one campaign NFT.
+      *
+      * This prevents attacks using fake campaign UTxOs without the NFT. The campaign NFT has
+      * policyId = scriptHash, so we check for exactly one token from that policy.
+      */
+    def verifyCampaignNftPresent(value: Value, scriptHash: ValidatorHash): Unit =
+        val nftTokens = value.tokens(scriptHash)
+        // Must have exactly one token type with quantity 1
+        val hasExactlyOneNft =
+            nftTokens.size === BigInt(1) &&
+                nftTokens.forall { case (_, qty) => qty === BigInt(1) }
+        require(hasExactlyOneNft, "Campaign input must contain exactly one campaign NFT")
 
     /** Verify that indices are strictly ascending (which guarantees uniqueness).
       *
