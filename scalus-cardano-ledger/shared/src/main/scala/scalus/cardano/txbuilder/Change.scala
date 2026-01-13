@@ -52,6 +52,7 @@ object Change {
       * @return
       *   Either a [[TxBalancingError]] or the modified transaction
       */
+    @deprecated("use changeOutputDiffHandler instead", "0.14.2")
     def handleChange(
         diff: Value,
         tx: Transaction,
@@ -108,6 +109,7 @@ object Change {
       * @return
       *   The index of the first output matching the change address, or -1 if not found
       */
+    @deprecated("will be removed", "0.14.2")
     def findChangeOutput(tx: Transaction, changeAddress: Address): Int =
         tx.body.value.outputs.indexWhere(_.value.address == changeAddress)
 

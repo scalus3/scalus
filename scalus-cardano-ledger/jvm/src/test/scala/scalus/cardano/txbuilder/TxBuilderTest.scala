@@ -431,6 +431,36 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         assert(aliceAssets(h2so4) == 300L, "Alice should receive all 300 h2so4 as change")
     }
 
+    test("build should not merge change with existing output to same address") {
+        // When payTo(changeAddress, amount) is used, change should go to a SEPARATE output,
+        // not merge with the payment output. Users expect explicitly stated amounts.
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 100_000_000).sample.get
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .payTo(Alice.address, Value.ada(10)) // Explicit payment to Alice
+            .build(changeTo = Alice.address) // Alice is also change address
+            .transaction
+
+        // Should have TWO separate outputs to Alice: payment + change
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(
+          aliceOutputs.size == 2,
+          s"Should have 2 outputs to Alice (payment + change), got ${aliceOutputs.size}"
+        )
+
+        // One output should be around 10 ADA (the payment)
+        val hasPaymentOutput = aliceOutputs.exists(out =>
+            out.value.value.coin >= Coin.ada(10) && out.value.value.coin < Coin.ada(15)
+        )
+        assert(hasPaymentOutput, "Should have the ~10 ADA payment output")
+
+        // Other output should be the change (bulk of remaining funds)
+        val hasChangeOutput =
+            aliceOutputs.exists(out => out.value.value.coin.value > Coin.ada(80).value)
+        assert(hasChangeOutput, "Should have the change output with 80+ ADA")
+    }
+
     private def outputsOf(party: Party, tx: Transaction) =
         tx.body.value.outputs.toSeq.filter(_.value.address == party.address)
 

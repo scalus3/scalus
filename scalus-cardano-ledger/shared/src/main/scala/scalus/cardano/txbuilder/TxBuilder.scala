@@ -214,6 +214,8 @@ object TxBuilderException {
   *   datum values to be included in the transaction witness set
   * @param validators
   *   ledger rules to run against the built transaction for additional validations
+  * @param changeOutputIndex
+  *   index of the explicit change output (set by [[changeTo]]), or None for implicit change
   */
 case class TxBuilder(
     env: CardanoInfo,
@@ -221,7 +223,8 @@ case class TxBuilder(
     evaluator: PlutusScriptEvaluator,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
-    validators: Seq[Validator] = Seq.empty
+    validators: Seq[Validator] = Seq.empty,
+    changeOutputIndex: Option[Int] = None
 ) {
 
     /** Spends a UTXO with an explicit witness.
@@ -524,6 +527,36 @@ case class TxBuilder(
             TransactionOutput(address, value, Some(DatumOption.Hash(datumHash)), None)
           )
         )
+
+    /** Specifies an output that will receive change during transaction balancing.
+      *
+      * The output specifies the MINIMUM amount it must contain. During balancing, any excess ADA
+      * and tokens will be added to this output. The final output will always have at least the
+      * specified value, plus any change from the transaction.
+      *
+      * This method can only be called once per transaction. If not called, a new change output will
+      * be created at the sponsor address during [[complete]].
+      *
+      * The change output must meet the minimum ADA requirement (minUTxO). If the transaction
+      * doesn't have enough excess to cover this minimum, additional UTXOs will be selected
+      * automatically.
+      *
+      * @param output
+      *   the output that will receive change (specifies minimum amounts)
+      * @throws IllegalArgumentException
+      *   if called more than once
+      */
+    def changeTo(output: TransactionOutput): TxBuilder = {
+        require(
+          changeOutputIndex.isEmpty,
+          s"changeTo can only be called once (already set at index ${changeOutputIndex.get})"
+        )
+        copy(changeOutputIndex = Some(sendStepCount))
+            .addSteps(TransactionBuilderStep.Send(output))
+    }
+
+    /** Counts the number of Send steps, which corresponds to the output index. */
+    private def sendStepCount: Int = steps.count(_.isInstanceOf[TransactionBuilderStep.Send])
 
     /** Attaches a datum to the transaction witness set.
       *
@@ -1367,7 +1400,11 @@ case class TxBuilder(
       * address.
       *
       * This is a convenience method that uses the default change handling strategy. Any difference
-      * between inputs and outputs (minus fees) will be sent to the provided address.
+      * between inputs and outputs (minus fees) will be sent to the provided address as a new
+      * output.
+      *
+      * Note: If [[changeTo(TransactionOutput)]] was called, that output will receive the change
+      * instead of creating a new output at this address.
       *
       * @param changeTo
       *   the address to receive any remaining value (change)
@@ -1377,8 +1414,22 @@ case class TxBuilder(
       *   if script execution fails or if the transaction cannot be balanced
       */
     def build(changeTo: Address): TxBuilder = {
-        build(diffHandler =
-            (diff, tx) => Change.handleChange(diff, tx, changeTo, env.protocolParams)
+        // Determine change output index and add implicit change output if needed
+        val (buildSteps, changeIdx) = changeOutputIndex match {
+            case Some(idx) =>
+                // Explicit change output already added via changeTo - use its index
+                (steps, idx)
+
+            case None =>
+                // No explicit change output - add implicit one at change address
+                val implicitChangeOutput = TransactionOutput(changeTo, Value.zero)
+                val implicitChangeStep = TransactionBuilderStep.Send(implicitChangeOutput)
+                (steps :+ implicitChangeStep, sendStepCount)
+        }
+
+        // Build with the modified steps and use changeOutputDiffHandler
+        copy(steps = buildSteps).build(diffHandler =
+            (diff, tx) => Change.changeOutputDiffHandler(diff, tx, env.protocolParams, changeIdx)
         )
     }
 
@@ -1526,7 +1577,18 @@ case class TxBuilder(
             TransactionBuilderStep.AddCollateral(Utxo(input, output))
         }.toSeq
 
-        val allSteps = steps ++ spendSteps ++ collateralSteps
+        // Determine change output index and add implicit change output if needed
+        val (allSteps, changeIdx) = changeOutputIndex match {
+            case Some(idx) =>
+                // Explicit change output already added via changeTo - use its index
+                (steps ++ spendSteps ++ collateralSteps, idx)
+
+            case None =>
+                // No explicit change output - add implicit one at sponsor address
+                val implicitChangeOutput = TransactionOutput(sponsor, Value.zero)
+                val implicitChangeStep = TransactionBuilderStep.Send(implicitChangeOutput)
+                (steps ++ spendSteps ++ collateralSteps :+ implicitChangeStep, sendStepCount)
+        }
 
         TransactionBuilder.build(env.network, allSteps) match {
             case Left(error) =>
@@ -1535,7 +1597,7 @@ case class TxBuilder(
             case Right(ctx) =>
                 val ctxWithAttachments = addAttachmentsToContext(ctx)
                 val diffHandler: DiffHandler = (diff, tx) =>
-                    Change.handleChange(diff, tx, sponsor, env.protocolParams)
+                    Change.changeOutputDiffHandler(diff, tx, env.protocolParams, changeIdx)
 
                 ctxWithAttachments.finalizeContext(
                   env.protocolParams,

@@ -5,7 +5,6 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
@@ -633,6 +632,138 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     // Change Output Handling
     // ============================================================================
 
+    test("complete should not merge change with existing sponsor output") {
+        // When payTo(sponsor, amount) is used, change should go to a SEPARATE output,
+        // not merge with the payment output. Users expect explicitly stated amounts.
+        val provider = Emulator(
+          Map(
+            input(0) -> adaOutput(Alice.address, 100),
+            input(1) -> adaOutput(Alice.address, 50)
+          )
+        )
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Alice.address, Value.ada(10)) // Explicit payment to Alice
+            .complete(provider, Alice.address) // Alice is also sponsor
+            .await()
+            .transaction
+
+        // Should have TWO separate outputs to Alice: payment + change
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(
+          aliceOutputs.size == 2,
+          s"Should have 2 outputs to Alice (payment + change), got ${aliceOutputs.size}"
+        )
+
+        // One output should be exactly 10 ADA (the payment)
+        val exactTenAda = aliceOutputs.exists(out =>
+            out.value.value.coin >= Coin.ada(10) && out.value.value.coin < Coin.ada(11)
+        )
+        assert(exactTenAda, "Should have the exact 10 ADA payment output")
+    }
+
+    test("changeTo should create output with at least minimum specified value") {
+        val provider = Emulator(
+          Map(input(0) -> adaOutput(Alice.address, 100))
+        )
+
+        val minChangeValue = Value.ada(5)
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .changeTo(TransactionOutput(Alice.address, minChangeValue))
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.size == 1, "Should have exactly 1 change output to Alice")
+
+        // Change output should have at least the minimum specified (5 ADA) plus any excess
+        val changeAda = aliceOutputs.head.value.value.coin.value
+        assert(
+          changeAda >= minChangeValue.coin.value,
+          s"Change output ($changeAda) should be >= minimum ${minChangeValue.coin.value}"
+        )
+
+        // The change should include excess from 100 - 10 - fee
+        assert(
+          changeAda > Coin.ada(80).value,
+          s"Change output ($changeAda) should be > 80 ADA (100 input - 10 payment - fees)"
+        )
+    }
+
+    test("changeTo should add tokens to change output") {
+        val provider = Emulator(
+          Map(
+            input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
+            input(1) -> adaOutput(Alice.address, 50)
+          )
+        )
+
+        // Specify change output with minimum 5 ADA and 50 tokens
+        val minChange = Value.fromPolicy(policyId, Map(co2 -> 50L), Coin.ada(5))
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.fromPolicy(policyId, Map(co2 -> 100L), Coin.ada(10)))
+            .changeTo(TransactionOutput(Alice.address, minChange))
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        val aliceOutputs = outputsOf(Alice, tx)
+        assert(aliceOutputs.size == 1, "Should have exactly 1 change output to Alice")
+
+        val changeValue = aliceOutputs.head.value.value
+        // Should have at least 50 tokens (minimum) + 50 excess = 100 total
+        val changeTokens = changeValue.assets.assets.get(policyId).flatMap(_.get(co2)).getOrElse(0L)
+        assert(
+          changeTokens == 100L,
+          s"Change should have 100 tokens (200 input - 100 payment), got $changeTokens"
+        )
+    }
+
+    test("changeTo should fail if called twice") {
+        val exception = intercept[IllegalArgumentException] {
+            TxBuilder(testEnv)
+                .changeTo(TransactionOutput(Alice.address, Value.ada(5)))
+                .changeTo(TransactionOutput(Bob.address, Value.ada(3)))
+        }
+
+        assert(
+          exception.getMessage.contains("changeTo can only be called once"),
+          s"Should fail with 'changeTo can only be called once', got: ${exception.getMessage}"
+        )
+    }
+
+    test("changeTo should work with different address than sponsor") {
+        val coldWallet = Bob // Using Bob as "cold wallet" for this test
+        val provider = Emulator(
+          Map(input(0) -> adaOutput(Alice.address, 100))
+        )
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Alice.address, Value.ada(10))
+            .changeTo(TransactionOutput(coldWallet.address, Value.ada(5)))
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        // Change should go to coldWallet (Bob), not sponsor (Alice)
+        val aliceOutputs = outputsOf(Alice, tx)
+        val coldWalletOutputs = outputsOf(coldWallet, tx)
+
+        assert(aliceOutputs.size == 1, "Alice should have exactly 1 output (the payment)")
+        assert(
+          aliceOutputs.head.value.value.coin >= Coin.ada(10),
+          "Alice should get 10 ADA payment"
+        )
+
+        assert(coldWalletOutputs.size == 1, "Cold wallet should have exactly 1 output (change)")
+        assert(
+          coldWalletOutputs.head.value.value.coin.value > Coin.ada(80).value,
+          "Cold wallet should receive the change"
+        )
+    }
+
     test("complete should ensure change output meets minimum ADA") {
         val provider = Emulator(
           Map(input(0) -> adaOutput(Alice.address, 100))
@@ -668,6 +799,67 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(
           nonBobOutputs.forall(_.value.address == Alice.address),
           "All change should go to Alice"
+        )
+    }
+
+    test("changeTo should work with script address and inline datum") {
+        val provider = Emulator(
+          Map(input(0) -> adaOutput(Alice.address, 100))
+        )
+
+        val changeDatum = Data.I(12345)
+        val changeOutput = TransactionOutput(scriptAddress, Value.ada(5), changeDatum)
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .changeTo(changeOutput)
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        // Find the script output (change output)
+        val scriptOutputs = tx.body.value.outputs.toSeq.filter(_.value.address == scriptAddress)
+        assert(scriptOutputs.size == 1, "Should have exactly 1 output to script address")
+
+        val changeOut = scriptOutputs.head.value
+        assert(changeOut.value.coin.value > Coin.ada(80).value, "Change should include excess ADA")
+        assert(
+          changeOut.datumOption.contains(DatumOption.Inline(changeDatum)),
+          "Change output should preserve the inline datum"
+        )
+    }
+
+    test("changeTo should select correct output by index when multiple outputs have same address") {
+        val provider = Emulator(
+          Map(input(0) -> adaOutput(Alice.address, 100))
+        )
+
+        // Create two outputs to Bob: first is a payment, second is the change output
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10)) // Output 0: exactly 10 ADA
+            .changeTo(TransactionOutput(Bob.address, Value.ada(5))) // Output 1: 5 ADA min + change
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        val bobOutputs = outputsOf(Bob, tx)
+        assert(bobOutputs.size == 2, s"Should have 2 outputs to Bob, got ${bobOutputs.size}")
+
+        // The outputs should be in order: first the 10 ADA payment, then the change output
+        val outputs = tx.body.value.outputs.toSeq.filter(_.value.address == Bob.address)
+
+        // First output (payment) should be around 10 ADA (just the payment)
+        val paymentOutput = outputs.head.value.value
+        assert(
+          paymentOutput.coin >= Coin.ada(10) && paymentOutput.coin < Coin.ada(15),
+          s"First output should be ~10 ADA payment, got ${paymentOutput.coin}"
+        )
+
+        // Second output (change) should have the bulk of remaining funds (80+ ADA)
+        val changeOutput = outputs(1).value.value
+        assert(
+          changeOutput.coin.value > Coin.ada(80).value,
+          s"Second output should be change with 80+ ADA, got ${changeOutput.coin}"
         )
     }
 
