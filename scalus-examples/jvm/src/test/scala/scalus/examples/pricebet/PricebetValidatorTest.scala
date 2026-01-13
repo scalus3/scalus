@@ -214,13 +214,13 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           newRateDenominator = winningRate._2,
           authorizedSigner = Oracle.addrKeyHash,
           sponsor = Alice.address,
-          validFrom = beforeDeadline,
-          validTo = deadline,
+          validFrom = updateValidFrom,
+          validTo = updateValidTo,
           oracleSigner = Oracle.signer,
           sponsorSigner = Alice.signer
         )
 
-        provider.setSlot(beforeSlot)
+        provider.setSlot(updateSlot)
         assertSuccess(provider, updateTx, oracleUtxo._1)
     }
 
@@ -238,14 +238,74 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
           newRateDenominator = winningRate._2,
           authorizedSigner = Alice.addrKeyHash,
           sponsor = Bob.address,
-          validFrom = beforeDeadline,
-          validTo = deadline,
+          validFrom = updateValidFrom,
+          validTo = updateValidTo,
           oracleSigner = Alice.signer,
           sponsorSigner = Bob.signer
         )
 
-        provider.setSlot(beforeSlot)
+        provider.setSlot(updateSlot)
         assertFailure(provider, updateTx, oracleUtxo._1, "Must be signed by authorized signer")
+    }
+
+    test("Oracle discovery via beacon token") {
+        val provider = createProvider()
+
+        val oracleUtxos = provider.findUtxos(Oracle.address).await().toOption.get
+        val seedUtxo = Utxo(oracleUtxos.head)
+
+        val createTx = txCreator.mintBeaconAndCreateOracle(
+          utxos = oracleUtxos,
+          seedUtxo = seedUtxo,
+          beaconTokenName = beaconTokenName,
+          authorizedSigner = Oracle.addrKeyHash,
+          initialTimestamp = beforeDeadline.toEpochMilli,
+          initialRateNominator = winningRate._1,
+          initialRateDenominator = winningRate._2,
+          sponsor = Oracle.address,
+          signer = Oracle.signer
+        )
+
+        val result = provider.submit(createTx).await()
+        assert(result.isRight, s"Failed to submit oracle creation: ${result.left.getOrElse(null)}")
+
+        // Step 2: Discover oracle by searching for beacon token (real-world flow)
+        val beaconPolicyId = oracleScriptAddress.scriptHashOption.get
+
+        // Search all UTXOs at oracle script address
+        val allOracleUtxos = provider.findUtxos(oracleScriptAddress).await().toOption.get
+
+        // Filter for the one with our beacon token
+        val discoveredOracleUtxo = allOracleUtxos.find { case (input, output) =>
+            output.value.assets.assets.exists { case (assetId, assets) =>
+                assetId == beaconPolicyId && assets.size == 1 && assets.head._1 == AssetName(
+                  beaconTokenName
+                )
+            }
+        }
+
+        assert(discoveredOracleUtxo.isDefined, "Should be able to find oracle by beacon token")
+
+        // Step 3: Verify we can read the oracle state from discovered UTXO
+        val (_, discoveredOutput) = discoveredOracleUtxo.get
+        val oracleState = discoveredOutput.datumOption.get.dataOption.get.to[OracleState]
+
+        assert(
+          oracleState.beaconPolicyId == beaconPolicyId,
+          "Oracle state should contain beacon policy ID"
+        )
+        assert(
+          oracleState.beaconTokenName == beaconTokenName,
+          "Oracle state should contain beacon token name"
+        )
+        assert(
+          oracleState.exchangeRateNominator == winningRate._1,
+          "Oracle should have correct rate numerator"
+        )
+        assert(
+          oracleState.exchangeRateDenominator == winningRate._2,
+          "Oracle should have correct rate denominator"
+        )
     }
 
     test("Happy path") {
@@ -315,6 +375,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         // Update oracle to high rate 7/8 > 3/4
         val highRate = (BigInt(7), BigInt(8))
         val updatedOracleUtxo = {
+            provider.setSlot(updateSlot) // Set slot for oracle update
             val aliceUtxos = provider.findUtxos(Alice.address).await().toOption.get
             val updateTx = txCreator.updateOracle(
               utxos = aliceUtxos,
@@ -324,8 +385,8 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
               newRateDenominator = highRate._2,
               authorizedSigner = Oracle.addrKeyHash,
               sponsor = Alice.address,
-              validFrom = beforeDeadline,
-              validTo = deadline,
+              validFrom = updateValidFrom,
+              validTo = updateValidTo,
               oracleSigner = Oracle.signer,
               sponsorSigner = Alice.signer
             )
@@ -378,10 +439,13 @@ object PricebetValidatorTest extends ScalusTest {
     val beforeDeadline = Instant.parse("2025-01-14T23:59:59Z")
     val afterDeadline = Instant.parse("2025-01-15T00:00:01Z")
     val updateTimestamp = Instant.parse("2025-01-14T12:00:00Z")
+    val updateValidFrom = Instant.parse("2025-01-14T11:00:00Z")
+    val updateValidTo = Instant.parse("2025-01-14T13:00:00Z")
 
     val beforeSlot = env.slotConfig.timeToSlot(beforeDeadline.toEpochMilli).toLong
     val deadlineSlot = env.slotConfig.timeToSlot(deadline.toEpochMilli).toLong
     val afterDeadlineSlot = env.slotConfig.timeToSlot(afterDeadline.toEpochMilli).toLong
+    val updateSlot = env.slotConfig.timeToSlot(updateTimestamp.toEpochMilli).toLong
 
     // Exchange rates: (numerator, denominator)
     // Bet rate: 3/2 = 1.5

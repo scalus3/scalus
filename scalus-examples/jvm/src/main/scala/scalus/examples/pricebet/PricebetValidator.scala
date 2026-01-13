@@ -120,7 +120,10 @@ object PricebetValidator extends Validator {
 
                 // Verify oracle timestamp is within tx validity window
                 val validRange = tx.validRange
-                // TODO: Implement proper timestamp validation with interval bounds
+                require(
+                  validRange.contains(oracleState.timestamp),
+                  "Oracle timestamp must be within transaction validity range"
+                )
 
                 val (betNom, betDenom) = state.exchangeRate
                 val oracleNom = oracleState.exchangeRateNominator

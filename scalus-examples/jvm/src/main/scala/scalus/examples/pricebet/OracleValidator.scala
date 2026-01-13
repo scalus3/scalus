@@ -41,7 +41,7 @@ object OracleValidator extends Validator {
 
         // Verify the seed UTXO is being spent
         val seedUtxoIsSpent = tx.inputs.exists(_.outRef === mintRedeemer.seedUtxo)
-        require(seedUtxoIsSpent, "Seed UTXO must be spent to mint beacon")
+        require(seedUtxoIsSpent, "Must spend seed utxo to mint the beacon")
 
         // Get the minted value and sum all quantities
         // We expect exactly 1 token to be minted (the beacon NFT)
@@ -110,10 +110,11 @@ object OracleValidator extends Validator {
         }
 
         // Verify timestamp is within tx validity window
-        // TODO: Implement proper interval bound checking
         val validRange = tx.validRange
-        // For now, just verify non-zero timestamp
-        require(newState.timestamp > 0, "Timestamp must be positive")
+        require(
+          validRange.contains(newState.timestamp),
+          "Oracle timestamp must be within transaction validity range"
+        )
 
         // Verify beacon info unchanged
         require(
