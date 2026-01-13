@@ -329,3 +329,11 @@ Run `sbtn precommit` before considering work complete.
 
 These projects are references of data model. They could be obtained in sibling directories (
 using ../) or directly on GitHub.
+
+### Backwards Compatibility
+
+- For public APIs, maintain backwards compatibility unless absolutely necessary to break it
+- Use `sbtn mima` to verify compatibility
+- Document any breaking changes clearly in commit messages and documentation
+- Put `@deprecated("use XYZ instead", "version")` annotations on deprecated APIs
+- Use latest git tag for `version`: if latest git tag is "v0.14.2" then write "0.14.2"
