@@ -1,10 +1,11 @@
 package scalus.examples.auction
 
+import scalus.Compile
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.blueprint.Blueprint
-import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, DatumOption, Transaction, Utxo, Value as LedgerValue}
+import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.compiler.Options
@@ -13,7 +14,6 @@ import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.uplc.PlutusV3
-import scalus.Compile
 
 import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
@@ -522,7 +522,9 @@ class AuctionEndpoints(
             auctionUtxo <- findActiveUtxo(itemId).map(
               _.getOrElse(throw RuntimeException(s"No active auction found for itemId: $itemId"))
             )
-            currentDatum = extractDatum(auctionUtxo)
+            currentDatum = auctionUtxo.output.inlineDatum
+                .getOrElse(throw IllegalStateException("Auction UTxO must have inline datum"))
+                .to[Datum]
 
             newDatum = currentDatum.copy(
               highestBidder = Option.Some(bidderPkh),
@@ -614,7 +616,9 @@ class AuctionEndpoints(
             auctionUtxo <- findActiveUtxo(itemId).map(
               _.getOrElse(throw RuntimeException(s"No active auction found for itemId: $itemId"))
             )
-            currentDatum = extractDatum(auctionUtxo)
+            currentDatum = auctionUtxo.output.inlineDatum
+                .getOrElse(throw IllegalStateException("Auction UTxO must have inline datum"))
+                .to[Datum]
 
             nftAsset = AssetName(currentDatum.itemId)
             nftValue = LedgerValue.asset(policyId, nftAsset, 1L)
@@ -708,10 +712,4 @@ class AuctionEndpoints(
                     Utxo(input, output)
                 }
 
-    private def extractDatum(utxo: Utxo): Datum =
-        utxo.output.datumOption match
-            case Some(DatumOption.Inline(data)) =>
-                scalus.builtin.Data.fromData[Datum](data)
-            case _ =>
-                throw IllegalStateException("Expected inline datum in auction UTxO")
 }

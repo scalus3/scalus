@@ -379,7 +379,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
 
             for
                 campaignUtxo <- endpoints.findCampaignUtxo(campaignId).map(_.get)
-                currentDatum = extractCampaignDatum(campaignUtxo)
+                currentDatum = campaignUtxo.output.requireInlineDatum.to[CampaignDatum]
 
                 donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
                 donationScript = getDonationScript(endpoints, campaignId)
@@ -460,13 +460,6 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                     case Left(error) => throw RuntimeException(s"Failed to submit: $error")
                 }
             yield tx
-
-        private def extractCampaignDatum(utxo: Utxo): CampaignDatum =
-            utxo.output.datumOption match
-                case Some(DatumOption.Inline(data)) =>
-                    scalus.builtin.Data.fromData[CampaignDatum](data)
-                case _ =>
-                    throw IllegalStateException("Expected inline datum")
 
         private def getDonationScript(
             endpoints: CrowdfundingEndpoints,

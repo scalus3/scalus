@@ -3,15 +3,51 @@ package scalus.cardano.ledger
 import scalus.cardano.address.Address
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
 import monocle.Lens
+import scalus.cardano.ledger.TransactionOutput.{Babbage, Shelley}
 
 /** Represents a transaction output in Cardano. Both Shelley-era and Babbage-era output formats are
   * supported.
   */
-sealed trait TransactionOutput:
+sealed trait TransactionOutput {
     def address: Address
+
     def value: Value
+
     def datumOption: Option[DatumOption]
+
     def scriptRef: Option[ScriptRef]
+
+    /** Creates a copy of this TransactionOutput with a new value */
+    def withValue(amount: Value): TransactionOutput
+
+    /** Resolve datum from output - either inline or by looking up hash in transaction witness set.
+      *
+      * @param tx
+      *   The transaction containing the witness set with plutus data
+      * @return
+      *   The resolved datum data, or None if no datum is present or if the hash is not found
+      */
+    def resolveDatum(tx: Transaction): Option[scalus.builtin.Data] =
+        datumOption match
+            case Some(DatumOption.Hash(hash)) =>
+                tx.witnessSet.plutusData.value.toSortedMap.get(hash).map(_.value)
+            case Some(DatumOption.Inline(data)) => Some(data)
+            case None                           => None
+
+    /** Get inline datum if present, None otherwise */
+    def inlineDatum: Option[scalus.builtin.Data] =
+        datumOption match
+            case Some(DatumOption.Inline(data)) => Some(data)
+            case _                              => None
+
+    /** Get inline datum, throwing if not present */
+    def requireInlineDatum: scalus.builtin.Data =
+        inlineDatum.getOrElse(
+          throw IllegalStateException(
+            s"Inline datum required but not present. Output: address=${address.encode.getOrElse("?")} value=$value"
+          )
+        )
+}
 
 object TransactionOutputAddress:
     def unapply(transactionOutput: TransactionOutput): Some[Address] = Some(
@@ -43,30 +79,6 @@ object TransactionOutput:
         Lens(get)(set)
     }
 
-    extension (txo: TransactionOutput) {
-
-        /** Creates a copy of this TransactionOutput with a new value */
-        def withValue(amount: Value): TransactionOutput = txo match {
-            case shelley: Shelley => shelley.copy(value = amount)
-            case babbage: Babbage => babbage.copy(value = amount)
-        }
-
-        /** Resolve datum from output - either inline or by looking up hash in transaction witness
-          * set.
-          *
-          * @param tx
-          *   The transaction containing the witness set with plutus data
-          * @return
-          *   The resolved datum data, or None if no datum is present or if the hash is not found
-          */
-        def resolveDatum(tx: Transaction): Option[scalus.builtin.Data] =
-            txo.datumOption match
-                case Some(DatumOption.Hash(hash)) =>
-                    tx.witnessSet.plutusData.value.toSortedMap.get(hash).map(_.value)
-                case Some(DatumOption.Inline(data)) => Some(data)
-                case None                           => None
-    }
-
     def unapply(
         transactionOutput: TransactionOutput
     ): (Address, Value, Option[DatumOption], Option[ScriptRef]) = (
@@ -81,9 +93,13 @@ object TransactionOutput:
         override val address: Address,
         override val value: Value,
         datumHash: Option[DataHash] = None
-    ) extends TransactionOutput:
+    ) extends TransactionOutput {
         def datumOption: Option[DatumOption] = datumHash.map(DatumOption.Hash(_))
+
         override def scriptRef: Option[ScriptRef] = None
+
+        override def withValue(amount: Value): TransactionOutput = copy(value = amount)
+    }
 
     /** Babbage-era transaction output format with extended features */
     final case class Babbage(
@@ -91,7 +107,9 @@ object TransactionOutput:
         override val value: Value,
         override val datumOption: Option[DatumOption] = None,
         override val scriptRef: Option[ScriptRef] = None
-    ) extends TransactionOutput
+    ) extends TransactionOutput {
+        override def withValue(amount: Value): TransactionOutput = copy(value = amount)
+    }
 
     /** Creates a Shelley-era transaction output with the specified address and value.
       *

@@ -184,7 +184,9 @@ class CrowdfundingEndpoints(
             campaignUtxo <- findCampaignUtxo(campaignId).map(
               _.getOrElse(throw RuntimeException(s"No campaign found for id: $campaignId"))
             )
-            currentDatum = extractCampaignDatum(campaignUtxo)
+            currentDatum = campaignUtxo.output.inlineDatum
+                .getOrElse(throw IllegalStateException("Campaign UTxO must have inline datum"))
+                .to[CampaignDatum]
 
             // Compute donation policy and script for this campaign
             donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
@@ -295,7 +297,9 @@ class CrowdfundingEndpoints(
             campaignUtxo <- findCampaignUtxo(campaignId).map(
               _.getOrElse(throw RuntimeException(s"No campaign found for id: $campaignId"))
             )
-            currentDatum = extractCampaignDatum(campaignUtxo)
+            currentDatum = campaignUtxo.output.inlineDatum
+                .getOrElse(throw IllegalStateException("Campaign UTxO must have inline datum"))
+                .to[CampaignDatum]
 
             // Verify recipient matches
             _ = if currentDatum.recipient != recipientPkh then
@@ -306,7 +310,10 @@ class CrowdfundingEndpoints(
 
             // Calculate total amount being withdrawn from donation UTxOs (get amount from DonationDatum)
             donationAmounts: Seq[BigInt] = donationUtxos.map { utxo =>
-                extractDonationDatum(utxo).amount
+                utxo.output.inlineDatum
+                    .getOrElse(throw IllegalStateException("Donation UTxO must have inline datum"))
+                    .to[DonationDatum]
+                    .amount
             }
             totalWithdrawAmount: BigInt = donationAmounts.foldLeft(BigInt(0))(_ + _)
 
@@ -433,14 +440,18 @@ class CrowdfundingEndpoints(
             campaignUtxo <- findCampaignUtxo(campaignId).map(
               _.getOrElse(throw RuntimeException(s"No campaign found for id: $campaignId"))
             )
-            currentDatum = extractCampaignDatum(campaignUtxo)
+            currentDatum = campaignUtxo.output.inlineDatum
+                .getOrElse(throw IllegalStateException("Campaign UTxO must have inline datum"))
+                .to[CampaignDatum]
 
             donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
             donationScript = getDonationScript(campaignId)
 
             // Extract donor info from DonationDatum (amount now stored in datum, not token name)
             donorInfos: Seq[(ShelleyAddress, PubKeyHash, BigInt)] = donationUtxos.map { utxo =>
-                val donationDatum = extractDonationDatum(utxo)
+                val donationDatum = utxo.output.inlineDatum
+                    .getOrElse(throw IllegalStateException("Donation UTxO must have inline datum"))
+                    .to[DonationDatum]
                 val donorAddress = addressFromPkh(donationDatum.donor)
                 (donorAddress, donationDatum.donor, donationDatum.amount)
             }
@@ -592,7 +603,9 @@ class CrowdfundingEndpoints(
         for
             utxos <- provider.findUtxos(scriptAddress).map(_.getOrElse(Map.empty))
             campaignUtxo <- findCampaignUtxo(campaignId)
-            currentDatum = campaignUtxo.map(extractCampaignDatum)
+            currentDatum = campaignUtxo
+                .flatMap(_.output.inlineDatum)
+                .map(_.to[CampaignDatum])
         yield
             val nftAsset = AssetName(campaignId)
             val donationPolicyId = currentDatum
@@ -615,19 +628,4 @@ class CrowdfundingEndpoints(
                 .map { case (input, output) => Utxo(input, output) }
                 .toSeq
 
-    /** Extracts the CampaignDatum from a campaign UTxO. */
-    private def extractCampaignDatum(utxo: Utxo): CampaignDatum =
-        utxo.output.datumOption match
-            case Some(DatumOption.Inline(data)) =>
-                scalus.builtin.Data.fromData[CampaignDatum](data)
-            case _ =>
-                throw IllegalStateException("Expected inline datum in campaign UTxO")
-
-    /** Extracts the DonationDatum from a donation UTxO. */
-    private def extractDonationDatum(utxo: Utxo): DonationDatum =
-        utxo.output.datumOption match
-            case Some(DatumOption.Inline(data)) =>
-                scalus.builtin.Data.fromData[DonationDatum](data)
-            case _ =>
-                throw IllegalStateException("Expected inline DonationDatum in donation UTxO")
 }

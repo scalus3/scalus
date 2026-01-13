@@ -78,11 +78,10 @@ case class PricebetTransactionCreator(
             .transaction
     }
 
-    private def previousStateInlineDatum[A: FromData](pricebetUtxo: Utxo) =
-        pricebetUtxo.output.datumOption.collect {
-            case Inline(data) => data.to[A]
-            case _            => throw new RuntimeException("unreachable")
-        }.get
+    private def previousStateInlineDatum[A: FromData](pricebetUtxo: Utxo): A =
+        pricebetUtxo.output.inlineDatum
+            .getOrElse(throw IllegalStateException("Pricebet UTxO must have inline datum"))
+            .to[A]
 
     /** Player claims pot if oracle rate exceeds bet rate.
       */
