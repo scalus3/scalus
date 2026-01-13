@@ -149,7 +149,7 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.pr
             .get(uri"$url")
             .headers(headers)
             .send(backend)
-            .map { response =>
+            .flatMap { response =>
                 if response.code.isSuccess then {
                     response.body match {
                         case Right(body) =>
@@ -157,87 +157,145 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.pr
                             val outputs = json("outputs").arr
 
                             if outputIndex >= outputs.size then {
-                                throw new RuntimeException(
-                                  s"Output index $outputIndex out of bounds (tx has ${outputs.size} outputs)"
-                                )
-                            }
-
-                            val outputJson = outputs(outputIndex)
-                            val address = Address.fromBech32(outputJson("address").str)
-
-                            // Parse value
-                            val amountArray = outputJson("amount").arr
-                            var lovelace = 0L
-                            val multiAssetBuilder = scala.collection.mutable
-                                .Map[ScriptHash, scala.collection.mutable.Map[AssetName, Long]]()
-
-                            amountArray.foreach { item =>
-                                val unit = item("unit").str
-                                val quantity = item("quantity").str.toLong
-
-                                if unit == "lovelace" then {
-                                    lovelace = quantity
-                                } else {
-                                    // Parse multi-asset: first 56 chars = policy ID (28 bytes hex), rest = asset name
-                                    val policyId = ScriptHash.fromHex(unit.take(56))
-                                    val assetNameHex = unit.drop(56)
-                                    val assetName = AssetName(ByteString.fromHex(assetNameHex))
-
-                                    multiAssetBuilder
-                                        .getOrElseUpdate(policyId, scala.collection.mutable.Map())
-                                        .update(assetName, quantity)
-                                }
-                            }
-
-                            val value = if multiAssetBuilder.isEmpty then {
-                                Value.lovelace(lovelace)
-                            } else {
-                                // Convert mutable maps to immutable SortedMaps
-                                val immutableAssets
-                                    : SortedMap[ScriptHash, SortedMap[AssetName, Long]] =
-                                    SortedMap.from(
-                                      multiAssetBuilder.view.mapValues(m => SortedMap.from(m))
+                                Future.successful(
+                                  Left(
+                                    new RuntimeException(
+                                      s"Output index $outputIndex out of bounds (tx has ${outputs.size} outputs)"
                                     )
-                                Value(Coin(lovelace), MultiAsset(immutableAssets))
-                            }
+                                  )
+                                )
+                            } else {
+                                val outputJson = outputs(outputIndex)
+                                val address = Address.fromBech32(outputJson("address").str)
 
-                            // Parse datum if present
-                            val datumOption: Option[DatumOption] = {
-                                val dataHash = outputJson.obj.get("data_hash")
-                                val inlineDatum = outputJson.obj.get("inline_datum")
+                                // Parse value
+                                val amountArray = outputJson("amount").arr
+                                var lovelace = 0L
+                                val multiAssetBuilder = scala.collection.mutable
+                                    .Map[ScriptHash, scala.collection.mutable.Map[
+                                      AssetName,
+                                      Long
+                                    ]]()
 
-                                (dataHash, inlineDatum) match {
-                                    case (_, Some(inlineDatumJson)) if !inlineDatumJson.isNull =>
-                                        Some(
-                                          DatumOption.Inline(
-                                            Data.fromCbor(hexToBytes(inlineDatumJson.str))
+                                amountArray.foreach { item =>
+                                    val unit = item("unit").str
+                                    val quantity = item("quantity").str.toLong
+
+                                    if unit == "lovelace" then {
+                                        lovelace = quantity
+                                    } else {
+                                        // Parse multi-asset: first 56 chars = policy ID (28 bytes hex), rest = asset name
+                                        val policyId = ScriptHash.fromHex(unit.take(56))
+                                        val assetNameHex = unit.drop(56)
+                                        val assetName = AssetName(ByteString.fromHex(assetNameHex))
+
+                                        multiAssetBuilder
+                                            .getOrElseUpdate(
+                                              policyId,
+                                              scala.collection.mutable.Map()
+                                            )
+                                            .update(assetName, quantity)
+                                    }
+                                }
+
+                                val value = if multiAssetBuilder.isEmpty then {
+                                    Value.lovelace(lovelace)
+                                } else {
+                                    // Convert mutable maps to immutable SortedMaps
+                                    val immutableAssets
+                                        : SortedMap[ScriptHash, SortedMap[AssetName, Long]] =
+                                        SortedMap.from(
+                                          multiAssetBuilder.view.mapValues(m => SortedMap.from(m))
+                                        )
+                                    Value(Coin(lovelace), MultiAsset(immutableAssets))
+                                }
+
+                                // Parse datum if present
+                                val datumOption: Option[DatumOption] = {
+                                    val dataHash = outputJson.obj.get("data_hash")
+                                    val inlineDatum = outputJson.obj.get("inline_datum")
+
+                                    (dataHash, inlineDatum) match {
+                                        case (_, Some(inlineDatumJson))
+                                            if !inlineDatumJson.isNull =>
+                                            Some(
+                                              DatumOption.Inline(
+                                                Data.fromCbor(hexToBytes(inlineDatumJson.str))
+                                              )
+                                            )
+                                        case (Some(dataHashJson), _) if !dataHashJson.isNull =>
+                                            Some(
+                                              DatumOption.Hash(
+                                                Hash(ByteString.fromHex(dataHashJson.str))
+                                              )
+                                            )
+                                        case _ => None
+                                    }
+                                }
+
+                                // Parse reference_script_hash if present
+                                val refScriptHash = outputJson.obj.get("reference_script_hash")
+
+                                refScriptHash match {
+                                    case Some(hashJson) if !hashJson.isNull =>
+                                        // Fetch the reference script
+                                        fetchScript(hashJson.str).map {
+                                            case Right(script) =>
+                                                Right(
+                                                  Utxo(
+                                                    input,
+                                                    TransactionOutput(
+                                                      address = address,
+                                                      value = value,
+                                                      datumOption = datumOption,
+                                                      scriptRef = Some(ScriptRef(script))
+                                                    )
+                                                  )
+                                                )
+                                            case Left(_) =>
+                                                // Script fetch failed, return UTxO without scriptRef
+                                                Right(
+                                                  Utxo(
+                                                    input,
+                                                    TransactionOutput(
+                                                      address = address,
+                                                      value = value,
+                                                      datumOption = datumOption,
+                                                      scriptRef = None
+                                                    )
+                                                  )
+                                                )
+                                        }
+                                    case _ =>
+                                        // No reference script
+                                        Future.successful(
+                                          Right(
+                                            Utxo(
+                                              input,
+                                              TransactionOutput(
+                                                address = address,
+                                                value = value,
+                                                datumOption = datumOption,
+                                                scriptRef = None
+                                              )
+                                            )
                                           )
                                         )
-                                    case (Some(dataHashJson), _) if !dataHashJson.isNull =>
-                                        Some(
-                                          DatumOption.Hash(
-                                            Hash(ByteString.fromHex(dataHashJson.str))
-                                          )
-                                        )
-                                    case _ => None
                                 }
                             }
-
-                            val output = TransactionOutput(
-                              address = address,
-                              value = value,
-                              datumOption = datumOption,
-                              scriptRef = None
-                            )
-
-                            Right(Utxo(input, output))
                         case Left(error) =>
-                            Left(new RuntimeException(s"Failed to fetch UTxO: $error"))
+                            Future.successful(
+                              Left(new RuntimeException(s"Failed to fetch UTxO: $error"))
+                            )
                     }
                 } else if response.code == StatusCode.NotFound then {
-                    Left(new RuntimeException(s"Transaction ${txHash.take(16)}... not found"))
+                    Future.successful(
+                      Left(new RuntimeException(s"Transaction ${txHash.take(16)}... not found"))
+                    )
                 } else {
-                    Left(new RuntimeException(s"Failed to fetch UTxO: ${response.body}"))
+                    Future.successful(
+                      Left(new RuntimeException(s"Failed to fetch UTxO: ${response.body}"))
+                    )
                 }
             }
             .recover {
@@ -266,6 +324,124 @@ class BlockfrostProvider(apiKey: String, baseUrl: String = BlockfrostProvider.pr
                 }
             }
         }
+    }
+
+    /** Fetch a script by its hash from Blockfrost
+      * @param scriptHash
+      *   the hex-encoded script hash
+      * @return
+      *   the Script or an error
+      */
+    def fetchScript(scriptHash: String): Future[Either[RuntimeException, Script]] = {
+        // First, get the script type
+        val typeUrl = s"$baseUrl/scripts/$scriptHash"
+        basicRequest
+            .get(uri"$typeUrl")
+            .headers(headers)
+            .send(backend)
+            .flatMap { response =>
+                if response.code.isSuccess then {
+                    response.body match {
+                        case Right(body) =>
+                            val json = ujson.read(body, trace = false)
+                            val scriptType = json("type").str
+                            if scriptType == "timelock" then {
+                                // Fetch JSON for timelock scripts
+                                val jsonUrl = s"$baseUrl/scripts/$scriptHash/json"
+                                basicRequest
+                                    .get(uri"$jsonUrl")
+                                    .headers(headers)
+                                    .send(backend)
+                                    .map { jsonResponse =>
+                                        if jsonResponse.code.isSuccess then {
+                                            jsonResponse.body match {
+                                                case Right(jsonBody) =>
+                                                    import Timelock.blockfrostReadWriter
+                                                    val jsonData =
+                                                        ujson.read(jsonBody, trace = false)
+                                                    val timelock =
+                                                        upickle.default.read[Timelock](
+                                                          jsonData("json")
+                                                        )
+                                                    Right(Script.Native(timelock))
+                                                case Left(error) =>
+                                                    Left(
+                                                      new RuntimeException(
+                                                        s"Failed to fetch script JSON: $error"
+                                                      )
+                                                    )
+                                            }
+                                        } else {
+                                            Left(
+                                              new RuntimeException(
+                                                s"Failed to fetch script JSON: ${jsonResponse.body}"
+                                              )
+                                            )
+                                        }
+                                    }
+                            } else {
+                                // Fetch CBOR for Plutus scripts
+                                val cborUrl = s"$baseUrl/scripts/$scriptHash/cbor"
+                                basicRequest
+                                    .get(uri"$cborUrl")
+                                    .headers(headers)
+                                    .send(backend)
+                                    .map { cborResponse =>
+                                        if cborResponse.code.isSuccess then {
+                                            cborResponse.body match {
+                                                case Right(cborBody) =>
+                                                    val cborJson =
+                                                        ujson.read(cborBody, trace = false)
+                                                    val cborHex = cborJson("cbor").str
+                                                    val scriptBytes =
+                                                        ByteString.fromHex(cborHex)
+                                                    val script = scriptType match {
+                                                        case "plutusV1" =>
+                                                            Script.PlutusV1(scriptBytes)
+                                                        case "plutusV2" =>
+                                                            Script.PlutusV2(scriptBytes)
+                                                        case "plutusV3" =>
+                                                            Script.PlutusV3(scriptBytes)
+                                                        case other =>
+                                                            throw new RuntimeException(
+                                                              s"Unknown Plutus script type: $other"
+                                                            )
+                                                    }
+                                                    Right(script)
+                                                case Left(error) =>
+                                                    Left(
+                                                      new RuntimeException(
+                                                        s"Failed to fetch script CBOR: $error"
+                                                      )
+                                                    )
+                                            }
+                                        } else {
+                                            Left(
+                                              new RuntimeException(
+                                                s"Failed to fetch script CBOR: ${cborResponse.body}"
+                                              )
+                                            )
+                                        }
+                                    }
+                            }
+                        case Left(error) =>
+                            Future.successful(
+                              Left(new RuntimeException(s"Failed to fetch script type: $error"))
+                            )
+                    }
+                } else if response.code == StatusCode.NotFound then {
+                    Future.successful(
+                      Left(new RuntimeException(s"Script $scriptHash not found"))
+                    )
+                } else {
+                    Future.successful(
+                      Left(new RuntimeException(s"Failed to fetch script: ${response.body}"))
+                    )
+                }
+            }
+            .recover { case e: Throwable =>
+                Left(new RuntimeException(s"Failed to fetch script: ${e.getMessage}", e))
+            }
     }
 
     /** Check if a transaction has been confirmed on-chain */
