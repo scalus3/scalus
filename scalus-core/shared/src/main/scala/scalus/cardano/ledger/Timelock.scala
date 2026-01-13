@@ -198,3 +198,71 @@ object Timelock:
     def ltePosInfty(i: Option[SlotNo], j: SlotNo): Boolean = i match
         case None    => false // ∞ > j
         case Some(i) => i <= j
+
+    /** ReadWriter for Timelock in Blockfrost JSON format.
+      *
+      * Blockfrost uses the following JSON format for native scripts:
+      *   - sig: `{"type": "sig", "keyHash": "..."}`
+      *   - all: `{"type": "all", "scripts": [...]}`
+      *   - any: `{"type": "any", "scripts": [...]}`
+      *   - atLeast: `{"type": "atLeast", "required": n, "scripts": [...]}`
+      *   - after: `{"type": "after", "slot": n}`
+      *   - before: `{"type": "before", "slot": n}`
+      */
+    given blockfrostReadWriter: upickle.default.ReadWriter[Timelock] = {
+        import upickle.default.*
+        given upickle.default.ReadWriter[Timelock] = blockfrostReadWriter
+
+        readwriter[ujson.Value].bimap(
+          {
+              case Timelock.Signature(keyHash) =>
+                  ujson.Obj("type" -> "sig", "keyHash" -> keyHash.toHex)
+              case Timelock.AllOf(scripts) =>
+                  ujson.Obj("type" -> "all", "scripts" -> ujson.Arr.from(scripts.map(writeJs)))
+              case Timelock.AnyOf(scripts) =>
+                  ujson.Obj("type" -> "any", "scripts" -> ujson.Arr.from(scripts.map(writeJs)))
+              case Timelock.MOf(m, scripts) =>
+                  ujson.Obj(
+                    "type" -> "atLeast",
+                    "required" -> m,
+                    "scripts" -> ujson.Arr.from(scripts.map(writeJs))
+                  )
+              case Timelock.TimeStart(slot) =>
+                  ujson.Obj("type" -> "after", "slot" -> slot)
+              case Timelock.TimeExpire(slot) =>
+                  ujson.Obj("type" -> "before", "slot" -> slot)
+          },
+          json => {
+              val scriptType = json("type").str
+              scriptType match {
+                  case "sig" =>
+                      Timelock.Signature(Hash(ByteString.fromHex(json("keyHash").str)))
+                  case "all" =>
+                      Timelock.AllOf(json("scripts").arr.map(read[Timelock](_)).toIndexedSeq)
+                  case "any" =>
+                      Timelock.AnyOf(json("scripts").arr.map(read[Timelock](_)).toIndexedSeq)
+                  case "atLeast" =>
+                      Timelock.MOf(
+                        json("required").num.toInt,
+                        json("scripts").arr.map(read[Timelock](_)).toIndexedSeq
+                      )
+                  case "after" =>
+                      Timelock.TimeStart(json("slot").num.toLong)
+                  case "before" =>
+                      Timelock.TimeExpire(json("slot").num.toLong)
+                  case other =>
+                      throw new RuntimeException(s"Unknown timelock script type: $other")
+              }
+          }
+        )
+    }
+
+    /** Parses a Timelock script from Blockfrost JSON string.
+      *
+      * @param json
+      *   the JSON string representing the script
+      * @return
+      *   the Timelock script
+      */
+    def fromBlockfrostJson(json: String): Timelock =
+        upickle.default.read[Timelock](json)
