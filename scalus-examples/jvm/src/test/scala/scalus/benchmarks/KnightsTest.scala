@@ -321,12 +321,7 @@ object KnightsTest:
         require(remainderInteger(size, BigInt(2)) === BigInt(0))
         createBoard(size, tile)
 
-    given Eq[ChessSet] =
-        (lhs: ChessSet, rhs: ChessSet) =>
-            lhs.size === rhs.size &&
-                lhs.moveNumber === rhs.moveNumber &&
-                lhs.start === rhs.start &&
-                lhs.visited === rhs.visited
+    given Eq[ChessSet] = Eq.derived
 
     given Ord[ChessSet] = (lhs: ChessSet, rhs: ChessSet) => lhs.visited <=> rhs.visited
 

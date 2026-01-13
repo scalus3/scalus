@@ -41,12 +41,7 @@ case class Datum(
 
 @Compile
 object Datum {
-    given Eq[Datum] = (a: Datum, b: Datum) =>
-        a.seller === b.seller &&
-            a.highestBidder === b.highestBidder &&
-            a.highestBid === b.highestBid &&
-            a.auctionEndTime === b.auctionEndTime &&
-            a.itemId === b.itemId
+    given Eq[Datum] = Eq.derived
 }
 
 /** Auction, as described in Rosetta Smart Contracts:

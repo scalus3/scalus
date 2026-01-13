@@ -41,13 +41,7 @@ case class CampaignDatum(
 
 @Compile
 object CampaignDatum {
-    given Eq[CampaignDatum] = (a: CampaignDatum, b: CampaignDatum) =>
-        a.totalSum === b.totalSum &&
-            a.goal === b.goal &&
-            a.recipient === b.recipient &&
-            a.deadline === b.deadline &&
-            a.withdrawn === b.withdrawn &&
-            a.donationPolicyId === b.donationPolicyId
+    given Eq[CampaignDatum] = Eq.derived
 }
 
 /** Datum for donation UTxOs at the script address.
@@ -70,8 +64,7 @@ case class DonationDatum(
 
 @Compile
 object DonationDatum {
-    given Eq[DonationDatum] = (a: DonationDatum, b: DonationDatum) =>
-        a.donor === b.donor && a.amount === b.amount
+    given Eq[DonationDatum] = Eq.derived
 }
 
 /** Actions that can be performed on the crowdfunding contract

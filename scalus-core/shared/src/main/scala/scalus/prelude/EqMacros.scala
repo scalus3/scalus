@@ -31,65 +31,35 @@ private object EqMacros {
     private def deriveEqCaseClass[A: Type](using Quotes): Expr[Eq[A]] = {
         import quotes.reflect.*
 
+        val tpeA = TypeRepr.of[A]
         val classSym = TypeTree.of[A].symbol
+        val caseFields = classSym.caseFields
 
-        if classSym.caseFields.isEmpty then '{ (_: A, _: A) => true }
+        if caseFields.isEmpty then '{ (_: A, _: A) => true }
         else
-            val companionModuleRef = classSym.companionModule
-            val unapplyRef = companionModuleRef.methodMember("unapply").head.termRef
-            val constr = classSym.primaryConstructor
-            val params = constr.paramSymss.flatten.filter(_.isTerm)
-            val paramsNameType = params.map(p => p.name -> p.typeRef)
-
-            def createBindings(prefix: String) = paramsNameType.map { (name, tpe) =>
-                (Symbol.newBind(Symbol.noSymbol, s"${prefix}_$name", Flags.EmptyFlags, tpe), tpe)
-            }
-
-            def genComparisons(
-                lhsBinds: scala.List[(Symbol, TypeRepr)],
-                rhsBinds: scala.List[(Symbol, TypeRepr)]
-            ): Expr[Boolean] = {
-                val comps = lhsBinds.zip(rhsBinds).map { case ((lSym, tpe), (rSym, _)) =>
-                    tpe.widen.asType match
-                        case '[t] =>
-                            Expr.summon[Eq[t]] match
-                                case None =>
-                                    report.errorAndAbort(
-                                      s"Could not find given Eq[${tpe.widen.show}] for field in ${TypeRepr.of[A].show}"
-                                    )
-                                case Some(eq) =>
-                                    val l = Ident(lSym.termRef).asExprOf[t]
-                                    val r = Ident(rSym.termRef).asExprOf[t]
-                                    '{ $eq($l, $r) }
-                }
-                comps.reduceLeft((a, b) => '{ $a && $b })
-            }
-
+            // Use direct field access instead of pattern matching with unapply
+            // This generates: lhs.field1 === rhs.field1 && lhs.field2 === rhs.field2 && ...
             '{ (lhs: A, rhs: A) =>
                 ${
-                    val lhsBindings = createBindings("lhs")
-                    val rhsBindings = createBindings("rhs")
-                    val lhsPatterns = lhsBindings.map((s, _) => Bind(s, Wildcard()))
-                    val rhsPatterns = rhsBindings.map((s, _) => Bind(s, Wildcard()))
-                    val comparisons = genComparisons(lhsBindings, rhsBindings)
-
-                    val rhsMatch = Match(
-                      'rhs.asTerm,
-                      scala.List(
-                        CaseDef(
-                          Unapply(Ident(unapplyRef), Nil, rhsPatterns),
-                          None,
-                          comparisons.asTerm
-                        )
-                      )
-                    )
-
-                    Match(
-                      'lhs.asTerm,
-                      scala.List(
-                        CaseDef(Unapply(Ident(unapplyRef), Nil, lhsPatterns), None, rhsMatch)
-                      )
-                    ).asExprOf[Boolean]
+                    val comparisons = caseFields.map { field =>
+                        // Use memberType to get the field type as seen from type A
+                        // This avoids path-dependent type issues (Datum.this.x vs lhs.x)
+                        val fieldType = tpeA.memberType(field).widen.dealias
+                        fieldType.asType match
+                            case '[t] =>
+                                Expr.summon[Eq[t]] match
+                                    case None =>
+                                        report.errorAndAbort(
+                                          s"Could not find given Eq[${fieldType.show}] for field ${field.name} in ${TypeRepr.of[A].show}"
+                                        )
+                                    case Some(eq) =>
+                                        val lhsField =
+                                            Select.unique('lhs.asTerm, field.name).asExprOf[t]
+                                        val rhsField =
+                                            Select.unique('rhs.asTerm, field.name).asExprOf[t]
+                                        '{ $eq($lhsField, $rhsField) }
+                    }
+                    comparisons.reduceLeft((a, b) => '{ $a && $b })
                 }
             }
     }

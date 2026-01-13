@@ -19,9 +19,7 @@ case class Config(
 
 @Compile
 object Config {
-    given Eq[Config] = (x, y) =>
-        x.buyer === y.buyer && x.seller === y.seller &&
-            x.escrowAmount === y.escrowAmount && x.initializationAmount === y.initializationAmount
+    given Eq[Config] = Eq.derived
 }
 
 // Redeemer
