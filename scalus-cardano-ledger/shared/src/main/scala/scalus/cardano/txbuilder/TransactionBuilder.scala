@@ -484,15 +484,17 @@ object TransactionBuilder {
         /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */
         def getUtxos: Utxos = this.resolvedUtxos.utxos
 
-        /** Validate a context according so a set of ledger rules */
+        /** Validate a context according to a set of ledger rules */
         def validate(
             validators: Seq[Validator],
-            protocolParams: ProtocolParams
+            protocolParams: ProtocolParams,
+            validationSlot: Long,
         ): Either[TransactionException, Context] = {
+            // FIXME: this should either be passed explicitly as "validationCertState" or built in the builder context
             val certState = CertState.empty
             val context = SContext(
               this.transaction.body.value.fee,
-              UtxoEnv(1L, protocolParams, certState, network)
+              UtxoEnv(validationSlot, protocolParams, certState, network)
             )
             val state = SState(this.getUtxos, certState)
             validators
@@ -507,6 +509,7 @@ object TransactionBuilder {
         def finalizeContext(
             protocolParams: ProtocolParams,
             diffHandler: DiffHandler,
+            validationSlot: Long,
             evaluator: PlutusScriptEvaluator,
             validators: Seq[Validator]
         ): Either[SomeBuildError, Context] = {
@@ -537,7 +540,7 @@ object TransactionBuilder {
                     .map(BalancingError(_, this))
 
                 validatedCtx <- balancedCtx
-                    .validate(validators, protocolParams)
+                    .validate(validators, protocolParams, validationSlot)
                     .left
                     .map(ValidationError(_, this))
 
