@@ -17,6 +17,9 @@ extension [A](x: A)
 object Eq:
     inline def apply[A: Eq]: Eq[A] = summon[Eq[A]]
 
+    /** Derives an Eq instance for type A (case class, enum, or sealed trait) */
+    inline def derived[A]: Eq[A] = ${ EqMacros.eqImpl[A] }
+
     given Eq[Unit] = (_: Unit, _: Unit) => true
     given Eq[BigInt] = (x: BigInt, y: BigInt) => equalsInteger(x, y)
     given Eq[String] = (x: String, y: String) => equalsString(x, y)
