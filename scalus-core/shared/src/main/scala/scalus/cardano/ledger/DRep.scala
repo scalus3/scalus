@@ -1,6 +1,8 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
+import org.typelevel.paiges.Doc
+import scalus.utils.{Pretty, Style}
 
 /** Represents a Delegated Representative (DRep) in the Cardano blockchain.
   *
@@ -98,4 +100,15 @@ object DRep {
             drep
         }
     }
+
+    import Doc.*
+    import Pretty.inParens
+
+    /** Pretty prints DRep */
+    given Pretty[DRep] with
+        def pretty(a: DRep, style: Style): Doc = a match
+            case DRep.KeyHash(hash)      => text("DRep.KeyHash") + inParens(text(hash.toHex))
+            case DRep.ScriptHash(hash)   => text("DRep.ScriptHash") + inParens(text(hash.toHex))
+            case DRep.AlwaysAbstain      => text("DRep.AlwaysAbstain")
+            case DRep.AlwaysNoConfidence => text("DRep.AlwaysNoConfidence")
 }

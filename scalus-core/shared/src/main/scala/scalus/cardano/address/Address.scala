@@ -1,13 +1,14 @@
 package scalus.cardano.address
 
+import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
+import org.typelevel.paiges.Doc
 import scalus.builtin.ByteString
 import scalus.cardano.ledger.*
+import scalus.utils.{Pretty, Style}
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
-
-import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
 import scala.util.control.NonFatal
+import scala.util.{Failure, Success, Try}
 
 /** Implementation of Cardano CIP-19 address format following Rust Pallas implementation structure.
   * Handles the binary structure of Cardano addresses including Shelley, Stake, and Byron addresses.
@@ -77,7 +78,7 @@ object VarUInt {
     }
 }
 
-import VarUInt.*
+import scalus.cardano.address.VarUInt.*
 
 /** Network identification for Cardano addresses */
 sealed trait Network {
@@ -360,11 +361,42 @@ case class ShelleyAddress(
 }
 
 object ShelleyAddress {
+    import Doc.*
+    import Pretty.inParens
+
     given Encoder[ShelleyAddress] with
         def write(w: Writer, value: ShelleyAddress): Writer = {
             w.write(value.toBytes)
             w
         }
+
+    /** Pretty prints ShelleyAddress
+      *   - Concise: bech32 encoding
+      *   - Detailed: structured with network, payment, delegation
+      */
+    given Pretty[ShelleyAddress] = Pretty.instanceWithDetailed(
+      concise = (a, _) => text(a.toBech32.getOrElse(a.toHex)),
+      detailed = (a, _) =>
+          val paymentDoc = a.payment match
+              case ShelleyPaymentPart.Key(hash) =>
+                  text("KeyHash") + inParens(text(hash.toHex))
+              case ShelleyPaymentPart.Script(hash) =>
+                  text("ScriptHash") + inParens(text(hash.toHex))
+          val delegationDoc = a.delegation match
+              case ShelleyDelegationPart.Key(hash) =>
+                  text("KeyHash") + inParens(text(hash.toHex))
+              case ShelleyDelegationPart.Script(hash) =>
+                  text("ScriptHash") + inParens(text(hash.toHex))
+              case ShelleyDelegationPart.Pointer(ptr) =>
+                  text("Pointer") + inParens(
+                    text(s"${ptr.slot.slot}, ${ptr.txIdx}, ${ptr.certIdx}")
+                  )
+              case ShelleyDelegationPart.Null => text("Null")
+          text("ShelleyAddress") /
+              (text("network:") & text(a.network.toString)).nested(2) /
+              (text("payment:") & paymentDoc).nested(2) /
+              (text("delegation:") & delegationDoc).nested(2)
+    )
 }
 
 /** A decoded Stake address for delegation purposes */
@@ -420,11 +452,29 @@ case class StakeAddress(network: Network, payload: StakePayload) extends Address
 }
 
 object StakeAddress {
+    import Doc.*
+    import Pretty.inParens
+
     given Encoder[StakeAddress] with
         def write(w: Writer, value: StakeAddress): Writer = {
             w.write(value.toBytes)
             w
         }
+
+    /** Pretty prints StakeAddress
+      *   - Concise: bech32 encoding
+      *   - Detailed: structured with network, payload
+      */
+    given Pretty[StakeAddress] = Pretty.instanceWithDetailed(
+      concise = (a, style) => text(a.toBech32.getOrElse(a.toHex)),
+      detailed = (a, style) =>
+          val payloadDoc = a.payload match
+              case StakePayload.Stake(hash)  => text("Stake") + inParens(text(hash.toHex))
+              case StakePayload.Script(hash) => text("Script") + inParens(text(hash.toHex))
+          (text("StakeAddress") /
+              (text("network:") & text(a.network.toString)).nested(2) /
+              (text("payload:") & payloadDoc).nested(2)).grouped
+    )
 }
 
 /** Placeholder for Byron address - complex legacy format */
@@ -576,11 +626,19 @@ case class ByronAddress(bytes: ByteString) extends Address {
 }
 
 object ByronAddress {
+    import Doc.*
+    import Pretty.inParens
+
     given Encoder[ByronAddress] with
         def write(w: Writer, value: ByronAddress): Writer = {
             w.write(value.toBytes)
             w
         }
+
+    /** Pretty prints ByronAddress as hex (Byron doesn't use bech32) */
+    given Pretty[ByronAddress] with
+        def pretty(a: ByronAddress, style: Style): Doc =
+            text("ByronAddress") + inParens(text(a.toHex))
 }
 
 /** Base trait for all Cardano addresses
@@ -622,6 +680,20 @@ sealed trait Address {
 
 // Conversion utilities between address types
 object Address {
+
+    /** Pretty prints any Address - delegates to specific type instances */
+    given Pretty[Address] = Pretty.instanceWithDetailed(
+      concise = (a, style) =>
+          a match
+              case s: ShelleyAddress => summon[Pretty[ShelleyAddress]].pretty(s, style)
+              case s: StakeAddress   => summon[Pretty[StakeAddress]].pretty(s, style)
+              case b: ByronAddress   => summon[Pretty[ByronAddress]].pretty(b, style),
+      detailed = (a, style) =>
+          a match
+              case s: ShelleyAddress => summon[Pretty[ShelleyAddress]].prettyDetailed(s, style)
+              case s: StakeAddress   => summon[Pretty[StakeAddress]].prettyDetailed(s, style)
+              case b: ByronAddress   => summon[Pretty[ByronAddress]].prettyDetailed(b, style)
+    )
 
     /** Create a Shelley address from payment and stake credentials */
     def apply(network: Network, payment: Credential, delegation: Credential): Address = {

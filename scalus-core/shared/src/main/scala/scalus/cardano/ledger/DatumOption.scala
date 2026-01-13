@@ -2,7 +2,9 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.Tag.EmbeddedCBOR
 import io.bullet.borer.*
+import org.typelevel.paiges.Doc
 import scalus.builtin.Data
+import scalus.utils.{Pretty, Style}
 
 /** Represents a datum option in Cardano outputs */
 enum DatumOption:
@@ -32,6 +34,15 @@ enum DatumOption:
         case Inline(d) => Some(d)
 
 object DatumOption:
+    import Doc.*
+    import Pretty.inParens
+
+    /** Pretty prints DatumOption as `Hash(...)` or `Inline(...)` */
+    given Pretty[DatumOption] with
+        def pretty(a: DatumOption, style: Style): Doc = a match
+            case DatumOption.Hash(hash)   => text("Hash") + inParens(text(hash.toHex))
+            case DatumOption.Inline(data) => text("Inline") + inParens(text(data.toString))
+
     /** CBOR encoder for DatumOption */
     given Encoder[DatumOption] with
         def write(w: Writer, value: DatumOption): Writer =

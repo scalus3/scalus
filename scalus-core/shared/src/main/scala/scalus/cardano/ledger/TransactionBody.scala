@@ -1,6 +1,8 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
+import org.typelevel.paiges.Doc
+import scalus.utils.{Pretty, Style}
 
 case class TransactionBody(
     /** Transaction inputs to spend */
@@ -343,3 +345,42 @@ object TransactionBody:
               currentTreasuryValue = currentTreasuryValue,
               donation = donation
             )
+
+    import Doc.*
+
+    /** Pretty prints TransactionBody with multi-line structured output */
+    given Pretty[TransactionBody] with
+        def pretty(a: TransactionBody, style: Style): Doc =
+            def inputDoc(i: TransactionInput) = summon[Pretty[TransactionInput]].pretty(i, style)
+            def outputDoc(o: TransactionOutput) = summon[Pretty[TransactionOutput]].pretty(o, style)
+
+            val inputsDoc = Pretty.bulletList("inputs", a.inputs.toSet.toList.map(inputDoc))
+
+            val outputsDoc =
+                if a.outputs.nonEmpty then
+                    text("outputs:") / stack(a.outputs.zipWithIndex.map { case (o, idx) =>
+                        text(s"[$idx]") & outputDoc(o.value)
+                    }).nested(2)
+                else empty
+
+            val feeDoc = Pretty.field("fee", summon[Pretty[Coin]].pretty(a.fee, style), style)
+
+            val ttlDoc = a.ttl.fold(empty)(t => line + text(s"ttl: $t"))
+            val validityStartDoc =
+                a.validityStartSlot.fold(empty)(s => line + text(s"validityStart: $s"))
+            val mintDoc = a.mint.fold(empty)(m =>
+                line + text("mint:") & summon[Pretty[MultiAsset]].pretty(m, style)
+            )
+
+            val refInputsDoc =
+                Pretty.bulletList("referenceInputs", a.referenceInputs.toSet.toList.map(inputDoc))
+
+            val collateralDoc =
+                Pretty.bulletList("collateral", a.collateralInputs.toSet.toList.map(inputDoc))
+
+            val refInputsPrefixed =
+                if a.referenceInputs.toSet.nonEmpty then line + refInputsDoc else empty
+            val collateralPrefixed =
+                if a.collateralInputs.toSet.nonEmpty then line + collateralDoc else empty
+
+            (inputsDoc / outputsDoc / feeDoc + ttlDoc + validityStartDoc + mintDoc + refInputsPrefixed + collateralPrefixed).grouped

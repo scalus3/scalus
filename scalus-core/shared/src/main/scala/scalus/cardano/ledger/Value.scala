@@ -2,6 +2,8 @@ package scalus.cardano.ledger
 
 import cats.kernel.CommutativeGroup
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
+import org.typelevel.paiges.Doc
+import scalus.utils.{Pretty, Style}
 
 import scala.annotation.targetName
 
@@ -132,3 +134,15 @@ object Value:
         def combine(x: Value, y: Value): Value = x + y
         def empty: Value = Value.zero
         def inverse(x: Value): Value = -x
+
+    import Doc.*
+
+    /** Pretty prints Value in Lucid flat style:
+      *   - ADA-only: `{ ada: X.XXXXXX }`
+      *   - With assets: vertically indented entries with ada first
+      */
+    given Pretty[Value] with
+        def pretty(a: Value, style: Style): Doc =
+            val adaEntry =
+                Pretty.field("ada", Pretty.lit(text(Pretty.formatAda(a.coin.value)), style), style)
+            Pretty.braceList(adaEntry :: MultiAsset.formatAssetEntries(a.assets, style))

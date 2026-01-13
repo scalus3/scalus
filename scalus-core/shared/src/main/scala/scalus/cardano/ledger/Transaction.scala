@@ -3,9 +3,10 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import io.bullet.borer.NullOptions.given
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
+import org.typelevel.paiges.Doc
 import scalus.builtin.{platform, ByteString, given}
-
 import scalus.serialization.cbor.Cbor
+import scalus.utils.{Pretty, Style}
 
 /** Represents a complete transaction in Cardano */
 case class Transaction(
@@ -86,4 +87,30 @@ object Transaction {
     given Encoder[Transaction] = Encoder.derived
     given decoder(using OriginalCborByteArray, ProtocolVersion): Decoder[Transaction] =
         Decoder.derived[Transaction]
+
+    import Doc.*
+
+    /** Pretty prints Transaction with id, body, witnesses count, and validity */
+    given Pretty[Transaction] with
+        def pretty(a: Transaction, style: Style): Doc =
+            val idDoc = text("Transaction") / (text("id:") & text(a.id.toHex)).nested(2)
+            val bodyDoc = (text("body:") / summon[Pretty[TransactionBody]]
+                .pretty(a.body.value, style)
+                .nested(2)).nested(2)
+            val witnessDoc = {
+                val ws = a.witnessSet
+                val vkeyCount = ws.vkeyWitnesses.toSet.size
+                val scriptCount = ws.nativeScripts.toMap.size + ws.plutusV1Scripts.toMap.size +
+                    ws.plutusV2Scripts.toMap.size + ws.plutusV3Scripts.toMap.size
+                val redeemerCount = ws.redeemers.map(_.value.toMap.size).getOrElse(0)
+                (text("witnesses:") / stack(
+                  List(
+                    text(s"vkeys: $vkeyCount"),
+                    text(s"scripts: $scriptCount"),
+                    text(s"redeemers: $redeemerCount")
+                  )
+                )).nested(2)
+            }
+            val validDoc = (text("valid:") & text(a.isValid.toString)).nested(2)
+            (idDoc / bodyDoc / witnessDoc / validDoc).grouped
 }

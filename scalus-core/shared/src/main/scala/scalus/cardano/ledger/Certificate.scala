@@ -2,6 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.NullOptions.given
+import org.typelevel.paiges.Doc
+import scalus.utils.{Pretty, Style}
 
 import scala.collection.mutable
 
@@ -500,4 +502,69 @@ object Certificate {
                 r.validationFailure(s"Expected tag 258 for definite Set, got $tag")
             r.read[Set[A]]()
         else r.read[Set[A]]()
+
+    import Doc.*
+    import Pretty.{formatAda, inParens}
+
+    /** Pretty prints Certificate showing the certificate type */
+    given Pretty[Certificate] with
+        def pretty(a: Certificate, style: Style): Doc =
+            def credDoc(c: Credential) = summon[Pretty[Credential]].pretty(c, style)
+            def drepDoc(d: DRep) = summon[Pretty[DRep]].pretty(d, style)
+            def anchorDoc(a: Anchor) = summon[Pretty[Anchor]].pretty(a, style)
+            def depositDoc(c: Coin) = text(s", deposit=${formatAda(c.value)}")
+            def refundDoc(c: Coin) = text(s", refund=${formatAda(c.value)}")
+            def poolDoc(p: PoolKeyHash) = text(", pool=") + text(p.toHex)
+            def optAnchor(opt: Option[Anchor]) =
+                opt.fold(Doc.empty)(a => text(", anchor=") + anchorDoc(a))
+
+            a match
+                case Certificate.StakeDelegation(cred, pool) =>
+                    text("StakeDelegation") + inParens(credDoc(cred) + poolDoc(pool))
+                case Certificate.PoolRegistration(op, _, pledge, cost, _, _, _, _, _) =>
+                    text("PoolRegistration") + inParens(
+                      text("operator=") + text(op.toHex) +
+                          text(s", pledge=${formatAda(pledge.value)}") +
+                          text(s", cost=${formatAda(cost.value)}")
+                    )
+                case Certificate.PoolRetirement(pool, epoch) =>
+                    text("PoolRetirement") + inParens(
+                      text("pool=") + text(pool.toHex) + text(s", epoch=$epoch")
+                    )
+                case Certificate.RegCert(cred, coin) =>
+                    text("RegCert") + inParens(credDoc(cred) + coin.fold(Doc.empty)(depositDoc))
+                case Certificate.UnregCert(cred, coin) =>
+                    text("UnregCert") + inParens(credDoc(cred) + coin.fold(Doc.empty)(refundDoc))
+                case Certificate.VoteDelegCert(cred, drep) =>
+                    text("VoteDelegCert") + inParens(credDoc(cred) + text(", ") + drepDoc(drep))
+                case Certificate.StakeVoteDelegCert(cred, pool, drep) =>
+                    text("StakeVoteDelegCert") + inParens(
+                      credDoc(cred) + poolDoc(pool) + text(", ") + drepDoc(drep)
+                    )
+                case Certificate.StakeRegDelegCert(cred, pool, coin) =>
+                    text("StakeRegDelegCert") + inParens(
+                      credDoc(cred) + poolDoc(pool) + depositDoc(coin)
+                    )
+                case Certificate.VoteRegDelegCert(cred, drep, coin) =>
+                    text("VoteRegDelegCert") + inParens(
+                      credDoc(cred) + text(", ") + drepDoc(drep) + depositDoc(coin)
+                    )
+                case Certificate.StakeVoteRegDelegCert(cred, pool, drep, coin) =>
+                    text("StakeVoteRegDelegCert") + inParens(
+                      credDoc(cred) + poolDoc(pool) + text(", ") + drepDoc(drep) + depositDoc(coin)
+                    )
+                case Certificate.AuthCommitteeHotCert(cold, hot) =>
+                    text("AuthCommitteeHotCert") + inParens(
+                      text("cold=") + credDoc(cold) + text(", hot=") + credDoc(hot)
+                    )
+                case Certificate.ResignCommitteeColdCert(cold, anchor) =>
+                    text("ResignCommitteeColdCert") + inParens(credDoc(cold) + optAnchor(anchor))
+                case Certificate.RegDRepCert(cred, coin, anchor) =>
+                    text("RegDRepCert") + inParens(
+                      credDoc(cred) + depositDoc(coin) + optAnchor(anchor)
+                    )
+                case Certificate.UnregDRepCert(cred, coin) =>
+                    text("UnregDRepCert") + inParens(credDoc(cred) + refundDoc(coin))
+                case Certificate.UpdateDRepCert(cred, anchor) =>
+                    text("UpdateDRepCert") + inParens(credDoc(cred) + optAnchor(anchor))
 }

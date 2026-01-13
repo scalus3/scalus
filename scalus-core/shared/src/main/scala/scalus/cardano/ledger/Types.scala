@@ -1,17 +1,19 @@
 package scalus.cardano.ledger
 
+import cats.kernel.CommutativeGroup
 import io.bullet.borer.*
 import io.bullet.borer.NullOptions.given
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
-import scalus.builtin.{platform, BuiltinList, BuiltinPair, ByteString, Data, FromData, ToData}
-import scalus.builtin.Builtins.{iData, listData, mapData, unIData, unListData, unMapData}
+import monocle.*
+import org.typelevel.paiges.Doc
+import scalus.builtin.Builtins.*
+import scalus.builtin.*
 import scalus.cardano.address.Address
 import scalus.serialization.cbor.Cbor
-import scalus.utils.Hex.toHex
-import upickle.default.ReadWriter as UpickleReadWriter
-import cats.kernel.CommutativeGroup
-import monocle.*
 import scalus.uplc.eval.ExCPU
+import scalus.utils.Hex.toHex
+import scalus.utils.{Pretty, Style}
+import upickle.default.ReadWriter as UpickleReadWriter
 
 import java.util
 import scala.annotation.{targetName, threadUnsafe}
@@ -63,6 +65,11 @@ object Coin {
 
     given ToData[Coin] = (coin: Coin) => iData(coin.value)
     given FromData[Coin] = (data: Data) => Coin(unIData(data).toLong)
+
+    /** Pretty prints Coin as ADA with 6 decimal places */
+    given Pretty[Coin] with
+        def pretty(a: Coin, style: Style): Doc =
+            Pretty.lit(Doc.text(Pretty.formatAda(a.value)), style)
 }
 
 /** Minting MultiAsset. Can't contain zeros, can't be empty */
@@ -256,6 +263,28 @@ object MultiAsset {
         def empty: MultiAsset = MultiAsset.zero
         def inverse(x: MultiAsset): MultiAsset = -x
 
+    import Doc.*
+
+    /** Format asset entries as Lucid-style Doc list: `"policyId.assetName": amount`
+      *
+      * This helper is used by both MultiAsset and Value Pretty instances.
+      */
+    def formatAssetEntries(ma: MultiAsset, style: Style = Style.Normal): List[Doc] =
+        ma.assets.toList.flatMap { case (policyId, tokens) =>
+            tokens.toList.map { case (assetName, amount) =>
+                val key = s""""${policyId.toHex}.$assetName":"""
+                Pretty.typ(text(key), style) & Pretty.lit(text(amount.toString), style)
+            }
+        }
+
+    /** Pretty prints MultiAsset in Lucid flat style: `"policyId.assetName": amount`
+      *
+      * Uses vertical indentation when there are multiple entries.
+      */
+    given Pretty[MultiAsset] with
+        def pretty(a: MultiAsset, style: Style): Doc =
+            Pretty.braceList(formatAssetEntries(a, style))
+
 }
 
 /** Represents an asset name in Cardano's multi-asset framework
@@ -297,6 +326,10 @@ object AssetName {
         val bytes = ByteString.fromString(str)
         AssetName(bytes)
     }
+
+    /** Pretty prints AssetName as ASCII if printable, otherwise hex */
+    given Pretty[AssetName] with
+        def pretty(a: AssetName, style: Style): Doc = Pretty.lit(Doc.text(a.toString), style)
 }
 
 /** Represents the supported scripting languages in Cardano */
@@ -353,6 +386,10 @@ object Language {
     given Ordering[Language] = (x: Language, y: Language) => {
         x.languageId - y.languageId
     }
+
+    /** Pretty prints Language as PlutusV1, PlutusV2, etc. */
+    given Pretty[Language] with
+        def pretty(a: Language, style: Style): Doc = Pretty.ctr(a.toString, style)
 }
 
 /** Represents a Cardano address bytes */

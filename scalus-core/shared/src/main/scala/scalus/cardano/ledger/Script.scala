@@ -3,8 +3,10 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.derivation.key
+import org.typelevel.paiges.Doc
 import scalus.builtin.{platform, ByteString}
 import scalus.uplc.{DeBruijnedProgram, ProgramFlatCodec}
+import scalus.utils.{Pretty, Style}
 
 import scala.util.control.NonFatal
 
@@ -100,4 +102,17 @@ object Script {
     }
 
     given Codec[Script] = deriveCodec
+
+    import Doc.*
+    import Pretty.inParens
+
+    /** Pretty prints Script as `Native(hash)`, `PlutusV1(hash)`, etc. */
+    given Pretty[Script] with
+        def pretty(a: Script, style: Style): Doc =
+            val hashDoc = inParens(text(a.scriptHash.toHex))
+            a match
+                case Script.Native(_)   => text("Native") + hashDoc
+                case Script.PlutusV1(_) => text("PlutusV1") + hashDoc
+                case Script.PlutusV2(_) => text("PlutusV2") + hashDoc
+                case Script.PlutusV3(_) => text("PlutusV3") + hashDoc
 }

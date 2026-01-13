@@ -1,9 +1,11 @@
 package scalus.cardano.ledger
 
-import scalus.cardano.address.Address
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
 import monocle.Lens
+import org.typelevel.paiges.Doc
+import scalus.cardano.address.Address
 import scalus.cardano.ledger.TransactionOutput.{Babbage, Shelley}
+import scalus.utils.{Pretty, Style}
 
 /** Represents a transaction output in Cardano. Both Shelley-era and Babbage-era output formats are
   * supported.
@@ -327,3 +329,16 @@ object TransactionOutput:
           datumOption,
           scriptRef
         )
+
+    import Doc.*
+
+    /** Pretty prints TransactionOutput with address, value, and datum info */
+    given Pretty[TransactionOutput] with
+        def pretty(a: TransactionOutput, style: Style): Doc =
+            val addressDoc = summon[Pretty[Address]].pretty(a.address, style)
+            val valueDoc = summon[Pretty[Value]].pretty(a.value, style)
+            val datumDoc = a.datumOption.fold(empty)(d =>
+                line + text("datum:") & summon[Pretty[DatumOption]].pretty(d, style)
+            )
+            val scriptDoc = a.scriptRef.fold(empty)(_ => line + text("scriptRef: present"))
+            (addressDoc / valueDoc.nested(2) + datumDoc.nested(2) + scriptDoc.nested(2)).grouped

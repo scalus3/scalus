@@ -1,7 +1,9 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder}
+import org.typelevel.paiges.Doc
 import scalus.builtin.ByteString
+import scalus.utils.{Pretty, Style}
 
 trait Blake2b_256
 trait Blake2b_224
@@ -55,6 +57,10 @@ object Hash {
     given Ordering[HF, Purpose]: Ordering[Hash[HF, Purpose]] =
         (x: Hash[HF, Purpose], y: Hash[HF, Purpose]) =>
             ByteString.given_Ordering_ByteString.compare(x, y)
+
+    /** Pretty prints a hash as its full hex string */
+    given prettyHash[HF, Purpose]: Pretty[Hash[HF, Purpose]] with
+        def pretty(a: Hash[HF, Purpose], style: Style): Doc = Doc.text(a.toHex)
 }
 
 trait HashConstructors[HashType >: Hash[HashFunction, Purpose], HashFunction: HashSize, Purpose] {

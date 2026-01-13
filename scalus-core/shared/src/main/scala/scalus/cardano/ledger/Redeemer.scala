@@ -2,7 +2,9 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
+import org.typelevel.paiges.Doc
 import scalus.builtin.Data
+import scalus.utils.{Pretty, Style}
 
 import scala.annotation.threadUnsafe
 import scala.collection.immutable
@@ -54,11 +56,18 @@ case class Redeemer(
     require(index >= 0, s"Redeemer index must be non-negative, got $index")
 
 object Redeemer {
+    import Doc.*
+
     given Ordering[Redeemer] with
         def compare(x: Redeemer, y: Redeemer): Int =
             x.tag.compareTo(y.tag) match
                 case 0 => x.index.compareTo(y.index)
                 case c => c
+
+    /** Pretty prints Redeemer showing tag, index, and execution units */
+    given Pretty[Redeemer] with
+        def pretty(a: Redeemer, style: Style): Doc =
+            text(s"Redeemer(${a.tag}#${a.index}, exUnits=${a.exUnits.memory}/${a.exUnits.steps})")
 }
 
 /** Represents a collection of redeemers in the transaction witness set */
