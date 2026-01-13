@@ -867,7 +867,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
             input -> TransactionOutput(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
-              datumOption = DatumOption.Inline(datum)
+              inlineDatum = datum
             )
           )
         )
@@ -926,7 +926,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
             referenceInput -> TransactionOutput(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
-              datumOption = DatumOption.Inline(datum)
+              inlineDatum = datum
             )
           )
         )

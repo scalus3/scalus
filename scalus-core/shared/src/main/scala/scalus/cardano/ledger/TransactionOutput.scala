@@ -152,6 +152,10 @@ object TransactionOutput:
       * @return
       *   a new Babbage transaction output with no script reference
       */
+    @deprecated(
+      "use apply(address, value, datumOption: DatumOption) or apply(address, value, inlineDatum: Data)",
+      "0.14.2"
+    )
     def apply(
         address: Address,
         value: Value,
@@ -175,6 +179,25 @@ object TransactionOutput:
         value: Value,
         datumOption: DatumOption
     ): TransactionOutput = Babbage(address, value, Some(datumOption), None)
+
+    /** Creates a Babbage-era transaction output with an inline datum.
+      *
+      * This is a convenience method equivalent to using `DatumOption.Inline(inlineDatum)`.
+      *
+      * @param address
+      *   the destination address for this output
+      * @param value
+      *   the value (ADA and native tokens) contained in this output
+      * @param inlineDatum
+      *   the datum to embed inline in this output
+      * @return
+      *   a new Babbage transaction output with the inline datum
+      */
+    def apply(
+        address: Address,
+        value: Value,
+        inlineDatum: scalus.builtin.Data
+    ): TransactionOutput = Babbage(address, value, Some(DatumOption.Inline(inlineDatum)), None)
 
     /** Creates a Babbage-era transaction output with all optional parameters.
       *

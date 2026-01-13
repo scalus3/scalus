@@ -56,7 +56,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         ada: Int = 20,
         datum: DatumOption = inlineDatum42
     ): TransactionOutput =
-        TransactionOutput(address, Value.ada(ada), Some(datum))
+        TransactionOutput(address, Value.ada(ada), datum)
 
     def scriptUtxo(
         index: Int,

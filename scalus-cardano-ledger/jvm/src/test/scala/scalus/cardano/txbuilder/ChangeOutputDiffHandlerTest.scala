@@ -44,7 +44,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           in = 1_000_000,
           output = 800_000,
           fee = 200_000,
-          expected = Expected.Failure(InsufficientFunds(Value.zero, 178370))
+          expected = Expected.Failure(InsufficientFunds(Value.zero, 169750))
         )
     }
 
@@ -122,7 +122,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     test("should fail when output would become below minimum ADA") {
         val insufficientFunds: InsufficientFunds =
-            InsufficientFunds(Value.lovelace(-160705), 139075)
+            InsufficientFunds(Value.lovelace(-160617), 130367)
         check(
           in = 1_000_000,
           output = 1_000_000,
@@ -135,7 +135,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           output = 1_000_000,
           fee = 0,
           expected = Expected.success(
-            outputLovelace = 978_370,
+            outputLovelace = 969750,
             fee = -insufficientFunds.valueDiff.coin.value
           )
         )
@@ -143,7 +143,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     test("should handle single multi asset change") {
         val initialAda = Coin.ada(2)
-        val expectedFee = Coin(162377L)
+        val expectedFee = Coin(162289)
         check(
           in = Value.asset(policyId, co2, 5, initialAda),
           output = Value.zero,
@@ -158,7 +158,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     test("should handle multiple token types in change") {
         val initialAda = Coin.ada(3)
         val assets = MultiAsset.asset(policyId, co2, 100) + MultiAsset.asset(policyId, h2so4, 50)
-        val expectedFee = Coin(162773L)
+        val expectedFee = Coin(162685)
 
         check(
           in = Value(initialAda, assets),
@@ -175,7 +175,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         val initialAda = Coin.ada(5)
         val inputTokens = MultiAsset.asset(policyId, co2, 1000)
         val outputAda = Coin.ada(2)
-        val expectedFee = Coin(162465L)
+        val expectedFee = Coin(162377)
 
         check(
           in = Value(initialAda, inputTokens),
@@ -189,7 +189,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     }
 
     test("should silently remove when input doesn't have them") {
-        val expectedFee = Coin(160705L)
+        val expectedFee = Coin(160617)
         check(
           in = Value.ada(3),
           output = Value.asset(policyId, co2, 100, Coin.ada(1)),
@@ -207,8 +207,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           output = 2_000_000,
           fee = 0,
           expected = Expected.success(
-            outputLovelace = 2_839295,
-            fee = 160705
+            outputLovelace = 2_839383,
+            fee = 160617
           )
         )
     }
@@ -314,8 +314,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         val utxo = Map(
           input -> TransactionOutput(
             address = testAddress,
-            value = in,
-            None
+            value = in
           )
         )
         val tx = Transaction(
@@ -325,8 +324,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
               Sized(
                 TransactionOutput(
                   address = testAddress,
-                  value = output,
-                  None
+                  value = output
                 )
               )
             ),

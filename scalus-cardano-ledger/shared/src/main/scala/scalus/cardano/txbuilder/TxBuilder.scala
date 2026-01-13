@@ -503,7 +503,7 @@ case class TxBuilder(
     def payTo[T: ToData](address: Address, value: Value, datum: T): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
-            TransactionOutput(address, value, Some(DatumOption.Inline(datum.toData)), None)
+            TransactionOutput(address, value, datum.toData)
           )
         )
 

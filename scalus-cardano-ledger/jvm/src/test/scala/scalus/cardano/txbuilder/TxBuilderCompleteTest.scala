@@ -44,7 +44,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     val token: AssetName = AssetName.fromString("token")
 
     val emptyRedeemer: Data = Data.List(PList.Nil)
-    val inlineDatum42: DatumOption = Inline(Data.I(42))
+    val datum42: Data = Data.I(42)
 
     val scriptAddress: ShelleyAddress = ShelleyAddress(
       network = testEnv.network,
@@ -65,11 +65,8 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     ): TransactionOutput =
         TransactionOutput(address, Value.assets(tokens.toMap, Coin.ada(ada)))
 
-    def scriptOutput(ada: Int, datum: DatumOption = inlineDatum42): TransactionOutput =
-        TransactionOutput(scriptAddress, Value.ada(ada), Some(datum))
-
-    def scriptUtxo(index: Int, ada: Int, datum: DatumOption = inlineDatum42): Utxo =
-        Utxo(input(index), scriptOutput(ada, datum))
+    def scriptUtxo(index: Int, ada: Int): Utxo =
+        Utxo(input(index), TransactionOutput(scriptAddress, Value.ada(ada), datum42))
 
     private def outputsOf(party: Party, tx: Transaction) =
         tx.body.value.outputs.toSeq.filter(_.value.address == party.address)
@@ -1066,7 +1063,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
           TransactionOutput(
             scriptAddress,
             Value.ada(3), // Minimal ADA, forces balancing to add sponsor input
-            Some(inlineDatum42)
+            datum42
           )
         )
 
