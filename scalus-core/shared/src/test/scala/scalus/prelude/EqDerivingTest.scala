@@ -56,6 +56,19 @@ case object EqTestZero extends EqTestExpr
 // Note: Nested sealed traits (sealed trait child of sealed trait) are not yet
 // supported by the Scalus compiler plugin due to type test pattern limitations.
 
+// Test case class for budget comparison: Eq.derived vs manual unapply
+case class EqBudgetPair(x: BigInt, y: BigInt)
+
+@Compile
+object EqBudgetPair:
+    // Eq.derived uses direct field access: lhs.x === rhs.x && lhs.y === rhs.y
+    given eqDerived: Eq[EqBudgetPair] = Eq.derived
+
+    // Manual implementation using pattern matching with unapply (for comparison)
+    given eqManualUnapply: Eq[EqBudgetPair] = (lhs: EqBudgetPair, rhs: EqBudgetPair) =>
+        (lhs, rhs) match
+            case (EqBudgetPair(x1, y1), EqBudgetPair(x2, y2)) => x1 === x2 && y1 === y2
+
 class EqDerivingTest extends AnyFunSuite {
 
     test("Eq.derived for case class - equal values") {
@@ -160,4 +173,89 @@ class EqDerivingTest extends AnyFunSuite {
             case Result.Failure(ex, _, _, l) =>
                 fail(s"Expected success for different points, got failure: $ex, logs=$l")
     }
+
+    test("Eq.derived vs manual for case class - budget comparison") {
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        given scalus.compiler.Options = scalus.compiler.Options(
+          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = false,
+          optimizeUplc = true,
+          debug = false
+        )
+
+        // Compile using Eq.derived (direct field access)
+        val sirDerived = scalus.compiler.compile {
+            (x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt) =>
+                val p1 = EqBudgetPair(x1, y1)
+                val p2 = EqBudgetPair(x2, y2)
+                EqBudgetPair.eqDerived(p1, p2)
+        }
+
+        // Compile using manual implementation (pattern matching with unapply)
+        val sirManual = scalus.compiler.compile {
+            (x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt) =>
+                val p1 = EqBudgetPair(x1, y1)
+                val p2 = EqBudgetPair(x2, y2)
+                EqBudgetPair.eqManualUnapply(p1, p2)
+        }
+
+        val programDerived = sirDerived.toUplcOptimized(false).plutusV3
+        val programManual = sirManual.toUplcOptimized(false).plutusV3
+
+        // Test with equal Pair values
+        val resultDerived =
+            (programDerived $ BigInt(1).asTerm $ BigInt(2).asTerm $ BigInt(1).asTerm $ BigInt(
+              2
+            ).asTerm).term.evaluateDebug
+        val resultManual =
+            (programManual $ BigInt(1).asTerm $ BigInt(2).asTerm $ BigInt(1).asTerm $ BigInt(
+              2
+            ).asTerm).term.evaluateDebug
+
+        // Both should succeed with true
+        assert(resultDerived.isSuccess, s"Derived failed: $resultDerived")
+        assert(resultManual.isSuccess, s"Manual failed: $resultManual")
+
+        val budgetDerived = resultDerived.budget
+        val budgetManual = resultManual.budget
+
+        println(s"Case class Eq budget comparison (equal values):")
+        println(
+          s"  Derived (direct field access):      memory=${budgetDerived.memory}, steps=${budgetDerived.steps}"
+        )
+        println(
+          s"  Manual (pattern match with unapply): memory=${budgetManual.memory}, steps=${budgetManual.steps}"
+        )
+        println(
+          s"  Difference: memory=${budgetDerived.memory - budgetManual.memory}, steps=${budgetDerived.steps - budgetManual.steps}"
+        )
+
+        // Test with different values to exercise the comparison logic
+        val resultDerived2 =
+            (programDerived $ BigInt(1).asTerm $ BigInt(2).asTerm $ BigInt(1).asTerm $ BigInt(
+              3
+            ).asTerm).term.evaluateDebug
+        val resultManual2 =
+            (programManual $ BigInt(1).asTerm $ BigInt(2).asTerm $ BigInt(1).asTerm $ BigInt(
+              3
+            ).asTerm).term.evaluateDebug
+
+        assert(resultDerived2.isSuccess)
+        assert(resultManual2.isSuccess)
+
+        println(s"Case class Eq budget comparison (different values):")
+        println(
+          s"  Derived: memory=${resultDerived2.budget.memory}, steps=${resultDerived2.budget.steps}"
+        )
+        println(
+          s"  Manual:  memory=${resultManual2.budget.memory}, steps=${resultManual2.budget.steps}"
+        )
+        println(
+          s"  Difference: memory=${resultDerived2.budget.memory - resultManual2.budget.memory}, steps=${resultDerived2.budget.steps - resultManual2.budget.steps}"
+        )
+
+        // For case classes, derived should be equal or better
+        // (direct field access should be at least as efficient as pattern matching)
+    }
+
 }

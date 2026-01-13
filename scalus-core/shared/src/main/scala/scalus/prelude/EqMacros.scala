@@ -165,7 +165,9 @@ private object EqMacros {
 
                 CaseDef(childIdent, None, rhsMatch)
             else
-                // Case class with fields
+                // Case class with fields - use unapply pattern matching
+                // (direct field access doesn't work due to path-dependent type issues
+                // with intersection types in type test patterns)
                 val companionModuleRef = childSym.companionModule
                 val unapplyRef = companionModuleRef.methodMember("unapply").head.termRef
                 val constr = childSym.primaryConstructor
