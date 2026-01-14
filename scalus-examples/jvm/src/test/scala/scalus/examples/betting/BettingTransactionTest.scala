@@ -8,9 +8,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
-import scalus.cardano.txbuilder.TransactionSigner
+import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.cardano.txbuilder.RedeemerPurpose
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
@@ -127,9 +126,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         program.runWithDebug(scriptContext)
     }
 
-    test("deploy script") {
-        val provider = createProvider()
-
+    private def deployScript(provider: Emulator) = {
         val deployTx = {
             val utxos = provider
                 .findUtxos(
@@ -146,47 +143,25 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(deployTx).await().isRight)
 
-        val scriptUtxo = provider
-            .findUtxo(
+        val scriptUtxos = provider
+            .findUtxos(
               address = deploymentAddress,
               transactionId = Some(deployTx.id),
-              datum = None,
-              minAmount = None
             )
             .await()
-            .toOption
-            .get
+            .getOrElse(fail("No UTXOs found at deployment address"))
+        Utxo(scriptUtxos.find((in, out) => out.scriptRef.isDefined).get)
+    }
 
-        assert(scriptUtxo._2.scriptRef.isDefined)
+    test("deploy script") {
+        val provider = createProvider()
+        val scriptUtxo = deployScript(provider)
+        assert(scriptUtxo.output.scriptRef.isDefined)
     }
 
     test("init bet") {
         val provider = createProvider()
-
-        val deployTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = deploymentAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            transactionCreatorFor(deploymentSigner)
-                .deploy(utxos, deploymentAddress, deploymentAddress)
-        }
-
-        assert(provider.submit(deployTx).await().isRight)
-
-        val scriptUtxo = provider
-            .findUtxo(
-              address = deploymentAddress,
-              transactionId = Some(deployTx.id)
-            )
-            .await()
-            .toOption
-            .get
+        val scriptUtxo = deployScript(provider)
 
         val initTx = {
             val utxos = provider
@@ -237,28 +212,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
     test("player2 joins bet before expiration") {
         val provider = createProvider()
-
-        val deployTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = deploymentAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            transactionCreatorFor(deploymentSigner)
-                .deploy(utxos, deploymentAddress, deploymentAddress)
-        }
-
-        assert(provider.submit(deployTx).await().isRight)
-
-        val scriptUtxo = provider
-            .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
-            .await()
-            .toOption
-            .get
+        val scriptUtxo = deployScript(provider)
 
         val initTx = {
             val utxos = provider
@@ -360,28 +314,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
     test("player2 joining fails after expiration") {
         val provider = createProvider()
-
-        val deployTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = deploymentAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            transactionCreatorFor(deploymentSigner)
-                .deploy(utxos, deploymentAddress, deploymentAddress)
-        }
-
-        assert(provider.submit(deployTx).await().isRight)
-
-        val scriptUtxo = provider
-            .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
-            .await()
-            .toOption
-            .get
+        val scriptUtxo = deployScript(provider)
 
         val initTx = {
             val utxos = provider
@@ -463,28 +396,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
     test("oracle announces winner after expiration") {
         val provider = createProvider()
-
-        val deployTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = deploymentAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            transactionCreatorFor(deploymentSigner)
-                .deploy(utxos, deploymentAddress, deploymentAddress)
-        }
-
-        assert(provider.submit(deployTx).await().isRight)
-
-        val scriptUtxo = provider
-            .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
-            .await()
-            .toOption
-            .get
+        val scriptUtxo = deployScript(provider)
 
         val initTx = {
             val utxos = provider
@@ -599,28 +511,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
     test("oracle announcing winner fails before expiration") {
         val provider = createProvider()
-
-        val deployTx = {
-            val utxos = provider
-                .findUtxos(
-                  address = deploymentAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
-                .await()
-                .toOption
-                .get
-
-            transactionCreatorFor(deploymentSigner)
-                .deploy(utxos, deploymentAddress, deploymentAddress)
-        }
-
-        assert(provider.submit(deployTx).await().isRight)
-
-        val scriptUtxo = provider
-            .findUtxo(address = deploymentAddress, transactionId = Some(deployTx.id))
-            .await()
-            .toOption
-            .get
+        val scriptUtxo = deployScript(provider)
 
         val initTx = {
             val utxos = provider
