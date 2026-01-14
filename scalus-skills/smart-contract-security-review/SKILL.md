@@ -55,6 +55,7 @@ For detailed patterns and code examples, see `references/vulnerabilities.md`.
 | V010 | Other Redeemer Attack | Bypass via different redeemer | Multiple script purposes |
 | V011 | Other Token Name Attack | Unauthorized token minting | Policy doesn't check all tokens |
 | V012 | Missing UTxO Authentication | Fake UTxO injection | No auth token verification |
+| V025 | Oracle Data Validation | Price manipulation, stale data | Oracle data without signature/freshness |
 
 ### Medium Severity
 
@@ -65,6 +66,7 @@ For detailed patterns and code examples, see `references/vulnerabilities.md`.
 | V015 | Datum Mutation | Unauthorized state change | No field comparison |
 | V016 | Insufficient Staking Control | Reward redirection | No staking credential check |
 | V017 | Arbitrary Datum | Unspendable UTxOs | No datum validation |
+| V024 | Parameterization Verification | Script substitution (varies) | ParameterizedValidator with auth params, no token |
 
 ### Low Severity / Design Issues
 
@@ -73,7 +75,7 @@ For detailed patterns and code examples, see `references/vulnerabilities.md`.
 | V018 | Unbounded Value | UTxO size limit | Unlimited tokens in output |
 | V019 | Unbounded Datum | Resource exhaustion | Growing datum size |
 | V020 | Unbounded Inputs | TX limit exceeded | Many required UTxOs |
-| V021 | UTxO Contention | Bottleneck | Shared global state |
+| V021 | UTxO Contention / Concurrency DoS | Bottleneck, DoS | Shared global state, no rate limit |
 | V022 | Cheap Spam/Dust | Operation obstruction | No minimum amounts |
 | V023 | Locked Value | Permanent lock | Missing exit paths |
 

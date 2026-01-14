@@ -20,21 +20,23 @@ Based on Cardano Developer Portal security guidelines and Scalus-specific patter
 10. [V010: Other Redeemer Attack](#v010-other-redeemer-attack)
 11. [V011: Other Token Name Attack](#v011-other-token-name-attack)
 12. [V012: Missing UTxO Authentication](#v012-missing-utxo-authentication)
+13. [V025: Oracle Data Validation](#v025-oracle-data-validation)
 
 ### Medium
-13. [V013: Time Handling](#v013-time-handling)
-14. [V014: Missing Signature Validation](#v014-missing-signature-validation)
-15. [V015: Datum Mutation Not Validated](#v015-datum-mutation-not-validated)
-16. [V016: Insufficient Staking Control](#v016-insufficient-staking-control)
-17. [V017: Arbitrary Datum](#v017-arbitrary-datum)
+14. [V013: Time Handling](#v013-time-handling)
+15. [V014: Missing Signature Validation](#v014-missing-signature-validation)
+16. [V015: Datum Mutation Not Validated](#v015-datum-mutation-not-validated)
+17. [V016: Insufficient Staking Control](#v016-insufficient-staking-control)
+18. [V017: Arbitrary Datum](#v017-arbitrary-datum)
+19. [V024: Parameterization Verification](#v024-parameterization-verification)
 
 ### Low / Design Issues
-18. [V018: Unbounded Value](#v018-unbounded-value)
-19. [V019: Unbounded Datum](#v019-unbounded-datum)
-20. [V020: Unbounded Inputs](#v020-unbounded-inputs)
-21. [V021: UTxO Contention](#v021-utxo-contention)
-22. [V022: Cheap Spam / Dust Attack](#v022-cheap-spam--dust-attack)
-23. [V023: Locked Value](#v023-locked-value)
+20. [V018: Unbounded Value](#v018-unbounded-value)
+21. [V019: Unbounded Datum](#v019-unbounded-datum)
+22. [V020: Unbounded Inputs](#v020-unbounded-inputs)
+23. [V021: UTxO Contention / EUTXO Concurrency DoS](#v021-utxo-contention--eutxo-concurrency-dos)
+24. [V022: Cheap Spam / Dust Attack](#v022-cheap-spam--dust-attack)
+25. [V023: Locked Value](#v023-locked-value)
 
 ---
 
@@ -814,15 +816,93 @@ Design for bounded input requirements; use batching patterns.
 
 ---
 
-## V021: UTxO Contention
+## V021: UTxO Contention / EUTXO Concurrency DoS
 
-**Severity**: Low (Design Issue)
+**Severity**: Low-Medium (Design Issue)
 
 ### Description
-Shared global state (single UTxO) creates bottlenecks when multiple users access simultaneously.
+Shared global state (single UTxO) creates bottlenecks when multiple users access simultaneously. In the worst case, attackers can intentionally block protocol operations by repeatedly spending critical UTxOs with trivial transactions.
 
-### Mitigation
-Use per-user UTxOs or batching patterns; avoid global state where possible.
+### Attack Scenario (EUTXO Concurrency DoS)
+1. Protocol has a "global" UTxO that must be consumed for key operations
+2. Attacker monitors mempool for legitimate transactions targeting this UTxO
+3. Attacker submits competing transaction with higher fee, spending the same UTxO
+4. Attacker's transaction wins, legitimate transaction fails
+5. Attacker repeats, effectively blocking the protocol
+
+### Vulnerable Pattern
+```scala
+// Single global state UTxO - easy target for DoS
+@Compile
+object GlobalStateValidator extends Validator {
+  def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
+    // All protocol operations go through this single UTxO
+    val globalState = datum.to[GlobalState]
+    // ... update state ...
+  }
+}
+```
+
+### Mitigation Strategies
+
+**1. Per-user UTxOs**
+```scala
+// Each user has their own UTxO - no contention
+case class UserState(owner: PubKeyHash, balance: BigInt)
+
+def spend(datum: Data, redeemer: Data, ctx: TxInfo, ownRef: TxOutRef) = {
+  val state = datum.to[UserState]
+  require(ctx.isSignedBy(state.owner), "Owner must sign")
+  // User only affects their own UTxO
+}
+```
+
+**2. Batching with multiple UTxOs**
+```scala
+// Multiple identical state UTxOs - reduces contention
+// Off-chain: round-robin or random selection of which UTxO to use
+```
+
+**3. Time-locked operations**
+```scala
+// Require minimum time between state changes
+case class GlobalState(lastUpdate: POSIXTime, data: Data)
+
+def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
+  val state = datum.to[GlobalState]
+  val minInterval = POSIXTime(60000)  // 1 minute
+
+  require(
+    ctx.validRange.from > state.lastUpdate + minInterval,
+    "Must wait between updates"
+  )
+}
+```
+
+**4. Stake-based access**
+```scala
+// Require stake to interact, making DoS expensive
+require(
+  ctx.inputs.exists(i => i.value.getLovelace >= minStake),
+  "Minimum stake required"
+)
+```
+
+### Assessment Questions
+
+| # | Question | Risk Level |
+|---|----------|------------|
+| 1 | Does protocol have single "global" UTxO for critical operations? | If Yes → Medium |
+| 2 | Can anyone submit transactions affecting this UTxO? | If Yes → Higher risk |
+| 3 | Is there rate limiting or stake requirement? | If No → Higher risk |
+| 4 | Can protocol function if UTxO is temporarily blocked? | If No → Higher risk |
+
+### Detection Patterns
+Search for:
+- Single validator handling all protocol state
+- No per-user state separation
+- Missing rate limiting or stake requirements
+- Critical operations dependent on single UTxO availability
 
 ---
 
@@ -854,6 +934,241 @@ Design flaws can make funds permanently inaccessible.
 - Include emergency withdrawal mechanisms
 - Verify all state transitions have valid exits
 - Consider timeout-based fallbacks
+
+---
+
+## V024: Parameterization Verification
+
+**Severity**: Varies (assess per case)
+
+### Description
+Parameterized validators (using `ParameterizedValidator` or `DataParameterizedValidator`) include parameters that affect the script hash. On-chain code cannot cryptographically verify that parameters were correctly applied. Depending on what parameters control and what verification mechanisms exist, this may or may not be a security concern.
+
+### Assessment Process
+
+Answer these questions to determine severity:
+
+| # | Question | Impact |
+|---|----------|--------|
+| 1 | Do parameters control authorization/ownership (owner pubkey, admin key)? | If No → likely safe |
+| 2 | Is there an authentication token (NFT) verifying legitimate instances? | If Yes → mitigated |
+| 3 | Is the script hash published/verifiable through trusted channels? | If Yes → mitigated |
+| 4 | Can users independently verify correct parameters before interacting? | If Yes → mitigated |
+
+### Severity Matrix
+
+| Scenario | Severity |
+|----------|----------|
+| Parameters are only configuration (fees, thresholds, non-auth data) | Informational |
+| Auth params + authentication token present | Low |
+| Auth params + script hash verified off-chain (registry, verified UI) | Low |
+| Auth params + no token + no verification mechanism | Medium-High |
+
+### Attack Scenario (when vulnerable)
+1. Protocol uses parameterized validator with `owner: PubKeyHash` parameter
+2. Attacker deploys same validator with their own `owner` parameter
+3. Both scripts have different hashes but identical interface
+4. Users interact with attacker's version thinking it's legitimate
+5. Attacker controls the "owner" operations
+
+### Example: Low Risk (configuration only)
+```scala
+// Parameters don't control authorization - just configuration
+case class FeeConfig(feePercent: BigInt, minFee: BigInt)
+
+@Compile
+object SwapValidator extends ParameterizedValidator[FeeConfig] {
+  def spend(config: FeeConfig)(datum: Data, redeemer: Data, ctx: TxInfo) = {
+    // Fee config doesn't grant special privileges
+    val fee = calculateFee(amount, config.feePercent, config.minFee)
+    // ... validation logic
+  }
+}
+```
+
+### Example: Mitigated with Auth Token
+```scala
+case class ProtocolParams(owner: PubKeyHash, authPolicyId: PolicyId)
+
+@Compile
+object ProtocolValidator extends ParameterizedValidator[ProtocolParams] {
+  def spend(params: ProtocolParams)(datum: Data, redeemer: Data, ctx: TxInfo, ownRef: TxOutRef) = {
+    val ownInput = ctx.inputs.find(_.outRef === ownRef).get.resolved
+
+    // Auth token verifies this is a legitimate instance
+    require(
+      ownInput.value.quantityOf(params.authPolicyId, authTokenName) === BigInt(1),
+      "Authentication NFT required"
+    )
+    // Now safe to use params.owner
+  }
+}
+```
+
+### Example: Vulnerable (auth params, no verification)
+```scala
+case class VulnerableParams(owner: PubKeyHash, treasury: Address)
+
+@Compile
+object VulnerableValidator extends ParameterizedValidator[VulnerableParams] {
+  def spend(params: VulnerableParams)(datum: Data, redeemer: Data, ctx: TxInfo) = {
+    // RISKY: owner controls withdrawal but nothing verifies correct params
+    require(ctx.isSignedBy(params.owner), "Owner must sign")
+    // Attacker can deploy with their own owner and trick users
+  }
+}
+```
+
+### Secure Alternatives
+
+**Option 1: Add authentication token**
+Mint an NFT when creating the protocol instance, require it in all operations.
+
+**Option 2: Use datum for mutable auth data**
+```scala
+case class ValidatorDatum(owner: PubKeyHash, config: Config)
+
+@Compile
+object SafeValidator extends Validator {
+  def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
+    val d = datum.to[ValidatorDatum]
+    // Owner is visible in datum, users can verify before interacting
+  }
+}
+```
+
+**Option 3: Publish script hash registry**
+Maintain on-chain or verified off-chain registry of legitimate script hashes.
+
+### Detection Patterns
+Search for:
+- Classes extending `ParameterizedValidator` or `DataParameterizedValidator`
+- Parameters containing `PubKeyHash`, `Address`, or authorization-related fields
+- Missing authentication tokens for parameterized validators with auth params
+
+---
+
+## V025: Oracle Data Validation
+
+**Severity**: High (when applicable)
+
+### Description
+Contracts relying on external oracle data (prices, exchange rates, external state) must properly validate authenticity and freshness. Without proper validation, attackers can provide manipulated or stale data.
+
+### Applicability
+This vulnerability applies to contracts that:
+- Use external price feeds for liquidations, swaps, or collateral calculations
+- Rely on off-chain data signed by oracles
+- Make decisions based on external market conditions
+
+### Attack Vectors
+
+**1. Missing Signature Verification**
+Oracle data accepted without verifying it was signed by trusted oracle.
+
+**2. Stale Data Attack**
+Using outdated oracle data that no longer reflects current conditions.
+
+**3. Price Manipulation**
+Attacker manipulates oracle's data source (e.g., low-liquidity DEX) to report incorrect prices.
+
+**4. Single Oracle Dependency**
+Relying on one oracle creates single point of failure.
+
+### Vulnerable Pattern
+```scala
+def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
+  val oracleData = redeemer.to[OracleData]
+
+  // BAD: No signature verification
+  // BAD: No timestamp/freshness check
+  val price = oracleData.price
+
+  // Using unverified price for liquidation
+  if (collateralValue / price < liquidationThreshold) {
+    // Allow liquidation - attacker can trigger with fake low price
+  }
+}
+```
+
+### Secure Pattern
+```scala
+case class OracleData(
+  price: BigInt,
+  timestamp: POSIXTime,
+  signature: ByteString
+)
+
+def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
+  val oracleData = redeemer.to[OracleData]
+  val maxOracleAge = POSIXTime(300000)  // 5 minutes
+
+  // 1. Verify oracle signature
+  val message = serializeForSigning(oracleData.price, oracleData.timestamp)
+  require(
+    verifyEd25519Signature(trustedOraclePubKey, message, oracleData.signature),
+    "Invalid oracle signature"
+  )
+
+  // 2. Check data freshness - oracle timestamp must be recent
+  require(
+    ctx.validRange.from - oracleData.timestamp < maxOracleAge,
+    "Oracle data too stale"
+  )
+
+  // 3. Sanity bounds on values
+  require(
+    oracleData.price > minReasonablePrice && oracleData.price < maxReasonablePrice,
+    "Price outside reasonable bounds"
+  )
+
+  // Now safe to use price
+}
+```
+
+### Multi-Oracle Pattern (for high-value protocols)
+```scala
+case class MultiOracleData(
+  oracleReadings: List[(PubKeyHash, BigInt, ByteString)],  // (oracle, price, sig)
+  timestamp: POSIXTime
+)
+
+def validateMultiOracle(
+  data: MultiOracleData,
+  trustedOracles: List[PubKeyHash],
+  minOracles: BigInt
+): BigInt = {
+  val validPrices = data.oracleReadings.filter { case (oracle, price, sig) =>
+    trustedOracles.contains(oracle) &&
+    verifySignature(oracle, (price, data.timestamp), sig)
+  }.map(_._2)
+
+  require(
+    BigInt(validPrices.length) >= minOracles,
+    "Insufficient valid oracle signatures"
+  )
+
+  // Use median to resist manipulation
+  median(validPrices)
+}
+```
+
+### Assessment Questions
+
+| # | Question | Risk Level |
+|---|----------|------------|
+| 1 | Does contract use external price/data feeds? | If No → N/A |
+| 2 | Is oracle signature verified on-chain? | If No → High |
+| 3 | Is data freshness checked? | If No → Medium |
+| 4 | Are there sanity bounds on values? | If No → Medium |
+| 5 | Is there multi-oracle redundancy? | If No → consider for high-value |
+
+### Detection Patterns
+Search for:
+- Redeemer fields containing `price`, `rate`, `oracle` without signature verification
+- External data used without `verifyEd25519Signature` or similar
+- Price-based logic (liquidation, swap rates) without freshness checks
+- Single trusted pubkey for critical price data
 
 ---
 
