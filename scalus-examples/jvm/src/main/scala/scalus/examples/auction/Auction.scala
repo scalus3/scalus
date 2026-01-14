@@ -341,10 +341,16 @@ object AuctionValidator extends Validator {
           "Seller must sign to start auction"
         )
 
-        // 2. Only one NFT token should be minted with this itemId
+        // 2. Validate ALL tokens minted under this policy (prevents Other Token Name Attack)
+        val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          txInfo.mint.quantityOf(policyId, itemId) === BigInt(1),
-          "Exactly one auction NFT must be minted"
+          mintedTokens.size === BigInt(1),
+          "Only one token name allowed per auction start"
+        )
+        val (mintedTokenName, mintedQuantity) = mintedTokens.toList.head
+        require(
+          mintedTokenName === itemId && mintedQuantity === BigInt(1),
+          "Must mint exactly one auction NFT with the specified itemId"
         )
 
         // 3. The auction end time must be in the future
