@@ -2,10 +2,9 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.Tag.EmbeddedCBOR
-import org.typelevel.paiges.Doc
-import org.typelevel.paiges.Doc.*
+import org.typelevel.paiges.Doc.text
+import scalus.utils.Pretty
 import scalus.utils.Pretty.{ctr, inParens}
-import scalus.utils.{Pretty, Style}
 
 /** Represents a reference to a script in Cardano */
 case class ScriptRef(script: Script)

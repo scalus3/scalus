@@ -35,13 +35,12 @@ enum DatumOption:
 
 object DatumOption:
     import Doc.*
-    import Pretty.inParens
 
-    /** Pretty prints DatumOption as `Hash(...)` or `Inline(...)` */
+    /** Pretty prints DatumOption - shows hash hex or inline data */
     given Pretty[DatumOption] with
         def pretty(a: DatumOption, style: Style): Doc = a match
-            case DatumOption.Hash(hash)   => text("Hash") + inParens(text(hash.toHex))
-            case DatumOption.Inline(data) => text("Inline") + inParens(text(data.toString))
+            case DatumOption.Hash(hash)   => text(hash.toHex)
+            case DatumOption.Inline(data) => Pretty[Data].pretty(data, style)
 
     /** CBOR encoder for DatumOption */
     given Encoder[DatumOption] with

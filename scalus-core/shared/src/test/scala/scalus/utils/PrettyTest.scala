@@ -179,18 +179,17 @@ class PrettyTest extends AnyFunSuite {
 
     // === DatumOption Tests ===
 
-    test("Pretty[DatumOption] Hash") {
+    test("Pretty[DatumOption] Hash shows hex") {
         val datum = DatumOption.Hash(testHash32)
         val result = datum.show
-        assert(result.startsWith("Hash("))
-        assert(result.contains("0123456789abcdef"))
+        assert(result == "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
     }
 
-    test("Pretty[DatumOption] Inline") {
+    test("Pretty[DatumOption] Inline shows data") {
         val data = scalus.builtin.Data.I(BigInt(42))
         val datum = DatumOption.Inline(data)
         val result = datum.show
-        assert(result.startsWith("Inline("))
+        assert(result == "42")
     }
 
     // === Script Tests ===

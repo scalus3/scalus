@@ -3,11 +3,15 @@ package scalus.builtin
 import io.bullet.borer
 import io.bullet.borer.Tag.{NegativeBigNum, Other, PositiveBigNum}
 import io.bullet.borer.{ByteAccess, Cbor, DataItem as DI, Decoder, Encoder, Reader, Tag}
+import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
 import scalus.builtin.Data.{B, Constr, FromData, I, Map}
 import scalus.compiler.fieldAsData
 import scalus.prelude.List as PList
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
+import scalus.utils.Pretty.{inBrackets, lit}
+import scalus.utils.{Pretty, Style}
 import upickle.default.*
 
 import java.io.InputStream
@@ -283,4 +287,25 @@ private trait DataApi {
             val bytes = summon[Flat[Array[Byte]]].decode(decode)
             Cbor.decode(bytes).to[Data].value
     end given
+
+    /** Pretty prints Data in debug format: `<constr, [args]>`, `{k: v}`, `[v]`, `123`, `"hex"` */
+    given Pretty[Data] with
+        def pretty(a: Data, style: Style): Doc = a match
+            case Constr(constr, args) =>
+                val argsDoc = fill(comma + space, args.toScalaList.map(pretty(_, style)))
+                (char('<') + lit(str(constr), style) + comma + space + inBrackets(argsDoc) + char(
+                  '>'
+                )).grouped
+            case Map(values) =>
+                val entries = values.toScalaList.map { case (k, v) =>
+                    pretty(k, style) + char(':') + space + pretty(v, style)
+                }
+                fill(comma + space, entries).tightBracketBy(char('{'), char('}'))
+            case Data.List(values) =>
+                val items = values.toScalaList.map(pretty(_, style))
+                fill(comma + space, items).tightBracketBy(char('['), char(']'))
+            case I(value) =>
+                lit(str(value), style)
+            case B(value) =>
+                lit(char('"') + text(value.toHex) + char('"'), style)
 }

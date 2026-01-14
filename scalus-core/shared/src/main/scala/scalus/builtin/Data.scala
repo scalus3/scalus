@@ -59,20 +59,20 @@ import scala.compiletime.asMatchable
   *   [[https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf Plutus Core Specification]]
   */
 sealed abstract class Data {
-    private[scalus] def showDebug: String = this match {
+
+    /** Debug string representation matching the Pretty instance format */
+    override def toString: String = this match {
         case Constr(constr, args) =>
-            s"<$constr, [${args.toScalaList.map(_.showDebug).mkString(", ")}]>"
+            s"<$constr, [${args.toScalaList.map(_.toString).mkString(", ")}]>"
         case Map(values) =>
-            s"{${values.toScalaList.map { case (k, v) => s"${k.showDebug}: ${v.showDebug}" }.mkString(", ")}}"
+            s"{${values.toScalaList.map { case (k, v) => s"$k: $v" }.mkString(", ")}}"
         case List(values) =>
-            s"[${values.toScalaList.map(_.showDebug).mkString(", ")}]"
+            s"[${values.toScalaList.map(_.toString).mkString(", ")}]"
         case I(value) =>
             s"$value"
         case B(value) =>
             s"\"${value.toHex}\""
     }
-
-    override def toString: String = showDebug
 }
 
 /** Companion object for [[Data]] providing constructors and type class instances.
@@ -181,9 +181,7 @@ object Data extends DataApi:
       *   List(PList(I(1), I(2), I(3)))
       *   }}}
       */
-    case class List(values: PList[Data]) extends Data:
-        override def toString: String =
-            s"List(${values.toScalaList.map(v => v.toString + "::").mkString}Nil)"
+    case class List(values: PList[Data]) extends Data
 
     /** Arbitrary-precision integer.
       *
@@ -215,8 +213,7 @@ object Data extends DataApi:
       *   B(ByteString.empty)
       *   }}}
       */
-    case class B(value: ByteString) extends Data:
-        override def toString: String = s"B(\"${value.toHex}\")"
+    case class B(value: ByteString) extends Data
 
     /** The unit value encoded as Data.
       *
