@@ -3,9 +3,8 @@ package scalus.examples.pricebet
 import scalus.builtin.{ByteString, Data, FromData}
 import scalus.cardano.address.Address as OffchainAddress
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.{Address as OnchainAddress, PosixTime, PubKeyHash}
+import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.uplc.PlutusV3
 import scalus.prelude.*
 

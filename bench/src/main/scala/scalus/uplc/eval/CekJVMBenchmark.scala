@@ -15,6 +15,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.concurrent.TimeUnit
+import scala.annotation.nowarn
 
 /** Benchmark for CekMachine running on JVM.
   *
@@ -35,6 +36,7 @@ class CekJVMBenchmark:
         "auction_1-4.flat"
       )
     )
+    @nowarn("msg=unset private variable")
     private var file: String = ""
     private var path: Path = null
     private var program: DeBruijnedProgram = null

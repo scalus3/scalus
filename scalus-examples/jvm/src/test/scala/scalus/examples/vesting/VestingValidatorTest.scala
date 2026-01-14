@@ -6,9 +6,7 @@ import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compileWithOptions, Options}
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v1.IntervalBoundType.*
-import scalus.ledger.api.v1.Value.getLovelace
+import scalus.ledger.api.v1.Credential.ScriptCredential
 import scalus.ledger.api.v1.{Address, PubKeyHash}
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.*
@@ -524,91 +522,6 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
 
         val secondResult = compiled.runScript(scriptContext2)
         assert(secondResult.isFailure, "Second withdrawal should fail")
-    }
-
-    private def debugPrint(
-        txInfo: TxInfo,
-        vestingDatum: Config,
-        redeemer: Action
-    ): Unit = {
-        printAdaInInputs(txInfo, vestingDatum, redeemer)
-        printContractOutput(txInfo)
-        printAvailableAmout(txInfo, vestingDatum)
-    }
-
-    private def printAdaInInputs(
-        txInfo: TxInfo,
-        vestingDatum: Config,
-        redeemer: Action
-    ): Unit = {
-        println("All outputs: " + txInfo.outputs)
-        val beneficiaryOutputs = txInfo.outputs.filter(txOut =>
-            txOut.address.credential match
-                case Credential.PubKeyCredential(pkh) => pkh === vestingDatum.beneficiary
-                case _                                => false
-        )
-        println("Beneficiary Outputs: " + beneficiaryOutputs)
-        val adaInOutputs = beneficiaryOutputs
-            .map(txOut => txOut.value.getLovelace)
-            .foldLeft(BigInt(0))(_ + _)
-        println("ADA in Outputs: " + adaInOutputs)
-
-        println("All inputs: " + txInfo.inputs)
-        val beneficiaryInputs = txInfo.inputs.filter(txInInfo =>
-            txInInfo.resolved.address.credential match
-                case Credential.PubKeyCredential(pkh) => pkh === vestingDatum.beneficiary
-                case _                                => false
-        )
-        println("Beneficiary Inputs: " + beneficiaryInputs)
-        val adaInInputs = beneficiaryInputs
-            .map(txInInfo => txInInfo.resolved.value.getLovelace)
-            .foldLeft(BigInt(0))(_ + _)
-        println("Reddemer amount: " + redeemer.amount)
-        println("ADA in Inputs: " + adaInInputs)
-        println("Fee: " + txInfo.fee)
-    }
-
-    def printContractOutput(txInfo: TxInfo): Unit = {
-        val ownInput = txInfo.findOwnInputOrFail(txInfo.inputs.head.outRef).resolved
-        println("Own Input: " + ownInput)
-        val contractAddress = ownInput.address
-        println("Contract Address: " + contractAddress)
-
-        println("TxInfo.outputs: " + txInfo.outputs)
-        val contractOutputs = txInfo.outputs.filter(txOut => txOut.address === contractAddress)
-        println("Contract Outputs: " + contractOutputs)
-
-        val contractOutput = contractOutputs.head
-        println("Contract Output: " + contractOutput)
-        println("Contract Output Datum: " + contractOutput.datum)
-    }
-
-    def printAvailableAmout(txInfo: TxInfo, vestingDatum: Config): Unit = {
-        def linearVesting(timestamp: BigInt): BigInt = {
-            val min = vestingDatum.startTimestamp
-            val max = vestingDatum.startTimestamp + vestingDatum.duration
-            println("min: " + min + ", max: " + max)
-            println("timestamp: " + timestamp)
-            println("timestamp < min: " + (timestamp < min))
-            println("timestamp >= max: " + (timestamp >= max))
-
-            if timestamp < min then 0
-            else if timestamp >= max then vestingDatum.initialAmount
-            else
-                vestingDatum.initialAmount * (timestamp - vestingDatum.startTimestamp) / vestingDatum.duration
-        }
-        val txEarliestTime = txInfo.validRange.from.boundType match
-            case Finite(t) => t
-            case _         => BigInt(0)
-        val linearVestingTime = linearVesting(txEarliestTime)
-        println("Linear Vesting Time: " + linearVestingTime)
-        val ownInput = txInfo.findOwnInputOrFail(txInfo.inputs.head.outRef).resolved
-        val contractAmount = ownInput.value.getLovelace
-        println("Contract Amount: " + contractAmount)
-        val released = vestingDatum.initialAmount - contractAmount
-        println("Released Amount: " + released)
-        val availableAmount = linearVestingTime - released
-        println("Available Amount: " + availableAmount)
     }
 
 }

@@ -7,6 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.uplc.eval.ExBudget
 
 import java.util.concurrent.TimeUnit
+import scala.annotation.nowarn
 import scala.util.Try
 
 /** Benchmark for PlutusScriptEvaluator performance evaluation.
@@ -51,6 +52,7 @@ import scala.util.Try
 class PlutusScriptEvaluatorBenchmark {
 
     @Param(Array("11553070", "11544748", "11544518"))
+    @nowarn("msg=unset private variable")
     private var blockNumber: String = ""
 
     private var transactions: Seq[(Transaction, Map[TransactionInput, TransactionOutput])] =

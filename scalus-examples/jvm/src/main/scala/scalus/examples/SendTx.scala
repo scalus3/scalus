@@ -3,7 +3,6 @@ package scalus.examples
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.address.AddressProvider
 import com.bloxbean.cardano.client.api.model.Amount
-import com.bloxbean.cardano.client.backend.api.DefaultProtocolParamsSupplier
 import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
 import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
 import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService
@@ -33,9 +32,6 @@ object SendTx:
         new BFBackendService(Constants.BLOCKFROST_PREVIEW_URL, blockfrostApiKey)
 
     private val utxoSupplier = new DefaultUtxoSupplier(backendService.getUtxoService)
-    private val protocolParamsSupplier = new DefaultProtocolParamsSupplier(
-      backendService.getEpochService
-    )
 
     private def publishLockingTx(scriptAddressBech32: String, datum: Data) = {
         val tx = new Tx()

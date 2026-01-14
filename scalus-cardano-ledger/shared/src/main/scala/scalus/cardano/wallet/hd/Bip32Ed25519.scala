@@ -19,11 +19,6 @@ import scalus.crypto.{Hmac, Pbkdf2}
   */
 object Bip32Ed25519 {
 
-    /** Ed25519 group order L = 2^252 + 27742317777372353535851937790883648493 */
-    private val L: BigInt = BigInt(
-      "7237005577332262213973186563042994240857116359379907606001950938285454250989"
-    )
-
     /** Extended key containing private key components and chain code.
       *
       * @param kL

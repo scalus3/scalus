@@ -10,6 +10,9 @@ import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TxBalancingError.InsufficientFunds
 
+import scala.annotation.nowarn
+
+@nowarn("msg=deprecated")
 class ChangeTest
     extends AnyFunSuite,
       ScalaCheckPropertyChecks,
@@ -370,9 +373,9 @@ class ChangeTest
     }
 
     private def txGen(
-        inputAmount: Int = 1,
+        inputAmount: Int,
         inputSum: Value,
-        outputAmount: Int = 1,
+        outputAmount: Int,
         outputSum: Value
     ): Gen[(Utxos, Transaction)] = {
         require(inputAmount > 0, "Must have at least one input")

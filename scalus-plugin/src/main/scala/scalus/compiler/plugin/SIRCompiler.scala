@@ -1199,8 +1199,8 @@ final class SIRCompiler(
         typeFromDef: SIRType,
         pos: SrcPos,
         typeParamsMapping: Map[SIRType.TypeVar, SIRType.TypeVar],
-        typeFromDefMismatchWasFound: Boolean = false,
-        debug: Boolean = false
+        typeFromDefMismatchWasFound: Boolean,
+        debug: Boolean
     ): (SIRType, AnnotatedSIR) = {
 
         /** let we have SIR which depends on type parameters, with tyoe lile SIR.Let(x: T,

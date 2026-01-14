@@ -3,7 +3,7 @@ package scalus.examples.vesting
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.address.AddressProvider
 import com.bloxbean.cardano.client.api.model.{Amount, Result, Utxo}
-import com.bloxbean.cardano.client.backend.api.{DefaultProtocolParamsSupplier, DefaultUtxoSupplier}
+import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
 import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
 import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService
 import com.bloxbean.cardano.client.common.CardanoConstants.LOVELACE
@@ -35,9 +35,6 @@ object VestingOffChain:
         BFBackendService(Constants.BLOCKFROST_PREVIEW_URL, blockfrostApiKey)
 
     private val utxoSupplier = DefaultUtxoSupplier(backendService.getUtxoService)
-    private val protocolParamsSupplier = DefaultProtocolParamsSupplier(
-      backendService.getEpochService
-    )
 
     private inline def compiled(using options: Options) = {
         compileWithOptions(options, VestingValidator.validate)

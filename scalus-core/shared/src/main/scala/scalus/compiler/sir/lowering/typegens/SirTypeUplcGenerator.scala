@@ -167,12 +167,6 @@ object SirTypeUplcGenerator {
             case Left(_)           => false
         }
 
-    private def containsFun(
-        types: List[SIRType],
-        trace: IdentityHashMap[SIRType, SIRType]
-    ): Boolean =
-        types.exists(tp => containsFun(tp, trace))
-
     private def containsFun(tp: SIRType, trace: IdentityHashMap[SIRType, SIRType]): Boolean = {
         if !(trace.get(tp) eq null) then false
         else
@@ -191,13 +185,6 @@ object SirTypeUplcGenerator {
                 case SIRType.TypeProxy(ref) =>
                     containsFun(ref, trace)
                 case _ => false
-    }
-
-    private def containsFun(
-        constr: SIR.Constr,
-        trace: IdentityHashMap[SIRType, SIRType]
-    ): Boolean = {
-        constr.args.exists(arg => containsFun(arg.tp, trace))
     }
 
     private def containsFun(

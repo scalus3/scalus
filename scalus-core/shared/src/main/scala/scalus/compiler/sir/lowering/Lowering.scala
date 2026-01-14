@@ -502,12 +502,6 @@ object Lowering {
         case _                               => false
     }
 
-    private def isToDataType(tp: SIRType): Boolean = tp match {
-        case SIRType.Fun(_, SIRType.Data())  => true
-        case SIRType.TypeLambda(params, tp1) => isToDataType(tp1)
-        case _                               => false
-    }
-
     private def isFromDataName(name: String): Boolean = {
         name == "scalus.builtin.internal.UniversalDataConversion$.fromData"
     }

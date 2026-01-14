@@ -49,8 +49,6 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
 
     private var errorLog: List[(String, SIRPosition)] = List.empty
 
-    private var requireV3Backend: Boolean = false
-
     def retrieveErrors: List[(String, SIRPosition)] = {
         errorLog
     }

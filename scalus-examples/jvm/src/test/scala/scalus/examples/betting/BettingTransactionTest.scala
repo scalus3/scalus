@@ -44,7 +44,6 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private val player2Address = TestUtil.createTestAddress(player2Pkh)
     private val oracleAddress = TestUtil.createTestAddress(oraclePkh)
     private val deploymentAddress = TestUtil.createTestAddress(deploymentPkh)
-    private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     // Transaction creator factories
     private def transactionCreatorFor(signer: TransactionSigner) = BettingTransactionCreator(

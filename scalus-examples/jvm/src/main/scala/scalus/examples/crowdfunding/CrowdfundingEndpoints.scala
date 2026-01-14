@@ -3,7 +3,7 @@ package scalus.examples.crowdfunding
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, DatumOption, Script, ScriptHash, Transaction, Utxo, Value as LedgerValue}
+import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Script, ScriptHash, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.ledger.api.v1.PubKeyHash

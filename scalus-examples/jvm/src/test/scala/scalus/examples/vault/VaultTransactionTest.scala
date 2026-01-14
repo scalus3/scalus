@@ -26,7 +26,6 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
     private val ownerSigner = TransactionSigner(Set(ownerKeyPair))
     private val ownerPkh = AddrKeyHash(platform.blake2b_224(ownerPublicKey))
     private val ownerAddress = TestUtil.createTestAddress(ownerPkh)
-    private val changeAddress = TestUtil.createTestAddress("a" * 56)
 
     private val defaultInitialAmount: Coin = Coin.ada(10)
     private val defaultWaitTime: Long = 10_000L

@@ -7,6 +7,7 @@ import scalus.uplc.{DeBruijnedProgram, DefaultFun, Program, Term}
 
 import java.nio.file.{Files, Path, Paths}
 import java.util.concurrent.TimeUnit
+import scala.annotation.nowarn
 
 @State(Scope.Thread)
 class JITMincontBenchmark:
@@ -18,6 +19,7 @@ class JITMincontBenchmark:
         "auction_1-4.flat"
       )
     )
+    @nowarn("msg=unset private variable")
     private var file: String = ""
     private var program: DeBruijnedProgram | Null = null
     private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
@@ -48,6 +50,7 @@ class JITNativeStackBenchmark:
         "auction_1-4.flat"
       )
     )
+    @nowarn("msg=unset private variable")
     private var file: String = ""
     private var program: DeBruijnedProgram | Null = null
     private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null
@@ -78,6 +81,7 @@ class JITHybridBenchmark:
         "auction_1-4.flat"
       )
     )
+    @nowarn("msg=unset private variable")
     private var file: String = ""
     private var program: DeBruijnedProgram | Null = null
     private var jitted: (Logger, BudgetSpender, MachineParams) => Any | Null = null

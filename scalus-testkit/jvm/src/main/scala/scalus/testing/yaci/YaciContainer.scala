@@ -10,7 +10,6 @@ import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
   */
 object YaciContainer:
     private var _container: YaciCardanoContainer = _
-    private var _refCount: Int = 0
     private val lock = new Object()
 
     /** Acquire container (starts if not running, increments ref count)
@@ -24,7 +23,6 @@ object YaciContainer:
         if _container == null then
             _container = createContainer(config)
             _container.start()
-        _refCount += 1
         _container
     }
 
@@ -34,7 +32,6 @@ object YaciContainer:
       * container reuse across test runs when reuse is enabled.
       */
     def release(): Unit = lock.synchronized {
-        _refCount -= 1
         // Don't stop the container - let testcontainers/ryuk handle cleanup
         // This allows reuse across test runs when reuse is enabled
     }

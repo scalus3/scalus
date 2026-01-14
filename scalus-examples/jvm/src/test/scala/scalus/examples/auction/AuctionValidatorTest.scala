@@ -549,29 +549,6 @@ object AuctionValidatorTest extends ScalusTest {
 
     private val scriptAddress = compiledContract.address(env.network)
 
-    private def runValidator(
-        provider: Emulator,
-        tx: Transaction,
-        scriptInput: TransactionInput
-    ): Result =
-        val utxos =
-            val body = tx.body.value
-            val allInputs =
-                (body.inputs.toSet.view ++ body.collateralInputs.toSet.view ++ body.referenceInputs.toSet.view).toSet
-            provider.findUtxos(allInputs).await().toOption.get
-
-        val scriptContext = tx.getScriptContextV3(utxos, RedeemerPurpose.ForSpend(scriptInput))
-
-        val allResolvedPlutusScriptsMap =
-            AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
-        val plutusScript =
-            scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
-        val program = plutusScript.deBruijnedProgram.toProgram
-
-        val result = program.runWithDebug(scriptContext)
-        assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")
-        result
-
     /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted)
       */
     private def runValidatorWithUtxos(

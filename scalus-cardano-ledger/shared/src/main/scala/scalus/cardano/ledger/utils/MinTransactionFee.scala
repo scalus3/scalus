@@ -133,10 +133,6 @@ object MinTransactionFee {
         else totalExUnits.fee(executionUnitPrices)
     }
 
-    private def calculateTotalExUnits(transaction: Transaction): ExUnits = {
-        transaction.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
-    }
-
     // Cache the lens at object level
     private val feeLens: Lens[Transaction, Coin] =
         Focus[Transaction](_.body)

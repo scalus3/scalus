@@ -139,7 +139,7 @@ object PlutusDataSchema {
 
     private def generateForEnumLeafWithIndex(using
         Quotes
-    )(symbol: quotes.reflect.Symbol, index: Int = 0): Expr[PlutusDataSchema] =
+    )(symbol: quotes.reflect.Symbol, index: Int): Expr[PlutusDataSchema] =
 
         val params = getPrimaryConstructorParams(symbol)
 
@@ -317,27 +317,6 @@ object PlutusDataSchema {
             case _ if tpe.typeSymbol.name == "List" || tpe.typeSymbol.name == "Map" => true
             case _                                                                  => false
         }
-
-    private def isCaseClassOrEnum(using Quotes)(symbol: quotes.reflect.Symbol): Boolean =
-        import quotes.reflect.*
-
-        val isCaseClass = symbol.isClassDef && symbol.flags.is(Flags.Case)
-        val isEnum = symbol.isClassDef && symbol.flags.is(Flags.Enum)
-        val isEnumCase =
-            symbol.isClassDef && symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum)
-
-        isCaseClass || isEnum || isEnumCase
-
-    private def getConstructorParams(using
-        Quotes
-    )(symbol: quotes.reflect.Symbol): List[(String, quotes.reflect.TypeRepr)] =
-        import quotes.reflect.*
-
-        if symbol.flags.is(Flags.Enum) && !symbol.flags.is(Flags.Case) then
-            symbol.children.filter(_.flags.is(Flags.Case)).flatMap { caseSymbol =>
-                getPrimaryConstructorParams(caseSymbol)
-            }
-        else getPrimaryConstructorParams(symbol)
 
     private def getPrimaryConstructorParams(using
         Quotes

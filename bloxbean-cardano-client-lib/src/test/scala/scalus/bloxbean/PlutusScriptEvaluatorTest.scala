@@ -11,12 +11,9 @@ import scalus.cardano.ledger.*
 import scalus.compiler.compile
 import scalus.examples.PubKeyValidator
 
-import java.nio.file.Paths
 import scala.collection.immutable.SortedSet
 
 class PlutusScriptEvaluatorTest extends AnyFunSuite {
-    private val params: ProtocolParams = CardanoInfo.mainnet.protocolParams
-    private val costModels = params.costModels
 
     lazy val apiKey = System.getenv("BLOCKFROST_API_KEY") ?? sys.error(
       "BLOCKFROST_API_KEY is not set, please set it before running the test"
@@ -175,37 +172,6 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
             val expectedExUnits = expectedRedeemers(key)._2
             assert(actualExUnits.memory <= expectedExUnits.memory)
             assert(actualExUnits.steps <= expectedExUnits.steps)
-    }
-
-    private def bloxbeanResolveUtxo(tx: Transaction): Map[TransactionInput, TransactionOutput] = {
-        import com.bloxbean.cardano.client.backend.api.DefaultUtxoSupplier
-        import com.bloxbean.cardano.client.backend.blockfrost.common.Constants
-        import com.bloxbean.cardano.client.backend.blockfrost.service.BFBackendService
-
-        // this makes sure to download the utxos in the same directory that `resolveUtxoFromResources` is going to
-        // look for them in.
-        val blocksUrl = getClass.getResource("/blocks")
-        val compiledResourcesPath = Paths.get(blocksUrl.toURI).getParent
-        val resourcesPath = compiledResourcesPath.getParent.getParent.getParent
-            .resolve("src")
-            .resolve("test")
-            .resolve("resources")
-
-        val backendService =
-            new BFBackendService(Constants.BLOCKFROST_MAINNET_URL, apiKey)
-        val utxoSupplier = CachedUtxoSupplier(
-          resourcesPath.resolve("utxos"),
-          DefaultUtxoSupplier(backendService.getUtxoService)
-        )
-        // memory and file cached script supplier using the script service
-        val scriptSupplier = InMemoryCachedScriptSupplier(
-          FileScriptSupplier(
-            resourcesPath.resolve("scripts"),
-            ScriptServiceSupplier(backendService.getScriptService)
-          )
-        )
-        val utxoResolver = ScalusUtxoResolver(utxoSupplier, scriptSupplier)
-        utxoResolver.resolveUtxos(tx)
     }
 
     private def resolveUtxoFromResources(

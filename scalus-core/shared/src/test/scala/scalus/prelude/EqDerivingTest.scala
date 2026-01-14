@@ -2,7 +2,6 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.*
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.Constant.given
@@ -175,7 +174,6 @@ class EqDerivingTest extends AnyFunSuite {
     }
 
     test("Eq.derived with === extension") {
-        import scalus.prelude.===
         val p1 = EqTestPoint(1, 2)
         val p2 = EqTestPoint(1, 2)
         val p3 = EqTestPoint(1, 3)
@@ -310,7 +308,7 @@ class EqDerivingTest extends AnyFunSuite {
     }
 
     test("Eq.derived vs binders vs direct field access for sum type - budget comparison") {
-        import EqBudgetStatus.{mkPending, mkDone, mkFailed}
+        import EqBudgetStatus.{mkDone, mkFailed}
 
         given PlutusVM = PlutusVM.makePlutusV3VM()
         given scalus.compiler.Options = scalus.compiler.Options(

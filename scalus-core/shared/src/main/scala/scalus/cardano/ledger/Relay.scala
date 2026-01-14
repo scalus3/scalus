@@ -43,18 +43,6 @@ enum Relay {
 
 object Relay {
 
-    /** Validates that an IPv4 address is exactly 4 bytes.
-      */
-    private def validateIpv4(bytes: ByteString): Unit = {
-        require(bytes.size == 4, s"IPv4 address must be exactly 4 bytes, got ${bytes.size}")
-    }
-
-    /** Validates that an IPv6 address is exactly 16 bytes.
-      */
-    private def validateIpv6(bytes: ByteString): Unit = {
-        require(bytes.size == 16, s"IPv6 address must be exactly 16 bytes, got ${bytes.size}")
-    }
-
     /** Validates that a DNS name is at most 128 characters.
       */
     private def validateDnsName(name: String): Unit = {

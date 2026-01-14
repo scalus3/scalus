@@ -28,7 +28,6 @@ class PatternMatchingContext(
 ) {
 
     private var tmpNameCounter: Int = 1
-    private var scopeDepth: Int = 0 // Track nesting depth for scoped variable names
 
     private var _actionsUsageCount: Map[Int, Int] = Map.empty
     private var _guardsUsageCount: Map[Int, Int] = Map.empty

@@ -65,7 +65,7 @@ class SumTypeFieldAccessTest extends AnyFunSuite {
     )
 
     test("Pattern matching with binders compiles and runs correctly") {
-        import TestStatus.{mkDone, mkFailed}
+        import TestStatus.mkDone
 
         val sir = compile { (r1: BigInt, r2: BigInt) =>
             val s1 = mkDone(r1)
@@ -80,7 +80,7 @@ class SumTypeFieldAccessTest extends AnyFunSuite {
     }
 
     test("Direct field access on type-test bound variable should compile") {
-        import TestStatus.{mkDone, mkFailed}
+        import TestStatus.mkDone
 
         // This test documents the current limitation:
         // Direct field access on type-test bound variables for sum type children
@@ -104,7 +104,7 @@ class SumTypeFieldAccessTest extends AnyFunSuite {
     }
 
     test("Budget comparison: binders vs direct field access for sum types") {
-        import TestStatus.{mkDone, mkFailed}
+        import TestStatus.mkFailed
 
         val sirBinders = compile { (c1: BigInt, m1: String, c2: BigInt, m2: String) =>
             val s1 = mkFailed(c1, m1)

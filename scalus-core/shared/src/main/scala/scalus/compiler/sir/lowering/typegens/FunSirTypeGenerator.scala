@@ -224,12 +224,4 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
         )
     }
 
-    private def retrieveSirFun(tp: SIRType): Option[SIRType.Fun] = {
-        tp match {
-            case SIRType.Fun(input, output)  => Some(SIRType.Fun(input, output))
-            case SIRType.TypeLambda(_, body) => retrieveSirFun(body)
-            case _                           => None
-        }
-    }
-
 }

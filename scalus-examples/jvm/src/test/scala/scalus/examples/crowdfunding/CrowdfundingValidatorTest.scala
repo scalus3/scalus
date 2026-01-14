@@ -13,7 +13,6 @@ import scalus.testing.kit.ScalusTest
 class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
 
     private val crowdfundingContract = CrowdfundingContract.withErrorTraces
-    private val donationContract = DonationMintingContract.withErrorTraces
 
     test(s"Crowdfunding validator size is ${CrowdfundingContract.script.script.size} bytes") {
         println(s"Crowdfunding validator size: ${CrowdfundingContract.script.script.size} bytes")

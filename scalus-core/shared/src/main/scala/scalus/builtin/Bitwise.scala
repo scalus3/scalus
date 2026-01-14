@@ -198,13 +198,6 @@ object ByteStringToInteger:
             i += 1
         result
 
-    /** Drop trailing bytes matching a predicate when scanning from the end. */
-    private def reverseTakeWhile(bs: ByteString, p: Byte => Boolean): Array[Byte] =
-        var lastNonZeroIndex = bs.size - 1
-        while lastNonZeroIndex >= 0 && p(bs.bytes(lastNonZeroIndex)) do lastNonZeroIndex -= 1
-        if lastNonZeroIndex == -1 then Array.empty
-        else bs.bytes.slice(0, lastNonZeroIndex + 1)
-
 /** CIP-122 + shifts & rotations from CIP-123 */
 object BitwiseLogicalOperations:
     /** Bitwise AND between two byte strings.

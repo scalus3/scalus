@@ -759,7 +759,7 @@ class SIRTyper(using Context) {
             val name = typeSymbol.fullName.show
             if tpArgs.nonEmpty then {
                 val msg = s"Module type ${typeSymbol.showFullName} should not have type arguments"
-                Some(typeError(tp, msg, env, throwError = true))
+                Some(typeError(tp, msg, env))
             } else {
                 Some(SIRType.TypeNonCaseModule(name))
             }
@@ -788,9 +788,7 @@ class SIRTyper(using Context) {
     private def typeError(
         tpe: Type,
         msg: String,
-        env: SIRTypeEnv,
-        throwError: Boolean = true,
-        cause: Throwable = null
+        env: SIRTypeEnv
     ): SIRType = {
         throw TypingException(tpe, env.pos, msg)
     }
@@ -798,14 +796,12 @@ class SIRTyper(using Context) {
     private def unsupportedType(
         tpe: Type,
         msg: String,
-        env: SIRTypeEnv,
-        throwError: Boolean = true
+        env: SIRTypeEnv
     ): SIRType = {
         typeError(
           tpe,
           s"unsupported type: ${tpe.typeSymbol.showFullName} $msg at ${env.pos.sourcePos.show}",
-          env,
-          throwError
+          env
         )
     }
 

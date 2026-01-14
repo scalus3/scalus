@@ -145,9 +145,9 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
     private def context(
         balance: Value,
         redeemer: Data,
-        signatories: List[PubKeyHash] = List.Nil,
+        signatories: List[PubKeyHash],
         inputs: List[TxInInfo] = List.Nil,
-        outputs: List[TxOut] = List.Nil,
+        outputs: List[TxOut]
     ): ScriptContext = {
         val ownInput =
             TxInInfo(

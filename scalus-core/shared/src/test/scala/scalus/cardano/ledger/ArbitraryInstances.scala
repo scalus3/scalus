@@ -162,10 +162,10 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
     }
 
     private def genConfigurableMultiAsset(
-        minPolicies: Int = 1,
-        maxPolicies: Int = 8,
-        minAssets: Int = 1,
-        maxAssets: Int = 8
+        minPolicies: Int,
+        maxPolicies: Int,
+        minAssets: Int,
+        maxAssets: Int
     )(valueGen: Gen[Long]): Gen[MultiAsset] = {
         given Arbitrary[Long] = Arbitrary(valueGen)
         given [A: Arbitrary, B: Arbitrary]: Arbitrary[immutable.Map[A, B]] = Arbitrary(

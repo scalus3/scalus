@@ -686,14 +686,4 @@ object TxEvaluator {
     ): Unit = {
         // FIXME: implement
     }
-
-    /// builds a redeemer pointer (tag, index) from a script purpose by setting the tag
-    /// according to the type of the script purpose, and the index according to the
-    /// placement of script purpose inside its container.
-    private def buildRedeemerPtr(
-        tx: Transaction,
-        purpose: v1.ScriptPurpose
-    ): Option[Redeemer] = {
-        ??? // FIXME: implement
-    }
 }
