@@ -170,9 +170,19 @@ object UnorderedLinkedList extends DataParameterizedValidator:
                   range.isEntirelyBefore(cfg.deadline),
                   "Must be before the deadline"
                 )
+
+                val PubKeyHash(keyBytes) = key
+                val exactMatch = signatories.contains(key)
+                val prefixMatch = signatories.exists(sig =>
+                    val PubKeyHash(sigBytes) = sig
+                    // Check if keyBytes starts with sigBytes using Plutus ByteString operations
+                    val prefixLen = Builtins.lengthOfByteString(sigBytes)
+                    val keyPrefix = Builtins.sliceByteString(0, prefixLen, keyBytes)
+                    keyPrefix === sigBytes
+                )
                 require(
-                  signatories.contains(key),
-                  "Must be signed by a node key"
+                  exactMatch || prefixMatch,
+                  "Must be signed by node key or its prefix"
                 )
                 append(common, key, covering)
             case UnorderedNodeAction.Remove(key, covering) =>

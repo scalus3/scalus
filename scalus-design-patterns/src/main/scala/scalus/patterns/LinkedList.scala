@@ -20,7 +20,7 @@ import scalus.{show as _, *}
   * @param init
   *   An input reference that makes each initialized linked list unique.
   * @param deadline
-  *   The deadline to which royalties could be payed.
+  *   The deadline to which royalties could be paid.
   * @param penalty
   *   A payment address to pay royalties.
   */
@@ -46,18 +46,18 @@ type NodeKey = Option[TokenName]
   *   - [[scalus.prelude.Option.Some]] means a node of the linked list.
   * @param ref
   *   Has a unique link to another node's key (unless it's the last node of the list)
-  *   - [[scalus.prelude.Option.None]] means a end of the linked list (or empty head)
+  *   - [[scalus.prelude.Option.None]] means an end of the linked list (or empty head)
   *   - [[scalus.prelude.Option.Some]] contains a reference key to the next node.
+  * @param data
+  *   User data stored in this node
   *
   * @note
   *   Token present as a value asset name and as key at datum.
-  *
-  * @todo
-  *   `data: Data` field to store user data.
   */
 case class Cons(
     key: NodeKey,
-    ref: NodeKey = None
+    ref: NodeKey = None,
+    data: Data = Data.unit
 ) derives FromData,
       ToData
 
@@ -65,17 +65,18 @@ case class Cons(
 object Cons:
     /** Constructor of the [[scalus.patterns.Cons]] for a head of the linked list.
       */
-    inline def head(ref: NodeKey = None): Cons = Cons(key = None, ref)
+    inline def head(ref: NodeKey = None, data: Data = Data.unit): Cons = Cons(key = None, ref, data)
 
     /** Constructor of the [[scalus.patterns.Cons]] for a node of the linked list.
       */
-    inline def cons(key: TokenName, ref: NodeKey = None): Cons = Cons(key = Some(key), ref)
+    inline def cons(key: TokenName, ref: NodeKey = None, data: Data = Data.unit): Cons =
+        Cons(key = Some(key), ref, data)
 
-    given Eq[Cons] = (x, y) => x.key === y.key && x.ref === y.ref
+    given Eq[Cons] = (x, y) => x.key === y.key && x.ref === y.ref && x.data === y.data
 
-    given Ord[Cons] = by: node =>
-        node match
-            case Cons(key, _) => key
+    given Ord[Cons] = by { case Cons(key, _, _) =>
+        key
+    }
 
     extension (self: Cons)
 
@@ -84,19 +85,19 @@ object Cons:
           * @param at
           *   New node key, the head of linked list at current node.
           */
-        inline def chKey(at: TokenName): Cons = cons(at, self.ref)
+        inline def chKey(at: TokenName): Cons = cons(at, self.ref, self.data)
 
         /** Create a parent node
           *
           * @param by
           *   New node key, the head of tail of linked list at current node.
           */
-        inline def chRef(by: TokenName): Cons = Cons(self.key, Some(by))
+        inline def chRef(by: TokenName): Cons = Cons(self.key, Some(by), self.data)
 
-/** Every linked list node UTxO:
+/** The linked list node UTxO:
   *
   * Representation of an [[scalus.ledger.api.v2.TxOut]] of the node for the
-  * [[scalus.patterns.Common]] argument with tx's inputs and outputs.
+  * [[scalus.patterns.Common]] argument with inputs and outputs of the transactions.
   *
   * @param value
   *   Holds node's token key.
@@ -114,9 +115,9 @@ object Node:
 
     given Eq[Node] = (x, y) => x.value === y.value && x.cell === y.cell
 
-    given Ord[Node] = by: cons =>
-        cons match
-            case Node(_, cell) => cell
+    given Ord[Node] = by { case Node(_, cell) =>
+        cell
+    }
 
     extension (self: Node)
 
@@ -283,7 +284,7 @@ object OrderedLinkedList:
         /** Deinitialize an empty unordered list.
           */
     def deinit(common: Common): Unit = common.inputs match
-        case List.Cons(Node(_value, Cons(_key, None)), List.Nil) =>
+        case List.Cons(Node(_value, Cons(_key, None, _)), List.Nil) =>
             require(
               common.outputs.isEmpty,
               "Must not produce nodes"
@@ -320,16 +321,32 @@ object OrderedLinkedList:
         val (parentOut, insertNode) = common.outputs match
             case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) => fstOut.sort(sndOut)
             case _ => fail("There must be only a parent and an inserted node outputs")
+
+        // Validate key and ref structure, but allow arbitrary data in new node
         require(
-          cell.chKey(key) === insertNode.cell,
-          "The covering cell must be preserved by inserted key at outputs,\n" +
-              "the inserted key must be present at the cell of inserted node"
+          insertNode.cell.key === Some(key),
+          "The inserted key must be present at the cell of inserted node"
         )
         require(
-          parentOut === Node(parentIn.value, cell.chRef(key)),
-          "The inserted key must be referenced by the parent's key at outputs,\n" +
-              "the parent node's value must be preserved"
-        ) // NEW: cell.key === parentIn.cell.key
+          insertNode.cell.ref === cell.ref,
+          "The inserted node must have the expected ref"
+        )
+        require(
+          parentOut.cell.key === cell.key,
+          "Parent key must be preserved"
+        )
+        require(
+          parentOut.cell.ref === Some(key),
+          "The inserted key must be referenced by the parent's key at outputs"
+        )
+        require(
+          parentOut.cell.data === parentIn.cell.data,
+          "Parent data must be preserved"
+        )
+        require(
+          parentOut.value === parentIn.value,
+          "Parent node's value must be preserved"
+        )
         require(
           common.mint.flatten === List.single(
             (common.policy, nodeToken(key), BigInt(1))
@@ -494,7 +511,7 @@ object UnorderedLinkedList:
           case _                                  => fail("Node datum must be inline")
     )
 
-    /** Validatie a node output invariants.
+    /** Validate a node output invariants.
       *
       * @param policy
       *   A policy of the linked list.
@@ -558,7 +575,7 @@ object UnorderedLinkedList:
         /** Deinitialize an empty unordered list.
           */
     def deinit(common: Common): Unit = common.inputs match
-        case List.Cons(Node(_value, Cons(_key, None)), List.Nil) =>
+        case List.Cons(Node(_value, Cons(_key, None, _)), List.Nil) =>
             require(
               common.outputs.isEmpty,
               "Must not produce nodes"
@@ -595,16 +612,32 @@ object UnorderedLinkedList:
         val (parentOut, insertNode) = common.outputs match
             case List.Cons(fstOut, List.Cons(sndOut, List.Nil)) => fstOut.sortByKey(sndOut, key)
             case _ => fail("There must be only a parent and an inserted node outputs")
+
+        // Validate key and ref structure, but allow arbitrary data in new node
         require(
-          cell.chKey(key) === insertNode.cell,
-          "The covering cell must be preserved by inserted key at outputs,\n" +
-              "the inserted key must be present at the cell of inserted node"
+          insertNode.cell.key === Some(key),
+          "The inserted key must be present at the cell of inserted node"
         )
         require(
-          parentOut === Node(parentIn.value, cell.chRef(key)),
-          "The inserted key must be referenced by the parent's key at outputs,\n" +
-              "the parent node's value must be preserved"
-        ) // NEW: cell.key === parentIn.cell.key
+          insertNode.cell.ref === cell.ref,
+          "The inserted node must have the expected ref"
+        )
+        require(
+          parentOut.cell.key === cell.key,
+          "Parent key must be preserved"
+        )
+        require(
+          parentOut.cell.ref === Some(key),
+          "The inserted key must be referenced by the parent's key at outputs"
+        )
+        require(
+          parentOut.cell.data === parentIn.cell.data,
+          "Parent data must be preserved"
+        )
+        require(
+          parentOut.value === parentIn.value,
+          "Parent node's value must be preserved"
+        )
         require(
           common.mint.flatten === List.single(
             (common.policy, nodeToken(key), BigInt(1))

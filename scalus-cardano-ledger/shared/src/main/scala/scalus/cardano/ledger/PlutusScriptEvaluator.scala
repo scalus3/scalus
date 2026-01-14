@@ -519,9 +519,9 @@ object PlutusScriptEvaluator {
                 Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
             catch
                 case e: StackTraceMachineError =>
-                    //                println()
-                    //                println(s"Script ${vm.language} ${redeemer.tag} evaluation failed: ${e.getMessage}")
-                    //                println(e.env.view.reverse.take(20).mkString("\n"))
+//                    println()
+//                    println(s"Script ${vm.language} ${redeemer.tag} evaluation failed: ${e.getMessage}")
+//                    println(e.env.view.reverse.take(20).mkString("\n"))
                     throw new PlutusScriptEvaluationException(e.getMessage, e, logger.getLogs)
                 case NonFatal(e) =>
                     throw new PlutusScriptEvaluationException(e.getMessage, e, logger.getLogs)

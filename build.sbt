@@ -517,7 +517,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       // Exclude integration tests from default test runs (require external services)
       Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest")
     )
-    .configurePlatform(JVMPlatform)(_.dependsOn(`scalus-bloxbean-cardano-client-lib`))
+    .configurePlatform(JVMPlatform)(
+      _.dependsOn(`scalus-bloxbean-cardano-client-lib`, scalusDesignPatterns)
+    )
     .jvmSettings(
       Test / fork := true,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion
