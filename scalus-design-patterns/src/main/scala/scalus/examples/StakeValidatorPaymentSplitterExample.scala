@@ -12,11 +12,11 @@ import scalus.prelude.List.*
 import scalus.prelude.Option.*
 import scalus.uplc.PlutusV3
 
-/** Merkelized Payment Splitter - demonstrates the Merkelized Validators pattern.
+/** Stake Validator Payment Splitter - demonstrates the Stake Validator pattern (withdraw zero
+  * trick).
   *
   * This is an optimized version of [[scalus.examples.paymentsplitter.PaymentSplitterValidator]]
-  * that uses the "merkelized validators" pattern to reduce execution costs when spending multiple
-  * UTxOs.
+  * that uses the "stake validator" pattern to reduce execution costs when spending multiple UTxOs.
   *
   * '''The Problem:''' In the original PaymentSplitter, each UTxO spend executes the full validation
   * logic - iterating through ALL inputs and outputs. When spending N UTxOs, this results in O(N²)
@@ -30,10 +30,15 @@ import scalus.uplc.PlutusV3
   *   1. Off-chain code computes: sumContractInputs, splitPerPayee, etc.
   *   2. These values are passed in the stake validator's redeemer
   *   3. Stake validator verifies the claimed values match actual transaction
-  *   4. Spending validator just checks the stake validator ran
+  *   4. Spending validator just checks the stake validator ran (withdraw zero trick)
+  *
+  * '''Note:''' This example uses [[scalus.patterns.StakeValidator]] because the spending validator
+  * does NOT need to read any data from the stake validator's redeemer. For cases where the spending
+  * validator needs to read verified data, see [[BatchAuctionValidator]] which uses
+  * [[scalus.patterns.MerkelizedValidator]].
   *
   * @see
-  *   [[https://github.com/Anastasia-Labs/design-patterns/blob/main/merkelized-validators/merkelized-validators.md]]
+  *   [[https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator]]
   */
 
 /** Redeemer for the stake validator containing pre-computed split verification data.
@@ -57,22 +62,23 @@ case class SplitVerificationRedeemer(
 ) derives ToData,
       FromData
 
-/** Merkelized Payment Splitter Validator
+/** Stake Validator Payment Splitter Validator
   *
   * A single validator that serves both spending and reward purposes:
-  *   - '''spend:''' Minimal logic - delegates to stake validator
+  *   - '''spend:''' Minimal logic - delegates to stake validator via withdraw zero trick
   *   - '''reward:''' Heavy computation - verifies the split is correct
   *
   * @param payeesData
   *   List of payee PubKeyHashes (as Data for parameterization)
   */
 @Compile
-object MerkelizedPaymentSplitterValidator extends DataParameterizedValidator {
+object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator {
 
     /** Spending endpoint - minimal logic.
       *
       * Just verifies that the stake validator (reward endpoint) was executed. The actual validation
-      * happens in the reward endpoint.
+      * happens in the reward endpoint. Uses StakeValidator.spendMinimal since we don't need to read
+      * any data from the stake validator's redeemer.
       */
     inline override def spend(
         payeesData: Data,
@@ -171,7 +177,7 @@ object MerkelizedPaymentSplitterValidator extends DataParameterizedValidator {
     }
 }
 
-private given merkelizedPaymentSplitterOptions: Options = Options.release
+private given stakeValidatorPaymentSplitterOptions: Options = Options.release
 
-lazy val MerkelizedPaymentSplitterContract =
-    PlutusV3.compile(MerkelizedPaymentSplitterValidator.validate)
+lazy val StakeValidatorPaymentSplitterContract =
+    PlutusV3.compile(StakeValidatorPaymentSplitterValidator.validate)

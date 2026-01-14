@@ -12,8 +12,8 @@ import scalus.uplc.PlutusV3
 
 /** Batch Auction Example - demonstrates when MerkelizedValidator is useful.
   *
-  * Unlike MerkelizedPaymentSplitter (which uses StakeValidator.spendMinimal), this example shows a
-  * case where the spending validator NEEDS to read verified data from the stake validator's
+  * Unlike StakeValidatorPaymentSplitter (which uses StakeValidator.spendMinimal), this example
+  * shows a case where the spending validator NEEDS to read verified data from the stake validator's
   * redeemer.
   *
   * '''Use Case:''' A batch auction where multiple bid UTxOs are settled at once.
@@ -27,7 +27,7 @@ import scalus.uplc.PlutusV3
   *   - Using MerkelizedValidator.verifyAndGetRedeemer() allows reading this verified value
   *
   * @see
-  *   [[MerkelizedPaymentSplitterExample]] for a case where MerkelizedValidator is NOT needed
+  *   [[StakeValidatorPaymentSplitterExample]] for a case where MerkelizedValidator is NOT needed
   */
 
 /** Datum for a bid UTxO */

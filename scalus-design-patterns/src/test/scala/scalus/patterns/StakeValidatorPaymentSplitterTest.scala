@@ -5,7 +5,7 @@ import scalus.*
 import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.ExUnits
-import scalus.examples.{MerkelizedPaymentSplitterContract, SplitVerificationRedeemer}
+import scalus.examples.{SplitVerificationRedeemer, StakeValidatorPaymentSplitterContract}
 import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.ledger.api.v2.TxOut
@@ -14,15 +14,15 @@ import scalus.ledger.api.v3.ScriptInfo.{RewardingScript, SpendingScript}
 import scalus.prelude.{List, Option as POption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
-/** Tests for the Merkelized Payment Splitter pattern.
+/** Tests for the Stake Validator Payment Splitter pattern.
   *
   * Demonstrates that the pattern correctly validates payment splits while running the heavy
   * computation only once (in the reward endpoint).
   */
-class MerkelizedPaymentSplitterTest extends AnyFunSuite with ScalusTest {
+class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
     import Payee.*
 
-    private val contract = MerkelizedPaymentSplitterContract.withErrorTraces
+    private val contract = StakeValidatorPaymentSplitterContract.withErrorTraces
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]
@@ -65,7 +65,7 @@ class MerkelizedPaymentSplitterTest extends AnyFunSuite with ScalusTest {
     }
 
     test("success: multiple contract UTxOs spent in one transaction") {
-        // This is where the merkelized pattern shines - multiple UTxOs, one computation
+        // This is where the stake validator pattern shines - multiple UTxOs, one computation
         TestCase(
           payees = scala.List(A, B, C),
           contractInputs = scala.List(30L, 20L, 10L), // 3 contract UTxOs = 60 total
@@ -141,8 +141,8 @@ class MerkelizedPaymentSplitterTest extends AnyFunSuite with ScalusTest {
         ).run()
     }
 
-    test("budget comparison: merkelized vs non-merkelized with 3 UTxOs") {
-        // This test demonstrates the budget savings of the merkelized pattern
+    test("budget comparison: stake validator pattern with 3 UTxOs") {
+        // This test demonstrates the budget savings of the stake validator pattern
         // when spending multiple UTxOs
         val testCase = TestCase(
           payees = scala.List(A, B, C),
@@ -157,7 +157,7 @@ class MerkelizedPaymentSplitterTest extends AnyFunSuite with ScalusTest {
         // Run and get budget
         val (rewardBudget, spendBudget) = testCase.runWithBudget()
 
-        println(s"\n=== Merkelized Payment Splitter Budget (3 UTxOs) ===")
+        println(s"\n=== Stake Validator Payment Splitter Budget (3 UTxOs) ===")
         println(
           s"Reward endpoint (runs once):    mem=${rewardBudget.memory}, cpu=${rewardBudget.steps}"
         )
