@@ -101,6 +101,45 @@ object Pretty:
     /** Error styling (red) */
     def err(d: Doc, style: Style): Doc = d.styled(Fg.colorCode(124), style)
 
+    // === Rainbow Brackets ===
+
+    /** 16 distinct XTerm colors for rainbow brackets (red -> orange -> yellow -> green -> cyan ->
+      * blue -> purple -> magenta). Avoids colors used by other styling helpers (27=ctr, 64=lit,
+      * 172=kw).
+      */
+    private val rainbowColors: Array[Int] = Array(
+      196, // red
+      208, // orange
+      214, // light orange
+      220, // yellow-orange
+      226, // yellow
+      118, // lime
+      48, // green
+      49, // teal
+      51, // cyan
+      45, // light blue
+      39, // sky blue
+      33, // blue
+      57, // indigo (changed from 27 to avoid collision with ctr)
+      93, // purple
+      129, // magenta
+      201 // pink
+    )
+
+    /** Get rainbow color for a given nesting depth */
+    private def rainbowColor(depth: Int): paiges.Style =
+        Fg.colorCode(rainbowColors(depth % rainbowColors.length))
+
+    /** Create a bracket Doc with rainbow coloring based on depth */
+    def rainbowChar(c: Char, depth: Int, style: Style): Doc =
+        char(c).styled(rainbowColor(depth), style)
+
+    /** Wrap content in rainbow-colored brackets based on nesting depth */
+    def rainbowBracket(d: Doc, open: Char, close: Char, depth: Int, style: Style): Doc =
+        val openDoc = rainbowChar(open, depth, style)
+        val closeDoc = rainbowChar(close, depth, style)
+        d.tightBracketBy(openDoc, closeDoc, indent = 0)
+
     // === Formatting Helpers ===
 
     /** Format lovelace as ADA with 6 decimal places */

@@ -10,7 +10,7 @@ import scalus.compiler.fieldAsData
 import scalus.prelude.List as PList
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
-import scalus.utils.Pretty.{inBrackets, lit}
+import scalus.utils.Pretty.{lit, rainbowBracket}
 import scalus.utils.{Pretty, Style}
 import upickle.default.*
 
@@ -288,22 +288,36 @@ private trait DataApi {
             Cbor.decode(bytes).to[Data].value
     end given
 
-    /** Pretty prints Data in debug format: `<constr, [args]>`, `{k: v}`, `[v]`, `123`, `"hex"` */
+    /** Pretty prints Data in debug format with rainbow brackets: `<constr, [args]>`, `{k: v}`,
+      * `[v]`, `123`, `"hex"`
+      */
     given Pretty[Data] with
-        def pretty(a: Data, style: Style): Doc = a match
+        def pretty(a: Data, style: Style): Doc = prettyWithDepth(a, style, 0)
+
+        private def prettyWithDepth(a: Data, style: Style, depth: Int): Doc = a match
             case Constr(constr, args) =>
-                val argsDoc = fill(comma + space, args.toScalaList.map(pretty(_, style)))
-                (char('<') + lit(str(constr), style) + comma + space + inBrackets(argsDoc) + char(
-                  '>'
-                )).grouped
+                val argsDoc =
+                    fill(comma + space, args.toScalaList.map(prettyWithDepth(_, style, depth + 1)))
+                val inner = lit(str(constr), style) + comma & rainbowBracket(
+                  argsDoc,
+                  '[',
+                  ']',
+                  depth + 1,
+                  style
+                )
+                rainbowBracket(inner, '<', '>', depth, style).grouped
             case Map(values) =>
                 val entries = values.toScalaList.map { case (k, v) =>
-                    pretty(k, style) + char(':') + space + pretty(v, style)
+                    prettyWithDepth(k, style, depth + 1) + char(':') + space + prettyWithDepth(
+                      v,
+                      style,
+                      depth + 1
+                    )
                 }
-                fill(comma + space, entries).tightBracketBy(char('{'), char('}'))
+                rainbowBracket(fill(comma + space, entries), '{', '}', depth, style).grouped
             case Data.List(values) =>
-                val items = values.toScalaList.map(pretty(_, style))
-                fill(comma + space, items).tightBracketBy(char('['), char(']'))
+                val items = values.toScalaList.map(prettyWithDepth(_, style, depth + 1))
+                rainbowBracket(fill(comma + space, items), '[', ']', depth, style).grouped
             case I(value) =>
                 lit(str(value), style)
             case B(value) =>
