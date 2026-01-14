@@ -43,8 +43,10 @@ enum Action derives FromData, ToData:
     case Join
 
     /** Action for the oracle to announce the winner and trigger payout
-      * @param winner The winner's public key hash (must be player1 or player2)
-      * @param payoutOutputIdx Index of the payout output in tx.outputs (V005 fix: prevents double satisfaction)
+      * @param winner
+      *   The winner's public key hash (must be player1 or player2)
+      * @param payoutOutputIdx
+      *   Index of the payout output in tx.outputs (V005 fix: prevents double satisfaction)
       */
     case AnnounceWinner(winner: PubKeyHash, payoutOutputIdx: BigInt)
 
@@ -95,7 +97,10 @@ object BettingValidator extends Validator {
                 ) = txInfo
                     .findOwnScriptOutputs(scriptHash)
                     .match
-                        case List.Cons(TxOut(outAddr, outValue, OutputDatum(newDatum), _), List.Nil) =>
+                        case List.Cons(
+                              TxOut(outAddr, outValue, OutputDatum(newDatum), _),
+                              List.Nil
+                            ) =>
                             (outAddr, outValue, newDatum.to[Config])
                         case _ =>
                             fail(
