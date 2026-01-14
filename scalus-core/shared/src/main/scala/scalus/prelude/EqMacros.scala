@@ -151,8 +151,10 @@ private object EqMacros {
                                 )
 
                                 CaseDef(lhsPattern, None, rhsMatch)
-            else if caseFields.isEmpty then
-                // Singleton (case object or parameterless case)
+            else if caseFields.isEmpty && (childSym.flags.is(Flags.Module) ||
+                    childSym.companionModule.methodMember("unapply").isEmpty)
+            then
+                // Singleton: case object or enum case without fields
                 val childIdent = Ident(childSym.termRef)
 
                 val rhsMatch = Match(

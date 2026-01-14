@@ -99,15 +99,21 @@ class PatternMatchingContext(
                 countActionUsage(i)
             case _ =>
         }
-        val binding = row.patterns.zip(columnBinding).foldLeft(Map.empty[VariableKey, String]) {
-            case (m, (p, cb)) =>
-                p.optNameInfo match {
-                    case None => m
-                    case Some(nameInfo) =>
-                        val key = VariableKey(nameInfo.name, nameInfo.symbol)
-                        m + (key -> cb.name)
-                }
-        }
+        val binding = row.patterns
+            .zip(columnBinding)
+            .foldLeft(Map.empty[VariableKey, SirCaseDecisionTree.BindingTarget]) {
+                case (m, (p, cb)) =>
+                    p.optNameInfo match {
+                        case None => m
+                        case Some(nameInfo) =>
+                            val key = VariableKey(nameInfo.name, nameInfo.symbol)
+                            // Check if alias type differs from column binding type
+                            val narrowedType =
+                                if !(nameInfo.tp ~=~ cb.tp) then Some(nameInfo.tp)
+                                else None
+                            m + (key -> SirCaseDecisionTree.BindingTarget(cb.name, narrowedType))
+                    }
+            }
         SirCaseDecisionTree.Leaf(binding, row.actionRef, row.pos)
     }
 
@@ -349,13 +355,19 @@ object SirParsedCase:
         scalaName: Option[String],
         tp: SIRType,
         symbol: Option[Symbol],
-        aliases: Set[BindingNameInfo] = Set.empty
+        aliases: Set[BindingNameInfo] = Set.empty,
+        // Maps field names to extracted binding names for type-test pattern aliases
+        // e.g., if pattern is `case x: Done => x.result`, fieldBindings = Map("result" -> "_result_1")
+        fieldBindings: Map[String, String] = Map.empty
     ) {
 
         def variableKey: VariableKey = VariableKey(name, symbol)
 
         def withAlias(alias: BindingNameInfo): BindingNameInfo =
             this.copy(aliases = this.aliases + alias)
+
+        def withFieldBindings(bindings: Map[String, String]): BindingNameInfo =
+            this.copy(fieldBindings = this.fieldBindings ++ bindings)
 
         def show: String = {
             val symbolStr = symbol match {
@@ -451,15 +463,18 @@ object SirCaseDecisionTree:
     ) extends SirCaseDecisionTree
 
     case class CheckGuard(
-        bingingMap: Map[VariableKey, String], // Use VariableKey to distinguish shadowed variables
+        bingingMap: Map[VariableKey, BindingTarget],
         guard: Int,
         pos: SrcPos,
         nextTrue: SirCaseDecisionTree,
         nextFalse: Option[SirCaseDecisionTree]
     ) extends SirCaseDecisionTree
 
+    // Binding target: column name and optional narrowed type (if alias type differs from column type)
+    case class BindingTarget(columnName: String, narrowedType: Option[SIRType])
+
     case class Leaf(
-        binding: Map[VariableKey, String], // Use VariableKey to distinguish shadowed variables
+        binding: Map[VariableKey, BindingTarget],
         action: SirParsedCase.ActionRef,
         pos: SrcPos
     ) extends SirCaseDecisionTree
@@ -781,16 +796,20 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                       tptSirType
                     )
                 } else
+                    // Update the binding's type to the narrowed type (tptSirType)
+                    // so that field access on the alias uses the case class type, not the sum type
+                    val narrowedBindingInfo =
+                        optBindingNameInfo.map(info => info.copy(tp = tptSirType))
                     val innerPattern = parsePatternInOptBind(
                       ctx,
                       inner,
-                      optBindingNameInfo,
+                      narrowedBindingInfo,
                       inner.sourcePos,
                       tptSirType
                     )
                     SirParsedCase.Pattern.TypeSelector(
                       tptSirType,
-                      optBindingNameInfo,
+                      narrowedBindingInfo,
                       innerPattern,
                       pos
                     )
@@ -1104,7 +1123,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             optNextReference.foreach(ref => ctx.countDecisionTreeRefUsage(ref.index))
             optNextReference getOrElse {
                 SirCaseDecisionTree.Leaf(
-                  Map.empty,
+                  Map.empty[VariableKey, SirCaseDecisionTree.BindingTarget],
                   SirParsedCase.ActionRef.FailMatch,
                   ctx.topLevelPos
                 )
@@ -1457,7 +1476,30 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
               Set.empty
             )
         )
-        val newColumnBindings = prevGroup.columnBindings ++ constructorBindings
+
+        // Build field name -> extracted binding name mapping for type-test pattern aliases
+        val fieldBindingsMap: Map[String, String] = cc.constrDecl.params
+            .zip(constructorBindings)
+            .map { case (param, binding) => param.name -> binding.name }
+            .toMap
+
+        // Check if any row has a constructor pattern with an alias that needs field bindings
+        // If so, update the column binding at colIndex with the field bindings
+        val hasAliasWithFieldAccess = rows.exists { r =>
+            r.patterns(colIndex) match
+                case c: SirParsedCase.Pattern.Constructor => c.optNameInfo.isDefined
+                case _                                    => false
+        }
+
+        val updatedColumnBindings = if hasAliasWithFieldAccess then {
+            // Update the column binding to include field bindings for any aliases
+            prevGroup.columnBindings.zipWithIndex.map { case (binding, idx) =>
+                if idx == colIndex then binding.withFieldBindings(fieldBindingsMap)
+                else binding
+            }
+        } else prevGroup.columnBindings
+
+        val newColumnBindings = updatedColumnBindings ++ constructorBindings
         val newActiveColumns =
             (prevGroup.activeColumns - colIndex) ++ (nextIndex until nextIndex + constructorBindings.length)
         val newRows = rows.map { r =>
@@ -1930,13 +1972,41 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                                                 false
                                         }
                                     }
-                                    .map { case (varKey, value) => (varKey.varName, value) }
+                                    .map { case (varKey, target) => (varKey.varName, target) }
 
-                                val renamed = SIR.renameFreeVarsInExpr(
-                                  sir,
-                                  filteredBindingMap
-                                )
-                                renamed
+                                // Separate simple renames from narrowed type aliases
+                                val (narrowedAliases, simpleRenames) =
+                                    filteredBindingMap.partition(_._2.narrowedType.isDefined)
+
+                                // Simple renames: just map aliasName -> columnName
+                                val renameMap = simpleRenames.map { case (name, target) =>
+                                    (name, target.columnName)
+                                }
+
+                                val renamed = SIR.renameFreeVarsInExpr(sir, renameMap)
+
+                                // Wrap in let-bindings with Cast for narrowed type aliases
+                                val withCasts = narrowedAliases.foldLeft(renamed) {
+                                    case (body, (aliasName, target)) =>
+                                        val narrowedType = target.narrowedType.get
+                                        // Get the parent sum type for the Cast source
+                                        val parentType =
+                                            SIRType.collectProdCaseClass(narrowedType) match {
+                                                case Some((_, cc)) =>
+                                                    cc.parent.getOrElse(narrowedType)
+                                                case None => narrowedType
+                                            }
+                                        val anns = AnnotationsDecl.fromSrcPos(pos)
+                                        val columnVar = SIR.Var(target.columnName, parentType, anns)
+                                        val castExpr = SIR.Cast(columnVar, narrowedType, anns)
+                                        SIR.Let(
+                                          List(Binding(aliasName, narrowedType, castExpr)),
+                                          body,
+                                          SIR.LetFlags.None,
+                                          anns
+                                        )
+                                }
+                                withCasts
                             case SirCaseDecisionTree.EmbeddingType.ByReference =>
                                 generateActionRefApply(
                                   name,
@@ -2217,7 +2287,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
 
     private def generateGuardCondition(
         context: PatternMatchingContext,
-        bindingMap: Map[VariableKey, String],
+        bindingMap: Map[VariableKey, SirCaseDecisionTree.BindingTarget],
         guardIndex: Int,
         guardRecords: IndexedSeq[
           Option[(SirParsedGuard, SirCaseDecisionTree.EmbeddingType, String)]
@@ -2234,7 +2304,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 embedding match {
                     case SirCaseDecisionTree.EmbeddingType.Inline =>
                         val renameMap = guard.bindedVariables.map { case (n, b) =>
-                            (n, bindingMap(b.variableKey))
+                            (n, bindingMap(b.variableKey).columnName)
                         }.toMap
                         SIR.renameFreeVars(
                           guard.sir,

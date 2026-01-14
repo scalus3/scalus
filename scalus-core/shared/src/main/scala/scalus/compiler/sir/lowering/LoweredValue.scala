@@ -2257,18 +2257,23 @@ object LoweredValue {
                       inPos
                     )
                 }
-                val valueGen = lctx.typeGenerator(value.sirType)
-                val tvRepr =
+                val (tvRepr, resultRepr) =
                     if changeRepresentation then
-                        value.toRepresentation(
+                        val valueGen = lctx.typeGenerator(value.sirType)
+                        val converted = value.toRepresentation(
                           valueGen.defaultTypeVarReperesentation(value.sirType),
                           inPos
                         )
-                    else value
+                        // Use target type's default TypeVar representation for the result
+                        // DataConstr and ProdDataConstr are compatible representations
+                        val targetGen = lctx.typeGenerator(targetType)
+                        val targetTypeVarRepr = targetGen.defaultTypeVarReperesentation(targetType)
+                        (converted, targetTypeVarRepr)
+                    else (value, value.representation)
                 TypeRepresentationProxyLoweredValue(
                   tvRepr,
                   targetType,
-                  tvRepr.representation,
+                  resultRepr,
                   inPos
                 )
             }

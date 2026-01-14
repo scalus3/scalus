@@ -69,6 +69,57 @@ object EqBudgetPair:
         (lhs, rhs) match
             case (EqBudgetPair(x1, y1), EqBudgetPair(x2, y2)) => x1 === x2 && y1 === y2
 
+// Test enum for budget comparison: Eq.derived vs manual pattern matching
+enum EqBudgetStatus:
+    case Pending
+    case Done(result: BigInt)
+    case Failed(code: BigInt, message: String)
+
+@Compile
+object EqBudgetStatus:
+    // Eq.derived uses direct field access for case class variants
+    given eqDerived: Eq[EqBudgetStatus] = Eq.derived
+
+    // Manual implementation using nested pattern matching with binders (for comparison)
+    // This extracts fields via pattern matching in the inner match
+    given eqWithBinders: Eq[EqBudgetStatus] = (lhs: EqBudgetStatus, rhs: EqBudgetStatus) =>
+        lhs match
+            case EqBudgetStatus.Pending =>
+                rhs match
+                    case EqBudgetStatus.Pending => true
+                    case _                      => false
+            case EqBudgetStatus.Done(r1) =>
+                rhs match
+                    case EqBudgetStatus.Done(r2) => r1 === r2
+                    case _                       => false
+            case EqBudgetStatus.Failed(c1, m1) =>
+                rhs match
+                    case EqBudgetStatus.Failed(c2, m2) => c1 === c2 && m1 === m2
+                    case _                             => false
+
+    // Optimized implementation: type test in inner match, then direct field access
+    // This avoids the binder extraction in the inner match
+    given eqDirectFieldAccess: Eq[EqBudgetStatus] = (lhs: EqBudgetStatus, rhs: EqBudgetStatus) =>
+        lhs match
+            case EqBudgetStatus.Pending =>
+                rhs match
+                    case _: EqBudgetStatus.Pending.type => true
+                    case _                              => false
+            case lhsDone: EqBudgetStatus.Done =>
+                rhs match
+                    case rhsDone: EqBudgetStatus.Done => lhsDone.result === rhsDone.result
+                    case _                            => false
+            case lhsFailed: EqBudgetStatus.Failed =>
+                rhs match
+                    case rhsFailed: EqBudgetStatus.Failed =>
+                        lhsFailed.code === rhsFailed.code && lhsFailed.message === rhsFailed.message
+                    case _ => false
+
+    // Helper functions for creating values (needed for compile block)
+    def mkPending: EqBudgetStatus = EqBudgetStatus.Pending
+    def mkDone(r: BigInt): EqBudgetStatus = EqBudgetStatus.Done(r)
+    def mkFailed(c: BigInt, m: String): EqBudgetStatus = EqBudgetStatus.Failed(c, m)
+
 class EqDerivingTest extends AnyFunSuite {
 
     test("Eq.derived for case class - equal values") {
@@ -256,6 +307,128 @@ class EqDerivingTest extends AnyFunSuite {
 
         // For case classes, derived should be equal or better
         // (direct field access should be at least as efficient as pattern matching)
+    }
+
+    test("Eq.derived vs binders vs direct field access for sum type - budget comparison") {
+        import EqBudgetStatus.{mkPending, mkDone, mkFailed}
+
+        given PlutusVM = PlutusVM.makePlutusV3VM()
+        given scalus.compiler.Options = scalus.compiler.Options(
+          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = false,
+          optimizeUplc = true,
+          debug = false
+        )
+
+        // Compare three approaches for Failed variant (2 fields):
+        // 1. Eq.derived - current macro implementation
+        // 2. eqWithBinders - nested match with binders: case Done(r2) => r1 === r2
+        // 3. eqDirectFieldAccess - type test + direct field access: case rhsDone: Done => ... === rhsDone.result
+
+        val sirDerived = scalus.compiler.compile {
+            (code1: BigInt, msg1: String, code2: BigInt, msg2: String) =>
+                val s1 = mkFailed(code1, msg1)
+                val s2 = mkFailed(code2, msg2)
+                EqBudgetStatus.eqDerived(s1, s2)
+        }
+
+        val sirWithBinders = scalus.compiler.compile {
+            (code1: BigInt, msg1: String, code2: BigInt, msg2: String) =>
+                val s1 = mkFailed(code1, msg1)
+                val s2 = mkFailed(code2, msg2)
+                EqBudgetStatus.eqWithBinders(s1, s2)
+        }
+
+        val sirDirectAccess = scalus.compiler.compile {
+            (code1: BigInt, msg1: String, code2: BigInt, msg2: String) =>
+                val s1 = mkFailed(code1, msg1)
+                val s2 = mkFailed(code2, msg2)
+                EqBudgetStatus.eqDirectFieldAccess(s1, s2)
+        }
+
+        val programDerived = sirDerived.toUplcOptimized(false).plutusV3
+        val programWithBinders = sirWithBinders.toUplcOptimized(false).plutusV3
+        val programDirectAccess = sirDirectAccess.toUplcOptimized(false).plutusV3
+
+        // Test with equal Failed values
+        val resultDerived =
+            (programDerived $ BigInt(42).asTerm $ "error".asTerm $ BigInt(
+              42
+            ).asTerm $ "error".asTerm).term.evaluateDebug
+        val resultWithBinders =
+            (programWithBinders $ BigInt(42).asTerm $ "error".asTerm $ BigInt(
+              42
+            ).asTerm $ "error".asTerm).term.evaluateDebug
+        val resultDirectAccess =
+            (programDirectAccess $ BigInt(42).asTerm $ "error".asTerm $ BigInt(
+              42
+            ).asTerm $ "error".asTerm).term.evaluateDebug
+
+        assert(resultDerived.isSuccess, s"Derived failed: $resultDerived")
+        assert(resultWithBinders.isSuccess, s"WithBinders failed: $resultWithBinders")
+        assert(resultDirectAccess.isSuccess, s"DirectAccess failed: $resultDirectAccess")
+
+        println(s"Sum type Eq budget comparison - Failed variant (equal values):")
+        println(
+          s"  Eq.derived:          memory=${resultDerived.budget.memory}, steps=${resultDerived.budget.steps}"
+        )
+        println(
+          s"  With binders:        memory=${resultWithBinders.budget.memory}, steps=${resultWithBinders.budget.steps}"
+        )
+        println(
+          s"  Direct field access: memory=${resultDirectAccess.budget.memory}, steps=${resultDirectAccess.budget.steps}"
+        )
+        println(
+          s"  Binders vs Direct:   memory=${resultWithBinders.budget.memory - resultDirectAccess.budget.memory}, steps=${resultWithBinders.budget.steps - resultDirectAccess.budget.steps}"
+        )
+
+        // Test Done variant (single field) - simpler case
+        val sirDerivedDone = scalus.compiler.compile { (r1: BigInt, r2: BigInt) =>
+            val s1 = mkDone(r1)
+            val s2 = mkDone(r2)
+            EqBudgetStatus.eqDerived(s1, s2)
+        }
+
+        val sirBindersDone = scalus.compiler.compile { (r1: BigInt, r2: BigInt) =>
+            val s1 = mkDone(r1)
+            val s2 = mkDone(r2)
+            EqBudgetStatus.eqWithBinders(s1, s2)
+        }
+
+        val sirDirectDone = scalus.compiler.compile { (r1: BigInt, r2: BigInt) =>
+            val s1 = mkDone(r1)
+            val s2 = mkDone(r2)
+            EqBudgetStatus.eqDirectFieldAccess(s1, s2)
+        }
+
+        val programDerivedDone = sirDerivedDone.toUplcOptimized(false).plutusV3
+        val programBindersDone = sirBindersDone.toUplcOptimized(false).plutusV3
+        val programDirectDone = sirDirectDone.toUplcOptimized(false).plutusV3
+
+        val resultDerivedDone =
+            (programDerivedDone $ BigInt(42).asTerm $ BigInt(42).asTerm).term.evaluateDebug
+        val resultBindersDone =
+            (programBindersDone $ BigInt(42).asTerm $ BigInt(42).asTerm).term.evaluateDebug
+        val resultDirectDone =
+            (programDirectDone $ BigInt(42).asTerm $ BigInt(42).asTerm).term.evaluateDebug
+
+        assert(resultDerivedDone.isSuccess, s"Derived Done failed: $resultDerivedDone")
+        assert(resultBindersDone.isSuccess, s"Binders Done failed: $resultBindersDone")
+        assert(resultDirectDone.isSuccess, s"Direct Done failed: $resultDirectDone")
+
+        println(s"Sum type Eq budget comparison - Done variant (equal values):")
+        println(
+          s"  Eq.derived:          memory=${resultDerivedDone.budget.memory}, steps=${resultDerivedDone.budget.steps}"
+        )
+        println(
+          s"  With binders:        memory=${resultBindersDone.budget.memory}, steps=${resultBindersDone.budget.steps}"
+        )
+        println(
+          s"  Direct field access: memory=${resultDirectDone.budget.memory}, steps=${resultDirectDone.budget.steps}"
+        )
+        println(
+          s"  Binders vs Direct:   memory=${resultBindersDone.budget.memory - resultDirectDone.budget.memory}, steps=${resultBindersDone.budget.steps - resultDirectDone.budget.steps}"
+        )
     }
 
 }
