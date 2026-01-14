@@ -42,8 +42,11 @@ object IndexerValidator extends Validator:
         )
     }
 
-private given indexerOptions: Options = Options.release
-lazy val IndexerValidatorContract = PlutusV3.compile(IndexerValidator.validate)
+private object IndexerCompilation:
+    private given indexerOptions: Options = Options.release
+    lazy val contract = PlutusV3.compile(IndexerValidator.validate)
+
+lazy val IndexerValidatorContract = IndexerCompilation.contract
 
 /** Off-chain code demonstrating how to use SpendWithDelayedRedeemer to compute the indices. */
 object Offchain:

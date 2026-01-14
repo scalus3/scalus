@@ -177,7 +177,8 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
     }
 }
 
-private given stakeValidatorPaymentSplitterOptions: Options = Options.release
+private object StakeValidatorPaymentSplitterCompilation:
+    private given stakeValidatorPaymentSplitterOptions: Options = Options.release
+    lazy val contract = PlutusV3.compile(StakeValidatorPaymentSplitterValidator.validate)
 
-lazy val StakeValidatorPaymentSplitterContract =
-    PlutusV3.compile(StakeValidatorPaymentSplitterValidator.validate)
+lazy val StakeValidatorPaymentSplitterContract = StakeValidatorPaymentSplitterCompilation.contract

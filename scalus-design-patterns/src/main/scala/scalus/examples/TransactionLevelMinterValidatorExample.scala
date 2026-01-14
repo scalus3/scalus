@@ -74,6 +74,8 @@ object TransactionLevelMinterValidatorExample extends Validator {
     }
 }
 
-private given txLevelMinterOptions: Options = Options.release
-lazy val TransactionLevelMinterValidatorExampleContract =
-    PlutusV3.compile(TransactionLevelMinterValidatorExample.validate)
+private object TransactionLevelMinterCompilation:
+    private given txLevelMinterOptions: Options = Options.release
+    lazy val contract = PlutusV3.compile(TransactionLevelMinterValidatorExample.validate)
+
+lazy val TransactionLevelMinterValidatorExampleContract = TransactionLevelMinterCompilation.contract

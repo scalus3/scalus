@@ -163,6 +163,8 @@ object BatchAuctionValidator extends DataParameterizedValidator {
     }
 }
 
-private given batchAuctionOptions: Options = Options.release
+private object BatchAuctionCompilation:
+    private given batchAuctionOptions: Options = Options.release
+    lazy val contract = PlutusV3.compile(BatchAuctionValidator.validate)
 
-lazy val BatchAuctionContract = PlutusV3.compile(BatchAuctionValidator.validate)
+lazy val BatchAuctionContract = BatchAuctionCompilation.contract

@@ -39,5 +39,8 @@ object StakeValidatorExample extends Validator {
     }
 }
 
-private given stakeValidatorOptions: Options = Options.release
-lazy val StakeValidatorExampleContract = PlutusV3.compile(StakeValidatorExample.validate)
+private object StakeValidatorCompilation:
+    private given stakeValidatorOptions: Options = Options.release
+    lazy val contract = PlutusV3.compile(StakeValidatorExample.validate)
+
+lazy val StakeValidatorExampleContract = StakeValidatorCompilation.contract

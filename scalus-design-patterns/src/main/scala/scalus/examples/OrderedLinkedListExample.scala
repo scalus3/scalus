@@ -211,8 +211,11 @@ object OrderedLinkedList extends DataParameterizedValidator:
                   "Must satisfy removal broke phase rules"
                 )
 
-private given orderedLinkedListOptions: Options = Options.release
-lazy val OrderedLinkedListContract = PlutusV3.compile(OrderedLinkedList.validate)
+private object OrderedLinkedListCompilation:
+    private given orderedLinkedListOptions: Options = Options.release
+    lazy val contract = PlutusV3.compile(OrderedLinkedList.validate)
+
+lazy val OrderedLinkedListContract = OrderedLinkedListCompilation.contract
 
 lazy val OrderedLinkedListBlueprint: Blueprint = {
     val title = "OrderedLinkedList validator"
