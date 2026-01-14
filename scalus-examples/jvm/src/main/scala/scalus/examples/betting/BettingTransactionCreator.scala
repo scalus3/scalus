@@ -124,11 +124,13 @@ case class BettingTransactionCreator(
           delegation = ShelleyDelegationPart.Null
         )
 
+        // Payout output will be at index 0 (first output added)
+        val payoutOutputIdx = BigInt(0)
         TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxo)
             .references(scriptUtxo)
-            .spend(betUtxo, Action.AnnounceWinner(payout), Set(oraclePkh))
+            .spend(betUtxo, Action.AnnounceWinner(payout, payoutOutputIdx), Set(oraclePkh))
             .payTo(payoutAddress, betUtxo.output.value)
             .validFrom(java.time.Instant.ofEpochMilli(afterTime))
             .build(changeTo = changeAddress)

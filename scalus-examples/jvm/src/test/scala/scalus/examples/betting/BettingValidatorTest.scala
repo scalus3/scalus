@@ -68,6 +68,8 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
               datum = OutputDatum.OutputDatum(initialBettingConfig.toData)
             )
           ),
+          // Include the minted token in tx.mint
+          mint = Value(policyId, utf8"lucky_number_slevin", 1),
           signatories = List(player1),
           // 20th of July 2025 - for 5 minutes
           validRange = Interval.between(1752989540, 1752990020)
@@ -203,7 +205,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           // 1st of August 2025 - for 5 minutes
           validRange = Interval.between(1754027120, 1754027420)
         )
-        val announceWinnerAction: Action = Action.AnnounceWinner(player2)
+        val announceWinnerAction: Action = Action.AnnounceWinner(player2, BigInt(0))
         val result = contract.program.runWithDebug(
           ScriptContext(
             txInfo = testTransaction,

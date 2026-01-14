@@ -6,8 +6,8 @@ import scalus.builtin.Data.FromData
 import scalus.builtin.Data.ToData
 import scalus.builtin.ToData.*
 import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v2.OutputDatum.{NoOutputDatum, OutputDatum}
+import scalus.ledger.api.v1.Credential.ScriptCredential
+import scalus.ledger.api.v2.OutputDatum.OutputDatum
 import scalus.ledger.api.v3.*
 import scalus.prelude.*
 import scalus.{show as _, *}
@@ -42,8 +42,11 @@ enum Action derives FromData, ToData:
     /** Action for player2 to join an existing bet */
     case Join
 
-    /** Action for the oracle to announce the winner and trigger payout */
-    case AnnounceWinner(winner: PubKeyHash)
+    /** Action for the oracle to announce the winner and trigger payout
+      * @param winner The winner's public key hash (must be player1 or player2)
+      * @param payoutOutputIdx Index of the payout output in tx.outputs (V005 fix: prevents double satisfaction)
+      */
+    case AnnounceWinner(winner: PubKeyHash, payoutOutputIdx: BigInt)
 
 @Compile
 object Action
@@ -86,13 +89,14 @@ object BettingValidator extends Validator {
         redeemer.to[Action] match
             case Action.Join =>
                 val (
-                  outputLovelace,
+                  outputAddress,
+                  outputValue,
                   Config(newPlayer1, joiningPlayer, newOracle, newExpiration)
                 ) = txInfo
                     .findOwnScriptOutputs(scriptHash)
                     .match
-                        case List.Cons(TxOut(_, value, OutputDatum(newDatum), _), List.Nil) =>
-                            (value.getLovelace, newDatum.to[Config])
+                        case List.Cons(TxOut(outAddr, outValue, OutputDatum(newDatum), _), List.Nil) =>
+                            (outAddr, outValue, newDatum.to[Config])
                         case _ =>
                             fail(
                               "There must be a single continuing spent output with inline new betting config that goes to the script"
@@ -104,6 +108,16 @@ object BettingValidator extends Validator {
                 require(
                   value.policyIds.contains(scriptHash),
                   "Input must contain the bet token"
+                )
+                // V002 fix: Verify bet token is preserved in output
+                require(
+                  outputValue.policyIds.contains(scriptHash),
+                  "Output must contain the bet token"
+                )
+                // V016 fix: Verify full address including staking credential
+                require(
+                  outputAddress === address,
+                  "Output address must match input address (including staking credential)"
                 )
                 require(
                   txInfo.isSignedBy(joiningPlayer),
@@ -126,7 +140,7 @@ object BettingValidator extends Validator {
                   "Player2 cannot be the same as oracle"
                 )
                 require(
-                  outputLovelace === BigInt(2) * value.getLovelace,
+                  outputValue.getLovelace === BigInt(2) * value.getLovelace,
                   "The bet amount must double (player2 matches player1's bet)"
                 )
                 require(
@@ -140,19 +154,14 @@ object BettingValidator extends Validator {
 
             // ???: oracle can spend token to create a malformed bet, e.g. oracle === player1
             // TODO: all minted tokens should be burnt
-            case Action.AnnounceWinner(winner) =>
-                val payoutAddress = txInfo.outputs
-                    .filter:
-                        case TxOut(Address(PubKeyCredential(recipient), _), _, _, _) =>
-                            recipient !== oracle
-                        case _ => true
-                    .match
-                        case List.Cons(TxOut(payoutAddress, _, NoOutputDatum, _), List.Nil) =>
-                            payoutAddress
-                        case _ =>
-                            fail(
-                              "There's must be a single payout output with no continuing betting config"
-                            )
+            case Action.AnnounceWinner(winner, payoutOutputIdx) =>
+                // V005 fix: Use indexed lookup to prevent double satisfaction
+                require(
+                  payoutOutputIdx >= BigInt(0),
+                  "Payout output index must be non-negative"
+                )
+                val payoutOutput = txInfo.outputs.at(payoutOutputIdx)
+                val TxOut(payoutAddress, payoutValue, _, _) = payoutOutput
                 require(
                   winner === player1 || winner === player2,
                   "Winner must be either player1 or player2"
@@ -164,6 +173,11 @@ object BettingValidator extends Validator {
                 require(
                   payoutAddress === Address.fromPubKeyHash(winner),
                   "Payout goes to the winner's address"
+                )
+                // V005 fix: Verify payout contains at least this bet's value
+                require(
+                  payoutValue.getLovelace >= value.getLovelace,
+                  "Payout must contain at least the bet amount"
                 )
                 require(
                   txInfo.isSignedBy(oracle),
@@ -192,6 +206,16 @@ object BettingValidator extends Validator {
                     fail(
                       "There must be a single output with inline initial betting config that goes to the script"
                     )
+        // Validate exactly one token minted under this policy (V003/V011 fix)
+        val mintedTokens = tx.mint.tokens(policyId).toList
+        require(
+          mintedTokens.length === BigInt(1),
+          "Must mint exactly one token type under this policy"
+        )
+        require(
+          mintedTokens.head._2 === BigInt(1),
+          "Must mint exactly one token"
+        )
         require(
           tx.isSignedBy(player1),
           "Player1 must sign the transaction (they're creating the bet)"
