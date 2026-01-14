@@ -335,10 +335,12 @@ object TransactionOutput:
     /** Pretty prints TransactionOutput with address, value, and datum info */
     given Pretty[TransactionOutput] with
         def pretty(a: TransactionOutput, style: Style): Doc =
-            val addressDoc = summon[Pretty[Address]].pretty(a.address, style)
-            val valueDoc = summon[Pretty[Value]].pretty(a.value, style)
+            val addressDoc = Pretty[Address].pretty(a.address, style)
+            val valueDoc = Pretty[Value].pretty(a.value, style)
             val datumDoc = a.datumOption.fold(empty)(d =>
-                line + text("datum:") & summon[Pretty[DatumOption]].pretty(d, style)
+                line + text("datum:") & Pretty[DatumOption].pretty(d, style)
             )
-            val scriptDoc = a.scriptRef.fold(empty)(_ => line + text("scriptRef: present"))
-            (addressDoc / valueDoc.nested(2) + datumDoc.nested(2) + scriptDoc.nested(2)).grouped
+            val scriptDoc = a.scriptRef.fold(empty)(ref =>
+                line + text("scriptRef:") & Pretty[ScriptRef].pretty(ref, style)
+            )
+            (addressDoc / valueDoc + datumDoc + scriptDoc).grouped

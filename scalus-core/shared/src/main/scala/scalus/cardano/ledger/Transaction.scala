@@ -93,24 +93,24 @@ object Transaction {
     /** Pretty prints Transaction with id, body, witnesses count, and validity */
     given Pretty[Transaction] with
         def pretty(a: Transaction, style: Style): Doc =
-            val idDoc = text("Transaction") / (text("id:") & text(a.id.toHex)).nested(2)
-            val bodyDoc = (text("body:") / summon[Pretty[TransactionBody]]
+            val idDoc = text("id:") & text(a.id.toHex)
+            val bodyDoc = text("body:") / Pretty[TransactionBody]
                 .pretty(a.body.value, style)
-                .nested(2)).nested(2)
+                .indent(2)
             val witnessDoc = {
                 val ws = a.witnessSet
                 val vkeyCount = ws.vkeyWitnesses.toSet.size
                 val scriptCount = ws.nativeScripts.toMap.size + ws.plutusV1Scripts.toMap.size +
                     ws.plutusV2Scripts.toMap.size + ws.plutusV3Scripts.toMap.size
                 val redeemerCount = ws.redeemers.map(_.value.toMap.size).getOrElse(0)
-                (text("witnesses:") / stack(
+                text("witnesses:") / stack(
                   List(
                     text(s"vkeys: $vkeyCount"),
                     text(s"scripts: $scriptCount"),
                     text(s"redeemers: $redeemerCount")
                   )
-                )).nested(2)
+                ).indent(2)
             }
-            val validDoc = (text("valid:") & text(a.isValid.toString)).nested(2)
-            (idDoc / bodyDoc / witnessDoc / validDoc).grouped
+            val validDoc = text("valid:") & text(a.isValid.toString)
+            (text("Transaction") / idDoc / bodyDoc / witnessDoc / validDoc).hang(2)
 }

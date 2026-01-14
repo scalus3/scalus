@@ -779,6 +779,14 @@ object KeepRaw {
         w.output.writeBytes(value.raw)
         w
     }
+
+    /** Pretty prints KeepRaw: concise shows value only, detailed shows raw hex */
+    given [A](using p: Pretty[A]): Pretty[KeepRaw[A]] = Pretty.instanceWithDetailed(
+      concise = (kr, style) => p.pretty(kr.value, style),
+      detailed = (kr, style) =>
+          import Doc.*
+          p.prettyDetailed(kr.value, style) / Pretty.field("raw", text(kr.raw.toHex), style)
+    )
 }
 
 extension (self: KeepRaw[Data]) {

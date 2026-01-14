@@ -1,7 +1,10 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
+import org.typelevel.paiges.Doc
 import scalus.builtin.{platform, ByteString, given}
+import scalus.utils.Pretty.{ctr, inParens, lit}
+import scalus.utils.{Pretty, Style}
 
 import scala.annotation.tailrec
 
@@ -266,3 +269,25 @@ object Timelock:
       */
     def fromBlockfrostJson(json: String): Timelock =
         upickle.default.read[Timelock](json)
+
+    import Doc.*
+
+    /** Pretty prints Timelock scripts in a readable format */
+    given Pretty[Timelock] with
+        def pretty(a: Timelock, style: Style): Doc = a match
+            case Timelock.TimeStart(slot) =>
+                ctr("TimeStart", style) + inParens(lit(str(slot), style))
+            case Timelock.TimeExpire(slot) =>
+                ctr("TimeExpire", style) + inParens(lit(str(slot), style))
+            case Timelock.AllOf(xs) =>
+                val inner = fill(comma + space, xs.map(pretty(_, style)).toList)
+                (ctr("AllOf", style) + inParens(inner)).grouped
+            case Timelock.AnyOf(xs) =>
+                val inner = fill(comma + space, xs.map(pretty(_, style)).toList)
+                (ctr("AnyOf", style) + inParens(inner)).grouped
+            case Timelock.MOf(m, xs) =>
+                val scriptsDoc = fill(comma + space, xs.map(pretty(_, style)).toList)
+                val inner = lit(str(m), style) + comma + space + scriptsDoc
+                (ctr("MOf", style) + inParens(inner)).grouped
+            case Timelock.Signature(hash) =>
+                ctr("Signature", style) + inParens(Pretty[AddrKeyHash].pretty(hash, style))

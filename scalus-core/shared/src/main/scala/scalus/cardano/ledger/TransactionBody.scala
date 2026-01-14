@@ -351,26 +351,25 @@ object TransactionBody:
     /** Pretty prints TransactionBody with multi-line structured output */
     given Pretty[TransactionBody] with
         def pretty(a: TransactionBody, style: Style): Doc =
-            def inputDoc(i: TransactionInput) = summon[Pretty[TransactionInput]].pretty(i, style)
-            def outputDoc(o: TransactionOutput) = summon[Pretty[TransactionOutput]].pretty(o, style)
+            def inputDoc(i: TransactionInput) = Pretty[TransactionInput].pretty(i, style)
+            def outputDoc(o: TransactionOutput) = Pretty[TransactionOutput].pretty(o, style)
 
             val inputsDoc = Pretty.bulletList("inputs", a.inputs.toSet.toList.map(inputDoc))
 
             val outputsDoc =
                 if a.outputs.nonEmpty then
                     text("outputs:") / stack(a.outputs.zipWithIndex.map { case (o, idx) =>
-                        text(s"[$idx]") & outputDoc(o.value)
-                    }).nested(2)
+                        (text(s"[$idx]") & outputDoc(o.value)).hang(2)
+                    }).indent(2)
                 else empty
 
-            val feeDoc = Pretty.field("fee", summon[Pretty[Coin]].pretty(a.fee, style), style)
+            val feeDoc = Pretty.field("fee", Pretty[Coin].pretty(a.fee, style), style)
 
             val ttlDoc = a.ttl.fold(empty)(t => line + text(s"ttl: $t"))
             val validityStartDoc =
                 a.validityStartSlot.fold(empty)(s => line + text(s"validityStart: $s"))
-            val mintDoc = a.mint.fold(empty)(m =>
-                line + text("mint:") & summon[Pretty[MultiAsset]].pretty(m, style)
-            )
+            val mintDoc =
+                a.mint.fold(empty)(m => line + text("mint:") & Pretty[MultiAsset].pretty(m, style))
 
             val refInputsDoc =
                 Pretty.bulletList("referenceInputs", a.referenceInputs.toSet.toList.map(inputDoc))

@@ -509,9 +509,9 @@ object Certificate {
     /** Pretty prints Certificate showing the certificate type */
     given Pretty[Certificate] with
         def pretty(a: Certificate, style: Style): Doc =
-            def credDoc(c: Credential) = summon[Pretty[Credential]].pretty(c, style)
-            def drepDoc(d: DRep) = summon[Pretty[DRep]].pretty(d, style)
-            def anchorDoc(a: Anchor) = summon[Pretty[Anchor]].pretty(a, style)
+            def credDoc(c: Credential) = Pretty[Credential].pretty(c, style)
+            def drepDoc(d: DRep) = Pretty[DRep].pretty(d, style)
+            def anchorDoc(a: Anchor) = Pretty[Anchor].pretty(a, style)
             def depositDoc(c: Coin) = text(s", deposit=${formatAda(c.value)}")
             def refundDoc(c: Coin) = text(s", refund=${formatAda(c.value)}")
             def poolDoc(p: PoolKeyHash) = text(", pool=") + text(p.toHex)

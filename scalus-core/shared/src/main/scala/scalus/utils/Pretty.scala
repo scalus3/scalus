@@ -77,7 +77,7 @@ object Pretty:
     /** Bullet list field with label */
     def bulletList(label: String, items: List[Doc]): Doc =
         if items.isEmpty then empty
-        else text(label + ":") / stack(items.map(text("- ") + _)).nested(2)
+        else text(label + ":") / stack(items.map(text("- ") + _)).indent(2)
 
     // === Styling Helpers ===
 
@@ -140,12 +140,16 @@ object Pretty:
             case Some(v) => p.pretty(v, style)
             case None    => empty
 
+    given [A, B](using a: Pretty[A], b: Pretty[B]): Pretty[(A, B)] with
+        def pretty(t: (A, B), style: Style): Doc =
+            inParens(a.pretty(t._1, style) + comma & space & b.pretty(t._2, style))
+
     /** Pretty instance for Seq */
     given [A](using p: Pretty[A]): Pretty[Seq[A]] with
         def pretty(a: Seq[A], style: Style): Doc =
             if a.isEmpty then text("[]")
             else
-                fill(comma & space, a.toList.map(p.pretty(_, style)))
+                fill(comma + space, a.toList.map(p.pretty(_, style)))
                     .tightBracketBy(char('['), char(']'))
 
 /** Extension methods for types with a Pretty instance */

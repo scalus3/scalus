@@ -2,6 +2,10 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.Tag.EmbeddedCBOR
+import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
+import scalus.utils.Pretty.{ctr, inParens}
+import scalus.utils.{Pretty, Style}
 
 /** Represents a reference to a script in Cardano */
 case class ScriptRef(script: Script)
@@ -35,3 +39,18 @@ object ScriptRef:
             val script = Cbor.decode(bytes).to[Script].value
 
             ScriptRef(script)
+
+    /** Pretty prints ScriptRef with script hash (concise) or full hex (detailed) */
+    given Pretty[ScriptRef] = Pretty.instanceWithDetailed(
+      concise = (ref, style) => Pretty[Script].pretty(ref.script, style),
+      detailed = (ref, style) =>
+          ref.script match
+              case Script.Native(s) =>
+                  ctr("Native", style) + inParens(Pretty[Timelock].pretty(s, style))
+              case Script.PlutusV1(s) =>
+                  ctr("PlutusV1", style) + inParens(text(s.toHex))
+              case Script.PlutusV2(s) =>
+                  ctr("PlutusV2", style) + inParens(text(s.toHex))
+              case Script.PlutusV3(s) =>
+                  ctr("PlutusV3", style) + inParens(text(s.toHex))
+    )
