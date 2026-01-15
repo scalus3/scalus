@@ -263,7 +263,7 @@ object AuctionValidator extends Validator {
 
         currentHighestBidder match
             case Option.Some(winner) =>
-                // 2. Winner cannot be the seller (defense in depth - also checked in handleBid)
+                // 3. Winner cannot be the seller (defense in depth - also checked in handleBid)
                 require(
                   !(winner === seller),
                   "Seller cannot be the winner"
@@ -279,9 +279,17 @@ object AuctionValidator extends Validator {
                   winnerOutput.address === Address.fromPubKeyHash(winner),
                   "Winner output must go to the winner"
                 )
+                // Verify winner receives exactly this auction's NFT (prevents double satisfaction)
+                // If multiple auctions shared this output, it would have multiple NFTs
+                val totalNftsInWinnerOutput =
+                    winnerOutput.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+                require(
+                  totalNftsInWinnerOutput === BigInt(1),
+                  "Winner output must have exactly one auction NFT (no bundling)"
+                )
                 require(
                   winnerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
-                  "Winner must receive the auction NFT"
+                  "Winner must receive this auction's NFT"
                 )
 
                 // 3. Seller must receive the highest bid amount - use indexed lookup
@@ -308,9 +316,16 @@ object AuctionValidator extends Validator {
                   sellerOutput.address === Address.fromPubKeyHash(seller),
                   "Seller output must go to the seller"
                 )
+                // Verify seller receives exactly this auction's NFT (prevents double satisfaction)
+                val totalNftsInSellerOutput =
+                    sellerOutput.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+                require(
+                  totalNftsInSellerOutput === BigInt(1),
+                  "Seller output must have exactly one auction NFT (no bundling)"
+                )
                 require(
                   sellerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
-                  "Seller must receive back the auction NFT"
+                  "Seller must receive back this auction's NFT"
                 )
 
     inline override def mint(
