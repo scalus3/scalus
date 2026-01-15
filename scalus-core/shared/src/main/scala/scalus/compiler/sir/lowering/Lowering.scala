@@ -3,7 +3,7 @@ package scalus.compiler.sir.lowering
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
+import scalus.compiler.sir.lowering.typegens.{FunSirTypeGenerator, SirTypeUplcGenerator}
 import scalus.prelude.List as PList
 import scalus.pretty
 import scalus.uplc.*
@@ -322,12 +322,14 @@ object Lowering {
                         // lvCast(loweredExpr, tp, anns.pos)
                         throw ex
             case sirBuiltin @ SIR.Builtin(bn, tp, anns) =>
-                StaticLoweredValue(
-                  sirBuiltin,
-                  builtinTerms(bn),
-                  SirTypeUplcGenerator(tp).defaultRepresentation(tp),
-                  true
-                )
+                // Builtins that take Unit (like mkNilData, chooseUnit) expect Apply(builtin, Const(Unit)),
+                // not Force(builtin). So we use normalRepresentation for function types that take Unit.
+                // This includes polymorphic builtins like `chooseUnit : forall a. Unit -> a -> a`
+                val repr =
+                    if SIRType.isPolyFunOrFunUnit(tp) then
+                        FunSirTypeGenerator.normalRepresentation(tp)
+                    else SirTypeUplcGenerator(tp).defaultRepresentation(tp)
+                StaticLoweredValue(sirBuiltin, builtinTerms(bn), repr, true)
             case sirError @ SIR.Error(msg, anns, cause) =>
                 if lctx.generateErrorTraces then
                     if msg.tp != SIRType.String then

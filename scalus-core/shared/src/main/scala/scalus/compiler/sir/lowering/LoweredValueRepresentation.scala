@@ -324,139 +324,32 @@ case class InOutRepresentationPair(
   * But some builtin function accept more then one representations, because they poplymorhiocj on
   * plutus level. (i.e. have builtin type variables). For example: makeCons work with SumDataList
   * and SumPairDataList, so we need to reevaluate representation when argument type is known.
+  *
+  * LambdaRepresentation has two subtypes:
+  *   - Normal: standard lambda using LamAbs/Apply
+  *   - Delayed: unit lambda using Delay/Force (optimization for () => A)
   */
-case class LambdaRepresentation(
-    funTp: SIRType,
-    canonicalRepresentationPair: InOutRepresentationPair,
-) extends LoweredValueRepresentation {
+sealed trait LambdaRepresentation extends LoweredValueRepresentation {
+    def funTp: SIRType
+
+    /** True if this is a delayed unit lambda (uses Delay/Force instead of LamAbs/Apply) */
+    def isDelayed: Boolean
+
+    /** The output representation of the lambda */
+    def outputRepresentation: LoweredValueRepresentation
 
     override def isPackedData: Boolean = false
 
     override def isDataCentric: Boolean = false
 
-    override def isCompatibleOn(tp: SIRType, repr: LoweredValueRepresentation, pos: SIRPosition)(
-        using LoweringContext
-    ): Boolean = {
-        repr match {
-            case comparator: LambdaRepresentation =>
-                val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
-                val InOutRepresentationPair(inRepr, outRepr) = reprFun(inputType, pos)
-                val InOutRepresentationPair(otherInRepr, otherOutRepr) =
-                    comparator.reprFun(inputType, pos)
-                inRepr.isCompatibleOn(inputType, otherInRepr, pos) &&
-                outRepr.isCompatibleOn(outputType, otherOutRepr, pos)
-            case TypeVarRepresentation(isBuiltin) =>
-                isBuiltin || {
-                    val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
-                    val InOutRepresentationPair(inRepr, outRepr) = reprFun(inputType, pos)
-                    isTypeVarCompatibleOn(inputType, inRepr, pos)
-                    && isTypeVarCompatibleOn(outputType, outRepr, pos)
-                }
-            case _ => false
-        }
-
-    }
-
-    def reprFun(tp: SIRType, pos: SIRPosition)(using
-        lctx: LoweringContext
-    ): InOutRepresentationPair = {
-        SIRType.collectPolyOrFun(funTp) match
-            case Some((typeVars, input, output)) =>
-                val builtinTypeVars = typeVars.filter(_.isBuiltin)
-                if builtinTypeVars.isEmpty then {
-                    canonicalRepresentationPair
-                    // this expression is equal to canonical representation pair
-                    // in princiole, we cah recheck this in paranoid mode.
-                    // val (inputTypeVars, _) = SIRType.partitionGround(tvs, input)
-                    // val (outputTypeVars, _) = SIRType.partitionGround(tvs, output)
-                    // val nInput =
-                    //    if inputTypeVars.isEmpty then input
-                    //    else SIRType.TypeLambda(inputTypeVars, input)
-                    // val nOutput =
-                    //    if outputTypeVars.isEmpty then output
-                    //    else SIRType.TypeLambda(outputTypeVars, output)
-                    // if we have no type variables in input and output, then
-                } else
-                    // in builtin typevars we must substitute types and receive context over substituted type variables
-                    val tvGenContext = SIRType.createMinimalTypeVarGenerationContext(
-                      0L,
-                      List(funTp)
-                    )
-                    val renamedTp =
-                        if SIRType.isTypeVarsUsedIn(typeVars, tp) then
-                            val newTpTypevars =
-                                typeVars.map(tv => (tv, tvGenContext.freshCopy(tv))).toMap
-                            val renamingContext =
-                                RenamingTypeVars.makeContext(newTpTypevars, tvGenContext)
-                            RenamingTypeVars.inType(tp, renamingContext)
-                        else tp
-                    SIRUnify.topLevelUnifyType(renamedTp, input, SIRUnify.Env.empty) match {
-                        case SIRUnify.UnificationSuccess(env, unificator) =>
-                            val builtinSubstitutes = builtinTypeVars
-                                .map(tv => (tv, env.filledTypes.getOrElse(tv, tv)))
-                                .toMap
-                            val substitutedInput =
-                                SIRType.substitute(input, builtinSubstitutes, Map.empty)
-                            val substitutedOutput =
-                                SIRType.substitute(output, builtinSubstitutes, Map.empty)
-                            val (inputTypeVars, _) = SIRType.partitionGround(
-                              typeVars,
-                              substitutedInput
-                            )
-                            val newInput =
-                                if inputTypeVars.isEmpty then substitutedInput
-                                else SIRType.TypeLambda(inputTypeVars, substitutedInput)
-                            val (outputTypeVars, _) = SIRType.partitionGround(
-                              typeVars,
-                              substitutedOutput
-                            )
-                            val newOutput =
-                                if outputTypeVars.isEmpty then substitutedOutput
-                                else SIRType.TypeLambda(outputTypeVars, substitutedOutput)
-                            InOutRepresentationPair(
-                              lctx.typeGenerator(newInput).defaultRepresentation(newInput),
-                              lctx.typeGenerator(newOutput).defaultRepresentation(newOutput)
-                            )
-                        case SIRUnify.UnificationFailure(path, left, right) =>
-                            throw LoweringException(
-                              s"Can't unify function type $tp with input type $input and output type $output, " +
-                                  s"because of unification failure: ${path}.\nLeft: ${left}, Right: ${right}",
-                              pos
-                            )
-                    }
-            case None =>
-                canonicalRepresentationPair
-    }
-
-    def isTypeVarCompatibleOn(
-        tp: SIRType,
-        repr: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using LoweringContext): Boolean =
-        repr match {
-            case TypeVarRepresentation(_) => true
-            case othrLambdaRepr @ LambdaRepresentation(otherFunTp, otherCanonicalPair) =>
-                val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
-                val InOutRepresentationPair(inRepr, outRepr) =
-                    othrLambdaRepr.reprFun(inputType, pos)
-                isTypeVarCompatibleOn(inputType, inRepr, pos) &&
-                isTypeVarCompatibleOn(outputType, outRepr, pos)
-            case _ => repr.isPackedData
-        }
-
     override def isCompatibleWithType(tp: SIRType): Boolean = {
         SIRUnify.topLevelUnifyType(funTp, tp, SIRUnify.Env.empty).isSuccess
     }
 
-    override def doc: Doc = {
-        PrettyPrinter.inParens(
-          canonicalRepresentationPair.inRepr.doc + Doc.text(
-            " -> "
-          ) + canonicalRepresentationPair.outRepr.doc
-        )
-    }
+    /** Get the representation pair for a specific input type. Subtypes implement differently. */
+    def reprFun(tp: SIRType, pos: SIRPosition)(using LoweringContext): InOutRepresentationPair
 
-    private def retrieveInputAndOutputType(tp: SIRType, pos: SIRPosition): (SIRType, SIRType) = {
+    protected def retrieveInputAndOutputType(tp: SIRType, pos: SIRPosition): (SIRType, SIRType) = {
         tp match {
             case SIRType.Fun(in, out)                  => (in, out)
             case SIRType.TypeLambda(_, body)           => retrieveInputAndOutputType(body, pos)
@@ -472,6 +365,194 @@ case class LambdaRepresentation(
         }
     }
 
+    protected def isTypeVarCompatibleOn(
+        tp: SIRType,
+        repr: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using LoweringContext): Boolean =
+        repr match {
+            case TypeVarRepresentation(_) => true
+            case othrLambdaRepr: LambdaRepresentation =>
+                val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
+                val InOutRepresentationPair(inRepr, outRepr) =
+                    othrLambdaRepr.reprFun(inputType, pos)
+                isTypeVarCompatibleOn(inputType, inRepr, pos) &&
+                isTypeVarCompatibleOn(outputType, outRepr, pos)
+            case _ => repr.isPackedData
+        }
+}
+
+object LambdaRepresentation {
+
+    /** Normal lambda: LamAbs(id, body) called with Apply(f, arg). This is the standard
+      * representation for all lambdas except unit lambdas.
+      */
+    case class Normal(
+        funTp: SIRType,
+        canonicalRepresentationPair: InOutRepresentationPair
+    ) extends LambdaRepresentation {
+
+        override def isDelayed: Boolean = false
+
+        override def outputRepresentation: LoweredValueRepresentation =
+            canonicalRepresentationPair.outRepr
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean = {
+            repr match {
+                case comparator: LambdaRepresentation.Normal =>
+                    val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
+                    val InOutRepresentationPair(inRepr, outRepr) = reprFun(inputType, pos)
+                    val InOutRepresentationPair(otherInRepr, otherOutRepr) =
+                        comparator.reprFun(inputType, pos)
+                    inRepr.isCompatibleOn(inputType, otherInRepr, pos) &&
+                    outRepr.isCompatibleOn(outputType, otherOutRepr, pos)
+                case _: LambdaRepresentation.Delayed =>
+                    // Normal and Delayed are NOT compatible
+                    false
+                case TypeVarRepresentation(isBuiltin) =>
+                    isBuiltin || {
+                        val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
+                        val InOutRepresentationPair(inRepr, outRepr) = reprFun(inputType, pos)
+                        isTypeVarCompatibleOn(inputType, inRepr, pos)
+                        && isTypeVarCompatibleOn(outputType, outRepr, pos)
+                    }
+                case _ => false
+            }
+        }
+
+        override def reprFun(tp: SIRType, pos: SIRPosition)(using
+            lctx: LoweringContext
+        ): InOutRepresentationPair = {
+            SIRType.collectPolyOrFun(funTp) match
+                case Some((typeVars, input, output)) =>
+                    val builtinTypeVars = typeVars.filter(_.isBuiltin)
+                    if builtinTypeVars.isEmpty then {
+                        canonicalRepresentationPair
+                    } else
+                        // in builtin typevars we must substitute types and receive context over substituted type variables
+                        val tvGenContext = SIRType.createMinimalTypeVarGenerationContext(
+                          0L,
+                          List(funTp)
+                        )
+                        val renamedTp =
+                            if SIRType.isTypeVarsUsedIn(typeVars, tp) then
+                                val newTpTypevars =
+                                    typeVars.map(tv => (tv, tvGenContext.freshCopy(tv))).toMap
+                                val renamingContext =
+                                    RenamingTypeVars.makeContext(newTpTypevars, tvGenContext)
+                                RenamingTypeVars.inType(tp, renamingContext)
+                            else tp
+                        SIRUnify.topLevelUnifyType(renamedTp, input, SIRUnify.Env.empty) match {
+                            case SIRUnify.UnificationSuccess(env, unificator) =>
+                                val builtinSubstitutes = builtinTypeVars
+                                    .map(tv => (tv, env.filledTypes.getOrElse(tv, tv)))
+                                    .toMap
+                                val substitutedInput =
+                                    SIRType.substitute(input, builtinSubstitutes, Map.empty)
+                                val substitutedOutput =
+                                    SIRType.substitute(output, builtinSubstitutes, Map.empty)
+                                val (inputTypeVars, _) = SIRType.partitionGround(
+                                  typeVars,
+                                  substitutedInput
+                                )
+                                val newInput =
+                                    if inputTypeVars.isEmpty then substitutedInput
+                                    else SIRType.TypeLambda(inputTypeVars, substitutedInput)
+                                val (outputTypeVars, _) = SIRType.partitionGround(
+                                  typeVars,
+                                  substitutedOutput
+                                )
+                                val newOutput =
+                                    if outputTypeVars.isEmpty then substitutedOutput
+                                    else SIRType.TypeLambda(outputTypeVars, substitutedOutput)
+                                InOutRepresentationPair(
+                                  lctx.typeGenerator(newInput).defaultRepresentation(newInput),
+                                  lctx.typeGenerator(newOutput).defaultRepresentation(newOutput)
+                                )
+                            case SIRUnify.UnificationFailure(path, left, right) =>
+                                throw LoweringException(
+                                  s"Can't unify function type $tp with input type $input and output type $output, " +
+                                      s"because of unification failure: ${path}.\nLeft: ${left}, Right: ${right}",
+                                  pos
+                                )
+                        }
+                case None =>
+                    canonicalRepresentationPair
+        }
+
+        override def doc: Doc = {
+            PrettyPrinter.inParens(
+              canonicalRepresentationPair.inRepr.doc + Doc.text(
+                " -> "
+              ) + canonicalRepresentationPair.outRepr.doc
+            )
+        }
+    }
+
+    /** Delayed lambda: Delay(body) called with Force(f). This is an optimization for unit lambdas
+      * (() => A) that saves 1 CEK step per invocation. Force doesn't take an argument, so there is
+      * NO input representation.
+      */
+    case class Delayed(
+        funTp: SIRType, // Fun(Unit, resultType)
+        resultRepr: LoweredValueRepresentation
+    ) extends LambdaRepresentation {
+
+        override def isDelayed: Boolean = true
+
+        override def outputRepresentation: LoweredValueRepresentation = resultRepr
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean = {
+            repr match {
+                case other: LambdaRepresentation.Delayed =>
+                    // Both must be Delayed, then check output compatibility
+                    val (_, outputType) = retrieveInputAndOutputType(tp, pos)
+                    resultRepr.isCompatibleOn(outputType, other.resultRepr, pos)
+                case _: LambdaRepresentation.Normal =>
+                    // Normal and Delayed are NOT compatible
+                    false
+                case TypeVarRepresentation(isBuiltin) =>
+                    isBuiltin || {
+                        val (_, outputType) = retrieveInputAndOutputType(tp, pos)
+                        isTypeVarCompatibleOn(outputType, resultRepr, pos)
+                    }
+                case _ => false
+            }
+        }
+
+        /** For Delayed lambdas, reprFun returns a dummy input representation since it won't be used
+          * (Force doesn't take an argument).
+          */
+        override def reprFun(tp: SIRType, pos: SIRPosition)(using
+            LoweringContext
+        ): InOutRepresentationPair = {
+            InOutRepresentationPair(PrimitiveRepresentation.Constant, resultRepr)
+        }
+
+        override def doc: Doc = {
+            Doc.text("Delayed(") + resultRepr.doc + Doc.text(")")
+        }
+    }
+
+    /** Factory method for backwards compatibility - creates a Normal lambda representation */
+    def apply(funTp: SIRType, canonicalRepresentationPair: InOutRepresentationPair): Normal =
+        Normal(funTp, canonicalRepresentationPair)
+
+    /** Extractor for pattern matching - matches both Normal and extracts funTp and pair */
+    def unapply(lr: LambdaRepresentation): Option[(SIRType, InOutRepresentationPair)] =
+        lr match {
+            case Normal(funTp, pair) => Some((funTp, pair))
+            case Delayed(funTp, resultRepr) =>
+                Some((funTp, InOutRepresentationPair(PrimitiveRepresentation.Constant, resultRepr)))
+        }
 }
 
 sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentric: Boolean)

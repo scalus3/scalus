@@ -195,7 +195,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                             }
                         case ErrorRepresentation =>
                             TypeNothingSirTypeGenerator.toRepresentation(input, representation, pos)
-                        case LambdaRepresentation(inRepr, outRepr) =>
+                        case _: LambdaRepresentation =>
                             RepresentationProxyLoweredValue(input, representation, pos)
                         case null =>
                             throw LoweringException(
