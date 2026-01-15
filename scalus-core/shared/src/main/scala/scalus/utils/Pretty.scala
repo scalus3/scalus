@@ -191,6 +191,17 @@ object Pretty:
                 fill(comma + space, a.toList.map(p.pretty(_, style)))
                     .tightBracketBy(char('['), char(']'))
 
+    /** Pretty instance for Map (works with any scala.collection.Map) */
+    given [K, V, M[K, V] <: scala.collection.Map[K, V]](using
+        pk: Pretty[K],
+        pv: Pretty[V]
+    ): Pretty[M[K, V]] with
+        def pretty(a: M[K, V], style: Style): Doc =
+            val entries = a.toList.map { (k, v) =>
+                pk.pretty(k, style) + text(" -> ") + pv.pretty(v, style)
+            }
+            braceList(entries)
+
 /** Extension methods for types with a Pretty instance */
 extension [A](a: A)(using p: Pretty[A])
     /** Get pretty Doc (concise) */

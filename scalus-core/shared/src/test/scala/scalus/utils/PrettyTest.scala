@@ -349,4 +349,35 @@ class PrettyTest extends AnyFunSuite {
         assert(result.contains("1.000000"))
         assert(result.contains("2.000000"))
     }
+
+    // === Pretty[Map[K, V]] Tests ===
+
+    test("Pretty[Map[K, V]] empty shows {}") {
+        val map: Map[String, Int] = Map.empty
+        val result = map.show
+        assert(result == "{}")
+    }
+
+    test("Pretty[Map[K, V]] non-empty shows key -> value pairs") {
+        val map = Map("a" -> 1, "b" -> 2)
+        val result = map.show
+        assert(result.contains("a -> 1"))
+        assert(result.contains("b -> 2"))
+        assert(result.startsWith("{"))
+        assert(result.endsWith("}"))
+    }
+
+    test("Pretty[Map[K, V]] works with mutable.Map") {
+        val map = scala.collection.mutable.Map("x" -> 10)
+        val result = map.show
+        assert(result.contains("x -> 10"))
+    }
+
+    test("Pretty[Map[K, V]] works with SortedMap") {
+        val map = scala.collection.immutable.SortedMap("z" -> 3, "a" -> 1)
+        val result = map.show
+        // SortedMap maintains order
+        assert(result.contains("a -> 1"))
+        assert(result.contains("z -> 3"))
+    }
 }
