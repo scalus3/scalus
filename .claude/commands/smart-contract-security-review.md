@@ -38,8 +38,15 @@ Load the skill documentation for detailed vulnerability patterns:
 
    **Medium/Low**: Time handling, signatures, datum validation, design issues
 
-3. **Reporting Phase**
-   - Use TodoWrite to create a todo item for each issue found
+3. **False Positive Verification**
+   For each potential issue, before reporting verify it's not a false positive:
+   - Check surrounding code for mitigations (see `references/vulnerabilities.md` for false positive patterns)
+   - Look for compensating controls elsewhere in the code
+   - Verify the vulnerable pattern actually applies to this context
+   - If false positive: skip silently or note as "verified safe" with reason
+
+4. **Reporting Phase**
+   - Use TodoWrite to create a todo item for each **verified** issue found
    - Present each finding using this format:
 
    ```
@@ -61,20 +68,32 @@ Load the skill documentation for detailed vulnerability patterns:
    ```
    ```
 
-4. **Remediation Phase**
+5. **Remediation Phase**
    For each issue:
    - Show vulnerable code with exact file:line location
    - Propose secure fix with code example
-   - Ask: "Apply this fix? [y/n/s/d]"
-   - If yes: apply fix, mark todo completed
+   - Ask: "Apply this fix? [y/n/s/d/f]"
+     - y: Apply fix, mark todo completed
+     - n: Skip, log as "declined"
+     - s: Skip without logging
+     - d: Show more details (attack scenario)
+     - f: Mark as false positive (ask for reason, log to summary)
    - After all fixes: run `sbtn compile` to verify
 
-5. **Summary**
+6. **Summary**
    Generate table with clickable locations:
    ```
-   | ID | Severity | Location | Issue |
-   |----|----------|----------|-------|
-   | C-01 | Critical | `path/File.scala:123` | Description |
+   | ID | Severity | Location | Issue | Status |
+   |----|----------|----------|-------|--------|
+   | C-01 | Critical | `path/File.scala:123` | Description | Fixed |
+   | H-01 | High | `path/File.scala:87` | Description | False Positive: [reason] |
+   ```
+   - Include false positives section if any were marked:
+   ```
+   ## False Positives
+   | ID | Location | Why False Positive |
+   |----|----------|-------------------|
+   | H-01 | `path/File.scala:87` | Address check is performed in helper function `validateOutput` |
    ```
    - Assign security grade (A/B/C/D/F)
 

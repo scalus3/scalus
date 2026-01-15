@@ -94,6 +94,50 @@ Search for:
 - `txInfo.outputs` filtering without address validation
 - Continuing output handling in spend validators
 
+### Verification: Attack Transaction Tracing (REQUIRED)
+
+#### Step 1: Construct Attack Transaction
+
+```
+Attack scenario: Redirect continuing output to attacker's script
+
+Inputs:
+  - UTxO_A: 100 ADA at legitimate script, datum={owner=O, state=Active}
+
+Outputs:
+  - 100 ADA to ATTACKER's script address (not the original script!)
+
+Redeemers:
+  - UTxO_A → SomeAction(outputIdx=0)
+
+Signatories: [attacker]
+```
+
+#### Step 2: Trace Validator Execution
+
+```scala
+// Trace the code that handles continuing output:
+
+val continuingOutput = txInfo.outputs.at(outputIdx)  // → attacker's output
+
+// Is there an address check? Trace to find out:
+// LOOK FOR: require(continuingOutput.address === ???)
+
+// If NO address check exists → VULNERABLE
+// If address check uses script's own hash → SAFE
+// If address uses datum field (user-specified) → Intentional, SAFE
+```
+
+#### Step 3: Key Questions
+
+| Question | If Yes |
+|----------|--------|
+| Does code check `output.address === Address.fromScriptHash(ownHash)`? | SAFE |
+| Does code use `findOwnOutputsByCredential(scriptCredential)`? | SAFE (filters by address) |
+| Does output go to datum-specified address (e.g., `datum.beneficiary`)? | Intentional design, SAFE |
+| Is this a close/burn action with no continuing output? | V001 N/A |
+| Can attacker control the address through redeemer? | VULNERABLE |
+
 ---
 
 ## V002: Token/NFT Not Verified
@@ -142,6 +186,47 @@ Search for:
 - Contracts using `policyId` or `tokenName` without `quantityOf` checks
 - State machine patterns without token verification on transitions
 - NFT-based contracts without presence checks in continuing outputs
+
+### Verification: Attack Transaction Tracing (REQUIRED)
+
+#### Step 1: Construct Attack Transaction
+
+```
+Attack scenario: Remove NFT from continuing output
+
+Inputs:
+  - UTxO_A: 50 ADA + NFT(policyId, "state") at script, datum={state=Active}
+
+Outputs:
+  - 50 ADA to script (WITHOUT the NFT!)
+  - NFT to attacker's wallet
+
+Redeemers:
+  - UTxO_A → UpdateState
+```
+
+#### Step 2: Trace Validator Execution
+
+```scala
+// Trace the continuing output validation:
+
+val continuingOutput = txInfo.outputs.at(outputIdx)
+
+// Is there a token check? Look for:
+// require(continuingOutput.value.quantityOf(policyId, tokenName) === 1)
+
+// If NO token check → VULNERABLE (attacker keeps NFT)
+// If token check exists → SAFE
+```
+
+#### Step 3: Key Questions
+
+| Question | If Yes |
+|----------|--------|
+| Does code check `output.value.quantityOf(policyId, tokenName) === 1`? | SAFE |
+| Is this a close/burn action that burns the token? | V002 N/A |
+| Does contract use address-based ID instead of tokens? | Different design, not V002 |
+| Is token verification in a helper function that gets called? | SAFE |
 
 ---
 
@@ -205,6 +290,12 @@ Search for:
 - `mint.quantityOf` with `>=` or `<=` instead of `===`
 - Flexible burn validation allowing partial burns
 - Token minting without upper bound
+
+### False Positive Indicators
+- `>=` is intentional for "mint at least N" scenarios (check if this is the design)
+- Exact check done elsewhere in the same transaction flow
+- The flexibility is constrained by other validation (e.g., must match datum count)
+- Burning partial amount is intentional for incremental withdrawal patterns
 
 ---
 
@@ -281,6 +372,12 @@ Search for:
 - `.indexOf(` without subsequent `>= 0` check
 - `.at(idx)` where `idx` comes from user input or `indexOf`
 - List operations without bounds validation
+
+### False Positive Indicators
+- Index bounds check in a helper function (e.g., `requireFound`, `requireValidIndex`)
+- Index is guaranteed valid by construction (e.g., always 0 for single-element list)
+- Index comes from validated redeemer structure that enforces bounds
+- The `at()` call is on `txInfo.inputs` or `txInfo.outputs` where index is from script's own UTxO lookup
 
 ---
 
@@ -458,6 +555,13 @@ Search for:
 - State transitions without authorization
 - Withdrawal/cancel operations without signature validation
 
+### False Positive Indicators
+- Authorization done via NFT/token ownership instead of signature
+- The action is public by design (e.g., anyone can trigger liquidation if conditions met)
+- Signature check exists in a helper function or parent method
+- Authorization comes from spending a specific UTxO (implicit signature via spending)
+- Multi-sig or DAO-based authorization via separate validator
+
 ---
 
 ## V011: Datum Mutation Not Validated
@@ -543,6 +647,93 @@ Search for:
 - `outputs.exists` or `outputs.find` without unique linking
 - Multiple inputs expecting payment to same address
 - Missing correlation between inputs and outputs
+
+### Verification: Attack Transaction Tracing (REQUIRED)
+
+**Do NOT report based on pattern matching. You MUST construct and trace an attack transaction.**
+
+#### Step 1: Construct Attack Transaction
+
+```
+Attack scenario: Pay once, satisfy two escrows
+
+Inputs:
+  - UTxO_A: 12 ADA at script, datum={seller=S, amount=10, init=2}
+  - UTxO_B: 12 ADA at script, datum={seller=S, amount=10, init=2}
+
+Outputs:
+  - 12 ADA to seller S  (attacker pays ONCE instead of twice)
+  - 1 ADA to buyer B
+
+Redeemers:
+  - UTxO_A → Pay
+  - UTxO_B → Pay
+
+Signatories: [B]
+```
+
+#### Step 2: Trace Validator Execution
+
+Execute the validator code line-by-line with your attack transaction.
+Track what each variable evaluates to. Check if each `require()` passes.
+
+```scala
+// For UTxO_A, trace through handlePay:
+
+// What does contractBalance evaluate to?
+val contractInputs = txInfo.findOwnInputsByCredential(credential)
+// → If this returns [UTxO_A, UTxO_B], then:
+val contractBalance = getAdaFromInputs(contractInputs)  // → 24 ADA
+
+// Does this require pass?
+require(contractBalance === escrowAmount + initAmount)
+// → require(24 === 12) → FAILS ❌
+
+// Attack blocked! This is a FALSE POSITIVE.
+```
+
+#### Step 3: Write Test if Uncertain
+
+```scala
+test("V005: Double satisfaction attack") {
+  val utxoA = escrowUtxo(seller = S, amount = 10.ada)
+  val utxoB = escrowUtxo(seller = S, amount = 10.ada)
+
+  val attackTx = tx(
+    inputs = List(utxoA, utxoB),
+    outputs = List(output(S, 12.ada)),  // Pay once!
+    redeemers = Map(utxoA -> Pay, utxoB -> Pay)
+  )
+
+  // Does this pass or fail?
+  evaluate(EscrowValidator, utxoA, attackTx) shouldBe ???
+}
+```
+
+### Example Trace: EscrowValidator (FALSE POSITIVE)
+
+**Suspicious code**:
+```scala
+val sellerOutputs = txInfo.findOwnOutputsByCredential(PubKeyCredential(seller))
+require(Utils.getAdaFromOutputs(sellerOutputs) === escrowAmount + initAmount)
+```
+
+**Attack transaction**: Spend UTxO_A and UTxO_B (both 12 ADA), create single 12 ADA output to seller.
+
+**Trace execution**:
+```
+Line 57: contractInputs = findOwnInputsByCredential(scriptCredential)
+         → [UTxO_A, UTxO_B]
+
+Line 58: contractBalance = getAdaFromInputs(contractInputs)
+         → 12 + 12 = 24 ADA
+
+Line 118-120: require(contractBalance === 10 + 2)
+              → require(24 === 12)
+              → FAILS ❌
+```
+
+**Conclusion**: Attack fails at line 118. The `contractBalance` check implicitly prevents spending multiple UTxOs. **FALSE POSITIVE**.
 
 ---
 
@@ -641,6 +832,12 @@ def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo) = {
   )
 }
 ```
+
+### False Positive Indicators
+- Policy uses `mint.filter(_.policyId === policyId)` and validates all returned tokens
+- Token name is derived deterministically from transaction data (e.g., hash of input ref)
+- Separate redeemer cases each validate their tokens AND check total mint count
+- Policy explicitly validates mint map size for this policy ID
 
 ---
 

@@ -26,8 +26,9 @@ grep -rn "extends DataParameterizedValidator" --include="*.scala" <path>
 1. **Discovery**: Find all `@Compile` annotated code in specified path
 2. **Classification**: Identify validator type (spend/mint/reward/certify/vote/propose)
 3. **Analysis**: Check each validator against vulnerability checklist
-4. **Reporting**: Generate structured report with severity levels
-5. **Remediation**: Use TodoWrite to track issues, fix one-by-one with user confirmation
+4. **False Positive Verification**: For each potential issue, verify it's not a false positive
+5. **Reporting**: Generate structured report with severity levels (only verified issues)
+6. **Remediation**: Use TodoWrite to track issues, fix one-by-one with user confirmation
 
 ## Vulnerability Checklist
 
@@ -79,6 +80,105 @@ For detailed patterns and code examples, see `references/vulnerabilities.md`.
 | V022 | Cheap Spam/Dust | Operation obstruction | No minimum amounts |
 | V023 | Locked Value | Permanent lock | Missing exit paths |
 
+## False Positive Verification
+
+**CRITICAL**: Before reporting ANY vulnerability, you MUST verify exploitability by tracing code execution with a concrete attack transaction.
+
+### Verification Method: Attack Transaction Tracing
+
+For each potential vulnerability:
+
+1. **Construct a concrete attack transaction**
+   - Define specific inputs (UTxOs with concrete values/datums)
+   - Define the redeemer values
+   - Define the outputs the attacker would create
+   - Define signatories
+
+2. **Execute the validator logic mentally with this transaction**
+   - Go line-by-line through the validator code
+   - Track what each variable evaluates to with your attack tx
+   - Check EVERY `require()` statement - does it pass or fail?
+
+3. **If ANY require fails, the attack fails → False Positive**
+
+4. **Only report if ALL requires pass with the attack transaction**
+
+### Example: V005 Double Satisfaction Verification
+
+**Potential vulnerability detected**: `handlePay` uses `getAdaFromOutputs(sellerOutputs)` without unique linking.
+
+**Construct attack transaction**:
+```
+Inputs:
+  - EscrowA: 12 ADA, datum={seller=S, buyer=B, escrowAmount=10, initAmount=2}
+  - EscrowB: 12 ADA, datum={seller=S, buyer=B, escrowAmount=10, initAmount=2}
+Outputs:
+  - 12 ADA to seller S (single output for both!)
+  - 1 ADA to buyer B
+Signatories: [B]
+```
+
+**Trace execution for EscrowA**:
+```scala
+// Line 57-58:
+val contractInputs = txInfo.findOwnInputsByCredential(contractAddress.credential)
+// → Returns [EscrowA, EscrowB] (both have same script credential)
+
+val contractBalance = Utils.getAdaFromInputs(contractInputs)
+// → 12 + 12 = 24 ADA
+
+// Line 118-120 in handlePay:
+require(contractBalance === escrowDatum.escrowAmount + escrowDatum.initializationAmount)
+// → require(24 === 10 + 2)
+// → require(24 === 12)
+// → FAILS! ❌
+```
+
+**Result**: Attack transaction fails at line 118-120. This is a **FALSE POSITIVE**.
+
+### When to Write a Test
+
+If the attack trace is complex or you're uncertain, write an actual test:
+
+```scala
+test("V005: Double satisfaction attack should fail") {
+  // Setup: Create two escrow UTxOs with same seller
+  val escrowA = createEscrowUtxo(seller = S, buyer = B, amount = 10.ada)
+  val escrowB = createEscrowUtxo(seller = S, buyer = B, amount = 10.ada)
+
+  // Attack: Try to spend both with single output to seller
+  val attackTx = Transaction(
+    inputs = List(escrowA, escrowB),
+    outputs = List(TxOut(sellerAddress, 12.ada)),  // Only pay once!
+    redeemers = Map(escrowA -> Pay, escrowB -> Pay)
+  )
+
+  // Verify: Should this pass or fail?
+  // If it passes → Real vulnerability
+  // If it fails → False positive
+  evaluateValidator(EscrowValidator, escrowA, attackTx) shouldBe failure
+}
+```
+
+### Verification Checklist
+
+Before reporting, answer these questions:
+
+| Question | Answer Required |
+|----------|-----------------|
+| What is the specific attack transaction? | Inputs, outputs, redeemers, signatories |
+| Which line would the attacker exploit? | File:line reference |
+| Did you trace through EVERY require in the code path? | Yes/No |
+| Does the attack pass ALL requires? | Yes (report) / No (false positive) |
+| What value does the attacker gain? | Concrete amount/asset |
+
+### Do NOT Report If
+
+- You only found a pattern match without tracing execution
+- You haven't constructed a specific attack transaction
+- Any `require()` in the code path would fail the attack
+- You're unsure whether the attack works (investigate more or write a test)
+
 ## Output Format
 
 Use clickable `file_path:line_number` format for all code locations.
@@ -115,10 +215,17 @@ At the end, provide a summary with clickable locations:
 ```
 ## Summary
 
-| ID | Severity | Location | Issue |
-|----|----------|----------|-------|
-| C-01 | Critical | `path/File.scala:123` | Missing mint validation |
-| H-01 | High | `path/File.scala:87` | Token not in output |
+| ID | Severity | Location | Issue | Status |
+|----|----------|----------|-------|--------|
+| C-01 | Critical | `path/File.scala:123` | Missing mint validation | Fixed |
+| H-01 | High | `path/File.scala:87` | Token not in output | Declined |
+| M-01 | Medium | `path/File.scala:200` | Missing signature | False Positive |
+
+## False Positives
+
+| ID | Location | Reason |
+|----|----------|--------|
+| M-01 | `path/File.scala:200` | Authorization is done via NFT ownership in `verifyAuth` helper |
 
 **Security Grade:** A/B/C/D/F
 ```
@@ -134,13 +241,17 @@ At the end, provide a summary with clickable locations:
 
 For each finding:
 1. Display issue with location and proposed fix
-2. Prompt: "Apply fix? [y/n/s/d]"
+2. Prompt: "Apply fix? [y/n/s/d/f]"
    - y: Apply fix, mark completed, verify with `sbtn compile`
    - n: Skip, log as "declined"
    - s: Skip without logging
    - d: Show more details (attack scenario)
+   - f: Mark as false positive (prompts for reason, logged to summary)
 3. After all findings: run `sbtn quick` to verify fixes
-4. Generate summary report
+4. Generate summary report including:
+   - Fixed issues
+   - Declined issues
+   - False positives with reasons
 
 ## Reference
 
