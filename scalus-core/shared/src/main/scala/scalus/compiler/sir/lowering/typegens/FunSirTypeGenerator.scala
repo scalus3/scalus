@@ -6,37 +6,6 @@ import scalus.compiler.sir.*
 
 object FunSirTypeGenerator extends SirTypeUplcGenerator {
 
-    /** Get Normal lambda representation (always uses LamAbs/Apply). Used for builtin functions that
-      * take Unit as argument (like mkNilData), which expect Apply(builtin, Const(Unit)), not
-      * Force(builtin).
-      */
-    def normalRepresentation(
-        tp: SIRType
-    )(using lctx: LoweringContext): LambdaRepresentation.Normal =
-        collect(tp) match {
-            case Some((typeVars, input, output)) =>
-                val typeVarsList = typeVars.toList
-                val (inputTypeVars, _) = SIRType.partitionGround(typeVarsList, input)
-                val nInput =
-                    if inputTypeVars.isEmpty then input
-                    else SIRType.TypeLambda(inputTypeVars, input)
-                val (outputTypeVars, _) = SIRType.partitionGround(typeVarsList, output)
-                val nOutput =
-                    if outputTypeVars.isEmpty then output
-                    else SIRType.TypeLambda(outputTypeVars, output)
-                LambdaRepresentation.Normal(
-                  tp,
-                  InOutRepresentationPair(
-                    lctx.typeGenerator(input).defaultRepresentation(nInput),
-                    lctx.typeGenerator(output).defaultRepresentation(nOutput)
-                  )
-                )
-            case None =>
-                throw IllegalStateException(
-                  s"Function type generator can't be used for type ${tp.show}",
-                )
-        }
-
     override def defaultRepresentation(
         tp: SIRType
     )(using lctx: LoweringContext): LoweredValueRepresentation =
@@ -52,20 +21,13 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                 val nOutput =
                     if outputTypeVars.isEmpty then output
                     else SIRType.TypeLambda(outputTypeVars, output)
-                // Unit lambdas use Delayed representation (Delay/Force instead of LamAbs/Apply)
-                if input == SIRType.Unit then
-                    LambdaRepresentation.Delayed(
-                      tp,
-                      lctx.typeGenerator(output).defaultRepresentation(nOutput)
-                    )
-                else
-                    LambdaRepresentation(
-                      tp,
-                      InOutRepresentationPair(
-                        lctx.typeGenerator(input).defaultRepresentation(nInput),
-                        lctx.typeGenerator(output).defaultRepresentation(nOutput)
-                      )
-                    )
+                LambdaRepresentation(
+                  tp,
+                  InOutRepresentationPair(
+                    lctx.typeGenerator(input).defaultRepresentation(nInput),
+                    lctx.typeGenerator(output).defaultRepresentation(nOutput)
+                  )
+                )
 
             case None =>
                 throw IllegalStateException(

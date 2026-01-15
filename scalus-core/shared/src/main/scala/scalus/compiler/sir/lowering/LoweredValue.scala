@@ -706,73 +706,6 @@ case class LambdaLoweredValue(newVar: VariableLoweredValue, body: LoweredValue, 
 
 }
 
-/** Delayed unit lambda: Delay(body) called with Force(f). This is an optimization for unit lambdas
-  * (() => A) that saves 1 CEK step per invocation compared to LamAbs/Apply.
-  *
-  * Unlike LambdaLoweredValue:
-  *   - No newVar in ownVars because the Unit parameter doesn't exist at UPLC level
-  *   - Uses LambdaRepresentation.Delayed instead of Normal
-  *   - Generates Term.Delay(body) instead of Term.LamAbs
-  */
-case class DelayedUnitLambdaLoweredValue(
-    paramName: String,
-    body: LoweredValue,
-    inPos: SIRPosition
-) extends ComplexLoweredValue(Set.empty, body) {
-
-    override def sirType: SIRType = SIRType.Fun(SIRType.Unit, body.sirType)
-
-    override def representation: LoweredValueRepresentation = {
-        LambdaRepresentation.Delayed(sirType, body.representation)
-    }
-
-    override def pos: SIRPosition = inPos
-
-    override def isEffortLess: Boolean = {
-        // Same logic as LambdaLoweredValue
-        body.usedUplevelVars.forall(_.isEffortLess)
-    }
-
-    // Lambda barrier: same logic as LambdaLoweredValue but without newVar dependency check
-    override val dominatingUplevelVars: Set[IdentifiableLoweredValue] = {
-        def hasNonEffortlessRhs(v: IdentifiableLoweredValue): Boolean = {
-            v match
-                case vv: VariableLoweredValue =>
-                    vv.optRhs match
-                        case Some(rhs) => !rhs.isEffortLess
-                        case None      => false
-                case dv: DependendVariableLoweredValue =>
-                    !dv.rhs.isEffortLess
-        }
-
-        val normallyDominating = usedVarsCount.filter { case (v, c) =>
-            c > 1 && v.directDepended.size > 1
-        }.keySet
-
-        // For delayed lambdas, no parameter dependency to check (param is substituted with Unit constant)
-        val nonEffortlessExternalVars = cUsedVars.filter { v =>
-            hasNonEffortlessRhs(v) && !internalVars.contains(v)
-        }
-
-        normallyDominating ++ nonEffortlessExternalVars
-    }
-
-    override def termInternal(gctx: TermGenerationContext): Term = {
-        // Generate Delay(body) instead of LamAbs
-        Term.Delay(body.termWithNeededVars(gctx))
-    }
-
-    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-        import PrettyPrinter.*
-        val left = Doc.text("(") +
-            Doc.text("delay") + Doc.text("[") + Doc.text(paramName) + Doc.text("]:") +
-            Doc.text(sirType.show) + inBrackets(representation.doc) + Doc.text(".")
-        val right = Doc.text(")")
-        body.docRef(ctx).bracketBy(left, right)
-    }
-
-}
-
 /** Lowered value which exists to create a scope for the set of variables. Need to prevent pulling
   * out variables outsiode scope from lambda-s, while we have not yet full tracking of control-flow
   * dependencies. (i.e. variables defined inside scope should not be pulled outside of it
@@ -2044,28 +1977,13 @@ object LoweredValue {
 
             lctx.debug = prevDebug
 
-            // Check if function is a delayed unit lambda - if so, use Force instead of Apply
-            val applied: LoweredValue = f.representation match {
-                case delayed: LambdaRepresentation.Delayed =>
-                    // Delayed lambda: emit Force(f) instead of Apply(f, arg)
-                    // The argument is NOT passed - Force takes no argument
-                    // Wrap ForceLoweredValue in TypeRepresentationProxyLoweredValue to fix type/repr
-                    TypeRepresentationProxyLoweredValue(
-                      ForceLoweredValue(f, inPos),
-                      resType,
-                      delayed.resultRepr,
-                      inPos
-                    )
-                case _ =>
-                    // Normal lambda or TypeVar: emit Apply(f, arg) as usual
-                    ApplyLoweredValue(
-                      f,
-                      argInTargetRepresentation,
-                      resType,
-                      calculatedResRepr,
-                      inPos
-                    )
-            }
+            val applied = ApplyLoweredValue(
+              f,
+              argInTargetRepresentation,
+              resType,
+              calculatedResRepr,
+              inPos
+            )
 
             if lctx.debug then {
                 lctx.log(
@@ -2170,55 +2088,29 @@ object LoweredValue {
             f: IdentifiableLoweredValue => LoweringContext ?=> LoweredValue,
             inPos: SIRPosition
         )(using lctx: LoweringContext): LoweredValue = {
-            // Optimization: Unit lambdas use Delay/Force instead of LamAbs/Apply
-            if sirVar.tp == SIRType.Unit then {
-                // Create a variable bound to Const(Unit) for substitution in body
-                // This variable is added to scope so body can reference it,
-                // but NOT added to enclosingLambdaParams since there's no actual UPLC parameter
-                val unitConstant = ConstantLoweredValue(
-                  SIR.Const(Constant.Unit, SIRType.Unit, AnnotationsDecl(inPos)),
-                  PrimitiveRepresentation.Constant
-                )
-                val unitVar = new VariableLoweredValue(
-                  id = lctx.uniqueVarName(sirVar.name),
-                  name = sirVar.name,
-                  sir = sirVar,
-                  representation = PrimitiveRepresentation.Constant,
-                  optRhs = Some(unitConstant)
-                )
+            val newVar = new VariableLoweredValue(
+              id = lctx.uniqueVarName(sirVar.name),
+              name = sirVar.name,
+              sir = sirVar,
+              representation = inputRepresentation
+            )
 
-                val prevScope = lctx.scope
-                lctx.scope = lctx.scope.add(unitVar)
-                val body = f(unitVar)(using lctx)
-                lctx.scope = prevScope
-
-                DelayedUnitLambdaLoweredValue(sirVar.name, body, inPos)
-            } else {
-                // Normal lambda: use LamAbs/Apply
-                val newVar = new VariableLoweredValue(
-                  id = lctx.uniqueVarName(sirVar.name),
-                  name = sirVar.name,
-                  sir = sirVar,
-                  representation = inputRepresentation
-                )
-
-                // Make inner lambda parameter depend on the immediate outer lambda parameter
-                // Since isDependFrom is transitive, this creates a dependency chain
-                // Update BOTH directions: forward (dependFrom) and reverse (depended)
-                lctx.enclosingLambdaParams.headOption.foreach { outerParam =>
-                    newVar.directDependFrom.add(outerParam)
-                    outerParam.directDepended.add(newVar)
-                }
-
-                val prevScope = lctx.scope
-                val prevEnclosingParams = lctx.enclosingLambdaParams
-                lctx.scope = lctx.scope.add(newVar)
-                lctx.enclosingLambdaParams = newVar :: lctx.enclosingLambdaParams
-                val body = f(newVar)(using lctx)
-                lctx.scope = prevScope
-                lctx.enclosingLambdaParams = prevEnclosingParams
-                LambdaLoweredValue(newVar, body, inPos)
+            // Make inner lambda parameter depend on the immediate outer lambda parameter
+            // Since isDependFrom is transitive, this creates a dependency chain
+            // Update BOTH directions: forward (dependFrom) and reverse (depended)
+            lctx.enclosingLambdaParams.headOption.foreach { outerParam =>
+                newVar.directDependFrom.add(outerParam)
+                outerParam.directDepended.add(newVar)
             }
+
+            val prevScope = lctx.scope
+            val prevEnclosingParams = lctx.enclosingLambdaParams
+            lctx.scope = lctx.scope.add(newVar)
+            lctx.enclosingLambdaParams = newVar :: lctx.enclosingLambdaParams
+            val body = f(newVar)(using lctx)
+            lctx.scope = prevScope
+            lctx.enclosingLambdaParams = prevEnclosingParams
+            LambdaLoweredValue(newVar, body, inPos)
         }
 
         /** create let and add it to the current scope.
