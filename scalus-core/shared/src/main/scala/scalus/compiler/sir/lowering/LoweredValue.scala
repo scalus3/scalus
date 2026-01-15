@@ -5,6 +5,7 @@ import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.Lowering.tpf
 import scalus.compiler.sir.*
 import scalus.uplc.*
+import scalus.utils.{Pretty, Style}
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
 
 import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
@@ -181,14 +182,14 @@ case class ConstantLoweredValue(
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-        (PrettyPrinter.pretty(Term.Const(sir.uplcConst), ctx.style) + Doc.text(":") + Doc.text(
+        (Pretty[Term].pretty(Term.Const(sir.uplcConst), ctx.style) + Doc.text(":") + Doc.text(
           sirType.show
         ) + PrettyPrinter
             .inBrackets(representation.doc)).grouped
     }
 
     override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
-        PrettyPrinter.pretty(Term.Const(sir.uplcConst), ctx.style)
+        Pretty[Term].pretty(Term.Const(sir.uplcConst), ctx.style)
 
     override def findSelfOrSubtems(p: LoweredValue => Boolean): Option[LoweredValue] = {
         Some(this).filter(p)
@@ -219,14 +220,14 @@ case class StaticLoweredValue(
     def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         import PrettyPrinter.*
         Doc.text("static") + inParens(
-          PrettyPrinter.pretty(term, ctx.style) + Doc.text(":") + Doc.text(
+          Pretty[Term].pretty(term, ctx.style) + Doc.text(":") + Doc.text(
             sir.tp.show
           ) + inBrackets(representation.doc)
         )
     }
 
     def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-        PrettyPrinter.pretty(term, ctx.style)
+        Pretty[Term].pretty(term, ctx.style)
     }
 
 }
@@ -1315,7 +1316,7 @@ case class ChooseListLoweredValue(
 object LoweredValue {
 
     class PrettyPrintingContext(
-        val style: PrettyPrinter.Style = PrettyPrinter.Style.Normal,
+        val style: Style = Style.Normal,
         var printedIdentifiers: Set[String] = Set.empty
     )
 

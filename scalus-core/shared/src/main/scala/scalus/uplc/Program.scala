@@ -2,16 +2,15 @@ package scalus.uplc
 
 import io.bullet.borer.Cbor
 import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
 import scalus.*
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.ledger.Language
-import scalus.compiler.sir.PrettyPrinter
-import scalus.compiler.sir.PrettyPrinter.Style
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, Natural, given}
 import scalus.uplc.Term.Const
 import scalus.uplc.eval.*
-import scalus.utils.{Hex, Utils}
+import scalus.utils.{Hex, Pretty, Style, Utils}
 import scalus.utils.Hex.hexToBytes
 
 import scala.annotation.targetName
@@ -106,10 +105,10 @@ case class Program(version: (Int, Int, Int), term: Term):
     lazy val deBruijnedProgram: DeBruijnedProgram = DeBruijn.deBruijnProgram(this)
 
     /** Pretty-print the program. */
-    def pretty: Doc = PrettyPrinter.pretty(this, Style.Normal)
+    def pretty: Doc = Pretty[Program].pretty(this, Style.Normal)
 
     /** Pretty-print the program with XTerm syntax highlighting. */
-    def prettyXTerm: Doc = PrettyPrinter.pretty(this, Style.XTerm)
+    def prettyXTerm: Doc = Pretty[Program].pretty(this, Style.XTerm)
 
     /** Show the program as a string. */
     def show: String = pretty.render(80)
@@ -198,6 +197,18 @@ object Program:
     /** Parse UPLC program from string using a specific version */
     def parseUplc(s: String, version: (Int, Int, Int)): Either[String, Program] =
         UplcParser(version).parseProgram(s)
+
+    /** Pretty[Program] instance */
+    given Pretty[Program] with
+        def pretty(program: Program, style: Style): Doc =
+            import Pretty.rainbowChar
+            val (major, minor, patch) = program.version
+            val openP = rainbowChar('(', 0, style)
+            val closeP = rainbowChar(')', 0, style)
+            val prefix = openP + Pretty.kw("program", style)
+            val versionDoc = text(s"$major.$minor.$patch")
+            val termDoc = Pretty[Term].pretty(program.term, style)
+            ((prefix & versionDoc & termDoc).nested(2).grouped + closeP).grouped
 
 /** A De Bruijn-indexed program.
   *
@@ -296,7 +307,7 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
     def applyArg(arg: Data): DeBruijnedProgram = this $ arg
 
     /** Pretty-print the program with XTerm syntax highlighting. */
-    def prettyXTerm: Doc = PrettyPrinter.pretty(toProgram, Style.XTerm)
+    def prettyXTerm: Doc = Pretty[Program].pretty(toProgram, Style.XTerm)
 
     /** Show the program as a string. */
     def show: String = pretty.render(80)

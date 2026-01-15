@@ -2,7 +2,7 @@ import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.Language
 import scalus.compiler.Options
 import scalus.compiler.sir.*
-import scalus.compiler.sir.PrettyPrinter.Style
+import scalus.utils.Style
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
 import scalus.uplc.{Constant, DeBruijnedProgram, DefaultUni, Program, Term}

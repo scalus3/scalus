@@ -10,8 +10,8 @@ import scalus.uplc.Constant
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultUni
 import scalus.uplc.Term
-import scalus.uplc.TermSanitizer
 import scalus.utils.Utils
+import scalus.utils.{Pretty, Style as PrettyStyle}
 
 /** Pretty printers.
   *
@@ -27,8 +27,13 @@ import scalus.utils.Utils
   * }}}
   */
 object PrettyPrinter:
-    enum Style:
-        case Normal, XTerm
+    /** @deprecated Use scalus.utils.Style instead */
+    @deprecated("Use scalus.utils.Style instead", "0.14.2")
+    type Style = scalus.utils.Style
+
+    /** @deprecated Use scalus.utils.Style instead */
+    @deprecated("Use scalus.utils.Style instead", "0.14.2")
+    val Style = scalus.utils.Style
 
     def inParens(d: Doc): Doc = char('(') + d + char(')')
     def inBraces(d: Doc): Doc = char('{') + d + char('}')
@@ -105,10 +110,10 @@ object PrettyPrinter:
         case DefaultUni.BLS12_381_G2_Element => text("bls12_381_G2_element")
         case _                               => sys.error(s"Unexpected default uni: $du")
 
-    def pretty(sir: SIR, style: Style): Doc =
+    def pretty(sir: SIR, style: PrettyStyle): Doc =
         import SIR.*
         extension (d: Doc)
-            def styled(s: paiges.Style): Doc = if style == Style.XTerm then d.style(s) else d
+            def styled(s: paiges.Style): Doc = if style == PrettyStyle.XTerm then d.style(s) else d
         def kw(s: String): Doc = text(s).styled(Fg.colorCode(172))
         def ctr(s: String): Doc = text(s).styled(Fg.colorCode(27))
         def typ(s: Doc): Doc = s.styled(Fg.colorCode(55))
@@ -297,92 +302,15 @@ object PrettyPrinter:
         inParens(
           text("program") & text(
             s"$major.$minor.$patch"
-          ) & pretty(p.term, Style.Normal)
+          ) & pretty(p.term, PrettyStyle.Normal)
         )
 
-    private var bracketColorIndex = 1
-    private def nextBracketColor(): Int =
-        val color = bracketColorIndex
-        bracketColorIndex = (bracketColorIndex + 1) % 15 + 1
-        color
+    /** @deprecated Use Pretty[Term] instance instead */
+    @deprecated("Use Pretty[Term] instance from Term companion object instead", "0.14.2")
+    def pretty(term: Term, style: PrettyStyle): Doc =
+        Pretty[Term].pretty(term, style)
 
-    /** Bracket a document for UPLC syntax where the opening bracket and keyword must stay together.
-      * Uses a different approach than tightBracketBy: keeps `(keyword` as a single unit, then uses
-      * bracketBy to handle line breaks for the body.
-      */
-    private def uplcBracket(
-        keyword: Doc,
-        body: Doc,
-        openParen: Doc = text("("),
-        closeParen: Doc = text(")")
-    ): Doc =
-        // Keep "(keyword" together as a single unit that never breaks
-        val prefix = openParen + keyword
-        // The body can break after the keyword
-        (prefix & body).grouped + closeParen
-
-    /** Bracket with multiple arguments that can break between them */
-    private def uplcBracketArgs(
-        keyword: Doc,
-        args: List[Doc],
-        openParen: Doc = text("("),
-        closeParen: Doc = text(")")
-    ): Doc =
-        if args.isEmpty then openParen + keyword + closeParen
-        else
-            val prefix = openParen + keyword
-            val body = intercalate(lineOrSpace, args)
-            ((prefix & body).nested(2).grouped + closeParen).grouped
-
-    def pretty(term: Term, style: Style): Doc =
-        // Sanitize variable names to ensure they conform to UPLC text format
-        val sanitizedTerm = TermSanitizer.sanitizeNames(term)
-
-        import Term.*
-        extension (d: Doc)
-            def styled(s: paiges.Style): Doc = if style == Style.XTerm then d.style(s) else d
-        def kw(s: String): Doc = text(s).styled(Fg.colorCode(172))
-        sanitizedTerm match
-            case Var(name) => text(name.name)
-            case LamAbs(name, term) =>
-                val color = nextBracketColor()
-                val openP = char('(').styled(Fg.colorCode(color))
-                val closeP = char(')').styled(Fg.colorCode(color))
-                // (lam name body) - keyword and name should stay with opening paren
-                val prefix = openP + kw("lam") & text(name)
-                ((prefix / pretty(term, style)).nested(2).grouped + closeP).grouped
-            case a @ Apply(f, arg) =>
-                val (t, args) = a.applyToList
-                val color = nextBracketColor()
-                // [f arg1 arg2 ...] - square brackets, can break between args
-                val openB = text("[").styled(Fg.colorCode(color))
-                val closeB = text("]").styled(Fg.colorCode(color))
-                val allTerms = (t :: args).map(pretty(_, style))
-                val body = intercalate(lineOrSpace, allTerms)
-                ((openB + body).nested(2).grouped + closeB).grouped
-            case Force(term) =>
-                // (force term)
-                uplcBracket(kw("force"), pretty(term, style))
-            case Delay(term) =>
-                // (delay term)
-                uplcBracket(kw("delay"), pretty(term, style))
-            case Const(const) =>
-                // (con type value) - should not break
-                inParens(kw("con") & const.pretty.styled(Fg.colorCode(64)))
-            case Builtin(bn) =>
-                inParens(kw("builtin") & pretty(bn).styled(Fg.colorCode(176)))
-            case Error             => kw("(error)")
-            case Constr(tag, args) =>
-                // (constr tag arg1 arg2 ...)
-                uplcBracketArgs(kw("constr") & str(tag.value), args.map(pretty(_, style)))
-            case Case(arg, cases) =>
-                // (case scrutinee branch1 branch2 ...)
-                uplcBracketArgs(kw("case"), pretty(arg, style) :: cases.map(pretty(_, style)))
-
-    def pretty(program: uplc.Program, style: Style): Doc =
-        val (major, minor, patch) = program.version
-        // (program version term) - keep (program together
-        val prefix = text("(program")
-        val version = text(s"$major.$minor.$patch")
-        val term = pretty(program.term, style)
-        ((prefix & version & term).nested(2).grouped + text(")")).grouped
+    /** @deprecated Use Pretty[Program] instance instead */
+    @deprecated("Use Pretty[Program] instance from Program companion object instead", "0.14.2")
+    def pretty(program: uplc.Program, style: PrettyStyle): Doc =
+        Pretty[uplc.Program].pretty(program, style)
