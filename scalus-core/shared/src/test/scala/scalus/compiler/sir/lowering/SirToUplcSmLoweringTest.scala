@@ -826,3 +826,92 @@ class SirToUplcSmLoweringTest
                 fail(s"Expected failure for non-matching case, got: ${result2}")
         }
     }
+
+    test("lower Unit lambda to Delay/Force") {
+        import SIRType.{Integer, Unit}
+
+        // Create a Unit lambda: () => 42
+        val unitParam = SIR.Var("_", Unit, ae)
+        val body = SIR.Const(Constant.Integer(42), Integer, ae)
+        val unitLambda = SIR.LamAbs(unitParam, body, List.empty, ae)
+
+        // Lower the lambda and verify it produces Delay(42) instead of LamAbs
+        val lambdaUplc = lower(unitLambda)
+        val expectedLambda = ~Constant.Integer(42) // Delay(42)
+        assert(
+          lambdaUplc alphaEq expectedLambda,
+          s"Unit lambda should lower to Delay, got: ${lambdaUplc.pretty.render(100)}"
+        )
+
+        // Create an application: (() => 42)()
+        val application = SIR.Apply(unitLambda, SIR.Const(Constant.Unit, Unit, ae), Integer, ae)
+
+        // Lower the application and verify it produces Force(Delay(42))
+        val appUplc = lower(application)
+        val expectedApp = !(~Constant.Integer(42)) // Force(Delay(42))
+        assert(
+          appUplc alphaEq expectedApp,
+          s"Unit lambda application should lower to Force(Delay), got: ${appUplc.pretty.render(100)}"
+        )
+
+        // Verify evaluation produces 42
+        val result = appUplc.evaluateDebug
+        result match {
+            case Result.Success(term, _, _, _) =>
+                assert(term == 42.asTerm, s"Expected 42, got: $term")
+            case _ =>
+                fail(s"Expected success with 42, got: $result")
+        }
+    }
+
+    test("lower Unit lambda with body referencing param substitutes Unit constant") {
+        import SIRType.{Integer, Unit}
+
+        // Create a Unit lambda that references the param: (u: Unit) => chooseUnit(u, 42)
+        // The Unit param should be substituted with Const(Unit) in the body
+        val unitParam = SIR.Var("u", Unit, ae)
+        val chooseUnitResult = SIR.Const(Constant.Integer(42), Integer, ae)
+
+        // Simple case: () => 42 where we don't actually use the param
+        val unitLambda = SIR.LamAbs(unitParam, chooseUnitResult, List.empty, ae)
+
+        val lambdaUplc = lower(unitLambda)
+        // Should still be Delay(42)
+        val expectedLambda = ~Constant.Integer(42)
+        assert(
+          lambdaUplc alphaEq expectedLambda,
+          s"Unit lambda should lower to Delay, got: ${lambdaUplc.pretty.render(100)}"
+        )
+    }
+
+    test("builtin mkNilData uses Apply not Force") {
+        // mkNilData : Unit -> [Data] should NOT use Delay/Force
+        // It should use normal LamAbs/Apply
+        val mkNilDataSir = SIRBuiltins.mkNilData
+        val application = SIR.Apply(
+          mkNilDataSir,
+          SIR.Const(Constant.Unit, SIRType.Unit, ae),
+          SIRType.BuiltinList(SIRType.Data.tp),
+          ae
+        )
+
+        val uplc = lower(application)
+        // Should be MkNilData applied to Unit, NOT Force(...)
+        val expected = MkNilData $ Constant.Unit
+        assert(
+          uplc alphaEq expected,
+          s"mkNilData should use Apply(builtin, Unit), got: ${uplc.pretty.render(100)}"
+        )
+
+        // Verify it evaluates to empty list
+        val result = uplc.evaluateDebug
+        result match {
+            case Result.Success(term, _, _, _) =>
+                assert(
+                  term == Term.Const(Constant.List(DefaultUni.Data, List.empty)),
+                  s"Expected empty Data list, got: $term"
+                )
+            case _ =>
+                fail(s"Expected success, got: $result")
+        }
+    }
