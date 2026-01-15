@@ -33,7 +33,7 @@ object TransactionInput {
     /** Pretty prints TransactionInput as `txHash#index` */
     given Pretty[TransactionInput] with
         def pretty(a: TransactionInput, style: Style): Doc =
-            Pretty.typ(text(a.transactionId.toHex), style) + char('#') +
+            Pretty.lit(text(a.transactionId.toHex), style) + char('#') +
                 Pretty.lit(text(a.index.toString), style)
 }
 

@@ -144,5 +144,5 @@ object Value:
     given Pretty[Value] with
         def pretty(a: Value, style: Style): Doc =
             val adaEntry =
-                Pretty.field("ada", Pretty.lit(text(Pretty.formatAda(a.coin.value)), style), style)
+                Doc.text("ada:") & Pretty.lit(text(Pretty.formatAda(a.coin.value)), style)
             Pretty.braceList(adaEntry :: MultiAsset.formatAssetEntries(a.assets, style))

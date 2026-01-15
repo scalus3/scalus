@@ -1,7 +1,11 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
+import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
 import scalus.builtin.Data
+import scalus.utils.Pretty.ctr
+import scalus.utils.{Pretty, Style}
 
 /** Represents the witness set for a transaction in Cardano */
 case class TransactionWitnessSet(
@@ -210,3 +214,43 @@ object TransactionWitnessSet:
     given TaggedSortedStrictMap.KeyOf[ScriptHash, Script.PlutusV1] = _.scriptHash
     given TaggedSortedStrictMap.KeyOf[ScriptHash, Script.PlutusV2] = _.scriptHash
     given TaggedSortedStrictMap.KeyOf[ScriptHash, Script.PlutusV3] = _.scriptHash
+
+    /** Pretty prints TransactionWitnessSet showing non-empty fields */
+    given Pretty[TransactionWitnessSet] with
+        def pretty(a: TransactionWitnessSet, style: Style): Doc =
+            val fields = List.newBuilder[Doc]
+
+            if a.vkeyWitnesses.toSet.nonEmpty then
+                fields += text("vkeyWitnesses:") &
+                    Pretty[TaggedSortedSet[VKeyWitness]].pretty(a.vkeyWitnesses, style)
+            if a.nativeScripts.toMap.nonEmpty then
+                fields += text("nativeScripts:") &
+                    Pretty[TaggedSortedMap[ScriptHash, Script.Native]].pretty(a.nativeScripts, style)
+            if a.bootstrapWitnesses.toSet.nonEmpty then
+                fields += text("bootstrapWitnesses:") &
+                    Pretty[TaggedSortedSet[BootstrapWitness]].pretty(a.bootstrapWitnesses, style)
+            if a.plutusV1Scripts.toMap.nonEmpty then
+                fields += text("plutusV1Scripts:") &
+                    Pretty[TaggedSortedStrictMap[ScriptHash, Script.PlutusV1]]
+                        .pretty(a.plutusV1Scripts, style)
+            if a.plutusData.value.toMap.nonEmpty then
+                fields += text("plutusData:") &
+                    Pretty[KeepRaw[TaggedSortedMap[DataHash, KeepRaw[Data]]]]
+                        .pretty(a.plutusData, style)
+            a.redeemers.foreach { r =>
+                fields += text("redeemers:") & Pretty[KeepRaw[Redeemers]].pretty(r, style)
+            }
+            if a.plutusV2Scripts.toMap.nonEmpty then
+                fields += text("plutusV2Scripts:") &
+                    Pretty[TaggedSortedStrictMap[ScriptHash, Script.PlutusV2]]
+                        .pretty(a.plutusV2Scripts, style)
+            if a.plutusV3Scripts.toMap.nonEmpty then
+                fields += text("plutusV3Scripts:") &
+                    Pretty[TaggedSortedStrictMap[ScriptHash, Script.PlutusV3]]
+                        .pretty(a.plutusV3Scripts, style)
+
+            val fieldList = fields.result()
+            if fieldList.isEmpty then ctr("TransactionWitnessSet", style) + text("()")
+            else
+                (ctr("TransactionWitnessSet", style) + char('(') + line +
+                    stack(fieldList).indent(2) + line + char(')')).grouped

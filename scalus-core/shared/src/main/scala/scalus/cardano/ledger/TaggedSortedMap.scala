@@ -1,6 +1,9 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder}
+import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
+import scalus.utils.{Pretty, Style}
 
 import scala.collection.immutable.{ListSet, SortedMap}
 
@@ -34,3 +37,8 @@ object TaggedSortedMap extends TaggedSeq:
         if pv >= ProtocolVersion.conwayPV
         then r => from(checkNonEmpty(readTagged(r)))
         else r => from(readTagged(r))
+
+    given [K, A](using p: Pretty[A]): Pretty[TaggedSortedMap[K, A]] with
+        def pretty(a: TaggedSortedMap[K, A], style: Style): Doc =
+            val items = a.values.map(p.pretty(_, style)).toList
+            fill(comma + line, items).tightBracketBy(char('['), char(']')).grouped

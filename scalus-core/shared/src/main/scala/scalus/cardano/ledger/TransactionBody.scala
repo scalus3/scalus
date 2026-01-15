@@ -363,7 +363,7 @@ object TransactionBody:
                     }).indent(2)
                 else empty
 
-            val feeDoc = Pretty.field("fee", Pretty[Coin].pretty(a.fee, style), style)
+            val feeDoc = text("fee:") & Pretty[Coin].pretty(a.fee, style)
 
             val ttlDoc = a.ttl.fold(empty)(t => line + text(s"ttl: $t"))
             val validityStartDoc =

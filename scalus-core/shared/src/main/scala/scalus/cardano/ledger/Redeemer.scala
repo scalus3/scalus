@@ -3,6 +3,7 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
 import scalus.builtin.Data
 import scalus.utils.{Pretty, Style}
 
@@ -166,3 +167,9 @@ object Redeemers:
                         r.read[immutable.VectorMap[(RedeemerTag, Int), (Data, ExUnits)]]()
                     Redeemers.Map(redeemers)
                 case _ => r.validationFailure("Expected Array or Map for Redeemers")
+
+    /** Pretty prints Redeemers as a list */
+    given Pretty[Redeemers] with
+        def pretty(a: Redeemers, style: Style): Doc =
+            val items = a.toSeq.map(Pretty[Redeemer].pretty(_, style))
+            fill(comma + line, items.toList).tightBracketBy(char('['), char(']')).grouped

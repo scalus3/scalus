@@ -62,9 +62,8 @@ object Pretty:
     def inBrackets(d: Doc): Doc = d.tightBracketBy(char('['), char(']'), indent = 0)
 
     /** Comma-separated list in braces: { a, b, c } or multiline with indent if needed */
-    def braceList(entries: List[Doc]): Doc = entries match
-        case Nil => text("{}")
-        case _   => fill(comma & space, entries).bracketBy(text("{ "), text(" }"))
+    def braceList(entries: List[Doc]): Doc =
+        fill(comma & space, entries).bracketBy(text("{ "), text(" }"))
 
     /** Field with label: "name: value" */
     def field(label: String, value: Doc, style: Style): Doc =

@@ -1,6 +1,9 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder}
+import org.typelevel.paiges.Doc
+import org.typelevel.paiges.Doc.*
+import scalus.utils.{Pretty, Style}
 
 import scala.collection.immutable.*
 
@@ -46,3 +49,8 @@ object TaggedSortedStrictMap extends TaggedSeq:
     given [K: Ordering, A: Decoder](using
         pv: ProtocolVersion = ProtocolVersion.conwayPV
     )(using K KeyOf A): Decoder[TaggedSortedStrictMap[K, A]] = r => from(readTagged(r))
+
+    given [K, A](using p: Pretty[A]): Pretty[TaggedSortedStrictMap[K, A]] with
+        def pretty(a: TaggedSortedStrictMap[K, A], style: Style): Doc =
+            val items = a.toMap.values.map(p.pretty(_, style)).toList
+            fill(comma + line, items).tightBracketBy(char('['), char(']')).grouped

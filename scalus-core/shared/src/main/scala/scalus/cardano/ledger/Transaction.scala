@@ -6,7 +6,7 @@ import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
 import scalus.builtin.{platform, ByteString, given}
 import scalus.serialization.cbor.Cbor
-import scalus.utils.{Pretty, Style}
+import scalus.utils.Pretty
 
 /** Represents a complete transaction in Cardano */
 case class Transaction(
@@ -90,27 +90,29 @@ object Transaction {
 
     import Doc.*
 
-    /** Pretty prints Transaction with id, body, witnesses count, and validity */
-    given Pretty[Transaction] with
-        def pretty(a: Transaction, style: Style): Doc =
-            val idDoc = text("id:") & text(a.id.toHex)
-            val bodyDoc = text("body:") / Pretty[TransactionBody]
-                .pretty(a.body.value, style)
-                .indent(2)
-            val witnessDoc = {
-                val ws = a.witnessSet
-                val vkeyCount = ws.vkeyWitnesses.toSet.size
-                val scriptCount = ws.nativeScripts.toMap.size + ws.plutusV1Scripts.toMap.size +
-                    ws.plutusV2Scripts.toMap.size + ws.plutusV3Scripts.toMap.size
-                val redeemerCount = ws.redeemers.map(_.value.toMap.size).getOrElse(0)
-                text("witnesses:") / stack(
-                  List(
-                    text(s"vkeys: $vkeyCount"),
-                    text(s"scripts: $scriptCount"),
-                    text(s"redeemers: $redeemerCount")
-                  )
-                ).indent(2)
-            }
-            val validDoc = text("valid:") & text(a.isValid.toString)
-            (text("Transaction") / idDoc / bodyDoc / witnessDoc / validDoc).hang(2)
+    /** Pretty prints Transaction with id, body, witnesses, and validity */
+    given Pretty[Transaction] = Pretty.instanceWithDetailed(
+      concise = (a, style) =>
+          val ws = a.witnessSet
+          val vkeyCount = ws.vkeyWitnesses.toSet.size
+          val scriptCount = ws.nativeScripts.toMap.size + ws.plutusV1Scripts.toMap.size +
+              ws.plutusV2Scripts.toMap.size + ws.plutusV3Scripts.toMap.size
+          val redeemerCount = ws.redeemers.map(_.value.toMap.size).getOrElse(0)
+          val fields = List(
+            text("id:") & text(a.id.toHex),
+            text("body:") & Pretty[TransactionBody].pretty(a.body.value, style),
+            text("witnesses:") & text(s"vkeys=$vkeyCount, scripts=$scriptCount, redeemers=$redeemerCount"),
+            text("valid:") & text(a.isValid.toString)
+          )
+          (text("Transaction(") + line + stack(fields).indent(2) + line + char(')')).grouped
+      ,
+      detailed = (a, style) =>
+          val fields = List(
+            text("id:") & text(a.id.toHex),
+            text("body:") & Pretty[TransactionBody].prettyDetailed(a.body.value, style),
+            text("witnessSet:") & Pretty[TransactionWitnessSet].prettyDetailed(a.witnessSet, style),
+            text("valid:") & text(a.isValid.toString)
+          )
+          text("Transaction(") + line + stack(fields).indent(2) + line + char(')')
+    )
 }

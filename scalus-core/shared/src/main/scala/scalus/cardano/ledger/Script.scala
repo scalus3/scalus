@@ -107,7 +107,7 @@ object Script {
     import Pretty.inParens
 
     /** Pretty prints Script as `Native(hash)`, `PlutusV1(hash)`, etc. */
-    given Pretty[Script] with
+    given prettyScript: Pretty[Script] with
         def pretty(a: Script, style: Style): Doc =
             val hashDoc = inParens(text(a.scriptHash.toHex))
             a match
@@ -115,4 +115,10 @@ object Script {
                 case Script.PlutusV1(_) => text("PlutusV1") + hashDoc
                 case Script.PlutusV2(_) => text("PlutusV2") + hashDoc
                 case Script.PlutusV3(_) => text("PlutusV3") + hashDoc
+
+    // Variant instances delegate to the main Pretty[Script]
+    given Pretty[Script.Native] = (a, style) => prettyScript.pretty(a, style)
+    given Pretty[Script.PlutusV1] = (a, style) => prettyScript.pretty(a, style)
+    given Pretty[Script.PlutusV2] = (a, style) => prettyScript.pretty(a, style)
+    given Pretty[Script.PlutusV3] = (a, style) => prettyScript.pretty(a, style)
 }

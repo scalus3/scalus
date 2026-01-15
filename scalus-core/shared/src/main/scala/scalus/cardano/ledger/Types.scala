@@ -273,7 +273,7 @@ object MultiAsset {
         ma.assets.toList.flatMap { case (policyId, tokens) =>
             tokens.toList.map { case (assetName, amount) =>
                 val key = s""""${policyId.toHex}.$assetName":"""
-                Pretty.typ(text(key), style) & Pretty.lit(text(amount.toString), style)
+                Pretty.lit(text(key), style) & Pretty.lit(text(amount.toString), style)
             }
         }
 
@@ -785,7 +785,7 @@ object KeepRaw {
       concise = (kr, style) => p.pretty(kr.value, style),
       detailed = (kr, style) =>
           import Doc.*
-          p.prettyDetailed(kr.value, style) / Pretty.field("raw", text(kr.raw.toHex), style)
+          p.prettyDetailed(kr.value, style) / text("raw:") & text(kr.raw.toHex)
     )
 }
 
