@@ -23,7 +23,6 @@ case class VKeyWitness(
 
 object VKeyWitness:
     import Doc.*
-    import Pretty.inParens
 
     /** Ordering matches Haskell's Ord for WitVKey: compare by vkeyHash first, then signature.
       * Haskell uses hash of signature for tie-breaking, but we use raw signature bytes since
@@ -34,10 +33,7 @@ object VKeyWitness:
             .by[VKeyWitness, ByteString](_.vkeyHash)
             .orElseBy[ByteString](_.signature)
 
-    /** Pretty prints VKeyWitness showing vkey hash and truncated signature */
+    /** Pretty prints VKeyWitness showing just the vkey hash */
     given Pretty[VKeyWitness] with
         def pretty(a: VKeyWitness, style: Style): Doc =
-            text("VKeyWitness") + inParens(
-              text("vkeyHash=") + text(a.vkeyHash.toHex) +
-                  text(", sig=") + text(a.signature.toHex.take(16)) + text("...")
-            )
+            Pretty.lit(text(a.vkeyHash.toHex), style)

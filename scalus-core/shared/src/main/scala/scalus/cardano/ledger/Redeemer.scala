@@ -65,10 +65,13 @@ object Redeemer {
                 case 0 => x.index.compareTo(y.index)
                 case c => c
 
-    /** Pretty prints Redeemer showing tag, index, and execution units */
+    /** Pretty prints Redeemer showing tag, index, data, and execution units */
     given Pretty[Redeemer] with
         def pretty(a: Redeemer, style: Style): Doc =
-            text(s"Redeemer(${a.tag}#${a.index}, exUnits=${a.exUnits.memory}/${a.exUnits.steps})")
+            import scalus.builtin.Data
+            val dataDoc = Pretty[Data].pretty(a.data, style)
+            val exUnitsDoc = Pretty[ExUnits].pretty(a.exUnits, style)
+            (text(s"${a.tag}#${a.index}") & dataDoc & exUnitsDoc).grouped
 }
 
 /** Represents a collection of redeemers in the transaction witness set */

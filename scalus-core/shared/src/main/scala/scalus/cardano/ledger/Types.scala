@@ -523,6 +523,19 @@ object ExUnits {
         val list = unListData(data)
         ExUnits(unIData(list.head).toLong, unIData(list.tail.head).toLong)
     }
+
+    /** Pretty prints ExUnits as [memory/steps] with millions highlighted */
+    given Pretty[ExUnits] with
+        def pretty(a: ExUnits, style: Style): Doc =
+            def formatWithMillions(n: Long): Doc =
+                val millions = n / 1000000
+                val remainder = n % 1000000
+                if millions > 0 then
+                    Pretty.lit(Doc.text(millions.toString), style) + Doc.text(f"$remainder%06d")
+                else Doc.text(n.toString)
+
+            Doc.char('[') + formatWithMillions(a.memory) + Doc.char('/') +
+                formatWithMillions(a.steps) + Doc.char(']')
 }
 
 /** Represents execution unit prices in the Cardano blockchain.

@@ -225,7 +225,8 @@ object TransactionWitnessSet:
                     Pretty[TaggedSortedSet[VKeyWitness]].pretty(a.vkeyWitnesses, style)
             if a.nativeScripts.toMap.nonEmpty then
                 fields += text("nativeScripts:") &
-                    Pretty[TaggedSortedMap[ScriptHash, Script.Native]].pretty(a.nativeScripts, style)
+                    Pretty[TaggedSortedMap[ScriptHash, Script.Native]]
+                        .pretty(a.nativeScripts, style)
             if a.bootstrapWitnesses.toSet.nonEmpty then
                 fields += text("bootstrapWitnesses:") &
                     Pretty[TaggedSortedSet[BootstrapWitness]].pretty(a.bootstrapWitnesses, style)

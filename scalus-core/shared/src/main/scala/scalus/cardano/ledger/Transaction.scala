@@ -6,7 +6,7 @@ import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
 import scalus.builtin.{platform, ByteString, given}
 import scalus.serialization.cbor.Cbor
-import scalus.utils.Pretty
+import scalus.utils.{Pretty, Style}
 
 /** Represents a complete transaction in Cardano */
 case class Transaction(
@@ -89,30 +89,82 @@ object Transaction {
         Decoder.derived[Transaction]
 
     import Doc.*
+    import Pretty.{bulletList, lit}
 
-    /** Pretty prints Transaction with id, body, witnesses, and validity */
-    given Pretty[Transaction] = Pretty.instanceWithDetailed(
-      concise = (a, style) =>
-          val ws = a.witnessSet
-          val vkeyCount = ws.vkeyWitnesses.toSet.size
-          val scriptCount = ws.nativeScripts.toMap.size + ws.plutusV1Scripts.toMap.size +
-              ws.plutusV2Scripts.toMap.size + ws.plutusV3Scripts.toMap.size
-          val redeemerCount = ws.redeemers.map(_.value.toMap.size).getOrElse(0)
-          val fields = List(
-            text("id:") & text(a.id.toHex),
-            text("body:") & Pretty[TransactionBody].pretty(a.body.value, style),
-            text("witnesses:") & text(s"vkeys=$vkeyCount, scripts=$scriptCount, redeemers=$redeemerCount"),
-            text("valid:") & text(a.isValid.toString)
-          )
-          (text("Transaction(") + line + stack(fields).indent(2) + line + char(')')).grouped
-      ,
-      detailed = (a, style) =>
-          val fields = List(
-            text("id:") & text(a.id.toHex),
-            text("body:") & Pretty[TransactionBody].prettyDetailed(a.body.value, style),
-            text("witnessSet:") & Pretty[TransactionWitnessSet].prettyDetailed(a.witnessSet, style),
-            text("valid:") & text(a.isValid.toString)
-          )
-          text("Transaction(") + line + stack(fields).indent(2) + line + char(')')
-    )
+    /** Pretty prints Transaction with inlined body and witness fields */
+    given Pretty[Transaction] with
+        def pretty(a: Transaction, style: Style): Doc =
+            val body = a.body.value
+            val ws = a.witnessSet
+
+            val fields = List.newBuilder[Doc]
+
+            // Transaction id
+            fields += text("id:") & lit(text(a.id.toHex), style)
+
+            // Inputs
+            val inputDocs = body.inputs.toSeq.map(Pretty[TransactionInput].pretty(_, style)).toList
+            if inputDocs.nonEmpty then fields += bulletList("inputs", inputDocs)
+
+            // Reference inputs
+            val refInputDocs =
+                body.referenceInputs.toSeq.map(Pretty[TransactionInput].pretty(_, style)).toList
+            if refInputDocs.nonEmpty then fields += bulletList("referenceInputs", refInputDocs)
+
+            // Outputs
+            if body.outputs.nonEmpty then
+                fields += text("outputs:") / stack(body.outputs.zipWithIndex.map { case (o, idx) =>
+                    (text(s"[$idx]") & Pretty[TransactionOutput].pretty(o.value, style)).hang(2)
+                }).indent(2)
+
+            // Fee
+            fields += text("fee:") & Pretty[Coin].pretty(body.fee, style)
+
+            // TTL and validity
+            body.ttl.foreach(t => fields += text(s"ttl: $t"))
+            body.validityStartSlot.foreach(s => fields += text(s"validityStart: $s"))
+
+            // Mint
+            body.mint.foreach(m => fields += text("mint:") & Pretty[MultiAsset].pretty(m, style))
+
+            // Collateral
+            val collateralDocs =
+                body.collateralInputs.toSeq.map(Pretty[TransactionInput].pretty(_, style)).toList
+            if collateralDocs.nonEmpty then fields += bulletList("collateral", collateralDocs)
+
+            // VKey witnesses (just hashes)
+            val vkeyDocs = ws.vkeyWitnesses.toSeq.map(Pretty[VKeyWitness].pretty(_, style)).toList
+            if vkeyDocs.nonEmpty then fields += bulletList("vkeys", vkeyDocs)
+
+            // Scripts (hashes)
+            val scriptDocs =
+                ws.nativeScripts.toMap.values.map(Pretty[Script.Native].pretty(_, style)).toList ++
+                    ws.plutusV1Scripts.toMap.values
+                        .map(Pretty[Script.PlutusV1].pretty(_, style))
+                        .toList ++
+                    ws.plutusV2Scripts.toMap.values
+                        .map(Pretty[Script.PlutusV2].pretty(_, style))
+                        .toList ++
+                    ws.plutusV3Scripts.toMap.values
+                        .map(Pretty[Script.PlutusV3].pretty(_, style))
+                        .toList
+            if scriptDocs.nonEmpty then fields += bulletList("scripts", scriptDocs)
+
+            // Redeemers (with full data)
+            ws.redeemers.foreach { r =>
+                val redeemerDocs = r.value.toSeq.map(Pretty[Redeemer].pretty(_, style)).toList
+                if redeemerDocs.nonEmpty then fields += bulletList("redeemers", redeemerDocs)
+            }
+
+            // Plutus data
+            if ws.plutusData.value.toMap.nonEmpty then
+                val dataDocs = ws.plutusData.value.toMap.values
+                    .map(kr => Pretty[scalus.builtin.Data].pretty(kr.value, style))
+                    .toList
+                fields += bulletList("datums", dataDocs)
+
+            // Valid flag (only show if false)
+            if !a.isValid then fields += text("valid: false")
+
+            text("Transaction(") / stack(fields.result()).indent(2) / char(')')
 }

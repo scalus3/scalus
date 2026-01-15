@@ -203,7 +203,7 @@ class PrettyTest extends AnyFunSuite {
 
     // === VKeyWitness Tests ===
 
-    test("Pretty[VKeyWitness] shows vkey hash and truncated signature") {
+    test("Pretty[VKeyWitness] shows vkey hash") {
         val vkey =
             ByteString.fromHex("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
         val sig = ByteString.fromHex(
@@ -211,9 +211,8 @@ class PrettyTest extends AnyFunSuite {
         )
         val witness = VKeyWitness(vkey, sig)
         val result = witness.show
-        assert(result.contains("VKeyWitness"))
-        assert(result.contains("vkeyHash"))
-        assert(result.contains("sig="))
+        // Now just shows the hash
+        assert(result.length == 56) // 28 bytes = 56 hex chars
     }
 
     // === Redeemer Tests ===
