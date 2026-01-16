@@ -1,43 +1,50 @@
 ---
 title: Transaction Level Minter Pattern
 sidebarTitle: Transaction Level Minter
-description: Couple spending and minting endpoints for minimal spend costs with single minting execution.
+description: Delegate validation to minting endpoint for minimal per-UTxO costs using coupled spend and mint scripts.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Transaction Level Minter Pattern
 
-Similar to the [Stake Validator](/docs/learning/design-patterns/stake-validator-pattern), this pattern delegates heavy computation to a single execution point. Instead of using a stake validator, it couples spending and minting endpoints of the same validator.
+Couple spending and minting endpoints of the same validator to delegate heavy computation to a single minting execution.
+
+## The Challenge
+
+Like the [Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern), spending validators that run per-UTxO create quadratic costs for batch operations. However, not all protocols use staking, and some naturally involve minting or burning tokens as part of their logic.
 
 ## How It Works
 
 1. **Spending validator** (runs per UTxO): Minimal - just checks minting endpoint executes
 2. **Minting validator** (runs once): Heavy computation when minting/burning tokens
 
-The spending validator only ensures the minting endpoint executes by looking at the mint field and verifying a non-zero amount of its asset is being minted/burnt.
+The spending validator only ensures the minting endpoint executes by verifying a non-zero amount of its asset is being minted or burnt.
 
-## When It Helps
+## When to Use This Pattern
 
-**Useful for:**
-- Validators that need transaction-level validation through minting
-- Protocols using beacon tokens to signal state changes
-- Batch operations where minting/burning confirms execution
-- Reducing spend validator complexity
+**Best for:**
+- Protocols that already use beacon tokens or minting/burning
+- State machines where minting signals state transitions
+- Cases where token existence proves validation occurred
 
-**Not suitable for:**
-- Protocols that don't use minting/burning mechanisms
-- Cases where spend validation must be independent
-- When minting logic should not control spending
+**Not ideal for:**
+- Protocols without natural minting requirements (use [Stake Validator](/docs/learning/design-patterns/stake-validator-pattern) instead - lower execution costs)
+- Cases where spend validation must be independent of minting
+- When minting logic should not control spending authorization
 
-## API
+<Callout type="info">
+**Prefer Stake Validator when possible.** If minting tokens isn't a natural part of your protocol, use the Stake Validator pattern instead—it has lower execution unit costs.
+</Callout>
+
+## API Reference
 
 | Function | Description |
 |----------|-------------|
 | `spend` | Check minting policy ran + validate its redeemer and minted tokens |
 | `spendMinimal` | Just check at least one token is minted/burnt with the policy |
 
-## Implementation
+## Implementation Guide
 
 ### Spending Endpoint
 
@@ -143,7 +150,7 @@ inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Un
 - **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Similar pattern using staking instead of minting
 - **[Merkelized Validator](/docs/learning/design-patterns/merkelized-validator-pattern)** - When spending validators need to read verified data
 
-## Additional Resources
+## Resources
 
 - [Anastasia Labs: Transaction Level Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/transaction-level-validator-minting-policy) - Original pattern documentation
 - [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

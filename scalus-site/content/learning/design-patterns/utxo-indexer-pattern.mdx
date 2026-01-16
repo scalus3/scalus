@@ -1,16 +1,16 @@
 ---
 title: UTxO Indexer Pattern
 sidebarTitle: UTxO Indexer
-description: Match inputs to outputs using off-chain computed indices for O(1) validation.
+description: O(1) input-output mapping with off-chain computed indices for efficient validation.
 ---
 
 import { Callout } from 'nextra/components'
 
 # UTxO Indexer Pattern
 
-This pattern provides an optimized way to map input UTxOs to output UTxOs using indices computed off-chain. Instead of searching through all inputs/outputs on-chain (O(n) per lookup), validators receive pre-computed indices and just verify correctness (O(1)).
+Map input UTxOs to output UTxOs using pre-computed indices, reducing on-chain validation from O(n) search to O(1) lookup.
 
-## The Problem
+## The Challenge
 
 When smart contracts handle multiple inputs and outputs in a single transaction, validation challenges arise:
 
@@ -18,13 +18,33 @@ When smart contracts handle multiple inputs and outputs in a single transaction,
 - **Unaccounted outputs** - Additional outputs can be added without validator checks
 - **Pairing complexity** - Determining how inputs and outputs correspond becomes expensive on-chain
 
-## The Solution
+Searching through all inputs/outputs on-chain costs O(n) per lookup, making batch operations expensive.
 
-Instead of searching on-chain, the validator receives UTxO indices via the redeemer. The transaction builder calculates indices after construction and embeds them in the redeemer, reducing on-chain validation to verification only.
+## How It Works
+
+Instead of searching on-chain, the validator receives UTxO indices via the redeemer:
+
+1. Transaction builder constructs the transaction
+2. Builder calculates input/output indices after construction
+3. Indices are embedded in the redeemer
+4. Validator verifies correctness at known indices (O(1))
 
 This leverages Cardano's deterministic script evaluation property, which guarantees that script interpreter arguments are fixed and outcomes depend solely on transaction contents.
 
-## Available Functions
+## When to Use This Pattern
+
+**Best for:**
+- Validators handling multiple inputs and outputs
+- Protocols requiring explicit input-to-output mapping
+- Preventing double satisfaction attacks
+- Reducing on-chain search costs
+
+**Not ideal for:**
+- Simple single input/output scenarios
+- Cases where input-output pairing is implicit
+- Validators with minimal state transitions
+
+## API Reference
 
 | Function | Use Case |
 |----------|----------|
@@ -34,20 +54,7 @@ This leverages Cardano's deterministic script evaluation property, which guarant
 | `multiOneToOneNoRedeemer` | Map multiple script inputs to outputs (same redeemer) |
 | `multiOneToOneWithRedeemer` | Map multiple script inputs with different redeemers |
 
-## When It Helps
-
-**Useful for:**
-- Validators handling multiple inputs and outputs
-- Protocols requiring explicit input-to-output mapping
-- Preventing double satisfaction attacks
-- Reducing on-chain search costs
-
-**Not suitable for:**
-- Simple single input/output scenarios
-- Cases where input-output pairing is implicit
-- Validators with minimal state transitions
-
-## Implementation
+## Implementation Guide
 
 ### One-to-One Indexer
 
@@ -140,7 +147,7 @@ UtxoIndexer.multiOneToOneWithRedeemer[MyRedeemer](
 )
 ```
 
-## Off-Chain Index Computation
+### Off-Chain Index Computation
 
 Use `TxBuilder` with a redeemer builder function to compute indices after the transaction is assembled:
 
@@ -168,7 +175,12 @@ TxBuilder(env)
 **Double Satisfaction:** The singular UTxO indexer patterns (`oneToOne`, `oneToMany`) do not provide built-in protection against double satisfaction. Implement your own protection based on your contract's needs. See [Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities#3-double-satisfaction).
 </Callout>
 
-## Additional Resources
+## Related Patterns
+
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - For reducing per-input execution costs
+- **[Linked List](/docs/learning/design-patterns/linked-list-pattern)** - For ordered on-chain data structures
+
+## Resources
 
 - [Anastasia Labs: UTxO Indexers](https://github.com/Anastasia-Labs/design-patterns/tree/main/utxo-indexers) - Original pattern documentation with all variations
 - [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

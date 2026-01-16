@@ -1,28 +1,31 @@
 ---
 title: Validity Range Normalization
 sidebarTitle: Validity Range
-description: Simplify time range validation with normalized intervals that eliminate redundant representations.
+description: Eliminate redundant interval representations for consistent time validation across protocol changes.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Validity Range Normalization
 
-The `Interval` type in Cardano allows values that are either meaningless or have multiple representations. This pattern provides a `NormalizedInterval` type that eliminates meaningless intervals and redundant representations.
+Normalize Plutus validity ranges into four standardized forms to simplify time validation and protect against protocol changes.
 
-## The Problem
+## The Challenge
 
-Plutus validity ranges can be represented in multiple equivalent ways:
+Plutus validators receive transaction validity ranges with lower and upper bounds that can be:
+- Finite or infinite (-∞ or +∞)
+- Open or closed at each end
 
-- Open ranges like `(a, b)` equal closed ranges like `[a+1, b-1]`
-- Infinite bounds are sometimes marked as closed despite representing unbounded time
+This creates multiple valid representations of the same range:
+- `(a, b)` equals `[a+1, b-1]` for finite integer values
+- Infinite bounds are sometimes marked as closed despite being mathematically open
 - The "always" range is inconsistently denoted as `[-∞, +∞]`
 
-This forces validators to handle numerous case variations or risk incorrect behavior. The situation worsens for long-lived contracts since the standard method of communicating the range may change with any hard fork.
+This ambiguity risks unintended validator failures. Since Cardano may change how ranges are communicated during hard forks, long-lived contracts must handle various representations to prevent funds from becoming permanently locked.
 
-## The Solution
+## How It Works
 
-Normalize all validity ranges into four standardized forms where all bounds are **inclusive**:
+Normalize all validity ranges into four standardized forms where finite bounds are always **inclusive**:
 
 ```scala
 import scalus.patterns.NormalizedInterval
@@ -34,18 +37,29 @@ enum NormalizedInterval:
     case Always                                           // (-∞, +∞)
 ```
 
-This enables cleaner validator code with four straightforward cases instead of exhaustively matching numerous equivalent representations.
+This reduces pattern-matching complexity from dozens of cases to four clear categories.
 
-## API
+## When to Use This Pattern
+
+**Best for:**
+- Any validator that checks transaction validity time
+- Long-lived contracts that must survive protocol upgrades
+- Simplifying time-based validation logic
+
+**Not ideal for:**
+- Contracts that don't use time constraints
+- Off-chain code (use standard library time functions)
+
+## API Reference
 
 | Method | Description |
 |--------|-------------|
 | `interval.tryNormalize` | Safe normalization - returns `Option[NormalizedInterval]` |
 | `interval.normalize` | Unsafe normalization - fails on improper intervals |
 
-Extension methods are provided on `Interval` type.
+Extension methods are provided on the `Interval` type.
 
-## Usage
+## Implementation Guide
 
 ### Safe Normalization
 
@@ -86,11 +100,9 @@ normalized match
     case NormalizedInterval.Always => ...
 ```
 
-## Examples
+### Examples
 
-### Exclusive Bounds Conversion
-
-Exclusive bounds are automatically converted to inclusive:
+**Exclusive bounds are converted to inclusive:**
 
 ```scala
 val interval = Interval(
@@ -100,7 +112,7 @@ val interval = Interval(
 interval.normalize  // ClosedRange(11, 19)
 ```
 
-### Infinite Bounds
+**Infinite bounds:**
 
 ```scala
 val openEnded = Interval(
@@ -116,7 +128,7 @@ val beforeDeadline = Interval(
 beforeDeadline.normalize  // FromNegInf(500)
 ```
 
-### Improper Intervals
+**Improper intervals:**
 
 ```scala
 val never = Interval(
@@ -127,7 +139,7 @@ never.tryNormalize  // None
 never.normalize     // throws error
 ```
 
-## Type Class Instances
+### Type Class Instances
 
 `NormalizedInterval` provides `Eq`, `Ord`, and `Show` instances for use in on-chain code:
 
@@ -144,7 +156,12 @@ range1.show            // "NormalizedInterval.ClosedRange(100, 200)"
 **On-Chain Safety:** Use `tryNormalize` in validators to handle all cases gracefully. The `normalize` method is useful when you're certain the interval is valid.
 </Callout>
 
-## Additional Resources
+## Related Patterns
+
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Often combined with time checks in reward endpoints
+- **[UTxO Indexer](/docs/learning/design-patterns/utxo-indexer-pattern)** - Time validation in indexed transactions
+
+## Resources
 
 - [Anastasia Labs: Validity Range Normalization](https://github.com/Anastasia-Labs/design-patterns/blob/main/validity-range-normalization/VALIDITY-RANGE-NORMALIZATION.md) - Original pattern documentation
 - [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

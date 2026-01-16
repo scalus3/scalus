@@ -1,35 +1,45 @@
 ---
 title: Stake Validator Pattern
 sidebarTitle: Stake Validator
-description: Delegate computation to staking scripts using the withdraw zero trick for multi-input optimization.
+description: Reduce execution costs for multi-input transactions using the withdraw zero trick.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Stake Validator Pattern
 
-This pattern delegates computation to a staking script using the "withdraw zero trick." Instead of running expensive logic per-UTxO (O(N²)), the stake validator runs once (O(N)).
+Delegate computation to a staking script using the "withdraw zero trick" to reduce execution costs from O(N²) to O(N).
+
+## The Challenge
+
+When a Cardano validator processes multiple UTxOs in a single transaction, the spending script runs once per input. If each execution performs expensive operations (iterating all inputs, checking all outputs), costs grow quadratically:
+
+- **10 inputs** = 10 script executions × 10 iterations = 100 operations
+- **20 inputs** = 20 script executions × 20 iterations = 400 operations
+
+This makes batch operations prohibitively expensive.
 
 ## How It Works
 
 1. **Spending validator** (runs per UTxO): Minimal logic - just checks stake validator ran
 2. **Stake validator** (runs once): Heavy computation in the reward endpoint
 
-The spending validator essentially says: "As long as there is a reward withdrawal of the given script in transaction, this UTxO can be spent."
+The spending validator essentially says: "As long as there is a reward withdrawal of the given script in this transaction, this UTxO can be spent."
 
-## When It Helps
+## When to Use This Pattern
 
-**Useful for:**
-- Validators that need to go over multiple inputs
-- Batch operations where per-input logic can be minimal
-- Reducing execution costs for multi-input transactions
+**Best for:**
+- Consolidating complex business logic into a single validation point
+- Batch operations processing multiple UTxOs together
+- Separating payment validation from protocol logic (better composability)
+- Reducing script size and execution costs
 
-**Not suitable for:**
-- Single input transactions
-- Cases where each input needs unique validation
-- When per-input state transitions are complex
+**Not ideal for:**
+- Single input transactions (no benefit)
+- Cases where each input needs unique, complex validation
+- Protocols where staking credentials aren't suitable
 
-## API
+## API Reference
 
 | Function | Description |
 |----------|-------------|
@@ -37,7 +47,7 @@ The spending validator essentially says: "As long as there is a reward withdrawa
 | `spendMinimal` | Just check stake validator ran (most common) |
 | `withdraw` | Helper for reward endpoint - extracts script hash from credential |
 
-## Implementation
+## Implementation Guide
 
 ### Spending Endpoint
 
@@ -101,7 +111,7 @@ inline override def reward(
 **Double Satisfaction:** When using this pattern with multiple inputs, ensure proper input-to-output mapping to prevent double satisfaction vulnerabilities. See [Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities#3-double-satisfaction).
 </Callout>
 
-## Example: Payment Splitter
+### Example: Payment Splitter
 
 See `scalus.examples.StakeValidatorPaymentSplitterExample` for a complete implementation where:
 - **Spending validator**: Uses `spendMinimal` to just verify stake validator runs
@@ -129,7 +139,7 @@ inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInf
 - **[Merkelized Validator](/docs/learning/design-patterns/merkelized-validator-pattern)** - When spending validators need to read verified data from stake validator
 - **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Similar pattern using minting instead of staking
 
-## Additional Resources
+## Resources
 
 - [Anastasia Labs: Stake Validator Pattern](https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator) - Original pattern documentation
 - [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

@@ -1,46 +1,58 @@
 ---
 title: Merkelized Validator Pattern
 sidebarTitle: Merkelized Validator
-description: Read verified data from stake validator redeemers for batch operations with shared computation results.
+description: Share verified computation results across spending validators using stake validator redeemers.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Merkelized Validator Pattern
 
-This pattern extends the [Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern) by allowing spending validators to **read verified data** from the stake validator's redeemer. Use this when spending validators need access to computation results verified once by the stake validator.
+Extend the [Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern) to allow spending validators to **read verified data** from the stake validator's redeemer.
 
-## The Problem
+## The Challenge
 
 When processing multiple UTxOs in a batch operation:
 - Each spending validator runs independently
 - Expensive computations (e.g., calculating a clearing price) would run N times
-- No way to share verified results between spending validator executions
+- No built-in way to share verified results between spending validator executions
 
-## The Solution
+Even with the Stake Validator pattern, spending validators can only verify that the stake validator ran—they cannot access its computation results.
+
+## How It Works
 
 1. Off-chain code computes expensive values (e.g., clearing price, settlement amounts)
 2. Values are included in the stake validator's redeemer
 3. Stake validator verifies the values are correct (runs **once**)
 4. Spending validators read the verified values via `MerkelizedValidator` (runs per UTxO)
 
-This reduces complexity from O(N²) to O(N) for batch operations.
+This reduces complexity from O(N²) to O(N) for batch operations while giving each spending validator access to shared, verified data.
 
-## When to Use Which Pattern
+## When to Use This Pattern
 
-| Pattern | Use Case | Example |
-|---------|----------|---------|
-| **StakeValidator.spendMinimal** | Only need to check stake validator ran | Payment splitter |
-| **MerkelizedValidator.verifyAndGetRedeemer** | Need to **read** verified data | Batch auction |
+**Best for:**
+- Batch auctions where all bids need the same clearing price
+- Settlement operations with shared computation results
+- Any scenario where spending validators need verified global state
 
-## API
+**Not ideal for:**
+- Simple validation that doesn't need shared data (use [Stake Validator](/docs/learning/design-patterns/stake-validator-pattern) instead)
+- Single-input transactions
+- When each input needs completely independent validation
+
+| Pattern | Use Case |
+|---------|----------|
+| **StakeValidator.spendMinimal** | Only need to check stake validator ran |
+| **MerkelizedValidator.verifyAndGetRedeemer** | Need to **read** verified data |
+
+## API Reference
 
 | Function | Description |
 |----------|-------------|
 | `getStakeRedeemer(hash, txInfo)` | Retrieves the stake validator's redeemer |
 | `verifyAndGetRedeemer(hash, txInfo)` | Verifies withdrawal exists AND returns redeemer |
 
-## Implementation
+## Implementation Guide
 
 ### Stake Validator Redeemer
 
@@ -116,13 +128,18 @@ Run `BatchAuctionTest` to see actual memory/CPU savings.
 **Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. Configure this when deploying scripts.
 </Callout>
 
-## Example: Batch Auction
+### Example: Batch Auction
 
 See `scalus.examples.BatchAuctionValidator` for a complete implementation where:
 - **Stake validator**: Verifies the clearing price calculation once
 - **Spending validator**: Reads the verified clearing price to determine if each bid is filled or refunded
 
-## Additional Resources
+## Related Patterns
+
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Base pattern when you don't need to read data
+- **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Alternative using minting instead of staking
+
+## Resources
 
 - [Anastasia Labs: Merkelized Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/merkelized-validators) - Original pattern documentation
 - [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

@@ -1,14 +1,14 @@
 ---
-title: Linked List Pattern
+title: On-Chain Linked List
 sidebarTitle: Linked List
-description: On-chain sorted linked list using NFTs and datums for storing key/value pairs.
+description: Distributed on-chain storage with uniqueness proofs using NFT-based linked nodes.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Linked List Pattern
+# On-Chain Linked List
 
-An on-chain linked list implementation using NFTs and datums. Each node is a UTxO containing a unique NFT token and a datum with the node's key, reference to next node, and user data.
+Distribute data across multiple UTxOs to overcome datum size limits and enable uniqueness proofs on-chain.
 
 ```
   ╭──────╮  ╭───────╮  ╭────────╮  ╭────────╮  ╭───────╮
@@ -16,63 +16,49 @@ An on-chain linked list implementation using NFTs and datums. Each node is a UTx
   ╰──────╯  ╰───────╯  ╰────────╯  ╰────────╯  ╰───────╯
 ```
 
+## The Challenge
+
+Two fundamental limitations in Cardano's UTxO model:
+
+1. **Datum size limits** - Storing lists in datums is impractical. As a list grows, it can lead to unspendable UTxOs due to limited on-chain resources and transaction size limits.
+
+2. **Non-existence proofs** - Validating that something *doesn't* exist on-chain is impossible with standard UTxOs. You only have access to transaction inputs, so detecting duplicates (e.g., preventing double votes) requires a data structure that guarantees uniqueness on insertion.
+
+## How It Works
+
+Each node is a UTxO containing:
+1. A **unique NFT** identifying the node
+2. A **datum** with the node's key, reference to next node, and user data
+
+For **ordered lists**, proving uniqueness becomes simple: inspect two adjacent keys and verify the new key fits between them according to the ordering (a < b < c). This guarantees no duplicate exists in that range.
+
+Operations (insert, remove) consume existing nodes and produce updated ones, with the minting policy enforcing list invariants.
+
+## When to Use This Pattern
+
+**Best for:**
+- Preventing duplicates (e.g., one vote per user, unique registrations)
+- Growing collections that would exceed datum size limits
+- Registries requiring uniqueness guarantees
+- On-chain state that needs membership proofs
+
+**Not ideal for:**
+- High-frequency updates (each operation is a transaction)
+- Random access lookups (requires sequential traversal)
+- Small, fixed-size collections (simpler to use datum lists)
+
 ## Two Variants
 
-Scalus provides two linked list implementations:
-
-| Variant | Module | Description |
-|---------|--------|-------------|
-| **OrderedLinkedList** | `scalus.patterns.OrderedLinkedList` | Keys must be sorted (key < ref). Supports `insert` at any position. |
-| **UnorderedLinkedList** | `scalus.patterns.UnorderedLinkedList` | Keys can be in any order. Only `prepend`/`append` for insertion. |
+| Variant | Module | Key Ordering | Insert Methods |
+|---------|--------|--------------|----------------|
+| **OrderedLinkedList** | `scalus.patterns.OrderedLinkedList` | Sorted (key < ref) | `insert`, `prepend`, `append` |
+| **UnorderedLinkedList** | `scalus.patterns.UnorderedLinkedList` | Any order | `prepend`, `append` only |
 
 **When to use which:**
 - **OrderedLinkedList**: When you need sorted data or efficient lookup by key range
 - **UnorderedLinkedList**: When order doesn't matter and you only add to head/tail
 
-## Data Structures
-
-### Node Datum (`Cons`)
-
-Each UTxO stores a `Cons` datum representing the node:
-
-```scala
-import scalus.patterns.{Cons, Node, Common, Config}
-
-case class Cons(
-    key: Option[TokenName],  // None = head node, Some(key) = regular node
-    ref: Option[TokenName],  // Reference to next node (None = end of list)
-    data: Data               // User data stored in this node
-)
-```
-
-### Node Representation
-
-```scala
-case class Node(value: Value, cell: Cons)
-```
-
-### Transaction Context
-
-```scala
-case class Common(
-    policy: PolicyId,
-    mint: Value,
-    inputs: List[Node],
-    outputs: List[Node]
-)
-```
-
-### Configuration
-
-```scala
-case class Config(
-    init: TxOutRef,      // Makes each list unique
-    deadline: PosixTime, // Optional deadline for operations
-    penalty: Address     // Address for penalty payments
-)
-```
-
-## Operations
+## API Reference
 
 | Operation | Ordered | Unordered | Description |
 |-----------|:-------:|:---------:|-------------|
@@ -83,7 +69,31 @@ case class Config(
 | `append` | ✓ | ✓ | Insert at end |
 | `remove` | ✓ | ✓ | Remove node (burn node NFT) |
 
-## How Insert Works (Ordered)
+### Data Structures
+
+```scala
+import scalus.patterns.{Cons, Node, Common, Config}
+
+// Node datum - stored in each UTxO
+case class Cons(
+    key: Option[TokenName],  // None = head node, Some(key) = regular node
+    ref: Option[TokenName],  // Reference to next node (None = end of list)
+    data: Data               // User data stored in this node
+)
+
+// Node representation for validation
+case class Node(value: Value, cell: Cons)
+
+// Shared transaction context
+case class Common(policy: PolicyId, mint: Value, inputs: List[Node], outputs: List[Node])
+
+// Configuration for the list
+case class Config(init: TxOutRef, deadline: PosixTime, penalty: Address)
+```
+
+## Implementation Guide
+
+### How Insert Works (Ordered)
 
 ```
            ╭────────╮  ╭────────╮
@@ -106,8 +116,6 @@ case class Config(
 - New node's `ref` points to what parent previously referenced
 - Keys maintain sorted order (for OrderedLinkedList)
 - Exactly one NFT is minted for the new node
-
-## Implementation
 
 ### Ordered Linked List
 
@@ -202,14 +210,12 @@ enum UnorderedNodeAction derives FromData, ToData:
 **NFT Management:** Each node is represented by a unique NFT. The minting policy controls list operations - `init`/`insert`/`prepend`/`append` mint NFTs, while `deinit`/`remove` burn them.
 </Callout>
 
-## Use Cases
+## Related Patterns
 
-- **Sorted registries**: Maintain ordered lists of participants, assets, or records
-- **Priority queues**: Process items in key order
-- **Merkle-like structures**: Build verifiable data structures on-chain
-- **State machines**: Track ordered state transitions
+- **[UTxO Indexer](/docs/learning/design-patterns/utxo-indexer-pattern)** - For efficient input-output mapping
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - For reducing validation costs
 
-## Additional Resources
+## Resources
 
 - [Anastasia Labs: Aiken Linked List](https://github.com/Anastasia-Labs/aiken-linked-list) - Original Aiken implementation
 - [Plutarch Linked List Guide](https://github.com/Anastasia-Labs/data-structures/blob/main/pages/linked_list.mdx) - Detailed pattern explanation
