@@ -1771,7 +1771,7 @@ object TxBuilder {
       * transactions complete in 1-2 iterations. If this limit is exceeded, it usually indicates
       * insufficient funds or an issue with the transaction structure.
       */
-    val MaxCompleteIterations = 10
+    private val MaxCompleteIterations = 10
 
     // -------------------------------------------------------------------------
     // Factory methods
@@ -1819,3 +1819,13 @@ object TxBuilder {
         apply(env, evaluator)
     }
 }
+
+/** Creates a TxBuilder using a context CardanoInfo.
+  *
+  * Example:
+  * {{{
+  * given CardanoInfo = CardanoInfo.mainnet
+  * val builder = txBuilder  // Uses the given CardanoInfo
+  * }}}
+  */
+def txBuilder(using env: CardanoInfo): TxBuilder = TxBuilder(env)

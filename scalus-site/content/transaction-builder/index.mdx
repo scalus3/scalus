@@ -32,6 +32,24 @@ val tx = TxBuilder(env)
   .transaction                             // Get the final transaction
 ```
 
+### Using Context Parameters
+
+For cleaner code, you can use `txBuilder` with a context `CardanoInfo`:
+
+```scala copy
+import scalus.cardano.ledger.CardanoInfo
+import scalus.cardano.txbuilder.txBuilder
+
+given CardanoInfo = CardanoInfo.mainnet
+
+val tx = txBuilder                           // Uses the given CardanoInfo
+  .spend(utxo)
+  .payTo(recipientAddress, Value.ada(10))
+  .build(changeTo = changeAddress)
+  .sign(signer)
+  .transaction
+```
+
 <Callout type="info">
   TxBuilder is purely functional - each method returns a new instance with updated state, and it's fully immutable.
   Only `build()` can throw while evaluating scripts and balancing the transaction.

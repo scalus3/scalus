@@ -10,6 +10,7 @@ import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.node.Emulator
+import scalus.cardano.txbuilder.txBuilder
 import scalus.compiler.compile
 import scalus.prelude.List as PList
 import scalus.testing.kit.Party
@@ -52,7 +53,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val scriptUtxo = createScriptLockedUtxo(script1)
         val redeemer = Data.List(PList.Nil)
 
-        val builder = TxBuilder(testEnv)
+        val builder = txBuilder
             .spend(scriptUtxo, redeemer)
 
         val exception = intercept[TxBuilderException.BuildStepException] {
@@ -69,7 +70,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val assets = Map(AssetName(hex"deadbeef") -> 100L)
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
 
-        val builder = TxBuilder(testEnv)
+        val builder = txBuilder
             .spend(utxo)
             .mint(policyId, assets, redeemer)
 
@@ -91,7 +92,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validTo = validFrom.plusSeconds(3600)
         val inlineDatum = 123.toData
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(paymentUtxo)
             .collaterals(collateralUtxo)
             .spend(scriptUtxo, redeemer, script1)
@@ -163,7 +164,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           )
         )
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .mint(mintingPolicy, assets, redeemer)
             .payTo(Bob.address, paymentValue)
@@ -222,7 +223,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           scriptRef = None
         )
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .output(customOutput)
             .build(changeTo = Alice.address)
@@ -248,7 +249,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           scalus.builtin.Builtins.blake2b_256(scalus.builtin.Builtins.serialiseData(datum))
         )
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .attach(datum)
             .payTo(Bob.address, Value.ada(2), datumHash)
@@ -274,7 +275,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val datum2 = hex"aabbcc".toData
         val datum3 = Data.Constr(1, PList(222.toData))
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .attach(datum1)
             .attach(datum2)
@@ -292,7 +293,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     test("TxBuilder spend script UTXO without script or redeemer should fail") {
         val scriptUtxo = createScriptLockedUtxo(script1)
 
-        val builder = TxBuilder(testEnv)
+        val builder = txBuilder
             .spend(scriptUtxo)
             .payTo(Bob.address, Value.ada(20))
 
@@ -316,7 +317,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
             )
 
         // Only send ADA, no tokens
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(Utxo(tokenUtxo))
             .payTo(Bob.address, Value.ada(5))
             .build(changeTo = Alice.address)
@@ -356,7 +357,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
         val paymentValue = Value.asset(policyId, co2, sendAmount, Coin.ada(3))
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(Utxo(tokenUtxo))
             .payTo(Bob.address, paymentValue)
             .build(changeTo = Alice.address)
@@ -405,7 +406,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         // Send only co2, no h2so4
         val paymentValue = Value.asset(policyId, co2, 200, Coin.ada(3))
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(Utxo(tokenUtxo))
             .payTo(Bob.address, paymentValue)
             .build(changeTo = Alice.address)
@@ -429,7 +430,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         // not merge with the payment output. Users expect explicitly stated amounts.
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(100)).sample.get
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .payTo(Alice.address, Value.ada(10)) // Explicit payment to Alice
             .build(changeTo = Alice.address) // Alice is also change address
@@ -464,7 +465,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     test("Transaction.utxos returns outputs with correct transaction inputs") {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .payTo(Bob.address, Value.ada(2))
             .payTo(Alice.address, Value.ada(3))
@@ -507,7 +508,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         )
 
         // Build tx1: send ADA to Bob
-        val tx1 = TxBuilder(testEnv)
+        val tx1 = txBuilder
             .payTo(Bob.address, Value.ada(10))
             .complete(provider, Alice.address)
             .await()
@@ -535,7 +536,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val aliceChangeFromTx1 = Utxo(tx1.utxos.find(_._2.address == Alice.address).get)
 
         // Build tx2 using UTXOs derived from tx1.utxos
-        val tx2 = TxBuilder(testEnv)
+        val tx2 = txBuilder
             .spend(bobUtxoFromTx1) // Spend the UTXO from tx1 that we got via Transaction.utxos
             .spend(aliceChangeFromTx1) // Alice's change for fees
             .payTo(Alice.address, Value.ada(10))
@@ -579,7 +580,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .mint(policyId, assets, attached(mintingPolicy, redeemer))
@@ -613,7 +614,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .references(Utxo(refScriptUtxo))
@@ -644,7 +645,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .withdrawRewards(scriptStakeAddress, Coin(1_000_000), attached(script1, redeemer))
@@ -680,7 +681,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .delegateTo(scriptStakeAddress, poolId, attached(script1, redeemer))
@@ -716,7 +717,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .registerStake(scriptStakeAddress, attached(script1, redeemer))
@@ -769,7 +770,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .references(refUtxo)
@@ -806,7 +807,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .mint(
@@ -842,7 +843,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .registerDRep(scriptCredential, None, attached(script1, Data.unit))
@@ -875,7 +876,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .delegateTo(scriptStakeAddress, poolId, attached(script1, Data.unit))
@@ -904,7 +905,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
-        val tx = TxBuilder(testEnv)
+        val tx = txBuilder
             .spend(utxo)
             .collaterals(collateralUtxo)
             .deregisterStake(scriptStakeAddress, attached(script1, Data.unit))
@@ -920,5 +921,11 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           certRedeemerOpt.isDefined,
           s"Certificate redeemer should be present. Redeemers: $redeemers"
         )
+    }
+
+    test("TxBuilder can be created with context CardanoInfo") {
+        // txBuilder uses context parameter
+        val builder = txBuilder
+        assert(builder.env == testEnv)
     }
 }

@@ -181,16 +181,16 @@ import scalus.utils.await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
 
-// Setup
-val cardanoInfo = CardanoInfo.mainnet
+// Setup - use given CardanoInfo for cleaner txBuilder calls
+given CardanoInfo = CardanoInfo.mainnet
 val myUtxo: Utxo = // ...
 val recipientAddress: Address = // ...
 val changeAddress: Address = // ...
 val signer: TransactionSigner = // ...
 val provider: Provider = // ...
 
-// Build, sign, and submit
-val transaction = TxBuilder(cardanoInfo)
+// Build, sign, and submit using txBuilder with context parameter
+val transaction = txBuilder
   .spend(myUtxo)
   .payTo(recipientAddress, Value.ada(10))
   .build(changeTo = changeAddress)
