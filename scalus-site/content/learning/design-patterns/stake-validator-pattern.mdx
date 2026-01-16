@@ -111,26 +111,53 @@ inline override def reward(
 **Double Satisfaction:** When using this pattern with multiple inputs, ensure proper input-to-output mapping to prevent double satisfaction vulnerabilities. See [Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities#3-double-satisfaction).
 </Callout>
 
-### Example: Payment Splitter
+### Example: Optimized Payment Splitter
 
-See `scalus.examples.StakeValidatorPaymentSplitterExample` for a complete implementation where:
-- **Spending validator**: Uses `spendMinimal` to just verify stake validator runs
-- **Stake validator**: Verifies payment distribution logic once for all inputs
+The `scalus-examples` module includes a side-by-side comparison:
+
+| Validator | Description |
+|-----------|-------------|
+| `NaivePaymentSplitterValidator` | Runs full validation per UTxO (O(N²)) |
+| `OptimizedPaymentSplitterValidator` | Uses stake validator pattern (O(N)) |
+
+<Callout type="info">
+**Real-world savings:** Tests show **~71% reduction** in memory and CPU costs when spending multiple UTxOs with the optimized version.
+</Callout>
+
+The optimized version also uses `SpendRedeemer.ownInputIndex` to avoid iterating through all inputs to find the own input:
 
 ```scala
-// Payment splitter - spending endpoint is minimal
-StakeValidator.spendMinimal(ownScriptHash, tx)
+case class SpendRedeemer(ownInputIndex: BigInt) derives ToData, FromData
 
-// All heavy logic in stake validator reward endpoint
-inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInfo): Unit = {
-    val distribution = redeemer.to[PaymentDistribution]
+// Spending endpoint - O(1) input lookup
+inline override def spend(...): Unit = {
+    val ownInput = tx.inputs.at(spendRedeemer.ownInputIndex)
+    require(ownInput.outRef === ownRef, "Own input index mismatch")
 
-    // Verify all recipients receive correct amounts
-    distribution.payments.foreach { payment =>
-        val output = tx.outputs.find(_.address === payment.recipient)
-            .getOrFail("Missing recipient output")
-        require(output.value.getLovelace >= payment.amount, "Insufficient payment")
-    }
+    val ownScriptHash = ownInput.resolved.address.credential
+        .scriptOption.getOrFail("Own address must be Script")
+
+    // Just check stake validator ran (withdraw zero trick)
+    StakeValidator.spendMinimal(ownScriptHash, tx)
+}
+```
+
+The stake validator's reward endpoint receives pre-computed values and verifies them:
+
+```scala
+case class SplitVerificationRedeemer(
+    payeeWithChange: PubKeyHash,
+    sumContractInputs: BigInt,
+    splitPerPayee: BigInt,
+    nPayed: BigInt
+) derives ToData, FromData
+
+// Reward endpoint - runs ONCE, verifies claimed values match transaction
+inline override def reward(...): Unit = {
+    val verification = redeemer.to[SplitVerificationRedeemer]
+    // Verify sumContractInputs matches actual inputs
+    // Verify outputs match claimed split amounts
+    // All heavy iteration happens here, once
 }
 ```
 
@@ -143,4 +170,6 @@ inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInf
 
 - [Anastasia Labs: Stake Validator Pattern](https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator) - Original pattern documentation
 - [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
-- [StakeValidatorPaymentSplitterExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorPaymentSplitterExample.scala) - Complete example
+- [OptimizedPaymentSplitterValidator](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala) - Optimized example with 71% savings
+- [NaivePaymentSplitterValidator](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/PaymentSplitterValidator.scala) - Naive version for comparison
+- [PaymentSplitterTxBuilderTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala) - Cost comparison tests

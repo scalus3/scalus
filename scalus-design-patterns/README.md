@@ -82,6 +82,15 @@ inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInf
 
 See `scalus.examples.StakeValidatorPaymentSplitterExample` for a complete example.
 
+#### Real-World Cost Comparison
+
+The `scalus-examples` module includes a side-by-side comparison:
+- `NaivePaymentSplitterValidator` - Runs full validation per UTxO (O(N²))
+- `OptimizedPaymentSplitterValidator` - Uses stake validator pattern (O(N))
+
+Tests show **~71% reduction** in memory and CPU costs when spending multiple UTxOs.
+See `PaymentSplitterTxBuilderTest` for the cost comparison test.
+
 ### Transaction Level Validator Minting Policy
 
 Similar to the [Stake Validator](#stake-validator), this pattern delegates heavy computation
