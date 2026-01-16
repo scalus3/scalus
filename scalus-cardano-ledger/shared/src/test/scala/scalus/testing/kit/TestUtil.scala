@@ -1,18 +1,21 @@
 package scalus.testing.kit
 
+import org.scalacheck.{Arbitrary, Gen}
 import scalus.builtin.Builtins.{appendByteString, blake2b_224, blake2b_256}
+import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.ArbitraryInstances.given
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
-import scalus.cardano.txbuilder.{PubKeyWitness, RedeemerManagement, RedeemerPurpose, Wallet as WalletTrait, Witness}
+import scalus.cardano.txbuilder.{PubKeyWitness, RedeemerManagement, RedeemerPurpose, TransactionBuilder, Wallet as WalletTrait, Witness}
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.ledger.api.v3.{TxId, TxOutRef, ValidatorHash}
 import scalus.ledger.api.{v1, v2, v3, ScriptContext}
-import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
+import scalus.uplc.eval.PlutusVM
 
-object TestUtil extends ScalusTest {
+object TestUtil {
     import scalus.builtin.ByteString.*
 
     // Mock data generation constants and methods
@@ -75,7 +78,25 @@ object TestUtil extends ScalusTest {
         )
     }
 
-    @deprecated("Will be removed", "0.13.0")
+    /** Ada-only pub key utxo from the given party, at least `min` lovelace, random tx id, random
+      * index, no datum, no script ref
+      */
+    def genAdaOnlyPubKeyUtxo(
+        party: Party,
+        params: ProtocolParams = CardanoInfo.mainnet.protocolParams,
+        min: Coin = Coin(0L)
+    )(using CardanoInfo): Gen[Utxo] =
+        for input <- Arbitrary.arbitrary[TransactionInput]
+        yield {
+            val output =
+                TransactionBuilder.ensureMinAda(
+                  TransactionOutput(party.address, Value(min)),
+                  params
+                )
+            Utxo(input, output)
+        }
+
+    @deprecated("will be removed", "0.13.0")
     def createTestWallet(address: Address, ada: BigInt): WalletTrait = new WalletTrait {
         private val testInput = TransactionInput(
           TransactionHash.fromByteString(ByteString.fromHex("0" * 64)),
@@ -145,7 +166,7 @@ object TestUtil extends ScalusTest {
         output: TransactionOutput
     ): Option[Data] = output.resolveDatum(tx)
 
-    @deprecated("Will be removed", "0.13.0")
+    @deprecated("will be removed", "0.13.0")
     def runValidator(
         validatorProgram: Program,
         tx: Transaction,
@@ -156,8 +177,10 @@ object TestUtil extends ScalusTest {
         environment: CardanoInfo = testEnvironment
     ) = {
         given CardanoInfo = environment
+        given PlutusVM = PlutusVM.makePlutusV3VM()
         val scriptContext = tx.getScriptContextV3(utxo, RedeemerPurpose.ForSpend(scriptInput))
-        validatorProgram.runWithDebug(scriptContext)
+        val appliedScript = validatorProgram $ scriptContext.toData
+        appliedScript.evaluateDebug
     }
 
     extension (tx: Transaction)

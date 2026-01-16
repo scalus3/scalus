@@ -1,6 +1,5 @@
 package scalus.cardano.txbuilder
 
-import monocle.syntax.all.*
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.ByteString.{hex, utf8}
@@ -10,12 +9,12 @@ import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
-import scalus.cardano.ledger.TransactionOutput.Babbage
 import scalus.cardano.node.Emulator
 import scalus.compiler.compile
 import scalus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
 import scalus.toUplc
 import scalus.utils.await
 
@@ -41,14 +40,12 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
     def createScriptLockedUtxo(script: PlutusScript): Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        Utxo(
-          utxo._1,
-          utxo._2
-              .focus(_.address)
-              .replace(Address(Mainnet, Credential.ScriptHash(script.scriptHash)))
-              .focus(_.datumOption)
-              .replace(Some(Inline(42.toData)))
+        val newOutput = TransactionOutput(
+          address = Address(Mainnet, Credential.ScriptHash(script.scriptHash)),
+          value = utxo.output.value,
+          inlineDatum = 42.toData,
         )
+        utxo.copy(output = newOutput)
     }
 
     test("TxBuilder spend without attaching script should fail when built") {
@@ -73,7 +70,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
 
         val builder = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .mint(policyId, assets, redeemer)
 
         val exception = intercept[TxBuilderException.BuildStepException] {
@@ -87,16 +84,16 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     test("TxBuilder spend with script should include script in witness set") {
         val scriptUtxo = createScriptLockedUtxo(script1)
         val redeemer = Data.List(PList.Nil)
-        val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
         val inlineDatum = 123.toData
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(paymentUtxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(paymentUtxo)
+            .collaterals(collateralUtxo)
             .spend(scriptUtxo, redeemer, script1)
             .payTo(Alice.address, Value.ada(1))
             .payTo(Bob.address, Value.ada(2), inlineDatum)
@@ -145,7 +142,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           assetName1 -> 100L,
           assetName2 -> 50L
         )
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
 
         val paymentValue = Value(
           coin = Coin.ada(2),
@@ -167,7 +164,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         )
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .mint(mintingPolicy, assets, redeemer)
             .payTo(Bob.address, paymentValue)
             .metadata(metadata)
@@ -216,7 +213,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     }
 
     test("TxBuilder sends specified TransactionOutput") {
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 
         val customOutput = TransactionOutput(
           address = Bob.address,
@@ -226,7 +223,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         )
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .output(customOutput)
             .build(changeTo = Alice.address)
             .transaction
@@ -244,7 +241,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     }
 
     test("TxBuilder payTo with datum hash includes datum in witness set") {
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 
         val datum = Data.Constr(0, PList(100.toData, hex"abcd".toData))
         val datumHash = DataHash.fromByteString(
@@ -252,7 +249,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         )
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .attach(datum)
             .payTo(Bob.address, Value.ada(2), datumHash)
             .build(changeTo = Alice.address)
@@ -271,14 +268,14 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     }
 
     test("TxBuilder attach preserves multiple data in witness set") {
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 
         val datum1 = 111.toData
         val datum2 = hex"aabbcc".toData
         val datum3 = Data.Constr(1, PList(222.toData))
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .attach(datum1)
             .attach(datum2)
             .attach(datum3)
@@ -398,7 +395,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
             )
           )
         )
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
         val tokenUtxo =
             (
               Arbitrary.arbitrary[TransactionInput].sample.get,
@@ -430,10 +427,10 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     test("build should not merge change with existing output to same address") {
         // When payTo(changeAddress, amount) is used, change should go to a SEPARATE output,
         // not merge with the payment output. Users expect explicitly stated amounts.
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 100_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(100)).sample.get
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .payTo(Alice.address, Value.ada(10)) // Explicit payment to Alice
             .build(changeTo = Alice.address) // Alice is also change address
             .transaction
@@ -465,10 +462,10 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     // ============================================================================
 
     test("Transaction.utxos returns outputs with correct transaction inputs") {
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 10_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
+            .spend(utxo)
             .payTo(Bob.address, Value.ada(2))
             .payTo(Alice.address, Value.ada(3))
             .build(changeTo = Alice.address)
@@ -576,15 +573,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val policyId: PolicyId = mintingPolicy.scriptHash
         val redeemer = Data.List(PList.Nil)
         val assets = Map(AssetName(hex"deadbeef") -> 100L)
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .mint(policyId, assets, attached(mintingPolicy, redeemer))
             .validFrom(validFrom)
             .validTo(validTo)
@@ -604,8 +601,8 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val policyId: PolicyId = mintingPolicy.scriptHash
         val redeemer = Data.List(PList.Nil)
         val assets = Map(AssetName(hex"deadbeef") -> 100L)
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         // Create reference script UTxO
         val refScriptUtxo = (
@@ -617,8 +614,8 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .references(Utxo(refScriptUtxo))
             .mint(policyId, assets, reference(redeemer))
             .validFrom(validFrom)
@@ -641,15 +638,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           StakePayload.Script(script1.scriptHash)
         )
         val redeemer = Data.unit
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .withdrawRewards(scriptStakeAddress, Coin(1_000_000), attached(script1, redeemer))
             .validFrom(validFrom)
             .validTo(validTo)
@@ -677,15 +674,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         )
         val poolId = PoolKeyHash.fromHex("0" * 56)
         val redeemer = Data.unit
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .delegateTo(scriptStakeAddress, poolId, attached(script1, redeemer))
             .validFrom(validFrom)
             .validTo(validTo)
@@ -713,15 +710,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           StakePayload.Script(script1.scriptHash)
         )
         val redeemer = Data.unit
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .registerStake(scriptStakeAddress, attached(script1, redeemer))
             .validFrom(validFrom)
             .validTo(validTo)
@@ -756,8 +753,8 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         import scalus.cardano.address.{StakeAddress, StakePayload}
 
         val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         // Create a reference UTxO with the script
         val refInput = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -773,8 +770,8 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .references(refUtxo)
             .registerStake(scriptStakeAddress, reference(Data.unit, Set.empty))
             .validFrom(validFrom)
@@ -803,15 +800,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         import scalus.cardano.address.{StakeAddress, StakePayload}
 
         val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .mint(
               policyId = script1.scriptHash,
               assets = Map(AssetName.empty -> 1L),
@@ -839,15 +836,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         import TwoArgumentPlutusScriptWitness.*
 
         val scriptCredential = Credential.ScriptHash(script1.scriptHash)
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 550_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(550)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .registerDRep(scriptCredential, None, attached(script1, Data.unit))
             .validFrom(validFrom)
             .validTo(validTo)
@@ -872,15 +869,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
         val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
         val poolId = PoolKeyHash.fromHex("0" * 56)
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .delegateTo(scriptStakeAddress, poolId, attached(script1, Data.unit))
             .validFrom(validFrom)
             .validTo(validTo)
@@ -901,15 +898,15 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         import scalus.cardano.address.{StakeAddress, StakePayload}
 
         val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
-        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
-        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(utxo))
-            .collaterals(Utxo(collateralUtxo))
+            .spend(utxo)
+            .collaterals(collateralUtxo)
             .deregisterStake(scriptStakeAddress, attached(script1, Data.unit))
             .validFrom(validFrom)
             .validTo(validTo)

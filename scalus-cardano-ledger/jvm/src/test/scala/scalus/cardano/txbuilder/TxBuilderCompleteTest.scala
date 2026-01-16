@@ -12,6 +12,7 @@ import scalus.compiler.compileInline
 import scalus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
 import scalus.utils.await
 import scalus.toUplc
 
@@ -266,18 +267,18 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete should send tokens acquired from additional input querying back as change") {
-        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
 
         val provider = Emulator(
           Map(
             input(0) -> tokenOutput(Alice.address, 100, policyId -> Map(co2 -> 200L)),
-            explicitUtxo._1 -> explicitUtxo._2
+            explicitUtxo.input -> explicitUtxo.output
           )
         )
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(explicitUtxo))
-            .payTo(Bob.address, explicitUtxo._2.value)
+            .spend(explicitUtxo)
+            .payTo(Bob.address, explicitUtxo.output.value)
             .complete(provider, Alice.address)
             .await()
             .transaction
@@ -517,18 +518,18 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("complete with explicit spend should only add necessary additional inputs") {
-        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 3_000_000).sample.get
+        val explicitUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(3)).sample.get
 
         val provider = Emulator(
           Map(
             input(0) -> adaOutput(Alice.address, 100),
-            explicitUtxo._1 -> explicitUtxo._2
+            explicitUtxo.input -> explicitUtxo.output
           )
         )
 
         val tx = TxBuilder(testEnv)
-            .spend(Utxo(explicitUtxo))
-            .payTo(Bob.address, explicitUtxo._2.value)
+            .spend(explicitUtxo)
+            .payTo(Bob.address, explicitUtxo.output.value)
             .complete(provider, Alice.address)
             .await()
             .transaction

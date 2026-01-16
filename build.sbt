@@ -470,23 +470,30 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
-    )
-    .jvmSettings(
-      // Copy Party.scala (JVM-only due to Bloxbean dependencies)
+      // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
-          val source =
-              (scalusCardanoLedger.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala" / "scalus" / "testing" / "kit" / "Party.scala"
-          val target =
-              (Compile / sourceManaged).value / "scalus" / "testing" / "kit" / "Party.scala"
+          val baseDir =
+              (scalusCardanoLedger.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"
+          val targetDir = (Compile / sourceManaged).value
           val log = streams.value.log
-          if (source.exists) {
-              IO.copyFile(source, target)
-              Seq(target)
-          } else {
-              log.error(s"Party.scala does not exist at $source")
-              Seq.empty
+          val files = Seq(
+            "scalus/testing/kit/Party.scala",
+            "scalus/testing/kit/TestUtil.scala"
+          )
+          files.flatMap { file =>
+              val source = baseDir / file
+              val target = targetDir / file
+              if (source.exists) {
+                  IO.copyFile(source, target)
+                  Some(target)
+              } else {
+                  log.error(s"$file does not exist at $source")
+                  None
+              }
           }
       }.taskValue,
+    )
+    .jvmSettings(
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,

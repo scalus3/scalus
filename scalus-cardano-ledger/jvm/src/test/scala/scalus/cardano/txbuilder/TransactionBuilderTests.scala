@@ -26,6 +26,7 @@ import scalus.cardano.txbuilder.ScriptSource.*
 import scalus.cardano.txbuilder.SomeBuildError.SomeStepError
 import scalus.cardano.txbuilder.StepError.*
 import scalus.testing.kit.Party.Alice
+import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
 import scalus.cardano.txbuilder.TransactionBuilder.{build, Context, ResolvedUtxos}
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint, *}
 import scalus.prelude.List as PList
@@ -89,55 +90,65 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           script2Signers
         )
 
-    private def setScriptAddr(
-        scriptHash: ScriptHash,
-        utxo: (TransactionInput, Babbage)
-    ): (TransactionInput, Babbage) =
-        utxo.focus(_._2.address)
-            .replace(
-              ShelleyAddress(
-                network = Mainnet,
-                payment = ShelleyPaymentPart.Script(scriptHash),
-                delegation = Null
-              )
-            )
+    private def withScriptAddr(scriptHash: ScriptHash, utxo: Utxo): Utxo = {
+        val newOutput = utxo.output match
+            case o: Babbage =>
+                o.copy(address =
+                    ShelleyAddress(Mainnet, ShelleyPaymentPart.Script(scriptHash), Null)
+                )
+            case _ =>
+                Babbage(
+                  address = ShelleyAddress(Mainnet, ShelleyPaymentPart.Script(scriptHash), Null),
+                  value = utxo.output.value,
+                  datumOption = None,
+                  scriptRef = None
+                )
+        Utxo(utxo.input, newOutput)
+    }
 
     // A Utxo at the address for script 1
     val script1Utxo: Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        Utxo(
-          setScriptAddr(script1.scriptHash, utxo)
-              .focus(_._2.datumOption)
-              .replace(Some(Inline(Data.List(PList.Nil))))
-        )
+        val withAddr = withScriptAddr(script1.scriptHash, utxo)
+        val newOutput = withAddr.output match
+            case o: Babbage => o.copy(datumOption = Some(Inline(Data.List(PList.Nil))))
+            case _          => throw new IllegalStateException("Expected Babbage output")
+        Utxo(withAddr.input, newOutput)
     }
 
     // A Utxo at the address for script 2
     val script2Utxo: Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        Utxo(setScriptAddr(script2.scriptHash, utxo))
+        withScriptAddr(script2.scriptHash, utxo)
     }
 
     // Expected Signers for the plutus script1 ref witness
     val psRefWitnessExpectedSigners: Set[ExpectedSigner] =
         Gen.listOf(arbitrary[AddrKeyHash]).sample.get.toSet.map(ExpectedSigner(_))
 
-    private def setRefScript(
-        script: Script,
-        utxo: (TransactionInput, Babbage)
-    ): (TransactionInput, Babbage) =
-        utxo.focus(_._2.scriptRef).replace(Some(ScriptRef(script)))
+    private def withRefScript(script: Script, utxo: Utxo): Utxo = {
+        val newOutput = utxo.output match
+            case o: Babbage => o.copy(scriptRef = Some(ScriptRef(script)))
+            case _ =>
+                Babbage(
+                  address = utxo.output.address,
+                  value = utxo.output.value,
+                  datumOption = None,
+                  scriptRef = Some(ScriptRef(script))
+                )
+        Utxo(utxo.input, newOutput)
+    }
 
     // A utxo carrying a reference script for script 1
     val utxoWithScript1ReferenceScript: Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        Utxo(setRefScript(script1, utxo))
+        withRefScript(script1, utxo)
     }
 
     // A utxo carrying a reference script for script 2
     val utxoWithScript2ReferenceStep: ReferenceOutput = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        ReferenceOutput(Utxo(setRefScript(script2, utxo)))
+        ReferenceOutput(withRefScript(script2, utxo))
     }
 
     val plutusScript1RefWitness = ThreeArgumentPlutusScriptWitness(
