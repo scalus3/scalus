@@ -1,0 +1,218 @@
+---
+title: Linked List Pattern
+sidebarTitle: Linked List
+description: On-chain sorted linked list using NFTs and datums for storing key/value pairs.
+---
+
+import { Callout } from 'nextra/components'
+
+# Linked List Pattern
+
+An on-chain linked list implementation using NFTs and datums. Each node is a UTxO containing a unique NFT token and a datum with the node's key, reference to next node, and user data.
+
+```
+  ╭──────╮  ╭───────╮  ╭────────╮  ╭────────╮  ╭───────╮
+  │•Head•├─>│ Apple ├─>│ Banana ├─>│ Orange ├─>│ Peach │
+  ╰──────╯  ╰───────╯  ╰────────╯  ╰────────╯  ╰───────╯
+```
+
+## Two Variants
+
+Scalus provides two linked list implementations:
+
+| Variant | Module | Description |
+|---------|--------|-------------|
+| **OrderedLinkedList** | `scalus.patterns.OrderedLinkedList` | Keys must be sorted (key < ref). Supports `insert` at any position. |
+| **UnorderedLinkedList** | `scalus.patterns.UnorderedLinkedList` | Keys can be in any order. Only `prepend`/`append` for insertion. |
+
+**When to use which:**
+- **OrderedLinkedList**: When you need sorted data or efficient lookup by key range
+- **UnorderedLinkedList**: When order doesn't matter and you only add to head/tail
+
+## Data Structures
+
+### Node Datum (`Cons`)
+
+Each UTxO stores a `Cons` datum representing the node:
+
+```scala
+import scalus.patterns.{Cons, Node, Common, Config}
+
+case class Cons(
+    key: Option[TokenName],  // None = head node, Some(key) = regular node
+    ref: Option[TokenName],  // Reference to next node (None = end of list)
+    data: Data               // User data stored in this node
+)
+```
+
+### Node Representation
+
+```scala
+case class Node(value: Value, cell: Cons)
+```
+
+### Transaction Context
+
+```scala
+case class Common(
+    policy: PolicyId,
+    mint: Value,
+    inputs: List[Node],
+    outputs: List[Node]
+)
+```
+
+### Configuration
+
+```scala
+case class Config(
+    init: TxOutRef,      // Makes each list unique
+    deadline: PosixTime, // Optional deadline for operations
+    penalty: Address     // Address for penalty payments
+)
+```
+
+## Operations
+
+| Operation | Ordered | Unordered | Description |
+|-----------|:-------:|:---------:|-------------|
+| `init` | ✓ | ✓ | Create empty list (mint head NFT) |
+| `deinit` | ✓ | ✓ | Destroy empty list (burn head NFT) |
+| `insert` | ✓ | ✗ | Insert node at sorted position |
+| `prepend` | ✓ | ✓ | Insert at beginning (after head) |
+| `append` | ✓ | ✓ | Insert at end |
+| `remove` | ✓ | ✓ | Remove node (burn node NFT) |
+
+## How Insert Works (Ordered)
+
+```
+           ╭────────╮  ╭────────╮
+           │ Banana ├─>│ Orange │   INPUTS
+           ╰───┬────╯  ╰────┬───╯
+               │            │
+           ┏━━━V━━━━━━━━━━━━V━━━━━━━━━━━━━━┓
+           ┃   Insert "Kiwi" Transaction   ┃
+           ┗━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━┛
+               │          │          │
+           ╭───V────╮  ╭──V───╮  ╭───V────╮
+           │ Banana ├─>│ Kiwi ├─>│ Orange │  OUTPUTS
+           ╰────────╯  ╰──────╯  ╰────────╯
+
+           (Banana < Kiwi < Orange maintained)
+```
+
+**Validation ensures:**
+- Parent node's `ref` is updated to point to new node
+- New node's `ref` points to what parent previously referenced
+- Keys maintain sorted order (for OrderedLinkedList)
+- Exactly one NFT is minted for the new node
+
+## Implementation
+
+### Ordered Linked List
+
+```scala
+import scalus.patterns.OrderedLinkedList as LinkedList
+
+@Compile
+object MyOrderedListValidator extends DataParameterizedValidator {
+
+    inline override def mint(cfgData: Data, redeemer: Data, tx: TxInfo): Unit = {
+        val config = cfgData.to[Config]
+        val action = redeemer.to[OrderedNodeAction]
+        val ownPolicy = tx.findOwnMintingPolicyHash
+
+        val (common, inputs, outputs, signatories, validRange) =
+            LinkedList.mkCommon(ownPolicy, tx)
+
+        action match
+            case OrderedNodeAction.Init =>
+                LinkedList.init(common)
+            case OrderedNodeAction.Deinit =>
+                LinkedList.deinit(common)
+            case OrderedNodeAction.Insert(key, covering) =>
+                LinkedList.insert(common, key, covering)
+            case OrderedNodeAction.Prepend(key, covering) =>
+                LinkedList.prepend(common, key, covering)
+            case OrderedNodeAction.Append(key, covering) =>
+                LinkedList.append(common, key, covering)
+            case OrderedNodeAction.Remove(key, covering) =>
+                LinkedList.remove(common, key, covering)
+    }
+}
+```
+
+### Unordered Linked List
+
+```scala
+import scalus.patterns.UnorderedLinkedList as LinkedList
+
+@Compile
+object MyUnorderedListValidator extends DataParameterizedValidator {
+
+    inline override def mint(cfgData: Data, redeemer: Data, tx: TxInfo): Unit = {
+        val config = cfgData.to[Config]
+        val action = redeemer.to[UnorderedNodeAction]
+        val ownPolicy = tx.findOwnMintingPolicyHash
+
+        val (common, inputs, outputs, signatories, validRange) =
+            LinkedList.mkCommon(ownPolicy, tx)
+
+        action match
+            case UnorderedNodeAction.Init =>
+                LinkedList.init(common)
+            case UnorderedNodeAction.Deinit =>
+                LinkedList.deinit(common)
+            case UnorderedNodeAction.Prepend(key, covering) =>
+                LinkedList.prepend(common, key, covering)
+            case UnorderedNodeAction.Append(key, covering) =>
+                LinkedList.append(common, key, covering)
+            case UnorderedNodeAction.Remove(key, covering) =>
+                LinkedList.remove(common, key, covering)
+    }
+}
+```
+
+### Redeemer Types
+
+```scala
+// For OrderedLinkedList
+enum OrderedNodeAction derives FromData, ToData:
+    case Init
+    case Deinit
+    case Insert(key: PubKeyHash, covering: Cons)
+    case Prepend(key: PubKeyHash, covering: Cons)
+    case Append(key: PubKeyHash, covering: Cons)
+    case Remove(key: PubKeyHash, covering: Cons)
+
+// For UnorderedLinkedList
+enum UnorderedNodeAction derives FromData, ToData:
+    case Init
+    case Deinit
+    case Prepend(key: PubKeyHash, covering: Cons)
+    case Append(key: PubKeyHash, covering: Cons)
+    case Remove(key: PubKeyHash, covering: Cons)
+```
+
+<Callout type="info">
+**Key Uniqueness:** Keys must be unique within a list. For `OrderedLinkedList`, the invariant `node.key < node.ref` must hold for all nodes.
+</Callout>
+
+<Callout type="warning">
+**NFT Management:** Each node is represented by a unique NFT. The minting policy controls list operations - `init`/`insert`/`prepend`/`append` mint NFTs, while `deinit`/`remove` burn them.
+</Callout>
+
+## Use Cases
+
+- **Sorted registries**: Maintain ordered lists of participants, assets, or records
+- **Priority queues**: Process items in key order
+- **Merkle-like structures**: Build verifiable data structures on-chain
+- **State machines**: Track ordered state transitions
+
+## Additional Resources
+
+- [Anastasia Labs: Aiken Linked List](https://github.com/Anastasia-Labs/aiken-linked-list) - Original Aiken implementation
+- [Plutarch Linked List Guide](https://github.com/Anastasia-Labs/data-structures/blob/main/pages/linked_list.mdx) - Detailed pattern explanation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [OrderedLinkedListExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/OrderedLinkedListExample.scala) - Ordered variant example
+- [UnorderedLinkedListExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/UnorderedLinkedListExample.scala) - Unordered variant example

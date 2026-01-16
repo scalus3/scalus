@@ -1,5 +1,5 @@
 export default {
-    'plutus-vulnerabilities': '',
-    'design-patterns': '',
+    'plutus-vulnerabilities': 'Plutus Vulnerabilities',
+    'design-patterns': 'Design Patterns',
   }
   

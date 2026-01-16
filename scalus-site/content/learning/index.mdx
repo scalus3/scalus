@@ -20,16 +20,36 @@ Essential security knowledge for smart contract development:
 
 ## Design Patterns
 
-Proven patterns for building efficient and secure Cardano smart contracts:
+Proven patterns for building efficient and secure Cardano smart contracts.
 
-- **[Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern)** - Delegate computation to staking scripts for multi-input optimization
+### Optimization Patterns
+
+Reduce execution costs by delegating computation to single-execution endpoints:
+
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Delegate computation to staking scripts using the "withdraw zero trick"
 - **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Couple spend and mint endpoints for minimal spend costs
-- **[UTxO Indexer](/docs/learning/design-patterns/utxo-indexer-pattern)** - Match inputs to outputs using off-chain computed indices
-- **[Validity Range Normalization](/docs/learning/design-patterns/normalized-interval-pattern)** - Simplify time range validation with normalized intervals
+- **[Merkelized Validator](/docs/learning/design-patterns/merkelized-validator-pattern)** - Read verified data from stake validator redeemers for batch operations
 
+### Indexing Patterns
+
+Efficiently map inputs to outputs using off-chain computed indices:
+
+- **[UTxO Indexer](/docs/learning/design-patterns/utxo-indexer-pattern)** - Match inputs to outputs with O(1) on-chain verification
+
+### Data Structures
+
+On-chain data structure implementations:
+
+- **[Linked List](/docs/learning/design-patterns/linked-list-pattern)** - Ordered and unordered linked lists using NFTs and datums
+
+### Utilities
+
+Helper patterns for common validation tasks:
+
+- **[Validity Range Normalization](/docs/learning/design-patterns/normalized-interval-pattern)** - Simplify time range validation with normalized intervals
 
 ## Additional Resources
 
-- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Complete implementation and tests
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Complete implementation and tests
 - [Anastasia Labs Design Patterns](https://github.com/Anastasia-Labs/design-patterns) - Original pattern documentation
 - [Plutonomicon](https://github.com/Plutonomicon/plutonomicon/blob/main/README.md) - Developer-driven guide to the Plutus smart contract language in practice

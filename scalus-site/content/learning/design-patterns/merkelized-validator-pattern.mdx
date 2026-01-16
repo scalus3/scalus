@@ -1,0 +1,129 @@
+---
+title: Merkelized Validator Pattern
+sidebarTitle: Merkelized Validator
+description: Read verified data from stake validator redeemers for batch operations with shared computation results.
+---
+
+import { Callout } from 'nextra/components'
+
+# Merkelized Validator Pattern
+
+This pattern extends the [Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern) by allowing spending validators to **read verified data** from the stake validator's redeemer. Use this when spending validators need access to computation results verified once by the stake validator.
+
+## The Problem
+
+When processing multiple UTxOs in a batch operation:
+- Each spending validator runs independently
+- Expensive computations (e.g., calculating a clearing price) would run N times
+- No way to share verified results between spending validator executions
+
+## The Solution
+
+1. Off-chain code computes expensive values (e.g., clearing price, settlement amounts)
+2. Values are included in the stake validator's redeemer
+3. Stake validator verifies the values are correct (runs **once**)
+4. Spending validators read the verified values via `MerkelizedValidator` (runs per UTxO)
+
+This reduces complexity from O(N²) to O(N) for batch operations.
+
+## When to Use Which Pattern
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| **StakeValidator.spendMinimal** | Only need to check stake validator ran | Payment splitter |
+| **MerkelizedValidator.verifyAndGetRedeemer** | Need to **read** verified data | Batch auction |
+
+## API
+
+| Function | Description |
+|----------|-------------|
+| `getStakeRedeemer(hash, txInfo)` | Retrieves the stake validator's redeemer |
+| `verifyAndGetRedeemer(hash, txInfo)` | Verifies withdrawal exists AND returns redeemer |
+
+## Implementation
+
+### Stake Validator Redeemer
+
+Define a redeemer type that carries the verified computation results:
+
+```scala
+case class AuctionSettlementRedeemer(
+    clearingPrice: BigInt,
+    totalUnitsAvailable: BigInt
+) derives ToData, FromData
+```
+
+### Spending Validator
+
+Read the verified data using `MerkelizedValidator`:
+
+```scala
+import scalus.patterns.MerkelizedValidator
+
+@Compile
+object BatchAuctionValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+
+        // Read verified settlement data from stake validator
+        val stakeRedeemer = MerkelizedValidator.verifyAndGetRedeemer(ownScriptHash, tx)
+        val settlement = stakeRedeemer.to[AuctionSettlementRedeemer]
+
+        // Use the verified clearing price
+        val bid = datum.getOrFail("Missing datum").to[BidDatum]
+        if bid.bidPrice >= settlement.clearingPrice then
+            // Fill the bid - verify bidder receives tokens
+        else
+            // Refund the bid - verify bidder receives ADA back
+    }
+}
+```
+
+### Stake Validator (Reward Endpoint)
+
+Verify the computation results are correct:
+
+```scala
+inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInfo): Unit = {
+    val settlement = redeemer.to[AuctionSettlementRedeemer]
+
+    // Verify clearing price calculation
+    require(settlement.clearingPrice > BigInt(0), "Clearing price must be positive")
+
+    // Verify supply/demand balance
+    val totalDemand = calculateTotalDemand(tx, settlement.clearingPrice)
+    require(totalDemand <= settlement.totalUnitsAvailable, "Demand exceeds supply")
+
+    // ... additional verification logic
+}
+```
+
+<Callout type="info">
+**Performance Benefit:** When spending N UTxOs with iteration-heavy logic:
+- **Without pattern**: O(N²) - each spending validator iterates all inputs/outputs
+- **With pattern**: O(N) - stake validator iterates once, spending validators just read
+
+Run `BatchAuctionTest` to see actual memory/CPU savings.
+</Callout>
+
+<Callout type="warning">
+**Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. Configure this when deploying scripts.
+</Callout>
+
+## Example: Batch Auction
+
+See `scalus.examples.BatchAuctionValidator` for a complete implementation where:
+- **Stake validator**: Verifies the clearing price calculation once
+- **Spending validator**: Reads the verified clearing price to determine if each bid is filled or refunded
+
+## Additional Resources
+
+- [Anastasia Labs: Merkelized Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/merkelized-validators) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [BatchAuctionTest](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala) - Test suite with budget comparison

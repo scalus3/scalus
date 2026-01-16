@@ -1,19 +1,21 @@
 ---
 title: Stake Validator Pattern
-sidebarTitle: Stake Validator Pattern
+sidebarTitle: Stake Validator
+description: Delegate computation to staking scripts using the withdraw zero trick for multi-input optimization.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Stake Validator Pattern
 
-This pattern allows for delegating some computations to a given staking script. The primary application for this is the so-called "withdraw zero trick," which is most effective for validators that need to go over multiple inputs.
+This pattern delegates computation to a staking script using the "withdraw zero trick." Instead of running expensive logic per-UTxO (O(N²)), the stake validator runs once (O(N)).
 
-## The Pattern
+## How It Works
 
-With a minimal spending logic (which is executed for each UTxO), and an arbitrary withdrawal logic (which is executed only once), a much more optimized script can be implemented.
+1. **Spending validator** (runs per UTxO): Minimal logic - just checks stake validator ran
+2. **Stake validator** (runs once): Heavy computation in the reward endpoint
 
-The spending validator essentially says: As long as there is a reward withdrawal of the given script in transaction, this UTxO can be spent.
+The spending validator essentially says: "As long as there is a reward withdrawal of the given script in transaction, this UTxO can be spent."
 
 ## When It Helps
 
@@ -27,9 +29,69 @@ The spending validator essentially says: As long as there is a reward withdrawal
 - Cases where each input needs unique validation
 - When per-input state transitions are complex
 
+## API
+
+| Function | Description |
+|----------|-------------|
+| `spend` | Check stake validator ran + validate its redeemer and withdrawal amount |
+| `spendMinimal` | Just check stake validator ran (most common) |
+| `withdraw` | Helper for reward endpoint - extracts script hash from credential |
+
 ## Implementation
 
-The `scalus-design-patterns` package provides helper functions and examples of use.
+### Spending Endpoint
+
+```scala
+import scalus.patterns.StakeValidator
+
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Redeemer,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+
+        // Option 1: Just check stake validator ran (withdraw zero trick)
+        StakeValidator.spendMinimal(ownScriptHash, tx)
+
+        // Option 2: Also validate redeemer and withdrawal amount
+        StakeValidator.spend(
+          withdrawalScriptHash = ownScriptHash,
+          withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+          txInfo = tx
+        )
+    }
+}
+```
+
+### Reward Endpoint (Stake Validator)
+
+```scala
+inline override def reward(
+    redeemer: Redeemer,
+    stakingKey: Credential,
+    tx: TxInfo
+): Unit = {
+    StakeValidator.withdraw(
+      withdrawalValidator = (redeemer, validatorHash, txInfo) => {
+          // Your heavy validation logic here
+          // This runs ONCE for all inputs
+          val totalInputValue = txInfo.inputs.foldLeft(BigInt(0)) { (acc, input) =>
+              acc + input.resolved.value.getLovelace
+          }
+          // Verify outputs match expected distribution
+          true
+      },
+      redeemer = redeemer,
+      credential = stakingKey,
+      txInfo = tx
+    )
+}
+```
 
 <Callout type="warning">
 **Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. This is configured when deploying scripts.
@@ -39,7 +101,36 @@ The `scalus-design-patterns` package provides helper functions and examples of u
 **Double Satisfaction:** When using this pattern with multiple inputs, ensure proper input-to-output mapping to prevent double satisfaction vulnerabilities. See [Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities#3-double-satisfaction).
 </Callout>
 
+## Example: Payment Splitter
+
+See `scalus.examples.StakeValidatorPaymentSplitterExample` for a complete implementation where:
+- **Spending validator**: Uses `spendMinimal` to just verify stake validator runs
+- **Stake validator**: Verifies payment distribution logic once for all inputs
+
+```scala
+// Payment splitter - spending endpoint is minimal
+StakeValidator.spendMinimal(ownScriptHash, tx)
+
+// All heavy logic in stake validator reward endpoint
+inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInfo): Unit = {
+    val distribution = redeemer.to[PaymentDistribution]
+
+    // Verify all recipients receive correct amounts
+    distribution.payments.foreach { payment =>
+        val output = tx.outputs.find(_.address === payment.recipient)
+            .getOrFail("Missing recipient output")
+        require(output.value.getLovelace >= payment.amount, "Insufficient payment")
+    }
+}
+```
+
+## Related Patterns
+
+- **[Merkelized Validator](/docs/learning/design-patterns/merkelized-validator-pattern)** - When spending validators need to read verified data from stake validator
+- **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Similar pattern using minting instead of staking
+
 ## Additional Resources
 
 - [Anastasia Labs: Stake Validator Pattern](https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator) - Original pattern documentation
-- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [StakeValidatorPaymentSplitterExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/StakeValidatorPaymentSplitterExample.scala) - Complete example

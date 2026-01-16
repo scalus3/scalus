@@ -1,19 +1,21 @@
 ---
 title: Transaction Level Minter Pattern
 sidebarTitle: Transaction Level Minter
+description: Couple spending and minting endpoints for minimal spend costs with single minting execution.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Transaction Level Minter Pattern
 
-This design pattern couples the spend and minting endpoints of a validator, in order to have minimal spend costs, in exchange for a single execution of the minting endpoint.
+Similar to the [Stake Validator](/docs/learning/design-patterns/stake-validator-pattern), this pattern delegates heavy computation to a single execution point. Instead of using a stake validator, it couples spending and minting endpoints of the same validator.
 
-## The Pattern
+## How It Works
 
-Spend logic only ensures the minting endpoint executes. It does so by looking at the mint field and making sure **only** a non-zero amount of its asset (i.e. with a policy identical to the validator's hash) are getting minted/burnt.
+1. **Spending validator** (runs per UTxO): Minimal - just checks minting endpoint executes
+2. **Minting validator** (runs once): Heavy computation when minting/burning tokens
 
-The arbitrary logic is passed to the minting policy so that it can be executed a single time for a given transaction.
+The spending validator only ensures the minting endpoint executes by looking at the mint field and verifying a non-zero amount of its asset is being minted/burnt.
 
 ## When It Helps
 
@@ -28,15 +30,121 @@ The arbitrary logic is passed to the minting policy so that it can be executed a
 - Cases where spend validation must be independent
 - When minting logic should not control spending
 
+## API
+
+| Function | Description |
+|----------|-------------|
+| `spend` | Check minting policy ran + validate its redeemer and minted tokens |
+| `spendMinimal` | Just check at least one token is minted/burnt with the policy |
+
 ## Implementation
 
-The `scalus-design-patterns` package provides helper functions and examples of use.
+### Spending Endpoint
+
+```scala
+import scalus.patterns.TransactionLevelMinterValidator
+
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Redeemer,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+
+        // Option 1: Just check minting policy ran
+        TransactionLevelMinterValidator.spendMinimal(ownScriptHash, tx)
+
+        // Option 2: Also validate redeemer and minted tokens
+        TransactionLevelMinterValidator.spend(
+          minterScriptHash = ownScriptHash,
+          minterRedeemerValidator = _.to[MintRedeemer].isValid,
+          minterTokensValidator = tokens => {
+              val (tokenName, qty) = tokens.toList.head
+              tokenName === utf8"BEACON" && (qty === BigInt(1) || qty === BigInt(-1))
+          },
+          txInfo = tx
+        )
+    }
+}
+```
+
+### Minting Endpoint
+
+```scala
+inline override def mint(
+    redeemer: Redeemer,
+    policyId: PolicyId,
+    tx: TxInfo
+): Unit = {
+    val mintRedeemer = redeemer.to[MintRedeemer]
+
+    // Your heavy validation logic here - runs ONCE
+    val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>
+        input.resolved.address.credential match
+            case Credential.ScriptCredential(hash) if hash === policyId => acc + 1
+            case _ => acc
+    }
+
+    require(scriptInputsCount === mintRedeemer.expectedInputCount, "Input count mismatch")
+
+    // Verify all outputs meet requirements
+    // ... additional validation logic
+}
+```
+
+### Example: Beacon Token Protocol
+
+A common use case is minting/burning a "beacon" token to signal state changes:
+
+```scala
+case class SpendRedeemer(ownIndex: BigInt, burn: Boolean) derives FromData
+case class MintRedeemer(maxUtxosToSpend: BigInt) derives FromData
+
+// Spending endpoint - checks beacon is minted/burnt
+inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
+    val spendRedeemer = redeemer.to[SpendRedeemer]
+    val ownHash = tx.inputs.get(spendRedeemer.ownIndex)
+        .getOrFail("Invalid index").resolved.address.credential
+        .scriptOption.getOrFail("Must be script")
+
+    TransactionLevelMinterValidator.spend(
+      minterScriptHash = ownHash,
+      minterRedeemerValidator = _.to[MintRedeemer].maxUtxosToSpend > 0,
+      minterTokensValidator = tokens => {
+          val (tokenName, qty) = tokens.toList.head
+          require(tokenName === utf8"BEACON")
+          if spendRedeemer.burn then qty === BigInt(-1)
+          else qty === BigInt(1)
+      },
+      txInfo = tx
+    )
+}
+
+// Minting endpoint - heavy logic runs once
+inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
+    val mintRedeemer = redeemer.to[MintRedeemer]
+    val scriptInputsCount = countScriptInputs(tx, policyId)
+    require(scriptInputsCount === mintRedeemer.maxUtxosToSpend)
+}
+```
 
 <Callout type="info">
-**Similar to Stake Validator:** This pattern applies the delegation mechanism to the minting/spending relationship instead of using a staking script. Choose based on whether your protocol naturally uses minting or staking.
+**Stake Validator vs Transaction Level Minter:** Both patterns delegate computation to a single execution. Choose based on your protocol:
+- **Stake Validator**: When you don't need minting/burning, or staking is already part of your design
+- **Transaction Level Minter**: When beacon tokens or minting/burning naturally fits your protocol
 </Callout>
+
+## Related Patterns
+
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Similar pattern using staking instead of minting
+- **[Merkelized Validator](/docs/learning/design-patterns/merkelized-validator-pattern)** - When spending validators need to read verified data
 
 ## Additional Resources
 
 - [Anastasia Labs: Transaction Level Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/transaction-level-validator-minting-policy) - Original pattern documentation
-- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [TransactionLevelMinterValidatorExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/TransactionLevelMinterValidatorExample.scala) - Complete example

@@ -1,31 +1,38 @@
 ---
 title: UTxO Indexer Pattern
 sidebarTitle: UTxO Indexer
+description: Match inputs to outputs using off-chain computed indices for O(1) validation.
 ---
 
 import { Callout } from 'nextra/components'
 
 # UTxO Indexer Pattern
 
-Indexer pattern for matching inputs to outputs by index. Indices are computed off-chain using SpendWithDelayedRedeemer after the transaction is built.
+This pattern provides an optimized way to map input UTxOs to output UTxOs using indices computed off-chain. Instead of searching through all inputs/outputs on-chain (O(n) per lookup), validators receive pre-computed indices and just verify correctness (O(1)).
 
 ## The Problem
 
 When smart contracts handle multiple inputs and outputs in a single transaction, validation challenges arise:
 
-- **Multiple satisfaction** - A single output (or input) can be paired with multiple inputs, which individually satisfies the validator, but in a whole can lead to value being lost
-- **Unaccounted outputs** - Additional unforeseen outputs can be added without validator checks
-- **Pairing complexity** - Determining how multiple inputs and outputs correspond becomes expensive on-chain
+- **Multiple satisfaction** - A single output can be paired with multiple inputs, leading to value loss
+- **Unaccounted outputs** - Additional outputs can be added without validator checks
+- **Pairing complexity** - Determining how inputs and outputs correspond becomes expensive on-chain
 
 ## The Solution
 
-Instead of searching on-chain, the validator receives UTxO indices via the redeemer. The transaction builder calculates indices before construction and embeds them in the redeemer, reducing on-chain validation to verification only.
+Instead of searching on-chain, the validator receives UTxO indices via the redeemer. The transaction builder calculates indices after construction and embeds them in the redeemer, reducing on-chain validation to verification only.
 
-This leverages Cardano's deterministic script evaluation property, which guarantees that script interpreter arguments are fixed and that outcomes depend solely on transaction contents.
+This leverages Cardano's deterministic script evaluation property, which guarantees that script interpreter arguments are fixed and outcomes depend solely on transaction contents.
 
-<Callout type="info">
-**Implementation Status:** Currently, only the one-to-one indexer variation is implemented in Scalus. This validates a single input-output pair at specified indices. Additional variations (one-to-many, many-to-one, etc.) may be added in the future.
-</Callout>
+## Available Functions
+
+| Function | Use Case |
+|----------|----------|
+| `validateInput` | Validate a single input at a known index |
+| `oneToOne` | Map one input to one output |
+| `oneToMany` | Map one input to multiple outputs |
+| `multiOneToOneNoRedeemer` | Map multiple script inputs to outputs (same redeemer) |
+| `multiOneToOneWithRedeemer` | Map multiple script inputs with different redeemers |
 
 ## When It Helps
 
@@ -42,15 +49,127 @@ This leverages Cardano's deterministic script evaluation property, which guarant
 
 ## Implementation
 
-The `scalus-design-patterns` package provides the one-to-one indexer and examples of use.
+### One-to-One Indexer
 
-The validator receives `inputIdx` and `outputIdx` via the redeemer, then verifies the input at `inputIdx` matches the expected UTxO and validates the relationship with the output at `outputIdx`.
+The most common case - map one input to one output:
+
+```scala
+import scalus.patterns.UtxoIndexer
+
+case class IndexerRedeemer(inputIdx: BigInt, outputIdx: BigInt) derives FromData, ToData
+
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val IndexerRedeemer(inputIdx, outputIdx) = redeemer.to[IndexerRedeemer]
+
+        UtxoIndexer.oneToOne(
+          ownRef,
+          inputIdx,
+          outputIdx,
+          tx,
+          validator = (input, output) => {
+              // Your validation logic: check values, datums, addresses, etc.
+              input.resolved.value.getLovelace === output.value.getLovelace
+          }
+        )
+    }
+}
+```
+
+### One-to-Many Indexer
+
+Map one input to multiple outputs:
+
+```scala
+UtxoIndexer.oneToMany(
+  ownRef,
+  inputIdx,
+  outputIndices = List(0, 2, 4),  // Non-contiguous indices supported
+  tx,
+  perOutputValidator = (input, idx, output) => {
+      // Validate each output individually
+      output.value.getLovelace >= minAmount
+  },
+  collectiveValidator = (input, outputs) => {
+      // Validate all outputs together
+      outputs.foldLeft(BigInt(0))(_ + _.value.getLovelace) === input.resolved.value.getLovelace
+  }
+)
+```
+
+### Multiple One-to-One (No Redeemer)
+
+Process multiple script UTxOs with the same validation logic:
+
+```scala
+UtxoIndexer.multiOneToOneNoRedeemer(
+  indexPairs = List((0, 0), (2, 1), (3, 2)),  // (inputIdx, outputIdx) pairs
+  scriptHash = ownScriptHash,
+  tx = txInfo,
+  validator = (inIdx, input, outIdx, output) => {
+      // Validate each input-output pair
+      input.resolved.value.getLovelace === output.value.getLovelace
+  }
+)
+```
+
+### Multiple One-to-One (With Redeemer)
+
+When each input needs different redeemer data. Requires a staking script as coupling mechanism:
+
+```scala
+UtxoIndexer.multiOneToOneWithRedeemer[MyRedeemer](
+  indexPairs = List((0, 0), (1, 1)),
+  spendingScriptHash = spendScriptHash,
+  stakeScriptHash = stakeScriptHash,
+  tx = txInfo,
+  redeemerCoercerAndStakeExtractor = (data: Data) => {
+      val r = data.to[MySpendRedeemer]
+      (r.payload, r.stakeCredential)
+  },
+  validator = (inIdx, input, redeemer, outIdx, output) => {
+      // Validate with per-input redeemer data
+      true
+  }
+)
+```
+
+## Off-Chain Index Computation
+
+Use `TxBuilder` with a redeemer builder function to compute indices after the transaction is assembled:
+
+```scala
+import scalus.cardano.txbuilder.TxBuilder
+
+TxBuilder(env)
+    .spend(
+      scriptUtxo,
+      redeemerBuilder = (tx: Transaction) => {
+          val inputIdx = tx.body.value.inputs.toSeq.indexOf(scriptUtxo.input)
+          val outputIdx = tx.body.value.outputs.indexWhere(_.address == recipientAddress)
+          IndexerRedeemer(BigInt(inputIdx), BigInt(outputIdx)).toData
+      },
+      script
+    )
+    .payTo(recipientAddress, value)
+```
 
 <Callout type="warning">
 **Input Ordering:** Inputs are reordered deterministically (first by transaction hash, then by output index). Transaction builders must account for this before generating redeemers.
 </Callout>
 
+<Callout type="warning">
+**Double Satisfaction:** The singular UTxO indexer patterns (`oneToOne`, `oneToMany`) do not provide built-in protection against double satisfaction. Implement your own protection based on your contract's needs. See [Plutus Vulnerabilities](/docs/learning/plutus-vulnerabilities#3-double-satisfaction).
+</Callout>
+
 ## Additional Resources
 
 - [Anastasia Labs: UTxO Indexers](https://github.com/Anastasia-Labs/design-patterns/tree/main/utxo-indexers) - Original pattern documentation with all variations
-- [Scalus Design Patterns](https://github.com/nau/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [UtxoIndexerExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/UtxoIndexerExample.scala) - Complete example with off-chain code
