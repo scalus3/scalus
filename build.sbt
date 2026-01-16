@@ -705,6 +705,10 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // use custom webpack config to export scalus as a commonjs2 module
       // otherwise it won't export the module correctly
       webpackConfigFile := Some(sourceDirectory.value / "main" / "webpack" / "webpack.config.js"),
+      // Upgrade webpack and related tools to newer versions to eliminate npm deprecation warnings
+      webpack / version := "5.97.1",
+      webpackCliVersion := "5.1.4",
+      startWebpackDevServer / version := "4.15.2",
       scalaJSUseMainModuleInitializer := false,
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
