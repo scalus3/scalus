@@ -24,6 +24,9 @@ import scalus.prelude.*
   *   - Spending validator stays small and cheap
   *   - Heavy computation logic can be optimized in the stake validator
   *
+  * Usage: This pattern is particularly useful for batch auctions where multiple bids need to be
+  * processed in a single transaction. See [[scalus.examples.BatchAuctionExample]] for an example.
+  *
   * @see
   *   [[https://github.com/Anastasia-Labs/design-patterns/blob/main/merkelized-validators/merkelized-validators.md]]
   */

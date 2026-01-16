@@ -11,7 +11,14 @@ import scalus.prelude.{AssocMap, *}
 import scalus.prelude.List.*
 import scalus.prelude.Option.*
 
-/** Split payouts equally among a list of specified payees
+/** Naive Payment Splitter - Split payouts equally among a list of specified payees.
+  *
+  * This is the naive implementation where the spending validator executes the full validation logic
+  * for each UTxO being spent. When spending N UTxOs, this results in O(N²) iteration cost because
+  * each invocation iterates through ALL inputs and outputs.
+  *
+  * For an optimized version using the stake validator pattern, see
+  * [[OptimizedPaymentSplitterValidator]].
   *
   * A payment splitter can be used for example to create a shared project donation address, ensuring
   * that all payees receive the same amount
@@ -25,7 +32,7 @@ import scalus.prelude.Option.*
   *   [[https://meshjs.dev/smart-contracts/payment-splitter]]
   */
 @Compile
-object PaymentSplitterValidator extends DataParameterizedValidator {
+object NaivePaymentSplitterValidator extends DataParameterizedValidator {
 
     inline override def spend(
         payeesData: Data,
@@ -59,7 +66,7 @@ object PaymentSplitterValidator extends DataParameterizedValidator {
             }
 
         val payeeInputWithChange = optPayeeInputWithChange.getOrFail(
-          "One of the payees must have an input to pay the fee and trigger the payout"
+          "Fee payer not found in inputs"
         )
 
         val (sumOutput, sumsPerPayee) =
@@ -81,14 +88,14 @@ object PaymentSplitterValidator extends DataParameterizedValidator {
             sumsPerPayee.toList.foldLeft(
               (Option.empty[BigInt], Option.empty[BigInt], BigInt(0))
             ) { case ((optSplit, optPayeeSumWithChange, nPayed), (payee, value)) =>
-                require(payees.contains(payee), "Must pay to a payee")
+                require(payees.contains(payee), "Output must be to a payee")
                 if payeeInputWithChange.address.credential === payee
                 then (optSplit, Some(value), nPayed + 1)
                 else
                     optSplit match
                         case None => (Some(value), optPayeeSumWithChange, nPayed + 1)
                         case Some(split) =>
-                            require(split === value, "Split unequally")
+                            require(split === value, "Payee must receive exact split")
                             (Some(split), optPayeeSumWithChange, nPayed + 1)
             }
 

@@ -1,8 +1,7 @@
-package scalus.examples
+package scalus.examples.paymentsplitter
 
 import scalus.*
 import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.compiler.Options
 import scalus.ledger.api.v1.Value.*
 import scalus.ledger.api.v1.{Credential, PubKeyHash}
 import scalus.ledger.api.v3.*
@@ -10,32 +9,15 @@ import scalus.patterns.StakeValidator
 import scalus.prelude.*
 import scalus.prelude.List.*
 import scalus.prelude.Option.*
-import scalus.uplc.PlutusV3
 
-/** Stake Validator Payment Splitter - demonstrates the Stake Validator pattern (withdraw zero
-  * trick).
+/** Redeemer for the spending validator containing the own input index.
   *
-  * This is an optimized version of
-  * [[scalus.examples.paymentsplitter.NaivePaymentSplitterValidator]] that uses the "stake
-  * validator" pattern to reduce execution costs when spending multiple UTxOs.
+  * Using the input index directly avoids iterating through all inputs to find the own input.
   *
-  * '''The Problem:''' In the original PaymentSplitter, each UTxO spend executes the full validation
-  * logic - iterating through ALL inputs and outputs. When spending N UTxOs, this results in O(N²)
-  * iteration cost.
-  *
-  * '''The Solution:''' Split the logic:
-  *   - '''Stake validator (reward endpoint):''' Runs ONCE, does all heavy computation
-  *   - '''Spending validator:''' Runs per UTxO, minimal - just checks stake validator executed
-  *
-  * '''How it works:'''
-  *   1. Off-chain code computes: sumContractInputs, splitPerPayee, etc.
-  *   2. These values are passed in the stake validator's redeemer
-  *   3. Stake validator verifies the claimed values match actual transaction
-  *   4. Spending validator just checks the stake validator ran (withdraw zero trick)
-  *
-  * @see
-  *   [[https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator]]
+  * @param ownInputIndex
+  *   Index of the own input in txInfo.inputs
   */
+case class SpendRedeemer(ownInputIndex: BigInt) derives ToData, FromData
 
 /** Redeemer for the stake validator containing pre-computed split verification data.
   *
@@ -58,23 +40,40 @@ case class SplitVerificationRedeemer(
 ) derives ToData,
       FromData
 
-/** Stake Validator Payment Splitter Validator
+/** Optimized Payment Splitter - Split payouts equally among a list of specified payees.
   *
-  * A single validator that serves both spending and reward purposes:
-  *   - '''spend:''' Minimal logic - delegates to stake validator via withdraw zero trick
-  *   - '''reward:''' Heavy computation - verifies the split is correct
+  * This is an optimized implementation using the "stake validator" pattern (withdraw zero trick) to
+  * reduce execution costs when spending multiple UTxOs.
   *
-  * @param payeesData
-  *   List of payee PubKeyHashes (as Data for parameterization)
+  * '''The Problem:''' In the naive [[NaivePaymentSplitterValidator]], each UTxO spend executes the
+  * full validation logic - iterating through ALL inputs and outputs. When spending N UTxOs, this
+  * results in O(N²) iteration cost.
+  *
+  * '''The Solution:''' Split the logic:
+  *   - '''Stake validator (reward endpoint):''' Runs ONCE, does all heavy computation
+  *   - '''Spending validator:''' Runs per UTxO, minimal - just checks stake validator executed
+  *
+  * '''How it works:'''
+  *   1. Off-chain code computes: sumContractInputs, splitPerPayee, etc.
+  *   2. These values are passed in the stake validator's redeemer
+  *   3. Stake validator verifies the claimed values match actual transaction
+  *   4. Spending validator just checks the stake validator ran (withdraw zero trick)
+  *
+  * @see
+  *   [[https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator]]
+  * @see
+  *   [[scalus.patterns.StakeValidator]]
   */
 @Compile
-object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator {
+object OptimizedPaymentSplitterValidator extends DataParameterizedValidator {
 
     /** Spending endpoint - minimal logic.
       *
       * Just verifies that the stake validator (reward endpoint) was executed. The actual validation
-      * happens in the reward endpoint. Uses StakeValidator.spendMinimal since we don't need to read
-      * any data from the stake validator's redeemer.
+      * happens in the reward endpoint.
+      *
+      * Uses the input index from the redeemer to avoid iterating through all inputs to find own
+      * input.
       */
     inline override def spend(
         payeesData: Data,
@@ -83,9 +82,18 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        // Get own script hash from the input being spent
-        val ownCredential = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-        val ownScriptHash = ownCredential.scriptOption.getOrFail("Own address must be Script")
+        val spendRedeemer = redeemer.to[SpendRedeemer]
+
+        // Get own input by index - still O(n) traversal but avoids equality comparison at each step
+        val ownInput = tx.inputs.at(spendRedeemer.ownInputIndex)
+
+        // Verify the input at the given index matches ownRef
+        require(ownInput.outRef === ownRef, "Own input index mismatch")
+
+        // Get own script hash
+        val ownScriptHash =
+            ownInput.resolved.address.credential.scriptOption
+                .getOrFail("Own address must be Script")
 
         // Just check that reward endpoint was triggered (withdraw zero trick)
         StakeValidator.spendMinimal(ownScriptHash, tx)
@@ -163,7 +171,10 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
         // Allow small remainder (< nPayed) for rounding
         val expectedMinOutput = verification.nPayed * verification.splitPerPayee
         val remainder = verification.sumContractInputs - expectedMinOutput
-        require(remainder >= 0 && remainder < verification.nPayed, "Split calculation invalid")
+        require(
+          remainder >= 0 && remainder < verification.nPayed,
+          "value to be payed to payees is too low"
+        )
 
         // Change payee should have received at least splitPerPayee
         require(
@@ -172,9 +183,3 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
         )
     }
 }
-
-private object StakeValidatorPaymentSplitterCompilation:
-    private given stakeValidatorPaymentSplitterOptions: Options = Options.release
-    lazy val contract = PlutusV3.compile(StakeValidatorPaymentSplitterValidator.validate)
-
-lazy val StakeValidatorPaymentSplitterContract = StakeValidatorPaymentSplitterCompilation.contract
