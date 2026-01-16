@@ -77,7 +77,10 @@ enum Certificate {
             case cert: Certificate.PoolRegistration =>
                 cert.poolOwners.view.concat(Some(cert.operator)).toSet
             case cert: Certificate.PoolRetirement => Set(cert.poolKeyHash)
-            case cert: Certificate.RegCert =>
+            case cert: Certificate.RegCert        =>
+                // Conway era transitional behavior: witness only required for Conway-style
+                // registration (coin=Some, CBOR tag 7), not for Shelley-style (coin=None, CBOR tag 0).
+                // See cardano-ledger getVKeyWitnessConwayTxCert in Conway/TxCert.hs
                 if cert.coin.nonEmpty then cert.credential.keyHashOption.toSet else Set.empty
             case cert: Certificate.UnregCert             => cert.credential.keyHashOption.toSet
             case cert: Certificate.VoteDelegCert         => cert.credential.keyHashOption.toSet
@@ -99,7 +102,14 @@ enum Certificate {
             case cert: Certificate.StakeDelegation => cert.credential.scriptHashOption
             case _: Certificate.PoolRegistration   => None
             case _: Certificate.PoolRetirement     => None
-            case cert: Certificate.RegCert =>
+            case cert: Certificate.RegCert         =>
+                // Conway era transitional behavior: Script witness is NOT required for
+                // Shelley-style registration (coin=None, CBOR tag 0) for backward compatibility.
+                // Script witness IS required for Conway-style registration (coin=Some, CBOR tag 7).
+                // See cardano-ledger getScriptWitnessConwayTxCert in Conway/TxCert.hs:
+                // "We preserve the old behavior of not requiring a witness for staking credential
+                // registration, but only during the transitional period of Conway era and only for
+                // staking credential registration certificates without a deposit."
                 if cert.coin.nonEmpty then cert.credential.scriptHashOption else None
             case cert: Certificate.UnregCert             => cert.credential.scriptHashOption
             case cert: Certificate.VoteDelegCert         => cert.credential.scriptHashOption

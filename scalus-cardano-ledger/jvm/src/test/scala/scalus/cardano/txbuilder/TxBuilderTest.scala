@@ -19,6 +19,7 @@ import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.toUplc
 import scalus.utils.await
 
+import java.time.Instant
 import scala.collection.immutable.SortedMap
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -89,7 +90,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
         val inlineDatum = 123.toData
 
@@ -578,7 +579,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 20_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
@@ -612,7 +613,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           TransactionOutput(Alice.address, Value.ada(5), None, Some(ScriptRef(mintingPolicy)))
         )
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
@@ -643,7 +644,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
@@ -679,7 +680,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
@@ -715,7 +716,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
@@ -730,30 +731,124 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         // Assert script is in witness set
         val plutusV3Scripts = tx.witnessSet.plutusV3Scripts.toMap.values
         assert(plutusV3Scripts.exists(_.scriptHash == script1.scriptHash))
+        // Assert certificate is present with Conway-style (explicit deposit)
+        val certs = tx.body.value.certificates.toSeq
+        val regCert = certs.collectFirst {
+            case cert @ Certificate.RegCert(cred, coinOpt)
+                if cred == scriptStakeAddress.credential =>
+                (cert, coinOpt)
+        }
+        assert(regCert.isDefined, s"RegCert should be present. Certs: $certs")
+        // Conway-style certificate must have explicit deposit for script execution
+        assert(
+          regCert.get._2.isDefined,
+          "RegCert should have explicit deposit (Conway-style) for script execution"
+        )
+        // Assert certificate redeemer is present
+        val redeemers = tx.witnessSet.redeemers.map(_.value.toSeq).getOrElse(Seq.empty)
+        val certRedeemer = redeemers.find(_.tag == RedeemerTag.Cert)
+        assert(certRedeemer.isDefined, "Certificate redeemer should be present")
+        assert(certRedeemer.get.index == 0, "Certificate redeemer index should be 0")
+    }
+
+    test("TxBuilder registerStake with reference script witness includes certificate redeemer") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        // Create a reference UTxO with the script
+        val refInput = Arbitrary.arbitrary[TransactionInput].sample.get
+        val refOutput = TransactionOutput(
+          address = Alice.address,
+          value = Value.ada(10),
+          datumOption = None,
+          scriptRef = Some(ScriptRef(script1))
+        )
+        val refUtxo = Utxo(refInput, refOutput)
+
+        val validFrom = Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .references(refUtxo)
+            .registerStake(scriptStakeAddress, reference(Data.unit, Set.empty))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
         // Assert certificate is present
         val certs = tx.body.value.certificates.toSeq
         assert(certs.exists {
-            case Certificate.RegCert(cred, _) =>
-                cred == scriptStakeAddress.credential
-            case _ => false
+            case Certificate.RegCert(cred, _) => cred == scriptStakeAddress.credential
+            case _                            => false
         })
+        // Assert certificate redeemer is present
+        val redeemers = tx.witnessSet.redeemers.map(_.value.toSeq).getOrElse(Seq.empty)
+        val certRedeemer = redeemers.find(_.tag == RedeemerTag.Cert)
+        assert(
+          certRedeemer.isDefined,
+          "Certificate redeemer should be present when using reference script witness"
+        )
+        assert(certRedeemer.get.index == 0, "Certificate redeemer index should be 0")
+    }
+
+    test("TxBuilder mint + registerStake includes both redeemers") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .mint(
+              policyId = script1.scriptHash,
+              assets = Map(AssetName.empty -> 1L),
+              witness = attached(script1, Data.unit)
+            )
+            .registerStake(scriptStakeAddress, attached(script1, Data.unit))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // Assert both redeemers are present
+        val redeemers = tx.witnessSet.redeemers.map(_.value.toSeq).getOrElse(Seq.empty)
+        val mintRedeemerOpt = redeemers.find(_.tag == RedeemerTag.Mint)
+        val certRedeemerOpt = redeemers.find(_.tag == RedeemerTag.Cert)
+
+        assert(mintRedeemerOpt.isDefined, s"Mint redeemer should be present. Redeemers: $redeemers")
+        assert(
+          certRedeemerOpt.isDefined,
+          s"Certificate redeemer should be present. Redeemers: $redeemers"
+        )
     }
 
     test("TxBuilder registerDRep with script witness builds correctly") {
         import TwoArgumentPlutusScriptWitness.*
 
         val scriptCredential = Credential.ScriptHash(script1.scriptHash)
-        val redeemer = Data.unit
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 550_000_000).sample.get
         val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
 
-        val validFrom = java.time.Instant.now()
+        val validFrom = Instant.now()
         val validTo = validFrom.plusSeconds(3600)
 
         val tx = TxBuilder(testEnv)
             .spend(Utxo(utxo))
             .collaterals(Utxo(collateralUtxo))
-            .registerDRep(scriptCredential, None, attached(script1, redeemer))
+            .registerDRep(scriptCredential, None, attached(script1, Data.unit))
             .validFrom(validFrom)
             .validTo(validTo)
             .build(changeTo = Alice.address)
@@ -769,5 +864,64 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
                 cred == scriptCredential
             case _ => false
         })
+    }
+
+    test("TxBuilder delegateTo with script witness includes certificate redeemer") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
+        val poolId = PoolKeyHash.fromHex("0" * 56)
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .delegateTo(scriptStakeAddress, poolId, attached(script1, Data.unit))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        val redeemers = tx.witnessSet.redeemers.map(_.value.toSeq).getOrElse(Seq.empty)
+        val certRedeemerOpt = redeemers.find(_.tag == RedeemerTag.Cert)
+
+        assert(
+          certRedeemerOpt.isDefined,
+          s"Certificate redeemer should be present. Redeemers: $redeemers"
+        )
+    }
+
+    test("TxBuilder deregisterStake with script witness includes certificate redeemer") {
+        import TwoArgumentPlutusScriptWitness.*
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+
+        val scriptStakeAddress = StakeAddress(Mainnet, StakePayload.Script(script1.scriptHash))
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = 50_000_000).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = 5_000_000).sample.get
+
+        val validFrom = Instant.now()
+        val validTo = validFrom.plusSeconds(3600)
+
+        val tx = TxBuilder(testEnv)
+            .spend(Utxo(utxo))
+            .collaterals(Utxo(collateralUtxo))
+            .deregisterStake(scriptStakeAddress, attached(script1, Data.unit))
+            .validFrom(validFrom)
+            .validTo(validTo)
+            .build(changeTo = Alice.address)
+            .transaction
+
+        val redeemers = tx.witnessSet.redeemers.map(_.value.toSeq).getOrElse(Seq.empty)
+        val certRedeemerOpt = redeemers.find(_.tag == RedeemerTag.Cert)
+
+        assert(
+          certRedeemerOpt.isDefined,
+          s"Certificate redeemer should be present. Redeemers: $redeemers"
+        )
     }
 }

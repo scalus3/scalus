@@ -881,7 +881,11 @@ case class TxBuilder(
       */
     def registerStake(stakeAddress: StakeAddress, witness: ScriptWitness): TxBuilder = {
         val credential = stakeAddress.credential
-        val cert = Certificate.RegCert(credential, None)
+        // Script-based registrations must use Conway-style certificate with explicit deposit
+        // so that the ledger recognizes it as needing script execution.
+        // Shelley-style (coin=None) doesn't trigger script execution per Certificate.scriptHashOption.
+        val deposit = Coin(env.protocolParams.stakeAddressDeposit)
+        val cert = Certificate.RegCert(credential, Some(deposit))
         addSteps(TransactionBuilderStep.IssueCertificate(cert, witness))
     }
 
