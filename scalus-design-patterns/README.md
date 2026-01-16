@@ -7,12 +7,12 @@
     * [How to Run Package Tests](#how-to-run-package-tests)
     * [Provided Patterns](#provided-patterns)
         * [Stake Validator](#stake-validator)
-            * [Endpoints](#endpoints)
-        <!-- * [UTxO Indexers](#utxo-indexers) -->
-        * [Transaction Level Validator Minting Policy](#transaction-level-validator-minting-policy) 
-        <!-- * [Validity Range Normalization](#validity-range-normalization)
+        * [UTxO Indexers](#utxo-indexers)
+        * [Transaction Level Validator Minting Policy](#transaction-level-validator-minting-policy)
         * [Merkelized Validator](#merkelized-validator)
-        * [Parameter Validation](#parameter-validation)-->
+        * [Validity Range Normalization](#validity-range-normalization)
+        * [Linked List](#linked-list)
+        <!-- * [Parameter Validation](#parameter-validation)-->
     * [License](#license)
 
 <!-- vim-markdown-toc -->
@@ -79,152 +79,516 @@ aiken check
 
 ### Stake Validator
 
-This pattern allows for delegating some computations to a given staking script.
+This pattern delegates computation to a staking script using the "withdraw zero trick."
+Instead of running expensive logic per-UTxO (O(N²)), the stake validator runs once (O(N)).
 
-The primary application for this is the so-called "withdraw zero trick," which
-is most effective for validators that need to go over multiple inputs.
+#### How It Works
 
-With a minimal spending logic (which is executed for each UTxO), and an
-arbitrary withdrawal logic (which is executed only once), a much more optimized
-script can be implemented.
+1. **Spending validator** (runs per UTxO): Minimal logic - just checks stake validator ran
+2. **Stake validator** (runs once): Heavy computation in the reward endpoint
 
-The module offers two functions, primarily meant to be implemented under
-spending endpoints: `spend` and `spend_minimal`. Use `spend_minimal` if you
-don't need to perform any validations on either the staking script's redeemer or
-withdrawal Lovelace quantity.
+#### API
 
-Both `spend` and `spend_minimal` go over the `withdrawals` of the transaction.
-However, `spend` also traverses the `redeemers` field in order to let you
-validate against both the redeemer and the withdrawal quantity.
+| Function | Use Case |
+|----------|----------|
+| `spend` | Check stake validator ran + validate its redeemer and withdrawal amount |
+| `spendMinimal` | Just check stake validator ran (most common) |
+| `withdraw` | Helper for reward endpoint - extracts script hash from credential |
 
-This module also offers `withdraw`, a very minimal function that simply unwraps
-the staking credential and provides you with the underlying hash.
-<!-- 
-### UTxO Indexers
+#### Example
 
-The primary purpose of this pattern is to offer a more optimized and composable
-solution for a unique mapping between one input UTxO to one or many output
-UTxOs.
+```scala
+import scalus.patterns.StakeValidator
 
-There are a total of 6 variations:
-- Single, one-to-one indexer
-- Single, one-to-many indexer
-- Multiple, one-to-one indexer, with ignored redeemers
-- Multiple, one-to-one indexer, with provided redeemers
-- Multiple, one-to-many indexer, with ignored redeemers
-- Multiple, one-to-many indexer, with provided redeemers
+// Spending endpoint - minimal, runs per UTxO
+inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
+    val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+        .scriptOption.getOrFail("Own address must be Script")
 
-> [!NOTE]
-> Neither of singular UTxO indexer patterns provide protection against the
-> [double satisfaction](https://github.com/Plutonomicon/plutonomicon/blob/b6906173c3f98fb5d7b40fd206f9d6fe14d0b03b/vulnerabilities.md#double-satisfaction)
-> vulnerability, as this can be done in multiple ways depending on the contract.
-> However, they require a dedicated argument as a reminder for the potential
-> requirement of implementing a protection against this vulnerability.
+    // Option 1: Just check stake validator ran (withdraw zero trick)
+    StakeValidator.spendMinimal(ownScriptHash, tx)
 
-Depending on the variation, the functions you can provide are:
-- One-to-one validator for an input and its corresponding outputs – this is
-  always the validation that executes the most times (i.e. for each output)
-- One-to-many validator for an input and all of its corresponding outputs – this
-  executes as many times as your specified inputs
-- Many-to-many validator for all inputs against all the outputs – this executes
-  only once
+    // Option 2: Also validate redeemer and withdrawal amount
+    StakeValidator.spend(
+      withdrawalScriptHash = ownScriptHash,
+      withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+      txInfo = tx
+    )
+}
 
-> [!NOTE]
-> Non-redeemer multi variants can only validate UTxOs that are spent via their
-> own contract's spending endpoint. In other words, they can only validate UTxOs
-> that are spent from an address which its payment part is a `Script`, such that
-> its included hash equals the wrapping staking validator (which you utilize
-> this function within).
---> 
-
-### Transaction Level Validator Minting Policy
-
-Very similar to the [stake validator](#stake-validator), this design pattern
-couples the spend and minting endpoints of a validator.
-
-The role of the spending input is to ensure the minting endpoint executes. It
-does so by looking at the mint field and making sure **only** a non-zero amount
-of its asset (i.e. its policy is the same as the validator's hash, with its name
-specified as a parameter) are getting minted/burnt.
-
-The arbitrary logic is passed to the minting policy so that it can be executed
-a single time for a given transaction.
-
-<!--
-### Validity Range Normalization
-
-The datatype that models validity range in Cardano currently allows for values
-that are either meaningless, or can have more than one representations. For
-example, since the values are integers, the inclusive flag for each end is
-redundant for most cases and can be omitted in favor of a predefined convention
-(e.g. a value should always be considered inclusive).
-
-In this module we present a custom datatype that essentially reduces the value
-domain of the original validity range to a smaller one that eliminates
-meaningless instances and redundancies.
-
-The datatype is defined as following:
-
-```rs
-pub type NormalizedTimeRange {
-  ClosedRange { lower: Int, upper: Int }
-  FromNegInf  {             upper: Int }
-  ToPosInf    { lower: Int             }
-  Always
+// Reward endpoint - heavy logic, runs once
+inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInfo): Unit = {
+    StakeValidator.withdraw(
+      withdrawalValidator = (redeemer, validatorHash, txInfo) => {
+          // Your heavy validation logic here
+          true
+      },
+      redeemer = redeemer,
+      credential = stakingKey,
+      txInfo = tx
+    )
 }
 ```
 
-The exposed function of the module (`normalize_time_range`), takes a
-`ValidityRange` and returns this custom datatype.
+See `scalus.examples.StakeValidatorPaymentSplitterExample` for a complete example.
+
+### UTxO Indexers
+
+This pattern provides an optimized way to map input UTxOs to output UTxOs using
+indices computed off-chain. Instead of searching through all inputs/outputs on-chain
+(O(n) per lookup), validators receive pre-computed indices and just verify correctness (O(1)).
+
+#### Available Functions
+
+| Function | Use Case |
+|----------|----------|
+| `validateInput` | Validate a single input at a known index |
+| `oneToOne` | Map one input to one output |
+| `oneToMany` | Map one input to multiple outputs |
+| `multiOneToOneNoRedeemer` | Map multiple script inputs to outputs (same redeemer) |
+| `multiOneToOneWithRedeemer` | Map multiple script inputs with different redeemers |
+
+#### Basic Usage: One-to-One
+
+```scala
+import scalus.patterns.UtxoIndexer
+
+case class IndexerRedeemer(inputIdx: BigInt, outputIdx: BigInt) derives FromData, ToData
+
+@Compile
+object MyValidator extends Validator:
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val IndexerRedeemer(inputIdx, outputIdx) = redeemer.to[IndexerRedeemer]
+
+        UtxoIndexer.oneToOne(
+          ownRef,
+          inputIdx,
+          outputIdx,
+          tx,
+          validator = (input, output) => {
+              // Your validation logic: check values, datums, addresses, etc.
+              input.resolved.value.getLovelace === output.value.getLovelace
+          }
+        )
+    }
+```
+
+#### One-to-Many Example
+
+```scala
+UtxoIndexer.oneToMany(
+  ownRef,
+  inputIdx,
+  outputIndices = List(0, 2, 4),  // Non-contiguous indices supported
+  tx,
+  perOutputValidator = (input, idx, output) => {
+      // Validate each output individually
+      output.value.getLovelace >= minAmount
+  },
+  collectiveValidator = (input, outputs) => {
+      // Validate all outputs together
+      outputs.foldLeft(BigInt(0))(_ + _.value.getLovelace) === input.resolved.value.getLovelace
+  }
+)
+```
+
+#### Multiple One-to-One Pairs
+
+For processing multiple UTxOs from the same script in a single transaction:
+
+**Without individual redeemers** (`multiOneToOneNoRedeemer`):
+Use when all script inputs share the same validation logic.
+
+```scala
+// Process multiple script UTxOs with the same redeemer
+UtxoIndexer.multiOneToOneNoRedeemer(
+  indexPairs = List((0, 0), (2, 1), (3, 2)),  // (inputIdx, outputIdx) pairs
+  scriptHash = ownScriptHash,
+  tx = txInfo,
+  validator = (inIdx, input, outIdx, output) => {
+      // Validate each input-output pair
+      input.resolved.value.getLovelace === output.value.getLovelace
+  }
+)
+```
+
+**With individual redeemers** (`multiOneToOneWithRedeemer`):
+Use with the withdraw-zero trick when each input needs different redeemer data.
+Requires a staking script as coupling mechanism.
+
+```scala
+// Each spend embeds stake credential; coercer extracts redeemer and credential
+UtxoIndexer.multiOneToOneWithRedeemer[MyRedeemer](
+  indexPairs = List((0, 0), (1, 1)),
+  spendingScriptHash = spendScriptHash,
+  stakeScriptHash = stakeScriptHash,
+  tx = txInfo,
+  redeemerCoercerAndStakeExtractor = (data: Data) => {
+      val r = data.to[MySpendRedeemer]
+      (r.payload, r.stakeCredential)
+  },
+  validator = (inIdx, input, redeemer, outIdx, output) => {
+      // Validate with per-input redeemer data
+      true
+  }
+)
+```
+
+#### Off-Chain Index Computation
+
+Use `TxBuilder` with a redeemer builder function to compute indices after the
+transaction is assembled:
+
+```scala
+import scalus.cardano.txbuilder.TxBuilder
+
+TxBuilder(env)
+    .spend(
+      scriptUtxo,
+      redeemerBuilder = (tx: Transaction) => {
+          val inputIdx = tx.body.value.inputs.toSeq.indexOf(scriptUtxo.input)
+          val outputIdx = tx.body.value.outputs.indexWhere(_.address == recipientAddress)
+          IndexerRedeemer(BigInt(inputIdx), BigInt(outputIdx)).toData
+      },
+      script
+    )
+    .payTo(recipientAddress, value)
+```
+
+> [!NOTE]
+> The singular UTxO indexer patterns (`oneToOne`, `oneToMany`) do not provide
+> protection against the [double satisfaction](https://github.com/Plutonomicon/plutonomicon/blob/b6906173c3f98fb5d7b40fd206f9d6fe14d0b03b/vulnerabilities.md#double-satisfaction)
+> vulnerability. Implement your own protection based on your contract's needs.
+
+### Transaction Level Validator Minting Policy
+
+Similar to the [Stake Validator](#stake-validator), this pattern delegates heavy computation
+to a single execution point. Instead of using a stake validator, it couples spending
+and minting endpoints of the same validator.
+
+#### How It Works
+
+1. **Spending validator** (runs per UTxO): Minimal - just checks minting endpoint executes
+2. **Minting validator** (runs once): Heavy computation when minting/burning tokens
+
+#### API
+
+| Function | Use Case |
+|----------|----------|
+| `spend` | Check minting policy ran + validate its redeemer and minted tokens |
+| `spendMinimal` | Just check at least one token is minted/burnt with the policy |
+
+#### Example
+
+```scala
+import scalus.patterns.TransactionLevelMinterValidator
+
+// Spending endpoint - minimal, runs per UTxO
+inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
+    val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+        .scriptOption.getOrFail("Own address must be Script")
+
+    // Option 1: Just check minting policy ran
+    TransactionLevelMinterValidator.spendMinimal(ownScriptHash, tx)
+
+    // Option 2: Also validate redeemer and minted tokens
+    TransactionLevelMinterValidator.spend(
+      minterScriptHash = ownScriptHash,
+      minterRedeemerValidator = _.to[MintRedeemer].isValid,
+      minterTokensValidator = tokens => {
+          val (tokenName, qty) = tokens.toList.head
+          tokenName === utf8"BEACON" && (qty === BigInt(1) || qty === BigInt(-1))
+      },
+      txInfo = tx
+    )
+}
+
+// Minting endpoint - heavy logic, runs once
+inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
+    // Your heavy validation logic here - e.g., count script inputs
+    val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>
+        if input.resolved.address.credential === Credential.ScriptCredential(policyId)
+        then acc + 1 else acc
+    }
+    require(scriptInputsCount === redeemer.to[MintRedeemer].expectedCount)
+}
+```
+
+See `scalus.examples.TransactionLevelMinterValidatorExample` for a complete example.
 
 ### Merkelized Validator
 
-Since transaction size is limited in Cardano, some validators benefit from a
-solution which allows them to delegate parts of their logics. This becomes more
-prominent in cases where such logics can greatly benefit from optimization
-solutions that trade computation resources for script sizes (e.g. table
-lookups can take up more space so that costly computations can be averted).
+This pattern allows spending validators to **read verified data** from a stake
+validator's redeemer. It builds on the [Stake Validator](#stake-validator) pattern
+but adds the ability for spending validators to access computation results that
+were verified once by the stake validator.
 
-This design pattern offers an interface for off-loading such logics into an
-external withdrawal script, so that the size of the validator itself can stay
-within the limits of Cardano.
+#### When to Use Which Pattern
+
+| Pattern | Use Case | Example |
+|---------|----------|---------|
+| **StakeValidator.spendMinimal** | Spending validator only needs to check stake validator ran | Payment splitter |
+| **MerkelizedValidator.verifyAndGetRedeemer** | Spending validator needs to **read** verified data | Batch auction |
+
+#### How It Works
+
+1. Off-chain code computes expensive values (e.g., clearing price)
+2. Values are included in the stake validator's redeemer
+3. Stake validator verifies the values are correct (runs **once**)
+4. Spending validator reads the verified values via `MerkelizedValidator` (runs per UTxO)
+
+#### API
+
+```scala
+import scalus.patterns.MerkelizedValidator
+
+// In your spending validator:
+val stakeRedeemer = MerkelizedValidator.verifyAndGetRedeemer(ownScriptHash, txInfo)
+val verifiedData = stakeRedeemer.to[YourRedeemerType]
+// Now use verifiedData - it's been verified by the stake validator
+```
+
+**Functions:**
+
+- `getStakeRedeemer(hash, txInfo)` - Retrieves the stake validator's redeemer
+- `verifyAndGetRedeemer(hash, txInfo)` - Verifies withdrawal exists AND returns redeemer
+
+#### Example: Batch Auction
+
+See `scalus.examples.BatchAuctionValidator` for a complete example where:
+- **Stake validator**: Verifies the clearing price calculation once
+- **Spending validator**: Reads the verified clearing price to determine if each bid is filled or refunded
+
+```scala
+// Stake validator redeemer with verified data
+case class AuctionSettlementRedeemer(
+    clearingPrice: BigInt,
+    totalUnitsAvailable: BigInt
+) derives ToData, FromData
+
+// In spending endpoint - read verified clearing price
+val stakeRedeemer = MerkelizedValidator.verifyAndGetRedeemer(ownScriptHash, tx)
+val settlement = stakeRedeemer.to[AuctionSettlementRedeemer]
+
+// Use the verified clearing price
+if bid.bidPrice >= settlement.clearingPrice then
+    // Fill the bid
+else
+    // Refund the bid
+```
+
+#### Benefits
+
+When spending N UTxOs with iteration-heavy logic:
+- **Without pattern**: O(N²) - each spending validator iterates all inputs/outputs
+- **With pattern**: O(N) - stake validator iterates once, spending validators just read
+
+Run the `BatchAuctionTest` budget comparison test to see actual memory/CPU savings.
 
 > [!NOTE]
-> Be aware that total size of reference scripts is currently limited to 200KiB
-> (204800 bytes), and they also impose additional fees in an exponential manner.
-> See [here](https://github.com/IntersectMBO/cardano-ledger/issues/3952) and [here](https://github.com/CardanoSolutions/ogmios/releases/tag/v6.5.0) for
-> more info.
+> Total size of reference scripts is limited to 200KiB (204800 bytes), with
+> exponential fee implications. See [cardano-ledger#3952](https://github.com/IntersectMBO/cardano-ledger/issues/3952).
 
-The exposed `delegated_compute` function from `merkelized_validator` expects 4
-arguments:
+### Validity Range Normalization
 
-1. The arbitrary input value for the underlying computation logic
-2. The hash of the withdrawal validator that performs the computation
-3. Validation function for coercing a `Data` to the format of the input expected
-   by the staking script's computation
-4. The `Pairs` of all redeemers within the current script context.
+The `Interval` type in Cardano allows values that are either meaningless or have
+multiple representations. For example, since values are integers, the inclusive
+flag is redundant - an exclusive bound can always be converted to an inclusive one.
 
-This function expects to find the given stake validator in the `redeemers` list,
-such that its redeemer is of type `WithdrawRedeemerIO` (which carries the
-generic input argument(s) and the expected output(s)), makes sure provided
-input(s) match the ones given to the validator through its redeemer, and returns
-the output(s) (which are carried inside the withdrawal redeemer) so that you can
-safely use them.
+This pattern provides a `NormalizedInterval` type that eliminates meaningless
+intervals and redundant representations.
 
-For defining a withdrawal logic that carries out the computation, use the
-exposed `withdraw_io` function. It expects 2 arguments:
+#### The Type
 
-1. The computation itself. It has to take an argument of type `a`, and return
-   a value of type `b`
-2. A redeemer of type `WithdrawRedeemerIO<a, b>`. Note that `a` is the type of
-   input argument(s), and `b` is the type of output argument(s)
+```scala
+import scalus.patterns.NormalizedInterval
 
-It validates that the given input(s) and output(s) match correctly with the
-provided computation logic.
+enum NormalizedInterval:
+    case ClosedRange(lower: PosixTime, upper: PosixTime)  // [lower, upper]
+    case FromNegInf(upper: PosixTime)                     // (-∞, upper]
+    case ToPosInf(lower: PosixTime)                       // [lower, +∞)
+    case Always                                           // (-∞, +∞)
+```
 
-There are also `WithdrawRedeemer<a>`, `withdraw` and `delegated_validation`
-variants which can be used for validations that don't return any outputs.
+All bounds are **inclusive** after normalization. Improper intervals (e.g., `Interval.never`)
+return `None` from `tryNormalize` or throw an error from `normalize`.
 
+#### API
+
+```scala
+import scalus.patterns.NormalizedInterval
+import scalus.ledger.api.v1.*
+
+// Extension methods on Interval
+val interval: Interval = txInfo.validRange
+
+// Safe normalization - returns Option
+interval.tryNormalize match
+    case Option.Some(NormalizedInterval.ClosedRange(start, end)) =>
+        // Valid time window
+    case Option.Some(NormalizedInterval.Always) =>
+        // No time constraints
+    case Option.None =>
+        // Improper interval (e.g., Interval.never)
+
+// Unsafe normalization - fails on improper intervals
+val normalized: NormalizedInterval = interval.normalize
+```
+
+#### Examples
+
+```scala
+// Exclusive bounds are converted to inclusive
+val interval = Interval(
+  from = IntervalBound(IntervalBoundType.Finite(10), false),  // exclusive
+  to = IntervalBound(IntervalBoundType.Finite(20), false)     // exclusive
+)
+interval.normalize  // ClosedRange(11, 19)
+
+// Infinite bounds
+val openEnded = Interval(
+  from = IntervalBound(IntervalBoundType.Finite(100), true),
+  to = IntervalBound(IntervalBoundType.PosInf, false)
+)
+openEnded.normalize  // ToPosInf(100)
+
+// Improper interval returns None
+val never = Interval(
+  from = IntervalBound(IntervalBoundType.Finite(200), true),
+  to = IntervalBound(IntervalBoundType.Finite(100), true)
+)
+never.tryNormalize  // None
+```
+
+#### Type Class Instances
+
+`NormalizedInterval` provides `Eq`, `Ord`, and `Show` instances for use in on-chain code:
+
+```scala
+val range1 = NormalizedInterval.ClosedRange(100, 200)
+val range2 = NormalizedInterval.ClosedRange(100, 300)
+
+range1 === range2      // false
+range1 < range2        // true (compares lower, then upper)
+range1.show            // "NormalizedInterval.ClosedRange(100, 200)"
+```
+
+### Linked List
+
+An on-chain linked list implementation using NFTs and datums. Each node is a UTxO
+containing a unique NFT token and a datum with the node's key, reference to next node,
+and user data.
+
+```
+  ╭──────╮  ╭───────╮  ╭────────╮  ╭────────╮  ╭───────╮
+  │•Head•├─>│ Apple ├─>│ Banana ├─>│ Orange ├─>│ Peach │
+  ╰──────╯  ╰───────╯  ╰────────╯  ╰────────╯  ╰───────╯
+```
+
+#### Two Variants
+
+| Variant | Module | Description |
+|---------|--------|-------------|
+| **OrderedLinkedList** | `scalus.patterns.OrderedLinkedList` | Keys must be sorted (key < ref). Supports `insert` at any position. |
+| **UnorderedLinkedList** | `scalus.patterns.UnorderedLinkedList` | Keys can be in any order. Only `prepend`/`append` for insertion. |
+
+**When to use which:**
+- **OrderedLinkedList**: When you need sorted data or efficient lookup by key range
+- **UnorderedLinkedList**: When order doesn't matter and you only add to head/tail
+
+#### Data Structures
+
+```scala
+import scalus.patterns.{Cons, Node, Common, Config}
+
+// Node datum - stored in each UTxO
+case class Cons(
+    key: Option[TokenName],  // None = head node, Some(key) = regular node
+    ref: Option[TokenName],  // Reference to next node (None = end of list)
+    data: Data               // User data stored in this node
+)
+
+// Node representation for validation
+case class Node(value: Value, cell: Cons)
+
+// Shared transaction context
+case class Common(policy: PolicyId, mint: Value, inputs: List[Node], outputs: List[Node])
+
+// Configuration for the list
+case class Config(init: TxOutRef, deadline: PosixTime, penalty: Address)
+```
+
+#### Operations
+
+| Operation | Ordered | Unordered | Description |
+|-----------|:-------:|:---------:|-------------|
+| `init` | ✓ | ✓ | Create empty list (mint head NFT) |
+| `deinit` | ✓ | ✓ | Destroy empty list (burn head NFT) |
+| `insert` | ✓ | ✗ | Insert node at sorted position |
+| `prepend` | ✓ | ✓ | Insert at beginning (after head) |
+| `append` | ✓ | ✓ | Insert at end |
+| `remove` | ✓ | ✓ | Remove node (burn node NFT) |
+
+#### Example: Insert Operation (Ordered)
+
+```
+           ╭────────╮  ╭────────╮
+           │ Banana ├─>│ Orange │   INPUTS
+           ╰───┬────╯  ╰────┬───╯
+               │            │
+           ┏━━━V━━━━━━━━━━━━V━━━━━━━━━━━━━━┓
+           ┃   Insert "Kiwi" Transaction   ┃
+           ┗━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━┛
+               │          │          │
+           ╭───V────╮  ╭──V───╮  ╭───V────╮
+           │ Banana ├─>│ Kiwi ├─>│ Orange │  OUTPUTS  (Banana < Kiwi < Orange)
+           ╰────────╯  ╰──────╯  ╰────────╯
+```
+
+#### Usage
+
+```scala
+// Ordered variant - keys must maintain sorted order
+import scalus.patterns.OrderedLinkedList as LinkedList
+
+val (common, inputs, outputs, signatories, validRange) = LinkedList.mkCommon(ownPolicy, tx)
+
+redeemer match
+    case Init                      => LinkedList.init(common)
+    case Deinit                    => LinkedList.deinit(common)
+    case Insert(key, covering)     => LinkedList.insert(common, key, covering)
+    case Prepend(key, covering)    => LinkedList.prepend(common, key, covering)
+    case Append(key, covering)     => LinkedList.append(common, key, covering)
+    case Remove(key, covering)     => LinkedList.remove(common, key, covering)
+```
+
+```scala
+// Unordered variant - keys can be in any order
+import scalus.patterns.UnorderedLinkedList as LinkedList
+
+val (common, inputs, outputs, signatories, validRange) = LinkedList.mkCommon(ownPolicy, tx)
+
+redeemer match
+    case Init                      => LinkedList.init(common)
+    case Deinit                    => LinkedList.deinit(common)
+    case Prepend(key, covering)    => LinkedList.prepend(common, key, covering)
+    case Append(key, covering)     => LinkedList.append(common, key, covering)
+    case Remove(key, covering)     => LinkedList.remove(common, key, covering)
+```
+
+See `scalus.examples.OrderedLinkedList` and `scalus.examples.UnorderedLinkedList` for
+complete validator implementations.
+
+> [!NOTE]
+> Keys must be unique within a list. For `OrderedLinkedList`, the invariant
+> `node.key < node.ref` must hold for all nodes.
+
+<!--
 ### Parameter Validation
 
 In some cases, validators need to be aware of instances of a parameterized
