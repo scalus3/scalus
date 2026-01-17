@@ -260,10 +260,6 @@ object Value extends ValueOffchainOps {
       */
     val adaPolicyId: PolicyId = ByteString.empty
 
-    /** @deprecated Use adaPolicyId instead. */
-    @deprecated("Use adaPolicyId instead", "0.12.0")
-    val adaCurrencySymbol: PolicyId = adaPolicyId
-
     /** The token name for ADA, represented as an empty `ByteString`.
       *
       * @example
@@ -879,10 +875,6 @@ object Value extends ValueOffchainOps {
           *   }}}
           */
         def policyIds: List[PolicyId] = v.toSortedMap.keys
-
-        /** @deprecated Use policyIds instead. */
-        @deprecated("Use policyIds instead", "0.12.0")
-        def currencySymbols: List[PolicyId] = policyIds
 
     private def binaryOpTokens(
         a: SortedMap[TokenName, BigInt],

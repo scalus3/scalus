@@ -14,8 +14,6 @@ type DatumHash = Hash
 type Redeemer = Data
 type ScriptHash = Hash
 type RedeemerHash = Hash
-@deprecated("Use PolicyId instead", "0.12.0")
-type CurrencySymbol = ByteString
 type PolicyId = ByteString
 type TokenName = ByteString
 type PosixTime = BigInt

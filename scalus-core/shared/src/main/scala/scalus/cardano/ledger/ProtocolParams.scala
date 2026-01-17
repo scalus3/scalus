@@ -249,7 +249,4 @@ object ProtocolParams {
         given ReadWriter[CostModels] = CostModels.cardanoCliReadWriter
         macroRW
     }
-
-    @deprecated("Use fromBlockfrostJson or blockfrostParamsReadWriter instead", "0.12")
-    val blockfrostParamsRW: ReadWriter[ProtocolParams] = blockfrostParamsReadWriter
 }

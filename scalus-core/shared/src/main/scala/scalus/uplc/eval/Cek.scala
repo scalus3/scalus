@@ -181,21 +181,6 @@ object MachineParams {
         fromCostModels(CardanoInfo.mainnet.protocolParams.costModels, language, protocolVersion)
     }
 
-    /** Creates default machine parameters for a given Plutus version and protocol version.
-      *
-      * @param plutus
-      *   The plutus version
-      * @param protocolVersion
-      *   The protocol version
-      * @return
-      *   The machine parameters
-      */
-    @deprecated("Use the overload with MajorProtocolVersion", "0.12.0")
-    def defaultParamsFor(
-        plutus: Language,
-        protocolVersion: ProtocolVersion
-    ): MachineParams = defaultParamsFor(plutus, MajorProtocolVersion(protocolVersion.major))
-
     /** Creates `MachineParams` from a Cardano CLI protocol parameters JSON.
       *
       * @param json

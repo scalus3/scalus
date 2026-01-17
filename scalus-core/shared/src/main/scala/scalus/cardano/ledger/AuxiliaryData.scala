@@ -8,16 +8,6 @@ import scala.collection.immutable
 /** Metadata is a map from metadatum labels to metadatum values */
 type Metadata = Map[Word64, Metadatum]
 
-@deprecated("Use Word64 instead", "0.12")
-type TransactionMetadatumLabel = Word64
-@deprecated("Use Word64 instead", "0.12")
-val TransactionMetadatumLabel = Word64
-
-@deprecated("Use Metadatum instead", "0.12")
-type TransactionMetadatum = Metadatum
-@deprecated("Use Metadatum instead", "0.12")
-val TransactionMetadatum = Metadatum
-
 /** Represents transaction metadata in Cardano */
 sealed trait Metadatum
 object Metadatum:

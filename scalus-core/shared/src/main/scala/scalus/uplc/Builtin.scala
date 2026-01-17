@@ -26,22 +26,7 @@ case class BuiltinRuntime(
     def calculateCost: ExUnits = costFunction.calculateCost(args*)
 }
 
-@annotation.nowarn(
-  "msg=deprecated"
-) // suppress deprecation warning for extending BuiltinsMeaning, remove later along with BuiltinsMeaning
-
 class CardanoBuiltins(
-    builtinCostModel: BuiltinCostModel,
-    platformSpecific: PlatformSpecific,
-    semanticVariant: BuiltinSemanticsVariant
-) extends BuiltinsMeaning(
-      builtinCostModel,
-      platformSpecific,
-      semanticVariant
-    )
-
-@deprecated("Use CardanoBuiltins instead", "0.12.1")
-class BuiltinsMeaning(
     builtinCostModel: BuiltinCostModel,
     platformSpecific: PlatformSpecific,
     semanticVariant: BuiltinSemanticsVariant

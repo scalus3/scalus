@@ -353,9 +353,6 @@ object TransactionException {
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 }
 
-@deprecated("Use Utxos instead", "0.12.1")
-type UTxO = Map[TransactionInput, TransactionOutput]
-
 type GovState = Array[Element]
 object GovState:
     def empty: GovState = Array.empty

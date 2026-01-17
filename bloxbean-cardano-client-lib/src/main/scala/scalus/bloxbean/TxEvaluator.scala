@@ -31,12 +31,6 @@ import scala.collection.immutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters.*
 
-@deprecated("Use scalus.cardano.ledger.SlotConfig instead", "v0.12.0")
-type SlotConfig = scalus.cardano.ledger.SlotConfig
-
-@deprecated("Use scalus.cardano.ledger.SlotConfig instead", "v0.12.0")
-val SlotConfig = scalus.cardano.ledger.SlotConfig
-
 class TxEvaluationException(
     message: String,
     cause: Throwable,

@@ -4,7 +4,7 @@ import scalus.builtin.Builtins
 import scalus.builtin.Data
 import scalus.cardano.ledger.{ProtocolParams, ProtocolParamsToExpr}
 import scalus.compiler.sir.SIR
-import scalus.uplc.{BuiltinRuntime, BuiltinsMeaning, DefaultFun, Expr as Exp, NamedDeBruijn, Term as Trm}
+import scalus.uplc.{BuiltinRuntime, CardanoBuiltins, DefaultFun, Expr as Exp, NamedDeBruijn, Term as Trm}
 import scalus.uplc.ExprBuilder.*
 
 import java.io.File
@@ -512,9 +512,8 @@ object Macros {
       *   }
       * }}}
       */
-    @annotation.nowarn("msg=deprecated")
     def mkGetBuiltinRuntime(
-        bm: Expr[BuiltinsMeaning]
+        bm: Expr[CardanoBuiltins]
     )(using Quotes): Expr[DefaultFun => BuiltinRuntime] = {
         import quotes.reflect.*
         val cases: List[CaseDef] = DefaultFun.values.toList.map { fun =>

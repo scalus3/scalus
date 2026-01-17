@@ -37,30 +37,6 @@ import scala.math.BigInt
   */
 object LedgerToPlutusTranslation {
 
-    /** Creates MachineParams from CostModels and PlutusLedgerLanguage.
-      *
-      * This function configures the Plutus virtual machine with the appropriate cost models and
-      * semantic variants based on the protocol version and Plutus language version. This is crucial
-      * for accurate script execution cost calculation and validation.
-      *
-      * @param costModels
-      *   Cost models for different Plutus versions
-      * @param language
-      *   Plutus language version (V1, V2, or V3)
-      * @param protocolVersion
-      *   Major protocol version for semantic variant selection
-      * @return
-      *   Configured MachineParams for script execution
-      */
-    @deprecated("Use MachineParams.fromCostModels instead", "scalus 0.12.1")
-    def translateMachineParamsFromCostModels(
-        costModels: CostModels,
-        language: Language,
-        protocolVersion: MajorProtocolVersion
-    ): MachineParams = {
-        MachineParams.fromCostModels(costModels, language, protocolVersion)
-    }
-
     /** Convert scalus.cardano.ledger.Credential to scalus.ledger.api.v1.Credential.
       *
       * This function bridges the gap between the domain model representation and the Plutus script
