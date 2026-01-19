@@ -66,10 +66,12 @@ case class VaultTransactionCreator(
         )
         val vaultValue = vaultUtxo.output.value
 
+        val ownerAddrKeyHash = AddrKeyHash.fromByteString(currentDatum.owner)
+
         TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxos)
-            .spend(vaultUtxo, Action.InitiateWithdrawal, script)
+            .spend(vaultUtxo, Action.InitiateWithdrawal, script, Set(ownerAddrKeyHash))
             .validFrom(java.time.Instant.ofEpochMilli(validityStartTime))
             .payTo(scriptAddress, vaultValue, newDatum)
             .build(changeTo = changeAddress)

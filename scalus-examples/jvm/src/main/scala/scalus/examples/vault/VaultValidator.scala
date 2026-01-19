@@ -111,6 +111,13 @@ object VaultValidator extends Validator {
           datum.status.isIdle,
           WithdrawalAlreadyPending
         )
+
+        // Owner must sign to initiate withdrawal
+        require(
+          tx.isSignedBy(v1.PubKeyHash(datum.owner)),
+          OwnerMustSign
+        )
+
         val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
         val out = getVaultOutput(tx, ownRef)
         requireSameOwner(out, datum)
@@ -118,6 +125,12 @@ object VaultValidator extends Validator {
           ownInput,
           out,
           NotExactlyOneVaultOutput
+        )
+
+        // Verify value is conserved during initiation
+        require(
+          out.value.getLovelace >= ownInput.resolved.value.getLovelace,
+          ValueNotConserved
         )
 
         val requestTime = tx.getValidityStartTime
@@ -147,6 +160,12 @@ object VaultValidator extends Validator {
     }
 
     def cancel(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
+        // Owner must sign to cancel withdrawal
+        require(
+          tx.isSignedBy(v1.PubKeyHash(datum.owner)),
+          OwnerMustSign
+        )
+
         val out = getVaultOutput(tx, ownRef)
         requireSameOwner(out, datum)
         val vaultDatum = getVaultDatum(out)
@@ -230,4 +249,6 @@ object VaultValidator extends Validator {
     inline val NoInlineDatum = "Vault transactions must have an inline datum"
     inline val VaultOwnerChanged = "Vault transactions cannot change the vault owner"
     inline val AdaLeftover = "Must spend entire vault"
+    inline val OwnerMustSign = "Owner must sign to initiate or cancel withdrawal"
+    inline val ValueNotConserved = "Value must be conserved during initiation"
 }
