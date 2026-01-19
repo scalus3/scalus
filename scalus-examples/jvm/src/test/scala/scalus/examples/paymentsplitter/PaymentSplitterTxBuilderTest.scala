@@ -4,12 +4,12 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
-import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
+import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.ledger.api.v1.PubKeyHash
-import scalus.testing.kit.{Party, ScalusTest}
+import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.utils.await
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -34,8 +34,7 @@ class PaymentSplitterTxBuilderTest
                 .foldLeft(ExUnits(0, 0))((a, e) => ExUnits(a.memory + e.memory, a.steps + e.steps))
     }
 
-    private val genesisHash =
-        TransactionHash.fromByteString(scalus.builtin.ByteString.fromHex("0" * 64))
+    private val genesisHash = TestUtil.genesisHash
 
     // Scale factor to convert test case amounts to realistic lovelace values
     // Test cases use small numbers (30, 31, etc.) which we scale to ADA

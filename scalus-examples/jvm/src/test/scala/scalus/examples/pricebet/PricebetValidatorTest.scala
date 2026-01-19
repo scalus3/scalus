@@ -458,7 +458,7 @@ object PricebetValidatorTest extends ScalusTest {
     val initialRate = (BigInt(1), BigInt(1))
 
     def createProvider(): Emulator = {
-        val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+        val genesisHash = TestUtil.genesisHash
 
         Emulator(
           initialUtxos = Map(
