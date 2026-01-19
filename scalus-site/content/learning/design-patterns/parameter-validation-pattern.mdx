@@ -1,0 +1,212 @@
+---
+title: Parameter Validation Pattern
+sidebarTitle: Parameter Validation
+description: Verify that script instances are legitimate instantiations of parameterized scripts with specific parameter values.
+---
+
+import { Callout } from 'nextra/components'
+
+# Parameter Validation Pattern
+
+Verify that script instances are legitimate instantiations of parameterized scripts with specific parameter values.
+
+## The Challenge
+
+When a minting policy needs to ensure tokens go only to a spending script parameterized with a specific value (e.g., a royalty address), it cannot directly inspect the target script's parameters. Each different parameter creates a different script hash, making it impossible to distinguish between legitimate and arbitrary script destinations.
+
+**Example problem:** An NFT creator wants to ensure their NFTs are always minted directly to a marketplace that enforces their royalty settings. Without parameter validation, a minting policy cannot verify the destination script has the correct creator address baked in.
+
+## How It Works
+
+Script hashing in Cardano follows this formula:
+
+```
+script_hash = blake2b_224(language_tag ++ cbor_encoded_program)
+
+Language tags:
+  - PlutusV1: 0x01
+  - PlutusV2: 0x02
+  - PlutusV3: 0x03
+
+When parameters are applied:
+  parameterized_program = base_program $ param1 $ param2 ...
+  parameterized_hash = blake2b_224(language_tag ++ cbor(parameterized_program))
+```
+
+The pattern:
+1. **Off-chain**: Compile base script, apply parameters, compute expected hash
+2. **Off-chain**: Pass expected hash to the dependent script (e.g., minting policy)
+3. **On-chain**: Dependent script verifies outputs go to addresses matching expected hash
+
+## When to Use This Pattern
+
+**Best for:**
+- Minting policies that need to verify tokens go to specific parameterized scripts
+- Multi-script coordination where scripts must verify each other's parameters
+- Factory patterns where minted tokens reference scripts with verified parameters
+- Royalty enforcement across marketplaces
+
+**Not ideal for:**
+- Simple single-script validators
+- Cases where parameter verification isn't security-critical
+
+## API Reference
+
+### Off-chain Functions (`ParameterValidation`)
+
+| Function | Description |
+|----------|-------------|
+| `computeScriptHashV3` | Compute hash for PlutusV3 script with applied parameters |
+| `computeScriptHashV2` | Compute hash for PlutusV2 script with applied parameters |
+| `computeScriptHashV1` | Compute hash for PlutusV1 script with applied parameters |
+
+### On-chain Functions (`ParameterValidationOnChain`)
+
+| Function | Description |
+|----------|-------------|
+| `verifyScriptCredential` | Verify credential matches expected script hash (fails if not) |
+| `verifyAddressScript` | Verify address has expected script credential (fails if not) |
+| `findOutputsToScript` | Find outputs sent to a specific script hash |
+| `isExpectedScript` | Check if credential matches expected hash (returns Boolean) |
+
+## Implementation Guide
+
+### Off-chain: Computing Expected Hash
+
+```scala
+import scalus.patterns.ParameterValidation
+import scalus.builtin.Data.toData
+
+// Compute the expected script hash for a parameterized script
+def computeMarketplaceHash(creatorPkh: PubKeyHash): ValidatorHash = {
+    ParameterValidation.computeScriptHashV3(
+      MarketplaceBaseProgram.program.deBruijnedProgram,
+      creatorPkh.toData
+    )
+}
+
+// Create parameterized scripts
+val marketplaceHash = computeMarketplaceHash(creatorPkh)
+val marketplace = MarketplaceBaseProgram.program.deBruijnedProgram $ creatorPkh.toData
+val mintingPolicy = NFTMintingBaseProgram.program.deBruijnedProgram $
+    NFTMintParams(marketplaceHash, tokenName).toData
+```
+
+### On-chain: Verifying Script Destination
+
+```scala
+import scalus.patterns.ParameterValidationOnChain
+
+@Compile
+object NFTMintingPolicy {
+    inline def validate(params: NFTMintParams)(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match
+            case ScriptInfo.MintingScript(policyId) =>
+                val mintedAmount = sc.txInfo.mint.quantityOf(policyId, params.tokenName)
+                require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
+
+                // Find output containing our NFT
+                val nftOutput = sc.txInfo.outputs.find { output =>
+                    output.value.quantityOf(policyId, params.tokenName) > 0
+                }.getOrFail("NFT output not found")
+
+                // Verify output goes to the expected marketplace script
+                ParameterValidationOnChain.verifyAddressScript(
+                  nftOutput.address,
+                  params.expectedMarketplaceHash
+                )
+            case _ => fail("Unsupported script purpose")
+    }
+}
+```
+
+<Callout type="info">
+**Key insight:** The expected hash is computed off-chain and passed as a parameter to the minting policy. The on-chain code only needs to compare hashes, not recompute them.
+</Callout>
+
+### Example: NFT with Verified Marketplace
+
+The complete example shows an NFT minting policy that ensures NFTs can only be sent to a marketplace parameterized with the correct creator royalty address.
+
+**Marketplace validator (parameterized by creator):**
+
+```scala
+@Compile
+object MarketplaceValidator {
+    inline def validate(creatorPkh: PubKeyHash)(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match
+            case ScriptInfo.SpendingScript(_, datum) =>
+                val listing = datum.getOrFail("Datum required").to[Listing]
+                val action = sc.redeemer.to[MarketplaceRedeemer]
+
+                action match
+                    case MarketplaceRedeemer.Buy =>
+                        // Verify royalty payment to creator (10%)
+                        val royaltyAmount = listing.price * BigInt(10) / BigInt(100)
+                        val creatorCred = Credential.PubKeyCredential(creatorPkh)
+                        // ... verify payments to creator and seller
+                    case MarketplaceRedeemer.Cancel =>
+                        require(sc.txInfo.signatories.contains(listing.seller))
+            case _ => fail("Unsupported script purpose")
+    }
+}
+```
+
+**Complete workflow:**
+
+```scala
+object ParameterValidationUsage {
+    // 1. Compute marketplace hash for a given creator
+    def computeMarketplaceHash(creatorPkh: PubKeyHash): ValidatorHash = {
+        ParameterValidation.computeScriptHashV3(
+          MarketplaceBaseProgram.program.deBruijnedProgram,
+          creatorPkh.toData
+        )
+    }
+
+    // 2. Create parameterized marketplace script
+    def createMarketplaceScript(creatorPkh: PubKeyHash) = {
+        MarketplaceBaseProgram.program.deBruijnedProgram $ creatorPkh.toData
+    }
+
+    // 3. Create parameterized NFT minting policy
+    def createNFTMintingPolicy(expectedMarketplaceHash: ValidatorHash, tokenName: TokenName) = {
+        val params = NFTMintParams(expectedMarketplaceHash, tokenName)
+        NFTMintingBaseProgram.program.deBruijnedProgram $ params.toData
+    }
+
+    // 4. Complete setup
+    def setupNFTWithMarketplace(creatorPkh: PubKeyHash, tokenName: TokenName) = {
+        val marketplaceHash = computeMarketplaceHash(creatorPkh)
+        val marketplace = createMarketplaceScript(creatorPkh)
+        val mintingPolicy = createNFTMintingPolicy(marketplaceHash, tokenName)
+        (marketplace, mintingPolicy, marketplaceHash)
+    }
+}
+```
+
+<Callout type="warning">
+**Security consideration:** The expected hash must be computed correctly off-chain. If an attacker can influence the hash computation, they could redirect tokens to malicious scripts.
+</Callout>
+
+## Alternative Approaches
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Parameter Validation** | Direct verification, no runtime overhead | Requires off-chain hash computation |
+| **Beacon tokens** | Flexible, can verify at runtime | Additional minting policy needed |
+| **Oracle/reference inputs** | Dynamic parameter updates | Centralization risk |
+
+## Related Patterns
+
+- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Optimize multi-input transactions
+- **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Couple spending and minting endpoints
+
+## Resources
+
+- [Anastasia Labs: Parameter Validation](https://github.com/Anastasia-Labs/aiken-design-patterns/blob/develop/README.md#parameter-validation) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [ParameterValidationExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/ParameterValidationExample.scala) - Complete example
+- [ParameterValidationTest](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/test/scala/scalus/patterns/ParameterValidationTest.scala) - Tests

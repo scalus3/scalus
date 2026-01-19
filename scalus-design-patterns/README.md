@@ -7,11 +7,13 @@
         * [Stake Validator](#stake-validator)
         * [Transaction Level Validator Minting Policy](#transaction-level-validator-minting-policy)
         * [Merkelized Validator](#merkelized-validator)
+    * [Validation Patterns](#validation-patterns)
+        * [Parameter Validation](#parameter-validation)
     * [Indexing Patterns](#indexing-patterns)
         * [UTxO Indexers](#utxo-indexers)
-    * [Advanced Data structures](#advanced-data-structures)    
+    * [Advanced Data structures](#advanced-data-structures)
         * [Linked List](#linked-list)
-    * [Utilities](#utilities)     
+    * [Utilities](#utilities)
         * [Validity Range Normalization](#validity-range-normalization)
     * [License](#license)
 
@@ -219,6 +221,127 @@ Run the `BatchAuctionTest` budget comparison test to see actual memory/CPU savin
 > [!NOTE]
 > Total size of reference scripts is limited to 200KiB (204800 bytes), with
 > exponential fee implications. See [cardano-ledger#3952](https://github.com/IntersectMBO/cardano-ledger/issues/3952).
+
+## Validation Patterns
+
+### Parameter Validation
+
+This pattern enables verification that script instances are legitimate instantiations
+of parameterized scripts with specific parameter values.
+
+#### The Problem
+
+When a minting policy needs to ensure tokens go only to a spending script parameterized
+with a specific value (e.g., a royalty address), it cannot directly inspect the target
+script's parameters. Each different parameter creates a different script hash, making
+it impossible to distinguish between legitimate and arbitrary script destinations
+without this pattern.
+
+#### Use Cases
+
+- **Minting Policy → Spending Script**: A minting policy verifies tokens only go to
+  a spending script parameterized with the correct royalty address
+- **Multi-Script Coordination**: A coordinator script verifies helper scripts have
+  expected parameters
+- **Factory Pattern**: A factory mints tokens referencing scripts with verified parameters
+
+#### How It Works
+
+Script hashing in Cardano:
+
+```
+script_hash = blake2b_224(language_tag ++ cbor_encoded_program)
+
+Language tags:
+  - PlutusV1: 0x01
+  - PlutusV2: 0x02
+  - PlutusV3: 0x03
+
+When parameters are applied:
+  parameterized_program = base_program $ param1 $ param2 ...
+  parameterized_hash = blake2b_224(language_tag ++ cbor(parameterized_program))
+```
+
+The pattern:
+1. **Off-chain**: Compile base script, apply parameters, compute expected hash
+2. **Off-chain**: Pass expected hash to the dependent script (e.g., minting policy)
+3. **On-chain**: Dependent script verifies outputs go to addresses matching expected hash
+
+#### API
+
+**Off-chain functions** (`ParameterValidation`):
+
+| Function | Description |
+|----------|-------------|
+| `computeScriptHashV3` | Compute hash for PlutusV3 script with applied parameters |
+| `computeScriptHashV2` | Compute hash for PlutusV2 script with applied parameters |
+| `computeScriptHashV1` | Compute hash for PlutusV1 script with applied parameters |
+
+**On-chain functions** (`ParameterValidationOnChain`):
+
+| Function | Description |
+|----------|-------------|
+| `verifyScriptCredential` | Verify credential matches expected script hash |
+| `verifyAddressScript` | Verify address has expected script credential |
+| `findOutputsToScript` | Find outputs sent to a specific script hash |
+| `isExpectedScript` | Check if credential matches expected hash (returns Boolean) |
+
+#### Example: NFT with Verified Marketplace
+
+A minting policy ensures NFTs can only be sent to a marketplace parameterized with
+the correct creator royalty address.
+
+**Off-chain setup:**
+
+```scala
+import scalus.patterns.ParameterValidation
+import scalus.builtin.Data.toData
+
+// 1. Compute marketplace hash for specific creator
+def computeMarketplaceHash(creatorPkh: PubKeyHash): ValidatorHash = {
+    ParameterValidation.computeScriptHashV3(
+      MarketplaceBaseProgram.program.deBruijnedProgram,
+      creatorPkh.toData
+    )
+}
+
+// 2. Create parameterized scripts
+val marketplaceHash = computeMarketplaceHash(creatorPkh)
+val marketplace = MarketplaceBaseProgram.program.deBruijnedProgram $ creatorPkh.toData
+val mintingPolicy = NFTMintingBaseProgram.program.deBruijnedProgram $
+    NFTMintParams(marketplaceHash, tokenName).toData
+```
+
+**On-chain verification (minting policy):**
+
+```scala
+import scalus.patterns.ParameterValidationOnChain
+
+@Compile
+object NFTMintingPolicy {
+    inline def validate(params: NFTMintParams)(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match
+            case ScriptInfo.MintingScript(policyId) =>
+                val mintedAmount = sc.txInfo.mint.quantityOf(policyId, params.tokenName)
+                require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
+
+                // Find output containing our NFT
+                val nftOutput = sc.txInfo.outputs.find { output =>
+                    output.value.quantityOf(policyId, params.tokenName) > 0
+                }.getOrFail("NFT output not found")
+
+                // Verify output goes to the expected marketplace script
+                ParameterValidationOnChain.verifyAddressScript(
+                  nftOutput.address,
+                  params.expectedMarketplaceHash
+                )
+            case _ => fail("Unsupported script purpose")
+    }
+}
+```
+
+See `scalus.examples.ParameterValidationExample` for the complete implementation.
 
 ## Indexing Patterns
 
