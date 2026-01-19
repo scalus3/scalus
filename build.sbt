@@ -1,5 +1,6 @@
 import sbt.internal.util.ManagedLogger
 import sbtwelcome.*
+import com.typesafe.tools.mima.core.*
 
 import java.net.URI
 import scala.scalanative.build.*
@@ -564,7 +565,11 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq.empty,
+      mimaBinaryIssueFilters ++= Seq(
+        // Removed deprecated SlotConfig type alias and value from package level (v0.12.0)
+        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package$")
+      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
