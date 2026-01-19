@@ -223,9 +223,9 @@ TxBuilder(env)
 You can attach a script to an output for others to reference:
 
 ```scala copy
-import scalus.cardano.ledger.{TransactionOutput, Script}
+import scalus.cardano.ledger.{Output, Script}
 
-val outputWithScript = TransactionOutput(
+val outputWithScript = Output(
   address = scriptAddress,
   value = Value.ada(10),
   datumOption = None,

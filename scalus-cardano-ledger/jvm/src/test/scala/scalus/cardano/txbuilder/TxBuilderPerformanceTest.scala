@@ -49,14 +49,14 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
     def input(index: Int): TransactionInput = Input(genesisHash, index)
 
     def adaOutput(address: Address, ada: Int): TransactionOutput =
-        TransactionOutput(address, Value.ada(ada))
+        Output(address, Value.ada(ada))
 
     def scriptOutput(
         address: ShelleyAddress = scriptAddress,
         ada: Int = 20,
         datum: DatumOption = inlineDatum42
     ): TransactionOutput =
-        TransactionOutput(address, Value.ada(ada), datum)
+        Output(address, Value.ada(ada), datum)
 
     def scriptUtxo(
         index: Int,

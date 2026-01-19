@@ -14,7 +14,7 @@ class UtxoPoolTest extends AnyFunSuite {
 
     // Computed minAda for a simple ADA-only output (using Alice's address as reference)
     val minAdaForSimpleOutput: Long = {
-        val minimalOutput = TransactionOutput(Alice.address, Value.zero)
+        val minimalOutput = Output(Alice.address, Value.zero)
         MinCoinSizedTransactionOutput.ensureMinAda(Sized(minimalOutput), testProtocolParams).value
     }
 
@@ -29,13 +29,13 @@ class UtxoPoolTest extends AnyFunSuite {
     def input(index: Int): TransactionInput = Input(genesisHash, index)
 
     def adaOutput(ada: Int): TransactionOutput =
-        TransactionOutput(Alice.address, Value.ada(ada))
+        Output(Alice.address, Value.ada(ada))
 
     def adaOutputLovelace(lovelace: Long): TransactionOutput =
-        TransactionOutput(Alice.address, Value.lovelace(lovelace))
+        Output(Alice.address, Value.lovelace(lovelace))
 
     def tokenOutput(ada: Int, tokenAmount: Long): TransactionOutput =
-        TransactionOutput(
+        Output(
           Alice.address,
           Value.assets(Map(policyId -> Map(tokenName -> tokenAmount)), Coin.ada(ada))
         )

@@ -86,11 +86,11 @@ object TestUtil {
         params: ProtocolParams = CardanoInfo.mainnet.protocolParams,
         min: Coin = Coin(0L)
     )(using CardanoInfo): Gen[Utxo] =
-        for input <- Arbitrary.arbitrary[TransactionInput]
+        for input <- Arbitrary.arbitrary[Input]
         yield {
             val output =
                 TransactionBuilder.ensureMinAda(
-                  TransactionOutput(party.address, Value(min)),
+                  Output(party.address, Value(min)),
                   params
                 )
             Utxo(input, output)
@@ -98,7 +98,7 @@ object TestUtil {
 
     @deprecated("will be removed", "0.13.0")
     def createTestWallet(address: Address, ada: BigInt): WalletTrait = new WalletTrait {
-        private val testInput = TransactionInput(
+        private val testInput = Input(
           TransactionHash.fromByteString(ByteString.fromHex("0" * 64)),
           0
         )

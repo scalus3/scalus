@@ -12,7 +12,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -42,7 +42,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -82,7 +82,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -127,7 +127,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -178,7 +178,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -229,7 +229,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -279,7 +279,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -328,7 +328,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -381,7 +381,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -422,7 +422,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -455,7 +455,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -490,7 +490,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -522,7 +522,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -557,7 +557,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -588,7 +588,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -624,7 +624,7 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )

@@ -67,7 +67,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val state = State(
           utxos = Map(
-            input1 -> TransactionOutput(
+            input1 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -75,7 +75,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   .copy(payload = StakePayload.Stake(Hash(platform.blake2b_224(publicKey1)))),
               Value(Coin(1000000L))
             ),
-            input2 -> TransactionOutput(
+            input2 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -127,7 +127,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val state = State(
           utxos = Map(
-            input1 -> TransactionOutput(
+            input1 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -139,7 +139,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
               Value(Coin(1000000L))
             ),
-            input2 -> TransactionOutput(
+            input2 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -192,7 +192,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val state = State(
           utxos = Map(
-            collateralInput1 -> TransactionOutput(
+            collateralInput1 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -204,7 +204,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
               Value(Coin(1000000L))
             ),
-            collateralInput2 -> TransactionOutput(
+            collateralInput2 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -256,7 +256,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val state = State(
           utxos = Map(
-            collateralInput1 -> TransactionOutput(
+            collateralInput1 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample
@@ -268,7 +268,7 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   ),
               Value(Coin(1000000L))
             ),
-            collateralInput2 -> TransactionOutput(
+            collateralInput2 -> Output(
               Arbitrary
                   .arbitrary[StakeAddress]
                   .sample

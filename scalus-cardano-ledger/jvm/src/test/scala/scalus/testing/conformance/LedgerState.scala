@@ -379,7 +379,7 @@ object LedgerState {
 
     given Decoder[TransactionOutput] with
         def read(r: Reader): TransactionOutput =
-            if r.hasByteArray then MempackParser.parseTransactionOutput(r.readByteArray())
+            if r.hasByteArray then MempackParser.parseOutput(r.readByteArray())
             else r.read[TransactionOutput]()
 
     given Codec[UTxOState] = Codec.derived

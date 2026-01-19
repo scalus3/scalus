@@ -9,7 +9,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
     test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs success") {
         val context = Context()
 
-        val output = TransactionOutput(
+        val output = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
               .sample
@@ -51,7 +51,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
     test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure for minimum ada") {
         val context = Context()
 
-        val output = TransactionOutput(
+        val output = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
               .sample
@@ -85,7 +85,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
     test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure for negative assets") {
         val context = Context()
 
-        val output = TransactionOutput(
+        val output = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
               .sample
@@ -126,7 +126,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
     test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput success") {
         val context = Context()
 
-        val collateralReturnOutput = TransactionOutput(
+        val collateralReturnOutput = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
               .sample
@@ -168,7 +168,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
     test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure for minimum ada") {
         val context = Context()
 
-        val collateralReturnOutput = TransactionOutput(
+        val collateralReturnOutput = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
               .sample
@@ -202,7 +202,7 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
     test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure for negative assets") {
         val context = Context()
 
-        val collateralReturnOutput = TransactionOutput(
+        val collateralReturnOutput = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
               .sample

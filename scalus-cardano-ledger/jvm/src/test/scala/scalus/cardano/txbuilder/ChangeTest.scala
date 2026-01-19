@@ -36,8 +36,8 @@ class ChangeTest
         // ensure change = 0
         val generousFee = inputAda - outputAda
 
-        val output = TransactionOutput(genPubkeyAddr().sample.get, Value(outputAda))
-        val changeOutput = TransactionOutput(genPubkeyAddr().sample.get, Value(Coin.zero, asset))
+        val output = Output(genPubkeyAddr().sample.get, Value(outputAda))
+        val changeOutput = Output(genPubkeyAddr().sample.get, Value(Coin.zero, asset))
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val tx = makeSimpleTx(
@@ -70,9 +70,9 @@ class ChangeTest
 
         val changeAssets = MultiAsset.asset(policyId, assetName, 50)
         val changeAddr = genPubkeyAddr().sample.get
-        val changeOutput = TransactionOutput(changeAddr, Value(Coin.ada(2), changeAssets))
+        val changeOutput = Output(changeAddr, Value(Coin.ada(2), changeAssets))
 
-        val otherOutput = TransactionOutput(genPubkeyAddr().sample.get, Value(Coin.ada(3)))
+        val otherOutput = Output(genPubkeyAddr().sample.get, Value(Coin.ada(3)))
 
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val tx = makeSimpleTx(
@@ -283,7 +283,7 @@ class ChangeTest
         changeAddr: Address,
         value: Value
     ): Transaction = {
-        val changeOutput = Sized(TransactionOutput(changeAddr, value))
+        val changeOutput = Sized(Output(changeAddr, value))
         tx.copy(body = KeepRaw(tx.body.value.copy(outputs = tx.body.value.outputs :+ changeOutput)))
     }
 
@@ -393,14 +393,14 @@ class ChangeTest
                 .zip(inputAddresses)
                 .zip(inputValues)
                 .map { case ((txIn, addr), value) =>
-                    txIn -> TransactionOutput(addr, value)
+                    txIn -> Output(addr, value)
                 }
                 .toMap
 
             val outputs = outputAddresses
                 .zip(outputValues)
                 .map { case (addr, value) =>
-                    Sized(TransactionOutput(addr, value))
+                    Sized(Output(addr, value))
                 }
 
             val tx = Transaction(

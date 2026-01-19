@@ -241,8 +241,8 @@ If you already have UTXOs available in memory (e.g., from a previous query or a 
 ```scala copy
 // Pre-fetched or cached UTXOs from any source
 val availableUtxos: Utxos = Map(
-  TransactionInput(txHash, 0) -> TransactionOutput(sponsorAddress, Value.ada(100)),
-  TransactionInput(txHash, 1) -> TransactionOutput(sponsorAddress, Value.ada(50))
+  Input(txHash, 0) -> Output(sponsorAddress, Value.ada(100)),
+  Input(txHash, 1) -> Output(sponsorAddress, Value.ada(50))
 )
 
 // Synchronous - no Future, no async provider query

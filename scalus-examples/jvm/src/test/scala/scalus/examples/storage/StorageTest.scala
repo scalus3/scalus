@@ -55,19 +55,13 @@ class StorageTest extends AnyFunSuite, ScalusTest:
         val data = ByteString.fromString("Hello, Cardano!")
 
         val initialUtxos = Map(
-          TransactionInput(TestUtil.genesisHash, 0) -> TransactionOutput(
-            Alice.address,
-            Value.ada(5000)
-          ),
-          TransactionInput(TestUtil.genesisHash, 1) -> TransactionOutput(
-            Alice.address,
-            Value.ada(5000)
-          ),
+          Input(TestUtil.genesisHash, 0) -> Output(Alice.address, Value.ada(5000)),
+          Input(TestUtil.genesisHash, 1) -> Output(Alice.address, Value.ada(5000)),
           // The init reference UTxO that LinkedList needs
-          TransactionInput(
+          Input(
             TransactionHash.fromByteString(initRef.id.hash),
             initRef.idx.toInt
-          ) -> TransactionOutput(
+          ) -> Output(
             Alice.address,
             Value.ada(10)
           )
@@ -132,22 +126,13 @@ class StorageTest extends AnyFunSuite, ScalusTest:
         )
 
         val initialUtxos = Map(
-          TransactionInput(TestUtil.genesisHash, 0) -> TransactionOutput(
-            Alice.address,
-            Value.ada(5000)
-          ),
-          TransactionInput(TestUtil.genesisHash, 1) -> TransactionOutput(
-            Alice.address,
-            Value.ada(5000)
-          ),
+          Input(TestUtil.genesisHash, 0) -> Output(Alice.address, Value.ada(5000)),
+          Input(TestUtil.genesisHash, 1) -> Output(Alice.address, Value.ada(5000)),
           // The init reference UTxO that LinkedList needs
-          TransactionInput(
+          Input(
             TransactionHash.fromByteString(initRef.id.hash),
             initRef.idx.toInt
-          ) -> TransactionOutput(
-            Alice.address,
-            Value.ada(10)
-          )
+          ) -> Output(Alice.address, Value.ada(10))
         )
 
         val provider = Emulator(

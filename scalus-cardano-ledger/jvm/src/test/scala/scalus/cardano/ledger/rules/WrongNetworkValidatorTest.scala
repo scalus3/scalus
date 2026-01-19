@@ -15,7 +15,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq(
               Sized(
-                TransactionOutput(
+                Output(
                   ShelleyAddress(
                     Testnet,
                     Arbitrary.arbitrary[ShelleyPaymentPart].sample.get,
@@ -41,7 +41,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq(
               Sized(
-                TransactionOutput(
+                Output(
                   ShelleyAddress(
                     Mainnet,
                     Arbitrary.arbitrary[ShelleyPaymentPart].sample.get,
@@ -65,7 +65,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq(
               Sized(
-                TransactionOutput(
+                Output(
                   StakeAddress(
                     Testnet,
                     Arbitrary.arbitrary[StakePayload].sample.get
@@ -90,7 +90,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq(
               Sized(
-                TransactionOutput(
+                Output(
                   StakeAddress(
                     Mainnet,
                     Arbitrary.arbitrary[StakePayload].sample.get
@@ -113,7 +113,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq(
               Sized(
-                TransactionOutput(
+                Output(
                   Arbitrary.arbitrary[ByronAddress].sample.get,
                   Value.zero
                 )
@@ -137,7 +137,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             fee = Coin.zero,
             collateralReturnOutput = Some(
               Sized(
-                TransactionOutput(
+                Output(
                   ShelleyAddress(
                     Testnet,
                     Arbitrary.arbitrary[ShelleyPaymentPart].sample.get,
@@ -164,7 +164,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             fee = Coin.zero,
             collateralReturnOutput = Some(
               Sized(
-                TransactionOutput(
+                Output(
                   ShelleyAddress(
                     Mainnet,
                     Arbitrary.arbitrary[ShelleyPaymentPart].sample.get,
@@ -191,7 +191,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             fee = Coin.zero,
             collateralReturnOutput = Some(
               Sized(
-                TransactionOutput(
+                Output(
                   StakeAddress(
                     Testnet,
                     Arbitrary.arbitrary[StakePayload].sample.get
@@ -217,7 +217,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             fee = Coin.zero,
             collateralReturnOutput = Some(
               Sized(
-                TransactionOutput(
+                Output(
                   StakeAddress(
                     Mainnet,
                     Arbitrary.arbitrary[StakePayload].sample.get
@@ -241,7 +241,7 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             fee = Coin.zero,
             collateralReturnOutput = Some(
               Sized(
-                TransactionOutput(
+                Output(
                   Arbitrary.arbitrary[ByronAddress].sample.get,
                   Value.zero
                 )

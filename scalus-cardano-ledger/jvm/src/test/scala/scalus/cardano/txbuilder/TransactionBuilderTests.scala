@@ -699,7 +699,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               additionalSigners = Set.empty
             )
           ),
-          Send(TransactionOutput(pkhOutput.address, Value.ada(1)))
+          Send(Output(pkhOutput.address, Value.ada(1)))
         )
 
         val result = TransactionBuilder.build(Mainnet, steps)

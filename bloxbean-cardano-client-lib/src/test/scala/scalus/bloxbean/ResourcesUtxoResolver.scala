@@ -77,7 +77,7 @@ private[scalus] class ResourcesUtxoResolver {
                             ScriptRef(Script.PlutusV3(decodeToSingleCbor(s)))
                     }
                 }
-                val out = getTransactionOutput(output, scriptRef)
+                val out = getOutput(output, scriptRef)
                 utxos.put(input, out)
             }
 
@@ -125,7 +125,7 @@ private[scalus] class ResourcesUtxoResolver {
             }
     }
 
-    private def getTransactionOutput(
+    private def getOutput(
         output: Utxo,
         scriptRef: Option[ScriptRef]
     ): TransactionOutput = {
@@ -137,7 +137,7 @@ private[scalus] class ResourcesUtxoResolver {
                 case (Some(dataHash), None) =>
                     Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHash))))
                 case (None, None) => None
-        TransactionOutput(
+        Output(
           address,
           output.toValue.toLedgerValue,
           datumOption,

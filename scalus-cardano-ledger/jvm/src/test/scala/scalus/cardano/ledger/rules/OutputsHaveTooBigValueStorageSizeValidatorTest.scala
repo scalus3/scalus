@@ -33,7 +33,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
     test("OutputsHaveTooBigValueStorageSizeValidator TransactionOutputs failure") {
         val context = Context()
 
-        val output = TransactionOutput(
+        val output = Output(
           Arbitrary.arbitrary[ShelleyAddress].sample.get,
           Value(
             Coin(1L),
@@ -92,7 +92,7 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
     test("OutputsHaveTooBigValueStorageSizeValidator CollateralReturnOutput failure") {
         val context = Context()
 
-        val collateralReturnOutput = TransactionOutput(
+        val collateralReturnOutput = Output(
           Arbitrary.arbitrary[ShelleyAddress].sample.get,
           Value(
             Coin(1L),

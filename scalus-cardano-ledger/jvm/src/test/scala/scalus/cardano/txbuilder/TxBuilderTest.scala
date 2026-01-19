@@ -41,7 +41,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
     def createScriptLockedUtxo(script: PlutusScript): Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get
-        val newOutput = TransactionOutput(
+        val newOutput = Output(
           address = Address(Mainnet, Credential.ScriptHash(script.scriptHash)),
           value = utxo.output.value,
           inlineDatum = 42.toData,
@@ -216,7 +216,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
     test("TxBuilder sends specified TransactionOutput") {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 
-        val customOutput = TransactionOutput(
+        val customOutput = Output(
           address = Bob.address,
           value = Value.ada(3),
           datumOption = Some(Inline(hex"deadbeef".toData)),
@@ -313,7 +313,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val tokenUtxo =
             (
               Arbitrary.arbitrary[TransactionInput].sample.get,
-              TransactionOutput(Alice.address, inputValue)
+              Output(Alice.address, inputValue)
             )
 
         // Only send ADA, no tokens
@@ -352,7 +352,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val tokenUtxo =
             (
               Arbitrary.arbitrary[TransactionInput].sample.get,
-              TransactionOutput(Alice.address, inputValue)
+              Output(Alice.address, inputValue)
             )
 
         val paymentValue = Value.asset(policyId, co2, sendAmount, Coin.ada(3))
@@ -400,7 +400,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val tokenUtxo =
             (
               Arbitrary.arbitrary[TransactionInput].sample.get,
-              TransactionOutput(Alice.address, inputValue)
+              Output(Alice.address, inputValue)
             )
 
         // Send only co2, no h2so4
@@ -501,7 +501,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         // (signature verification is tested elsewhere in TransactionSignerTest)
         val provider = Emulator(
           initialUtxos = Map(
-            Input(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100))
+            Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))
           ),
           validators = Set.empty,
           mutators = Emulator.defaultMutators
@@ -608,7 +608,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         // Create reference script UTxO
         val refScriptUtxo = (
           Arbitrary.arbitrary[TransactionInput].sample.get,
-          TransactionOutput(Alice.address, Value.ada(5), None, Some(ScriptRef(mintingPolicy)))
+          Output(Alice.address, Value.ada(5), None, Some(ScriptRef(mintingPolicy)))
         )
 
         val validFrom = Instant.now()
@@ -759,7 +759,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
         // Create a reference UTxO with the script
         val refInput = Arbitrary.arbitrary[TransactionInput].sample.get
-        val refOutput = TransactionOutput(
+        val refOutput = Output(
           address = Alice.address,
           value = Value.ada(10),
           datumOption = None,

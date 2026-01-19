@@ -20,7 +20,7 @@ trait ValidatorRulesTestKit extends ArbitraryInstances {
               outputs = tx.body.value.outputs
                   .map(x =>
                       Sized(
-                        TransactionOutput(
+                        Output(
                           Arbitrary.arbitrary[ShelleyAddress].sample.get.copy(network = network),
                           x.value.value
                         )
@@ -28,7 +28,7 @@ trait ValidatorRulesTestKit extends ArbitraryInstances {
                   )
                   .appended(
                     Sized(
-                      TransactionOutput(
+                      Output(
                         Arbitrary.arbitrary[ShelleyAddress].sample.get.copy(network = network),
                         Arbitrary.arbitrary[Value].sample.get
                       )

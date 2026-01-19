@@ -20,7 +20,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -52,7 +52,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -72,7 +72,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -104,7 +104,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -122,7 +122,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -160,7 +160,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -210,7 +210,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
               fee = Coin(0),
               collateralReturnOutput = Some(
                 Sized(
-                  TransactionOutput(
+                  Output(
                     address = arbitrary[Address].sample.get,
                     value = Value.lovelace(80000)
                   )
@@ -241,12 +241,12 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
             ),
-            collateralInput -> TransactionOutput(
+            collateralInput -> Output(
               address = arbitrary[Address].sample.get,
               value = Value.lovelace(100000)
             )
@@ -337,7 +337,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -386,7 +386,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -406,7 +406,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -443,7 +443,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -461,7 +461,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -494,7 +494,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -512,7 +512,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -546,7 +546,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -564,7 +564,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -598,7 +598,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -618,7 +618,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -655,7 +655,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -673,7 +673,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -706,7 +706,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -724,7 +724,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -758,7 +758,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -776,7 +776,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val input = arbitrary[TransactionInput].sample.get
         val datum = arbitrary[Data].sample.get
 
-        val output = TransactionOutput(
+        val output = Output(
           address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
           value = Value.lovelace(100000),
         )
@@ -810,7 +810,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)
@@ -864,7 +864,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               inlineDatum = datum
@@ -918,12 +918,12 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumOption = DatumOption.Hash(DataHash.fromByteString(datum.dataHash))
             ),
-            referenceInput -> TransactionOutput(
+            referenceInput -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               inlineDatum = datum
@@ -978,7 +978,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
         val state = State(
           utxos = Map(
-            input -> TransactionOutput(
+            input -> Output(
               address = Address(Testnet, Credential.ScriptHash(script.scriptHash)),
               value = Value.zero,
               datumHash = DataHash.fromByteString(datum.dataHash)

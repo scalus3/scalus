@@ -19,8 +19,8 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     test("Emulator.utxos returns all UTXOs") {
         val initialUtxos = Map(
-          Input(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(100)),
-          Input(genesisHash, 1) -> TransactionOutput(Bob.address, Value.ada(50))
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(Bob.address, Value.ada(50))
         )
 
         val provider = Emulator(
@@ -58,7 +58,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         ) { (initialAmount: Long, paymentAmount: Long) =>
             whenever(initialAmount > paymentAmount + 1) {
                 val initialUtxos = Map(
-                  Input(genesisHash, 0) -> TransactionOutput(
+                  Input(genesisHash, 0) -> Output(
                     Alice.address,
                     Value.ada(initialAmount)
                   )
@@ -111,7 +111,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     test("Property: invalid transaction (double spend) is rejected") {
         forAll(Gen.choose(100L, 1000L)) { initialAmount =>
             val initialUtxos = Map(
-              Input(genesisHash, 0) -> TransactionOutput(
+              Input(genesisHash, 0) -> Output(
                 Alice.address,
                 Value.ada(initialAmount)
               )

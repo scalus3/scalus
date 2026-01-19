@@ -312,7 +312,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     private def mkTx(in: Value, output: Value, fee: Coin): (Utxos, Transaction) = {
         val input = Input(Hash(platform.blake2b_256(utf8"asdf")), 0)
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             address = testAddress,
             value = in
           )
@@ -322,7 +322,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
             inputs = TaggedSortedSet(SortedSet(input)),
             outputs = Vector(
               Sized(
-                TransactionOutput(
+                Output(
                   address = testAddress,
                   value = output
                 )

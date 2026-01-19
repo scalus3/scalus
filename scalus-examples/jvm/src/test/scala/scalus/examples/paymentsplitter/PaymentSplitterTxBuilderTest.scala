@@ -295,7 +295,7 @@ class PaymentSplitterTxBuilderTest
         // Find fee payer's output by address
         val feePayerAddr = payeeParty(tc.feePayerInput._1).address
 
-        def verifyFeePayerOutput(result: TxResult, label: String): Unit = {
+        def verifyFeePayerTransactionOutput(result: TxResult, label: String): Unit = {
             val feePayerOutput = result.outputs.find(_.address == feePayerAddr)
             assert(feePayerOutput.isDefined, s"$label: Fee payer output not found")
 
@@ -312,7 +312,7 @@ class PaymentSplitterTxBuilderTest
             )
         }
 
-        verifyFeePayerOutput(resultNaive, "Naive")
-        verifyFeePayerOutput(resultOptimized, "Optimized")
+        verifyFeePayerTransactionOutput(resultNaive, "Naive")
+        verifyFeePayerTransactionOutput(resultOptimized, "Optimized")
     }
 }

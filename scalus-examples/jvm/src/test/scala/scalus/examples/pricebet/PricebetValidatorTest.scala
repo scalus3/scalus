@@ -463,17 +463,17 @@ object PricebetValidatorTest extends ScalusTest {
         Emulator(
           initialUtxos = Map(
             Input(genesisHash, 0) ->
-                TransactionOutput(
+                Output(
                   address = Alice.address,
                   value = Value.ada(100)
                 ),
             Input(genesisHash, 1) ->
-                TransactionOutput(
+                Output(
                   address = Bob.address,
                   value = Value.ada(100)
                 ),
             Input(genesisHash, 2) ->
-                TransactionOutput(
+                Output(
                   address = Oracle.address,
                   value = Value.ada(100)
                 )

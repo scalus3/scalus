@@ -130,9 +130,9 @@ Each call creates a separate UTxO at the recipient address.
 For full control, use the `output()` method with a complete `TransactionOutput`:
 
 ```scala copy
-import scalus.cardano.ledger.{TransactionOutput, DatumOption, Script}
+import scalus.cardano.ledger.{Output, DatumOption, Script}
 
-val customOutput = TransactionOutput(
+val customOutput = Output(
   address = recipientAddress,
   value = Value.ada(10),
   datumOption = Some(DatumOption.Inline(myDatum.toData)),

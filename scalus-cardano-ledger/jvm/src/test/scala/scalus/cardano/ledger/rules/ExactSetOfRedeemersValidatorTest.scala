@@ -13,7 +13,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
     test("ExactSetOfRedeemersValidator success with no scripts") {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -36,7 +36,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -66,7 +66,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -103,7 +103,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -133,7 +133,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -173,7 +173,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -212,7 +212,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -244,7 +244,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -277,7 +277,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -309,7 +309,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -340,7 +340,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -382,7 +382,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -423,7 +423,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -454,7 +454,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -491,7 +491,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -527,7 +527,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -558,7 +558,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -597,7 +597,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -634,7 +634,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Arbitrary.arbitrary[ShelleyAddress].sample.get,
             Value(Coin(1000000L))
           )
@@ -667,7 +667,7 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         val nativeScript = Timelock.Signature(Hash(scalus.builtin.platform.blake2b_224(publicKey)))
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -718,11 +718,11 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
         )
 
         val utxo = Map(
-          input1 -> TransactionOutput(
+          input1 -> Output(
             Address(Network.Testnet, Credential.ScriptHash(nativeScript.scriptHash)),
             Value(Coin(1000000L))
           ),
-          input2 -> TransactionOutput(
+          input2 -> Output(
             Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
             Value(Coin(1000000L))
           )

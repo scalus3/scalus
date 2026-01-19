@@ -29,7 +29,7 @@ class TxBuilderDemo extends AnyFunSuite {
     // Helper methods for creating UTXOs
     def input(index: Int): TransactionInput = Input(genesisHash, index)
     def adaOutput(address: Address, ada: Int): TransactionOutput =
-        TransactionOutput(address, Value.ada(ada))
+        Output(address, Value.ada(ada))
 
     val alwaysOkScript: Script.PlutusV3 = {
         val alwaysOk = PlutusV3.compile((sc: Data) => ())
@@ -113,7 +113,7 @@ class TxBuilderDemo extends AnyFunSuite {
 //            .collaterals(collateral)
 //            .references(referenceUtxo)
             .output(
-              TransactionOutput(
+              Output(
                 address = Bob,
                 value = amount,
                 datumOption = Some(DatumOption.Inline(0.toData)),
@@ -152,7 +152,7 @@ class TxBuilderDemo extends AnyFunSuite {
         val tx = TxBuilder(env)
             .spend(utxo)
             .output(
-              TransactionOutput(
+              Output(
                 address = Alice.address,
                 value = Value.ada(10),
                 datumOption = Some(DatumOption.Inline(0.toData)),
@@ -236,7 +236,7 @@ class TxBuilderDemo extends AnyFunSuite {
         // use the script in a transaction
         val tx = TxBuilder(env)
             .output(
-              TransactionOutput(
+              Output(
                 Alice.address,
                 Value.ada(10),
                 datumOption = None,

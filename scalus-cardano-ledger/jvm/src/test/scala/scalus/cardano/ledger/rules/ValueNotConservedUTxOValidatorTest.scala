@@ -35,12 +35,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("single input equals single output plus fee") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(900_000))
         )
@@ -61,12 +61,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("fails when output exceeds input") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(500_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(600_000))
         )
@@ -92,20 +92,20 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val input2 = createInput()
         val input3 = createInput()
 
-        val resolvedOutput1 = TransactionOutput(
+        val resolvedOutput1 = Output(
           address = createAddress(),
           value = Value(coin = Coin(300_000))
         )
-        val resolvedOutput2 = TransactionOutput(
+        val resolvedOutput2 = Output(
           address = createAddress(),
           value = Value(coin = Coin(400_000))
         )
-        val resolvedOutput3 = TransactionOutput(
+        val resolvedOutput3 = Output(
           address = createAddress(),
           value = Value(coin = Coin(300_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(900_000))
         )
@@ -134,20 +134,20 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("single input distributes to multiple outputs") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output1 = TransactionOutput(
+        val output1 = Output(
           address = createAddress(),
           value = Value(coin = Coin(300_000))
         )
-        val output2 = TransactionOutput(
+        val output2 = Output(
           address = createAddress(),
           value = Value(coin = Coin(400_000))
         )
-        val output3 = TransactionOutput(
+        val output3 = Output(
           address = createAddress(),
           value = Value(coin = Coin(250_000))
         )
@@ -170,20 +170,20 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val input1 = createInput()
         val input2 = createInput()
 
-        val resolvedOutput1 = TransactionOutput(
+        val resolvedOutput1 = Output(
           address = createAddress(),
           value = Value(coin = Coin(600_000))
         )
-        val resolvedOutput2 = TransactionOutput(
+        val resolvedOutput2 = Output(
           address = createAddress(),
           value = Value(coin = Coin(400_000))
         )
 
-        val output1 = TransactionOutput(
+        val output1 = Output(
           address = createAddress(),
           value = Value(coin = Coin(450_000))
         )
-        val output2 = TransactionOutput(
+        val output2 = Output(
           address = createAddress(),
           value = Value(coin = Coin(500_000))
         )
@@ -211,12 +211,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("zero fee is valid") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
@@ -237,7 +237,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("entire input becomes fee") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
@@ -263,13 +263,13 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val policyId = createPolicyId()
         val assetName = createAssetName()
 
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(2_000_000))
         )
 
         val mintedAssets = Map(assetName -> 100L)
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(1_900_000),
@@ -299,14 +299,14 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val assetName1 = createAssetName()
         val assetName2 = createAssetName()
 
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(2_000_000))
         )
 
         val mintedAssets1 = Map(assetName1 -> 50L)
         val mintedAssets2 = Map(assetName2 -> 75L)
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(1_900_000),
@@ -347,7 +347,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val assetName = createAssetName()
 
         val inputAssets = Map(assetName -> 100L)
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(2_000_000),
@@ -355,7 +355,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_900_000))
         )
@@ -381,7 +381,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val assetName = createAssetName()
 
         val inputAssets = Map(assetName -> 100L)
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(2_000_000),
@@ -390,7 +390,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         )
 
         val outputAssets = Map(assetName -> 50L)
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(1_900_000),
@@ -420,7 +420,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val assetName2 = createAssetName()
 
         val inputAssets = Map(assetName1 -> 100L)
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(2_000_000),
@@ -429,7 +429,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         )
 
         val outputAssets = Map(assetName2 -> 50L)
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(1_900_000),
@@ -469,12 +469,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val input = createInput()
         val rewardAccount = arbitrary[RewardAccount].sample.get
 
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_400_000))
         )
@@ -499,12 +499,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val rewardAccount1 = arbitrary[RewardAccount].sample.get
         val rewardAccount2 = arbitrary[RewardAccount].sample.get
 
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_600_000))
         )
@@ -535,12 +535,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val input = createInput()
         val rewardAccount = arbitrary[RewardAccount].sample.get
 
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(900_000))
         )
@@ -564,12 +564,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("donation increases produced value") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(400_000))
         )
@@ -592,12 +592,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
 
     test("zero donation has no effect") {
         val input = createInput()
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_000_000))
         )
 
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(coin = Coin(900_000))
         )
@@ -628,7 +628,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val rewardAccount = arbitrary[RewardAccount].sample.get
 
         val inputAssets = Map(assetName1 -> 100L)
-        val resolvedOutput = TransactionOutput(
+        val resolvedOutput = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(5_000_000),
@@ -637,7 +637,7 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         )
 
         val outputAssets = Map(assetName1 -> 50L, assetName2 -> 75L)
-        val output = TransactionOutput(
+        val output = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(3_000_000),
@@ -682,24 +682,24 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
         val rewardAccount1 = arbitrary[RewardAccount].sample.get
         val rewardAccount2 = arbitrary[RewardAccount].sample.get
 
-        val resolvedOutput1 = TransactionOutput(
+        val resolvedOutput1 = Output(
           address = createAddress(),
           value = Value(coin = Coin(3_000_000))
         )
-        val resolvedOutput2 = TransactionOutput(
+        val resolvedOutput2 = Output(
           address = createAddress(),
           value = Value(coin = Coin(2_000_000))
         )
 
         val mintedAssets = Map(assetName -> 200L)
-        val output1 = TransactionOutput(
+        val output1 = Output(
           address = createAddress(),
           value = Value(
             coin = Coin(3_000_000),
             assets = MultiAsset.fromPolicy(policyId, mintedAssets)
           )
         )
-        val output2 = TransactionOutput(
+        val output2 = Output(
           address = createAddress(),
           value = Value(coin = Coin(1_500_000))
         )

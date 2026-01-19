@@ -39,7 +39,7 @@ object MempackParser {
       *
       * Based on Haskell cardano-ledger implementation.
       */
-    def parseTransactionOutput(bytes: Array[Byte]): TransactionOutput = {
+    def parseOutput(bytes: Array[Byte]): TransactionOutput = {
         var offset = 0
 
         // Read tag byte

@@ -344,3 +344,9 @@ object TransactionOutput:
                 line + text("scriptRef:") & Pretty[ScriptRef].pretty(ref, style)
             )
             (addressDoc / valueDoc + datumDoc + scriptDoc).grouped
+
+/** Alias for [[TransactionOutput]] */
+type Output = TransactionOutput
+
+/** Alias for [[TransactionOutput]] */
+val Output = TransactionOutput

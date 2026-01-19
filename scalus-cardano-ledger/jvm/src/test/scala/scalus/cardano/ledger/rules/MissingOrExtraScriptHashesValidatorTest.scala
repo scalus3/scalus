@@ -31,7 +31,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
             Value(Coin(1000000L))
           )
@@ -60,7 +60,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV1].sample.get
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             Address(Network.Testnet, Credential.ScriptHash(plutusScript.scriptHash)),
             Value(Coin(1000000L))
           )

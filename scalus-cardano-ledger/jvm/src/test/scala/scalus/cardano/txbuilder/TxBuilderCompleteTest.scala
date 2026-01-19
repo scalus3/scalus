@@ -56,17 +56,17 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     def input(index: Int): TransactionInput = Input(genesisHash, index)
 
     def adaOutput(address: Address, ada: Int): TransactionOutput =
-        TransactionOutput(address, Value.ada(ada))
+        Output(address, Value.ada(ada))
 
     def tokenOutput(
         address: Address,
         ada: Int,
         tokens: (ScriptHash, Map[AssetName, Long])*
     ): TransactionOutput =
-        TransactionOutput(address, Value.assets(tokens.toMap, Coin.ada(ada)))
+        Output(address, Value.assets(tokens.toMap, Coin.ada(ada)))
 
     def scriptUtxo(index: Int, ada: Int): Utxo =
-        Utxo(input(index), TransactionOutput(scriptAddress, Value.ada(ada), datum42))
+        Utxo(input(index), Output(scriptAddress, Value.ada(ada), datum42))
 
     private def outputsOf(party: Party, tx: Transaction) =
         tx.body.value.outputs.toSeq.filter(_.value.address == party.address)
@@ -671,7 +671,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val minChangeValue = Value.ada(5)
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
-            .changeTo(TransactionOutput(Alice.address, minChangeValue))
+            .changeTo(Output(Alice.address, minChangeValue))
             .complete(provider, Alice.address)
             .await()
             .transaction
@@ -705,7 +705,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val minChange = Value.fromPolicy(policyId, Map(co2 -> 50L), Coin.ada(5))
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.fromPolicy(policyId, Map(co2 -> 100L), Coin.ada(10)))
-            .changeTo(TransactionOutput(Alice.address, minChange))
+            .changeTo(Output(Alice.address, minChange))
             .complete(provider, Alice.address)
             .await()
             .transaction
@@ -725,8 +725,8 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("changeTo should fail if called twice") {
         val exception = intercept[IllegalArgumentException] {
             TxBuilder(testEnv)
-                .changeTo(TransactionOutput(Alice.address, Value.ada(5)))
-                .changeTo(TransactionOutput(Bob.address, Value.ada(3)))
+                .changeTo(Output(Alice.address, Value.ada(5)))
+                .changeTo(Output(Bob.address, Value.ada(3)))
         }
 
         assert(
@@ -743,7 +743,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val tx = TxBuilder(testEnv)
             .payTo(Alice.address, Value.ada(10))
-            .changeTo(TransactionOutput(coldWallet.address, Value.ada(5)))
+            .changeTo(Output(coldWallet.address, Value.ada(5)))
             .complete(provider, Alice.address)
             .await()
             .transaction
@@ -809,7 +809,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val changeDatum = Data.I(12345)
-        val changeOutput = TransactionOutput(scriptAddress, Value.ada(5), changeDatum)
+        val changeOutput = Output(scriptAddress, Value.ada(5), changeDatum)
 
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10))
@@ -838,7 +838,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // Create two outputs to Bob: first is a payment, second is the change output
         val tx = TxBuilder(testEnv)
             .payTo(Bob.address, Value.ada(10)) // Output 0: exactly 10 ADA
-            .changeTo(TransactionOutput(Bob.address, Value.ada(5))) // Output 1: 5 ADA min + change
+            .changeTo(Output(Bob.address, Value.ada(5))) // Output 1: 5 ADA min + change
             .complete(provider, Alice.address)
             .await()
             .transaction
@@ -1028,7 +1028,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // Contains the script as a reference script in the UTXO itself
         val scriptUtxo = Utxo(
           input(0),
-          TransactionOutput(
+          Output(
             scriptAddr,
             Value.ada(3), // Only 3 ADA - not enough for 1 ADA payment + fees + change
             Some(DatumOption.Inline(0.toData)),
@@ -1253,7 +1253,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         // TxBuilder requires a datum for script outputs
         val sUtxo = Utxo(
           scriptUtxoInput,
-          TransactionOutput(
+          Output(
             scriptAddress,
             Value.ada(3), // Minimal ADA, forces balancing to add sponsor input
             datum42

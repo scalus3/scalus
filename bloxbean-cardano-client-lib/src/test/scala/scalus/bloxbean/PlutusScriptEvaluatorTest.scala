@@ -39,7 +39,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val outputAddress =
             addr"addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             address = Address(Network.Mainnet, Credential.ScriptHash(s.scriptHash)),
             datumHash = dataHash,
             value = Value.lovelace(2)
@@ -51,7 +51,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
             inputs = TaggedSortedSet(SortedSet(input)),
             outputs = Vector(
               Sized(
-                TransactionOutput(
+                Output(
                   address = outputAddress,
                   value = Value.lovelace(2)
                 )
@@ -94,7 +94,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val outputAddress =
             addr"addr1qxwg0u9fpl8dac9rkramkcgzerjsfdlqgkw0q8hy5vwk8tzk5pgcmdpe5jeh92guy4mke4zdmagv228nucldzxv95clqe35r3m"
         val utxo = Map(
-          input -> TransactionOutput(
+          input -> Output(
             address = Address(Network.Mainnet, Credential.ScriptHash(s.scriptHash)),
             datumHash = dataHash,
             value = Value.lovelace(2)
@@ -106,7 +106,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
             inputs = TaggedSortedSet(SortedSet(input)),
             outputs = Vector(
               Sized(
-                TransactionOutput(
+                Output(
                   address = outputAddress,
                   value = Value.lovelace(2)
                 )
