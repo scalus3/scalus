@@ -197,12 +197,7 @@ object Emulator {
     ): Emulator = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         val initialUtxos = addresses.zipWithIndex.map { case (address, index) =>
-            val input = TransactionInput(genesisHash, index)
-            val output = TransactionOutput.Babbage(
-              address = address,
-              value = initialValue
-            )
-            input -> output
+            Input(genesisHash, index) -> Output(address, initialValue)
         }.toMap
         Emulator(
           initialUtxos = initialUtxos,
