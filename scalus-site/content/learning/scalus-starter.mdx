@@ -24,8 +24,7 @@ The fastest way to see everything working is to run the integration tests. They 
 
 ### Prerequisites
 
-- Java JDK 11+ (21+ recommended)
-- [sbt](https://www.scala-sbt.org/)
+- Scala 3 development environment — see [Getting Started](/docs/get-started) for installation
 - Docker (for running Yaci DevKit via Testcontainers)
 
 <Callout type="info">
@@ -34,11 +33,21 @@ The fastest way to see everything working is to run the integration tests. They 
 
 <Steps>
 
-### Clone and Run Integration Tests
+### Clone and Run Unit Tests
 
 ```bash copy
 git clone https://github.com/scalus3/scalus-starter.git
 cd scalus-starter
+sbt test
+```
+
+Unit tests verify the smart contract logic without a blockchain — they're fast and don't require Docker.
+
+### Run Integration Tests
+
+Integration tests run against a real local blockchain:
+
+```bash copy
 sbt integration/test
 ```
 
@@ -52,14 +61,6 @@ This will:
 
 You should see the tests pass — you just ran a complete DApp locally.
 
-### Run Unit Tests
-
-Unit tests verify the smart contract logic without a blockchain:
-
-```bash copy
-sbt test
-```
-
 </Steps>
 
 Now that you've seen it work, let's understand how the pieces fit together.
@@ -70,7 +71,7 @@ The project has four main components that work together:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  MintingPolicy  │────▶│  Transactions   │────▶│     Server      │
+│  MintingPolicy  │─────│  Transactions   │─────│     Server      │
 │   (on-chain)    │     │   (off-chain)   │     │   (REST API)    │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
          │                      │                       │
@@ -101,7 +102,7 @@ Different configurations produce different policy IDs, so each deployment is uni
 
 **Validator logic** — The `@Compile` annotation tells Scalus to generate on-chain code:
 
-```scala copy
+```scala copy {1, 17, 18, 22}
 @Compile
 object MintingPolicy extends DataParameterizedValidator {
 
@@ -139,7 +140,7 @@ This validator enforces three rules:
 
 **Compilation pipeline** — The `MintingPolicyGenerator` compiles Scala to Plutus Core:
 
-```scala copy
+```scala copy {3,6,11}
 object MintingPolicyGenerator {
     // Compile to Scalus Intermediate Representation (SIR)
     val mintingPolicySIR: SIR = compile(MintingPolicy.validate)
@@ -308,7 +309,7 @@ Now that you understand the architecture, let's modify the code. We'll add a max
 
 Edit `MintingPolicy.scala`:
 
-```scala copy
+```scala copy {4}
 case class MintingConfig(
     adminPubKeyHash: PubKeyHash,
     tokenName: TokenName,
@@ -318,7 +319,7 @@ case class MintingConfig(
 
 ### Update the Validator Logic
 
-```scala copy
+```scala copy {4,15-16}
 def mintingPolicy(
     adminPubKeyHash: PubKeyHash,
     tokenName: TokenName,
