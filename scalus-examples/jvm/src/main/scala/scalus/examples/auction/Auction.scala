@@ -261,6 +261,19 @@ object AuctionValidator extends Validator {
           "Auction can only end after the end time"
         )
 
+        // 2. Verify only one auction NFT is being spent from this script (prevents double satisfaction)
+        // This ensures each End action corresponds to exactly one auction
+        val scriptAddress = Address.fromScriptHash(scriptHash)
+        val totalAuctionNftsSpent = txInfo.inputs.foldLeft(BigInt(0)) { (count, input) =>
+            if input.resolved.address === scriptAddress then
+                count + input.resolved.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+            else count
+        }
+        require(
+          totalAuctionNftsSpent === BigInt(1),
+          "Only one auction can be ended per transaction (prevents double satisfaction)"
+        )
+
         currentHighestBidder match
             case Option.Some(winner) =>
                 // 3. Winner cannot be the seller (defense in depth - also checked in handleBid)

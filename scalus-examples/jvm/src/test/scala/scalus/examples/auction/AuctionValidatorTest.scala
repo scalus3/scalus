@@ -96,8 +96,8 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("budget: end auction with winner") {
-        val cpuLimit = 200_000_000L
-        val memLimit = 550_000L
+        val cpuLimit = 250_000_000L
+        val memLimit = 650_000L // Increased due to double satisfaction prevention check
         val budget = TestCase(
           action = TestAction.EndWithWinner,
           expected = Expected.Success
@@ -113,8 +113,8 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
     }
 
     test("budget: end auction without bids") {
-        val cpuLimit = 150_000_000L
-        val memLimit = 400_000L
+        val cpuLimit = 200_000_000L
+        val memLimit = 500_000L // Increased due to double satisfaction prevention check
         val budget = TestCase(
           action = TestAction.EndNoBids,
           expected = Expected.Success
