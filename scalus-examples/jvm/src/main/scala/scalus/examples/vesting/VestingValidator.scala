@@ -94,16 +94,25 @@ object VestingValidator extends Validator {
         )
 
         if requestedAmount === contractAmount then ()
-        else require(contractOutputs.length === BigInt(1), "Expected exactly one contract output")
+        else
+            require(contractOutputs.length === BigInt(1), "Expected exactly one contract output")
 
-        val contractOutput = contractOutputs.head
-        contractOutput.datum match
-            case OutputDatum.OutputDatum(inlineData) =>
-                require(
-                  inlineData === datum.getOrFail("Datum not found"),
-                  "VestingDatum mismatch"
-                )
-            case _ => fail("Expected inline datum")
+            val contractOutput = contractOutputs.head
+
+            // Verify continuing output has correct remaining amount (prevents fund theft)
+            val expectedRemainingAmount = contractAmount - requestedAmount
+            require(
+              contractOutput.value.getLovelace >= expectedRemainingAmount,
+              "Continuing output must contain remaining vested funds"
+            )
+
+            contractOutput.datum match
+                case OutputDatum.OutputDatum(inlineData) =>
+                    require(
+                      inlineData === datum.getOrFail("Datum not found"),
+                      "VestingDatum mismatch"
+                    )
+                case _ => fail("Expected inline datum")
     }
 
     def linearVesting(vestingDatum: Config, timestamp: BigInt): BigInt = {
