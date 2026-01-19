@@ -205,6 +205,15 @@ object DonationMintingPolicy {
           "Exactly one donation token must be minted"
         )
 
+        // 6. Verify no other tokens are minted under this policy (V011 protection)
+        val allMintedUnderPolicy = txInfo.mint.flatten.filter { case (pid, _, _) =>
+            pid === policyId
+        }
+        require(
+          allMintedUnderPolicy.length === BigInt(1),
+          "Only one token type may be minted under donation policy"
+        )
+
     /** Handle burning of donation tokens.
       *
       * Security: Verifies that the campaign UTxO is being spent in this transaction. The campaign
@@ -485,10 +494,16 @@ object CrowdfundingValidator extends Validator {
             val newDatum = campaignOutput.datum match
                 case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
                 case _                          => fail("Campaign output must have inline datum")
-            require(
-              newDatum.withdrawn === newWithdrawn,
-              "Withdrawn amount must be updated"
+            // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
+            val expectedDatum = CampaignDatum(
+              totalSum = currentDatum.totalSum,
+              goal = currentDatum.goal,
+              recipient = currentDatum.recipient,
+              deadline = currentDatum.deadline,
+              withdrawn = newWithdrawn,
+              donationPolicyId = currentDatum.donationPolicyId
             )
+            require(newDatum === expectedDatum, "Only withdrawn field may change")
             // Verify campaign NFT is preserved in output
             verifyCampaignNftPresent(campaignOutput.value, scriptHash)
 
@@ -557,10 +572,16 @@ object CrowdfundingValidator extends Validator {
             val newDatum = campaignOutput.datum match
                 case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
                 case _                          => fail("Campaign output must have inline datum")
-            require(
-              newDatum.withdrawn === newWithdrawn,
-              "Withdrawn amount must be updated"
+            // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
+            val expectedDatum = CampaignDatum(
+              totalSum = currentDatum.totalSum,
+              goal = currentDatum.goal,
+              recipient = currentDatum.recipient,
+              deadline = currentDatum.deadline,
+              withdrawn = newWithdrawn,
+              donationPolicyId = currentDatum.donationPolicyId
             )
+            require(newDatum === expectedDatum, "Only withdrawn field may change")
             // Verify campaign NFT is preserved in output
             verifyCampaignNftPresent(campaignOutput.value, scriptHash)
 
@@ -666,6 +687,15 @@ object CrowdfundingValidator extends Validator {
         require(
           txInfo.mint.quantityOf(policyId, campaignId) === BigInt(1),
           "Exactly one campaign NFT must be minted"
+        )
+
+        // 5a. Verify no other tokens are minted under this policy (V011 protection)
+        val allMintedUnderPolicy = txInfo.mint.flatten.filter { case (pid, _, _) =>
+            pid === policyId
+        }
+        require(
+          allMintedUnderPolicy.length === BigInt(1),
+          "Only one token type may be minted under campaign policy"
         )
 
         // 6. Find the output going to the script address
