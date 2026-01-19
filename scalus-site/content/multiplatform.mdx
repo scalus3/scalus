@@ -1,18 +1,18 @@
 ---
 title: Multiplatform Support - JVM, JavaScript, Native
 sidebarTitle: Multiplatform
-description: Scalus runs on JVM, JavaScript (Node.js/browser), and Native platforms. Build Cardano smart contracts and offchain code that compiles to any target from the same Scala 3 codebase.
+description: Scalus runs on JVM, JavaScript/Typescript (Node.js/browser), and Native platforms. Build Cardano smart contracts and offchain code that compiles to any target from the same Scala 3 codebase.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Multiplatform Support
 
-Scalus compiles to **JVM**, **JavaScript**, and **Native** from the same Scala 3 codebase. Write once, deploy anywhere — from server-side backends to browser wallets to CLI tools.
+Scalus compiles to **JVM**, **JavaScript**/**Typescript**, and **Native** from the same Scala 3 codebase. Write once, deploy anywhere — from server-side backends to browser wallets to CLI tools.
 
 ## Platform Support Matrix
 
-| Module | JVM | JavaScript | Native | Description |
+| Module | JVM | JS/TS | Native | Description |
 |--------|:---:|:----------:|:------:|-------------|
 | **scalus-core** | ✓ | ✓ | ✓ | Plutus VM, UPLC, SIR compiler, standard library |
 | **scalus-cardano-ledger** | ✓ | ✓ | — | Transaction builder, ledger rules, Emulator |
@@ -32,9 +32,9 @@ The JVM platform provides the complete Scalus stack:
 
 **Best for:** Backend services, full DApp development, integration testing, production deployments.
 
-### JavaScript — Offchain & Browser
+### JavaScript/Typescript — Offchain & Browser
 
-JavaScript enables Scalus in Node.js and browser environments:
+JavaScript/Typescript enables Scalus in Node.js and browser environments:
 
 - **Script evaluation** — Run Plutus V1/V2/V3 scripts
 - **Transaction building** — Construct and sign transactions
@@ -64,7 +64,7 @@ Scala Native compiles to native binaries:
 
 ## Feature Availability
 
-| Feature | JVM | JS | Native |
+| Feature | JVM | JS/TS | Native |
 |---------|:---:|:--:|:------:|
 | Plutus script execution | ✓ | ✓ | ✓ |
 | SIR compilation | ✓ | ✓ | ✓ |
