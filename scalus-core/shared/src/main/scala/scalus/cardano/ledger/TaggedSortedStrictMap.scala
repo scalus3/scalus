@@ -32,7 +32,7 @@ object TaggedSortedStrictMap extends TaggedSeq:
         inline def toSortedMap: SortedMap[K, A] = s
         inline def toSet: Set[A] = ListSet.from(s.values)
 
-    trait KeyOf[K, A] extends (A => K) {}
+    infix trait KeyOf[K, A] extends (A => K) {}
 
     def from[K: Ordering, A](s: IterableOnce[A])(using
         pv: ProtocolVersion = ProtocolVersion.conwayPV

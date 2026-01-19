@@ -12,7 +12,6 @@ import scalus.ledger.api.v1.{DCert, ScriptPurpose, StakingCredential}
 import scalus.ledger.api.v2.OutputDatum
 import scalus.ledger.api.v3.GovernanceActionId
 import scalus.prelude.{asScalus, List, SortedMap}
-import scalus.uplc.eval.*
 import scalus.{builtin, ledger, prelude}
 
 import scala.annotation.{nowarn, unused}

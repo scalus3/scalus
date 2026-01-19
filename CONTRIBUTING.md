@@ -230,3 +230,65 @@ object Example {
     case _ => "something else"
 }
 ```
+
+## Upgrading Scala Version
+
+### From 3.3.x to 3.7.x
+
+The codebase is currently on Scala 3.3.7 but has been prepared for upgrade to 3.7.4. When upgrading,
+apply the following changes:
+
+#### 1. Update build.sbt
+
+```scala
+ThisBuild / scalaVersion := "3.7.4"
+```
+
+#### 2. Compiler Plugin: `init` → `initialize`
+
+In `scalus-plugin/src/main/scala/scalus/compiler/plugin/Plugin.scala`, change:
+
+```scala
+// Before (Scala 3.3.x)
+override def init(options: List[String]): List[PluginPhase] = { ... }
+
+// After (Scala 3.7.x)
+override def initialize(options: List[String])(using Context): List[PluginPhase] = { ... }
+```
+
+#### 3. Update Test Expectations
+
+Scala 3.7.4 generates more efficient code, so benchmark tests will have smaller budget values:
+
+- `ClausifyTest`: Update `ExUnits` values (memory/steps are ~1-2% smaller)
+- `PreimageExampleTest`: Update `flatSize` (268 vs 285 bytes)
+
+#### 4. Known Issue: KnightsTest Variable Capture Bug
+
+**Status**: Needs investigation
+
+With Scala 3.7.4, `KnightsTest` fails with:
+
+```
+Variable tile-XXXXXX@-1 not found in environment
+```
+
+This indicates a variable capture issue in the compiler plugin where variables used in closures
+(particularly in extension methods with tuple pattern matching like `val (x, y) = tile`) are not
+properly tracked in the environment during UPLC generation.
+
+**Root Cause**: The de Bruijn index `-1` indicates the variable was treated as a free variable
+during lowering, meaning it wasn't found in the scope. This is likely related to how Scala 3.7.4
+handles symbol IDs differently than 3.3.x.
+
+**Workaround**: Temporarily mark `KnightsTest` as `@org.scalatest.Ignore` until the issue is fixed.
+
+**Investigation Areas**:
+
+- `scalus-plugin/src/main/scala/scalus/compiler/plugin/VariableKey.scala` - variable key tracking
+- `scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala` - environment management
+- `scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala` - pattern
+  compilation
+
+See commit `4b377e845` for the variable shadowing fix that introduced `VariableKey`.
+```

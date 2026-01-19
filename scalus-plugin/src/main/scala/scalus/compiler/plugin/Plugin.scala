@@ -23,7 +23,11 @@ class Plugin extends StandardPlugin {
 
     // val compiledSirs: mutable.Map[String, SIR] = mmutable.Map.empty
 
-    /** For enablind debg in scalus
+    /** For enabling debug in scalus
+      *
+      * Note: In Scala 3.7+, the `init` method is deprecated in favor of `initialize(options)(using
+      * Context)`. When upgrading to Scala 3.7+, rename this method to `initialize` and add the
+      * `(using Context)` parameter.
       */
     override def init(options: List[String]): List[PluginPhase] = {
         val debugLevel = options

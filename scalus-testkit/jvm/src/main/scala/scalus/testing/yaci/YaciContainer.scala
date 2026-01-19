@@ -1,6 +1,7 @@
 package scalus.testing.yaci
 
 import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
+import scala.compiletime.uninitialized
 
 /** Singleton container holder for sharing across test suites with reference counting
   *
@@ -9,7 +10,7 @@ import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
   * as any test suite needs it.
   */
 object YaciContainer:
-    private var _container: YaciCardanoContainer = _
+    private var _container: YaciCardanoContainer = uninitialized
     private val lock = new Object()
 
     /** Acquire container (starts if not running, increments ref count)

@@ -3,7 +3,6 @@ package scalus.compiler.sir.lowering
 import scalus.cardano.ledger.Language
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
-import scalus.compiler.sir.SIRType.TypeVar
 
 object ScalusRuntime {
 

@@ -2,7 +2,7 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.RequirementError
-import scalus.builtin.Data.{fromData, toData, FromData, ToData}
+import scalus.builtin.Data.{fromData, toData, FromData}
 import scalus.testing.kit.EvalTestKit
 
 class SortedMapTest extends AnyFunSuite with EvalTestKit {

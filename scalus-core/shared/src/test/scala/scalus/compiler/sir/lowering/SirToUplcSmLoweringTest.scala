@@ -8,7 +8,7 @@ import scalus.builtin.Data.I
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
-import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeVar}
+import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass}
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Constant.asConstant

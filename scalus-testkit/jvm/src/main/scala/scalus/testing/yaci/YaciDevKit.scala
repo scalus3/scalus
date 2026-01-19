@@ -11,6 +11,7 @@ import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
 import scalus.utils.await
 import sttp.client4.DefaultFutureBackend
 
+import scala.compiletime.uninitialized
 import scala.concurrent.ExecutionContext.Implicits.global
 
 // Provide sttp backend for BlockfrostProvider
@@ -62,7 +63,7 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
         PoolKeyHash.fromArray(decoded.data)
     }
 
-    private var _container: YaciCardanoContainer = _
+    private var _container: YaciCardanoContainer = uninitialized
 
     /** Get the running container */
     def container: YaciCardanoContainer = _container

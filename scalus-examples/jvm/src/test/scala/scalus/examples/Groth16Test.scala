@@ -3,7 +3,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.builtin.ByteString.hex
 import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.builtin.Data
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.examples.Groth16.*

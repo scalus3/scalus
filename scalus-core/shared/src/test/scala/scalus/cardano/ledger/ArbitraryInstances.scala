@@ -107,6 +107,14 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
 
     given Arbitrary[Constitution] = autoDerived
 
+    given [A: Arbitrary: Encoder]: Arbitrary[KeepRaw[A]] = Arbitrary {
+        Arbitrary.arbitrary[A].map(a => KeepRaw(a))
+    }
+
+    given [A: Arbitrary: Encoder]: Arbitrary[Sized[A]] = Arbitrary {
+        Arbitrary.arbitrary[A].map(a => Sized(a))
+    }
+
     /** Generates a MultiAsset with a configurable number of policies and assets.
       *
       * Policies are generated with unique PolicyIds, and each policy contains a map of AssetNames
@@ -728,14 +736,6 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
           auxiliaryDataSet,
           invalidTransactions
         )
-    }
-
-    given [A: Arbitrary: Encoder]: Arbitrary[KeepRaw[A]] = Arbitrary {
-        Arbitrary.arbitrary[A].map(a => KeepRaw(a))
-    }
-
-    given [A: Arbitrary: Encoder]: Arbitrary[Sized[A]] = Arbitrary {
-        Arbitrary.arbitrary[A].map(a => Sized(a))
     }
 
     given Arbitrary[BlockFile] = autoDerived

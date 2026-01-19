@@ -3,7 +3,6 @@ package scalus.compiler.sir.lowering
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
-import scalus.compiler.sir.SIRType.TypeVar
 
 object SIRLoweringRepresentationTest {
 

@@ -21,9 +21,9 @@ class BLS12_381_G2Test extends AnyFunSuite with EvalTestKit {
     }
 
     test("equal") {
-        assertEval(zero equal zero)
-        assertEval(generator equal generator)
-        assertEval(!(generator equal zero))
+        assertEval(zero.equal(zero))
+        assertEval(generator.equal(generator))
+        assertEval(!generator.equal(zero))
         assertEval(zero === zero)
         assertEval(zero !== generator)
     }

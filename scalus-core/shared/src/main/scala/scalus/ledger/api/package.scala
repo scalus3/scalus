@@ -1,7 +1,5 @@
 package scalus.ledger
 
-import scalus.cardano.ledger.Language
-
 package object api {
 
     type ScriptContext = v1.ScriptContext | v2.ScriptContext | v3.ScriptContext
