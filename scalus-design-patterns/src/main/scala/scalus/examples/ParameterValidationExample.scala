@@ -120,6 +120,15 @@ object NFTMintingPolicy {
 
                 require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
 
+                // Verify no other tokens are minted under this policy (V011 protection)
+                val allMintedUnderPolicy = sc.txInfo.mint.flatten.filter { case (pid, _, _) =>
+                    pid === policyId
+                }
+                require(
+                  allMintedUnderPolicy.length === BigInt(1),
+                  "Only one token type may be minted"
+                )
+
                 // Find outputs containing our NFT
                 val nftOutputs = sc.txInfo.outputs.filter { output =>
                     output.value.quantityOf(policyId, params.tokenName) > 0
