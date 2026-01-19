@@ -1,11 +1,11 @@
 ## Install
-yarn install
+pnpm install
 
 ## Development
-yarn dev
+pnpm dev
 
 ## Generate static html
-yarn build
+pnpm build
 
 # Serve static htmlgit 
 npx serve -s out
