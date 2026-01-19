@@ -21,7 +21,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "postbuild": "next-sitemap & pagefind --site .next/server/app --output-path out/_pagefind"
+    "postbuild": "next-sitemap && pagefind --site .next/server/app --output-path out/_pagefind && node scripts/generate-redirects.mjs"
   },
   "devDependencies": {
     "gh-pages": "^6.3.0",

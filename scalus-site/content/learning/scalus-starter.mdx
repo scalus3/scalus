@@ -1,0 +1,490 @@
+---
+title: Building a Complete DApp with Scalus Starter
+sidebarTitle: Scalus Starter
+description: Learn how to build a complete Cardano DApp using Scalus Starter. This hands-on tutorial covers smart contracts, transaction building, REST APIs, and testing.
+---
+
+import { Steps, Tabs, Callout } from 'nextra/components'
+
+# Building a Complete DApp with Scalus Starter
+
+[Scalus Starter](https://github.com/scalus3/scalus-starter) is a ready-to-use template for building Cardano DApps with Scalus. It demonstrates a complete token minting service — from smart contract to REST API.
+
+In this guide, you'll:
+1. **Run** the project and see it mint tokens on a local devnet
+2. **Understand** how the pieces fit together (contract → transactions → API → tests)
+3. **Modify** the smart contract and add new functionality
+4. **Deploy** to a public testnet
+
+Let's start by getting it running.
+
+## Run the Project
+
+The fastest way to see everything working is to run the integration tests. They spin up a local Cardano node, mint tokens, and burn them — all automatically.
+
+### Prerequisites
+
+- Java JDK 11+ (21+ recommended)
+- [sbt](https://www.scala-sbt.org/)
+- Docker (for running Yaci DevKit via Testcontainers)
+
+<Callout type="info">
+  **Nix users**: Run `nix develop` to get a complete environment with all dependencies.
+</Callout>
+
+<Steps>
+
+### Clone and Run Integration Tests
+
+```bash copy
+git clone https://github.com/scalus3/scalus-starter.git
+cd scalus-starter
+sbt integration/test
+```
+
+This will:
+1. Start a local Cardano node (Yaci DevKit) in Docker
+2. Deploy the minting policy
+3. Mint 100 tokens
+4. Wait for block confirmation
+5. Burn the tokens
+6. Verify the final state
+
+You should see the tests pass — you just ran a complete DApp locally.
+
+### Run Unit Tests
+
+Unit tests verify the smart contract logic without a blockchain:
+
+```bash copy
+sbt test
+```
+
+</Steps>
+
+Now that you've seen it work, let's understand how the pieces fit together.
+
+## How It Works
+
+The project has four main components that work together:
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  MintingPolicy  │────▶│  Transactions   │────▶│     Server      │
+│   (on-chain)    │     │   (off-chain)   │     │   (REST API)    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                      │                       │
+         └──────────────────────┼───────────────────────┘
+                                ▼
+                        ┌─────────────────┐
+                        │     Tests       │
+                        │ (unit + e2e)    │
+                        └─────────────────┘
+```
+
+Let's examine each one, starting from the core.
+
+### The Smart Contract
+
+The minting policy in `MintingPolicy.scala` is the on-chain validator that controls who can mint or burn tokens.
+
+**Configuration** — The contract is parameterized with values "baked in" at deployment:
+
+```scala copy
+case class MintingConfig(
+    adminPubKeyHash: PubKeyHash, // Only this key can authorize minting/burning
+    tokenName: TokenName         // The only token name this policy allows
+)
+```
+
+Different configurations produce different policy IDs, so each deployment is unique.
+
+**Validator logic** — The `@Compile` annotation tells Scalus to generate on-chain code:
+
+```scala copy
+@Compile
+object MintingPolicy extends DataParameterizedValidator {
+
+    def mintingPolicy(
+        adminPubKeyHash: PubKeyHash,
+        tokenName: TokenName,
+        ownPolicyId: PolicyId,
+        tx: TxInfo
+    ): Unit = {
+        // Find tokens being minted under our policy ID
+        val mintedTokens = tx.mint.toSortedMap.getOrFail(ownPolicyId, "Tokens not found")
+
+        // Ensure exactly one token type with the correct name
+        mintedTokens.toList match
+            case List.Cons((tokName, _), tail) =>
+                tail match
+                    case List.Nil => require(tokName == tokenName, "Token name not found")
+                    case _        => fail("Multiple tokens found")
+            case _ => fail("Impossible: no tokens found")
+
+        // Only admin can mint or burn
+        require(tx.signatories.contains(adminPubKeyHash), "Not signed by admin")
+    }
+}
+```
+
+This validator enforces three rules:
+1. Only the configured token name can be minted/burned
+2. Only one token type per transaction (prevents accidental multi-minting)
+3. The admin must sign the transaction
+
+<Callout type="warning">
+  The `List` type here is `scalus.prelude.List`, not `scala.List`. On-chain code uses Scalus's own collection types.
+</Callout>
+
+**Compilation pipeline** — The `MintingPolicyGenerator` compiles Scala to Plutus Core:
+
+```scala copy
+object MintingPolicyGenerator {
+    // Compile to Scalus Intermediate Representation (SIR)
+    val mintingPolicySIR: SIR = compile(MintingPolicy.validate)
+
+    // Convert to optimized UPLC (Untyped Plutus Core)
+    val program: Program = mintingPolicySIR.toUplcOptimized(generateErrorTraces = true).plutusV3
+
+    // Create a parameterized script
+    def makeMintingPolicyScript(adminPubKeyHash: PubKeyHash, tokenName: TokenName): MintingPolicyScript = {
+        val config = MintingConfig(adminPubKeyHash, tokenName)
+        MintingPolicyScript(program = program $ config.toData)  // Apply config with $
+    }
+}
+```
+
+The `$` operator applies the configuration to the program template, producing a fully instantiated script.
+
+### Transaction Building
+
+With the smart contract defined, we need off-chain code to build transactions that use it. The `Transactions` class in `Transactions.scala` handles this.
+
+**Minting tokens:**
+
+```scala copy
+def makeMintingTx(amount: Long): Either[String, Transaction] = {
+    Try {
+        // Fetch UTxOs at our address
+        val utxos = ctx.provider
+            .findUtxos(ctx.address, None, None, None, None)
+            .await(10.seconds)
+            .getOrElse(throw new RuntimeException("Failed to fetch UTXOs"))
+
+        val assetName = AssetName(ctx.tokenNameByteString)
+        val assets = Map(assetName -> amount)
+        val mintedValue = Value.asset(ctx.mintingScript.policyId, assetName, amount)
+
+        // Use first UTxO as collateral
+        val (input, output) = utxos.head
+        val firstUtxo = Utxo(input, output)
+
+        // Build the transaction
+        TxBuilder(ctx.cardanoInfo)
+            .spend(utxos)                              // Include UTxOs as inputs
+            .collaterals(firstUtxo)                    // Collateral for script execution
+            .mint(
+              script = ctx.mintingScript.scalusScript, // The minting policy
+              assets = assets,                         // What to mint
+              redeemer = Data.unit,                    // Redeemer (unused here)
+              requiredSigners = Set(ctx.addrKeyHash)   // Admin must sign
+            )
+            .payTo(ctx.address, mintedValue)           // Send tokens to ourselves
+            .complete(ctx.provider, ctx.address)       // Balance and calculate fees
+            .await(30.seconds)
+            .sign(ctx.signer)
+            .transaction
+    }.toEither.left.map(_.getMessage)
+}
+```
+
+Key concepts:
+- **Collateral**: Required for Plutus script execution; seized if the script fails
+- **Required signers**: Ensures the admin key hash appears in `tx.signatories`
+- **`complete()`**: Automatically selects inputs and balances the transaction
+
+**Burning tokens** works the same way, but with a negative amount:
+
+```scala copy
+// Negative amount signals burning
+val assets = Map(assetName -> amount)  // amount should be negative
+
+TxBuilder(ctx.cardanoInfo)
+    .mint(script = ..., assets = assets, ...)
+    .complete(...)
+    // No payTo needed — burned tokens simply disappear
+```
+
+### The REST API
+
+The `Server` class exposes transaction building via HTTP, making the DApp accessible to external clients.
+
+**Endpoint definition** using [Tapir](https://tapir.softwaremill.com/):
+
+```scala copy
+class Server(ctx: AppCtx):
+    private val mint = endpoint.put
+        .in("mint")
+        .in(query[Long]("amount"))
+        .out(stringBody)
+        .errorOut(stringBody)
+        .handle(mintTokens)
+```
+
+This creates `PUT /mint?amount=100` which returns a transaction hash or error.
+
+**Application context** wires everything together:
+
+```scala copy
+case class AppCtx(
+    cardanoInfo: CardanoInfo,    // Protocol params, network, slot config
+    provider: Provider,          // Blockchain data provider
+    account: Account,            // HD wallet account
+    signer: TransactionSigner,   // Transaction signing
+    tokenName: String            // Token to mint/burn
+)
+```
+
+Factory methods create contexts for different environments:
+
+```scala copy
+// For testnet/mainnet with Blockfrost
+val prodCtx = AppCtx(Networks.preprod(), mnemonic, blockfrostApiKey, "MyToken")
+
+// For local development with Yaci DevKit
+val devCtx = AppCtx.yaciDevKit("MyToken")
+```
+
+### Testing
+
+The project includes two types of tests that verify different aspects.
+
+**Unit tests** (`MintingPolicyTest.scala`) evaluate the validator logic directly — no blockchain needed:
+
+```scala copy
+class MintingPolicyTest extends ScalusTest {
+    test("reject invalid token name") {
+        val wrongName = ByteString.fromString("WrongToken")
+        // ... build mock TxInfo with wrong token name ...
+
+        evaluateTx(txInfoData) shouldBe a[Left[_, _]]
+    }
+
+    test("reject missing admin signature") {
+        // ... build TxInfo without admin in signatories ...
+        evaluateTx(txInfoData) shouldBe a[Left[_, _]]
+    }
+}
+```
+
+Unit tests are fast because they evaluate the UPLC directly without network calls.
+
+**Integration tests** (`MintingIT.scala`) run against a real blockchain:
+
+```scala copy
+class MintingIT extends YaciDevKitTest {
+    test("mint and burn tokens") {
+        val mintResult = transactions.submitMintingTx(100)
+        mintResult shouldBe a[Right[_, _]]
+
+        Thread.sleep(5000)  // Wait for confirmation
+
+        val burnResult = transactions.submitBurningTx(-100)
+        burnResult shouldBe a[Right[_, _]]
+    }
+}
+```
+
+The `YaciDevKitTest` trait uses [Testcontainers](https://www.testcontainers.org/) to automatically start a Yaci DevKit node in Docker — no manual setup required.
+
+## Make It Your Own
+
+Now that you understand the architecture, let's modify the code. We'll add a maximum mint amount check to the validator.
+
+<Steps>
+
+### Add a Maximum Amount to Config
+
+Edit `MintingPolicy.scala`:
+
+```scala copy
+case class MintingConfig(
+    adminPubKeyHash: PubKeyHash,
+    tokenName: TokenName,
+    maxMintAmount: BigInt  // NEW: Maximum tokens per mint
+)
+```
+
+### Update the Validator Logic
+
+```scala copy
+def mintingPolicy(
+    adminPubKeyHash: PubKeyHash,
+    tokenName: TokenName,
+    maxMintAmount: BigInt,  // NEW
+    ownPolicyId: PolicyId,
+    tx: TxInfo
+): Unit = {
+    val mintedTokens = tx.mint.toSortedMap.getOrFail(ownPolicyId, "Tokens not found")
+
+    mintedTokens.toList match
+        case List.Cons((tokName, amount), tail) =>
+            tail match
+                case List.Nil =>
+                    require(tokName == tokenName, "Token name not found")
+                    // NEW: Check amount doesn't exceed maximum
+                    require(amount <= maxMintAmount, "Exceeds max mint amount")
+                case _ => fail("Multiple tokens found")
+        case _ => fail("Impossible: no tokens found")
+
+    require(tx.signatories.contains(adminPubKeyHash), "Not signed by admin")
+}
+```
+
+### Write a Test
+
+Add to `MintingPolicyTest.scala`:
+
+```scala copy
+test("reject mint amount exceeding maximum") {
+    val maxAmount = BigInt(1000)
+    val attemptedAmount = BigInt(2000)
+    // ... build TxInfo with amount > maxAmount ...
+
+    evaluateTx(txInfoData) shouldBe a[Left[_, _]]
+}
+```
+
+### Verify
+
+```bash copy
+sbt test
+```
+
+</Steps>
+
+## Add a Burn Endpoint
+
+Let's extend the REST API with an endpoint for burning tokens.
+
+<Steps>
+
+### Define the Endpoint
+
+In `Server.scala`:
+
+```scala copy
+class Server(ctx: AppCtx):
+    private val mint = endpoint.put
+        .in("mint")
+        .in(query[Long]("amount"))
+        .out(stringBody)
+        .errorOut(stringBody)
+        .handle(mintTokens)
+
+    // NEW
+    private val burn = endpoint.put
+        .in("burn")
+        .in(query[Long]("amount"))
+        .out(stringBody)
+        .errorOut(stringBody)
+        .handle(burnTokens)
+
+    private val apiEndpoints = List(mint, burn)  // Add burn
+```
+
+### Add the Handler
+
+```scala copy
+private def burnTokens(amount: Long): Either[String, String] =
+    val result = txBuilder.submitBurningTx(-amount.abs)
+    result match
+        case Left(value)  => println(s"Error burning tokens: $value")
+        case Right(value) => println(s"Tokens burned successfully: $value")
+    result
+```
+
+### Add submitBurningTx
+
+In `Transactions.scala`:
+
+```scala copy
+def submitBurningTx(amount: Long): Either[String, String] = {
+    for
+        tx <- makeBurningTx(amount)
+        result <- ctx.provider.submit(tx).await(30.seconds).left.map(_.toString)
+    yield result.toHex
+}
+```
+
+### Test It
+
+Start the server and try your new endpoint:
+
+```bash copy
+sbt "run yaciDevKit"
+# In another terminal:
+curl -X PUT "http://localhost:8088/burn?amount=50"
+```
+
+</Steps>
+
+## Deploy to Testnet
+
+Your modified DApp works locally. Let's deploy it to a public testnet.
+
+<Steps>
+
+### Get a Blockfrost API Key
+
+1. Sign up at [blockfrost.io](https://blockfrost.io)
+2. Create a project for **Preprod** testnet
+3. Copy your API key
+
+### Get Test ADA
+
+1. Get your wallet address
+2. Use the [Cardano Testnet Faucet](https://docs.cardano.org/cardano-testnets/tools/faucet/) to request test ADA
+
+### Configure and Run
+
+```bash copy
+export BLOCKFROST_API_KEY="your-api-key-here"
+export MNEMONIC="your 24-word mnemonic phrase here"
+sbt "run start"
+```
+
+Your API is now live:
+- `PUT http://localhost:8088/mint?amount=100`
+- `PUT http://localhost:8088/burn?amount=50`
+- Swagger UI: `http://localhost:8088/docs`
+
+</Steps>
+
+<Callout type="warning">
+  **Security**: Never commit your mnemonic or API keys to version control. Use environment variables or a secrets manager.
+</Callout>
+
+## Project Structure
+
+```
+scalus-starter/
+├── src/main/scala/starter/
+│   ├── MintingPolicy.scala    # Plutus V3 smart contract
+│   ├── Transactions.scala     # Transaction building
+│   ├── Server.scala           # REST API + AppCtx
+│   └── Main.scala             # CLI entry point
+├── src/test/scala/starter/
+│   └── MintingPolicyTest.scala  # Unit tests
+└── integration/src/test/scala/
+    └── MintingIT.scala          # Integration tests
+```
+
+## Next Steps
+
+- **[Language Guide](/docs/language-guide)** — Scalus syntax and supported Scala features
+- **[Smart Contracts](/docs/smart-contract/developing-smart-contracts)** — Deep dive into validators
+- **[Transaction Builder](/docs/transaction-builder)** — Advanced transaction patterns
+- **[Testing](/docs/smart-contract/testing)** — Property-based testing with ScalaCheck
+- **[Design Patterns](/docs/learning/design-patterns)** — Optimization patterns for efficient contracts
