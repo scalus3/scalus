@@ -1,22 +1,32 @@
 ---
 asIndexPage: true
-title: Ledger rules
-sidebarTitle: Ledger rules
+title: Cardano Ledger Rules Implementation
+sidebarTitle: Ledger Rules
+description: Scalus implementation of Cardano ledger validation rules. Phase 1 and Phase 2 transaction validation, Plutus script execution, and UTxO state transitions for JVM, JavaScript, and Native.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Ledger rules
+# Cardano Ledger Rules Implementation
+
+Scalus implements Cardano's ledger validation rules in pure Scala 3, running on **JVM**, **JavaScript**, and **Native** platforms.
+
+These rules power the [Emulator](/docs/ledger/emulator) for fast local testing, and can be used standalone for transaction validation.
 
 <Callout type="warning">
-  Note: Ledger Rules Framework is currently in active development and may be subject to changes.
+  The Ledger Rules Framework is in active development and may change.
 </Callout>
 
-## Implemented Ledger Rules
+## Overview
 
-Scalus implements a comprehensive set of Cardano ledger validation and state transition rules. 
-These rules are organized into **Validators** (which check transaction validity) and **Mutators** (which update ledger state). 
-All rules are located in `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/`.
+The framework implements two validation phases matching Cardano node behavior:
+
+- **Phase 1** — Structural validation (inputs exist, fees correct, signatures valid, size limits)
+- **Phase 2** — Script execution (Plutus V1/V2/V3 and native scripts)
+
+Rules are organized into **Validators** (check transaction validity) and **Mutators** (update ledger state).
+
+Source: `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/`
 
 ## Validating and updating UTxO state (EraRule UTXOW)
 
@@ -80,10 +90,10 @@ EUC[EraRule UTXOW Conway]
                                                                 Scalus:WrongNetworkWithdrawalValidator"]:::done
                 utxoTransition --> validateWrongNetworkInTxBody["Alonzo.validateWrongNetworkInTxBody
                                                                 Scalus:WrongNetworkInTxBodyValidator"]:::done
-                utxoTransition --> validateMaxTxSizeUTxO["Shelley.vallidateMaxTxSizeUTxO
+                utxoTransition --> validateMaxTxSizeUTxO["Shelley.validateMaxTxSizeUTxO
                                                                 Scalus:TransactionSizeValidator"]:::done
-                utxoTransition --> validateExUnitsTooBigUTxO["Alonzo.validateExUnitsTooBigUTxO 
-                                                            Scalus:Scalus:ExUnitsTooBigValidator"]:::done
+                utxoTransition --> validateExUnitsTooBigUTxO["Alonzo.validateExUnitsTooBigUTxO
+                                                            Scalus:ExUnitsTooBigValidator"]:::done
                 utxoTransition --> validateTooManyCollateralInputs["Alonzo.validateTooManyCollateralInputs
                                                                 Scalus:TooManyCollateralInputsValidator"]:::done
                 utxoTransition --> EUTXOSC[EraRule UTXOS Conway]:::done
@@ -161,3 +171,8 @@ EUC[EraRule UTXOW Conway]
 
 All rules follow the State Transition System (STS) pattern, providing a type-safe, composable framework for implementing Cardano ledger semantics in Scala 3.
 
+## See Also
+
+- [Emulator](/docs/ledger/emulator) — In-memory node using these rules for fast testing
+- [Yaci DevKit](/docs/ledger/yaci-devkit) — Docker-based devnet with real Cardano node
+- [Protocol Parameters](/docs/ledger/protocol-parameters) — Network configuration used by validators
