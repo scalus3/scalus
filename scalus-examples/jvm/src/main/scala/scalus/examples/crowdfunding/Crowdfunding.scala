@@ -143,7 +143,7 @@ object Action
   * spending is validated by CrowdfundingValidator which enforces deadline and goal conditions.
   */
 @Compile
-object DonationMintingPolicy extends DataParameterizedValidator {
+object DonationMintingPolicy {
 
     /** Fixed token name for all donation tokens.
       *
@@ -152,32 +152,24 @@ object DonationMintingPolicy extends DataParameterizedValidator {
       */
     val donationTokenName: ByteString = ByteString.empty
 
-    inline override def spend(
-        param: Data,
-        datum: Option[Data],
-        redeemer: Data,
-        tx: TxInfo,
-        ownRef: TxOutRef
-    ): Unit = fail("DonationMintingPolicy does not handle spending")
+    inline def validate(param: Data)(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match
+            case ScriptInfo.MintingScript(policyId) =>
+                val campaignId = param.to[ByteString]
+                val action = sc.redeemer.to[Action]
 
-    inline override def mint(
-        param: Data,
-        redeemer: Data,
-        policyId: PolicyId,
-        txInfo: TxInfo
-    ): Unit =
-        val campaignId = param.to[ByteString]
-        val action = redeemer.to[Action]
-
-        action match
-            case Action.Donate(amount, campaignInputIdx, _, _) =>
-                handleDonateMint(campaignId, policyId, txInfo, amount, campaignInputIdx)
-            case Action.Withdraw(campaignInputIdx, _, _, _) =>
-                handleBurn(campaignId, policyId, txInfo, campaignInputIdx)
-            case Action.Reclaim(campaignInputIdx, _, _, _) =>
-                handleBurn(campaignId, policyId, txInfo, campaignInputIdx)
-            case Action.Create(_, _, _) =>
-                fail("Create action does not mint donation tokens")
+                action match
+                    case Action.Donate(amount, campaignInputIdx, _, _) =>
+                        handleDonateMint(campaignId, policyId, sc.txInfo, amount, campaignInputIdx)
+                    case Action.Withdraw(campaignInputIdx, _, _, _) =>
+                        handleBurn(campaignId, policyId, sc.txInfo, campaignInputIdx)
+                    case Action.Reclaim(campaignInputIdx, _, _, _) =>
+                        handleBurn(campaignId, policyId, sc.txInfo, campaignInputIdx)
+                    case Action.Create(_, _, _) =>
+                        fail("Create action does not mint donation tokens")
+            case _ => fail("Unsupported script purpose")
+    }
 
     private inline def handleDonateMint(
         campaignId: ByteString,
@@ -243,33 +235,6 @@ object DonationMintingPolicy extends DataParameterizedValidator {
           mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
           "Only burning allowed during withdraw/reclaim"
         )
-
-    inline override def reward(
-        param: Data,
-        redeemer: Data,
-        stakingKey: Credential,
-        tx: TxInfo
-    ): Unit = fail("DonationMintingPolicy does not handle rewards")
-
-    inline override def certify(
-        param: Data,
-        redeemer: Data,
-        cert: TxCert,
-        tx: TxInfo
-    ): Unit = fail("DonationMintingPolicy does not handle certificates")
-
-    inline override def vote(
-        param: Data,
-        redeemer: Data,
-        voter: Voter,
-        tx: TxInfo
-    ): Unit = fail("DonationMintingPolicy does not handle voting")
-
-    inline override def propose(
-        param: Data,
-        proposalProcedure: ProposalProcedure,
-        tx: TxInfo
-    ): Unit = fail("DonationMintingPolicy does not handle proposals")
 }
 
 // ============================================================================
