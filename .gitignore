@@ -31,6 +31,8 @@ website/static/api
 node_modules
 .scala-build
 .envrc.local
+.cursor/
+**/todo/
 *.log
 test-logs-archive/
 /scalus-cardano-ledger/js/src/main/npm/scalus.js.map

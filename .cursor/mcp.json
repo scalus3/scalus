@@ -1,7 +1,0 @@
-{
-  "mcpServers": {
-    "scalus-metals": {
-      "url": "http://localhost:56776/sse"
-    }
-  }
-}
