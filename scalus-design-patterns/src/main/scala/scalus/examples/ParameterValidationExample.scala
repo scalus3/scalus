@@ -50,70 +50,47 @@ enum MarketplaceRedeemer derives ToData, FromData:
   *   The creator who receives royalties (script parameter)
   */
 @Compile
-object MarketplaceValidator extends ParameterizedValidator[PubKeyHash] {
+object MarketplaceValidator {
 
-    inline override def spend(
-        creatorPkh: PubKeyHash,
-        datum: Option[Data],
-        redeemer: Data,
-        tx: TxInfo,
-        ownRef: TxOutRef
-    ): Unit = {
-        val listing = datum.getOrFail("Datum required").to[Listing]
-        val action = redeemer.to[MarketplaceRedeemer]
+    inline def validate(creatorPkh: PubKeyHash)(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match
+            case ScriptInfo.SpendingScript(_, datum) =>
+                val listing = datum.getOrFail("Datum required").to[Listing]
+                val action = sc.redeemer.to[MarketplaceRedeemer]
 
-        action match
-            case MarketplaceRedeemer.Buy =>
-                // Verify royalty payment to creator (10% royalty)
-                val royaltyAmount = listing.price * BigInt(10) / BigInt(100)
-                val creatorCred = Credential.PubKeyCredential(creatorPkh)
-                val sellerCred = Credential.PubKeyCredential(listing.seller)
+                action match
+                    case MarketplaceRedeemer.Buy =>
+                        // Verify royalty payment to creator (10% royalty)
+                        val royaltyAmount = listing.price * BigInt(10) / BigInt(100)
+                        val creatorCred = Credential.PubKeyCredential(creatorPkh)
+                        val sellerCred = Credential.PubKeyCredential(listing.seller)
 
-                // Find payments to creator and seller
-                val (creatorPaid, sellerPaid) = tx.outputs.foldLeft((BigInt(0), BigInt(0))) {
-                    case ((creatorSum, sellerSum), output) =>
-                        val cred = output.address.credential
-                        val value = output.value.getLovelace
-                        if cred === creatorCred then (creatorSum + value, sellerSum)
-                        else if cred === sellerCred then (creatorSum, sellerSum + value)
-                        else (creatorSum, sellerSum)
-                }
+                        // Find payments to creator and seller
+                        val (creatorPaid, sellerPaid) =
+                            sc.txInfo.outputs.foldLeft((BigInt(0), BigInt(0))) {
+                                case ((creatorSum, sellerSum), output) =>
+                                    val cred = output.address.credential
+                                    val value = output.value.getLovelace
+                                    if cred === creatorCred then (creatorSum + value, sellerSum)
+                                    else if cred === sellerCred then (creatorSum, sellerSum + value)
+                                    else (creatorSum, sellerSum)
+                            }
 
-                require(creatorPaid >= royaltyAmount, "Creator royalty not paid")
-                require(sellerPaid >= listing.price - royaltyAmount, "Seller payment insufficient")
+                        require(creatorPaid >= royaltyAmount, "Creator royalty not paid")
+                        require(
+                          sellerPaid >= listing.price - royaltyAmount,
+                          "Seller payment insufficient"
+                        )
 
-            case MarketplaceRedeemer.Cancel =>
-                // Only seller can cancel
-                require(tx.signatories.contains(listing.seller), "Only seller can cancel")
+                    case MarketplaceRedeemer.Cancel =>
+                        // Only seller can cancel
+                        require(
+                          sc.txInfo.signatories.contains(listing.seller),
+                          "Only seller can cancel"
+                        )
+            case _ => fail("Unsupported script purpose")
     }
-
-    inline override def mint(
-        creatorPkh: PubKeyHash,
-        redeemer: Data,
-        policyId: PolicyId,
-        tx: TxInfo
-    ): Unit = fail("Marketplace does not support minting")
-
-    inline override def reward(
-        creatorPkh: PubKeyHash,
-        redeemer: Data,
-        stakingKey: Credential,
-        tx: TxInfo
-    ): Unit = fail("Marketplace does not support rewards")
-
-    inline override def certify(
-        creatorPkh: PubKeyHash,
-        redeemer: Data,
-        cert: TxCert,
-        tx: TxInfo
-    ): Unit = fail("Marketplace does not support certifying")
-
-    inline override def vote(
-        creatorPkh: PubKeyHash,
-        redeemer: Data,
-        voter: Voter,
-        tx: TxInfo
-    ): Unit = fail("Marketplace does not support voting")
 }
 
 /** NFT Minting Policy parameters */
@@ -132,63 +109,33 @@ case class NFTMintParams(
   *   Contains the expected marketplace hash and token name
   */
 @Compile
-object NFTMintingPolicy extends ParameterizedValidator[NFTMintParams] {
+object NFTMintingPolicy {
 
-    inline override def mint(
-        params: NFTMintParams,
-        redeemer: Data,
-        policyId: PolicyId,
-        tx: TxInfo
-    ): Unit = {
-        // Get minted amount for our token
-        val mintedAmount = tx.mint.quantityOf(policyId, params.tokenName)
+    inline def validate(params: NFTMintParams)(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match
+            case ScriptInfo.MintingScript(policyId) =>
+                // Get minted amount for our token
+                val mintedAmount = sc.txInfo.mint.quantityOf(policyId, params.tokenName)
 
-        require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
+                require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
 
-        // Find outputs containing our NFT
-        val nftOutputs = tx.outputs.filter { output =>
-            output.value.quantityOf(policyId, params.tokenName) > 0
-        }
+                // Find outputs containing our NFT
+                val nftOutputs = sc.txInfo.outputs.filter { output =>
+                    output.value.quantityOf(policyId, params.tokenName) > 0
+                }
 
-        require(nftOutputs.length === BigInt(1), "NFT must go to exactly one output")
+                require(nftOutputs.length === BigInt(1), "NFT must go to exactly one output")
 
-        val nftOutput = nftOutputs.head
+                val nftOutput = nftOutputs.head
 
-        // Verify the output goes to the expected marketplace script
-        ParameterValidationOnChain.verifyAddressScript(
-          nftOutput.address,
-          params.expectedMarketplaceHash
-        )
+                // Verify the output goes to the expected marketplace script
+                ParameterValidationOnChain.verifyAddressScript(
+                  nftOutput.address,
+                  params.expectedMarketplaceHash
+                )
+            case _ => fail("Unsupported script purpose")
     }
-
-    inline override def spend(
-        params: NFTMintParams,
-        datum: Option[Data],
-        redeemer: Data,
-        tx: TxInfo,
-        ownRef: TxOutRef
-    ): Unit = fail("NFT policy does not support spending")
-
-    inline override def reward(
-        params: NFTMintParams,
-        redeemer: Data,
-        stakingKey: Credential,
-        tx: TxInfo
-    ): Unit = fail("NFT policy does not support rewards")
-
-    inline override def certify(
-        params: NFTMintParams,
-        redeemer: Data,
-        cert: TxCert,
-        tx: TxInfo
-    ): Unit = fail("NFT policy does not support certifying")
-
-    inline override def vote(
-        params: NFTMintParams,
-        redeemer: Data,
-        voter: Voter,
-        tx: TxInfo
-    ): Unit = fail("NFT policy does not support voting")
 }
 
 // --- Compilation and Off-chain Usage ---
