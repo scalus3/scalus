@@ -31,9 +31,11 @@
   { "from": "/docs/onboarding", "to": "/docs/get-started" },
   { "from": "/docs/onboarding/for-cardano-developers", "to": "/docs/get-started/for-cardano-developers" },
   { "from": "/docs/onboarding/for-scala-developers", "to": "/docs/get-started/for-scala-developers" },
-  { "from": "/docs/learning", "to": "/docs/dapps" },
-  { "from": "/docs/learning/scalus-starter", "to": "/docs/dapps/building-first-dapp" },
+  { "from": "/docs/learning", "to": "/docs/dapp-development" },
+  { "from": "/docs/learning/scalus-starter", "to": "/docs/dapp-development/dapp-starter-tutorial" },
   { "from": "/docs/learning/plutus-vulnerabilities", "to": "/docs/security/common-vulnerabilities" },
-  { "from": "/docs/offchain-applications", "to": "/docs/dapps" },
-  { "from": "/docs/offchain-applications/working-with-contract", "to": "/docs/dapps/working-with-contract" }
+  { "from": "/docs/offchain-applications", "to": "/docs/dapp-development" },
+  { "from": "/docs/offchain-applications/working-with-contract", "to": "/docs/dapp-development/working-with-contract" },
+  { "from": "/docs/ledger/provider", "to": "/docs/dapp-development/data-providers" },
+  { "from": "/docs/ledger/protocol-parameters", "to": "/docs/dapp-development/protocol-parameters" }
 ]

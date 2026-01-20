@@ -8,7 +8,7 @@ export default {
   testing: 'Testing',
   'design-patterns': 'Design Patterns',
   security: 'Security',
-  dapps: 'DApps',
+  'dapp-development': 'DApp Development',
   ledger: 'Ledger Framework',
   catalyst: 'Catalyst',
 }
