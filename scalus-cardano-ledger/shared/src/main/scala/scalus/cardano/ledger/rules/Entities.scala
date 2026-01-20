@@ -33,35 +33,12 @@ case class State(
 
 case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network)
 object UtxoEnv {
+    // Delegates to platform-specific UtxoEnvDefaults (JVM loads from resources, JS embeds JSON)
     // TODO: remove
-    @threadUnsafe lazy val default: UtxoEnv =
-
-        val params: ProtocolParams = ProtocolParams.fromBlockfrostJson(
-          this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
-        )
-
-        // Load protocol parameters from a JSON file
-        UtxoEnv(
-          0,
-          params,
-          CertState.empty,
-          Network.Testnet
-        )
+    @threadUnsafe lazy val default: UtxoEnv = UtxoEnvDefaults.default
 
     // TODO: remove
-    def testMainnet(slot: SlotNo = 0): UtxoEnv =
-
-        val params: ProtocolParams = ProtocolParams.fromBlockfrostJson(
-          this.getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
-        )
-
-        // Load protocol parameters from a JSON file
-        UtxoEnv(
-          slot,
-          params,
-          CertState.empty,
-          Network.Mainnet
-        )
+    def testMainnet(slot: SlotNo = 0): UtxoEnv = UtxoEnvDefaults.testMainnet(slot)
 }
 
 sealed trait STS {
