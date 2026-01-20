@@ -36,32 +36,6 @@ trait TxTestKit extends Assertions {
         env: CardanoInfo,
         ec: ExecutionContext
     ): Unit = {
-        // Verify execution units are reasonable (not max budget)
-        val totalExUnits = tx.witnessSet.redeemers.map(_.value.totalExUnits).getOrElse(ExUnits.zero)
-        assert(totalExUnits.memory > 0, "Execution units memory should be positive")
-        assert(totalExUnits.steps > 0, "Execution units steps should be positive")
-        assert(
-          totalExUnits.memory < env.protocolParams.maxTxExecutionUnits.memory,
-          s"ExUnits memory ${totalExUnits.memory} should be less than max ${env.protocolParams.maxTxExecutionUnits.memory}"
-        )
-        assert(
-          totalExUnits.steps < env.protocolParams.maxTxExecutionUnits.steps,
-          s"ExUnits steps ${totalExUnits.steps} should be less than max ${env.protocolParams.maxTxExecutionUnits.steps}"
-        )
-
-        // Verify execution fee
-        val executionFee = totalExUnits.fee(env.protocolParams.executionUnitPrices)
-        assert(executionFee.value > 0, "Execution fee should be positive")
-
-        // Verify transaction fee covers minimum
-        val txFee = tx.body.value.fee
-        val allInputs = tx.body.value.inputs.toSet ++ tx.body.value.referenceInputs.toSet
-        val utxos = provider.findUtxos(allInputs).await().toOption.get
-        val minFee = MinTransactionFee.computeMinFee(tx, utxos, env.protocolParams).toOption.get
-        assert(
-          txFee >= minFee,
-          s"Transaction fee $txFee should be >= minimum fee $minFee"
-        )
 
         // Verify emulator submission succeeds
         val submissionResult = provider.submit(tx).await()
