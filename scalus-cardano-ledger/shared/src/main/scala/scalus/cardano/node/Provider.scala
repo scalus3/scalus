@@ -20,28 +20,61 @@ trait Provider {
         ExecutionContext
     ): Future[Either[SubmitError, TransactionHash]]
 
+    /** Find a single UTxO by its transaction input.
+      *
+      * @deprecated
+      *   Use findUtxos(UtxoQuery) instead
+      */
+    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxo(input: TransactionInput)(using
         ExecutionContext
-    ): Future[Either[RuntimeException, Utxo]]
+    ): Future[Either[UtxoQueryError, Utxo]]
 
+    /** Find UTxOs by a set of transaction inputs.
+      *
+      * @deprecated
+      *   Use findUtxos(UtxoQuery) instead
+      */
+    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxos(inputs: Set[TransactionInput])(using
         ExecutionContext
-    ): Future[Either[RuntimeException, Utxos]]
+    ): Future[Either[UtxoQueryError, Utxos]]
 
+    /** Find a single UTxO by address and optional filters.
+      *
+      * @deprecated
+      *   Use findUtxos(UtxoQuery) instead
+      */
+    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxo(
         address: Address,
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[RuntimeException, Utxo]]
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]]
 
+    /** Find UTxOs by address and optional filters.
+      *
+      * @deprecated
+      *   Use findUtxos(UtxoQuery) instead
+      */
+    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxos(
         address: Address,
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
         minRequiredTotalAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[RuntimeException, Utxos]]
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]]
+
+    /** Find UTxOs using a type-safe query.
+      *
+      * @param query
+      *   The query specifying source, filters, and pagination
+      * @return
+      *   Either a UtxoQueryError or the matching UTxOs
+      */
+    def findUtxos(query: UtxoQuery)(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]]
 }
 
 enum SubmitError:

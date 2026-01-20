@@ -54,28 +54,25 @@ class Emulator(
 
     def findUtxo(input: TransactionInput)(using
         ExecutionContext
-    ): Future[Either[RuntimeException, Utxo]] = {
-        val result = utxos.get(input) match {
-            case Some(output) => Right(Utxo(input, output))
-            case None         => Left(new RuntimeException(s"Utxo not found for input: $input"))
+    ): Future[Either[UtxoQueryError, Utxo]] = {
+        findUtxos(UtxoQuery(UtxoSource.FromInputs(Set(input)))).map { result =>
+            result.flatMap { utxos =>
+                utxos.headOption match
+                    case Some((i, o)) => Right(Utxo(i, o))
+                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
+            }
         }
-        Future.successful(result)
     }
 
     def findUtxos(inputs: Set[TransactionInput])(using
         ExecutionContext
-    ): Future[Either[RuntimeException, Utxos]] = {
-        val foundUtxos = inputs.view.flatMap { input =>
-            utxos.get(input).map(output => input -> output)
-        }.toMap
-
-        val result =
-            if foundUtxos.size == inputs.size then Right(foundUtxos)
-            else
-                val missingInputs = inputs.filterNot(foundUtxos.contains)
-                Left(new RuntimeException(s"Utxos not found for inputs: $missingInputs"))
-
-        Future.successful(result)
+    ): Future[Either[UtxoQueryError, Utxos]] = {
+        findUtxos(UtxoQuery(UtxoSource.FromInputs(inputs))).map { result =>
+            result.flatMap { foundUtxos =>
+                if foundUtxos.size == inputs.size then Right(foundUtxos)
+                else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
+            }
+        }
     }
 
     def findUtxo(
@@ -83,26 +80,14 @@ class Emulator(
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[RuntimeException, Utxo]] = {
-        val result = utxos.find { case (input, output) =>
-            (address == output.address) &&
-            transactionId.forall(_ == input.transactionId) &&
-            (
-              (datum, output.datumOption) match
-                  case (Some(d1), Some(d2)) => d1.contentEquals(d2)
-                  case (None, _)            => true
-                  case _                    => false
-            ) &&
-            minAmount.forall(amount => output.value.coin >= amount)
-        } match
-            case Some(utxo) => Right(Utxo(utxo))
-            case None =>
-                Left(
-                  new RuntimeException(
-                    s"Utxo not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount"
-                  )
-                )
-        Future.successful(result)
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]] = {
+        findUtxos(address, transactionId, datum, minAmount, None).map { result =>
+            result.flatMap { utxos =>
+                utxos.headOption match
+                    case Some((i, o)) => Right(Utxo(i, o))
+                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromAddress(address)))
+            }
+        }
     }
 
     def findUtxos(
@@ -111,42 +96,127 @@ class Emulator(
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
         minRequiredTotalAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[RuntimeException, Utxos]] = {
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
         if minRequiredTotalAmount.exists(_ <= Coin(0)) then
             return Future.successful(Right(Map.empty))
 
-        val (foundUtxos, totalAmount) = utxos.view
-            .filter { case (input, output) =>
-                (address == output.address) &&
-                transactionId.forall(_ == input.transactionId) &&
-                (
-                  (datum, output.datumOption) match
-                      case (Some(d1), Some(d2)) => d1.contentEquals(d2)
-                      case (None, _)            => true
-                      case _                    => false
-                ) &&
-                minAmount.forall(amount => output.value.coin >= amount)
-            }
-            .foldLeft((Map.empty[TransactionInput, TransactionOutput], Coin(0))) {
-                case (acc @ (accUtxos, accAmount), (input, output)) =>
-                    if minRequiredTotalAmount.exists(accAmount >= _) then acc
-                    else
-                        (
-                          accUtxos + (input -> output),
-                          Coin(accAmount.value + output.value.coin.value)
-                        )
-            }
+        // Build source using And combinator when transactionId is provided
+        val source: UtxoSource = transactionId match
+            case Some(txId) => UtxoSource.FromAddress(address) && UtxoSource.FromTransaction(txId)
+            case None       => UtxoSource.FromAddress(address)
 
-        val result =
-            if foundUtxos.nonEmpty && minRequiredTotalAmount.forall(totalAmount >= _) then
-                Right(foundUtxos)
-            else
-                Left(
-                  new RuntimeException(
-                    s"Utxos not found for address: $address, transactionId: $transactionId, datum: $datum, minAmount: $minAmount, minRequiredTotalAmount: $minRequiredTotalAmount"
-                  )
-                )
-        Future.successful(result)
+        // Build the query
+        var query: UtxoQuery = UtxoQuery(source)
+
+        // Add minRequiredTotalAmount
+        query = minRequiredTotalAmount.fold(query)(amt => query.withMinTotal(amt))
+
+        // Add datum filter
+        query = datum.fold(query)(d => query && UtxoFilter.HasDatum(d))
+
+        // Add minAmount filter
+        query = minAmount.fold(query)(amt => query && UtxoFilter.MinLovelace(amt))
+
+        findUtxos(query)
+    }
+
+    def findUtxos(
+        query: UtxoQuery
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
+        // Evaluate source to get candidate UTxOs
+        def evalSource(source: UtxoSource): Utxos = source match
+            case UtxoSource.FromAddress(addr) =>
+                utxos.filter { case (_, output) => output.address == addr }
+            case UtxoSource.FromAsset(policyId, assetName) =>
+                utxos.filter { case (_, output) =>
+                    output.value.assets.assets
+                        .get(policyId)
+                        .exists(_.contains(assetName))
+                }
+            case UtxoSource.FromInputs(inputs) =>
+                utxos.filter { case (input, _) => inputs.contains(input) }
+            case UtxoSource.FromTransaction(txId) =>
+                utxos.filter { case (input, _) => input.transactionId == txId }
+            case UtxoSource.Or(left, right) =>
+                evalSource(left) ++ evalSource(right)
+            case UtxoSource.And(left, right) =>
+                val leftResult = evalSource(left)
+                val rightResult = evalSource(right)
+                leftResult.filter { case (input, _) => rightResult.contains(input) }
+
+        // Evaluate filter
+        def evalFilter(filter: UtxoFilter, utxo: (TransactionInput, TransactionOutput)): Boolean = {
+            val (_, output) = utxo
+            filter match
+                case UtxoFilter.HasAsset(policyId, assetName) =>
+                    output.value.assets.assets
+                        .get(policyId)
+                        .exists(_.contains(assetName))
+                case UtxoFilter.HasDatum(datum) =>
+                    (datum, output.datumOption) match
+                        case (d1, Some(d2)) => d1.contentEquals(d2)
+                        case _              => false
+                case UtxoFilter.HasDatumHash(hash) =>
+                    output.datumOption match
+                        case Some(d) => d.dataHash == hash
+                        case None    => false
+                case UtxoFilter.MinLovelace(amount) =>
+                    output.value.coin >= amount
+                case UtxoFilter.AtInputs(inputs) =>
+                    inputs.contains(utxo._1)
+                case UtxoFilter.And(left, right) =>
+                    evalFilter(left, utxo) && evalFilter(right, utxo)
+                case UtxoFilter.Or(left, right) =>
+                    evalFilter(left, utxo) || evalFilter(right, utxo)
+                case UtxoFilter.Not(f) =>
+                    !evalFilter(f, utxo)
+        }
+
+        // Apply pagination and minRequiredTotalAmount to a result set
+        def applyPagination(
+            candidates: Utxos,
+            limit: Option[Int],
+            offset: Option[Int],
+            minRequiredTotalAmount: Option[Coin]
+        ): Utxos = {
+            val offsetValue = offset.getOrElse(0)
+            val paginated = candidates.drop(offsetValue)
+
+            minRequiredTotalAmount match
+                case Some(minTotal) if minTotal.value > 0 =>
+                    val (collected, _) =
+                        paginated.foldLeft(
+                          (Map.empty[TransactionInput, TransactionOutput], Coin(0))
+                        ) { case (acc @ (accUtxos, accAmount), (input, output)) =>
+                            if accAmount >= minTotal then acc
+                            else
+                                val newAmount = Coin(accAmount.value + output.value.coin.value)
+                                (accUtxos + (input -> output), newAmount)
+                        }
+                    limit.fold(collected)(n => collected.take(n))
+                case _ =>
+                    limit.fold(paginated.toMap)(n => paginated.take(n).toMap)
+        }
+
+        // Evaluate a simple query
+        def evalSimple(q: UtxoQuery.Simple): Utxos = {
+            val candidates = evalSource(q.source)
+            val filtered = q.filter match
+                case Some(f) => candidates.filter(evalFilter(f, _))
+                case None    => candidates
+            applyPagination(filtered, q.limit, q.offset, q.minRequiredTotalAmount)
+        }
+
+        // Evaluate query recursively
+        def evalQuery(q: UtxoQuery): Utxos = q match
+            case simple: UtxoQuery.Simple => evalSimple(simple)
+            case UtxoQuery.Or(left, right, limit, offset, minTotal) =>
+                val leftResult = evalQuery(left)
+                val rightResult = evalQuery(right)
+                val combined = leftResult ++ rightResult
+                applyPagination(combined, limit, offset, minTotal)
+
+        Future.successful(Right(evalQuery(query)))
     }
 
     @tailrec
