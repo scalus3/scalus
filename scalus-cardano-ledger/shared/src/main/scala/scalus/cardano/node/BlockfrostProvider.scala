@@ -74,36 +74,6 @@ class BlockfrostProvider(
         }
     }
 
-    override def findUtxos(
-        address: Address,
-        transactionId: Option[TransactionHash] = None,
-        datum: Option[DatumOption] = None,
-        minAmount: Option[Coin] = None,
-        minRequiredTotalAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
-        if minRequiredTotalAmount.exists(_ <= Coin(0)) then
-            return Future.successful(Right(Map.empty))
-
-        // Build source using And combinator when transactionId is provided
-        val source: UtxoSource = transactionId match
-            case Some(txId) => UtxoSource.FromAddress(address) && UtxoSource.FromTransaction(txId)
-            case None       => UtxoSource.FromAddress(address)
-
-        // Build the query
-        var query: UtxoQuery = UtxoQuery(source)
-
-        // Add minRequiredTotalAmount
-        query = minRequiredTotalAmount.fold(query)(amt => query.minTotal(amt))
-
-        // Add datum filter
-        query = datum.fold(query)(d => query && UtxoFilter.HasDatum(d))
-
-        // Add minAmount filter
-        query = minAmount.fold(query)(amt => query && UtxoFilter.MinLovelace(amt))
-
-        findUtxos(query)
-    }
-
     override def submit(
         tx: Transaction
     )(using ExecutionContext): Future[Either[SubmitError, TransactionHash]] = {
@@ -133,23 +103,6 @@ class BlockfrostProvider(
             }
         }.recover { case exception =>
             Left(SubmitError.NetworkError(s"Blockfrost submit exception", Some(exception)))
-        }
-    }
-
-    override def findUtxo(
-        input: TransactionInput
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]] = {
-        fetchUtxoFromInput(input)
-    }
-
-    override def findUtxos(inputs: Set[TransactionInput])(using
-        ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxos]] = {
-        findUtxos(UtxoQuery(UtxoSource.FromInputs(inputs))).map { result =>
-            result.flatMap { foundUtxos =>
-                if foundUtxos.size == inputs.size then Right(foundUtxos)
-                else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
-            }
         }
     }
 
@@ -505,22 +458,6 @@ class BlockfrostProvider(
                 utxos.get(input) match
                     case Some(output) => Right(Utxo(input, output))
                     case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
-        }
-    }
-
-    override def findUtxo(
-        address: Address,
-        transactionId: Option[TransactionHash],
-        datum: Option[DatumOption],
-        minAmount: Option[Coin]
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]] = {
-        findUtxos(address, transactionId, datum, minAmount, None).map { result =>
-            result.flatMap { utxos =>
-                utxos.headOption match {
-                    case Some((input, output)) => Right(Utxo(input, output))
-                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromAddress(address)))
-                }
-            }
         }
     }
 

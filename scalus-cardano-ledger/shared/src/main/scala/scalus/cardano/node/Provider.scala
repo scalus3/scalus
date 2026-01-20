@@ -28,7 +28,15 @@ trait Provider {
     @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxo(input: TransactionInput)(using
         ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxo]]
+    ): Future[Either[UtxoQueryError, Utxo]] = {
+        findUtxos(UtxoQuery(UtxoSource.FromInputs(Set(input)))).map { result =>
+            result.flatMap { utxos =>
+                utxos.headOption match
+                    case Some((i, o)) => Right(Utxo(i, o))
+                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
+            }
+        }
+    }
 
     /** Find UTxOs by a set of transaction inputs.
       *
@@ -38,7 +46,14 @@ trait Provider {
     @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxos(inputs: Set[TransactionInput])(using
         ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxos]]
+    ): Future[Either[UtxoQueryError, Utxos]] = {
+        findUtxos(UtxoQuery(UtxoSource.FromInputs(inputs))).map { result =>
+            result.flatMap { foundUtxos =>
+                if foundUtxos.size == inputs.size then Right(foundUtxos)
+                else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
+            }
+        }
+    }
 
     /** Find a single UTxO by address and optional filters.
       *
@@ -51,7 +66,15 @@ trait Provider {
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]]
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]] = {
+        findUtxos(address, transactionId, datum, minAmount, None).map { result =>
+            result.flatMap { utxos =>
+                utxos.headOption match
+                    case Some((i, o)) => Right(Utxo(i, o))
+                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromAddress(address)))
+            }
+        }
+    }
 
     /** Find UTxOs by address and optional filters.
       *
@@ -65,7 +88,29 @@ trait Provider {
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
         minRequiredTotalAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]]
+    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
+        if minRequiredTotalAmount.exists(_ <= Coin(0)) then
+            return Future.successful(Right(Map.empty))
+
+        // Build source using And combinator when transactionId is provided
+        val source: UtxoSource = transactionId match
+            case Some(txId) => UtxoSource.FromAddress(address) && UtxoSource.FromTransaction(txId)
+            case None       => UtxoSource.FromAddress(address)
+
+        // Build the query
+        var query: UtxoQuery = UtxoQuery(source)
+
+        // Add minRequiredTotalAmount
+        query = minRequiredTotalAmount.fold(query)(amt => query.minTotal(amt))
+
+        // Add datum filter
+        query = datum.fold(query)(d => query && UtxoFilter.HasDatum(d))
+
+        // Add minAmount filter
+        query = minAmount.fold(query)(amt => query && UtxoFilter.MinLovelace(amt))
+
+        findUtxos(query)
+    }
 
     /** Find UTxOs using a type-safe query.
       *
