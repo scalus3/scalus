@@ -1,6 +1,6 @@
 export default {
   'dapp-starter-tutorial': 'DApp Starter Tutorial',
   'working-with-contract': 'Working with Contract',
-  'data-providers': 'Data Providers',
+  'blockchain-providers': 'Blockchain Providers',
   'protocol-parameters': 'Protocol Parameters',
 }
