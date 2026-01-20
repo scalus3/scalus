@@ -274,11 +274,6 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                 fail(s"Expected success, but got failure: $failure")
             case _ =>
 
-    /** Assert code compiles and evaluates without checking result. */
-    protected final inline def assertEvalCompile(inline code: Any)(using vm: PlutusVM): Unit =
-        val compiled = PlutusV3.compile(code)
-        compiled.program.term.evaluate
-
     // ----- Term-Level Assertions -----
 
     /** Assert two terms evaluate to the same result */
