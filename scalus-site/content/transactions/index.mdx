@@ -20,9 +20,9 @@ Scalus provides a fluent API for constructing Cardano transactions — payments,
 - **[Governance](/docs/transactions/governance)** — DRep registration and voting
 - **[Smart Contract Interactions](/docs/transactions/spending-utxos)** — Spend script UTxOs with Plutus validators
 
-## TxBuilder
+## Transaction Builder
 
-`TxBuilder` handles the complexity of Cardano transactions — UTxO selection, fee calculation, script evaluation, and balancing:
+TransactionBuilder (`TxBuilder`) handles the complexity of Cardano transactions — UTxO selection, fee calculation, script evaluation, and balancing:
 
 ```scala copy
 val tx = TxBuilder(env)
@@ -89,3 +89,9 @@ TxBuilder(env, evaluator)
 - **[Minting & Burning](/docs/transactions/minting-burning-assets)** — Create and destroy native tokens
 - **[Staking & Rewards](/docs/transactions/staking-rewards)** — Delegation and reward withdrawal
 - **[Governance](/docs/transactions/governance)** — DRep registration and voting
+
+## Related
+
+- [Smart Contracts](/docs/smart-contracts) — Write validators to use in transactions
+- [Testing with Emulator](/docs/testing/emulator) — Test transactions locally
+- [DApp Starter Tutorial](/docs/dapp-development/dapp-starter-tutorial) — Complete example with transactions
