@@ -5,44 +5,28 @@ import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{CardanoMutator, Context, PlutusScriptsTransactionMutator, STS, State}
 import scalus.cardano.ledger.*
 
-import java.util.concurrent.atomic.AtomicReference
-import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 
-/** An in-memory bare-bones node implementation.
+/** Base trait for Emulator implementations containing shared logic.
   *
-  * Allows submitting transaction and querying UTxO state. Runs [[validators]] and [[mutators]]
-  * against all submitted transactions. The default validator and mutator lists reflect the Cardano
-  * Node UTxO related ledger rules.
-  *
-  * @see
-  *   [[scalus.cardano.ledger.rules]] for the ledger rules
+  * Platform-specific implementations (JVM/JS) extend this trait and provide thread-safe or
+  * single-threaded state management as appropriate.
   */
-class Emulator(
-    initialUtxos: Utxos = Map.empty,
-    initialContext: Context = Context.testMainnet(),
-    val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
-) extends Provider {
-    private val stateRef = new AtomicReference[State](State(initialUtxos))
-    private val contextRef = new AtomicReference[Context](initialContext)
+trait EmulatorBase extends Provider {
+    def validators: Iterable[STS.Validator]
+    def mutators: Iterable[STS.Mutator]
 
-    @tailrec
-    private final def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
-        val currentState = stateRef.get()
-        val currentContext = contextRef.get()
+    // Abstract - platform-specific state access
+    def utxos: Utxos
+    protected def currentContext: Context
 
-        processTransaction(currentContext, currentState, transaction) match {
-            case Right(newState) =>
-                if stateRef.compareAndSet(currentState, newState) then Right(transaction.id)
-                else submitSync(transaction)
-            case Left(t: TransactionException) =>
-                Left(SubmitError.fromException(t))
-        }
-    }
+    // Abstract - platform-specific state modification
+    protected def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash]
+    def setSlot(slot: SlotNo): Unit
+    def snapshot(): Emulator
 
     def fetchLatestParams(using ExecutionContext): Future[ProtocolParams] = {
-        val params = contextRef.get().env.params
+        val params = currentContext.env.params
         Future.successful(params)
     }
 
@@ -164,27 +148,7 @@ class Emulator(
         Future.successful(Right(evalQuery(query)))
     }
 
-    @tailrec
-    final def setSlot(slot: SlotNo): Unit = {
-        val currentContext = contextRef.get()
-        val newContext = Context(
-          fee = currentContext.fee,
-          env = currentContext.env.copy(slot = slot),
-          slotConfig = currentContext.slotConfig
-        )
-        if !contextRef.compareAndSet(currentContext, newContext) then setSlot(slot)
-    }
-
-    def snapshot(): Emulator = Emulator(
-      initialUtxos = this.utxos,
-      initialContext = this.contextRef.get(),
-      validators = this.validators,
-      mutators = this.mutators
-    )
-
-    def utxos: Utxos = stateRef.get().utxos
-
-    private def processTransaction(
+    protected def processTransaction(
         context: Context,
         state: State,
         transaction: Transaction
@@ -193,31 +157,26 @@ class Emulator(
     }
 }
 
-object Emulator {
+object EmulatorBase {
     val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
     val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
 
-    /** Creates an Emulator with the specified addresses, each with the given initial value.
+    /** Creates initial UTxOs for the given addresses.
       *
       * @param addresses
       *   The addresses to initialize with funds
       * @param initialValue
       *   Initial value per address (default: 10,000 ADA like Yaci Devkit)
       * @return
-      *   An Emulator instance with the addresses funded
+      *   A map of transaction inputs to outputs
       */
-    def withAddresses(
+    def createInitialUtxos(
         addresses: Seq[Address],
         initialValue: Value = Value.ada(10_000L)
-    ): Emulator = {
+    ): Utxos = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
-        val initialUtxos = addresses.zipWithIndex.map { case (address, index) =>
+        addresses.zipWithIndex.map { case (address, index) =>
             Input(genesisHash, index) -> Output(address, initialValue)
         }.toMap
-        Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = Context.testMainnet(),
-          mutators = Set(PlutusScriptsTransactionMutator)
-        )
     }
 }
