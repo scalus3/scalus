@@ -24,11 +24,7 @@ class PlutusScriptEvaluationException(
     message: String,
     cause: Throwable,
     val logs: Array[String]
-) extends RuntimeException(message, cause) {
-    override def toString: String = {
-        super.toString + s"\nlogs: ${logs.mkString("\n")}"
-    }
-}
+) extends RuntimeException(s"$message\nlogs: ${logs.mkString("\n")}", cause)
 
 /** Evaluates Plutus V1, V2 or V3 scripts using the provided transaction and UTxO set.
   *
