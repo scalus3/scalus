@@ -161,7 +161,7 @@ export default function IndexPage() {
           </div>
         </Link>
 
-        <Link href="/docs/smart-contract/developing-smart-contracts" className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 p-8 transition-all hover:shadow-lg hover:scale-105">
+        <Link href="/docs/smart-contracts/developing-smart-contracts" className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-50 to-pink-50 p-8 transition-all hover:shadow-lg hover:scale-105">
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-purple-600 text-white mb-4">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -201,7 +201,7 @@ export default function IndexPage() {
     <h2 className="mx-auto mt-2 text-center text-3xl font-semibold tracking-tight text-balance text-gray-950 sm:text-4xl">All-in-One Platform for Cardano Development</h2>
     <p className="mx-auto mt-6 max-w-4xl text-center text-lg text-gray-600">Scalus provides a unified Cardano development platform for building smart contracts and decentralized applications in Scala 3. Use a single, professional toolchain to design, test, and deploy Cardano dApps and on-chain code with confidence.</p>
     <div className="mt-10 grid gap-4 sm:mt-16 lg:grid-cols-3 lg:grid-rows-2">
-      <Link href="/docs/smart-contract" className="relative lg:row-span-2 group">
+      <Link href="/docs/smart-contracts" className="relative lg:row-span-2 group">
         <div className="absolute inset-px rounded-lg bg-white lg:rounded-l-4xl transition-colors group-hover:bg-blue-50"></div>
         <div className="relative flex h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)] lg:rounded-l-[calc(2rem+1px)]">
           <div className="px-8 pt-8 pb-3 sm:px-10 sm:pt-10 sm:pb-0">

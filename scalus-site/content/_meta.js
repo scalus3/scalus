@@ -4,7 +4,7 @@ export default {
   'multiplatform': 'Multiplatform',
   'onboarding': '',
   'language-guide': 'Language Guide',
-  'smart-contract': 'Smart Contracts',
+  'smart-contracts': 'Smart Contracts',
   'transactions': 'Transactions',
   testing: 'Testing',
   'design-patterns': 'Design Patterns',
