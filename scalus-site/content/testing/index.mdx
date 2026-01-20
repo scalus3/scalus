@@ -1,0 +1,115 @@
+---
+asIndexPage: true
+title: Cardano Smart Contract Testing - Emulator & Local Devnet
+sidebarTitle: Testing
+description: Test Cardano smart contracts locally with Scalus. Unit testing, debugging, in-memory Emulator, and Docker-based local devnet for integration testing.
+---
+
+import { Callout } from 'nextra/components'
+
+# Cardano Smart Contract Testing
+
+Scalus provides comprehensive testing tools for Cardano smart contracts — unit testing, debugging, and local execution environments.
+
+## Testing Tools Overview
+
+| Tool | Purpose | Best For |
+|------|---------|----------|
+| **[Unit Testing](/docs/testing/unit-testing)** | Property-based tests with ScalaCheck | Validator logic verification |
+| **[Debugging](/docs/testing/debugging)** | IDE debugging, logging, error traces | Finding and fixing bugs |
+| **[Emulator](/docs/testing/emulator)** | In-memory Cardano node | Fast iteration, CI/CD |
+| **[Local Devnet](/docs/testing/local-devnet)** | Docker-based real Cardano node | Integration tests, pre-deployment |
+
+## Unit Testing with ScalaCheck
+
+Write property-based tests using [ScalaCheck](https://www.scalacheck.org/) to verify validator logic:
+
+```scala
+class MyValidatorTest extends AnyFunSuite with ScalusTest {
+  test("validator accepts valid signature") {
+    val txInfo = random[TxInfo]
+    val signer = random[PubKeyHash]
+    // Test your validator logic
+  }
+}
+```
+
+See [Unit Testing](/docs/testing/unit-testing) for complete guide.
+
+## Debugging
+
+Debug validators as regular Scala code — use IDE breakpoints, step through execution, and inspect variables:
+
+```scala
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(...): Unit = {
+    log("Starting validation")
+    val owner = datum.getOrFail("No datum").to[PubKeyHash]
+    // Set breakpoint here, inspect variables
+    require(tx.signatories.contains(owner), "Not signed")
+  }
+```
+
+See [Debugging](/docs/testing/debugging) for IDE setup and logging.
+
+## Local Execution Environments
+
+### Emulator — Fast In-Memory Testing
+
+The [Emulator](/docs/testing/emulator) validates transactions and executes Plutus scripts instantly — no Docker required:
+
+```scala
+val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
+
+val tx = TxBuilder(testEnv)
+  .payTo(Bob.address, Value.ada(10))
+  .complete(emulator, Alice.address)
+  .await()
+  .sign(Alice.signer)
+  .transaction
+
+emulator.submit(tx).await() // Instant validation + script execution
+```
+
+### Local Devnet — Real Cardano Node
+
+[Local Devnet](/docs/testing/local-devnet) runs a real Cardano node (Yaci DevKit) in Docker:
+
+```scala
+class MyTest extends AnyFunSuite with YaciDevKit {
+  test("submit transaction to local devnet") {
+    val ctx = createTestContext()
+    val tx = TxBuilder(ctx.cardanoInfo)
+      .payTo(recipient, Value.ada(10))
+      .complete(ctx.provider, ctx.address)
+      .await(30.seconds)
+      .sign(ctx.signer)
+      .transaction
+
+    ctx.submitTx(tx) // Real Cardano node validation
+  }
+}
+```
+
+## Recommended Workflow
+
+<Callout type="info">
+**Test pyramid:** Tests → Emulator → Local Devnet → Testnet → Mainnet
+</Callout>
+
+
+Development:
+  Write code → Run tests → Emulator → Fast feedback → Debug with IDE  
+
+Pre-deployment:
+  All tests pass → Local Devnet → Deploy with confidence
+
+
+## See Also
+
+- [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck
+- [Debugging](/docs/testing/debugging) — IDE debugging and logging
+- [Emulator](/docs/testing/emulator) — In-memory testing with instant feedback
+- [Local Devnet](/docs/testing/local-devnet) — Integration testing with real Cardano node
+- [Ledger Rules](/docs/ledger/ledger-rules) — Validation rules used by testing tools

@@ -69,7 +69,7 @@ EUC[EraRule UTXOW Conway]
                                                                         Scalus:OutsideValidityIntervalValidator"]:::done
                 utxoTransition --> validateOutsideForecast["Alonzo.validateOutsideForecast
                                                             Scalus:OutsideForecastValidator"]:::done
-                utxoTransition --> validateInputSetEmptyUTxO["Shelley.validateInputSetEmptyUTxO 
+                utxoTransition --> validateInputSetEmptyUTxO["Shelley.validateInputSetEmptyUTxO
                                                             Scalus:EmptyInputsValidator"]:::done
                 utxoTransition --> feesOk["feesOk
                                         Scalus:FeesOkValidator"]:::done
@@ -80,7 +80,7 @@ EUC[EraRule UTXOW Conway]
                 utxoTransition --> validateOutputTooSmallUTxO["validateOutputTooSmallUTxO
                                                             Scalus:OutputsHaveNotEnoughCoinsValidator"]:::done
                 utxoTransition --> validateOutputTooBigUTxO["Alonzo.validateOutputTooBigUTxO
-                                                           Scalus:OutputsHaveTooBigValueStorageSizeValidator"]:::done 
+                                                           Scalus:OutputsHaveTooBigValueStorageSizeValidator"]:::done
                 utxoTransition --> validateOutputBootAddrAttrsTooBig["Shelley.validateOutputBootAddrAttrsTooBig
                                                                     Scalus:OutputBootAddrAttrsTooBigValidator"]:::done
                 utxoTransition --> validateWrongNetwork["Shelley.validateWrongNetwork

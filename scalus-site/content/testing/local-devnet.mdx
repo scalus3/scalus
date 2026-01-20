@@ -1,12 +1,12 @@
 ---
-title: Cardano Integration Testing with Yaci DevKit
-sidebarTitle: Yaci DevKit
-description: Run Cardano smart contract integration tests locally with Yaci DevKit. Set up a Docker-based devnet, submit transactions, and validate Plutus scripts without testnet dependencies.
+title: Local Cardano Devnet for Integration Testing
+sidebarTitle: Local Devnet
+description: Run Cardano smart contract integration tests locally with a Docker-based devnet. Submit transactions, validate Plutus scripts, and test with a real Cardano node — no testnet dependencies.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Cardano Integration Testing with Yaci DevKit
+# Local Cardano Devnet with Yaci DevKit
 
 [Yaci DevKit](https://github.com/bloxbean/yaci-devkit) is a configurable local Cardano devnet running in Docker. It provides full ledger validation and Plutus script execution without external dependencies — no testnet ADA, no network latency, no third-party API limits.
 
@@ -46,7 +46,7 @@ Running integration tests against preview/preprod testnets introduces:
 - Testnet ADA requirements
 - External infrastructure dependencies
 
-The Scalus [Emulator](/docs/ledger/emulator) is excellent for fast development cycles — it runs Plutus scripts, validates transactions using Cardano ledger rules, and operates entirely in-memory with instant feedback. For most unit tests and rapid iteration, the Emulator is the right choice.
+The Scalus [Emulator](/docs/testing/emulator) is excellent for fast development cycles — it runs Plutus scripts, validates transactions using Cardano ledger rules, and operates entirely in-memory with instant feedback. For most unit tests and rapid iteration, the Emulator is the right choice.
 
 Yaci DevKit complements the Emulator for scenarios requiring **complete Cardano node semantics**: the real Haskell node implementation, actual block production, consensus timing, and the full ledger rule set. Use it when you need confidence that your code works exactly as it will on mainnet.
 
@@ -324,6 +324,6 @@ override def yaciConfig = YaciConfig(enableLogs = true)
 
 ## See Also
 
-- [Emulator](/docs/ledger/emulator) — In-memory Cardano node with Plutus execution and ledger validation
+- [Emulator](/docs/testing/emulator) — In-memory Cardano node with Plutus execution and ledger validation
 - [Transaction Builder](/docs/transaction-builder) — Building and submitting transactions
-- [Smart Contract Testing](/docs/smart-contract/testing) — Testing strategies for validators
+- [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck

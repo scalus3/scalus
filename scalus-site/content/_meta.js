@@ -1,10 +1,12 @@
 export default {
   index: '',
   'get-started': '',
+  'multiplatform': 'Multiplatform',
   'onboarding': '',
   'language-guide': 'Language Guide',
   'smart-contract': 'Smart Contracts',
   'transaction-builder': 'Transaction Builder',
+  testing: 'Testing',
   'offchain-applications': 'Offchain Applications',
   ledger: 'Ledger Framework',
   learning: '',
