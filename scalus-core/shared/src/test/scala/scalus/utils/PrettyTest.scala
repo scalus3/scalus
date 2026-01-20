@@ -380,4 +380,131 @@ class PrettyTest extends AnyFunSuite {
         assert(result.contains("a -> 1"))
         assert(result.contains("z -> 3"))
     }
+
+    // === Derived Pretty Instance Tests ===
+
+    test("Pretty derived for case class shows constructor and field names") {
+        case class Person(name: String, age: Int) derives Pretty
+        val person = Person("Alice", 30)
+        val result = person.show
+        assert(result.contains("Person"))
+        assert(result.contains("name = Alice"))
+        assert(result.contains("age = 30"))
+    }
+
+    test("Pretty derived for case class with single field") {
+        case class Wrapper(value: String) derives Pretty
+        val wrapper = Wrapper("test")
+        val result = wrapper.show
+        assert(result.contains("Wrapper"))
+        assert(result.contains("value = test"))
+    }
+
+    test("Pretty derived for case object shows just the name") {
+        case object Singleton derives Pretty
+        val result = Singleton.show
+        assert(result == "Singleton")
+    }
+
+    test("Pretty derived for empty case class shows just the name") {
+        case class Empty() derives Pretty
+        val result = Empty().show
+        assert(result == "Empty")
+    }
+
+    test("Pretty derived for enum with case objects") {
+        enum Color derives Pretty:
+            case Red, Green, Blue
+
+        assert(Color.Red.show == "Red")
+        assert(Color.Green.show == "Green")
+        assert(Color.Blue.show == "Blue")
+    }
+
+    test("Pretty derived for enum with case classes") {
+        enum Status derives Pretty:
+            case Active
+            case Inactive(reason: String)
+            case Pending(until: Int)
+
+        assert(Status.Active.show == "Active")
+        assert(Status.Inactive("maintenance").show.contains("reason = maintenance"))
+        assert(Status.Pending(42).show.contains("until = 42"))
+    }
+
+    test("Pretty derived for nested case classes") {
+        case class Inner(x: Int) derives Pretty
+        case class Outer(inner: Inner, name: String) derives Pretty
+
+        val outer = Outer(Inner(10), "test")
+        val result = outer.show
+        assert(result.contains("Outer"))
+        assert(result.contains("inner = Inner"))
+        assert(result.contains("x = 10"))
+        assert(result.contains("name = test"))
+    }
+
+    test("Pretty derived for case class with nested enum") {
+        enum Level derives Pretty:
+            case Low, High
+
+        case class Config(name: String, level: Level) derives Pretty
+
+        val config = Config("debug", Level.High)
+        val result = config.show
+        assert(result.contains("Config"))
+        assert(result.contains("name = debug"))
+        assert(result.contains("level = High"))
+    }
+
+    test("Pretty manual instance takes precedence over derived") {
+        case class CustomPretty(value: Int)
+
+        object CustomPretty {
+            given Pretty[CustomPretty] =
+                Pretty.instance((a, _) => org.typelevel.paiges.Doc.text(s"Custom[${a.value}]"))
+        }
+
+        val custom = CustomPretty(42)
+        val result = custom.show
+        // Should use the manual instance, not the derived one
+        assert(result == "Custom[42]")
+    }
+
+    test("Pretty derived with XTerm styling applies colors") {
+        case class Styled(name: String, count: Int) derives Pretty
+        val styled = Styled("test", 5)
+        val highlighted = styled.showHighlighted
+        // XTerm styling adds ANSI escape codes
+        assert(highlighted.contains("\u001b["), s"Expected ANSI codes in: $highlighted")
+    }
+
+    test("Pretty derived for case class with BigInt field") {
+        case class BigValue(amount: BigInt) derives Pretty
+        val bigValue = BigValue(BigInt("12345678901234567890"))
+        val result = bigValue.show
+        assert(result.contains("BigValue"))
+        assert(result.contains("amount = 12345678901234567890"))
+    }
+
+    test("Pretty derived for case class with Boolean field") {
+        case class Flags(enabled: Boolean, active: Boolean) derives Pretty
+        val flags = Flags(true, false)
+        val result = flags.show
+        assert(result.contains("enabled = true"))
+        assert(result.contains("active = false"))
+    }
+
+    test("Pretty derived for deeply nested structures") {
+        case class Level3(value: String) derives Pretty
+        case class Level2(inner: Level3) derives Pretty
+        case class Level1(inner: Level2) derives Pretty
+
+        val nested = Level1(Level2(Level3("deep")))
+        val result = nested.show
+        assert(result.contains("Level1"))
+        assert(result.contains("Level2"))
+        assert(result.contains("Level3"))
+        assert(result.contains("value = deep"))
+    }
 }

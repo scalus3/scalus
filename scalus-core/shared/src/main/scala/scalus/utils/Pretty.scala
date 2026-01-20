@@ -6,6 +6,9 @@ import org.typelevel.paiges.Doc.*
 import org.typelevel.paiges.Style.XTerm.Fg
 import scalus.builtin.ByteString
 
+import scala.compiletime.{constValue, erasedValue, summonInline}
+import scala.deriving.Mirror
+
 /** Pretty printing style: Normal (plain text) or XTerm (with color highlighting) */
 enum Style:
     case Normal, XTerm
@@ -34,7 +37,84 @@ trait Pretty[A]:
     /** Pretty print to a Doc in detailed format. Defaults to `pretty` if not overridden. */
     def prettyDetailed(a: A, style: Style = Style.Normal): Doc = pretty(a, style)
 
-object Pretty:
+/** Low-priority Pretty instances for automatic ADT derivation. These are lower priority than
+  * manually defined instances.
+  */
+trait LowPriorityPrettyInstances {
+
+    /** Extract element labels from the MirroredElemLabels tuple type */
+    inline def getElemLabels[Labels <: Tuple]: List[String] =
+        inline erasedValue[Labels] match
+            case _: EmptyTuple => Nil
+            case _: (head *: tail) =>
+                constValue[head].toString :: getElemLabels[tail]
+
+    /** Summon Pretty instances for all element types in a tuple */
+    inline def summonPrettyInstances[Types <: Tuple]: List[Pretty[Any]] =
+        inline erasedValue[Types] match
+            case _: EmptyTuple => Nil
+            case _: (head *: tail) =>
+                summonInline[Pretty[head]].asInstanceOf[Pretty[Any]] ::
+                    summonPrettyInstances[tail]
+
+    /** Format a product (case class) with field names and values */
+    private def prettyProduct[A <: Product](
+        a: A,
+        typeName: String,
+        labels: List[String],
+        instances: List[Pretty[Any]],
+        style: Style
+    ): Doc = {
+        import Pretty.*
+        if labels.isEmpty then
+            // Case object or empty case class: just show the name
+            ctr(typeName, style)
+        else
+            val fieldDocs = a.productIterator
+                .zip(labels)
+                .zip(instances)
+                .map { case ((value, label), instance) =>
+                    kw(label, style) + Doc.text(" = ") + instance.pretty(value, style)
+                }
+                .toList
+            // Format: TypeName(field1 = value1, field2 = value2)
+            ctr(typeName, style) +
+                Doc.fill(Doc.comma + Doc.space, fieldDocs)
+                    .tightBracketBy(Doc.char('('), Doc.char(')'))
+    }
+
+    /** Create a Pretty instance for a product type */
+    inline def derivePrettyProduct[A](using p: Mirror.ProductOf[A]): Pretty[A] = {
+        val typeName = constValue[p.MirroredLabel]
+        val labels = getElemLabels[p.MirroredElemLabels]
+        lazy val instances = summonPrettyInstances[p.MirroredElemTypes]
+
+        new Pretty[A] {
+            def pretty(a: A, style: Style): Doc =
+                prettyProduct(a.asInstanceOf[Product], typeName, labels, instances, style)
+        }
+    }
+
+    /** Create a Pretty instance for a sum type */
+    inline def derivePrettySum[A](using s: Mirror.SumOf[A]): Pretty[A] = {
+        lazy val instances = summonPrettyInstances[s.MirroredElemTypes]
+
+        new Pretty[A] {
+            def pretty(a: A, style: Style): Doc = {
+                val ordinal = s.ordinal(a)
+                instances(ordinal).pretty(a, style)
+            }
+        }
+    }
+
+    /** Main derivation entry point - lower priority than explicit instances */
+    inline given derived[A](using m: Mirror.Of[A]): Pretty[A] =
+        inline m match
+            case s: Mirror.SumOf[A]     => derivePrettySum[A](using s)
+            case p: Mirror.ProductOf[A] => derivePrettyProduct[A](using p)
+}
+
+object Pretty extends LowPriorityPrettyInstances:
     /** Summon a Pretty instance */
     def apply[A](using p: Pretty[A]): Pretty[A] = p
 
