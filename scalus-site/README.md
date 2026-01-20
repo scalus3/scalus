@@ -8,4 +8,4 @@ pnpm dev
 pnpm build
 
 # Serve static htmlgit 
-npx serve -s out
+npx serve out
