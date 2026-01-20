@@ -13,13 +13,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val compiledContract = HtlcContract.withErrorTraces
+    private val contract = HtlcContract.compiled.withErrorTraces
 
     /** Transaction creator with real script evaluation */
-    private val txCreator = HtlcTransactionCreator(
+    private val txCreator = HtlcTransactions(
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
-      contract = compiledContract
+      contract = contract
     )
 
     private val slot: SlotNo = 10
@@ -51,15 +51,15 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
         )
         assert(provider.submit(lockTx).await().isRight)
         val lockedUtxo = lockTx.utxos.find { case (_, txOut) =>
-            txOut.address == compiledContract.address(env.network)
+            txOut.address == contract.address(env.network)
         }.get
         Utxo(lockedUtxo)
     }
 
     // Transaction assertions provided by TxTestKit
 
-    test(s"HTLC validator size is ${HtlcContract.script.script.size} bytes") {
-        assert(HtlcContract.script.script.size == 569)
+    test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
+        assert(HtlcContract.compiled.script.script.size == 569)
     }
 
     test("receiver reveals preimage before timeout") {
