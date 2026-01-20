@@ -53,8 +53,10 @@ class Emulator(
 }
 
 object Emulator {
-    val defaultValidators: Set[STS.Validator] = EmulatorBase.defaultValidators
-    val defaultMutators: Set[STS.Mutator] = EmulatorBase.defaultMutators
+    // JS cannot use CardanoMutator (requires JVM-only reflection/JAR scanning)
+    // Default to PlutusScriptsTransactionMutator which handles script evaluation
+    val defaultValidators: Set[STS.Validator] = Set.empty
+    val defaultMutators: Set[STS.Mutator] = Set(PlutusScriptsTransactionMutator)
 
     /** Creates an Emulator with the specified addresses, each with the given initial value.
       *

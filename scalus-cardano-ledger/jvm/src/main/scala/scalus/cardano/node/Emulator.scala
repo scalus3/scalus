@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State}
+import scalus.cardano.ledger.rules.{CardanoMutator, Context, PlutusScriptsTransactionMutator, STS, State}
 import scalus.cardano.ledger.*
 
 import java.util.concurrent.atomic.AtomicReference
@@ -64,8 +64,8 @@ class Emulator(
 }
 
 object Emulator {
-    val defaultValidators: Set[STS.Validator] = EmulatorBase.defaultValidators
-    val defaultMutators: Set[STS.Mutator] = EmulatorBase.defaultMutators
+    val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
+    val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
 
     /** Creates an Emulator with the specified addresses, each with the given initial value.
       *

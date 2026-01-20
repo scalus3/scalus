@@ -2,7 +2,7 @@ package scalus.cardano.node
 
 import scalus.builtin.ByteString
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{CardanoMutator, Context, PlutusScriptsTransactionMutator, STS, State}
+import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -90,8 +90,6 @@ trait EmulatorBase extends Provider {
 }
 
 object EmulatorBase {
-    val defaultValidators: Set[STS.Validator] = CardanoMutator.allValidators.values.toSet
-    val defaultMutators: Set[STS.Mutator] = CardanoMutator.allMutators.values.toSet
 
     /** Creates initial UTxOs for the given addresses.
       *
