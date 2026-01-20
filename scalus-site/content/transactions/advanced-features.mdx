@@ -176,3 +176,77 @@ emulator.submit(unlockTx)
 <Callout type="info">
   The `Transaction.utxos` method is particularly useful when you need to reference specific outputs immediately after building a transaction, without querying a provider.
 </Callout>
+
+## Draft Transactions for ScriptContext Testing
+
+The `draft` method assembles a transaction without balancing or fee calculation. This is useful for testing validators by deriving a `ScriptContext` from the transaction structure.
+
+### Why Use `draft`?
+
+When testing validators, you often need to:
+1. Create a transaction with specific inputs and outputs
+2. Derive the `ScriptContext` that would be passed to your validator
+3. Run the validator against that context
+
+The normal `build()` method requires fee calculation and balancing, which adds complexity when you just want to test validator logic. The `draft` method skips these steps.
+
+### Basic Usage
+
+```scala copy
+import scalus.cardano.txbuilder.{txBuilder, RedeemerPurpose}
+import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
+
+given CardanoInfo = TestUtil.testEnvironment
+
+val tx = txBuilder
+  .spend(lockedUtxo, redeemer, validatorScript, Set(signerPkh))
+  .payTo(recipient, Value.ada(10))
+  .validTo(deadline)
+  .draft  // No balancing, no fee calculation
+
+// Derive ScriptContext for the spend
+val scriptContext = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
+
+// Test your validator
+validator.code(scriptContext.toData)
+```
+
+### Complete Testing Example
+
+```scala copy
+import scalus.builtin.Data.toData
+import scalus.cardano.txbuilder.{txBuilder, RedeemerPurpose}
+import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
+import scalus.testing.kit.{ScalusTest, EvalTestKit}
+
+class MyValidatorTest extends AnyFunSuite, ScalusTest, EvalTestKit {
+  given CardanoInfo = TestUtil.testEnvironment
+
+  test("validator accepts valid action") {
+    // Setup: create UTXOs and locked output
+    val utxos: Utxos = ...
+    val lockedUtxo: Utxo = ...
+    val validRedeemer = MyAction.Unlock(secretValue)
+
+    // Build draft transaction
+    val tx = txBuilder
+      .spend(lockedUtxo, validRedeemer, myValidator.script, Set(ownerPkh))
+      .payTo(owner, lockedUtxo.output.value)
+      .validTo(deadline)
+      .draft
+
+    // Derive ScriptContext
+    val sc = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
+
+    // Test validator - should succeed without throwing
+    myValidator.code(sc.toData)
+
+    // Or test with the compiled program
+    myValidator.program $ sc.toData
+  }
+}
+```
+
+<Callout type="info">
+  The `draft` method is designed for testing. For production transactions, use `build()` or `complete()` which handle fee calculation and balancing.
+</Callout>

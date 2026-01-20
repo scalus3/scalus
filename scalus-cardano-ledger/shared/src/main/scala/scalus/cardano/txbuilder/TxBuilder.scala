@@ -1437,6 +1437,28 @@ case class TxBuilder(
         )
     }
 
+    /** Assembles the transaction without balancing or fee calculation.
+      *
+      * This method builds a transaction from the accumulated steps but skips the finalization phase
+      * (fee calculation, change handling, script evaluation). Useful for:
+      *   - Testing: Creating transactions for ScriptContext derivation
+      *   - Inspection: Previewing transaction structure before committing to balancing
+      *   - Advanced use cases: When manual control over balancing is needed
+      *
+      * @return
+      *   the unbalanced transaction
+      * @throws TxBuilderException
+      *   if step processing fails
+      */
+    def draft: Transaction = {
+        TransactionBuilder
+            .modify(context, steps)
+            .map(addAttachmentsToContext)
+            .match
+                case Right(ctx)  => ctx.transaction
+                case Left(error) => throw TxBuilderException.fromBuildError(error)
+    }
+
     /** Signs the transaction with the provided signer.
       *
       * This method should be called after [[build]] to add signatures to the transaction. Multiple
@@ -1741,11 +1763,11 @@ case class TxBuilder(
         if attachedData.isEmpty then return ctx
 
         var updatedTx = ctx.transaction
-        val currentData = updatedTx.witnessSet.plutusData.value.toMap.values.toSeq
-        val allData = currentData ++ attachedData.values.map(KeepRaw(_))
+        val currentData = updatedTx.witnessSet.plutusData.value.toSortedMap
+        val allData = currentData ++ attachedData.view.map((k, v) => k -> KeepRaw(v))
         updatedTx = updatedTx.copy(
           witnessSet = updatedTx.witnessSet.copy(
-            plutusData = KeepRaw(TaggedSortedMap(allData*))
+            plutusData = KeepRaw(TaggedSortedMap(allData))
           )
         )
         ctx.copy(transaction = updatedTx)
