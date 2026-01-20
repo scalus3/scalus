@@ -7,6 +7,7 @@ export default {
   'smart-contract': 'Smart Contracts',
   'transaction-builder': 'Transaction Builder',
   testing: 'Testing',
+  'design-patterns': 'Design Patterns',
   'offchain-applications': 'Offchain Applications',
   ledger: 'Ledger Framework',
   learning: '',

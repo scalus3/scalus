@@ -12,7 +12,7 @@ Couple spending and minting endpoints of the same validator to delegate heavy co
 
 ## The Challenge
 
-Like the [Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern), spending validators that run per-UTxO create quadratic costs for batch operations. However, not all protocols use staking, and some naturally involve minting or burning tokens as part of their logic.
+Like the [Stake Validator Pattern](/docs/design-patterns/withdraw-zero), spending validators that run per-UTxO create quadratic costs for batch operations. However, not all protocols use staking, and some naturally involve minting or burning tokens as part of their logic.
 
 ## How It Works
 
@@ -29,7 +29,7 @@ The spending validator only ensures the minting endpoint executes by verifying a
 - Cases where token existence proves validation occurred
 
 **Not ideal for:**
-- Protocols without natural minting requirements (use [Stake Validator](/docs/learning/design-patterns/stake-validator-pattern) instead - lower execution costs)
+- Protocols without natural minting requirements (use [Stake Validator](/docs/design-patterns/withdraw-zero) instead - lower execution costs)
 - Cases where spend validation must be independent of minting
 - When minting logic should not control spending authorization
 
@@ -147,8 +147,8 @@ inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Un
 
 ## Related Patterns
 
-- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Similar pattern using staking instead of minting
-- **[Merkelized Validator](/docs/learning/design-patterns/merkelized-validator-pattern)** - When spending validators need to read verified data
+- **[Stake Validator](/docs/design-patterns/withdraw-zero)** - Similar pattern using staking instead of minting
+- **[Merkelized Validator](/docs/design-patterns/merkelized-validator)** - When spending validators need to read verified data
 
 ## Resources
 

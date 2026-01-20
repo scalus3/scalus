@@ -1,4 +1,12 @@
 [
   { "from": "/docs/smart-contract/testing", "to": "/docs/testing/unit-testing" },
-  { "from": "/docs/smart-contract/debugging", "to": "/docs/testing/debugging" }
+  { "from": "/docs/smart-contract/debugging", "to": "/docs/testing/debugging" },
+  { "from": "/docs/learning/design-patterns", "to": "/docs/design-patterns" },
+  { "from": "/docs/learning/design-patterns/stake-validator-pattern", "to": "/docs/design-patterns/withdraw-zero" },
+  { "from": "/docs/learning/design-patterns/transaction-level-minter-pattern", "to": "/docs/design-patterns/transaction-level-minting" },
+  { "from": "/docs/learning/design-patterns/merkelized-validator-pattern", "to": "/docs/design-patterns/merkelized-validator" },
+  { "from": "/docs/learning/design-patterns/parameter-validation-pattern", "to": "/docs/design-patterns/parameter-validation" },
+  { "from": "/docs/learning/design-patterns/utxo-indexer-pattern", "to": "/docs/design-patterns/utxo-indexer" },
+  { "from": "/docs/learning/design-patterns/linked-list-pattern", "to": "/docs/design-patterns/linked-list" },
+  { "from": "/docs/learning/design-patterns/normalized-interval-pattern", "to": "/docs/design-patterns/validity-range" }
 ]

@@ -8,7 +8,7 @@ import { Callout } from 'nextra/components'
 
 # Merkelized Validator Pattern
 
-Extend the [Stake Validator Pattern](/docs/learning/design-patterns/stake-validator-pattern) to allow spending validators to **read verified data** from the stake validator's redeemer.
+Extend the [Stake Validator Pattern](/docs/design-patterns/withdraw-zero) to allow spending validators to **read verified data** from the stake validator's redeemer.
 
 ## The Challenge
 
@@ -36,7 +36,7 @@ This reduces complexity from O(N²) to O(N) for batch operations while giving ea
 - Any scenario where spending validators need verified global state
 
 **Not ideal for:**
-- Simple validation that doesn't need shared data (use [Stake Validator](/docs/learning/design-patterns/stake-validator-pattern) instead)
+- Simple validation that doesn't need shared data (use [Stake Validator](/docs/design-patterns/withdraw-zero) instead)
 - Single-input transactions
 - When each input needs completely independent validation
 
@@ -136,8 +136,8 @@ See `scalus.examples.BatchAuctionValidator` for a complete implementation where:
 
 ## Related Patterns
 
-- **[Stake Validator](/docs/learning/design-patterns/stake-validator-pattern)** - Base pattern when you don't need to read data
-- **[Transaction Level Minter](/docs/learning/design-patterns/transaction-level-minter-pattern)** - Alternative using minting instead of staking
+- **[Stake Validator](/docs/design-patterns/withdraw-zero)** - Base pattern when you don't need to read data
+- **[Transaction Level Minter](/docs/design-patterns/transaction-level-minting)** - Alternative using minting instead of staking
 
 ## Resources
 
