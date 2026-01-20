@@ -1,0 +1,92 @@
+# Scalus
+
+> Scalus is a Scala 3 platform for building Cardano smart contracts and decentralized applications. It compiles Scala to Plutus Core (UPLC) and provides type-safe transaction building.
+
+## Key Features
+
+- **One Language**: Write smart contracts and off-chain code in Scala 3
+- **Type Safety**: Catch errors at compile time with Scala's type system
+- **Multiplatform**: JVM, JavaScript/TypeScript, and Native compilation
+- **Local Testing**: In-memory Emulator and Docker-based devnet
+- **IDE Debugging**: Debug validators with breakpoints in IntelliJ or VS Code
+- **Design Patterns**: Proven optimization patterns with implementations
+
+## Documentation
+
+### Getting Started
+- /docs/get-started - Installation guide
+- /docs/get-started/for-scala-developers - Cardano concepts for Scala developers
+- /docs/get-started/for-cardano-developers - Scala basics for Cardano developers
+
+### Smart Contracts
+- /docs/smart-contracts - Writing Cardano validators
+- /docs/smart-contracts/developing-smart-contracts - First smart contract tutorial
+- /docs/smart-contracts/validators - Validator types (spending, minting, staking)
+- /docs/smart-contracts/from-data - Data type conversion
+- /docs/smart-contracts/compiling - Compilation to Plutus Core
+- /docs/smart-contracts/optimisations - Advanced optimizations
+
+### Transactions
+- /docs/transactions - Building Cardano transactions
+- /docs/transactions/building-first-transaction - Step-by-step guide
+- /docs/transactions/payment-methods - Send ADA and tokens
+- /docs/transactions/spending-utxos - Input selection and script UTxOs
+- /docs/transactions/minting-burning-assets - Token minting and burning
+- /docs/transactions/staking-rewards - Delegation and rewards
+- /docs/transactions/governance - DRep and voting
+
+### Testing
+- /docs/testing - Testing overview
+- /docs/testing/unit-testing - Property-based testing with ScalaCheck
+- /docs/testing/debugging - IDE debugging and logging
+- /docs/testing/emulator - In-memory Cardano emulator
+- /docs/testing/local-devnet - Docker-based local node (Yaci DevKit)
+
+### Design Patterns
+- /docs/design-patterns - Optimization patterns for Cardano
+- /docs/design-patterns/withdraw-zero - Stake validator pattern (O(N) vs O(N²))
+- /docs/design-patterns/transaction-level-minting - Coupled mint/spend
+- /docs/design-patterns/merkelized-validator - Batch operations
+- /docs/design-patterns/utxo-indexer - O(1) input-output mapping
+- /docs/design-patterns/linked-list - On-chain data structures
+
+### Security
+- /docs/security - Security principles
+- /docs/security/common-vulnerabilities - Plutus vulnerabilities and mitigations
+
+### DApp Development
+- /docs/dapp-development - Building complete DApps
+- /docs/dapp-development/dapp-starter-tutorial - Token minting service tutorial
+- /docs/dapp-development/blockchain-providers - Blockfrost, Koios, custom providers
+- /docs/dapp-development/protocol-parameters - Network parameters
+
+### Multiplatform
+- /docs/multiplatform - JVM, JavaScript, and Native support
+
+### Ledger
+- /docs/ledger/ledger-rules - Cardano ledger validation rules
+
+### Language Guide
+- /docs/language-guide - Scala 3 subset supported in Scalus
+- /docs/language-guide/scala3 - Scala 3 overview
+- /docs/language-guide/constants-primitives - Constants and primitive types
+- /docs/language-guide/data-types - Case classes, enums, ADTs
+- /docs/language-guide/functions - Functions and recursion
+- /docs/language-guide/control-flow - If/else, pattern matching
+- /docs/language-guide/collections - List, AssocMap operations
+- /docs/language-guide/builtin-functions - Plutus builtin functions
+- /docs/language-guide/modules - Module system and imports
+- /docs/language-guide/support - Supported Scala features
+
+## Examples
+
+- https://github.com/scalus3/scalus/tree/master/scalus-examples - Production examples
+- https://github.com/scalus3/scalus-starter - Complete DApp template
+
+## API Reference
+
+- https://scalus.org/api - Scaladoc API documentation
+
+## Source Code
+
+- https://github.com/scalus3/scalus - Main repository
