@@ -1,17 +1,14 @@
 ---
 title: Common Plutus Vulnerabilities
-sidebarTitle: Plutus Vulnerabilities
+description: Comprehensive guide to known Cardano smart contract vulnerabilities including double satisfaction, infinite mint, oracle attacks, and mitigation strategies.
+sidebarTitle: Common Vulnerabilities
 ---
 
 import { Callout } from 'nextra/components'
 
 # Common Plutus Vulnerabilities
 
-Smart contracts on Cardano are immutable once deployed. Understanding common vulnerabilities is essential for writing secure validators. This guide summarizes known Plutus vulnerabilities and mitigation strategies.
-
-<Callout type="warning">
-  **Security First:** Always audit your contracts, test thoroughly, and consider professional security reviews before deploying to mainnet with significant value.
-</Callout>
+This guide summarizes known Plutus vulnerabilities and mitigation strategies. Understanding these patterns helps you write more secure validators.
 
 ---
 
@@ -159,59 +156,3 @@ Smart contracts on Cardano are immutable once deployed. Understanding common vul
 - Validate all state transitions are consistent
 - Ensure staking credentials remain unchanged where required
 - Verify expected mints/burns occur as intended
-
----
-
-## General Security Principles
-
-### Authorization
-- Always verify signatures for state-changing operations
-- Use `tx.signatories.contains(expectedSigner)` checks
-- Implement multi-sig where appropriate
-
-### Input Validation
-- Validate all datum and redeemer inputs
-- Check value composition and amounts
-- Verify data structure sizes are bounded
-
-### Fail Secure
-- Design validators to reject by default
-- Use explicit `require()` checks for all conditions
-- Provide clear error messages
-
-### Comprehensive Testing
-- Test success paths
-- Test all failure cases
-- Test boundary conditions
-- Test with unauthorized actors
-- Use property-based testing
-
-### Audit and Review
-- Peer review all validator code
-- Professional audits for high-value contracts
-- Run bug bounties on testnet
-- Consider formal verification for critical logic
-
----
-
-## Additional Resources
-
-- [Plutonomicon Vulnerabilities](https://github.com/Plutonomicon/plutonomicon/blob/main/vulnerabilities.md) - Original vulnerability documentation
-- [Scalus Testing Guide](/docs/testing/unit-testing) - Learn to test your validators thoroughly
-- [Scalus Examples](https://github.com/scalus3/scalus/tree/master/scalus-examples) - Study production validator patterns
-
----
-
-## Summary
-
-Writing secure Plutus validators requires careful attention to:
-
-1. **Value validation** - Control what tokens and amounts your script accepts
-2. **Authorization** - Always verify signatures and permissions
-3. **Concurrency** - Design for EUTxO model constraints
-4. **Oracle security** - Use TWAP, multiple sources, and freshness checks
-5. **Mint validation** - Explicitly check minting amounts and conditions
-6. **Transaction validation** - Verify all transaction components
-7. **Testing** - Comprehensive test coverage including attack scenarios
-
-Security is not optional in smart contract development. Study these vulnerabilities, apply mitigations, and test exhaustively before mainnet deployment.

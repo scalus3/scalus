@@ -30,5 +30,10 @@
   { "from": "/docs/learning/design-patterns/normalized-interval-pattern", "to": "/docs/design-patterns/validity-range" },
   { "from": "/docs/onboarding", "to": "/docs/get-started" },
   { "from": "/docs/onboarding/for-cardano-developers", "to": "/docs/get-started/for-cardano-developers" },
-  { "from": "/docs/onboarding/for-scala-developers", "to": "/docs/get-started/for-scala-developers" }
+  { "from": "/docs/onboarding/for-scala-developers", "to": "/docs/get-started/for-scala-developers" },
+  { "from": "/docs/learning", "to": "/docs/dapps" },
+  { "from": "/docs/learning/scalus-starter", "to": "/docs/dapps/building-first-dapp" },
+  { "from": "/docs/learning/plutus-vulnerabilities", "to": "/docs/security/common-vulnerabilities" },
+  { "from": "/docs/offchain-applications", "to": "/docs/dapps" },
+  { "from": "/docs/offchain-applications/working-with-contract", "to": "/docs/dapps/working-with-contract" }
 ]

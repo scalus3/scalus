@@ -1,0 +1,70 @@
+---
+asIndexPage: true
+title: Smart Contract Security Guide
+description: Security principles and best practices for writing secure Cardano smart contracts with Scalus. Learn authorization, input validation, and comprehensive testing strategies.
+sidebarTitle: Security
+---
+
+import { Callout } from 'nextra/components'
+
+# Smart Contract Security
+
+Smart contracts on Cardano are immutable once deployed. Understanding security principles and common vulnerabilities is essential for writing secure validators.
+
+<Callout type="warning">
+  **Security First:** Always audit your contracts, test thoroughly, and consider professional security reviews before deploying to mainnet with significant value.
+</Callout>
+
+## Authorization
+
+- Always verify signatures for state-changing operations
+- Use `tx.signatories.contains(expectedSigner)` checks
+- Implement multi-sig where appropriate
+
+## Input Validation
+
+- Validate all datum and redeemer inputs
+- Check value composition and amounts
+- Verify data structure sizes are bounded
+
+## Fail Secure
+
+- Design validators to reject by default
+- Use explicit `require()` checks for all conditions
+- Provide clear error messages
+
+## Comprehensive Testing
+
+- Test success paths
+- Test all failure cases
+- Test boundary conditions
+- Test with unauthorized actors
+- Use property-based testing
+
+## Audit and Review
+
+- Peer review all validator code
+- Professional audits for high-value contracts
+- Run bug bounties on testnet
+- Consider formal verification for critical logic
+
+## Summary
+
+Writing secure Plutus validators requires careful attention to:
+
+1. **Value validation** - Control what tokens and amounts your script accepts
+2. **Authorization** - Always verify signatures and permissions
+3. **Concurrency** - Design for EUTxO model constraints
+4. **Oracle security** - Use TWAP, multiple sources, and freshness checks
+5. **Mint validation** - Explicitly check minting amounts and conditions
+6. **Transaction validation** - Verify all transaction components
+7. **Testing** - Comprehensive test coverage including attack scenarios
+
+Security is not optional in smart contract development. Study [common vulnerabilities](/docs/security/common-vulnerabilities), apply mitigations, and test exhaustively before mainnet deployment.
+
+## Resources
+
+- [Common Plutus Vulnerabilities](/docs/security/common-vulnerabilities) - Known vulnerability patterns and mitigations
+- [Scalus Testing Guide](/docs/testing/unit-testing) - Learn to test your validators thoroughly
+- [Scalus Examples](https://github.com/scalus3/scalus/tree/master/scalus-examples) - Study production validator patterns
+- [Plutonomicon Vulnerabilities](https://github.com/Plutonomicon/plutonomicon/blob/main/vulnerabilities.md) - Original vulnerability documentation

@@ -7,8 +7,8 @@ export default {
   'transactions': 'Transactions',
   testing: 'Testing',
   'design-patterns': 'Design Patterns',
-  'offchain-applications': 'Offchain Applications',
+  security: 'Security',
+  dapps: 'DApps',
   ledger: 'Ledger Framework',
-  learning: '',
   catalyst: 'Catalyst',
 }
