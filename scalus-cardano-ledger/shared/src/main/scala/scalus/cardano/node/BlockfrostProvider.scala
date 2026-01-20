@@ -93,7 +93,7 @@ class BlockfrostProvider(
         var query: UtxoQuery = UtxoQuery(source)
 
         // Add minRequiredTotalAmount
-        query = minRequiredTotalAmount.fold(query)(amt => query.withMinTotal(amt))
+        query = minRequiredTotalAmount.fold(query)(amt => query.minTotal(amt))
 
         // Add datum filter
         query = datum.fold(query)(d => query && UtxoFilter.HasDatum(d))
@@ -307,12 +307,18 @@ class BlockfrostProvider(
         def evalQuery(q: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] = q match
             case simple: UtxoQuery.Simple                           => evalSimple(simple)
             case UtxoQuery.Or(left, right, limit, offset, minTotal) =>
+                // Propagate limit and minTotal to branches for early termination
+                // Methods take minimum, so safe to always propagate
+                def propagate(q: UtxoQuery): UtxoQuery =
+                    val withLimit = limit.fold(q)(q.limit)
+                    minTotal.fold(withLimit)(withLimit.minTotal)
                 // Execute both queries in parallel
-                val leftFuture = evalQuery(left)
-                val rightFuture = evalQuery(right)
+                val leftFuture = evalQuery(propagate(left))
+                val rightFuture = evalQuery(propagate(right))
                 leftFuture.zip(rightFuture).map { case (leftResult, rightResult) =>
                     (leftResult, rightResult) match
                         case (Right(l), Right(r)) =>
+                            // Apply again to combined result
                             Right(applyPagination(l ++ r, limit, offset, minTotal))
                         case (Right(l), _) =>
                             Right(applyPagination(l, limit, offset, minTotal))

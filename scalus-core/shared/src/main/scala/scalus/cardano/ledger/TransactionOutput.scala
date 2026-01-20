@@ -345,6 +345,13 @@ object TransactionOutput:
             )
             (addressDoc / valueDoc + datumDoc + scriptDoc).grouped
 
+    extension (o: TransactionOutput) {
+
+        /** Check if output has a datum with the specified hash */
+        def hasDatumHash(hash: DataHash): Boolean =
+            o.datumOption.exists(_.dataHash == hash)
+    }
+
 /** Alias for [[TransactionOutput]] */
 type Output = TransactionOutput
 

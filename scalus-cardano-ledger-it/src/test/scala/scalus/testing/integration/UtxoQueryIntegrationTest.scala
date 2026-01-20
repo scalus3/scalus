@@ -75,7 +75,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery with limit") {
         val limit = 2
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)).take(limit)
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)).limit(limit)
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
 
@@ -94,7 +94,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery with minRequiredTotalAmount") {
         val minTotal = Coin.ada(50)
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)).withMinTotal(minTotal)
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)).minTotal(minTotal)
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
 

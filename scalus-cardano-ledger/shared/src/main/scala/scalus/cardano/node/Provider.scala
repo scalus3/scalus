@@ -75,6 +75,69 @@ trait Provider {
       *   Either a UtxoQueryError or the matching UTxOs
       */
     def findUtxos(query: UtxoQuery)(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]]
+
+    /** Query UTxOs using lambda DSL.
+      *
+      * This method translates a lambda expression to a UtxoQuery at compile time and returns a
+      * builder that can be further configured before execution.
+      *
+      * Example:
+      * {{{
+      * // Simple query - execute immediately
+      * provider.queryUtxos { u =>
+      *   u.output.address == myAddress
+      * }.execute()
+      *
+      * // With pagination and minimum total
+      * provider.queryUtxos { u =>
+      *   u.output.address == myAddress && u.output.value.hasAsset(policyId, assetName)
+      * }.minTotal(Coin.ada(100)).limit(10).execute()
+      * }}}
+      *
+      * Supported expressions:
+      *   - `u.output.address == addr` - query by address
+      *   - `u.input.transactionId == txId` - query by transaction
+      *   - `u.output.value.hasAsset(policyId, assetName)` - query/filter by asset
+      *   - `u.output.value.coin >= amount` - filter by minimum lovelace
+      *   - `u.output.hasDatumHash(hash)` - filter by datum hash
+      *   - `&&` - AND combination
+      *   - `||` - OR combination
+      *
+      * @param f
+      *   Lambda expression from Utxo to Boolean
+      * @return
+      *   A UtxoQueryWithProvider builder that can be configured and executed
+      */
+    inline def queryUtxos(inline f: Utxo => Boolean): UtxoQueryWithProvider =
+        UtxoQueryWithProvider(this, UtxoQueryMacros.buildQuery(f))
+}
+
+/** A query builder that combines a Provider with a UtxoQuery.
+  *
+  * Allows chaining configuration methods before executing the query.
+  *
+  * @param provider
+  *   The provider to execute the query against
+  * @param query
+  *   The query to execute
+  */
+case class UtxoQueryWithProvider(provider: Provider, query: UtxoQuery) {
+
+    /** Limit the number of results */
+    def limit(n: Int): UtxoQueryWithProvider = copy(query = query.limit(n))
+
+    /** Skip the first n results */
+    def skip(n: Int): UtxoQueryWithProvider = copy(query = query.skip(n))
+
+    /** Set minimum required total lovelace amount (early termination optimization).
+      *
+      * The query will stop fetching UTxOs once the accumulated lovelace reaches this amount.
+      */
+    def minTotal(amount: Coin): UtxoQueryWithProvider = copy(query = query.minTotal(amount))
+
+    /** Execute the query and return the results */
+    def execute()(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] =
+        provider.findUtxos(query)
 }
 
 enum SubmitError:

@@ -146,3 +146,14 @@ object Value:
             val adaEntry =
                 Doc.text("ada:") & Pretty.lit(text(Pretty.formatAda(a.coin.value)), style)
             Pretty.braceList(adaEntry :: MultiAsset.formatAssetEntries(a.assets, style))
+
+    extension (v: Value) {
+
+        /** Check if value contains a specific asset */
+        def hasAsset(policyId: PolicyId, assetName: AssetName): Boolean =
+            v.assets.assets.get(policyId).exists(_.contains(assetName))
+
+        /** Get amount of specific asset (0 if not present) */
+        def asset(policyId: PolicyId, assetName: AssetName): Long =
+            v.assets.assets.get(policyId).flatMap(_.get(assetName)).getOrElse(0L)
+    }

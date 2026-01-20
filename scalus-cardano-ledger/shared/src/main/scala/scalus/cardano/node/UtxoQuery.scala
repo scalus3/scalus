@@ -102,13 +102,13 @@ sealed trait UtxoQuery {
     def &&(f: UtxoFilter): UtxoQuery
 
     /** Limit the number of results */
-    def take(n: Int): UtxoQuery
+    def limit(n: Int): UtxoQuery
 
     /** Skip the first n results */
-    def drop(n: Int): UtxoQuery
+    def skip(n: Int): UtxoQuery
 
     /** Set minimum required total lovelace amount (early termination optimization) */
-    def withMinTotal(amount: Coin): UtxoQuery
+    def minTotal(amount: Coin): UtxoQuery
 }
 
 object UtxoQuery {
@@ -137,14 +137,23 @@ object UtxoQuery {
         /** Add a filter condition (AND with existing filters) */
         def &&(f: UtxoFilter): UtxoQuery = copy(filter = Some(filter.fold(f)(_ && f)))
 
-        /** Limit the number of results */
-        def take(n: Int): UtxoQuery = copy(limit = Some(n))
+        /** Limit the number of results. Takes minimum if limit already set. */
+        def limit(n: Int): UtxoQuery =
+            copy(limit = Some(limit.fold(n)(existing => math.min(existing, n))))
 
         /** Skip the first n results */
-        def drop(n: Int): UtxoQuery = copy(offset = Some(n))
+        def skip(n: Int): UtxoQuery = copy(offset = Some(n))
 
-        /** Set minimum required total lovelace amount (early termination optimization) */
-        def withMinTotal(amount: Coin): UtxoQuery = copy(minRequiredTotalAmount = Some(amount))
+        /** Set minimum required total lovelace amount (early termination optimization). Takes
+          * minimum if already set.
+          */
+        def minTotal(amount: Coin): UtxoQuery = copy(minRequiredTotalAmount =
+            Some(
+              minRequiredTotalAmount.fold(amount)(existing =>
+                  if existing <= amount then existing else amount
+              )
+            )
+        )
     }
 
     /** Combine two queries - each is evaluated with its own filters, results are merged.
@@ -172,14 +181,23 @@ object UtxoQuery {
         def &&(f: UtxoFilter): UtxoQuery =
             Or(left && f, right && f, limit, offset, minRequiredTotalAmount)
 
-        /** Limit the number of results */
-        def take(n: Int): UtxoQuery = copy(limit = Some(n))
+        /** Limit the number of results. Takes minimum if limit already set. */
+        def limit(n: Int): UtxoQuery =
+            copy(limit = Some(limit.fold(n)(existing => math.min(existing, n))))
 
         /** Skip the first n results */
-        def drop(n: Int): UtxoQuery = copy(offset = Some(n))
+        def skip(n: Int): UtxoQuery = copy(offset = Some(n))
 
-        /** Set minimum required total lovelace amount (early termination optimization) */
-        def withMinTotal(amount: Coin): UtxoQuery = copy(minRequiredTotalAmount = Some(amount))
+        /** Set minimum required total lovelace amount (early termination optimization). Takes
+          * minimum if already set.
+          */
+        def minTotal(amount: Coin): UtxoQuery = copy(minRequiredTotalAmount =
+            Some(
+              minRequiredTotalAmount.fold(amount)(existing =>
+                  if existing <= amount then existing else amount
+              )
+            )
+        )
     }
 
     /** Create a simple query from a source */

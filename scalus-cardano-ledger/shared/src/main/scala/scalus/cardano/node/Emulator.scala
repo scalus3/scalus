@@ -108,7 +108,7 @@ class Emulator(
         var query: UtxoQuery = UtxoQuery(source)
 
         // Add minRequiredTotalAmount
-        query = minRequiredTotalAmount.fold(query)(amt => query.withMinTotal(amt))
+        query = minRequiredTotalAmount.fold(query)(amt => query.minTotal(amt))
 
         // Add datum filter
         query = datum.fold(query)(d => query && UtxoFilter.HasDatum(d))
@@ -208,11 +208,17 @@ class Emulator(
 
         // Evaluate query recursively
         def evalQuery(q: UtxoQuery): Utxos = q match
-            case simple: UtxoQuery.Simple => evalSimple(simple)
+            case simple: UtxoQuery.Simple                           => evalSimple(simple)
             case UtxoQuery.Or(left, right, limit, offset, minTotal) =>
-                val leftResult = evalQuery(left)
-                val rightResult = evalQuery(right)
+                // Propagate limit and minTotal to branches for early termination
+                // Methods take minimum, so safe to always propagate
+                def propagate(q: UtxoQuery): UtxoQuery =
+                    val withLimit = limit.fold(q)(q.limit)
+                    minTotal.fold(withLimit)(withLimit.minTotal)
+                val leftResult = evalQuery(propagate(left))
+                val rightResult = evalQuery(propagate(right))
                 val combined = leftResult ++ rightResult
+                // Apply again to combined result
                 applyPagination(combined, limit, offset, minTotal)
 
         Future.successful(Right(evalQuery(query)))
