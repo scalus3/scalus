@@ -788,13 +788,18 @@ object LotteryValidatorTest extends ScalusTest {
 
         assert(directResult.isFailure, "Direct validator call should have failed but succeeded")
         submissionResult match {
-            case Left(nodeError: SubmitError.NodeError) =>
+            case Left(SubmitError.ScriptFailure(message, _)) =>
                 assert(
-                  nodeError.message.endsWith(expectedError),
-                  s"Expected error '$expectedError' but got '${nodeError.message}'"
+                  message.contains(expectedError),
+                  s"Expected error '$expectedError' but got '$message'"
+                )
+            case Left(SubmitError.ValidationError(message, _)) =>
+                assert(
+                  message.contains(expectedError),
+                  s"Expected error '$expectedError' but got '$message'"
                 )
             case Left(other) =>
-                throw AssertionError(s"Expected NodeError but got: $other")
+                throw AssertionError(s"Expected ScriptFailure or ValidationError but got: $other")
             case Right(_) =>
                 throw AssertionError("Emulator submission should have failed but succeeded")
         }

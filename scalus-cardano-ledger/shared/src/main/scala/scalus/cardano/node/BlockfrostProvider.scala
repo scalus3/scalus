@@ -118,13 +118,18 @@ class BlockfrostProvider(
               .send(backend)
         ).map { response =>
             response.code.code match {
-                case c if c >= 400 && c < 500 =>
+                case c if c >= 200 && c < 300 => Right(tx.id)
+                case c =>
                     val errorMsg = response.body.left.getOrElse(response.body.toString)
-                    Left(SubmitError.NodeError(errorMsg))
-                case c if c >= 500 =>
-                    val errorMsg = response.body.left.getOrElse(response.body.toString)
-                    Left(SubmitError.NodeError(s"Blockfrost submit error: $errorMsg"))
-                case _ => Right(tx.id)
+                    // Try to extract the message from Blockfrost JSON error response
+                    val message =
+                        try {
+                            val json = ujson.read(errorMsg, trace = false)
+                            json.obj.get("message").map(_.str).getOrElse(errorMsg)
+                        } catch {
+                            case _: Exception => errorMsg
+                        }
+                    Left(SubmitError.fromHttpResponse(c, message))
             }
         }.recover { case exception =>
             Left(SubmitError.NetworkError(s"Blockfrost submit exception", Some(exception)))

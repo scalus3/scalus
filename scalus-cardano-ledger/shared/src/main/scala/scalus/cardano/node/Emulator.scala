@@ -4,7 +4,6 @@ import scalus.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{CardanoMutator, Context, PlutusScriptsTransactionMutator, STS, State}
 import scalus.cardano.ledger.*
-import scalus.cardano.node.SubmitError.NodeError
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.annotation.tailrec
@@ -38,7 +37,7 @@ class Emulator(
                 if stateRef.compareAndSet(currentState, newState) then Right(transaction.id)
                 else submitSync(transaction)
             case Left(t: TransactionException) =>
-                Left(NodeError(s"Ledger rule violation: ${t.explain}", Some(t)))
+                Left(SubmitError.fromException(t))
         }
     }
 
