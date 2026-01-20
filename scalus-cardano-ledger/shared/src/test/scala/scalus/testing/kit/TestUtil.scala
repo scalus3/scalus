@@ -267,7 +267,7 @@ object TestUtil {
           *   The redeemer purpose (ForSpend, ForMint, ForCert, ForReward, ForVote, ForPropose)
           * @return
           *   The V1 script context
-          * @throws Exception
+          * @throws RuntimeException
           *   if no V1 script context is found for the given purpose
           */
         def getScriptContextV1(
@@ -282,7 +282,7 @@ object TestUtil {
                 }
                 .map(_._2)
                 .getOrElse(
-                  throw new Exception(s"No V1 script context found for $purpose")
+                  throw new RuntimeException(s"No V1 script context found for $purpose")
                 )
         }
 
@@ -294,7 +294,7 @@ object TestUtil {
           *   The redeemer purpose (ForSpend, ForMint, ForCert, ForReward, ForVote, ForPropose)
           * @return
           *   The V2 script context
-          * @throws Exception
+          * @throws RuntimeException
           *   if no V2 script context is found for the given purpose
           */
         def getScriptContextV2(
@@ -309,7 +309,7 @@ object TestUtil {
                 }
                 .map(_._2)
                 .getOrElse(
-                  throw new Exception(s"No V2 script context found for $purpose")
+                  throw new RuntimeException(s"No V2 script context found for $purpose")
                 )
         }
 
@@ -321,7 +321,7 @@ object TestUtil {
           *   The redeemer purpose (ForSpend, ForMint, ForCert, ForReward, ForVote, ForPropose)
           * @return
           *   The V3 script context
-          * @throws Exception
+          * @throws RuntimeException
           *   if no V3 script context is found for the given purpose
           */
         def getScriptContextV3(
@@ -336,7 +336,7 @@ object TestUtil {
                 }
                 .map(_._2)
                 .getOrElse(
-                  throw new Exception(s"No V3 script context found for $purpose")
+                  throw new RuntimeException(s"No V3 script context found for $purpose")
                 )
         }
 }
