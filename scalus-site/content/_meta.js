@@ -5,7 +5,7 @@ export default {
   'onboarding': '',
   'language-guide': 'Language Guide',
   'smart-contract': 'Smart Contracts',
-  'transaction-builder': 'Transaction Builder',
+  'transactions': 'Transactions',
   testing: 'Testing',
   'design-patterns': 'Design Patterns',
   'offchain-applications': 'Offchain Applications',

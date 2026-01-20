@@ -52,7 +52,7 @@ Yaci DevKit complements the Emulator for scenarios requiring **complete Cardano 
 
 ## Provider
 
-The `TestContext` includes a `BlockfrostProvider` connected to the container's Yaci Store API. This provides a Blockfrost-compatible interface locally — your [transaction building](/docs/transaction-builder) code works the same against local devnet and real networks:
+The `TestContext` includes a `BlockfrostProvider` connected to the container's Yaci Store API. This provides a Blockfrost-compatible interface locally — your [transaction building](/docs/transactions) code works the same against local devnet and real networks:
 
 ```scala
 val ctx = createTestContext()
@@ -325,5 +325,5 @@ override def yaciConfig = YaciConfig(enableLogs = true)
 ## See Also
 
 - [Emulator](/docs/testing/emulator) — In-memory Cardano node with Plutus execution and ledger validation
-- [Transaction Builder](/docs/transaction-builder) — Building and submitting transactions
+- [Transaction Builder](/docs/transactions) — Building and submitting transactions
 - [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck

@@ -176,7 +176,7 @@ export default function IndexPage() {
           </div>
         </Link>
 
-        <Link href="/docs/transaction-builder/building-first-transaction" className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-50 to-emerald-50 p-8 transition-all hover:shadow-lg hover:scale-105">
+        <Link href="/docs/transactions/building-first-transaction" className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-green-50 to-emerald-50 p-8 transition-all hover:shadow-lg hover:scale-105">
           <div className="flex flex-col h-full">
             <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-green-600 text-white mb-4">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,7 +222,7 @@ export default function IndexPage() {
         </div>
         <div className="pointer-events-none absolute inset-px rounded-lg shadow-sm ring-1 ring-black/5 lg:rounded-l-4xl group-hover:ring-blue-600/20"></div>
       </Link>
-      <Link href="/docs/transaction-builder" className="relative max-lg:row-start-1 group">
+      <Link href="/docs/transactions" className="relative max-lg:row-start-1 group">
         <div className="absolute inset-px rounded-lg bg-white max-lg:rounded-t-4xl transition-colors group-hover:bg-purple-50"></div>
         <div className="relative flex h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)] max-lg:rounded-t-[calc(2rem+1px)]">
           <div className="px-8 pt-8 sm:px-10 sm:pt-10">
