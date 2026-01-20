@@ -1,8 +1,7 @@
 export default {
   index: '',
-  'get-started': '',
+  'get-started': 'Getting Started',
   'multiplatform': 'Multiplatform',
-  'onboarding': '',
   'language-guide': 'Language Guide',
   'smart-contracts': 'Smart Contracts',
   'transactions': 'Transactions',

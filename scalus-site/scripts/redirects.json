@@ -27,5 +27,8 @@
   { "from": "/docs/learning/design-patterns/parameter-validation-pattern", "to": "/docs/design-patterns/parameter-validation" },
   { "from": "/docs/learning/design-patterns/utxo-indexer-pattern", "to": "/docs/design-patterns/utxo-indexer" },
   { "from": "/docs/learning/design-patterns/linked-list-pattern", "to": "/docs/design-patterns/linked-list" },
-  { "from": "/docs/learning/design-patterns/normalized-interval-pattern", "to": "/docs/design-patterns/validity-range" }
+  { "from": "/docs/learning/design-patterns/normalized-interval-pattern", "to": "/docs/design-patterns/validity-range" },
+  { "from": "/docs/onboarding", "to": "/docs/get-started" },
+  { "from": "/docs/onboarding/for-cardano-developers", "to": "/docs/get-started/for-cardano-developers" },
+  { "from": "/docs/onboarding/for-scala-developers", "to": "/docs/get-started/for-scala-developers" }
 ]
