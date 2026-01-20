@@ -201,59 +201,6 @@ class BlockfrostProvider(
                         case (_, Left(e)) => Left(e)
                 }
 
-        // Evaluate filter
-        def evalFilter(filter: UtxoFilter, utxo: (TransactionInput, TransactionOutput)): Boolean = {
-            val (_, output) = utxo
-            filter match
-                case UtxoFilter.HasAsset(policyId, assetName) =>
-                    output.value.assets.assets
-                        .get(policyId)
-                        .exists(_.contains(assetName))
-                case UtxoFilter.HasDatum(datum) =>
-                    (datum, output.datumOption) match
-                        case (d1, Some(d2)) => d1.contentEquals(d2)
-                        case _              => false
-                case UtxoFilter.HasDatumHash(hash) =>
-                    output.datumOption match
-                        case Some(d) => d.dataHash == hash
-                        case None    => false
-                case UtxoFilter.MinLovelace(amount) =>
-                    output.value.coin >= amount
-                case UtxoFilter.AtInputs(inputs) =>
-                    inputs.contains(utxo._1)
-                case UtxoFilter.And(left, right) =>
-                    evalFilter(left, utxo) && evalFilter(right, utxo)
-                case UtxoFilter.Or(left, right) =>
-                    evalFilter(left, utxo) || evalFilter(right, utxo)
-                case UtxoFilter.Not(f) =>
-                    !evalFilter(f, utxo)
-        }
-
-        // Apply pagination and minRequiredTotalAmount to a result set
-        def applyPagination(
-            candidates: Utxos,
-            limit: Option[Int],
-            offset: Option[Int],
-            minRequiredTotalAmount: Option[Coin]
-        ): Utxos = {
-            val offsetValue = offset.getOrElse(0)
-            val paginated = candidates.drop(offsetValue)
-
-            minRequiredTotalAmount match
-                case Some(minTotal) if minTotal.value > 0 =>
-                    val (collected, _) = paginated.foldLeft(
-                      (Map.empty[TransactionInput, TransactionOutput], Coin(0))
-                    ) { case (acc @ (accUtxos, accAmount), (input, output)) =>
-                        if accAmount >= minTotal then acc
-                        else
-                            val newAmount = Coin(accAmount.value + output.value.coin.value)
-                            (accUtxos + (input -> output), newAmount)
-                    }
-                    limit.fold(collected)(n => collected.take(n))
-                case _ =>
-                    limit.fold(paginated.toMap)(n => paginated.take(n).toMap)
-        }
-
         // Extract HasAsset filter from a filter tree (returns first found and remaining filter)
         def extractHasAsset(
             filter: UtxoFilter
@@ -297,9 +244,16 @@ class BlockfrostProvider(
                 case Left(e) => Left(e)
                 case Right(candidates) =>
                     val filtered = remainingFilter match
-                        case Some(f) => candidates.filter(evalFilter(f, _))
+                        case Some(f) => candidates.filter(UtxoQuery.evalFilter(f, _))
                         case None    => candidates
-                    Right(applyPagination(filtered, q.limit, q.offset, q.minRequiredTotalAmount))
+                    Right(
+                      UtxoQuery.applyPagination(
+                        filtered,
+                        q.limit,
+                        q.offset,
+                        q.minRequiredTotalAmount
+                      )
+                    )
             }
         }
 
@@ -307,23 +261,17 @@ class BlockfrostProvider(
         def evalQuery(q: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] = q match
             case simple: UtxoQuery.Simple                           => evalSimple(simple)
             case UtxoQuery.Or(left, right, limit, offset, minTotal) =>
-                // Propagate limit and minTotal to branches for early termination
-                // Methods take minimum, so safe to always propagate
-                def propagate(q: UtxoQuery): UtxoQuery =
-                    val withLimit = limit.fold(q)(q.limit)
-                    minTotal.fold(withLimit)(withLimit.minTotal)
                 // Execute both queries in parallel
-                val leftFuture = evalQuery(propagate(left))
-                val rightFuture = evalQuery(propagate(right))
+                val leftFuture = evalQuery(UtxoQuery.propagate(left, limit, minTotal))
+                val rightFuture = evalQuery(UtxoQuery.propagate(right, limit, minTotal))
                 leftFuture.zip(rightFuture).map { case (leftResult, rightResult) =>
                     (leftResult, rightResult) match
                         case (Right(l), Right(r)) =>
-                            // Apply again to combined result
-                            Right(applyPagination(l ++ r, limit, offset, minTotal))
+                            Right(UtxoQuery.applyPagination(l ++ r, limit, offset, minTotal))
                         case (Right(l), _) =>
-                            Right(applyPagination(l, limit, offset, minTotal))
+                            Right(UtxoQuery.applyPagination(l, limit, offset, minTotal))
                         case (_, Right(r)) =>
-                            Right(applyPagination(r, limit, offset, minTotal))
+                            Right(UtxoQuery.applyPagination(r, limit, offset, minTotal))
                         case (Left(e), _) => Left(e)
                 }
 

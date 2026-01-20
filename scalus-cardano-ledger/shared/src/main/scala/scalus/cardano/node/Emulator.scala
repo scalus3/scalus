@@ -143,83 +143,23 @@ class Emulator(
                 val rightResult = evalSource(right)
                 leftResult.filter { case (input, _) => rightResult.contains(input) }
 
-        // Evaluate filter
-        def evalFilter(filter: UtxoFilter, utxo: (TransactionInput, TransactionOutput)): Boolean = {
-            val (_, output) = utxo
-            filter match
-                case UtxoFilter.HasAsset(policyId, assetName) =>
-                    output.value.assets.assets
-                        .get(policyId)
-                        .exists(_.contains(assetName))
-                case UtxoFilter.HasDatum(datum) =>
-                    (datum, output.datumOption) match
-                        case (d1, Some(d2)) => d1.contentEquals(d2)
-                        case _              => false
-                case UtxoFilter.HasDatumHash(hash) =>
-                    output.datumOption match
-                        case Some(d) => d.dataHash == hash
-                        case None    => false
-                case UtxoFilter.MinLovelace(amount) =>
-                    output.value.coin >= amount
-                case UtxoFilter.AtInputs(inputs) =>
-                    inputs.contains(utxo._1)
-                case UtxoFilter.And(left, right) =>
-                    evalFilter(left, utxo) && evalFilter(right, utxo)
-                case UtxoFilter.Or(left, right) =>
-                    evalFilter(left, utxo) || evalFilter(right, utxo)
-                case UtxoFilter.Not(f) =>
-                    !evalFilter(f, utxo)
-        }
-
-        // Apply pagination and minRequiredTotalAmount to a result set
-        def applyPagination(
-            candidates: Utxos,
-            limit: Option[Int],
-            offset: Option[Int],
-            minRequiredTotalAmount: Option[Coin]
-        ): Utxos = {
-            val offsetValue = offset.getOrElse(0)
-            val paginated = candidates.drop(offsetValue)
-
-            minRequiredTotalAmount match
-                case Some(minTotal) if minTotal.value > 0 =>
-                    val (collected, _) =
-                        paginated.foldLeft(
-                          (Map.empty[TransactionInput, TransactionOutput], Coin(0))
-                        ) { case (acc @ (accUtxos, accAmount), (input, output)) =>
-                            if accAmount >= minTotal then acc
-                            else
-                                val newAmount = Coin(accAmount.value + output.value.coin.value)
-                                (accUtxos + (input -> output), newAmount)
-                        }
-                    limit.fold(collected)(n => collected.take(n))
-                case _ =>
-                    limit.fold(paginated.toMap)(n => paginated.take(n).toMap)
-        }
-
         // Evaluate a simple query
         def evalSimple(q: UtxoQuery.Simple): Utxos = {
             val candidates = evalSource(q.source)
             val filtered = q.filter match
-                case Some(f) => candidates.filter(evalFilter(f, _))
+                case Some(f) => candidates.filter(UtxoQuery.evalFilter(f, _))
                 case None    => candidates
-            applyPagination(filtered, q.limit, q.offset, q.minRequiredTotalAmount)
+            UtxoQuery.applyPagination(filtered, q.limit, q.offset, q.minRequiredTotalAmount)
         }
 
         // Evaluate query recursively
         def evalQuery(q: UtxoQuery): Utxos = q match
-            case simple: UtxoQuery.Simple                           => evalSimple(simple)
+            case simple: UtxoQuery.Simple => evalSimple(simple)
             case UtxoQuery.Or(left, right, limit, offset, minTotal) =>
-                // Propagate limit and minTotal to branches for early termination
-                // Methods take minimum, so safe to always propagate
-                def propagate(q: UtxoQuery): UtxoQuery =
-                    val withLimit = limit.fold(q)(q.limit)
-                    minTotal.fold(withLimit)(withLimit.minTotal)
-                val leftResult = evalQuery(propagate(left))
-                val rightResult = evalQuery(propagate(right))
+                val leftResult = evalQuery(UtxoQuery.propagate(left, limit, minTotal))
+                val rightResult = evalQuery(UtxoQuery.propagate(right, limit, minTotal))
                 val combined = leftResult ++ rightResult
-                // Apply again to combined result
-                applyPagination(combined, limit, offset, minTotal)
+                UtxoQuery.applyPagination(combined, limit, offset, minTotal)
 
         Future.successful(Right(evalQuery(query)))
     }

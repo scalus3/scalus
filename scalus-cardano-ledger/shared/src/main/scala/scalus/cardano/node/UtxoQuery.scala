@@ -205,6 +205,89 @@ object UtxoQuery {
 
     /** Implicit conversion from UtxoSource to UtxoQuery for convenience */
     given Conversion[UtxoSource, UtxoQuery] = Simple(_)
+
+    /** Evaluate a filter against a UTxO
+      *
+      * @param filter
+      *   The filter to evaluate
+      * @param utxo
+      *   The UTxO (input, output) pair to test
+      * @return
+      *   true if the UTxO matches the filter
+      */
+    def evalFilter(filter: UtxoFilter, utxo: (TransactionInput, TransactionOutput)): Boolean = {
+        val (_, output) = utxo
+        filter match
+            case UtxoFilter.HasAsset(policyId, assetName) =>
+                output.value.assets.assets.get(policyId).exists(_.contains(assetName))
+            case UtxoFilter.HasDatum(datum) =>
+                (datum, output.datumOption) match
+                    case (d1, Some(d2)) => d1.contentEquals(d2)
+                    case _              => false
+            case UtxoFilter.HasDatumHash(hash) =>
+                output.datumOption.exists(_.dataHash == hash)
+            case UtxoFilter.MinLovelace(amount) =>
+                output.value.coin >= amount
+            case UtxoFilter.AtInputs(inputs) =>
+                inputs.contains(utxo._1)
+            case UtxoFilter.And(left, right) =>
+                evalFilter(left, utxo) && evalFilter(right, utxo)
+            case UtxoFilter.Or(left, right) =>
+                evalFilter(left, utxo) || evalFilter(right, utxo)
+            case UtxoFilter.Not(f) =>
+                !evalFilter(f, utxo)
+    }
+
+    /** Apply pagination and minTotal early termination to a result set
+      *
+      * @param candidates
+      *   The UTxOs to paginate
+      * @param limit
+      *   Maximum number of results
+      * @param offset
+      *   Number of results to skip
+      * @param minRequiredTotalAmount
+      *   Stop when accumulated lovelace reaches this amount
+      * @return
+      *   The paginated UTxOs
+      */
+    def applyPagination(
+        candidates: Utxos,
+        limit: Option[Int],
+        offset: Option[Int],
+        minRequiredTotalAmount: Option[Coin]
+    ): Utxos = {
+        val paginated = candidates.drop(offset.getOrElse(0))
+        minRequiredTotalAmount match
+            case Some(minTotal) if minTotal.value > 0 =>
+                val (collected, _) = paginated.foldLeft(
+                  (Map.empty[TransactionInput, TransactionOutput], Coin(0))
+                ) { case (acc @ (accUtxos, accAmount), (input, output)) =>
+                    if accAmount >= minTotal then acc
+                    else
+                        val newAmount = Coin(accAmount.value + output.value.coin.value)
+                        (accUtxos + (input -> output), newAmount)
+                }
+                limit.fold(collected)(n => collected.take(n))
+            case _ =>
+                limit.fold(paginated.toMap)(n => paginated.take(n).toMap)
+    }
+
+    /** Propagate limit and minTotal to a subquery for early termination
+      *
+      * @param q
+      *   The query to propagate to
+      * @param limit
+      *   Optional limit to propagate
+      * @param minTotal
+      *   Optional minTotal to propagate
+      * @return
+      *   The query with propagated values
+      */
+    def propagate(q: UtxoQuery, limit: Option[Int], minTotal: Option[Coin]): UtxoQuery = {
+        val withLimit = limit.fold(q)(q.limit)
+        minTotal.fold(withLimit)(withLimit.minTotal)
+    }
 }
 
 /** Errors that can occur when executing a UTxO query */
