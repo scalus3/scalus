@@ -2,11 +2,11 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 export const metadata = {
-  title: 'Cardano Smart Contracts & dApps Development Platform | Scalus Docs',
+  title: 'Scalus - Cardano Smart Contracts & dApps Development Platform',
   description: 'Professional Cardano smart contracts and dApps development in Scala 3. Scalus compiles to Plutus Core for on-chain validation with full-stack Cardano development: write smart contracts, build transactions, and application logic in one unified platform.',
   keywords: 'Cardano smart contracts, Cardano dApps development, Plutus smart contracts, Cardano blockchain development, UPLC compiler, Cardano developer platform, Scala blockchain, Cardano full-stack development',
   openGraph: {
-    title: 'Cardano Smart Contracts & dApps Development Platform | Scalus Docs',
+    title: 'Scalus - Cardano Smart Contracts & dApps Development Platform',
     description: 'Professional Cardano smart contracts and dApps development in Scala 3. Write Plutus contracts, build transactions, and create full-stack Cardano applications.',
     url: 'https://scalus.org',
     siteName: 'Scalus',
@@ -22,7 +22,7 @@ export const metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Cardano Smart Contracts & dApps Development Platform | Scalus',
+    title: 'Scalus - Cardano Smart Contracts & dApps Development Platform',
     description: 'Professional Cardano smart contracts and dApps development in Scala 3. Write Plutus contracts, build transactions, and create full-stack Cardano applications.',
     images: ['https://scalus.org/scalus-logo-vertical-dark.png'],
   },
@@ -73,7 +73,7 @@ export default function IndexPage() {
     "operatingSystem": "Cross-platform",
     "description": "Professional Cardano smart contracts and dApps development platform in Scala 3. Compile to Plutus Core for on-chain validation with full-stack Cardano development capabilities.",
     "url": "https://scalus.org",
-    "softwareVersion": "1.0",
+    "softwareVersion": "0.14.2",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -103,6 +103,20 @@ export default function IndexPage() {
     }))
   };
 
+  const organizationData = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Scalus",
+    "url": "https://scalus.org",
+    "logo": "https://scalus.org/scalus-logo-vertical-dark.png",
+    "description": "Cardano smart contracts and dApps development platform",
+    "sameAs": [
+      "https://github.com/scalus3/scalus",
+      "https://discord.gg/B6tXmBzhTn",
+      "https://x.com/Scalus3"
+    ]
+  };
+
   return (
     <div className="bg-white">
       <script
@@ -112,6 +126,10 @@ export default function IndexPage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchemaData) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationData) }}
       />
 
   <div className="relative isolate px-6">
@@ -197,8 +215,7 @@ export default function IndexPage() {
   {/* Features */}
   <div className="bg-gray-50 py-15 sm:py-17">
   <div className="mx-auto max-w-2xl px-6 lg:max-w-7xl lg:px-8">
-    <p className="text-center text-base/7 font-semibold text-gray-600">Complete Cardano Development Platform</p>
-    <h2 className="mx-auto mt-2 text-center text-3xl font-semibold tracking-tight text-balance text-gray-950 sm:text-4xl">All-in-One Platform for Cardano Development</h2>
+    <h2 className="mx-auto text-center text-3xl font-semibold tracking-tight text-balance text-gray-950 sm:text-4xl">Why Scalus for Cardano Development</h2>
     <p className="mx-auto mt-6 max-w-4xl text-center text-lg text-gray-600">Scalus provides a unified Cardano development platform for building smart contracts and decentralized applications in Scala 3. Use a single, professional toolchain to design, test, and deploy Cardano dApps and on-chain code with confidence.</p>
     <div className="mt-10 grid gap-4 sm:mt-16 lg:grid-cols-3 lg:grid-rows-2">
       <Link href="/docs/smart-contracts" className="relative lg:row-span-2 group">
@@ -226,15 +243,14 @@ export default function IndexPage() {
         <div className="absolute inset-px rounded-lg bg-white max-lg:rounded-t-4xl transition-colors group-hover:bg-purple-50"></div>
         <div className="relative flex h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)] max-lg:rounded-t-[calc(2rem+1px)]">
           <div className="px-8 pt-8 sm:px-10 sm:pt-10">
-            <p className="mt-2 text-lg font-medium tracking-tight text-gray-950 max-lg:text-center group-hover:text-purple-600 transition-colors">Cardano dApps Off-chain Development</p>
-            <p className="mt-2 max-w-lg text-sm/6 text-gray-600 max-lg:text-center">Build complete Cardano dApps with off-chain transaction building and evaluation tools. Scalus runs on multiple platforms for flexible deployment: JVM, JavaScript, TypeScript, and native.</p>
-          </div>
-          <div className="flex flex-1 items-center justify-center px-8 max-lg:pt-10 max-lg:pb-12 sm:px-10 lg:pb-2">
-
+            <p className="mt-2 text-lg font-medium tracking-tight text-gray-950 max-lg:text-center group-hover:text-purple-600 transition-colors">Cardano Transaction Building</p>
+            <p className="mt-2 max-w-lg text-sm/6 text-gray-600 max-lg:text-center">Build transactions with automatic UTxO selection, fee calculation, and script evaluation. Share code between validators and off-chain logic for type-safe, end-to-end Cardano development.</p>
+          </div>    
+          <div className="@container flex flex-1 items-center justify-center max-lg:py-6 lg:pb-2">
             <Image
-                src="/scalus-off-chain.png"
-                alt="Cardano dApps off-chain development - Cross-platform support for JVM, JavaScript, TypeScript, and Native"
-                className="object-cover object-top"
+                src="/scalus-txbuilder.png"
+                alt="Cardano transaction building with TxBuilder API - automatic UTxO selection and fee calculation"
+                className="h-[min(152px,40cqw)] object-cover"
                 width={315}
                 height={105}
                 priority
@@ -243,15 +259,21 @@ export default function IndexPage() {
         </div>
         <div className="pointer-events-none absolute inset-px rounded-lg shadow-sm ring-1 ring-black/5 max-lg:rounded-t-4xl group-hover:ring-purple-600/20"></div>
       </Link>
-      <Link href="/docs" className="relative max-lg:row-start-3 lg:col-start-2 lg:row-start-2 group">
+      <Link href="/docs/multiplatform" className="relative max-lg:row-start-3 lg:col-start-2 lg:row-start-2 group">
         <div className="absolute inset-px rounded-lg bg-white transition-colors group-hover:bg-green-50"></div>
         <div className="relative flex h-full flex-col overflow-hidden rounded-[calc(var(--radius-lg)+1px)]">
           <div className="px-8 pt-8 sm:px-10 sm:pt-10">
-            <p className="mt-2 text-lg font-medium tracking-tight text-gray-950 max-lg:text-center group-hover:text-green-600 transition-colors">Cardano Layer 2 Scaling Solutions</p>
-            <p className="mt-2 max-w-lg text-sm/6 text-gray-600 max-lg:text-center">Scale your Cardano dApps with Layer 2 solutions. Scalus provides a reliable foundation for building high-performance, scalable decentralized applications on Cardano blockchain.</p>
+            <p className="mt-2 text-lg font-medium tracking-tight text-gray-950 max-lg:text-center group-hover:text-green-600 transition-colors">Multiplatform Development</p>
+            <p className="mt-2 max-w-lg text-sm/6 text-gray-600 max-lg:text-center">Deploy your Cardano dApps anywhere. Scalus runs on JVM for backend services, JavaScript/TypeScript for web apps, and Native for high-performance applications.</p>
           </div>
-          <div className="@container flex flex-1 items-center max-lg:py-6 lg:pb-2">
-            <img className="h-[min(152px,40cqw)] object-cover" src="https://tailwindcss.com/plus-assets/img/component-images/bento-03-security.png" alt="Cardano Layer 2 scaling solutions for high-performance dApps" />
+          <div className="flex flex-1 items-center justify-center px-8 max-lg:pt-10 max-lg:pb-12 sm:px-10 lg:pb-2">
+            <Image
+                src="/scalus-off-chain.png"
+                alt="Scalus multiplatform support - JVM, JavaScript, TypeScript, and Native"
+                className="object-cover object-top"
+                width={315}
+                height={105}
+              />
           </div>
         </div>
         <div className="pointer-events-none absolute inset-px rounded-lg shadow-sm ring-1 ring-black/5 group-hover:ring-green-600/20"></div>

@@ -9,6 +9,9 @@ export const metadata = {
   // Define your metadata here
   // For more information on metadata API, see: https://nextjs.org/docs/app/building-your-application/optimizing/metadata
   metadataBase: new URL('https://scalus.org'),
+  alternates: {
+    canonical: './',
+  },
   title: {
     template: '%s | Scalus Docs'
   },

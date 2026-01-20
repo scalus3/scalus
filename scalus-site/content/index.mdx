@@ -1,16 +1,13 @@
 ---
-title: Scalus - Build Cardano Smart Contracts and dApps with Scala 3
+title: Scalus Introduction
 description: Scalus is a development platform for building Cardano decentralized applications (dApps). Write smart contracts and off-chain logic in Scala 3 with type safety and professional tooling.
 sidebarTitle: Introduction
 ---
 
 import { Bleed, Cards } from 'nextra/components'
-import Image from 'next/image'
 import { DescriptionCards } from '../components/DescriptionCards'
 
-# Build Cardano Smart Contracts and dApps with Scala 3
-
-<Image src="/scalus-logo-dark.png" alt="Scalus - Cardano Development Platform for Scala" width={400} height={400} style={{ display: 'block', margin: '1rem auto' }} />
+# Scalus Introduction
 
 **Scalus** is a development platform for building smart contracts and decentralized applications (dApps) on the Cardano blockchain. It provides a unified environment where developers can write both on-chain smart contracts and off-chain logic using [Scala 3](/docs/language-guide/scala3) - a modern, expressive, and type-safe functional programming language.
 
@@ -37,9 +34,9 @@ import { DescriptionCards } from '../components/DescriptionCards'
   />
   <DescriptionCards.Card
     icon="💡"
-    title="Browse Examples"
-    href="https://github.com/scalus3/scalus/tree/master/scalus-examples"
-    description="Explore working examples and real-world use cases"
+    title="DApp Starter Tutorial"
+    href="/docs/dapp-development/dapp-starter-tutorial"
+    description="Build a complete native token minting service from scratch"
   />
 </DescriptionCards>
 
@@ -62,17 +59,14 @@ Built on the JVM with access to thousands of proven libraries. Use ScalaTest for
 ### Fine-Grained Control
 Advanced optimizations give you control over generated UPLC code. Reduce script size and execution costs with macros, inline optimizations, and direct Script Context access.
 
-## Full Development Lifecycle for Cardano
+## Development Workflow
 
-Scalus supports the complete development workflow for Cardano applications:
-
-- **Write** - [Cardano smart contracts in Scala 3](/docs/smart-contracts/developing-smart-contracts) that compile to UPLC
-- **Optimize** - Use [advanced optimization techniques](/docs/smart-contracts/optimisations) to reduce on-chain costs
-- **Debug** - [Debug validators](/docs/testing/debugging) as regular Scala code with your IDE's debugger
-- **Build** - [Construct transactions](/docs/transactions) with the transaction builder and evaluate them off-chain
-- **Integrate** - Seamlessly integrate on-chain and off-chain components in your full-stack application
-- **Test** - [Test thoroughly](/docs/testing) with unit, integration, and property-based tests
-- **Deploy** - Verify on testnet and deploy production-ready applications to mainnet with confidence
+- **Write** - [Smart contracts](/docs/smart-contracts/developing-smart-contracts) and off-chain logic in Scala 3
+- **Test** - [Unit, integration, and property-based tests](/docs/testing) with ScalaTest and ScalaCheck
+- **Debug** - [Step through validators](/docs/testing/debugging) with breakpoints in your IDE
+- **Optimize** - [Reduce script size and costs](/docs/smart-contracts/optimisations) with advanced techniques
+- **Build** - [Construct transactions](/docs/transactions) with automatic fee calculation and balancing
+- **Deploy** - Test on [local devnet](/docs/testing/local-devnet), then ship to mainnet
 
 ## Modern Development Experience
 
@@ -84,80 +78,3 @@ Built for professional developers and teams, Scalus provides:
 - **One Language** - Write everything in Scala 3—no juggling multiple languages, tools, or paradigms
 
 Scalus is a development platform made for professionals and businesses who value productivity, type safety, and code quality.
-
-
-{/*
-
-### Todo
-- [ ] Key words optimisation
-- [ ] Custom highlighting for code
-- [ ] Embed code components
-- [ ] Use more checklists?
-
-### Introduction - V1
-
-- [x]  What is Scalus?
-- [ ]  Why Scalus for Cardano Development?
-- [x]  Key Features & Benefits
-- [ ]  ? Target groups
-
-### Getting Started - V1
-
-- [x]  Installation & setup
-- [x]  Setting development environment
-- [x]  First Steps with Scalus / Your First Scalus Application
-- [ ]  ? Development Workflow Overview
-
-### Core concepts
-
-- [ ]  Blockchain Fundamentals
-- [ ]  Cardano & Plutus Essentials
-- [ ]  Scalus Programming Model
-- [ ]  Smart Contract Fundamentals in Scalus
-- [ ]  From Traditional Scala to Scalus
-
-### Development Guide - V1
-
-- [ ]  Project Structure
-- [ ]  Writing On-Chain Code
-- [ ]  Writing Off-Chain Code - V1/2
-- [ ]  Testing and Debugging
-- [ ]  Deployment
-
-### Design patterns
-
-- [ ]  ? Design Patterns & Best Practices
-
-### Onboarding Guides
-
-- [ ]  For Scala Developers
-- [ ]  ? For Cardano Developers
-
-### Language Guide - V1
-
-- [ ]  Scalus Type System
-- [ ]  Smart Contract Primitives
-- [ ]  Collections and Data Structures
-- [ ]  Control Flow
-- [ ]  Concurrency Model
-...
-
-### Multiplatform support
-
-- [ ]  JVM
-- [ ]  JS
-- [ ]  Native
-
-### ? API Reference
-
-### Use cases & Examples
-
-### Advanced topics
-
-- [ ] Performance Optimization
-- [ ] Security Considerations
-- [ ] Scalability Solutions
-- [ ] Interoperability
-- [ ] Benchmark, profile
-
-*/}
