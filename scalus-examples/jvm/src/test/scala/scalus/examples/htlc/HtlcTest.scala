@@ -61,7 +61,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         Utxo(lockedUtxo)
     }
 
-
     test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
         assert(HtlcContract.compiled.script.script.size == 569)
     }

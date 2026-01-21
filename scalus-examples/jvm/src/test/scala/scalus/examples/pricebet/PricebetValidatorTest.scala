@@ -540,10 +540,7 @@ object PricebetValidatorTest extends ScalusTest {
         assert(result.isSuccess, s"Direct validation failed: $result")
 
         val submitResult = provider.submit(tx).await()
-        assert(
-          submitResult.isRight,
-          s"Emulator submission failed: ${submitResult.left.get}"
-        )
+        submitResult.left.foreach(err => fail(s"Emulator submission failed: $err"))
     }
 
     def assertFailure(

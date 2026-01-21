@@ -56,16 +56,14 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
         catch
             case e: TxBuilderException.BalancingException =>
                 val logs = e.scriptLogs.getOrElse(Seq.empty)
-                assert(
-                  logs.exists(_.contains(expectedError)),
-                  s"Expected error containing '$expectedError' but got logs: ${logs.mkString("\n")}"
-                )
+                if !logs.exists(_.contains(expectedError)) then
+                    fail(
+                      s"Expected error containing '$expectedError' but got logs: ${logs.mkString("\n")}"
+                    )
             case e: Exception =>
                 val message = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
-                assert(
-                  message.contains(expectedError),
-                  s"Expected error containing '$expectedError' but got: $message"
-                )
+                if !message.contains(expectedError) then
+                    fail(s"Expected error containing '$expectedError' but got: $message")
     }
 
     extension (self: SIR)

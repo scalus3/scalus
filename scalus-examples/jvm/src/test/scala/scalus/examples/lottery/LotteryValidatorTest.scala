@@ -1,6 +1,5 @@
 package scalus.examples.lottery
 
-import org.junit.jupiter.api.Assertions.fail
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha2_256
 import scalus.builtin.Data.toData
@@ -772,7 +771,7 @@ object LotteryValidatorTest extends ScalusTest {
         val directResult = Try(LotteryContract.code(scriptContext.toData))
         val submissionResult = provider.submit(tx).await()
 
-        assert(directResult.isSuccess, s"Direct validator call failed: ${directResult.failed.get}")
+        directResult.failed.foreach(ex => fail(s"Direct validator call failed: ${ex.getMessage}"))
         assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
     }
 
