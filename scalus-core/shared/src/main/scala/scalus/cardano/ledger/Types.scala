@@ -470,14 +470,26 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
           scalus.uplc.eval.CostingInteger.satPlus(steps, other.steps)
         )
 
-    /** Calculate fee for the execution units given the prices */
+    /** Calculate fee for the execution units given explicit prices.
+      *
+      * @param prices
+      *   The execution unit prices (price per memory unit and price per CPU step)
+      * @return
+      *   The calculated fee in Coin (lovelace)
+      */
     def fee(prices: ExUnitPrices): Coin = {
         Coin(
           (prices.priceMemory * memory + prices.priceSteps * steps).ceil
         )
     }
 
-    /** Calculate fee for the execution units given the prices */
+    /** Calculate fee for the execution units using protocol parameters from implicit CardanoInfo.
+      *
+      * @param info
+      *   The CardanoInfo containing protocol parameters with execution unit prices
+      * @return
+      *   The calculated fee in Coin (lovelace)
+      */
     def fee(using info: CardanoInfo): Coin = fee(info.protocolParams.executionUnitPrices)
 }
 
