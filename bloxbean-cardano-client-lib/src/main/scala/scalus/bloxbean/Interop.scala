@@ -1,6 +1,8 @@
 package scalus.bloxbean
 
 import com.bloxbean.cardano.client.address.{Address, AddressType, Credential, CredentialType}
+import com.bloxbean.cardano.client.api.model.{ProtocolParams, Utxo}
+import com.bloxbean.cardano.client.api.util.CostModelUtil
 import com.bloxbean.cardano.client.plutus.spec.*
 import com.bloxbean.cardano.client.spec.{Rational, UnitInterval}
 import com.bloxbean.cardano.client.transaction.spec.*
@@ -12,7 +14,9 @@ import io.bullet.borer.Cbor
 import scalus.builtin.Builtins.*
 import scalus.builtin.Data.{toData, ToData}
 import scalus.builtin.{BuiltinPair, ByteString, Data, ToData}
-import scalus.cardano.ledger.{CostModels, Language, MajorProtocolVersion, Script, SlotConfig}
+import scalus.cardano.ledger.{CostModels, DatumOption, Hash, Language, MajorProtocolVersion, Script, ScriptRef, SlotConfig, TransactionHash, TransactionInput as ScalusTransactionInput, TransactionOutput as ScalusTransactionOutput}
+import scalus.cardano.ledger.BloxbeanToLedgerTranslation.toLedgerValue
+import scalus.utils.Hex.hexToBytes
 import scalus.ledger.api
 import scalus.ledger.api.v1.{DCert, ScriptPurpose, StakingCredential}
 import scalus.ledger.api.v3.GovernanceActionId
@@ -200,6 +204,24 @@ object Interop {
                 BytesPlutusData.of(b.bytes)
     }
 
+    /** Converts Bloxbean's [[com.bloxbean.cardano.client.api.model.ProtocolParams]] to Scalus
+      * [[scalus.cardano.ledger.CostModels]]
+      */
+    def getCostModels(protocolParams: ProtocolParams): CostModels = {
+        import com.bloxbean.cardano.client.plutus.spec.Language as BloxbeanLanguage
+        val costMdls = CostMdls()
+        CostModelUtil
+            .getCostModelFromProtocolParams(protocolParams, BloxbeanLanguage.PLUTUS_V1)
+            .ifPresent(costMdls.add)
+        CostModelUtil
+            .getCostModelFromProtocolParams(protocolParams, BloxbeanLanguage.PLUTUS_V2)
+            .ifPresent(costMdls.add)
+        CostModelUtil
+            .getCostModelFromProtocolParams(protocolParams, BloxbeanLanguage.PLUTUS_V3)
+            .ifPresent(costMdls.add)
+        getCostModels(costMdls)
+    }
+
     /** Converts Bloxbean's [[com.bloxbean.cardano.client.plutus.spec.CostMdls]] to Scalus
       * [[scalus.cardano.ledger.CostModels]]
       */
@@ -234,6 +256,68 @@ object Interop {
         val costModels = getCostModels(costMdls)
         MachineParams.fromCostModels(costModels, plutus, protocolVersion)
     }
+
+    /** Converts a Bloxbean [[com.bloxbean.cardano.client.api.model.Utxo]] to a Scalus
+      * [[scalus.cardano.ledger.TransactionInput]]
+      */
+    def toTransactionInput(utxo: Utxo): ScalusTransactionInput =
+        ScalusTransactionInput(TransactionHash.fromHex(utxo.getTxHash), utxo.getOutputIndex)
+
+    /** Converts a Bloxbean [[com.bloxbean.cardano.client.api.model.Utxo]] to a Scalus
+      * [[scalus.cardano.ledger.TransactionOutput]]
+      *
+      * @param utxo
+      *   The Bloxbean UTXO to convert
+      * @param scriptRef
+      *   Optional script reference to attach to the output
+      */
+    def toTransactionOutput(
+        utxo: Utxo,
+        scriptRef: Option[ScriptRef] = None
+    ): ScalusTransactionOutput = {
+        val address = scalus.cardano.address.Address.fromBech32(utxo.getAddress)
+        val datumOption: Option[DatumOption] =
+            Option(utxo.getDataHash) -> Option(utxo.getInlineDatum) match
+                case (_, Some(inlineDatum)) =>
+                    Some(DatumOption.Inline(Data.fromCbor(inlineDatum.hexToBytes)))
+                case (Some(dataHash), None) =>
+                    Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHash))))
+                case (None, None) => None
+        ScalusTransactionOutput(address, utxo.toValue.toLedgerValue, datumOption, scriptRef)
+    }
+
+    /** Converts a Bloxbean [[com.bloxbean.cardano.client.api.model.Utxo]] to a Scalus
+      * (TransactionInput, TransactionOutput) pair
+      *
+      * @param utxo
+      *   The Bloxbean UTXO to convert
+      * @param scriptSupplier
+      *   Script supplier for resolving reference scripts
+      */
+    def toUtxoEntry(
+        utxo: Utxo,
+        scriptSupplier: ScriptSupplier
+    ): (ScalusTransactionInput, ScalusTransactionOutput) = {
+        val scriptRef = getScriptRef(utxo, scriptSupplier)
+        toTransactionInput(utxo) -> toTransactionOutput(utxo, scriptRef)
+    }
+
+    /** Gets the script reference from a Bloxbean [[com.bloxbean.cardano.client.api.model.Utxo]] */
+    def getScriptRef(utxo: Utxo, scriptSupplier: ScriptSupplier): Option[ScriptRef] =
+        Option(utxo.getReferenceScriptHash).flatMap { scriptHash =>
+            scala.util
+                .Try(scriptSupplier.getScript(scriptHash))
+                .map {
+                    case s: PlutusV1Script => ScriptRef(Script.PlutusV1(decodeToSingleCbor(s)))
+                    case s: PlutusV2Script => ScriptRef(Script.PlutusV2(decodeToSingleCbor(s)))
+                    case s: PlutusV3Script => ScriptRef(Script.PlutusV3(decodeToSingleCbor(s)))
+                }
+                .toOption
+        }
+
+    /** Unwraps the outer CBOR encoding from a Plutus script */
+    private def decodeToSingleCbor(script: PlutusScript): ByteString =
+        ByteString.unsafeFromArray(Cbor.decode(script.getCborHex.hexToBytes).to[Array[Byte]].value)
 
     def getCredential(cred: Credential): v1.Credential = {
         cred.getType match

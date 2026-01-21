@@ -9,14 +9,231 @@ import com.bloxbean.cardano.client.transaction.spec.{Transaction, TransactionInp
 import com.bloxbean.cardano.client.transaction.util.TransactionUtil
 import com.bloxbean.cardano.client.util.JsonUtil
 import scalus.builtin.ByteString
-import scalus.cardano.ledger.SlotConfig
+import scalus.cardano.ledger
+import scalus.cardano.ledger.{MajorProtocolVersion, PlutusScriptEvaluationException, PlutusScriptEvaluator, SlotConfig}
 import scalus.ledger.api.ScriptContext
 import scalus.uplc.eval.ExBudget
 
+import java.math.BigInteger
 import java.util
 import scala.beans.BeanProperty
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.RichOptional
+
+/** Implements [[com.bloxbean.cardano.client.api.TransactionEvaluator]] to evaluate a transaction to
+  * get script costs using Scalus' [[scalus.cardano.ledger.PlutusScriptEvaluator]].
+  *
+  * @param slotConfig
+  *   Slot configuration
+  * @param protocolParams
+  *   Protocol parameters
+  * @param utxoSupplier
+  *   Utxo supplier
+  * @param scriptSupplier
+  *   Additional script supplier
+  * @param mode
+  *   Evaluator mode.
+  *   - [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] will evaluate the transaction
+  *     and compute the cost
+  *   - [[scalus.bloxbean.EvaluatorMode.VALIDATE]] will validate the transaction and fail if
+  *     execution budget exceeds
+  * @param debugDumpFilesForTesting
+  *   If true, dumps script files for testing purposes
+  */
+class ScalusTransactionEvaluator(
+    @BeanProperty val slotConfig: SlotConfig,
+    @BeanProperty val protocolParams: ProtocolParams,
+    @BeanProperty val utxoSupplier: UtxoSupplier,
+    @BeanProperty val scriptSupplier: ScriptSupplier,
+    @BeanProperty val mode: EvaluatorMode,
+    @BeanProperty val debugDumpFilesForTesting: Boolean = false
+) extends TransactionEvaluator {
+
+    private val utxoResolver = ScalusUtxoResolver(utxoSupplier, scriptSupplier)
+
+    private lazy val plutusScriptEvaluator = PlutusScriptEvaluator(
+      slotConfig,
+      ledger.ExUnits(
+        protocolParams.getMaxTxExMem.toLong,
+        protocolParams.getMaxTxExSteps.toLong
+      ),
+      MajorProtocolVersion(protocolParams.getProtocolMajorVer),
+      Interop.getCostModels(protocolParams),
+      mode match
+          case EvaluatorMode.EVALUATE_AND_COMPUTE_COST =>
+              ledger.EvaluatorMode.EvaluateAndComputeCost
+          case EvaluatorMode.VALIDATE => ledger.EvaluatorMode.Validate
+      ,
+      debugDumpFilesForTesting
+    )
+
+    /** Constructor with protocol params, utxo supplier, script supplier and mode. Uses
+      * [[scalus.cardano.ledger.SlotConfig.mainnet]].
+      *
+      * @param protocolParams
+      * @param utxoSupplier
+      * @param scriptSupplier
+      * @param mode
+      */
+    def this(
+        protocolParams: ProtocolParams,
+        utxoSupplier: UtxoSupplier,
+        scriptSupplier: ScriptSupplier,
+        mode: EvaluatorMode
+    ) = this(SlotConfig.mainnet, protocolParams, utxoSupplier, scriptSupplier, mode)
+
+    /** Constructor with protocol params and utxo supplier. Uses
+      * [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] mode and
+      * [[scalus.cardano.ledger.SlotConfig.mainnet]].
+      * @param protocolParams
+      *   Protocol parameters
+      * @param utxoSupplier
+      *   Utxo supplier
+      */
+    def this(protocolParams: ProtocolParams, utxoSupplier: UtxoSupplier) =
+        this(
+          SlotConfig.mainnet,
+          protocolParams,
+          utxoSupplier,
+          NoScriptSupplier(),
+          EvaluatorMode.EVALUATE_AND_COMPUTE_COST
+        )
+
+    /** Constructor with slot config, protocol params and utxo supplier. Uses
+      * [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] mode.
+      * @param slotConfig
+      *   Slot configuration
+      * @param protocolParams
+      *   Protocol parameters
+      * @param utxoSupplier
+      *   Utxo supplier
+      */
+    def this(slotConfig: SlotConfig, protocolParams: ProtocolParams, utxoSupplier: UtxoSupplier) =
+        this(
+          slotConfig,
+          protocolParams,
+          utxoSupplier,
+          NoScriptSupplier(),
+          EvaluatorMode.EVALUATE_AND_COMPUTE_COST
+        )
+
+    /** Constructor with protocol params, utxo supplier and script supplier. Uses
+      * [[scalus.cardano.ledger.SlotConfig.mainnet]] and
+      * [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] mode.
+      * @param protocolParams
+      *   Protocol parameters
+      * @param utxoSupplier
+      *   Utxo supplier
+      * @param scriptSupplier
+      *   Additional script supplier
+      */
+    def this(
+        protocolParams: ProtocolParams,
+        utxoSupplier: UtxoSupplier,
+        scriptSupplier: ScriptSupplier
+    ) =
+        this(
+          SlotConfig.mainnet,
+          protocolParams,
+          utxoSupplier,
+          scriptSupplier,
+          EvaluatorMode.EVALUATE_AND_COMPUTE_COST
+        )
+
+    /** Constructor with slot config, protocol params, utxo supplier and script supplier. Uses
+      * [[scalus.bloxbean.EvaluatorMode.EVALUATE_AND_COMPUTE_COST]] mode.
+      * @param slotConfig
+      *   Slot configuration
+      * @param protocolParams
+      *   Protocol parameters
+      * @param utxoSupplier
+      *   Utxo supplier
+      * @param scriptSupplier
+      *   Additional script supplier
+      */
+    def this(
+        slotConfig: SlotConfig,
+        protocolParams: ProtocolParams,
+        utxoSupplier: UtxoSupplier,
+        scriptSupplier: ScriptSupplier
+    ) =
+        this(
+          slotConfig,
+          protocolParams,
+          utxoSupplier,
+          scriptSupplier,
+          EvaluatorMode.EVALUATE_AND_COMPUTE_COST
+        )
+
+    override def evaluateTx(
+        transaction: Transaction,
+        inputUtxos: util.Set[Utxo]
+    ): Result[util.List[EvaluationResult]] = {
+        evaluateTx(transaction.serialize(), inputUtxos)
+    }
+
+    override def evaluateTx(
+        cbor: Array[Byte],
+        inputUtxos: util.Set[Utxo]
+    ): Result[util.List[EvaluationResult]] = {
+        try {
+            // Parse CBOR to Scalus Transaction
+            val scalusTx = ledger.Transaction.fromCbor(cbor)
+
+            // Convert Bloxbean UTxOs to Scalus format
+            val inputUtxosMap = convertInputUtxos(inputUtxos)
+
+            // Resolve all UTxOs using ScalusUtxoResolver
+            val scalusUtxos = utxoResolver.resolveUtxos(scalusTx, inputUtxosMap)
+
+            // Evaluate Plutus scripts
+            val redeemers = plutusScriptEvaluator.evalPlutusScripts(scalusTx, scalusUtxos)
+
+            // Convert results to Bloxbean format
+            val results = redeemers.map(toEvaluationResult).asJava
+            Result
+                .success("Evaluation successful")
+                .asInstanceOf[Result[util.List[EvaluationResult]]]
+                .withValue(results)
+                .asInstanceOf[Result[util.List[EvaluationResult]]]
+        } catch {
+            case e: PlutusScriptEvaluationException =>
+                Result
+                    .error(e.getMessage)
+                    .asInstanceOf[Result[util.List[EvaluationResult]]]
+            case e: Exception =>
+                throw ApiException("Error evaluating transaction", e)
+        }
+    }
+
+    private def convertInputUtxos(
+        inputUtxos: util.Set[Utxo]
+    ): Map[ledger.TransactionInput, ledger.TransactionOutput] =
+        inputUtxos.asScala.map(utxo => Interop.toUtxoEntry(utxo, scriptSupplier)).toMap
+
+    private def toEvaluationResult(redeemer: ledger.Redeemer): EvaluationResult = {
+        EvaluationResult.builder
+            .redeemerTag(toBloxbeanRedeemerTag(redeemer.tag))
+            .index(redeemer.index)
+            .exUnits(
+              ExUnits.builder
+                  .mem(BigInteger.valueOf(redeemer.exUnits.memory))
+                  .steps(BigInteger.valueOf(redeemer.exUnits.steps))
+                  .build()
+            )
+            .build
+    }
+
+    private def toBloxbeanRedeemerTag(tag: ledger.RedeemerTag): RedeemerTag = {
+        tag match
+            case ledger.RedeemerTag.Spend     => RedeemerTag.Spend
+            case ledger.RedeemerTag.Mint      => RedeemerTag.Mint
+            case ledger.RedeemerTag.Cert      => RedeemerTag.Cert
+            case ledger.RedeemerTag.Reward    => RedeemerTag.Reward
+            case ledger.RedeemerTag.Voting    => RedeemerTag.Voting
+            case ledger.RedeemerTag.Proposing => RedeemerTag.Proposing
+    }
+}
 
 /** Implements [[com.bloxbean.cardano.client.api.TransactionEvaluator]] to evaluate a transaction to
   * get script costs using Scalus evaluator. This is a wrapper around
@@ -36,7 +253,8 @@ import scala.jdk.OptionConverters.RichOptional
   *   - [[scalus.bloxbean.EvaluatorMode.VALIDATE]] will validate the transaction and fail if
   *     execution budget exceeds
   */
-class ScalusTransactionEvaluator(
+@deprecated("Use ScalusTransactionEvaluator instead", "0.14.2")
+class LegacyScalusTransactionEvaluator(
     @BeanProperty val slotConfig: SlotConfig,
     @BeanProperty val protocolParams: ProtocolParams,
     @BeanProperty val utxoSupplier: UtxoSupplier,
