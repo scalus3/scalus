@@ -102,7 +102,7 @@ class BlockfrostProvider(
                     Left(SubmitError.fromHttpResponse(c, message))
             }
         }.recover { case exception =>
-            Left(SubmitError.NetworkError(s"Blockfrost submit exception", Some(exception)))
+            Left(SubmitError.ConnectionError(s"Blockfrost submit exception", Some(exception)))
         }
     }
 

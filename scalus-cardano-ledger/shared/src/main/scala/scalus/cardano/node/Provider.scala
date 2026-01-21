@@ -185,21 +185,53 @@ case class UtxoQueryWithProvider(provider: Provider, query: UtxoQuery) {
         provider.findUtxos(query)
 }
 
-enum SubmitError:
+/** Error returned when submitting a transaction fails.
+  *
+  * Errors are organized into two categories:
+  *   - [[NetworkSubmitError]]: Communication/operational errors (connection, auth, rate limits)
+  *   - [[NodeSubmitError]]: Transaction validation errors (invalid inputs, expired, script
+  *     failures)
+  */
+sealed trait SubmitError {
+    def message: String
+}
+
+/** Network-level errors that occur during communication with the node/provider.
+  *
+  * These errors are typically transient and may be worth retrying.
+  */
+sealed trait NetworkSubmitError extends SubmitError
+
+object NetworkSubmitError {
+
     /** Network-level errors (connection failures, timeouts) */
-    case NetworkError(message: String, exception: Option[Throwable] = None)
+    case class ConnectionError(message: String, cause: Option[Throwable] = None)
+        extends NetworkSubmitError
 
     /** Authentication/authorization errors (HTTP 403) */
-    case AuthenticationError(message: String)
+    case class AuthenticationError(message: String) extends NetworkSubmitError
 
     /** Rate limiting errors (HTTP 402, 429) */
-    case RateLimited(message: String)
-
-    /** Mempool full (HTTP 425) */
-    case MempoolFull(message: String)
+    case class RateLimited(message: String) extends NetworkSubmitError
 
     /** Auto-banned for flooding (HTTP 418) */
-    case Banned(message: String)
+    case class Banned(message: String) extends NetworkSubmitError
+
+    /** Mempool full (HTTP 425) */
+    case class MempoolFull(message: String) extends NetworkSubmitError
+
+    /** Internal provider errors (HTTP 500+) */
+    case class InternalError(message: String, cause: Option[Throwable] = None)
+        extends NetworkSubmitError
+}
+
+/** Node validation errors that occur when the transaction is rejected by the ledger.
+  *
+  * These errors indicate the transaction is invalid and needs to be modified before resubmission.
+  */
+sealed trait NodeSubmitError extends SubmitError
+
+object NodeSubmitError {
 
     /** UTXO inputs not available - already spent or never existed.
       *
@@ -211,30 +243,66 @@ enum SubmitError:
       * @param unavailableInputs
       *   best-effort set of unavailable inputs (may be empty if parsing failed)
       */
-    case UtxoNotAvailable(message: String, unavailableInputs: Set[TransactionInput] = Set.empty)
+    case class UtxoNotAvailable(
+        message: String,
+        unavailableInputs: Set[TransactionInput] = Set.empty
+    ) extends NodeSubmitError
 
     /** Transaction expired - validity window passed (maps to OutsideValidityInterval) */
-    case TransactionExpired(message: String)
+    case class TransactionExpired(message: String) extends NodeSubmitError
 
     /** Value/balance errors - input/output value mismatch (maps to ValueNotConserved) */
-    case ValueNotConserved(message: String)
+    case class ValueNotConserved(message: String) extends NodeSubmitError
 
     /** Script execution failures */
-    case ScriptFailure(message: String, scriptHash: Option[ScriptHash] = None)
+    case class ScriptFailure(message: String, scriptHash: Option[ScriptHash] = None)
+        extends NodeSubmitError
 
     /** Other node validation errors (catch-all for unrecognized validation errors) */
-    case ValidationError(message: String, errorCode: Option[String] = None)
-
-    /** Internal provider errors (HTTP 500+) */
-    case InternalError(message: String, exception: Option[Throwable] = None)
-
-    /** @deprecated Use more specific error types. This is kept for backwards compatibility. */
-    @deprecated("Use more specific error types like ValidationError", "0.14.2") case NodeError(
-        message: String,
-        exception: Option[Throwable] = None
-    )
+    case class ValidationError(message: String, errorCode: Option[String] = None)
+        extends NodeSubmitError
+}
 
 object SubmitError {
+    // Type aliases for backwards compatibility
+    type ConnectionError = NetworkSubmitError.ConnectionError
+    val ConnectionError = NetworkSubmitError.ConnectionError
+
+    /** @deprecated Use ConnectionError instead */
+    @deprecated("Use ConnectionError instead", "0.14.2")
+    type NetworkError = NetworkSubmitError.ConnectionError
+    @deprecated("Use ConnectionError instead", "0.14.2")
+    val NetworkError = NetworkSubmitError.ConnectionError
+
+    type AuthenticationError = NetworkSubmitError.AuthenticationError
+    val AuthenticationError = NetworkSubmitError.AuthenticationError
+
+    type RateLimited = NetworkSubmitError.RateLimited
+    val RateLimited = NetworkSubmitError.RateLimited
+
+    type Banned = NetworkSubmitError.Banned
+    val Banned = NetworkSubmitError.Banned
+
+    type MempoolFull = NetworkSubmitError.MempoolFull
+    val MempoolFull = NetworkSubmitError.MempoolFull
+
+    type InternalError = NetworkSubmitError.InternalError
+    val InternalError = NetworkSubmitError.InternalError
+
+    type UtxoNotAvailable = NodeSubmitError.UtxoNotAvailable
+    val UtxoNotAvailable = NodeSubmitError.UtxoNotAvailable
+
+    type TransactionExpired = NodeSubmitError.TransactionExpired
+    val TransactionExpired = NodeSubmitError.TransactionExpired
+
+    type ValueNotConserved = NodeSubmitError.ValueNotConserved
+    val ValueNotConserved = NodeSubmitError.ValueNotConserved
+
+    type ScriptFailure = NodeSubmitError.ScriptFailure
+    val ScriptFailure = NodeSubmitError.ScriptFailure
+
+    type ValidationError = NodeSubmitError.ValidationError
+    val ValidationError = NodeSubmitError.ValidationError
 
     /** Create a SubmitError from an HTTP status code and message.
       *
