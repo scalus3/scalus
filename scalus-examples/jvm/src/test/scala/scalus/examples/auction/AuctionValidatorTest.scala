@@ -397,14 +397,10 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture the UTxO BEFORE the bid transaction consumes it
-            val auctionUtxo = provider
-                .findUtxo(scriptAddress, None, None)
-                .await()
-                .toOption
-                .get
+            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
 
             // Save the utxo map before submission
-            val utxosBeforeBid = Map(auctionUtxo._1 -> auctionUtxo._2)
+            val utxosBeforeBid = Map(auctionUtxo.toTuple)
 
             val tx = endpoints
                 .bid(
@@ -415,7 +411,7 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo._1, utxosBeforeBid).budget
+            runValidatorWithUtxos(provider, tx, auctionUtxo.input, utxosBeforeBid).budget
 
         private def runOutbidWithBudget(
             provider: Emulator,
@@ -444,11 +440,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture ALL UTxOs BEFORE the outbid transaction consumes them
-            val auctionUtxo = provider
-                .findUtxo(scriptAddress, None, None)
-                .await()
-                .toOption
-                .get
+            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
 
             // Get all UTxOs from the provider before the transaction
             val allUtxosBeforeOutbid = provider.utxos
@@ -462,7 +454,7 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo._1, allUtxosBeforeOutbid).budget
+            runValidatorWithUtxos(provider, tx, auctionUtxo.input, allUtxosBeforeOutbid).budget
 
         private def runEndWithWinnerWithBudget(
             provider: Emulator,
@@ -490,11 +482,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture the UTxO BEFORE the end transaction consumes it
-            val auctionUtxo = provider
-                .findUtxo(scriptAddress, None, None)
-                .await()
-                .toOption
-                .get
+            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
 
             // Get all UTxOs from the provider before the transaction
             val allUtxosBeforeEnd = provider.utxos
@@ -508,7 +496,7 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo._1, allUtxosBeforeEnd).budget
+            runValidatorWithUtxos(provider, tx, auctionUtxo.input, allUtxosBeforeEnd).budget
 
         private def runEndNoBidsWithBudget(
             provider: Emulator,
@@ -527,14 +515,10 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture the UTxO BEFORE the end transaction consumes it
-            val auctionUtxo = provider
-                .findUtxo(scriptAddress, None, None)
-                .await()
-                .toOption
-                .get
+            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
 
             // Save the utxo map before submission
-            val utxosBeforeEnd = Map(auctionUtxo._1 -> auctionUtxo._2)
+            val utxosBeforeEnd = Map(auctionUtxo.toTuple)
 
             provider.setSlot(afterSlot)
             val tx = endpoints
@@ -545,7 +529,7 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo._1, utxosBeforeEnd).budget
+            runValidatorWithUtxos(provider, tx, auctionUtxo.input, utxosBeforeEnd).budget
 
     private val scriptAddress = compiledContract.address(env.network)
 

@@ -7,7 +7,7 @@ import scalus.builtin.platform
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
-import scalus.cardano.node.Emulator
+import scalus.cardano.node.{Emulator, UtxoFilter, UtxoQuery, UtxoSource}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
@@ -128,10 +128,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private def deployScript(provider: Emulator) = {
         val deployTx = {
             val utxos = provider
-                .findUtxos(
-                  address = deploymentAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == deploymentAddress)
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -143,10 +142,10 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         assert(provider.submit(deployTx).await().isRight)
 
         val scriptUtxos = provider
-            .findUtxos(
-              address = deploymentAddress,
-              transactionId = Some(deployTx.id),
+            .queryUtxos(u =>
+                u.output.address == deploymentAddress && u.input.transactionId == deployTx.id
             )
+            .execute()
             .await()
             .getOrElse(fail("No UTXOs found at deployment address"))
         Utxo(scriptUtxos.find((in, out) => out.scriptRef.isDefined).get)
@@ -164,10 +163,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player1Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -196,17 +194,21 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val betUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(initTx.id),
-              datum = Some(DatumOption.Inline(initConfig.toData)),
-              minAmount = Some(betAmount)
-            )
+            .queryUtxos { u =>
+                u.output.address == scriptAddress &&
+                u.input.transactionId == initTx.id &&
+                u.output.hasDatumHash(DatumOption.Inline(initConfig.toData).dataHash) &&
+                u.output.value.coin >= betAmount
+            }
+            .execute()
             .await()
             .toOption
             .get
+            .headOption
+            .map(Utxo.apply)
+            .get
 
-        assert(betUtxo._2.value.coin == betAmount)
+        assert(betUtxo.output.value.coin == betAmount)
     }
 
     test("player2 joins bet before expiration") {
@@ -215,10 +217,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player1Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -247,22 +248,25 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val betUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(initTx.id),
-              datum = Some(DatumOption.Inline(initConfig.toData)),
-              minAmount = Some(betAmount)
-            )
+            .queryUtxos { u =>
+                u.output.address == scriptAddress &&
+                u.input.transactionId == initTx.id &&
+                u.output.hasDatumHash(DatumOption.Inline(initConfig.toData).dataHash) &&
+                u.output.value.coin >= betAmount
+            }
+            .execute()
             .await()
             .toOption
+            .get
+            .headOption
+            .map(Utxo.apply)
             .get
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player2Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player2Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -284,7 +288,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        val result = runValidator(provider, joinTx, betUtxo._1)
+        val result = runValidator(provider, joinTx, betUtxo.input)
         assert(result.isSuccess)
 
         provider.setSlot(beforeSlot - 1)
@@ -297,18 +301,22 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
           expiration
         )
 
-        val joinedBetUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(joinTx.id),
-              datum = Some(DatumOption.Inline(joinConfig.toData)),
-              minAmount = Some(betAmount + betAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val joinedBetUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == joinTx.id &&
+                  u.output.hasDatumHash(DatumOption.Inline(joinConfig.toData).dataHash) &&
+                  u.output.value.coin >= betAmount + betAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
-        assert(joinedBetUtxo._2.value.coin == betAmount + betAmount)
+        assert(joinedBetUtxo.output.value.coin == betAmount + betAmount)
     }
 
     test("player2 joining fails after expiration") {
@@ -317,10 +325,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player1Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -349,24 +356,27 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val betUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(initTx.id),
-              datum = Some(DatumOption.Inline(initConfig.toData)),
-              minAmount = Some(betAmount)
-            )
+            .queryUtxos { u =>
+                u.output.address == scriptAddress &&
+                u.input.transactionId == initTx.id &&
+                u.output.hasDatumHash(DatumOption.Inline(initConfig.toData).dataHash) &&
+                u.output.value.coin >= betAmount
+            }
+            .execute()
             .await()
             .toOption
+            .get
+            .headOption
+            .map(Utxo.apply)
             .get
 
         provider.setSlot(env.slotConfig.timeToSlot(expiration.toLong))
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player2Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player2Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -399,10 +409,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player1Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -423,18 +432,23 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(initTx).await().isRight)
 
-        val betUtxo = provider
-            .findUtxo(address = scriptAddress, transactionId = Some(initTx.id))
-            .await()
-            .toOption
-            .get
+        val betUtxo = Utxo(
+          provider
+              .queryUtxos(u =>
+                  u.output.address == scriptAddress && u.input.transactionId == initTx.id
+              )
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player2Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player2Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -459,15 +473,23 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).await().isRight)
 
-        val joinedBetUtxo = provider
-            .findUtxo(address = scriptAddress, transactionId = Some(joinTx.id))
-            .await()
-            .toOption
-            .get
+        val joinedBetUtxo = Utxo(
+          provider
+              .queryUtxos(u =>
+                  u.output.address == scriptAddress && u.input.transactionId == joinTx.id
+              )
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val winTx = {
             val utxos = provider
-                .findUtxos(address = oracleAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .queryUtxos(u => u.output.address == oracleAddress)
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -488,24 +510,28 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        val result = runValidator(provider, winTx, joinedBetUtxo._1)
+        val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isSuccess)
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
 
         assert(provider.submit(winTx).await().isRight)
 
-        val winnerUtxo = provider
-            .findUtxo(
-              address = player2Address,
-              transactionId = Some(winTx.id),
-              minAmount = Some(betAmount + betAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val winnerUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == player2Address &&
+                  u.input.transactionId == winTx.id &&
+                  u.output.value.coin >= betAmount + betAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
-        assert(winnerUtxo._2.value.coin == betAmount + betAmount)
+        assert(winnerUtxo.output.value.coin == betAmount + betAmount)
     }
 
     test("oracle announcing winner fails before expiration") {
@@ -514,10 +540,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val initTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player1Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -538,18 +563,23 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(initTx).await().isRight)
 
-        val betUtxo = provider
-            .findUtxo(address = scriptAddress, transactionId = Some(initTx.id))
-            .await()
-            .toOption
-            .get
+        val betUtxo = Utxo(
+          provider
+              .queryUtxos(u =>
+                  u.output.address == scriptAddress && u.input.transactionId == initTx.id
+              )
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val joinTx = {
             val utxos = provider
-                .findUtxos(
-                  address = player2Address,
-                  minRequiredTotalAmount = Some(betAmount + commissionAmount)
-                )
+                .queryUtxos(u => u.output.address == player2Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -574,15 +604,23 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).await().isRight)
 
-        val joinedBetUtxo = provider
-            .findUtxo(address = scriptAddress, transactionId = Some(joinTx.id))
-            .await()
-            .toOption
-            .get
+        val joinedBetUtxo = Utxo(
+          provider
+              .queryUtxos(u =>
+                  u.output.address == scriptAddress && u.input.transactionId == joinTx.id
+              )
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val winTx = {
             val utxos = provider
-                .findUtxos(address = oracleAddress, minRequiredTotalAmount = Some(commissionAmount))
+                .queryUtxos(u => u.output.address == oracleAddress)
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -603,7 +641,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        val result = runValidator(provider, winTx, joinedBetUtxo._1)
+        val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isFailure)
 
         provider.submit(winTx).await() match
