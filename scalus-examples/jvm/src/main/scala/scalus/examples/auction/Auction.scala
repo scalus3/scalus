@@ -727,18 +727,17 @@ class AuctionEndpoints(
       *   The auction UTxO if found
       */
     def findActiveUtxo(itemId: ByteString)(using ExecutionContext): Future[scala.Option[Utxo]] =
-        for utxos <- provider
-                .findUtxos(scriptAddress)
-                .map(_.getOrElse(Map.empty))
-        yield
-            val nftAsset = AssetName(itemId)
-            utxos
-                .find { case (_, output) =>
-                    // Check if this UTxO contains the auction NFT
-                    output.value.assets.assets.get(policyId).exists(_.get(nftAsset).exists(_ > 0))
-                }
-                .map { case (input, output) =>
-                    Utxo(input, output)
-                }
+        val nftAsset = AssetName(itemId)
+        provider
+            .queryUtxos { u =>
+                u.output.address == scriptAddress && u.output.value.hasAsset(policyId, nftAsset)
+            }
+            .limit(1)
+            .execute()
+            .map {
+                case Right(utxos) =>
+                    utxos.headOption.map { case (input, output) => Utxo(input, output) }
+                case Left(_) => scala.None
+            }
 
 }
