@@ -537,12 +537,14 @@ object CrowdfundingValidator extends Validator {
                 case (sum, (donationIdx, reclaimerOutIdx)) =>
                     val donationInput = txInfo.inputs.at(donationIdx)
 
-                    // Get donor and amount from DonationDatum
+                    // Get donor from DonationDatum and full UTxO value
                     val donationDatum = donationInput.resolved.datum match
                         case OutputDatum.OutputDatum(d) => d.to[DonationDatum]
                         case _ => fail("Donation input must have inline DonationDatum")
                     val donorPkh = donationDatum.donor
                     val donationAmount = donationDatum.amount
+                    // Use actual UTxO lovelace to include min UTxO overhead
+                    val utxoLovelace = donationInput.resolved.value.getLovelace
 
                     // Verify funds go to the original donor
                     val reclaimerOutput = txInfo.outputs.at(reclaimerOutIdx)
@@ -550,9 +552,10 @@ object CrowdfundingValidator extends Validator {
                       reclaimerOutput.address === Address.fromPubKeyHash(donorPkh),
                       "Funds must return to original donor"
                     )
+                    // Exact match required to prevent min UTxO theft (V009 protection)
                     require(
-                      reclaimerOutput.value.getLovelace >= donationAmount,
-                      "Donor must receive at least their donation amount"
+                      reclaimerOutput.value.getLovelace === utxoLovelace,
+                      "Donor must receive exact UTxO value"
                     )
 
                     sum + donationAmount

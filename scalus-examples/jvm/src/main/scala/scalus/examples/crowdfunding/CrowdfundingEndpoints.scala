@@ -447,18 +447,21 @@ class CrowdfundingEndpoints(
             donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
             donationScript = getDonationScript(campaignId)
 
-            // Extract donor info from DonationDatum (amount now stored in datum, not token name)
-            donorInfos: Seq[(ShelleyAddress, PubKeyHash, BigInt)] = donationUtxos.map { utxo =>
+            // Extract donor info from DonationDatum and full UTxO value
+            // (donorAddress, donorPkh, datumAmount, utxoLovelace)
+            donorInfos: Seq[(ShelleyAddress, PubKeyHash, BigInt, Long)] = donationUtxos.map { utxo =>
                 val donationDatum = utxo.output.inlineDatum
                     .getOrElse(throw IllegalStateException("Donation UTxO must have inline datum"))
                     .to[DonationDatum]
                 val donorAddress = addressFromPkh(donationDatum.donor)
-                (donorAddress, donationDatum.donor, donationDatum.amount)
+                val utxoLovelace = utxo.output.value.coin.value
+                (donorAddress, donationDatum.donor, donationDatum.amount, utxoLovelace)
             }
+            // Use datum amount for tracking campaign state (matches on-chain logic)
             totalReclaimAmount: BigInt = donorInfos.map(_._3).foldLeft(BigInt(0))(_ + _)
 
             // Collect all unique donor key hashes for required signers
-            donorKeyHashes: Set[AddrKeyHash] = donorInfos.map { case (_, pkh, _) =>
+            donorKeyHashes: Set[AddrKeyHash] = donorInfos.map { case (_, pkh, _, _) =>
                 AddrKeyHash.fromByteString(pkh.hash)
             }.toSet
 
@@ -495,7 +498,7 @@ class CrowdfundingEndpoints(
                 // to satisfy validator's strictly ascending requirement
                 val sortedPairs = donationUtxos
                     .zip(donorInfos)
-                    .map { case (utxo, (donorAddr, _, _)) =>
+                    .map { case (utxo, (donorAddr, _, _, _)) =>
                         val donationIdx = BigInt(
                           requireFound(
                             tx.body.value.inputs.toSeq.indexOf(utxo.input),
@@ -539,10 +542,10 @@ class CrowdfundingEndpoints(
             // Burn donation tokens
             builderWithBurn = builderWithDonations.mint(donationScript, burnMap, reclaimRedeemer)
 
-            // Pay each donor their reclaimed amount
+            // Pay each donor their full UTxO value (includes min UTxO overhead)
             builderWithPayments = donorInfos.foldLeft(builderWithBurn) {
-                case (builder, (donorAddr, _, amount)) =>
-                    builder.payTo(donorAddr, LedgerValue.lovelace(amount.toLong))
+                case (builder, (donorAddr, _, _, utxoLovelace)) =>
+                    builder.payTo(donorAddr, LedgerValue.lovelace(utxoLovelace))
             }
 
             // Update campaign UTxO if partial reclaim
@@ -559,7 +562,7 @@ class CrowdfundingEndpoints(
 
             // Use first donor address for fee payment
             feePayerAddress = donorInfos.headOption
-                .map { case (addr, _, _) => addr }
+                .map { case (addr, _, _, _) => addr }
                 .getOrElse(throw RuntimeException("No donation UTxOs provided"))
 
             tx <- builderWithCampaignOutput
