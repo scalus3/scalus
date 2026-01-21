@@ -11,13 +11,12 @@ import java.time.Instant
 
 case class HtlcTransactions(
     env: CardanoInfo,
-    evaluator: PlutusScriptEvaluator,
     contract: PlutusV3[Data => Unit]
 ) {
     private val script: Script.PlutusV3 = contract.script
     private val scriptAddress: Address = contract.address(env.network)
 
-    private val builder = TxBuilder(env, evaluator)
+    private val builder = TxBuilder(env)
 
     def lock(
         utxos: Utxos,

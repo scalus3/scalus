@@ -26,7 +26,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     /** Transaction creator with real script evaluation */
     private val txCreator = HtlcTransactions(
       env = env,
-      evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
       contract = contract
     )
 
