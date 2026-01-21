@@ -478,6 +478,126 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     }
 
     // =======================================================================
+    // Group: "ThreeArgumentPlutusScriptWitness factory methods"
+    // =======================================================================
+
+    test("ThreeArgumentPlutusScriptWitness.attached with immediate redeemer") {
+        val redeemer = Data.I(42)
+        val witness = ThreeArgumentPlutusScriptWitness.attached(
+          script = script1,
+          redeemer = redeemer,
+          datum = DatumInlined
+        )
+
+        assert(witness.scriptSource == PlutusScriptValue(script1))
+        assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
+        assert(witness.datum == DatumInlined)
+        assert(witness.additionalSigners.isEmpty)
+    }
+
+    test("ThreeArgumentPlutusScriptWitness.attached with immediate redeemer and signers") {
+        val redeemer = Data.I(42)
+        val signers = Set(arbitrary[AddrKeyHash].sample.get)
+        val witness = ThreeArgumentPlutusScriptWitness.attached(
+          script = script1,
+          redeemer = redeemer,
+          datum = Datum.DatumValue(Data.I(100)),
+          signers = signers
+        )
+
+        assert(witness.scriptSource == PlutusScriptValue(script1))
+        assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
+        assert(witness.datum == Datum.DatumValue(Data.I(100)))
+        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
+    }
+
+    test("ThreeArgumentPlutusScriptWitness.attached with delayed redeemer") {
+        val signers = Set(arbitrary[AddrKeyHash].sample.get)
+        val redeemerBuilder: Transaction => Data = tx => Data.I(tx.body.value.inputs.toSeq.size)
+        val witness = ThreeArgumentPlutusScriptWitness.attached(
+          script = script1,
+          redeemerBuilder = redeemerBuilder,
+          datum = DatumInlined,
+          signers = signers
+        )
+
+        assert(witness.scriptSource == PlutusScriptValue(script1))
+        // Test that the redeemer builder is correctly stored
+        val txWithInputs = txInputsL.replace(TaggedSortedSet(input1, input2))(Transaction.empty)
+        assert(witness.redeemerBuilder(txWithInputs) == Data.I(2))
+        assert(witness.datum == DatumInlined)
+        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
+    }
+
+    test("ThreeArgumentPlutusScriptWitness.reference with immediate redeemer") {
+        val redeemer = Data.I(99)
+        val witness = ThreeArgumentPlutusScriptWitness.reference(
+          redeemer = redeemer,
+          datum = DatumInlined
+        )
+
+        assert(witness.scriptSource == PlutusScriptAttached)
+        assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
+        assert(witness.datum == DatumInlined)
+        assert(witness.additionalSigners.isEmpty)
+    }
+
+    test("ThreeArgumentPlutusScriptWitness.reference with immediate redeemer and signers") {
+        val redeemer = Data.I(99)
+        val signers = Set(arbitrary[AddrKeyHash].sample.get)
+        val witness = ThreeArgumentPlutusScriptWitness.reference(
+          redeemer = redeemer,
+          datum = Datum.DatumValue(Data.I(200)),
+          signers = signers
+        )
+
+        assert(witness.scriptSource == PlutusScriptAttached)
+        assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
+        assert(witness.datum == Datum.DatumValue(Data.I(200)))
+        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
+    }
+
+    test("ThreeArgumentPlutusScriptWitness.reference with delayed redeemer") {
+        val signers = Set(arbitrary[AddrKeyHash].sample.get)
+        val redeemerBuilder: Transaction => Data = tx => Data.I(tx.body.value.outputs.size)
+        val witness = ThreeArgumentPlutusScriptWitness.reference(
+          redeemerBuilder = redeemerBuilder,
+          datum = DatumInlined,
+          signers = signers
+        )
+
+        assert(witness.scriptSource == PlutusScriptAttached)
+        // Test that the redeemer builder is correctly stored
+        val txWithOutputs = txOutputsL.replace(
+          IndexedSeq(Sized(pkhOutput), Sized(pkhOutput), Sized(pkhOutput))
+        )(Transaction.empty)
+        assert(witness.redeemerBuilder(txWithOutputs) == Data.I(3))
+        assert(witness.datum == DatumInlined)
+        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
+    }
+
+    test("ThreeArgumentPlutusScriptWitness factory methods work in Spend step") {
+        // Test that the factory methods produce witnesses that work in actual transaction building
+        val witness = ThreeArgumentPlutusScriptWitness.attached(
+          script = script1,
+          redeemer = Data.List(PList.Nil),
+          datum = DatumInlined
+        )
+
+        val steps = List(Spend(script1Utxo, witness))
+        val result = TransactionBuilder.build(Mainnet, steps)
+
+        assert(result.isRight, s"Expected Right but got $result")
+        val context = result.toOption.get
+
+        // Verify the script is in the witness set
+        assert(context.transaction.witnessSet.plutusV1Scripts.toMap.contains(script1.scriptHash))
+
+        // Verify the redeemer was added
+        assert(context.redeemers.nonEmpty)
+    }
+
+    // =======================================================================
     // Group: "Pay"
     // =======================================================================
 

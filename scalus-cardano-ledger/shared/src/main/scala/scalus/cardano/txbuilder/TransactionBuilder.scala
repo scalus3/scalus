@@ -229,6 +229,106 @@ object ThreeArgumentPlutusScriptWitness {
         additionalSigners: Set[ExpectedSigner]
     ): ThreeArgumentPlutusScriptWitness =
         apply(scriptSource, tx => redeemer, datum, additionalSigners)
+
+    /** Creates a witness for an attached Plutus script with immediate redeemer.
+      *
+      * The script will be included in the transaction witness set.
+      *
+      * @param script
+      *   the Plutus script to attach
+      * @param redeemer
+      *   the redeemer data
+      * @param datum
+      *   the datum specification (inline or value)
+      * @param signers
+      *   additional signers required by the script
+      */
+    def attached[T: ToData](
+        script: PlutusScript,
+        redeemer: T,
+        datum: Datum,
+        signers: Set[AddrKeyHash] = Set.empty
+    ): ThreeArgumentPlutusScriptWitness =
+        ThreeArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptValue(script),
+          redeemer.toData,
+          datum,
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for an attached Plutus script with delayed redeemer.
+      *
+      * The script will be included in the transaction witness set. The redeemer will be computed
+      * from the final transaction.
+      *
+      * @param script
+      *   the Plutus script to attach
+      * @param redeemerBuilder
+      *   function to compute redeemer from the built transaction
+      * @param datum
+      *   the datum specification (inline or value)
+      * @param signers
+      *   additional signers required by the script
+      */
+    def attached(
+        script: PlutusScript,
+        redeemerBuilder: Transaction => Data,
+        datum: Datum,
+        signers: Set[AddrKeyHash]
+    ): ThreeArgumentPlutusScriptWitness =
+        ThreeArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptValue(script),
+          redeemerBuilder,
+          datum,
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for a reference Plutus script with immediate redeemer.
+      *
+      * The script must be provided via a reference input (using `references` method).
+      *
+      * @param redeemer
+      *   the redeemer data
+      * @param datum
+      *   the datum specification (inline or value)
+      * @param signers
+      *   additional signers required by the script
+      */
+    def reference[T: ToData](
+        redeemer: T,
+        datum: Datum,
+        signers: Set[AddrKeyHash] = Set.empty
+    ): ThreeArgumentPlutusScriptWitness =
+        ThreeArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptAttached,
+          redeemer.toData,
+          datum,
+          signers.map(ExpectedSigner.apply)
+        )
+
+    /** Creates a witness for a reference Plutus script with delayed redeemer.
+      *
+      * The script must be provided via a reference input (using `references` method). The redeemer
+      * will be computed from the final transaction.
+      *
+      * @param redeemerBuilder
+      *   function to compute redeemer from the built transaction
+      * @param datum
+      *   the datum specification (inline or value)
+      * @param signers
+      *   additional signers required by the script
+      */
+    def reference(
+        redeemerBuilder: Transaction => Data,
+        datum: Datum,
+        signers: Set[AddrKeyHash]
+    ): ThreeArgumentPlutusScriptWitness =
+        ThreeArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptAttached,
+          redeemerBuilder,
+          datum,
+          signers.map(ExpectedSigner.apply)
+        )
 }
 
 /** Witness type for minting, certificates, withdrawals, and voting operations.

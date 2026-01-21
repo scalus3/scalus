@@ -242,6 +242,58 @@ TxBuilder(env)
   Reference scripts are particularly useful for complex validators, as they significantly reduce transaction fees by not including the full script in each transaction.
 </Callout>
 
+## Unified Spend API with Script Witness
+
+For consistency with other script operations (minting, staking, governance), you can use the unified spend API with explicit script witnesses using factory methods:
+
+```scala copy
+import scalus.cardano.txbuilder.ThreeArgumentPlutusScriptWitness.*
+import scalus.cardano.txbuilder.Datum.DatumInlined
+
+// With attached script and immediate redeemer
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, attached(validatorScript, redeemer, DatumInlined))
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+
+// With reference script and immediate redeemer
+val tx = TxBuilder(env)
+  .references(refScriptUtxo)
+  .spend(scriptUtxo, reference(redeemer, DatumInlined))
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+
+// With delayed redeemer (computed from final transaction)
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, attached(validatorScript, tx => computeRedeemer(tx), DatumInlined, requiredSigners))
+  .collaterals(collateralUtxo)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)
+```
+
+### Factory Method Reference
+
+The `ThreeArgumentPlutusScriptWitness` companion object provides these factory methods:
+
+| Method | Description |
+|--------|-------------|
+| `attached(script, redeemer, datum)` | Attach script with immediate redeemer |
+| `attached(script, redeemer, datum, signers)` | Attach script with signers |
+| `attached(script, redeemerBuilder, datum, signers)` | Attach script with delayed redeemer |
+| `reference(redeemer, datum)` | Use reference script with immediate redeemer |
+| `reference(redeemer, datum, signers)` | Use reference script with signers |
+| `reference(redeemerBuilder, datum, signers)` | Use reference script with delayed redeemer |
+
+The `datum` parameter specifies how the datum is provided:
+- `DatumInlined` - The datum is stored inline in the UTxO (most common)
+- `DatumValue(data)` - Provide the datum value explicitly (for UTxOs with datum hashes)
+
+<Callout type="info">
+  The factory methods automatically convert your redeemer type to `Data` using the `ToData` typeclass, and wrap signers in `ExpectedSigner`.
+</Callout>
+
 ## Next Steps
 
 - **[Minting & Burning](/docs/transactions/mint-burn-assets)** - Create and destroy native tokens
