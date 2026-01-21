@@ -419,7 +419,7 @@ class HtlcLogicTest extends ValidatorTestSuite {
 }
 
 // For realistic scenarios: Derive from transaction
-class HtlcTransactionTest extends TxTestKit {
+class HtlcTransactionTest extends ScalusTest {
   test("reveal with valid preimage succeeds") {
     val tx = txCreator.reveal(validPreimage, ...)
     val ctx = tx.scriptContextsV3.head
@@ -854,10 +854,10 @@ test("invalid input fails") {
 }
 ```
 
-### Implementation in TxTestKit
+### Implementation in ScalusTest
 
 ```scala
-trait TxTestKit {
+trait ScalusTest {
   // Exact match
   def assertTxFail(expectedError: String)(buildTx: => Transaction): Unit
 
@@ -968,7 +968,7 @@ scalus-examples/
 
 ```scala
 // Pattern 1: Single file with nested describes
-class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
+class HtlcTest extends AnyFunSuite, ScalusTest {
 
   describe("Validator Logic") {
     test("reveal with valid preimage succeeds") {
@@ -1054,7 +1054,7 @@ class HtlcValidatorTest
 
 class HtlcEmulatorTest
   extends AnyFunSuite
-    with TxTestKit
+    with ScalusTest
     with HtlcTestSetup {
   // Transaction tests
 }

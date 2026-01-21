@@ -9,14 +9,14 @@ import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
 import scalus.cardano.txbuilder.txBuilder
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.getScriptContextV3
-import scalus.testing.kit.{ScalusTest, TestUtil, TxTestKit}
+import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 
-class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
+class HtlcTest extends AnyFunSuite, ScalusTest {
 
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = HtlcContract.compiled.withErrorTraces
@@ -61,7 +61,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
         Utxo(lockedUtxo)
     }
 
-    // Transaction assertions provided by TxTestKit
 
     test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
         assert(HtlcContract.compiled.script.script.size == 569)

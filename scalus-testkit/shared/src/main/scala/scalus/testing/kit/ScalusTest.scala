@@ -1,13 +1,16 @@
 package scalus.testing.kit
 
 import org.scalacheck.Arbitrary
+import org.scalatest.Assertions
 import scalus.*
 import scalus.builtin.Builtins.blake2b_224
 import scalus.builtin.ByteString
 import scalus.builtin.Data
 import scalus.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.Transaction
 import scalus.cardano.ledger.TransactionInput
+import scalus.cardano.txbuilder.TxBuilderException
 import scalus.ledger.api.v1.Credential.PubKeyCredential
 import scalus.ledger.api.v1.Credential.ScriptCredential
 import scalus.ledger.api.v1.PubKeyHash
@@ -35,9 +38,35 @@ object Mock:
     def mockTxInput(variation: BigInt, idx: BigInt): TransactionInput =
         TestUtil.mockTxInput(variation, idx)
 
-trait ScalusTest extends ArbitraryInstances {
+trait ScalusTest extends ArbitraryInstances, Assertions {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
     protected given PlutusVM = plutusVM
+
+    /** Verifies that transaction building fails with the expected error.
+      *
+      * @param expectedError
+      *   Substring expected in error message or script logs
+      * @param buildTx
+      *   The transaction building code that should fail
+      */
+    protected def assertScriptFail(expectedError: String)(buildTx: => Transaction): Unit = {
+        try
+            val tx = buildTx
+            fail(s"Transaction building should have failed but succeeded: $tx")
+        catch
+            case e: TxBuilderException.BalancingException =>
+                val logs = e.scriptLogs.getOrElse(Seq.empty)
+                assert(
+                  logs.exists(_.contains(expectedError)),
+                  s"Expected error containing '$expectedError' but got logs: ${logs.mkString("\n")}"
+                )
+            case e: Exception =>
+                val message = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
+                assert(
+                  message.contains(expectedError),
+                  s"Expected error containing '$expectedError' but got: $message"
+                )
+    }
 
     extension (self: SIR)
         def runScript(using
