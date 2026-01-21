@@ -236,7 +236,7 @@ object BuidlerFest {
         val apiKey = System.getenv("BLOCKFROST_API_KEY") ?? sys.error(
           "BLOCKFROST_API_KEY is not set, please set it before running the test"
         )
-        val provider = BlockfrostProvider.mainnet(apiKey)
+        val provider = BlockfrostProvider.mainnet(apiKey).await()
 
         // Print loaded constants for verification
         println(s"Issuer Beacon Policy: ${issuerBeaconPolicy.toHex}")

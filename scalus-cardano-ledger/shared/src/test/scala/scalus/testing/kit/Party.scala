@@ -1,7 +1,7 @@
 package scalus.testing.kit
 
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.cardano.address.ShelleyAddress
+import scalus.cardano.address.{Network, ShelleyAddress}
 import scalus.cardano.address.ShelleyDelegationPart.Null
 import scalus.cardano.address.ShelleyPaymentPart.Key
 import scalus.cardano.ledger.{AddrKeyHash, CardanoInfo}
@@ -55,9 +55,11 @@ enum Party derives CanEqual {
     @threadUnsafe
     lazy val addrKeyHash: AddrKeyHash = account.paymentKeyHash
 
-    def address(using env: CardanoInfo): ShelleyAddress = {
-        ShelleyAddress(env.network, Key(addrKeyHash), Null)
-    }
+    def address(network: Network): ShelleyAddress =
+        ShelleyAddress(network, Key(addrKeyHash), Null)
+
+    /** Get address using CardanoInfo's network (backward compatible). */
+    def address(using env: CardanoInfo): ShelleyAddress = address(env.network)
 
     @threadUnsafe
     lazy val signer: TransactionSigner = new TransactionSigner(Set(account.paymentKeyPair))

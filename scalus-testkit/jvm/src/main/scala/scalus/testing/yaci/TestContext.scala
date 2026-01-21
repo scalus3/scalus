@@ -16,7 +16,7 @@ import scala.concurrent.duration.*
   * interface for submitting transactions and waiting for blocks.
   *
   * @param cardanoInfo
-  *   Cardano network information including protocol parameters and slot configuration
+  *   Cardano network information (fetched via provider.fetchCardanoInfo())
   * @param provider
   *   Provider for blockchain queries (typically BlockfrostProvider for Yaci DevKit)
   * @param account

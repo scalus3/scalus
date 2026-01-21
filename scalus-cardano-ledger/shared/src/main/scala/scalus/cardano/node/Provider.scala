@@ -14,6 +14,21 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 trait Provider {
 
+    /** Returns CardanoInfo for this provider.
+      *
+      * This is always available synchronously after the provider is constructed. For emulators,
+      * this returns the current context. For remote providers like BlockfrostProvider, the
+      * CardanoInfo is fetched during async construction.
+      */
+    def cardanoInfo: CardanoInfo
+
+    /** Fetches fresh CardanoInfo from the network.
+      *
+      * For emulators: returns current value immediately. For remote providers: fetches protocol
+      * params from the network and updates the internal cache.
+      */
+    def fetchCardanoInfo(using ExecutionContext): Future[CardanoInfo]
+
     def fetchLatestParams(using ExecutionContext): Future[ProtocolParams]
 
     def submit(transaction: Transaction)(using

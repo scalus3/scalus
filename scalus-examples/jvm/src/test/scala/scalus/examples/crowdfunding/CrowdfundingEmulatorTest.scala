@@ -6,7 +6,7 @@ import scalus.builtin.Data.toData
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
-import scalus.cardano.node.Emulator
+import scalus.cardano.node.{Emulator, Provider}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
@@ -69,7 +69,8 @@ class CrowdfundingEmulatorTest extends AnyFunSuite, ScalusTest {
 }
 
 object CrowdfundingEmulatorTest extends ScalusTest {
-    private given env: CardanoInfo = TestUtil.testEnvironment
+    import scalus.cardano.address.Network
+
     private val crowdfundingContract = CrowdfundingContract.withErrorTraces
     private val donationMintingContract = DonationMintingContract.withErrorTraces
 
@@ -78,9 +79,9 @@ object CrowdfundingEmulatorTest extends ScalusTest {
     private val donor1Party = Bob
     private val donor2Party = Charles
 
-    private val recipientAddress: ShelleyAddress = recipientParty.address
-    private val donor1Address: ShelleyAddress = donor1Party.address
-    private val donor2Address: ShelleyAddress = donor2Party.address
+    private val recipientAddress: ShelleyAddress = recipientParty.address(Network.Mainnet)
+    private val donor1Address: ShelleyAddress = donor1Party.address(Network.Mainnet)
+    private val donor2Address: ShelleyAddress = donor2Party.address(Network.Mainnet)
 
     private val goal = 10_000_000L // 10 ADA goal
     private val initialCampaignValue = Coin(2_000_000L) // Min UTxO
@@ -88,7 +89,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
     private val slot: SlotNo = 100
     private val beforeSlot: SlotNo = slot - 10
     private val afterSlot: SlotNo = slot + 10
-    private val deadline: PosixTime = BigInt(env.slotConfig.slotToTime(slot))
+    // deadline computed per-test from provider.cardanoInfo.slotConfig
 
     enum TestAction:
         case Create
@@ -102,6 +103,9 @@ object CrowdfundingEmulatorTest extends ScalusTest {
         case Success
         case Failure(errorContains: String)
 
+    private def getDeadline(provider: Provider): PosixTime =
+        BigInt(provider.cardanoInfo.slotConfig.slotToTime(slot))
+
     case class TestCase(
         action: TestAction,
         expected: Expected
@@ -109,7 +113,6 @@ object CrowdfundingEmulatorTest extends ScalusTest {
         def run(): Unit =
             val provider = createProvider()
             val endpoints = CrowdfundingEndpoints(
-              env,
               provider,
               crowdfundingContract,
               donationMintingContract
@@ -129,7 +132,10 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 case TestAction.ReclaimDuplicateIndices =>
                     runReclaimDuplicateIndicesTest(provider, endpoints)
 
-        private def runCreateTest(provider: Emulator, endpoints: CrowdfundingEndpoints): Unit =
+        private def runCreateTest(
+            provider: Emulator,
+            endpoints: CrowdfundingEndpoints
+        ): Unit =
             provider.setSlot(beforeSlot)
 
             val result = scala.util.Try {
@@ -137,7 +143,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                     .createCampaign(
                       recipientAddress = recipientAddress,
                       goal = goal,
-                      deadline = deadline.toLong,
+                      deadline = getDeadline(provider).toLong,
                       initialValue = initialCampaignValue,
                       signer = recipientParty.signer
                     )
@@ -157,7 +163,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 .createCampaign(
                   recipientAddress = recipientAddress,
                   goal = goal,
-                  deadline = deadline.toLong,
+                  deadline = getDeadline(provider).toLong,
                   initialValue = initialCampaignValue,
                   signer = recipientParty.signer
                 )
@@ -187,7 +193,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 .createCampaign(
                   recipientAddress = recipientAddress,
                   goal = goal,
-                  deadline = deadline.toLong,
+                  deadline = getDeadline(provider).toLong,
                   initialValue = initialCampaignValue,
                   signer = recipientParty.signer
                 )
@@ -227,7 +233,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 .createCampaign(
                   recipientAddress = recipientAddress,
                   goal = goal,
-                  deadline = deadline.toLong,
+                  deadline = getDeadline(provider).toLong,
                   initialValue = initialCampaignValue,
                   signer = recipientParty.signer
                 )
@@ -282,7 +288,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 .createCampaign(
                   recipientAddress = recipientAddress,
                   goal = goal,
-                  deadline = deadline.toLong,
+                  deadline = getDeadline(provider).toLong,
                   initialValue = initialCampaignValue,
                   signer = recipientParty.signer
                 )
@@ -327,7 +333,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 .createCampaign(
                   recipientAddress = recipientAddress,
                   goal = goal,
-                  deadline = deadline.toLong,
+                  deadline = getDeadline(provider).toLong,
                   initialValue = initialCampaignValue,
                   signer = recipientParty.signer
                 )
@@ -421,7 +427,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 donorKeyHash = AddrKeyHash.fromByteString(donorPkh.hash)
 
                 // Build the malicious transaction
-                builderWithCampaign = TxBuilder(env).spend(
+                builderWithCampaign = TxBuilder(provider.cardanoInfo).spend(
                   campaignUtxo,
                   redeemerBuilder = maliciousRedeemer,
                   crowdfundingContract.script,

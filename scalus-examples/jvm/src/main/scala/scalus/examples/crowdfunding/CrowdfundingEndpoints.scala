@@ -17,8 +17,6 @@ import scala.concurrent.{ExecutionContext, Future}
   * Handles off-chain transaction construction using the delayed redeemer pattern for computing UTxO
   * indices.
   *
-  * @param env
-  *   Cardano network information
   * @param provider
   *   Node provider for querying UTxOs and submitting transactions
   * @param crowdfundingContract
@@ -27,14 +25,14 @@ import scala.concurrent.{ExecutionContext, Future}
   *   Compiled donation minting policy (parameterized)
   */
 class CrowdfundingEndpoints(
-    env: CardanoInfo,
     provider: Provider,
     crowdfundingContract: PlutusV3[Data => Unit],
     donationMintingContract: PlutusV3[Data => Data => Unit]
 ) {
+    private def env: CardanoInfo = provider.cardanoInfo
     private val crowdfundingScript = crowdfundingContract.script
     private val crowdfundingPolicyId = crowdfundingScript.scriptHash
-    val scriptAddress: CardanoAddress = crowdfundingContract.address(env.network)
+    def scriptAddress: CardanoAddress = crowdfundingContract.address(env.network)
 
     /** Extract PubKeyHash from a ShelleyAddress */
     private def extractPkh(address: ShelleyAddress): PubKeyHash =

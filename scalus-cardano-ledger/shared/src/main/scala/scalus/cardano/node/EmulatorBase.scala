@@ -25,6 +25,14 @@ trait EmulatorBase extends Provider {
     def setSlot(slot: SlotNo): Unit
     def snapshot(): Emulator
 
+    override def cardanoInfo: CardanoInfo = {
+        val ctx = currentContext
+        CardanoInfo(ctx.env.params, ctx.env.network, ctx.slotConfig)
+    }
+
+    override def fetchCardanoInfo(using ExecutionContext): Future[CardanoInfo] =
+        Future.successful(cardanoInfo)
+
     def fetchLatestParams(using ExecutionContext): Future[ProtocolParams] = {
         val params = currentContext.env.params
         Future.successful(params)

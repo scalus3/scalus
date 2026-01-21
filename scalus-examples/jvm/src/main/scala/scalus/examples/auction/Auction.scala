@@ -468,14 +468,12 @@ lazy val AuctionContract: PlutusV3[Data => Data => Unit] =
   * This prevents UTXO discovery confusion attacks where multiple auctions could share the same
   * itemId.
   *
-  * @param env
-  *   Cardano network environment
   * @param provider
   *   Node provider for queries and submission
   * @param withErrorTraces
   *   If true, include error traces for debugging (default: false for production)
   */
-class AuctionFactory(env: CardanoInfo, provider: Provider, withErrorTraces: Boolean = false) {
+class AuctionFactory(provider: Provider, withErrorTraces: Boolean = false) {
 
     private val baseContract =
         if withErrorTraces then AuctionContract.withErrorTraces else AuctionContract
@@ -490,7 +488,6 @@ class AuctionFactory(env: CardanoInfo, provider: Provider, withErrorTraces: Bool
     def createInstance(oneShot: TxOutRef): AuctionInstance = {
         val appliedContract = baseContract.apply(Data.toData(oneShot))
         AuctionInstance(
-          env = env,
           provider = provider,
           oneShot = oneShot,
           compiledContract = appliedContract
@@ -500,8 +497,6 @@ class AuctionFactory(env: CardanoInfo, provider: Provider, withErrorTraces: Bool
 
 /** A specific auction instance with a unique policyId derived from the one-shot UTxO.
   *
-  * @param env
-  *   Cardano network environment
   * @param provider
   *   Node provider for queries and submission
   * @param oneShot
@@ -510,14 +505,14 @@ class AuctionFactory(env: CardanoInfo, provider: Provider, withErrorTraces: Bool
   *   The compiled contract with oneShot applied
   */
 class AuctionInstance(
-    env: CardanoInfo,
     provider: Provider,
     val oneShot: TxOutRef,
     compiledContract: PlutusV3[Data => Unit]
 ) {
+    private def env: CardanoInfo = provider.cardanoInfo
     private val script = compiledContract.script
     private val scriptHash: scalus.cardano.ledger.ScriptHash = script.scriptHash
-    val scriptAddress: CardanoAddress = compiledContract.address(env.network)
+    def scriptAddress: CardanoAddress = compiledContract.address(env.network)
 
     /** Extract PubKeyHash from a ShelleyAddress */
     private def extractPkh(address: ShelleyAddress): PubKeyHash =

@@ -132,17 +132,17 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 
 object AuctionValidatorTest extends ScalusTest {
     import scalus.ledger.api.v3.{TxId, TxOutRef}
-
-    private given env: CardanoInfo = TestUtil.testEnvironment
+    import scalus.cardano.node.Provider
+    import scalus.cardano.address.Network
 
     // Party to role mapping
     private val sellerParty = Alice
     private val bidder1Party = Bob
     private val bidder2Party = Charles
 
-    private val sellerAddress: ShelleyAddress = sellerParty.address
-    private val bidder1Address: ShelleyAddress = bidder1Party.address
-    private val bidder2Address: ShelleyAddress = bidder2Party.address
+    private val sellerAddress: ShelleyAddress = sellerParty.address(Network.Mainnet)
+    private val bidder1Address: ShelleyAddress = bidder1Party.address(Network.Mainnet)
+    private val bidder2Address: ShelleyAddress = bidder2Party.address(Network.Mainnet)
 
     private val itemId = utf8"auction-item-001"
     private val startingBid = 2_000_000L
@@ -151,7 +151,7 @@ object AuctionValidatorTest extends ScalusTest {
     private val slot: SlotNo = 100
     private val beforeSlot: SlotNo = slot - 10
     private val afterSlot: SlotNo = slot + 10
-    private val auctionEndTime: PosixTime = BigInt(env.slotConfig.slotToTime(slot))
+    // auctionEndTime computed per-test from provider.cardanoInfo.slotConfig
 
     /** Create an AuctionInstance using the first seller UTxO as the oneShot parameter. Returns both
       * the instance and the UTxO that must be spent in startAuction.
@@ -163,9 +163,12 @@ object AuctionValidatorTest extends ScalusTest {
           TxId(oneShotUtxo.input.transactionId),
           BigInt(oneShotUtxo.input.index)
         )
-        val factory = AuctionFactory(env, provider, withErrorTraces = true)
+        val factory = AuctionFactory(provider, withErrorTraces = true)
         (factory.createInstance(oneShot), oneShotUtxo)
     }
+
+    private def getAuctionEndTime(provider: Provider): PosixTime =
+        BigInt(provider.cardanoInfo.slotConfig.slotToTime(slot))
 
     enum TestAction:
         case Start
@@ -212,7 +215,7 @@ object AuctionValidatorTest extends ScalusTest {
                       oneShotUtxo = oneShotUtxo,
                       itemId = itemId,
                       startingBid = startingBid,
-                      auctionEndTime = auctionEndTime,
+                      auctionEndTime = getAuctionEndTime(provider),
                       initialValue = initialAuctionValue,
                       signer = sellerParty.signer
                     )
@@ -235,7 +238,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -268,7 +271,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -309,7 +312,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -350,7 +353,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -414,7 +417,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -451,7 +454,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -501,7 +504,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -551,7 +554,7 @@ object AuctionValidatorTest extends ScalusTest {
                   oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
-                  auctionEndTime = auctionEndTime,
+                  auctionEndTime = getAuctionEndTime(provider),
                   initialValue = initialAuctionValue,
                   signer = sellerParty.signer
                 )
@@ -584,6 +587,7 @@ object AuctionValidatorTest extends ScalusTest {
         scriptInput: TransactionInput,
         knownUtxos: Map[TransactionInput, TransactionOutput]
     ): Result =
+        given CardanoInfo = provider.cardanoInfo
         // Merge known utxos with any remaining utxos from provider
         val body = tx.body.value
         val allInputs =

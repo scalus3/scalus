@@ -3,7 +3,7 @@ package scalus.testing.yaci
 import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
 import org.scalatest.{BeforeAndAfterAll, Suite}
 import scalus.cardano.address.Network
-import scalus.cardano.ledger.{Bech32, CardanoInfo, PoolKeyHash, SlotConfig}
+import scalus.cardano.ledger.{Bech32, PoolKeyHash, SlotConfig}
 import scalus.cardano.node.BlockfrostProvider
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.hd.HdAccount
@@ -95,9 +95,6 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
         // Empty API key for local Yaci Store (Blockfrost-compatible API)
         // Strip trailing slash to avoid double-slash in URLs
         val baseUrl = _container.getYaciStoreApiUrl.stripSuffix("/")
-        val provider = BlockfrostProvider("", baseUrl)
-
-        val protocolParams = provider.fetchLatestParams.await()
 
         // Yaci DevKit uses slot length of 1 second and start time of 0
         val yaciSlotConfig = SlotConfig(
@@ -106,7 +103,8 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
           slotLength = 1000
         )
 
-        val cardanoInfo = CardanoInfo(protocolParams, Network.Testnet, yaciSlotConfig)
+        // Create provider (async) - fetches protocol params during construction
+        val provider = BlockfrostProvider.localYaci(baseUrl, 5, yaciSlotConfig).await()
 
         // Default signer with only payment key - sufficient for most transactions
         val signer = new TransactionSigner(Set(testHdAccount.paymentKeyPair))
@@ -115,7 +113,7 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
         val stakeAddress = testHdAccount.stakeAddress(Network.Testnet)
 
         TestContext(
-          cardanoInfo,
+          provider.cardanoInfo,
           provider,
           testHdAccount,
           signer,
