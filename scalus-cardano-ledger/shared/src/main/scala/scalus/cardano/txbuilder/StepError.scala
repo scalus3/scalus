@@ -44,23 +44,6 @@ sealed trait StepError {
 }
 
 object StepError {
-    case class Unimplemented(description: String, step: TransactionBuilderStep) extends StepError {
-        override def explain: String = s"$description is not yet implemented. If you need it, " +
-            s"submit a request at $bugTrackerUrl."
-    }
-
-    // TODO: Remove this error and just use a nonzero type
-    case class CannotMintZero(
-        scriptHash: ScriptHash,
-        assetName: AssetName,
-        step: TransactionBuilderStep
-    ) extends StepError {
-        override def explain: String =
-            "You cannot pass a \"amount = zero\" to a mint step, but we recieved it for" +
-                s"(policyId, assetName) == ($scriptHash, $assetName)." +
-                "\n You should not use the Mint step to calculate your mint amounts."
-    }
-
     // TODO: more verbose error -- we'll need to pass more information from the assertion/step.
     case class InputAlreadyExists(input: TransactionInput, step: TransactionBuilderStep)
         extends StepError {
@@ -85,12 +68,6 @@ object StepError {
     case class CollateralNotPubKey(utxo: Utxo, step: TransactionBuilderStep) extends StepError {
         override def explain: String =
             s"The UTxO passed as a collateral input is not a PubKey UTxO. UTxO: $utxo"
-    }
-
-    // TODO: This error could probably be improved.
-    case class CannotExtractSignatures(step: TransactionBuilderStep) extends StepError {
-        override def explain: String =
-            s"Could not extract signatures via _.additionalSigners from $step"
     }
 
     case class DatumIsMissing(utxo: Utxo, step: TransactionBuilderStep) extends StepError {

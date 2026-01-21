@@ -48,7 +48,8 @@ object TransactionBuilderStep {
       * determine your aggregate mint amount _outside_ of the builder. Chaining steps together to
       * calculate the mint amount.
       *
-      * WARNING: If you explicitly pass amount == 0, this will return a Left.
+      * @throws IllegalArgumentException
+      *   if amount is zero
       *
       * WARNING: If you do a reciprocal pair of mint/burn of the same amount (i.e., Mint 4, Mint
       * -4), you will nullify the mint amount, but the additionalSigners/requiredSigners/witnesses
@@ -59,7 +60,9 @@ object TransactionBuilderStep {
         assetName: AssetName,
         amount: Long,
         witness: NativeScriptWitness | TwoArgumentPlutusScriptWitness
-    ) extends TransactionBuilderStep
+    ) extends TransactionBuilderStep {
+        require(amount != 0, "Mint amount cannot be zero")
+    }
 
     /** Add a [[scalus.cardano.ledger.Utxo]] as a CIP-31 reference input. Consuming the same UTxO
       * twice (reference or spend) is an error

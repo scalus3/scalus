@@ -688,13 +688,10 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
         )
 
-    {
-        val mint0Step = mintScript1(0)
-        testBuilderStepsFail(
-          label = "Mint 0 directly",
-          steps = List(mint0Step),
-          error = CannotMintZero(scriptHash1, AssetName.empty, mint0Step)
-        )
+    test("Mint 0 directly throws IllegalArgumentException") {
+        assertThrows[IllegalArgumentException] {
+            mintScript1(0)
+        }
     }
 
     testBuilderSteps(

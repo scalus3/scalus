@@ -315,27 +315,21 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         val amount = mint.amount
         val witness = mint.witness
 
-        for {
-            // Not allowed to mint 0
-            _ <-
-                if amount == 0
-                then Left(CannotMintZero(scriptHash, assetName, mint))
-                else Ok
-
-            // Since we allow monoidal mints, only the final redeemer is kept. We have to remove the old redeemer
-            // before adding the new one, as well as if the monoidal sum of the amounts of this mint
-            // and the existing mint cause the policyId entry to be removed from the mint map.
-            _ = modify0(
-              Focus[Context](_.redeemers).modify(
-                _.filter(detachedRedeemer =>
-                    detachedRedeemer.purpose match {
-                        case RedeemerPurpose.ForMint(hash) => hash != scriptHash
-                        case _                             => true
-                    }
-                )
-              )
+        // Since we allow monoidal mints, only the final redeemer is kept. We have to remove the old redeemer
+        // before adding the new one, as well as if the monoidal sum of the amounts of this mint
+        // and the existing mint cause the policyId entry to be removed from the mint map.
+        modify0(
+          Focus[Context](_.redeemers).modify(
+            _.filter(detachedRedeemer =>
+                detachedRedeemer.purpose match {
+                    case RedeemerPurpose.ForMint(hash) => hash != scriptHash
+                    case _                             => true
+                }
             )
+          )
+        )
 
+        for {
             // Common witness handling
             _ <- useNonSpendingWitness(
               Operation.Minting(scriptHash),
