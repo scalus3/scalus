@@ -2,10 +2,11 @@ package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.{ByteString, Data}
-import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.ledger.*
+import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.DatumOption.Inline
+import scalus.cardano.ledger.Value.ada
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
+import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.compiler.compileInline
 import scalus.prelude.List as PList
@@ -48,9 +49,6 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     def input(index: Int): TransactionInput = Input(genesisHash, index)
 
-    def adaOutput(address: Address, ada: Int): TransactionOutput =
-        Output(address, Value.ada(ada))
-
     def scriptOutput(
         address: ShelleyAddress = scriptAddress,
         ada: Int = 20,
@@ -72,8 +70,8 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val provider = Emulator(
           Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50),
+            input(0) -> Output(Alice.address, ada(100)),
+            input(1) -> Output(Alice.address, ada(50)),
             sUtxo.input -> sUtxo.output
           )
         )
@@ -82,7 +80,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         for _ <- 1 to 3 do {
             TxBuilder(testEnv)
                 .spend(sUtxo, emptyRedeemer, alwaysOkScript)
-                .payTo(Bob.address, Value.ada(5))
+                .payTo(Bob.address, ada(5))
                 .complete(provider, Alice.address)
                 .await()
         }
@@ -93,7 +91,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
             val start = System.nanoTime()
             val tx = TxBuilder(testEnv)
                 .spend(sUtxo, emptyRedeemer, alwaysOkScript)
-                .payTo(Bob.address, Value.ada(5))
+                .payTo(Bob.address, ada(5))
                 .complete(provider, Alice.address)
                 .await()
                 .transaction
@@ -120,8 +118,8 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val provider = Emulator(
           Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50)
+            input(0) -> Output(Alice.address, ada(100)),
+            input(1) -> Output(Alice.address, ada(50))
           )
         )
 
@@ -168,8 +166,8 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val provider = Emulator(
           Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50),
+            input(0) -> Output(Alice.address, ada(100)),
+            input(1) -> Output(Alice.address, ada(50)),
             sUtxo.input -> sUtxo.output
           )
         )
@@ -224,7 +222,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("Performance: coin selection with many UTXOs") {
         // Create many small UTXOs to stress coin selection
         val manyUtxos = (0 until 50).map { i =>
-            input(i) -> adaOutput(Alice.address, 10 + i)
+            input(i) -> Output(Alice.address, ada(10 + i))
         }.toMap
 
         val provider = Emulator(manyUtxos)
@@ -232,7 +230,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         // Warmup
         for _ <- 1 to 3 do {
             TxBuilder(testEnv)
-                .payTo(Bob.address, Value.ada(200))
+                .payTo(Bob.address, ada(200))
                 .complete(provider, Alice.address)
                 .await()
         }
@@ -242,7 +240,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         val times = (1 to iterations).map { _ =>
             val start = System.nanoTime()
             val tx = TxBuilder(testEnv)
-                .payTo(Bob.address, Value.ada(200))
+                .payTo(Bob.address, ada(200))
                 .complete(provider, Alice.address)
                 .await()
                 .transaction
@@ -271,8 +269,8 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         val sUtxo = scriptUtxo(2)
 
         val availableUtxos: Utxos = Map(
-          input(0) -> adaOutput(Alice.address, 100),
-          input(1) -> adaOutput(Alice.address, 50),
+          input(0) -> Output(Alice.address, ada(100)),
+          input(1) -> Output(Alice.address, ada(50)),
           sUtxo.input -> sUtxo.output
         )
 
@@ -292,7 +290,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val builder = TxBuilder(testEnv, countingEvaluator)
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
-            .payTo(Bob.address, Value.ada(5))
+            .payTo(Bob.address, ada(5))
             .complete(availableUtxos, Alice.address)
 
         val tx = builder.transaction
@@ -303,11 +301,11 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         println(s"Number of inputs: ${tx.body.value.inputs.toSeq.size}")
         println(s"Number of outputs: ${tx.body.value.outputs.size}")
 
-        // Current behavior: 3 balancing iterations for script transactions
-        // This serves as a baseline for optimization efforts
+        // Current behavior: 2 balancing iterations for script transactions
+        // (Optimized from 3 by skipping collateral return for small collateral ≤5 ADA)
         assert(
-          evaluationCount == 3,
-          s"Expected 3 balancing iterations (current baseline), had $evaluationCount"
+          evaluationCount == 2,
+          s"Expected 2 balancing iterations (current baseline), had $evaluationCount"
         )
     }
 
@@ -315,15 +313,15 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("Baseline: simple ADA transfer performance") {
         val provider = Emulator(
           Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            input(1) -> adaOutput(Alice.address, 50)
+            input(0) -> Output(Alice.address, ada(100)),
+            input(1) -> Output(Alice.address, ada(50))
           )
         )
 
         // Warmup
         for _ <- 1 to 3 do {
             TxBuilder(testEnv)
-                .payTo(Bob.address, Value.ada(10))
+                .payTo(Bob.address, ada(10))
                 .complete(provider, Alice.address)
                 .await()
         }
@@ -333,7 +331,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
         val times = (1 to iterations).map { _ =>
             val start = System.nanoTime()
             val tx = TxBuilder(testEnv)
-                .payTo(Bob.address, Value.ada(10))
+                .payTo(Bob.address, ada(10))
                 .complete(provider, Alice.address)
                 .await()
                 .transaction

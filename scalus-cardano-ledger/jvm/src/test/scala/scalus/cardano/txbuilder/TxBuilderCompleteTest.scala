@@ -6,7 +6,7 @@ import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
-import scalus.cardano.ledger.utils.MinTransactionFee
+import scalus.cardano.ledger.utils.{CollateralSufficient, MinTransactionFee}
 import scalus.cardano.node.Emulator
 import scalus.compiler.compileInline
 import scalus.prelude.List as PList
@@ -360,7 +360,8 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         assert(tx.body.value.totalCollateral.isEmpty, "Should not have totalCollateral")
     }
 
-    test("complete should set collateral return output for script transactions") {
+    test("complete should skip collateral return for small collateral (≤5 ADA threshold)") {
+        // For small collateral (≤5 ADA), we skip creating a return output to save tx size/fees
         val sUtxo = scriptUtxo(2, 20)
 
         val provider = Emulator(
@@ -373,45 +374,65 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         val tx = TxBuilder(testEnv)
             .spend(sUtxo, emptyRedeemer, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        // Verify small collateral doesn't create return output
+        val fee = tx.body.value.fee
+        val requiredCollateral = CollateralSufficient
+            .calculateRequiredCollateral(fee, testEnv.protocolParams.collateralPercentage)
+        assert(
+          requiredCollateral.value <= 5_000_000L,
+          s"Test precondition: required collateral ($requiredCollateral) should be ≤5 ADA"
+        )
+        assert(
+          tx.body.value.collateralReturnOutput.isEmpty,
+          "Small collateral should not have collateral return output"
+        )
+        assert(
+          tx.body.value.totalCollateral.isEmpty,
+          "Small collateral should not have totalCollateral"
+        )
+    }
+
+    test("complete should set collateral return output for large collateral (>5 ADA)") {
+        // For large collateral (>5 ADA), we create a return output to protect user funds
+        val sUtxo = scriptUtxo(2, 20)
+
+        val provider = Emulator(
+          Map(
+            input(0) -> adaOutput(Alice.address, 100),
+            sUtxo.input -> sUtxo.output
+          )
+        )
+
+        // Use a custom fee that results in >5 ADA required collateral (fee > 3.33 ADA)
+        val tx = TxBuilder(testEnv)
+            .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+            .payTo(Bob.address, Value.ada(5))
+            .minFee(Coin.ada(4)) // min 4 ADA fee -> 6 ADA required collateral
             .complete(provider, Alice.address)
             .await()
             .transaction
 
         assert(
           tx.body.value.collateralReturnOutput.isDefined,
-          "Script transaction should have collateral return output"
+          "Large collateral should have collateral return output"
         )
         assert(
           tx.body.value.collateralReturnOutput.get.value.address == Alice.address,
           "Collateral return should go to sponsor address"
         )
-    }
-
-    test("complete should set totalCollateral field for script transactions") {
-        val sUtxo = scriptUtxo(2, 20)
-
-        val provider = Emulator(
-          Map(
-            input(0) -> adaOutput(Alice.address, 100),
-            sUtxo.input -> sUtxo.output
-          )
-        )
-
-        val tx = TxBuilder(testEnv)
-            .spend(sUtxo, emptyRedeemer, alwaysOkScript)
-            .payTo(Bob.address, Value.ada(5))
-            .complete(provider, Alice.address)
-            .await()
-            .transaction
-
         assert(tx.body.value.totalCollateral.isDefined, "Should have totalCollateral set")
 
         val totalCollateral = tx.body.value.totalCollateral.get
         val fee = tx.body.value.fee
-        val requiredCollateral = (fee.value * testEnv.protocolParams.collateralPercentage) / 100
+        val requiredCollateral = CollateralSufficient
+            .calculateRequiredCollateral(fee, testEnv.protocolParams.collateralPercentage)
 
         assert(
-          totalCollateral.value >= requiredCollateral,
+          totalCollateral.value >= requiredCollateral.value,
           s"totalCollateral ($totalCollateral) should be >= required ($requiredCollateral)"
         )
     }

@@ -411,6 +411,20 @@ object TransactionBuilder {
       */
     val MaxBalancingIterations = 20
 
+    /** Threshold at or below which collateral return output is not created for ADA-only collateral.
+      *
+      * When required collateral is at or below this threshold (≤5 ADA) and the collateral contains
+      * no tokens, we skip creating a collateral return output. This saves ~50 bytes of transaction
+      * size and associated fees for typical low-fee transactions.
+      *
+      * The comparison uses `requiredCollateral > threshold`, meaning:
+      *   - Required collateral ≤ 5 ADA: no return output
+      *   - Required collateral > 5 ADA: creates return output
+      *
+      * Value: 5 ADA (5,000,000 lovelace)
+      */
+    private val CollateralReturnThreshold: Long = 5_000_000L
+
     /** Represents different types of authorized operations (except the spending, which goes
       * separately).
       */
@@ -773,7 +787,12 @@ object TransactionBuilder {
       *
       * This method creates a collateral return output when:
       *   1. Collateral contains tokens (MUST be returned per protocol)
-      *   2. Excess ADA above required collateral can cover min ADA for return output
+      *   2. Excess ADA above required collateral can cover min ADA for return output AND required
+      *      collateral exceeds the threshold (5 ADA)
+      *
+      * For small ADA-only collateral (≤5 ADA), we skip creating a return output to save ~50 bytes
+      * of transaction size and associated fees. This is a reasonable trade-off since the potential
+      * loss from script failure is small.
       *
       * This prevents users from losing their entire collateral UTXO if a script fails.
       *
@@ -836,7 +855,8 @@ object TransactionBuilder {
               )
             )
 
-        val shouldCreateReturn = hasTokens || potentialReturnAda >= minAdaForReturn
+        val shouldCreateReturn = hasTokens ||
+            (potentialReturnAda >= minAdaForReturn && requiredCollateral.value > CollateralReturnThreshold)
 
         if !shouldCreateReturn then return Right(tx)
 

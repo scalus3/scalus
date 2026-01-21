@@ -1019,6 +1019,217 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         }
     }
 
+    // Test: No return for small collateral (ADA-only)
+    test("ensureCollateralReturn skips return output for small ADA-only collateral (≤5 ADA)") {
+        // Input: 10 ADA UTXO, 2 ADA fee → 3 ADA required collateral (150%)
+        // Expected: No collateral return output (3 ADA < 5 ADA threshold)
+        val pkhUtxo10Ada = Utxo(
+          input = input1,
+          output = pkhOutput.copy(value = Value(Coin.ada(10)))
+        )
+
+        val steps = List(AddCollateral(utxo = pkhUtxo10Ada))
+        val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // Set fee that requires 3 ADA collateral (2 ADA * 150% = 3 ADA)
+        val txWithFee = TransactionBuilder.modifyBody(
+          ctx.transaction,
+          _.copy(fee = Coin.ada(2))
+        )
+
+        val result = TransactionBuilder.ensureCollateralReturn(
+          txWithFee,
+          ctx.resolvedUtxos.utxos,
+          None,
+          CardanoInfo.mainnet.protocolParams
+        )
+
+        result match {
+            case Right(tx) =>
+                assert(
+                  tx.body.value.collateralReturnOutput.isEmpty,
+                  "Expected no collateral return output for small collateral (≤5 ADA)"
+                )
+                assert(
+                  tx.body.value.totalCollateral.isEmpty,
+                  "Expected no totalCollateral when no return output"
+                )
+            case Left(err) =>
+                fail(s"Expected success but got error: $err")
+        }
+    }
+
+    // Test: Return output for large collateral (ADA-only)
+    test("ensureCollateralReturn creates return output for large ADA-only collateral (>5 ADA)") {
+        // Input: 20 ADA UTXO, 4 ADA fee → 6 ADA required collateral (150%)
+        // Expected: Collateral return output created (~14 ADA)
+        val pkhUtxo20Ada = Utxo(
+          input = input1,
+          output = pkhOutput.copy(value = Value(Coin.ada(20)))
+        )
+
+        val steps = List(AddCollateral(utxo = pkhUtxo20Ada))
+        val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // Set fee that requires 6 ADA collateral (4 ADA * 150% = 6 ADA)
+        val txWithFee = TransactionBuilder.modifyBody(
+          ctx.transaction,
+          _.copy(fee = Coin.ada(4))
+        )
+
+        val result = TransactionBuilder.ensureCollateralReturn(
+          txWithFee,
+          ctx.resolvedUtxos.utxos,
+          None,
+          CardanoInfo.mainnet.protocolParams
+        )
+
+        result match {
+            case Right(tx) =>
+                assert(
+                  tx.body.value.collateralReturnOutput.isDefined,
+                  "Expected collateral return output for large collateral (>5 ADA)"
+                )
+                val returnAda = tx.body.value.collateralReturnOutput.get.value.value.coin.value
+                // 20 ADA - 6 ADA = 14 ADA returned
+                assert(
+                  returnAda == Coin.ada(14).value,
+                  s"Expected 14 ADA return, got ${returnAda / 1_000_000.0} ADA"
+                )
+            case Left(err) =>
+                fail(s"Expected success but got error: $err")
+        }
+    }
+
+    // Test: Tokens always get return (even small collateral)
+    test("ensureCollateralReturn always creates return output when collateral has tokens") {
+        // Input: 10 ADA + tokens UTXO, 1 ADA fee → 1.5 ADA required collateral
+        // Expected: Collateral return output created (tokens must be returned)
+        val pkhUtxoWithTokens = Utxo(
+          input = input1,
+          output = pkhOutput.copy(
+            value = Value(
+              Coin.ada(10),
+              MultiAsset.asset(script1.scriptHash, AssetName.fromString("TestToken"), 100L)
+            )
+          )
+        )
+
+        val steps = List(AddCollateral(utxo = pkhUtxoWithTokens))
+        val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // Set fee that requires 1.5 ADA collateral (1 ADA * 150% = 1.5 ADA)
+        val txWithFee = TransactionBuilder.modifyBody(
+          ctx.transaction,
+          _.copy(fee = Coin.ada(1))
+        )
+
+        val result = TransactionBuilder.ensureCollateralReturn(
+          txWithFee,
+          ctx.resolvedUtxos.utxos,
+          None,
+          CardanoInfo.mainnet.protocolParams
+        )
+
+        result match {
+            case Right(tx) =>
+                assert(
+                  tx.body.value.collateralReturnOutput.isDefined,
+                  "Expected collateral return output when tokens are present"
+                )
+                val returnOutput = tx.body.value.collateralReturnOutput.get.value
+                assert(
+                  returnOutput.value.assets.nonEmpty,
+                  "Expected tokens in return output"
+                )
+            case Left(err) =>
+                fail(s"Expected success but got error: $err")
+        }
+    }
+
+    // Test: Edge case at threshold
+    test("ensureCollateralReturn skips return output at exactly 5 ADA threshold") {
+        // Input: 15 ADA UTXO, 3.33 ADA fee → 5 ADA required collateral (150%)
+        // Expected: No collateral return output (5 ADA ≤ 5 ADA threshold)
+        val pkhUtxo15Ada = Utxo(
+          input = input1,
+          output = pkhOutput.copy(value = Value(Coin.ada(15)))
+        )
+
+        val steps = List(AddCollateral(utxo = pkhUtxo15Ada))
+        val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // To get exactly 5 ADA required collateral:
+        // fee * collateralPercentage / 100 = 5_000_000 (with ceiling rounding)
+        // fee * 150 / 100 = 5_000_000 → fee = 3_333_333.33...
+        // With fee = 3_333_333 lovelace: 3_333_333 * 150 / 100 = 4_999_999.5 → rounds UP to 5_000_000
+        val txWithFee = TransactionBuilder.modifyBody(
+          ctx.transaction,
+          _.copy(fee = Coin(3_333_333L)) // results in exactly 5 ADA required collateral
+        )
+
+        val result = TransactionBuilder.ensureCollateralReturn(
+          txWithFee,
+          ctx.resolvedUtxos.utxos,
+          None,
+          CardanoInfo.mainnet.protocolParams
+        )
+
+        result match {
+            case Right(tx) =>
+                assert(
+                  tx.body.value.collateralReturnOutput.isEmpty,
+                  "Expected no collateral return output at 5 ADA threshold"
+                )
+            case Left(err) =>
+                fail(s"Expected success but got error: $err")
+        }
+    }
+
+    // Test: Collateral just above threshold creates return output
+    test("ensureCollateralReturn creates return output just above 5 ADA threshold") {
+        // Input: 16 ADA UTXO, fee that results in 5_000_001 lovelace required collateral
+        // Expected: Collateral return output created (5_000_001 > 5_000_000 threshold)
+        val pkhUtxo16Ada = Utxo(
+          input = input1,
+          output = pkhOutput.copy(value = Value(Coin.ada(16)))
+        )
+
+        val steps = List(AddCollateral(utxo = pkhUtxo16Ada))
+        val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
+
+        // To get 5_000_001 lovelace required collateral (just above threshold):
+        // fee * 150 / 100 = 5_000_001 → fee = 3_333_334 lovelace
+        // Verify: 3_333_334 * 150 / 100 = 5_000_001 (no rounding needed)
+        val txWithFee = TransactionBuilder.modifyBody(
+          ctx.transaction,
+          _.copy(fee = Coin(3_333_334L)) // results in 5_000_001 lovelace required collateral
+        )
+
+        val result = TransactionBuilder.ensureCollateralReturn(
+          txWithFee,
+          ctx.resolvedUtxos.utxos,
+          None,
+          CardanoInfo.mainnet.protocolParams
+        )
+
+        result match {
+            case Right(tx) =>
+                assert(
+                  tx.body.value.collateralReturnOutput.isDefined,
+                  "Expected collateral return output just above 5 ADA threshold"
+                )
+                // 16 ADA - 5_000_001 lovelace = 10_999_999 lovelace returned
+                val returnAda = tx.body.value.collateralReturnOutput.get.value.value.coin.value
+                assert(
+                  returnAda == 10_999_999L,
+                  s"Expected 10_999_999 lovelace return, got $returnAda"
+                )
+            case Left(err) =>
+                fail(s"Expected success but got error: $err")
+        }
+    }
+
     // =======================================================================
     // Group: "Deregister"
     // =======================================================================
