@@ -64,6 +64,78 @@ trait PlutusScriptEvaluator {
 
 object PlutusScriptEvaluator {
 
+    /** Build all script contexts for Plutus scripts in a transaction without evaluation.
+      *
+      * This method extracts all Plutus script redeemers from a transaction and builds their
+      * corresponding script contexts (V1, V2, or V3) based on the script version.
+      *
+      * Useful for testing and debugging scenarios where you need to inspect script contexts without
+      * actually executing the scripts.
+      *
+      * @param tx
+      *   The transaction containing Plutus scripts and redeemers
+      * @param utxos
+      *   The UTxO set for resolving spent outputs
+      * @param slotConfig
+      *   Slot configuration for time conversions
+      * @param protocolVersion
+      *   Protocol version for validation rules
+      * @return
+      *   Map from Redeemer to ScriptContext (union type: v1 | v2 | v3)
+      * @throws java.lang.IllegalStateException
+      *   if script resolution fails or required data is missing
+      */
+    def buildScriptContexts(
+        tx: Transaction,
+        utxos: Utxos,
+        slotConfig: SlotConfig,
+        protocolVersion: MajorProtocolVersion
+    ): Map[Redeemer, ScriptContext] = {
+        import LedgerToPlutusTranslation.*
+
+        // 1. Resolve all scripts from transaction and UTxOs
+        val scriptsMap = AllResolvedScripts.allResolvedScriptsMap(tx, utxos) match
+            case Right(map)  => map
+            case Left(error) => throw error
+
+        // 2. Get needed script data
+        val neededScripts = AllNeededScriptHashes.allNeededScriptData(tx, utxos) match
+            case Right(data) => data
+            case Left(error) => throw error
+
+        // 3. Get redeemers map
+        val redeemersMap = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
+
+        // 4. Pre-compute TxInfo for each Plutus version lazily (reused across redeemers)
+        lazy val txInfoV1 = getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
+        lazy val txInfoV2 = getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
+        lazy val txInfoV3 = getTxInfoV3(tx, utxos, slotConfig, protocolVersion)
+
+        // 5. Build contexts for each Plutus script redeemer
+        neededScripts.flatMap { case (tag, index, hash, outputOpt) =>
+            for
+                script <- scriptsMap.get(hash)
+                plutusScript <- script match
+                    case ps: PlutusScript => Some(ps)
+                    case _                => None // Skip native scripts
+                (data, exUnits) <- redeemersMap.get((tag, index))
+            yield
+                val redeemer = Redeemer(tag, index, data, exUnits)
+                val datum = outputOpt.flatMap(_.resolveDatum(tx))
+                val context: ScriptContext = plutusScript match
+                    case _: Script.PlutusV1 =>
+                        val purpose = getScriptPurposeV1(tx, redeemer)
+                        v1.ScriptContext(txInfoV1, purpose)
+                    case _: Script.PlutusV2 =>
+                        val purpose = getScriptPurposeV2(tx, redeemer)
+                        v2.ScriptContext(txInfoV2, purpose)
+                    case _: Script.PlutusV3 =>
+                        val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
+                        v3.ScriptContext(txInfoV3, redeemer.data, scriptInfo)
+                redeemer -> context
+        }.toMap
+    }
+
     /** A no-op evaluator that returns empty sequences.
       *
       * Useful for testing scenarios where script evaluation is not needed, such as transaction
