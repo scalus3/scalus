@@ -88,11 +88,11 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
 
         println(tx.showHighlighted)
 
+        import scalus.testing.kit.TestUtil.getScriptContextV3
         val sc = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
 
         println(sc)
 
-        import scalus.uplc.apply
         assertExpected(SuccessAny)(contract(sc.toData))
     }
 
@@ -158,7 +158,6 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
           )
         )
 
-        import scalus.uplc.apply
         assertExpected(SuccessAny)(contract(sc.toData))
     }
 

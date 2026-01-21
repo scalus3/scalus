@@ -117,102 +117,6 @@ sealed abstract class CompiledPlutus[A](
     }
 }
 
-/** Extension methods for applying arguments to compiled Plutus V1 functions.
-  *
-  * Enables partial application of compiled validators at the UPLC level.
-  *
-  * @example
-  *   {{{
-  *   val parameterized = PlutusV1.compile((config: Config) => (datum: Data) => ...)
-  *   val applied = parameterized(myConfig) // PlutusV1[Data => Unit]
-  *   }}}
-  */
-extension [A: Constant.LiftValue, B](self: PlutusV1[A => B]) {
-
-    /** Applies an argument to a compiled function, producing a new compiled script.
-      *
-      * @param arg
-      *   the argument to apply, must have a [[Constant.LiftValue]] instance
-      * @return
-      *   a new [[PlutusV1]] with the argument applied
-      */
-    def apply(arg: A): PlutusV1[B] = {
-        val const = arg.asConstant
-        PlutusV1[B](
-          () => self.code(arg),
-          self.sir $ SIR.Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
-          self.options,
-          self.optimizer
-        )
-    }
-}
-
-/** Extension methods for applying arguments to compiled Plutus V2 functions.
-  *
-  * Enables partial application of compiled validators at the UPLC level.
-  *
-  * @example
-  *   {{{
-  *   val parameterized = PlutusV2.compile((config: Config) => (datum: Data) => ...)
-  *   val applied = parameterized(myConfig) // PlutusV2[Data => Unit]
-  *   }}}
-  */
-extension [A: Constant.LiftValue, B](self: PlutusV2[A => B]) {
-
-    /** Applies an argument to a compiled function, producing a new compiled script.
-      *
-      * @param arg
-      *   the argument to apply, must have a [[Constant.LiftValue]] instance
-      * @return
-      *   a new [[PlutusV2]] with the argument applied
-      */
-    def apply(arg: A): PlutusV2[B] = {
-        val const = arg.asConstant
-        PlutusV2[B](
-          () => self.code(arg),
-          self.sir $ SIR.Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
-          self.options,
-          self.optimizer
-        )
-    }
-}
-
-/** Extension methods for applying arguments to compiled Plutus V3 functions.
-  *
-  * Enables partial application of compiled validators at the UPLC level. When you apply a Scala
-  * value to a compiled function, the value is lifted to a UPLC constant and applied to the SIR
-  * representation.
-  *
-  * @example
-  *   {{{
-  *   val parameterizedValidator = PlutusV3.compile((config: Config) => (datum: Data) => ...)
-  *   val appliedValidator = parameterizedValidator(myConfig) // PlutusV3[Data => Unit]
-  *   }}}
-  */
-extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
-
-    /** Applies an argument to a compiled function, producing a new compiled script.
-      *
-      * The argument is converted to a UPLC constant and applied to the SIR representation,
-      * resulting in a specialized script with the parameter baked in.
-      *
-      * @param arg
-      *   the argument to apply, must have a [[Constant.LiftValue]] instance
-      * @return
-      *   a new [[PlutusV3]] with the argument applied
-      */
-    def apply(arg: A): PlutusV3[B] = {
-        val const = arg.asConstant
-        PlutusV3[B](
-          () => self.code(arg),
-          self.sir $ SIR
-              .Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
-          self.options,
-          self.optimizer
-        )
-    }
-}
-
 /** A compiled Plutus V1 script.
   *
   * Plutus V1 was introduced in the Alonzo hard fork. It provides basic smart contract functionality
@@ -295,6 +199,36 @@ object PlutusV1 {
     inline def compile[A](inline code: A)(using opts: Options): PlutusV1[A] = {
         val sir = compileInlineWithOptions(opts, code)
         PlutusV1(() => code, sir, opts, new V1V2Optimizer())
+    }
+
+    /** Extension methods for applying arguments to compiled Plutus V1 functions.
+      *
+      * Enables partial application of compiled validators at the UPLC level.
+      *
+      * @example
+      *   {{{
+      *   val parameterized = PlutusV1.compile((config: Config) => (datum: Data) => ...)
+      *   val applied = parameterized(myConfig) // PlutusV1[Data => Unit]
+      *   }}}
+      */
+    extension [A: Constant.LiftValue, B](self: PlutusV1[A => B]) {
+
+        /** Applies an argument to a compiled function, producing a new compiled script.
+          *
+          * @param arg
+          *   the argument to apply, must have a [[Constant.LiftValue]] instance
+          * @return
+          *   a new [[PlutusV1]] with the argument applied
+          */
+        def apply(arg: A): PlutusV1[B] = {
+            val const = arg.asConstant
+            PlutusV1[B](
+              () => self.code(arg),
+              self.sir $ SIR.Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
+              self.options,
+              self.optimizer
+            )
+        }
     }
 }
 
@@ -380,6 +314,36 @@ object PlutusV2 {
     inline def compile[A](inline code: A)(using opts: Options): PlutusV2[A] = {
         val sir = compileInlineWithOptions(opts, code)
         PlutusV2(() => code, sir, opts, new V1V2Optimizer())
+    }
+
+    /** Extension methods for applying arguments to compiled Plutus V2 functions.
+      *
+      * Enables partial application of compiled validators at the UPLC level.
+      *
+      * @example
+      *   {{{
+      *   val parameterized = PlutusV2.compile((config: Config) => (datum: Data) => ...)
+      *   val applied = parameterized(myConfig) // PlutusV2[Data => Unit]
+      *   }}}
+      */
+    extension [A: Constant.LiftValue, B](self: PlutusV2[A => B]) {
+
+        /** Applies an argument to a compiled function, producing a new compiled script.
+          *
+          * @param arg
+          *   the argument to apply, must have a [[Constant.LiftValue]] instance
+          * @return
+          *   a new [[PlutusV2]] with the argument applied
+          */
+        def apply(arg: A): PlutusV2[B] = {
+            val const = arg.asConstant
+            PlutusV2[B](
+              () => self.code(arg),
+              self.sir $ SIR.Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
+              self.options,
+              self.optimizer
+            )
+        }
     }
 }
 
@@ -471,5 +435,40 @@ object PlutusV3 {
     inline def compile[A](inline code: A)(using opts: Options): PlutusV3[A] = {
         val sir = compileInlineWithOptions(opts, code)
         PlutusV3(() => code, sir, opts, new V3Optimizer())
+    }
+
+    /** Extension methods for applying arguments to compiled Plutus V3 functions.
+      *
+      * Enables partial application of compiled validators at the UPLC level. When you apply a Scala
+      * value to a compiled function, the value is lifted to a UPLC constant and applied to the SIR
+      * representation.
+      *
+      * @example
+      *   {{{
+      *   val parameterizedValidator = PlutusV3.compile((config: Config) => (datum: Data) => ...)
+      *   val appliedValidator = parameterizedValidator(myConfig) // PlutusV3[Data => Unit]
+      *   }}}
+      */
+    extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
+
+        /** Applies an argument to a compiled function, producing a new compiled script.
+          *
+          * The argument is converted to a UPLC constant and applied to the SIR representation,
+          * resulting in a specialized script with the parameter baked in.
+          *
+          * @param arg
+          *   the argument to apply, must have a [[Constant.LiftValue]] instance
+          * @return
+          *   a new [[PlutusV3]] with the argument applied
+          */
+        def apply(arg: A): PlutusV3[B] = {
+            val const = arg.asConstant
+            PlutusV3[B](
+              () => self.code(arg),
+              self.sir $ SIR.Const(const, SIRType.fromDefaultUni(const.tpe), AnnotationsDecl.empty),
+              self.options,
+              self.optimizer
+            )
+        }
     }
 }
