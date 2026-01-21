@@ -449,13 +449,16 @@ class CrowdfundingEndpoints(
 
             // Extract donor info from DonationDatum and full UTxO value
             // (donorAddress, donorPkh, datumAmount, utxoLovelace)
-            donorInfos: Seq[(ShelleyAddress, PubKeyHash, BigInt, Long)] = donationUtxos.map { utxo =>
-                val donationDatum = utxo.output.inlineDatum
-                    .getOrElse(throw IllegalStateException("Donation UTxO must have inline datum"))
-                    .to[DonationDatum]
-                val donorAddress = addressFromPkh(donationDatum.donor)
-                val utxoLovelace = utxo.output.value.coin.value
-                (donorAddress, donationDatum.donor, donationDatum.amount, utxoLovelace)
+            donorInfos: Seq[(ShelleyAddress, PubKeyHash, BigInt, Long)] = donationUtxos.map {
+                utxo =>
+                    val donationDatum = utxo.output.inlineDatum
+                        .getOrElse(
+                          throw IllegalStateException("Donation UTxO must have inline datum")
+                        )
+                        .to[DonationDatum]
+                    val donorAddress = addressFromPkh(donationDatum.donor)
+                    val utxoLovelace = utxo.output.value.coin.value
+                    (donorAddress, donationDatum.donor, donationDatum.amount, utxoLovelace)
             }
             // Use datum amount for tracking campaign state (matches on-chain logic)
             totalReclaimAmount: BigInt = donorInfos.map(_._3).foldLeft(BigInt(0))(_ + _)
