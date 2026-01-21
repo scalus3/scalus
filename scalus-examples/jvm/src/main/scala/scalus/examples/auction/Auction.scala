@@ -94,15 +94,26 @@ enum Action derives Data.FromData, Data.ToData:
 @Compile
 object Action
 
+/** Auction validator parameterized by a one-shot UTxO reference.
+  *
+  * The oneShot TxOutRef must be spent when starting the auction, ensuring each auction instance has
+  * a unique policyId/script hash. This prevents UTXO discovery confusion attacks where multiple
+  * auctions could share the same itemId.
+  *
+  * Uses DataParameterizedValidator so the parameter is passed as Data and can be applied at
+  * runtime.
+  */
 @Compile
-object AuctionValidator extends Validator {
+object AuctionValidator extends DataParameterizedValidator {
 
     inline override def spend(
+        oneShotData: Data,
         @annotation.unused datum: Option[Data],
         redeemer: Data,
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit =
+        val oneShot = oneShotData.to[TxOutRef]
         // Match on redeemer action and extract input using provided index
         redeemer.to[Action] match
             case Action.Bid(bidAmount, bidder, inputIdx, outputIdx, refundOutputIdx) =>
@@ -342,20 +353,23 @@ object AuctionValidator extends Validator {
                 )
 
     inline override def mint(
+        oneShotData: Data,
         redeemer: Data,
         policyId: PolicyId,
         txInfo: TxInfo
     ): Unit =
+        val oneShot = oneShotData.to[TxOutRef]
         val action = redeemer.to[Action]
 
         action match
             case Action.Start(itemId, seller, startingBid, auctionEndTime) =>
-                handleMint(policyId, txInfo, itemId, seller, startingBid, auctionEndTime)
+                handleMint(oneShot, policyId, txInfo, itemId, seller, startingBid, auctionEndTime)
             case _ =>
                 // For End action - burning is allowed
                 handleBurn(policyId, txInfo)
 
     private inline def handleMint(
+        oneShot: TxOutRef,
         policyId: PolicyId,
         txInfo: TxInfo,
         itemId: ByteString,
@@ -363,13 +377,19 @@ object AuctionValidator extends Validator {
         startingBid: BigInt,
         auctionEndTime: PosixTime
     ): Unit =
-        // 1. Seller must sign the transaction
+        // 1. Verify the one-shot UTxO is being spent (ensures unique policyId per auction)
+        require(
+          txInfo.inputs.exists(_.outRef === oneShot),
+          "Must spend the one-shot UTxO to create auction"
+        )
+
+        // 2. Seller must sign the transaction
         require(
           txInfo.isSignedBy(seller),
           "Seller must sign to start auction"
         )
 
-        // 2. Validate ALL tokens minted under this policy (prevents Other Token Name Attack)
+        // 3. Validate ALL tokens minted under this policy (prevents Other Token Name Attack)
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
           mintedTokens.size === BigInt(1),
@@ -381,32 +401,32 @@ object AuctionValidator extends Validator {
           "Must mint exactly one auction NFT with the specified itemId"
         )
 
-        // 3. The auction end time must be in the future
+        // 4. The auction end time must be in the future
         require(
           txInfo.validRange.isEntirelyBefore(auctionEndTime),
           "Auction end time must be in the future"
         )
 
-        // 4. Starting bid must be positive
+        // 5. Starting bid must be positive
         require(
           startingBid > BigInt(0),
           "Starting bid must be positive"
         )
 
-        // 5. Find the output going to the script address
+        // 6. Find the output going to the script address
         val auctionOutput = txInfo.outputs.filter { out =>
             out.address === Address.fromScriptHash(policyId)
         }.match
             case List.Cons(out, List.Nil) => out
             case _ => fail("There must be exactly one output to the auction script")
 
-        // 6. Verify the output contains the minted NFT
+        // 7. Verify the output contains the minted NFT
         require(
           auctionOutput.value.quantityOf(policyId, itemId) === BigInt(1),
           "Auction output must contain the minted NFT"
         )
 
-        // 7. Verify the datum is correct
+        // 8. Verify the datum is correct
         val expectedDatum = Datum(
           seller = seller,
           highestBidder = Option.None,
@@ -435,22 +455,68 @@ object AuctionValidator extends Validator {
 }
 
 private given Options = Options.release
-lazy val AuctionContract = PlutusV3.compile(AuctionValidator.validate)
-lazy val AuctionBlueprint = Blueprint.plutusV3[Datum, Action](
-  title = "Auction validator",
-  description = "English auction smart contract for Cardano",
-  version = "1.0.0",
-  license = Some("Apache License Version 2.0"),
-  compiled = AuctionContract
-)
 
-class AuctionEndpoints(
+/** Compiled parameterized auction validator. Apply a TxOutRef (as Data) to get a unique auction
+  * instance.
+  */
+lazy val AuctionContract: PlutusV3[Data => Data => Unit] =
+    PlutusV3.compile(AuctionValidator.validate)
+
+/** Factory for creating auction instances with unique policyIds.
+  *
+  * Each auction is parameterized by a one-shot UTxO reference, ensuring globally unique policyIds.
+  * This prevents UTXO discovery confusion attacks where multiple auctions could share the same
+  * itemId.
+  *
+  * @param env
+  *   Cardano network environment
+  * @param provider
+  *   Node provider for queries and submission
+  * @param withErrorTraces
+  *   If true, include error traces for debugging (default: false for production)
+  */
+class AuctionFactory(env: CardanoInfo, provider: Provider, withErrorTraces: Boolean = false) {
+
+    private val baseContract =
+        if withErrorTraces then AuctionContract.withErrorTraces else AuctionContract
+
+    /** Creates a new auction instance parameterized by the given one-shot UTxO.
+      *
+      * @param oneShot
+      *   UTxO reference that will be spent to create the auction (ensures unique policyId)
+      * @return
+      *   AuctionInstance with unique policyId and script address
+      */
+    def createInstance(oneShot: TxOutRef): AuctionInstance = {
+        val appliedContract = baseContract.apply(Data.toData(oneShot))
+        AuctionInstance(
+          env = env,
+          provider = provider,
+          oneShot = oneShot,
+          compiledContract = appliedContract
+        )
+    }
+}
+
+/** A specific auction instance with a unique policyId derived from the one-shot UTxO.
+  *
+  * @param env
+  *   Cardano network environment
+  * @param provider
+  *   Node provider for queries and submission
+  * @param oneShot
+  *   The UTxO reference that parameterizes this auction (must be spent on creation)
+  * @param compiledContract
+  *   The compiled contract with oneShot applied
+  */
+class AuctionInstance(
     env: CardanoInfo,
     provider: Provider,
+    val oneShot: TxOutRef,
     compiledContract: PlutusV3[Data => Unit]
 ) {
     private val script = compiledContract.script
-    private val policyId = script.scriptHash
+    private val scriptHash: scalus.cardano.ledger.ScriptHash = script.scriptHash
     val scriptAddress: CardanoAddress = compiledContract.address(env.network)
 
     /** Extract PubKeyHash from a ShelleyAddress */
@@ -469,8 +535,13 @@ class AuctionEndpoints(
 
     /** Starts an auction for the given itemId by minting an NFT representing the item.
       *
+      * The oneShot UTxO (used to parameterize this auction instance) must be owned by the seller
+      * and will be spent in this transaction to ensure the auction can only be created once.
+      *
       * @param sellerAddress
       *   The seller's address for receiving funds and signing
+      * @param oneShotUtxo
+      *   The UTxO to spend as one-shot (must match the oneShot used to create this instance)
       * @param itemId
       *   Unique identifier for the auctioned item (becomes token name)
       * @param startingBid
@@ -486,12 +557,20 @@ class AuctionEndpoints(
       */
     def startAuction(
         sellerAddress: ShelleyAddress,
+        oneShotUtxo: Utxo,
         itemId: ByteString,
         startingBid: Long,
         auctionEndTime: PosixTime,
         initialValue: Coin,
         signer: TransactionSigner
     )(using ExecutionContext): Future[Transaction] =
+        // Verify the provided UTxO matches the oneShot parameter
+        require(
+          oneShotUtxo.input.transactionId == oneShot.id.hash &&
+              oneShotUtxo.input.index == oneShot.idx.toInt,
+          s"Provided UTxO ${oneShotUtxo.input} does not match oneShot ${oneShot}"
+        )
+
         val sellerPkh = extractPkh(sellerAddress)
         for
             _ <- Future.unit
@@ -511,10 +590,12 @@ class AuctionEndpoints(
             )
 
             nftAsset = AssetName(itemId)
-            mintedValue = LedgerValue.asset(policyId, nftAsset, 1L)
+            mintedValue = LedgerValue.asset(scriptHash, nftAsset, 1L)
             sellerAddrKeyHash = AddrKeyHash.fromByteString(sellerPkh.hash)
 
+            // Spend the oneShot UTxO and mint the auction NFT
             tx <- TxBuilder(env)
+                .spend(oneShotUtxo) // Spend the one-shot UTxO (pubkey-protected)
                 .mint(script, Map(nftAsset -> 1L), redeemer, Set(sellerAddrKeyHash))
                 .payTo(scriptAddress, LedgerValue(initialValue) + mintedValue, datum)
                 .validTo(Instant.ofEpochMilli(auctionEndTime.toLong - 1000))
@@ -527,10 +608,11 @@ class AuctionEndpoints(
             }
         yield tx
 
-    /** Places a bid on the auction identified by itemId.
+    /** Places a bid on this auction.
       *
-      * @param itemId
-      *   The auction item identifier (token name)
+      * Since each auction instance has a unique policyId, we can directly query by script address
+      * without risk of UTXO discovery confusion.
+      *
       * @param bidderAddress
       *   The bidder's address
       * @param bidAmount
@@ -541,15 +623,14 @@ class AuctionEndpoints(
       *   The submitted transaction
       */
     def bid(
-        itemId: ByteString,
         bidderAddress: ShelleyAddress,
         bidAmount: Long,
         signer: TransactionSigner
     )(using ExecutionContext): Future[Transaction] =
         val bidderPkh = extractPkh(bidderAddress)
         for
-            auctionUtxo <- findActiveUtxo(itemId).map(
-              _.getOrElse(throw RuntimeException(s"No active auction found for itemId: $itemId"))
+            auctionUtxo <- findAuctionUtxo().map(
+              _.getOrElse(throw RuntimeException(s"No active auction found at $scriptAddress"))
             )
             currentDatum = auctionUtxo.output.inlineDatum
                 .getOrElse(throw IllegalStateException("Auction UTxO must have inline datum"))
@@ -561,7 +642,7 @@ class AuctionEndpoints(
             )
 
             nftAsset = AssetName(currentDatum.itemId)
-            nftValue = LedgerValue.asset(policyId, nftAsset, 1L)
+            nftValue = LedgerValue.asset(scriptHash, nftAsset, 1L)
             newAuctionValue = LedgerValue.lovelace(bidAmount) + nftValue
 
             // Calculate previous bidder address for refund output index computation
@@ -622,13 +703,14 @@ class AuctionEndpoints(
             }
         yield tx
 
-    /** Ends the auction identified by itemId.
+    /** Ends this auction.
       *
       * Transfers the NFT to the winner and funds to the seller. If no bids were placed, the seller
       * reclaims the NFT (seller must sign).
       *
-      * @param itemId
-      *   The auction item identifier (token name)
+      * Since each auction instance has a unique policyId, we can directly query by script address
+      * without risk of UTXO discovery confusion.
+      *
       * @param sponsorAddress
       *   Address to pay transaction fees from
       * @param signer
@@ -637,20 +719,19 @@ class AuctionEndpoints(
       *   The submitted transaction
       */
     def endAuction(
-        itemId: ByteString,
         sponsorAddress: ShelleyAddress,
         signer: TransactionSigner
     )(using ExecutionContext): Future[Transaction] =
         for
-            auctionUtxo <- findActiveUtxo(itemId).map(
-              _.getOrElse(throw RuntimeException(s"No active auction found for itemId: $itemId"))
+            auctionUtxo <- findAuctionUtxo().map(
+              _.getOrElse(throw RuntimeException(s"No active auction found at $scriptAddress"))
             )
             currentDatum = auctionUtxo.output.inlineDatum
                 .getOrElse(throw IllegalStateException("Auction UTxO must have inline datum"))
                 .to[Datum]
 
             nftAsset = AssetName(currentDatum.itemId)
-            nftValue = LedgerValue.asset(policyId, nftAsset, 1L)
+            nftValue = LedgerValue.asset(scriptHash, nftAsset, 1L)
 
             sellerAddr = addressFromPkh(currentDatum.seller)
             sellerAddrKeyHash = AddrKeyHash.fromByteString(currentDatum.seller.hash)
@@ -716,21 +797,19 @@ class AuctionEndpoints(
             }
         yield tx
 
-    /** Finds the active auction UTxO containing the auction token with the given itemId.
+    /** Finds the auction UTxO at this auction's script address.
       *
-      * The auction is identified by the NFT token with policyId equal to the script hash and
-      * tokenName equal to the itemId.
+      * Since each auction instance has a unique policyId (derived from the one-shot UTxO), there
+      * can only be one active UTxO at this script address. This eliminates UTXO discovery
+      * confusion.
       *
-      * @param itemId
-      *   The auction item identifier (token name of the auction NFT)
       * @return
       *   The auction UTxO if found
       */
-    def findActiveUtxo(itemId: ByteString)(using ExecutionContext): Future[scala.Option[Utxo]] =
-        val nftAsset = AssetName(itemId)
+    def findAuctionUtxo()(using ExecutionContext): Future[scala.Option[Utxo]] =
         provider
             .queryUtxos { u =>
-                u.output.address == scriptAddress && u.output.value.hasAsset(policyId, nftAsset)
+                u.output.address == scriptAddress
             }
             .limit(1)
             .execute()
@@ -739,5 +818,4 @@ class AuctionEndpoints(
                     utxos.headOption.map { case (input, output) => Utxo(input, output) }
                 case Left(_) => scala.None
             }
-
 }

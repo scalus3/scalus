@@ -449,6 +449,14 @@ object PlutusV3 {
       *   val appliedValidator = parameterizedValidator(myConfig) // PlutusV3[Data => Unit]
       *   }}}
       */
+    // TODO: The constraint `A: Constant.LiftValue` is too restrictive. It only works for UPLC
+    // primitive types (BigInt, ByteString, Data, etc.) but not for Scalus case classes like
+    // TxOutRef that have ToData instances. We should introduce a typeclass (e.g., `Liftable[A]`)
+    // that supports both:
+    //   1. Types with LiftValue (direct UPLC primitives)
+    //   2. Types with ToData (converted to Data, then lifted)
+    // This would allow `ParameterizedValidator[TxOutRef]` to work directly without requiring
+    // users to switch to DataParameterizedValidator and manually convert to Data.
     extension [A: Constant.LiftValue, B](self: PlutusV3[A => B]) {
 
         /** Applies an argument to a compiled function, producing a new compiled script.

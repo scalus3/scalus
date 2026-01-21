@@ -131,8 +131,9 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 }
 
 object AuctionValidatorTest extends ScalusTest {
+    import scalus.ledger.api.v3.{TxId, TxOutRef}
+
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val compiledContract = AuctionContract.withErrorTraces
 
     // Party to role mapping
     private val sellerParty = Alice
@@ -152,6 +153,20 @@ object AuctionValidatorTest extends ScalusTest {
     private val afterSlot: SlotNo = slot + 10
     private val auctionEndTime: PosixTime = BigInt(env.slotConfig.slotToTime(slot))
 
+    /** Create an AuctionInstance using the first seller UTxO as the oneShot parameter. Returns both
+      * the instance and the UTxO that must be spent in startAuction.
+      */
+    private def createAuctionInstanceWithUtxo(provider: Emulator): (AuctionInstance, Utxo) = {
+        val sellerUtxos = provider.findUtxos(sellerAddress).await().toOption.get
+        val oneShotUtxo = Utxo(sellerUtxos.head)
+        val oneShot = TxOutRef(
+          TxId(oneShotUtxo.input.transactionId),
+          BigInt(oneShotUtxo.input.index)
+        )
+        val factory = AuctionFactory(env, provider, withErrorTraces = true)
+        (factory.createInstance(oneShot), oneShotUtxo)
+    }
+
     enum TestAction:
         case Start
         case Bid(bidAmount: Long)
@@ -169,27 +184,32 @@ object AuctionValidatorTest extends ScalusTest {
     ):
         def run(): Unit =
             val provider = createProvider()
-            val endpoints = AuctionEndpoints(env, provider, compiledContract)
+            val (auction, oneShotUtxo) = createAuctionInstanceWithUtxo(provider)
 
             action match
                 case TestAction.Start =>
-                    runStartTest(provider, endpoints)
+                    runStartTest(provider, auction, oneShotUtxo)
                 case TestAction.Bid(bidAmount) =>
-                    runBidTest(provider, endpoints, bidAmount)
+                    runBidTest(provider, auction, oneShotUtxo, bidAmount)
                 case TestAction.Outbid(newBidAmount) =>
-                    runOutbidTest(provider, endpoints, newBidAmount)
+                    runOutbidTest(provider, auction, oneShotUtxo, newBidAmount)
                 case TestAction.EndWithWinner =>
-                    runEndWithWinnerTest(provider, endpoints)
+                    runEndWithWinnerTest(provider, auction, oneShotUtxo)
                 case TestAction.EndNoBids =>
-                    runEndNoBidsTest(provider, endpoints)
+                    runEndNoBidsTest(provider, auction, oneShotUtxo)
 
-        private def runStartTest(provider: Emulator, endpoints: AuctionEndpoints): Unit =
+        private def runStartTest(
+            provider: Emulator,
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo
+        ): Unit =
             provider.setSlot(beforeSlot)
 
             val result = scala.util.Try {
-                endpoints
+                auction
                     .startAuction(
                       sellerAddress = sellerAddress,
+                      oneShotUtxo = oneShotUtxo,
                       itemId = itemId,
                       startingBid = startingBid,
                       auctionEndTime = auctionEndTime,
@@ -203,14 +223,16 @@ object AuctionValidatorTest extends ScalusTest {
 
         private def runBidTest(
             provider: Emulator,
-            endpoints: AuctionEndpoints,
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo,
             bidAmount: Long
         ): Unit =
             // First start the auction
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -221,9 +243,8 @@ object AuctionValidatorTest extends ScalusTest {
 
             // Then place bid
             val result = scala.util.Try {
-                endpoints
+                auction
                     .bid(
-                      itemId = itemId,
                       bidderAddress = bidder1Address,
                       bidAmount = bidAmount,
                       signer = bidder1Party.signer
@@ -235,14 +256,16 @@ object AuctionValidatorTest extends ScalusTest {
 
         private def runOutbidTest(
             provider: Emulator,
-            endpoints: AuctionEndpoints,
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo,
             newBidAmount: Long
         ): Unit =
             // Start auction
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -252,9 +275,8 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // First bid
-            endpoints
+            auction
                 .bid(
-                  itemId = itemId,
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
                   signer = bidder1Party.signer
@@ -263,9 +285,8 @@ object AuctionValidatorTest extends ScalusTest {
 
             // Outbid
             val result = scala.util.Try {
-                endpoints
+                auction
                     .bid(
-                      itemId = itemId,
                       bidderAddress = bidder2Address,
                       bidAmount = newBidAmount,
                       signer = bidder2Party.signer
@@ -277,13 +298,15 @@ object AuctionValidatorTest extends ScalusTest {
 
         private def runEndWithWinnerTest(
             provider: Emulator,
-            endpoints: AuctionEndpoints
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo
         ): Unit =
             // Start auction
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -293,9 +316,8 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Place bid
-            endpoints
+            auction
                 .bid(
-                  itemId = itemId,
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
                   signer = bidder1Party.signer
@@ -305,9 +327,8 @@ object AuctionValidatorTest extends ScalusTest {
             // End auction after time
             provider.setSlot(afterSlot)
             val result = scala.util.Try {
-                endpoints
+                auction
                     .endAuction(
-                      itemId = itemId,
                       sponsorAddress = sellerAddress,
                       signer = sellerParty.signer
                     )
@@ -318,13 +339,15 @@ object AuctionValidatorTest extends ScalusTest {
 
         private def runEndNoBidsTest(
             provider: Emulator,
-            endpoints: AuctionEndpoints
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo
         ): Unit =
             // Start auction
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -336,9 +359,8 @@ object AuctionValidatorTest extends ScalusTest {
             // End auction after time (no bids)
             provider.setSlot(afterSlot)
             val result = scala.util.Try {
-                endpoints
+                auction
                     .endAuction(
-                      itemId = itemId,
                       sponsorAddress = sellerAddress,
                       signer = sellerParty.signer
                     )
@@ -365,29 +387,31 @@ object AuctionValidatorTest extends ScalusTest {
         /** Run the test and return the execution budget for spend validators */
         def runWithBudget(): ExUnits =
             val provider = createProvider()
-            val endpoints = AuctionEndpoints(env, provider, compiledContract)
+            val (auction, oneShotUtxo) = createAuctionInstanceWithUtxo(provider)
 
             action match
                 case TestAction.Start =>
                     throw RuntimeException("Start action uses mint, not spend - no budget test")
                 case TestAction.Bid(bidAmount) =>
-                    runBidWithBudget(provider, endpoints, bidAmount)
+                    runBidWithBudget(provider, auction, oneShotUtxo, bidAmount)
                 case TestAction.Outbid(newBidAmount) =>
-                    runOutbidWithBudget(provider, endpoints, newBidAmount)
+                    runOutbidWithBudget(provider, auction, oneShotUtxo, newBidAmount)
                 case TestAction.EndWithWinner =>
-                    runEndWithWinnerWithBudget(provider, endpoints)
+                    runEndWithWinnerWithBudget(provider, auction, oneShotUtxo)
                 case TestAction.EndNoBids =>
-                    runEndNoBidsWithBudget(provider, endpoints)
+                    runEndNoBidsWithBudget(provider, auction, oneShotUtxo)
 
         private def runBidWithBudget(
             provider: Emulator,
-            endpoints: AuctionEndpoints,
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo,
             bidAmount: Long
         ): ExUnits =
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -397,31 +421,34 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture the UTxO BEFORE the bid transaction consumes it
-            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
+            val auctionUtxo = Utxo(
+              provider.findUtxos(auction.scriptAddress).await().toOption.get.head
+            )
 
             // Save the utxo map before submission
             val utxosBeforeBid = Map(auctionUtxo.toTuple)
 
-            val tx = endpoints
+            val tx = auction
                 .bid(
-                  itemId = itemId,
                   bidderAddress = bidder1Address,
                   bidAmount = bidAmount,
                   signer = bidder1Party.signer
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo.input, utxosBeforeBid).budget
+            runValidatorWithUtxos(provider, auction, tx, auctionUtxo.input, utxosBeforeBid).budget
 
         private def runOutbidWithBudget(
             provider: Emulator,
-            endpoints: AuctionEndpoints,
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo,
             newBidAmount: Long
         ): ExUnits =
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -430,9 +457,8 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            endpoints
+            auction
                 .bid(
-                  itemId = itemId,
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
                   signer = bidder1Party.signer
@@ -440,30 +466,39 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture ALL UTxOs BEFORE the outbid transaction consumes them
-            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
+            val auctionUtxo = Utxo(
+              provider.findUtxos(auction.scriptAddress).await().toOption.get.head
+            )
 
             // Get all UTxOs from the provider before the transaction
             val allUtxosBeforeOutbid = provider.utxos
 
-            val tx = endpoints
+            val tx = auction
                 .bid(
-                  itemId = itemId,
                   bidderAddress = bidder2Address,
                   bidAmount = newBidAmount,
                   signer = bidder2Party.signer
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo.input, allUtxosBeforeOutbid).budget
+            runValidatorWithUtxos(
+              provider,
+              auction,
+              tx,
+              auctionUtxo.input,
+              allUtxosBeforeOutbid
+            ).budget
 
         private def runEndWithWinnerWithBudget(
             provider: Emulator,
-            endpoints: AuctionEndpoints
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo
         ): ExUnits =
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -472,9 +507,8 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            endpoints
+            auction
                 .bid(
-                  itemId = itemId,
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
                   signer = bidder1Party.signer
@@ -482,30 +516,39 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture the UTxO BEFORE the end transaction consumes it
-            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
+            val auctionUtxo = Utxo(
+              provider.findUtxos(auction.scriptAddress).await().toOption.get.head
+            )
 
             // Get all UTxOs from the provider before the transaction
             val allUtxosBeforeEnd = provider.utxos
 
             provider.setSlot(afterSlot)
-            val tx = endpoints
+            val tx = auction
                 .endAuction(
-                  itemId = itemId,
                   sponsorAddress = sellerAddress,
                   signer = sellerParty.signer
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo.input, allUtxosBeforeEnd).budget
+            runValidatorWithUtxos(
+              provider,
+              auction,
+              tx,
+              auctionUtxo.input,
+              allUtxosBeforeEnd
+            ).budget
 
         private def runEndNoBidsWithBudget(
             provider: Emulator,
-            endpoints: AuctionEndpoints
+            auction: AuctionInstance,
+            oneShotUtxo: Utxo
         ): ExUnits =
             provider.setSlot(beforeSlot)
-            endpoints
+            auction
                 .startAuction(
                   sellerAddress = sellerAddress,
+                  oneShotUtxo = oneShotUtxo,
                   itemId = itemId,
                   startingBid = startingBid,
                   auctionEndTime = auctionEndTime,
@@ -515,28 +558,28 @@ object AuctionValidatorTest extends ScalusTest {
                 .await()
 
             // Capture the UTxO BEFORE the end transaction consumes it
-            val auctionUtxo = Utxo(provider.findUtxos(scriptAddress).await().toOption.get.head)
+            val auctionUtxo = Utxo(
+              provider.findUtxos(auction.scriptAddress).await().toOption.get.head
+            )
 
             // Save the utxo map before submission
             val utxosBeforeEnd = Map(auctionUtxo.toTuple)
 
             provider.setSlot(afterSlot)
-            val tx = endpoints
+            val tx = auction
                 .endAuction(
-                  itemId = itemId,
                   sponsorAddress = sellerAddress,
                   signer = sellerParty.signer
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, tx, auctionUtxo.input, utxosBeforeEnd).budget
-
-    private val scriptAddress = compiledContract.address(env.network)
+            runValidatorWithUtxos(provider, auction, tx, auctionUtxo.input, utxosBeforeEnd).budget
 
     /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted)
       */
     private def runValidatorWithUtxos(
         provider: Emulator,
+        auction: AuctionInstance,
         tx: Transaction,
         scriptInput: TransactionInput,
         knownUtxos: Map[TransactionInput, TransactionOutput]
@@ -557,7 +600,7 @@ object AuctionValidatorTest extends ScalusTest {
         val allResolvedPlutusScriptsMap =
             AllResolvedScripts.allResolvedPlutusScriptsMap(tx, utxos).toOption.get
         val plutusScript =
-            scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
+            auction.scriptAddress.scriptHashOption.flatMap(allResolvedPlutusScriptsMap.get).get
         val program = plutusScript.deBruijnedProgram.toProgram
 
         val result = program.runWithDebug(scriptContext)
@@ -567,17 +610,23 @@ object AuctionValidatorTest extends ScalusTest {
     private def createProvider(): Emulator =
         Emulator(
           initialUtxos = Map(
+            // Seller gets two UTxOs: one for oneShot, one for fees/collateral
             Input(genesisHash, 0) ->
                 TransactionOutput.Babbage(
                   address = sellerAddress,
-                  value = Value.lovelace(100_000_000L)
+                  value = Value.lovelace(10_000_000L) // oneShot UTxO
                 ),
             Input(genesisHash, 1) ->
+                TransactionOutput.Babbage(
+                  address = sellerAddress,
+                  value = Value.lovelace(100_000_000L) // fees/collateral
+                ),
+            Input(genesisHash, 2) ->
                 TransactionOutput.Babbage(
                   address = bidder1Address,
                   value = Value.lovelace(100_000_000L)
                 ),
-            Input(genesisHash, 2) ->
+            Input(genesisHash, 3) ->
                 TransactionOutput.Babbage(
                   address = bidder2Address,
                   value = Value.lovelace(100_000_000L)
