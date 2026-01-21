@@ -2,7 +2,6 @@ package scalus.testing.kit
 
 import org.scalatest.Assertions
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilderException
 import scalus.utils.await
@@ -15,33 +14,6 @@ import scala.concurrent.ExecutionContext
   */
 trait TxTestKit extends Assertions {
 
-    /** Verifies successful transaction with real script evaluation.
-      *
-      * Checks:
-      *   - Execution units are within expected bounds
-      *   - Execution fee is positive
-      *   - Transaction fee covers minimum required fee
-      *   - Emulator submission succeeds
-      *
-      * @param provider
-      *   The emulator to submit to
-      * @param tx
-      *   The transaction to verify
-      * @param env
-      *   The Cardano environment info
-      * @param ec
-      *   ExecutionContext for async operations
-      */
-    protected def assertTxSuccess(provider: Emulator, tx: Transaction)(using
-        env: CardanoInfo,
-        ec: ExecutionContext
-    ): Unit = {
-
-        // Verify emulator submission succeeds
-        val submissionResult = provider.submit(tx).await()
-        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
-    }
-
     /** Verifies that transaction building fails with the expected error.
       *
       * @param expectedError
@@ -49,7 +21,7 @@ trait TxTestKit extends Assertions {
       * @param buildTx
       *   The transaction building code that should fail
       */
-    protected def assertTxFail(expectedError: String)(buildTx: => Transaction): Unit = {
+    protected def assertScriptFail(expectedError: String)(buildTx: => Transaction): Unit = {
         try
             val tx = buildTx
             fail(s"Transaction building should have failed but succeeded: $tx")
@@ -60,10 +32,11 @@ trait TxTestKit extends Assertions {
                   logs.exists(_.contains(expectedError)),
                   s"Expected error containing '$expectedError' but got logs: ${logs.mkString("\n")}"
                 )
-            case e: Throwable =>
+            case e: Exception =>
+                val message = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
                 assert(
-                  e.getMessage.contains(expectedError),
-                  s"Expected error containing '$expectedError' but got: ${e.getMessage}"
+                  message.contains(expectedError),
+                  s"Expected error containing '$expectedError' but got: $message"
                 )
     }
 
@@ -86,22 +59,6 @@ trait TxTestKit extends Assertions {
           totalExUnits.steps <= maxSteps,
           s"Steps ${totalExUnits.steps} exceeds max $maxSteps"
         )
-    }
-
-    /** Assert that transaction submission to emulator succeeds.
-      *
-      * @param provider
-      *   The emulator
-      * @param tx
-      *   The transaction
-      * @param ec
-      *   ExecutionContext for async operations
-      */
-    protected def assertTxSubmits(provider: Emulator, tx: Transaction)(using
-        ec: ExecutionContext
-    ): Unit = {
-        val result = provider.submit(tx).await()
-        assert(result.isRight, s"Transaction submission failed: $result")
     }
 
     /** Assert that transaction submission to emulator fails.

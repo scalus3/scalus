@@ -7,12 +7,10 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
 import scalus.cardano.txbuilder.txBuilder
-import scalus.testing.assertions.Expected.{Success, SuccessAny}
-import scalus.testing.assertions.{Expected, ResultAssertions}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
+import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil, TxTestKit}
-import scalus.uplc.Compiled
-import scalus.utils.{await, showHighlighted}
+import scalus.utils.await
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -40,7 +38,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     val wrongPreimage: Preimage = genByteStringOfN(12).sample.get
     private val image: Image = sha3_256(validPreimage)
 
-    private def createProvider(): Emulator =
+    private def createProvider: Emulator =
         Emulator.withAddresses(Seq(Alice.address, Bob.address, Eve.address))
 
     private def lock(provider: Emulator): Utxo = {
@@ -70,11 +68,11 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     }
 
     test("VALIDATOR: receiver reveals preimage before timeout") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.utxos
 
-        val tx = txBuilder
+        val scriptCtx = txBuilder
             .spend(
               lockedUtxo,
               redeemer = Action.Reveal(validPreimage),
@@ -84,35 +82,17 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
             .payTo(Bob.address, Value.ada(10))
             .validTo(timeout)
             .draft
+            .getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
 
-        import scalus.testing.kit.TestUtil.getScriptContextV3
-        val sc = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
-        assertExpected(SuccessAny)(contract(sc.toData))
-    }
-
-    private def assertExpected[A](expected: Expected)(contract: Compiled[A]): Unit = {
-        val jvmResult = Try(contract.code)
-        val uplcResult = contract.program.evaluateDebug
-
-        // Assert UPLC result matches expected
-        ResultAssertions.assertResult(expected, uplcResult)
-
-        // Assert JVM result aligns with expected
-        expected match
-            case Expected.SuccessAny | Expected.Success(_) | Expected.SuccessSame =>
-                assert(
-                  jvmResult.isSuccess,
-                  s"JVM execution failed but expected success: ${jvmResult}"
-                )
-            case Expected.Failure(_) =>
-                assert(
-                  jvmResult.isFailure,
-                  s"JVM execution succeeded but expected failure"
-                )
+        assert(Try(contract(scriptCtx.toData).code).isSuccess)
+        val result = contract(scriptCtx.toData).program.evaluateDebug
+        assert(result.isSuccess)
+        assert(result.budget == ExUnits(46134, 16953083))
+        assert(result.budget.fee == Coin(3885))
     }
 
     test("receiver reveals preimage before timeout") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
@@ -127,17 +107,21 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
           signer = Bob.signer
         )
 
+        assertResult(ExUnits(46134, 16953083)):
+            revealTx.witnessSet.redeemers.get.value.totalExUnits
+
         provider.setSlot(beforeSlot)
+
         val result = provider.submit(revealTx).await()
         assert(result.isRight, s"Emulator submission failed: $result")
     }
 
     test("receiver fails with wrong preimage") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertTxFail(HtlcValidator.InvalidReceiverPreimage) {
+        assertScriptFail(HtlcValidator.InvalidReceiverPreimage) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -152,11 +136,11 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     }
 
     test("receiver fails with wrong receiver pubkey hash") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertTxFail(HtlcValidator.UnsignedReceiverTransaction) {
+        assertScriptFail(HtlcValidator.UnsignedReceiverTransaction) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -171,11 +155,11 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     }
 
     test("receiver fails after timeout") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        assertTxFail(HtlcValidator.InvalidReceiverTimePoint) {
+        assertScriptFail(HtlcValidator.InvalidReceiverTimePoint) {
             txCreator.reveal(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -190,7 +174,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     }
 
     test("committer reclaims after timeout") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
@@ -205,15 +189,16 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
         )
 
         provider.setSlot(afterSlot)
-        assertTxSuccess(provider, timeoutTx)
+        val submissionResult = provider.submit(timeoutTx).await()
+        assert(submissionResult.isRight, s"Emulator submission failed: $submissionResult")
     }
 
     test("committer fails with wrong committer pubkey hash") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Eve.address).await().toOption.get
 
-        assertTxFail(HtlcValidator.UnsignedCommitterTransaction) {
+        assertScriptFail(HtlcValidator.UnsignedCommitterTransaction) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,
@@ -227,11 +212,11 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
     }
 
     test("committer fails before timeout") {
-        val provider = createProvider()
+        val provider = createProvider
         val lockedUtxo = lock(provider)
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        assertTxFail(HtlcValidator.InvalidCommitterTimePoint) {
+        assertScriptFail(HtlcValidator.InvalidCommitterTimePoint) {
             txCreator.timeout(
               utxos = utxos,
               lockedUtxo = lockedUtxo,

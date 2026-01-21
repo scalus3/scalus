@@ -476,6 +476,9 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
           (prices.priceMemory * memory + prices.priceSteps * steps).ceil
         )
     }
+
+    /** Calculate fee for the execution units given the prices */
+    def fee(using info: CardanoInfo): Coin = fee(info.protocolParams.executionUnitPrices)
 }
 
 object ExUnits {
