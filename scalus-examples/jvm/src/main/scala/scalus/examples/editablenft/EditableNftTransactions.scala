@@ -16,7 +16,7 @@ import EditableNftValidator.USER_NFT_LABEL
   *   - To edit: include user token in tx inputs (proves ownership)
   *   - To transfer: just send the user token (no validator needed)
   */
-case class EditableNftTransactionCreator(
+case class EditableNftTransactions(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     contract: PlutusV3[Data => Unit]

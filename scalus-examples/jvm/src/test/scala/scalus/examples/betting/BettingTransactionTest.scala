@@ -46,7 +46,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private val deploymentAddress = TestUtil.createTestAddress(deploymentPkh)
 
     // Transaction creator factories
-    private def transactionCreatorFor(signer: TransactionSigner) = BettingTransactionCreator(
+    private def transactionCreatorFor(signer: TransactionSigner) = BettingTransactions(
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
       signer = signer,
@@ -54,7 +54,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     )
 
     private def transactionCreatorWithConstEvaluatorFor(signer: TransactionSigner) =
-        BettingTransactionCreator(
+        BettingTransactions(
           env = env,
           evaluator = PlutusScriptEvaluator.constMaxBudget(env),
           signer = signer,

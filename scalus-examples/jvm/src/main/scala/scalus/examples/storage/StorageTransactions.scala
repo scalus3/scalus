@@ -16,7 +16,7 @@ import scalus.builtin.Data.toData
   * tx size is 16KB), it's chunked into arrays of max size, and each chunk becomes a [[LinkedList]],
   * node.
   */
-case class StorageTransactionCreator(
+case class StorageTransactions(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     contract: PlutusV3[Data => Unit],

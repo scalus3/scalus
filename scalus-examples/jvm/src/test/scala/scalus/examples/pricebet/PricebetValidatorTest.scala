@@ -423,7 +423,7 @@ object PricebetValidatorTest extends ScalusTest {
 
     val evaluator = PlutusScriptEvaluator.constMaxBudget(env)
 
-    val txCreator = PricebetTransactionCreator(
+    val txCreator = PricebetTransactions(
       env = env,
       evaluator = evaluator,
       pricebetContract = pricebetContract,

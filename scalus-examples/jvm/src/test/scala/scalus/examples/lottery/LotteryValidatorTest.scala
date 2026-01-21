@@ -669,7 +669,7 @@ object LotteryValidatorTest extends ScalusTest {
     private val compiledContract = LotteryContract.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
 
-    private val txCreator = LotteryTransactionCreator(
+    private val txCreator = LotteryTransactions(
       env = env,
       evaluator = PlutusScriptEvaluator.constMaxBudget(env),
       contract = compiledContract

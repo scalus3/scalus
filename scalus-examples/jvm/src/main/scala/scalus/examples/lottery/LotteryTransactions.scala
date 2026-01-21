@@ -9,7 +9,7 @@ import scalus.uplc.PlutusV3
 
 import java.time.Instant
 
-case class LotteryTransactionCreator(
+case class LotteryTransactions(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     contract: PlutusV3[Data => Unit]

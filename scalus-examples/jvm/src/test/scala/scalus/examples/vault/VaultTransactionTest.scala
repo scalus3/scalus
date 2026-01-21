@@ -32,7 +32,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
     private val commissionAmount = Coin(2_000_000L)
 
     // Transaction creator factories
-    private def transactionCreatorFor(signer: TransactionSigner) = VaultTransactionCreator(
+    private def transactionCreatorFor(signer: TransactionSigner) = VaultTransactions(
       env = env,
       evaluator = PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost),
       signer = signer,
@@ -40,7 +40,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
     )
 
     private def transactionCreatorWithConstEvaluatorFor(signer: TransactionSigner) =
-        VaultTransactionCreator(
+        VaultTransactions(
           env = env,
           evaluator = PlutusScriptEvaluator.constMaxBudget(env),
           signer = signer,

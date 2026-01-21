@@ -6,7 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.uplc.PlutusV3
 
-case class VaultTransactionCreator(
+case class VaultTransactions(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,

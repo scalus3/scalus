@@ -8,7 +8,7 @@ import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.uplc.PlutusV3
 
-case class BettingTransactionCreator(
+case class BettingTransactions(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     signer: TransactionSigner,

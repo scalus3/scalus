@@ -43,7 +43,7 @@ class StorageTest extends AnyFunSuite, ScalusTest:
         appliedValidator
     }
 
-    val creator = StorageTransactionCreator(
+    val creator = StorageTransactions(
       env = env,
       evaluator = evaluator,
       contract = appliedValidator,
@@ -117,7 +117,7 @@ class StorageTest extends AnyFunSuite, ScalusTest:
         val data = ByteString.fromArray(Array.fill(250)(0x42.toByte))
 
         // Create creator with small chunk size for testing
-        val smallChunkCreator = StorageTransactionCreator(
+        val smallChunkCreator = StorageTransactions(
           env = env,
           evaluator = evaluator,
           contract = appliedValidator,

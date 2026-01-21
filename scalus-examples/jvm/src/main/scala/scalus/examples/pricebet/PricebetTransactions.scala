@@ -10,7 +10,7 @@ import scalus.prelude.*
 
 import java.time.Instant
 
-case class PricebetTransactionCreator(
+case class PricebetTransactions(
     env: CardanoInfo,
     evaluator: PlutusScriptEvaluator,
     pricebetContract: PlutusV3[Data => Unit],

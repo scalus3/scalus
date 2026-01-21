@@ -270,7 +270,7 @@ object EditableNftValidatorTest extends ScalusTest {
     val scriptAddress: scalus.cardano.address.Address = compiledContract.address(env.network)
     val policyId: scalus.cardano.ledger.PolicyId = compiledContract.script.scriptHash
 
-    val txCreator = EditableNftTransactionCreator(
+    val txCreator = EditableNftTransactions(
       env = env,
       evaluator = PlutusScriptEvaluator.constMaxBudget(env),
       contract = compiledContract
