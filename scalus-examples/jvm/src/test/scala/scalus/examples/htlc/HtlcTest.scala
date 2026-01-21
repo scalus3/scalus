@@ -85,82 +85,12 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
             .validTo(timeout)
             .draft
 
-        println(tx.showHighlighted)
-
         import scalus.testing.kit.TestUtil.getScriptContextV3
         val sc = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
-
-        println(sc)
-
         assertExpected(SuccessAny)(contract(sc.toData))
     }
 
-    test("SCRIPT CONTEXT: receiver reveals preimage before timeout") {
-        import scalus.builtin.ByteString.hex
-        import scalus.builtin.Data.toData
-        import scalus.ledger.api.v1.{IntervalBound, Value}
-        import scalus.ledger.api.v2.OutputDatum
-        import scalus.ledger.api.v3.*
-        import scalus.prelude.{List as PList, *}
-
-        val timeoutPosix = BigInt(timeout.toEpochMilli)
-        val redeemer = Action.Reveal(validPreimage).toData
-        val datum = Config(
-          PubKeyHash(Alice.addrKeyHash),
-          PubKeyHash(Bob.addrKeyHash),
-          image,
-          timeoutPosix
-        ).toData
-
-        val sc = ScriptContext(
-          txInfo = TxInfo(
-            inputs = PList(
-              TxInInfo(
-                TxOutRef(
-                  TxId(hex"33b2dfafd54bc2478bab834185041b44bc567d9bced9cdc9018f7322711c08c1"),
-                  0
-                ),
-                TxOut(
-                  Address(Credential.ScriptCredential(contract.script.scriptHash), Option.None),
-                  Value.lovelace(10_000_000),
-                  OutputDatum.OutputDatum(datum)
-                )
-              )
-            ),
-            outputs = PList(
-              TxOut(
-                Address(Credential.PubKeyCredential(PubKeyHash(Bob.addrKeyHash)), Option.None),
-                Value.lovelace(10_000_000)
-              )
-            ),
-            validRange =
-                Interval(IntervalBound.negInf, IntervalBound.finiteExclusive(timeoutPosix)),
-            signatories = PList(PubKeyHash(Bob.addrKeyHash)),
-            redeemers = SortedMap.singleton(
-              ScriptPurpose.Spending(
-                TxOutRef(
-                  TxId(hex"33b2dfafd54bc2478bab834185041b44bc567d9bced9cdc9018f7322711c08c1"),
-                  BigInt(0)
-                )
-              ),
-              redeemer
-            ),
-            id = TxId(hex"3612aa9eee38d20971027a9082e3a4e82c44c44f88b00416fe506e976a9f22dc")
-          ),
-          redeemer = redeemer,
-          scriptInfo = ScriptInfo.SpendingScript(
-            TxOutRef(
-              TxId(hex"33b2dfafd54bc2478bab834185041b44bc567d9bced9cdc9018f7322711c08c1"),
-              BigInt(0)
-            ),
-            Option.Some(datum)
-          )
-        )
-
-        assertExpected(SuccessAny)(contract(sc.toData))
-    }
-
-    def assertExpected[A](expected: Expected)(contract: Compiled[A]): Unit = {
+    private def assertExpected[A](expected: Expected)(contract: Compiled[A]): Unit = {
         val jvmResult = Try(contract.code)
         val uplcResult = contract.program.evaluateDebug
 

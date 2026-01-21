@@ -113,46 +113,6 @@ object TxBuilderException {
           s"Insufficient tokens at $sponsorAddress: need $required of ${policyId.toHex}.${assetName.toString}, found only $available"
         )
 
-    /** Could not find suitable collateral UTXOs. */
-    final case class CollateralSelectionException(
-        requiredAmount: Coin,
-        sponsorAddress: Address,
-        cause: Option[Throwable] = None
-    ) extends TxBuilderException(
-          s"Could not find collateral UTXOs at $sponsorAddress (required: ${requiredAmount.value} lovelace)",
-          cause.orNull
-        )
-
-    /** Collateral contains tokens but insufficient ADA for valid return output. */
-    final case class InsufficientCollateralForReturnException(
-        totalCollateralAda: Coin,
-        requiredCollateral: Coin,
-        minAdaForReturn: Coin
-    ) extends TxBuilderException(
-          s"Collateral contains tokens but insufficient ADA for return output. " +
-              s"Total: ${totalCollateralAda.value}, required for fees: ${requiredCollateral.value}, " +
-              s"minAda for return: ${minAdaForReturn.value}. " +
-              s"Need at least ${requiredCollateral.value + minAdaForReturn.value} lovelace in collateral."
-        )
-
-    /** Context initialization failed. */
-    final case class ContextInitializationException(
-        msg: String,
-        buildError: Option[SomeBuildError] = None
-    ) extends TxBuilderException(
-          s"Failed to initialize transaction context: $msg",
-          buildError.map(_.reason).orNull
-        )
-
-    /** Delayed redeemer computation failed. */
-    final case class DelayedRedeemerException(
-        msg: String,
-        cause: Option[Throwable] = None
-    ) extends TxBuilderException(
-          s"Failed to compute delayed redeemer: $msg",
-          cause.orNull
-        )
-
     /** Converts a SomeBuildError to the appropriate TxBuilderException. */
     def fromBuildError(error: SomeBuildError): TxBuilderException = error match {
         case SomeBuildError.SomeStepError(e, ctx)             => BuildStepException(e, ctx)
