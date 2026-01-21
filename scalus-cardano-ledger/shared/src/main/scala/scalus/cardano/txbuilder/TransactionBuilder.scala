@@ -615,14 +615,21 @@ object TransactionBuilder {
                 .toLeft(this)
         }
 
-        /** Set min ada, balance, and validate a context. TODO: @Ilia consider putting PP,
-          * evaluator, and validators, into the parameters for the transaction builder class
+        /** Balance the transaction, handling dummy signatures and collateral return.
+          *
+          * This method:
+          *   1. Adds dummy signatures for accurate fee calculation
+          *   2. Ensures min ADA on all outputs
+          *   3. Balances fees and change
+          *   4. Handles collateral return output
+          *   5. Removes dummy signatures
+          *
+          * Call [[validateContext]] after this to validate the balanced transaction.
           */
-        def finalizeContext(
+        def balanceContext(
             protocolParams: ProtocolParams,
             diffHandler: DiffHandler,
-            evaluator: PlutusScriptEvaluator,
-            validators: Seq[Validator]
+            evaluator: PlutusScriptEvaluator
         ): Either[SomeBuildError, Context] = {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
@@ -650,7 +657,35 @@ object TransactionBuilder {
                     .left
                     .map(BalancingError(_, this))
 
-                validatedCtx <- balancedCtx
+                balancedCtxWithoutSignatures = balancedCtx.copy(
+                  transaction =
+                      removeDummySignatures(this.expectedSigners.size, balancedCtx.transaction)
+                )
+            } yield balancedCtxWithoutSignatures
+        }
+
+        /** Validate the transaction against ledger rules.
+          *
+          * Adds dummy signatures during validation to ensure accurate signature count validation,
+          * then removes them before returning.
+          *
+          * @param validators
+          *   the ledger rule validators to run
+          * @param protocolParams
+          *   the protocol parameters
+          * @return
+          *   the validated context or a validation error
+          */
+        def validateContext(
+            validators: Seq[Validator],
+            protocolParams: ProtocolParams
+        ): Either[SomeBuildError, Context] = {
+            val txWithDummySignatures: Transaction =
+                addDummySignatures(this.expectedSigners.size, this.transaction)
+            val contextWithSignatures = this.copy(transaction = txWithDummySignatures)
+
+            for {
+                validatedCtx <- contextWithSignatures
                     .validate(validators, protocolParams)
                     .left
                     .map(ValidationError(_, this))
@@ -659,8 +694,22 @@ object TransactionBuilder {
                   transaction =
                       removeDummySignatures(this.expectedSigners.size, validatedCtx.transaction)
                 )
-
             } yield validatedCtxWithoutSignatures
+        }
+
+        /** Set min ada, balance, and validate a context. TODO: @Ilia consider putting PP,
+          * evaluator, and validators, into the parameters for the transaction builder class
+          */
+        def finalizeContext(
+            protocolParams: ProtocolParams,
+            diffHandler: DiffHandler,
+            evaluator: PlutusScriptEvaluator,
+            validators: Seq[Validator]
+        ): Either[SomeBuildError, Context] = {
+            for {
+                balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator)
+                validatedCtx <- balancedCtx.validateContext(validators, protocolParams)
+            } yield validatedCtx
         }
 
     }
