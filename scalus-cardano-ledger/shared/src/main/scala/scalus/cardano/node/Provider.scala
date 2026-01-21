@@ -22,10 +22,11 @@ trait Provider {
 
     /** Find a single UTxO by its transaction input.
       *
-      * @deprecated
-      *   Use findUtxos(UtxoQuery) instead
+      * @param input
+      *   the transaction input to look up
+      * @return
+      *   Either a UtxoQueryError or the found Utxo
       */
-    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxo(input: TransactionInput)(using
         ExecutionContext
     ): Future[Either[UtxoQueryError, Utxo]] = {
@@ -40,10 +41,11 @@ trait Provider {
 
     /** Find UTxOs by a set of transaction inputs.
       *
-      * @deprecated
-      *   Use findUtxos(UtxoQuery) instead
+      * @param inputs
+      *   the transaction inputs to look up
+      * @return
+      *   Either a UtxoQueryError or the found UTxOs (fails if not all inputs are found)
       */
-    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
     def findUtxos(inputs: Set[TransactionInput])(using
         ExecutionContext
     ): Future[Either[UtxoQueryError, Utxos]] = {
@@ -53,6 +55,19 @@ trait Provider {
                 else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
             }
         }
+    }
+
+    /** Find all UTxOs at the given address.
+      *
+      * @param address
+      *   the address to query
+      * @return
+      *   Either a UtxoQueryError or the found UTxOs
+      */
+    def findUtxos(address: Address)(using
+        ExecutionContext
+    ): Future[Either[UtxoQueryError, Utxos]] = {
+        findUtxos(UtxoQuery(UtxoSource.FromAddress(address)))
     }
 
     /** Find a single UTxO by address and optional filters.
