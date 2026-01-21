@@ -13,12 +13,11 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 /** Test demonstrating the sponsor signature fee calculation bug.
   *
-  * BUG: The TxBuilder adds the sponsor to expectedSigners AFTER finalizeContext (line 1609-1612),
-  * but finalizeContext uses expectedSigners.size to add dummy signatures for fee calculation
-  * (TransactionBuilder.scala line 514). This means the fee is underestimated by approximately the
-  * size of one VKey witness (~100 bytes = ~4400 lovelace).
+  * BUG: The TxBuilder adds the sponsor to expectedSigners AFTER balanceContext, but balanceContext
+  * uses expectedSigners.size to add dummy signatures for fee calculation. This means the fee is
+  * underestimated by approximately the size of one VKey witness (~100 bytes = ~4400 lovelace).
   *
-  * FIX: Move sponsor extraction BEFORE calling finalizeContext in TxBuilder.completeLoop.
+  * FIX: Move sponsor extraction BEFORE calling balanceContext in TxBuilder.completeLoop.
   */
 class SponsorSignatureFeeTest extends AnyFunSuite {
     private given env: CardanoInfo = CardanoInfo.mainnet

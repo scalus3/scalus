@@ -247,7 +247,7 @@ The ideal approach combines:
 TxBuilder.complete()
   |-> completeLoop(maxIterations=10)
        |-> TransactionBuilder.build()
-       |-> finalizeContext()
+       |-> balanceContext()
             |-> balance()
                  |-> balanceFeeAndChangeWithTokens() [up to 20 iterations]
                       |-> loop:

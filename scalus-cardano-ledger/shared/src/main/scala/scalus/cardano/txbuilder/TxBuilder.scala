@@ -5,8 +5,6 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.TransactionWitnessSet.given
-import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.node.Provider
 import scalus.cardano.txbuilder.SomeBuildError
 
@@ -212,8 +210,6 @@ object TxBuilderException {
   *   accumulated transaction building steps
   * @param attachedData
   *   datum values to be included in the transaction witness set
-  * @param validators
-  *   ledger rules to run against the built transaction for additional validations
   * @param changeOutputIndex
   *   index of the explicit change output (set by [[changeTo]]), or None for implicit change
   */
@@ -223,7 +219,6 @@ case class TxBuilder(
     evaluator: PlutusScriptEvaluator,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
-    validators: Seq[Validator] = Seq.empty,
     changeOutputIndex: Option[Int] = None
 ) {
 
@@ -1378,23 +1373,17 @@ case class TxBuilder(
       *   if script execution fails or if the transaction cannot be balanced
       */
     def build(diffHandler: DiffHandler): TxBuilder = {
-        val network = env.network
         val params = env.protocolParams
         // Could be a good idea to immediately `modify` on every step, maybe not tho.
-        val finalizedContext = for {
+        val balancedContext = for {
             built <- TransactionBuilder.modify(context, steps)
             withAttachments = addAttachmentsToContext(built)
-            finalized <- withAttachments.finalizeContext(
-              params,
-              diffHandler,
-              evaluator,
-              validators
-            )
-        } yield finalized
+            balanced <- withAttachments.balanceContext(params, diffHandler, evaluator)
+        } yield balanced
 
-        finalizedContext match {
-            case Right(finalized) =>
-                copy(context = finalized)
+        balancedContext match {
+            case Right(balanced) =>
+                copy(context = balanced)
             case Left(error) =>
                 throw TxBuilderException.fromBuildError(error)
         }
@@ -1582,7 +1571,7 @@ case class TxBuilder(
         )
     }
 
-    /** Iterative loop that adds UTXOs until finalizeContext succeeds. */
+    /** Iterative loop that adds UTXOs until balanceContext succeeds. */
     private def completeLoop(
         pool: UtxoPool,
         sponsor: Address,
@@ -1625,17 +1614,16 @@ case class TxBuilder(
                 val diffHandler: DiffHandler = (diff, tx) =>
                     Change.changeOutputDiffHandler(diff, tx, env.protocolParams, changeIdx)
 
-                ctxWithAttachments.finalizeContext(
+                ctxWithAttachments.balanceContext(
                   env.protocolParams,
                   diffHandler,
-                  evaluator,
-                  validators
+                  evaluator
                 ) match {
-                    case Right(finalizedCtx) =>
+                    case Right(balancedCtx) =>
                         // Success! Add sponsor to expected signers
                         val sponsorSigner = extractSponsorSigner(sponsor)
-                        val ctxWithSigner = finalizedCtx.copy(
-                          expectedSigners = finalizedCtx.expectedSigners ++ sponsorSigner.toSet
+                        val ctxWithSigner = balancedCtx.copy(
+                          expectedSigners = balancedCtx.expectedSigners ++ sponsorSigner.toSet
                         )
                         copy(context = ctxWithSigner)
 

@@ -997,7 +997,7 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test("complete should account for signature size in fee calculation") {
         // BUG: TxBuilder.complete doesn't add dummy signatures during fee calculation,
-        // unlike finalizeContext which uses addDummySignatures(this.expectedSigners.size, this.transaction)
+        // unlike balanceContext which uses addDummySignatures(this.expectedSigners.size, this.transaction)
         // before balancing. This means the fee is calculated without accounting for the
         // size of signatures that will be added when signing.
 

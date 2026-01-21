@@ -598,15 +598,28 @@ object TransactionBuilder {
         /** Conversion help to Scalus [[scalus.cardano.ledger.Utxos]] */
         def getUtxos: Utxos = this.resolvedUtxos.utxos
 
-        /** Validate a context according so a set of ledger rules */
+        /** Validate a context according to a set of ledger rules.
+          *
+          * @param validators
+          *   the ledger rule validators to run
+          * @param protocolParams
+          *   the protocol parameters
+          * @param slot
+          *   the current slot number for validation context (default: 1)
+          * @param certState
+          *   the certificate state for validation context (default: empty)
+          * @return
+          *   the validated context or a validation error
+          */
         def validate(
             validators: Seq[Validator],
-            protocolParams: ProtocolParams
+            protocolParams: ProtocolParams,
+            slot: Long = 1L,
+            certState: CertState = CertState.empty
         ): Either[TransactionException, Context] = {
-            val certState = CertState.empty
             val context = SContext(
               this.transaction.body.value.fee,
-              UtxoEnv(1L, protocolParams, certState, network)
+              UtxoEnv(slot, protocolParams, certState, network)
             )
             val state = SState(this.getUtxos, certState)
             validators
@@ -673,12 +686,18 @@ object TransactionBuilder {
           *   the ledger rule validators to run
           * @param protocolParams
           *   the protocol parameters
+          * @param slot
+          *   the current slot number for validation context (default: 1)
+          * @param certState
+          *   the certificate state for validation context (default: empty)
           * @return
           *   the validated context or a validation error
           */
         def validateContext(
             validators: Seq[Validator],
-            protocolParams: ProtocolParams
+            protocolParams: ProtocolParams,
+            slot: Long = 1L,
+            certState: CertState = CertState.empty
         ): Either[SomeBuildError, Context] = {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
@@ -686,7 +705,7 @@ object TransactionBuilder {
 
             for {
                 validatedCtx <- contextWithSignatures
-                    .validate(validators, protocolParams)
+                    .validate(validators, protocolParams, slot, certState)
                     .left
                     .map(ValidationError(_, this))
 
@@ -697,18 +716,39 @@ object TransactionBuilder {
             } yield validatedCtxWithoutSignatures
         }
 
-        /** Set min ada, balance, and validate a context. TODO: @Ilia consider putting PP,
-          * evaluator, and validators, into the parameters for the transaction builder class
+        /** Set min ada, balance, and validate a context.
+          *
+          * @param protocolParams
+          *   the protocol parameters
+          * @param diffHandler
+          *   the handler for managing transaction balance differences (change)
+          * @param evaluator
+          *   the Plutus script evaluator
+          * @param validators
+          *   the ledger rule validators to run
+          * @param slot
+          *   the current slot number for validation context (default: 1)
+          * @param certState
+          *   the certificate state for validation context (default: empty)
+          * @return
+          *   the finalized context or an error
           */
         def finalizeContext(
             protocolParams: ProtocolParams,
             diffHandler: DiffHandler,
             evaluator: PlutusScriptEvaluator,
-            validators: Seq[Validator]
+            validators: Seq[Validator],
+            slot: Long = 1L,
+            certState: CertState = CertState.empty
         ): Either[SomeBuildError, Context] = {
             for {
                 balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator)
-                validatedCtx <- balancedCtx.validateContext(validators, protocolParams)
+                validatedCtx <- balancedCtx.validateContext(
+                  validators,
+                  protocolParams,
+                  slot,
+                  certState
+                )
             } yield validatedCtx
         }
 
@@ -930,6 +970,9 @@ object TransactionBuilder {
 
     def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
         val produced = TxBalance.produced(tx, params)
+        // FIXME: CertState.empty means certificate refunds (UnregCert, UnregDRepCert, etc.)
+        // cannot be correctly calculated during balancing because the original deposit amounts
+        // are unknown. Consider adding certState parameter to balanceContext and propagating here.
         val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
         consumed - produced
     }
