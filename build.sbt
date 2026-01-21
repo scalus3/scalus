@@ -522,6 +522,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
       // Exclude integration tests from default test runs (require external services)
       Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest")
     )
