@@ -233,6 +233,31 @@ class ScalusTransactionEvaluator(
             case ledger.RedeemerTag.Voting    => RedeemerTag.Voting
             case ledger.RedeemerTag.Proposing => RedeemerTag.Proposing
     }
+
+    // Deprecated methods for backwards compatibility with LegacyScalusTransactionEvaluator
+
+    /** @deprecated Use the new PlutusScriptEvaluator API instead */
+    @deprecated("No longer supported in the new API", "0.14.2")
+    @BeanProperty
+    lazy val costMdls: CostMdls = ???
+
+    /** @deprecated Use the new PlutusScriptEvaluator API instead */
+    @deprecated("No longer supported in the new API", "0.14.2")
+    def evaluateTx(
+        transaction: Transaction,
+        inputUtxos: util.Set[Utxo],
+        datums: util.List[scalus.builtin.ByteString],
+        txhash: String
+    ): Result[util.List[EvaluationResult]] = ???
+
+    /** @deprecated Use the new PlutusScriptEvaluator API instead */
+    @deprecated("No longer supported in the new API", "0.14.2")
+    def evaluateTxWithContexts(
+        transaction: Transaction,
+        inputUtxos: util.Set[Utxo],
+        datums: util.List[scalus.builtin.ByteString],
+        txhash: String
+    ): Either[TxEvaluationException, collection.Seq[(EvaluationResult, ScriptContext)]] = ???
 }
 
 /** Implements [[com.bloxbean.cardano.client.api.TransactionEvaluator]] to evaluate a transaction to
