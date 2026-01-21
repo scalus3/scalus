@@ -22,6 +22,10 @@ Load the skill documentation for detailed vulnerability patterns:
    - Search for `@Compile` annotated code in `$ARGUMENTS` path
    - Find objects extending `Validator`, `DataParameterizedValidator`, `ParameterizedValidator`
    - List all validators found with their methods (spend, mint, reward, certify, vote, propose)
+   - Look for off-chain transaction builder code in same directory:
+     - Classes with methods like `startAuction`, `bid`, `endAuction`, `claim`, etc.
+     - Methods using `Provider`, `TxBuilder`, `queryUtxos`
+     - Methods that return `Future[Transaction]` or build transactions
 
 2. **Analysis Phase**
    For each validator, check against the vulnerability checklist:
@@ -37,6 +41,11 @@ Load the skill documentation for detailed vulnerability patterns:
    - V006-V012: Index validation, self-dealing, refund amounts, other redeemer/token attacks
 
    **Medium/Low**: Time handling, signatures, datum validation, design issues
+
+   **Off-Chain** (if transaction builder code exists):
+   - OC001: UTXO Discovery Confusion - queries returning arbitrary match without datum validation
+   - OC002: TOCTOU Race Conditions - missing retry/error handling for state changes
+   - OC003: Missing Datum Validation - trusting queried data without ownership checks
 
 3. **False Positive Verification**
    For each potential issue, before reporting verify it's not a false positive:
@@ -107,4 +116,12 @@ grep -rn "@Compile" --include="*.scala" $ARGUMENTS
 grep -rn "extends Validator" --include="*.scala" $ARGUMENTS
 grep -rn "extends DataParameterizedValidator" --include="*.scala" $ARGUMENTS
 grep -rn "extends ParameterizedValidator" --include="*.scala" $ARGUMENTS
+
+# Find off-chain transaction builder code
+grep -rn "queryUtxos\|TxBuilder\|Provider" --include="*.scala" $ARGUMENTS
+grep -rn "Future\[Transaction\]" --include="*.scala" $ARGUMENTS
+grep -rn "def.*Auction\|def.*bid\|def.*end\|def.*start\|def.*claim" --include="*.scala" $ARGUMENTS
+
+# Find potential OC001 patterns (.limit(1) in queries)
+grep -rn "\.limit(1)" --include="*.scala" $ARGUMENTS
 ```

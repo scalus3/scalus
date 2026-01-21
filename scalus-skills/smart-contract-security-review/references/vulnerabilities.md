@@ -1396,3 +1396,175 @@ val scriptHash = ownInput.resolved.address.credential match {
   case _ => fail("Not a script")
 }
 ```
+
+---
+
+## Off-Chain Vulnerabilities
+
+These vulnerabilities exist in transaction builder code, not the on-chain validators. Review these when off-chain code (transaction builders, endpoint classes) exists alongside smart contracts.
+
+### OC001: UTXO Discovery Confusion / Token Name Collision
+
+**Severity**: Medium-High
+
+**Description**: When off-chain code queries UTXOs using shared identifiers (policyId + tokenName), and multiple UTXOs can share the same identifier, the query may return the wrong UTXO.
+
+**Attack Scenario**:
+1. Alice starts auction with itemId="rare-painting"
+2. Attacker also starts auction with itemId="rare-painting"
+3. Buyer queries findActiveUtxo("rare-painting")
+4. Query returns attacker's UTXO (non-deterministic ordering)
+5. Buyer interacts with attacker's fake auction
+
+**Vulnerable Pattern**:
+```scala
+def findActiveUtxo(itemId: ByteString): Future[Option[Utxo]] =
+    provider.queryUtxos { u =>
+        u.output.address == scriptAddress &&
+        u.output.value.hasAsset(policyId, AssetName(itemId))
+    }
+    .limit(1)  // Returns arbitrary one if multiple exist!
+    .execute()
+```
+
+**Secure Patterns**:
+1. **Verify datum fields**: Check seller/owner in datum matches expected
+2. **Use unique identifiers**: itemId = hash(seller ++ item ++ utxo_ref)
+3. **Return all matches**: Let caller verify the correct one
+4. **Include seller in query**: Filter by expected seller address or pubkeyhash
+
+**Example secure pattern**:
+```scala
+def findActiveUtxo(itemId: ByteString, expectedSeller: PubKeyHash): Future[Option[Utxo]] =
+    provider.queryUtxos { u =>
+        u.output.address == scriptAddress &&
+        u.output.value.hasAsset(policyId, AssetName(itemId))
+    }
+    .execute()
+    .map { utxos =>
+        utxos.find { utxo =>
+            val datum = utxo.inlineDatum.map(_.to[AuctionDatum])
+            datum.exists(_.seller == expectedSeller)
+        }
+    }
+```
+
+**Detection**: Search for UTXO queries with `.limit(1)` or that return arbitrary matches without verifying datum ownership fields.
+
+---
+
+### OC002: TOCTOU Race Condition
+
+**Severity**: Medium
+
+**Description**: Time-of-check to time-of-use. The UTXO state when queried may differ from state when transaction is submitted.
+
+**Attack Scenario**:
+1. Off-chain code queries UTXO and builds transaction
+2. Between query and submit, attacker submits competing transaction
+3. Original transaction fails or interacts with unexpected state
+
+**Vulnerable Pattern**:
+```scala
+def placeBid(itemId: ByteString, bidAmount: BigInt): Future[Transaction] = {
+    for {
+        utxo <- findActiveUtxo(itemId)  // State at time T1
+        tx <- buildBidTransaction(utxo, bidAmount)
+        result <- submitTransaction(tx)  // State may have changed by T2
+    } yield result
+    // No error handling - fails silently or with cryptic error
+}
+```
+
+**Secure Pattern**:
+```scala
+def placeBid(itemId: ByteString, bidAmount: BigInt): Future[Transaction] = {
+    def attempt(retries: Int): Future[Transaction] = {
+        for {
+            utxo <- findActiveUtxo(itemId)
+            tx <- buildBidTransaction(utxo, bidAmount)
+            result <- submitTransaction(tx).recoverWith {
+                case e: UtxoConsumedError if retries > 0 =>
+                    // UTXO was spent, retry with fresh state
+                    attempt(retries - 1)
+            }
+        } yield result
+    }
+    attempt(maxRetries = 3)
+}
+```
+
+**Mitigation**:
+- Handle transaction failures gracefully with retry logic
+- Use reference inputs where applicable (read-only, no consumption)
+- Implement optimistic concurrency with exponential backoff
+- Log and surface UTXO contention to users
+
+**Detection**: Search for transaction building code without error handling or retry logic around submission.
+
+---
+
+### OC003: Missing Datum Validation in Queries
+
+**Severity**: Medium
+
+**Description**: Off-chain code trusts UTXO data without validating datum structure or ownership fields. Attackers can create fake UTXOs with malicious datums.
+
+**Attack Scenario**:
+1. Contract allows anyone to create UTXOs at script address
+2. Attacker creates UTXO with malicious datum (e.g., attacker as beneficiary)
+3. Off-chain code queries and uses this UTXO without validation
+4. Legitimate user's transaction interacts with attacker's UTXO
+
+**Vulnerable Pattern**:
+```scala
+def findAuction(itemId: ByteString): Future[AuctionDatum] = {
+    for {
+        utxo <- findActiveUtxo(itemId)
+        // BAD: Assumes datum is valid, doesn't verify ownership
+        datum = utxo.inlineDatum.get.to[AuctionDatum]
+    } yield datum
+}
+```
+
+**Secure Pattern**:
+```scala
+def findAuction(itemId: ByteString, expectedSeller: PubKeyHash): Future[AuctionDatum] = {
+    for {
+        utxo <- findActiveUtxo(itemId)
+        datum <- utxo.inlineDatum match {
+            case Some(d) => Future.successful(d.to[AuctionDatum])
+            case None => Future.failed(new IllegalStateException("Missing inline datum"))
+        }
+        // Validate datum fields match expectations
+        _ <- if (datum.seller == expectedSeller) Future.unit
+             else Future.failed(new IllegalStateException(s"Wrong seller: expected $expectedSeller, got ${datum.seller}"))
+    } yield datum
+}
+```
+
+**Detection Patterns**:
+- UTXO queries without subsequent datum field validation
+- Datum deserialization without ownership/authorization checks
+- Methods that return datum directly without validation
+
+---
+
+### Off-Chain Detection Commands
+
+```bash
+# Find off-chain transaction builder code
+grep -rn "queryUtxos\|TxBuilder\|Provider" --include="*.scala" $PATH
+
+# Find methods returning Future[Transaction]
+grep -rn "Future\[Transaction\]" --include="*.scala" $PATH
+
+# Find endpoint/action methods (common naming patterns)
+grep -rn "def.*Auction\|def.*bid\|def.*end\|def.*start\|def.*claim" --include="*.scala" $PATH
+
+# Find .limit(1) patterns in queries
+grep -rn "\.limit(1)" --include="*.scala" $PATH
+
+# Find queryUtxos without datum validation nearby
+grep -rn -A 10 "queryUtxos" --include="*.scala" $PATH | grep -v "inlineDatum\|datum"
+```
