@@ -2,16 +2,24 @@ package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.builtin.Builtins.sha3_256
+import scalus.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
+import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
+import scalus.cardano.txbuilder.txBuilder
+import scalus.testing.assertions.Expected.{Success, SuccessAny}
+import scalus.testing.assertions.{Expected, ResultAssertions}
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.{ScalusTest, TestUtil, TxTestKit}
-import scalus.utils.await
+import scalus.uplc.Compiled
+import scalus.utils.{await, showHighlighted}
 
 import java.time.Instant
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.util.Try
 
 class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
+
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = HtlcContract.compiled.withErrorTraces
 
@@ -62,6 +70,119 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
         assert(HtlcContract.compiled.script.script.size == 569)
     }
 
+    test("VALIDATOR: receiver reveals preimage before timeout") {
+        val provider = createProvider()
+        val lockedUtxo = lock(provider)
+        val utxos = provider.utxos
+
+        val tx = txBuilder
+            .spend(
+              lockedUtxo,
+              redeemer = Action.Reveal(validPreimage),
+              script = contract.script,
+              requiredSigners = Set(Bob.addrKeyHash)
+            )
+            .payTo(Bob.address, Value.ada(10))
+            .validTo(timeout)
+            .draft
+
+        println(tx.showHighlighted)
+
+        val sc = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
+
+        println(sc)
+
+        import scalus.uplc.apply
+        assertExpected(SuccessAny)(contract(sc.toData))
+    }
+
+    test("SCRIPT CONTEXT: receiver reveals preimage before timeout") {
+        import scalus.builtin.ByteString.hex
+        import scalus.builtin.Data.toData
+        import scalus.ledger.api.v1.{IntervalBound, Value}
+        import scalus.ledger.api.v2.OutputDatum
+        import scalus.ledger.api.v3.*
+        import scalus.prelude.{List as PList, *}
+
+        val timeoutPosix = BigInt(timeout.toEpochMilli)
+        val redeemer = Action.Reveal(validPreimage).toData
+        val datum = Config(
+          PubKeyHash(Alice.addrKeyHash),
+          PubKeyHash(Bob.addrKeyHash),
+          image,
+          timeoutPosix
+        ).toData
+
+        val sc = ScriptContext(
+          txInfo = TxInfo(
+            inputs = PList(
+              TxInInfo(
+                TxOutRef(
+                  TxId(hex"33b2dfafd54bc2478bab834185041b44bc567d9bced9cdc9018f7322711c08c1"),
+                  0
+                ),
+                TxOut(
+                  Address(Credential.ScriptCredential(contract.script.scriptHash), Option.None),
+                  Value.lovelace(10_000_000),
+                  OutputDatum.OutputDatum(datum)
+                )
+              )
+            ),
+            outputs = PList(
+              TxOut(
+                Address(Credential.PubKeyCredential(PubKeyHash(Bob.addrKeyHash)), Option.None),
+                Value.lovelace(10_000_000)
+              )
+            ),
+            validRange =
+                Interval(IntervalBound.negInf, IntervalBound.finiteExclusive(timeoutPosix)),
+            signatories = PList(PubKeyHash(Bob.addrKeyHash)),
+            redeemers = SortedMap.singleton(
+              ScriptPurpose.Spending(
+                TxOutRef(
+                  TxId(hex"33b2dfafd54bc2478bab834185041b44bc567d9bced9cdc9018f7322711c08c1"),
+                  BigInt(0)
+                )
+              ),
+              redeemer
+            ),
+            id = TxId(hex"3612aa9eee38d20971027a9082e3a4e82c44c44f88b00416fe506e976a9f22dc")
+          ),
+          redeemer = redeemer,
+          scriptInfo = ScriptInfo.SpendingScript(
+            TxOutRef(
+              TxId(hex"33b2dfafd54bc2478bab834185041b44bc567d9bced9cdc9018f7322711c08c1"),
+              BigInt(0)
+            ),
+            Option.Some(datum)
+          )
+        )
+
+        import scalus.uplc.apply
+        assertExpected(SuccessAny)(contract(sc.toData))
+    }
+
+    def assertExpected[A](expected: Expected)(contract: Compiled[A]): Unit = {
+        val jvmResult = Try(contract.code)
+        val uplcResult = contract.program.evaluateDebug
+
+        // Assert UPLC result matches expected
+        ResultAssertions.assertResult(expected, uplcResult)
+
+        // Assert JVM result aligns with expected
+        expected match
+            case Expected.SuccessAny | Expected.Success(_) | Expected.SuccessSame =>
+                assert(
+                  jvmResult.isSuccess,
+                  s"JVM execution failed but expected success: ${jvmResult}"
+                )
+            case Expected.Failure(_) =>
+                assert(
+                  jvmResult.isFailure,
+                  s"JVM execution succeeded but expected failure"
+                )
+    }
+
     test("receiver reveals preimage before timeout") {
         val provider = createProvider()
         val lockedUtxo = lock(provider)
@@ -79,7 +200,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest, TxTestKit {
         )
 
         provider.setSlot(beforeSlot)
-        assertTxSuccess(provider, revealTx)
+        val result = provider.submit(revealTx).await()
+        assert(result.isRight, s"Emulator submission failed: $result")
     }
 
     test("receiver fails with wrong preimage") {
