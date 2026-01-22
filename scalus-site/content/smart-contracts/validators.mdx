@@ -273,33 +273,9 @@ inline override def propose(
 
 **Use cases:** Treasury spending limits, parameter change constraints, protocol upgrade requirements
 
-## Parameterized Validators
-
-Parameterized validators allow you to "bake in" configuration values at compile time, creating specialized versions of a general validator.
-
-### How Parameterization Works
-
-When you write a function that returns a `Validator` and call it with specific values during compilation, those values are permanently embedded into the resulting UPLC bytecode as constants. The compiled script doesn't receive these values at runtime - they're hardcoded into the script itself during compilation.
-
-For example, if you compile a validator with a specific `PubKeyHash`, that exact hash becomes part of the script's bytecode. Each different set of parameters produces a completely different script with a different script hash and script address.
-
-### What It's Useful For
-
-This pattern is useful when you want to deploy the same validator logic multiple times with different configurations:
-
-- **Multi-signature validators**: You can write one multisig validator logic, then deploy it multiple times with different sets of allowed signers. Each deployment is a different script address with its own configuration baked in.
-
-- **Time-locked contracts**: Write the time-lock logic once, then create multiple instances with different deadlines. Each contract gets its own unique script address based on its deadline.
-
-- **NFT validators**: Create a general NFT validation logic, then deploy separate instances for different policy IDs. Each policy becomes a distinct script.
-
-- **Protocol configurations**: Deploy the same protocol logic to different script addresses with different configuration values (fees, limits, authorized keys) embedded in each instance.
-
-The key advantage is you write the logic once and reuse it with different parameters, where each parameter combination creates a unique on-chain script.
-
 ## Next Steps
 
-- **HTLC Contract Tutorial** - Complete walkthrough of building a Hash Time Locked Contract
-- **[Testing Validators](/docs/testing/unit-testing)** - How to test your validators thoroughly
-- **[Transaction Building](/docs/txbuilder)** - Building transactions that interact with validators
-- **[Debugging](/docs/testing/debugging)** - Common errors and debugging techniques
+- **[Parameterized Validators](/docs/smart-contracts/parameterized-validators)** — Reusable validators with compile-time configuration
+- **[Testing Validators](/docs/testing/unit-testing)** — Test your validators thoroughly
+- **[Debugging](/docs/testing/debugging)** — Debug validators in your IDE
+- **[Building Transactions](/docs/transactions/building-first-transaction)** — Use validators in transactions

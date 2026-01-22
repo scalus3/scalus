@@ -1,0 +1,108 @@
+---
+title: Parameterized Validators - Reusable Cardano Smart Contracts
+sidebarTitle: Parameterized Validators
+description: Create reusable Cardano validators with compile-time parameters. Learn how parameterization works, use cases like multi-sig and time-locks, and how to deploy multiple script instances.
+---
+
+import { Callout } from 'nextra/components'
+
+# Parameterized Validators
+
+Parameterized validators let you write validator logic once and deploy it multiple times with different configurations. Each parameter combination produces a unique script with its own address.
+
+## How It Works
+
+When you compile a validator with specific values, those values are permanently embedded into the UPLC bytecode as constants. The compiled script doesn't receive these values at runtime—they're hardcoded during compilation.
+
+```scala
+// Define a parameterized validator
+@Compile
+object TimeLock:
+    inline def validate(deadline: PosixTime)(datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef): Unit =
+        require(tx.validRange.isAfter(deadline), "Too early")
+        // ... rest of validation
+
+// Compile with a specific deadline
+val compiled = compile(TimeLock.validate(PosixTime(1735689600000L)))
+val program = compiled.toUplc().plutusV3
+```
+
+Each different `deadline` value produces a completely different script with a different script hash and address.
+
+## Use Cases
+
+### Multi-Signature Wallets
+
+Write one multisig logic, deploy with different signer sets:
+
+```scala
+@Compile
+object MultiSig:
+    inline def validate(requiredSigners: List[PubKeyHash], threshold: BigInt)(
+        datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef
+    ): Unit =
+        val signatureCount = requiredSigners.count(tx.signatories.contains)
+        require(signatureCount >= threshold, "Not enough signatures")
+
+// Deploy for different teams
+val teamA = compile(MultiSig.validate(List(alice, bob, carol), BigInt(2)))
+val teamB = compile(MultiSig.validate(List(dave, eve), BigInt(2)))
+```
+
+### Time-Locked Contracts
+
+Same vesting logic, different unlock dates:
+
+```scala
+@Compile
+object Vesting:
+    inline def validate(beneficiary: PubKeyHash, unlockTime: PosixTime)(
+        datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef
+    ): Unit =
+        require(tx.signatories.contains(beneficiary), "Not beneficiary")
+        require(tx.validRange.isAfter(unlockTime), "Still locked")
+
+// Different vesting schedules
+val q1Vesting = compile(Vesting.validate(employee, PosixTime(1711929600000L)))
+val q2Vesting = compile(Vesting.validate(employee, PosixTime(1719792000000L)))
+```
+
+### Token Policies
+
+One minting logic, different configurations:
+
+```scala
+@Compile
+object TokenPolicy:
+    inline def validate(maxSupply: BigInt, admin: PubKeyHash)(
+        redeemer: Data, policyId: PolicyId, tx: TxInfo
+    ): Unit =
+        require(tx.signatories.contains(admin), "Admin signature required")
+        val minted = tx.mint.filter(_._1 == policyId).map(_._2).sum
+        require(minted <= maxSupply, "Exceeds max supply")
+
+// Different token configurations
+val goldToken = compile(TokenPolicy.validate(BigInt(1000000), treasury))
+val silverToken = compile(TokenPolicy.validate(BigInt(10000000), treasury))
+```
+
+## Key Points
+
+<Callout type="info">
+**Each parameter set = unique script hash.** Two validators with different parameters have different addresses, even if the logic is identical.
+</Callout>
+
+- Parameters become constants in the compiled bytecode
+- No runtime overhead—values are inlined
+- Script hash changes when parameters change
+- Useful for deploying the same logic with different configs
+
+## Verifying Parameters On-Chain
+
+When one script needs to verify another script's parameters (e.g., a minting policy ensuring tokens go to a correctly parameterized marketplace), use the [Parameter Validation Pattern](/docs/design-patterns/parameter-validation).
+
+## Related
+
+- **[Parameter Validation Pattern](/docs/design-patterns/parameter-validation)** — Verify script parameters on-chain
+- **[Compiling Smart Contracts](/docs/smart-contracts/compiling)** — Compilation options and encoding
+- **[Validator Types](/docs/smart-contracts/validators)** — All six validator purposes

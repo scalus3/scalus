@@ -5,9 +5,25 @@ sidebarTitle: Smart Contracts
 description: Complete guide to Cardano smart contract development with Scala. Learn validators, testing, debugging, and optimization for production Plutus scripts.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Cardano Smart Contract Development
 
-Build type-safe smart contracts for Cardano using Scala. Debug validators with breakpoints in your IDE, test with ScalaCheck, and compile to Plutus Core.
+Write type-safe smart contracts for Cardano using Scala. Debug validators with breakpoints in your IDE, test with ScalaCheck, and compile to Plutus Core.
+
+```scala
+@Compile
+object MyValidator extends Validator:
+
+    inline override def spend(
+        datum: Option[Data], 
+        redeemer: Data, 
+        tx: TxInfo, 
+        outRef: TxOutRef
+    ): Unit =
+        val owner = datum.getOrFail("No datum").to[PubKeyHash]
+        require(tx.signatories.contains(owner), "Not signed by owner")
+```
 
 ## Tutorials
 
@@ -17,6 +33,7 @@ Build type-safe smart contracts for Cardano using Scala. Debug validators with b
 ## Validators
 
 - **[Validator Types](/docs/smart-contracts/validators)** — Spending, minting, rewarding, and certifying validators
+- **[Parameterized Validators](/docs/smart-contracts/parameterized-validators)** — Reusable validators with compile-time configuration
 - **[FromData Derivation](/docs/smart-contracts/from-data)** — Type-safe conversion between Scala and Plutus Data
 
 ## Testing & Debugging
