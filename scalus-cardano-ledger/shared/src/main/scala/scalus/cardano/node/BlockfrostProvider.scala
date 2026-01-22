@@ -50,8 +50,8 @@ class BlockfrostProvider(
 
     /** Force refresh of cached CardanoInfo from the network.
       *
-      * Fetches latest protocol parameters and updates the internal cache.
-      * Use this for long-running applications that need to stay current with network changes.
+      * Fetches latest protocol parameters and updates the internal cache. Use this for long-running
+      * applications that need to stay current with network changes.
       */
     def refreshCardanoInfo: Future[CardanoInfo] =
         fetchLatestParams.map { params =>
@@ -644,6 +644,7 @@ class BlockfrostProvider(
     }
 }
 
+/** Companion object for BlockfrostProvider with factory methods and utilities. */
 object BlockfrostProvider {
 
     /** Blockfrost API URL for Cardano mainnet */
@@ -669,112 +670,6 @@ object BlockfrostProvider {
 
     @deprecated("Use localUrl instead", "0.14.1")
     val LocalUrl: String = localUrl
-
-    /** Create a BlockfrostProvider by fetching protocol parameters from the network.
-      *
-      * @param apiKey
-      *   Blockfrost API key
-      * @param baseUrl
-      *   Blockfrost API base URL
-      * @param network
-      *   Cardano network (Mainnet or Testnet)
-      * @param slotConfig
-      *   Slot configuration for the network
-      * @param maxConcurrentRequests
-      *   Maximum concurrent HTTP requests
-      * @return
-      *   Future containing the configured BlockfrostProvider
-      */
-    def create(
-        apiKey: String,
-        baseUrl: String,
-        network: Network,
-        slotConfig: SlotConfig,
-        maxConcurrentRequests: Int = 5
-    )(using
-        backend: Backend[Future],
-        ec: ExecutionContext
-    ): Future[BlockfrostProvider] =
-        fetchProtocolParams(apiKey, baseUrl).map { params =>
-            new BlockfrostProvider(
-              apiKey,
-              baseUrl,
-              maxConcurrentRequests,
-              CardanoInfo(params, network, slotConfig)
-            )
-        }
-
-    /** Create a Blockfrost client for local Yaci DevKit.
-      *
-      * Fetches protocol parameters from the local Yaci DevKit instance.
-      */
-    def localYaci(
-        baseUrl: String = localUrl,
-        maxConcurrentRequests: Int = 5,
-        slotConfig: SlotConfig = SlotConfig(0L, 0L, 1000)
-    )(using
-        backend: Backend[Future],
-        ec: ExecutionContext
-    ): Future[BlockfrostProvider] =
-        create("", baseUrl, Network.Testnet, slotConfig, maxConcurrentRequests)
-
-    /** Create a Blockfrost client for mainnet.
-      *
-      * Fetches protocol parameters from Blockfrost mainnet.
-      */
-    def mainnet(apiKey: String, maxConcurrentRequests: Int = 5)(using
-        backend: Backend[Future],
-        ec: ExecutionContext
-    ): Future[BlockfrostProvider] =
-        create(apiKey, mainnetUrl, Network.Mainnet, SlotConfig.mainnet, maxConcurrentRequests)
-
-    /** Create a Blockfrost client for preview testnet.
-      *
-      * Fetches protocol parameters from Blockfrost preview testnet.
-      */
-    def preview(apiKey: String, maxConcurrentRequests: Int = 5)(using
-        backend: Backend[Future],
-        ec: ExecutionContext
-    ): Future[BlockfrostProvider] =
-        create(apiKey, previewUrl, Network.Testnet, SlotConfig.preview, maxConcurrentRequests)
-
-    /** Create a Blockfrost client for preprod testnet.
-      *
-      * Fetches protocol parameters from Blockfrost preprod testnet.
-      */
-    def preprod(apiKey: String, maxConcurrentRequests: Int = 5)(using
-        backend: Backend[Future],
-        ec: ExecutionContext
-    ): Future[BlockfrostProvider] =
-        create(apiKey, preprodUrl, Network.Testnet, SlotConfig.preprod, maxConcurrentRequests)
-
-    /** Fetch protocol parameters from Blockfrost API. */
-    private def fetchProtocolParams(apiKey: String, baseUrl: String)(using
-        backend: Backend[Future],
-        ec: ExecutionContext
-    ): Future[ProtocolParams] = {
-        val url = s"$baseUrl/epochs/latest/parameters"
-        val headers = Map("project_id" -> apiKey)
-        basicRequest
-            .get(uri"$url")
-            .headers(headers)
-            .send(backend)
-            .map { response =>
-                if response.code == StatusCode.Ok then {
-                    response.body match {
-                        case Right(body) => ProtocolParams.fromBlockfrostJson(body)
-                        case Left(error) =>
-                            throw RuntimeException(
-                              s"Failed to fetch protocol parameters. Status: ${response.code}, Body: $error"
-                            )
-                    }
-                } else {
-                    throw RuntimeException(
-                      s"Failed to fetch protocol parameters. Status: ${response.code}, Body: ${response.body}"
-                    )
-                }
-            }
-    }
 
     enum BlockfrostError:
         case NetworkError(underlying: Throwable)
@@ -847,5 +742,136 @@ object BlockfrostProvider {
 
             txInput -> txOutput
         }.toMap
+    }
+
+    /** Create a BlockfrostProvider for Cardano mainnet.
+      *
+      * Fetches protocol parameters during construction.
+      *
+      * @param apiKey
+      *   Blockfrost API key
+      * @param maxConcurrentRequests
+      *   Maximum concurrent HTTP requests (default 5)
+      * @return
+      *   Future containing the configured BlockfrostProvider
+      */
+    def mainnet(apiKey: String, maxConcurrentRequests: Int = 5)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(apiKey, mainnetUrl, Network.Mainnet, SlotConfig.mainnet, maxConcurrentRequests)
+
+    /** Create a BlockfrostProvider for Cardano preview testnet.
+      *
+      * Fetches protocol parameters during construction.
+      *
+      * @param apiKey
+      *   Blockfrost API key
+      * @param maxConcurrentRequests
+      *   Maximum concurrent HTTP requests (default 5)
+      * @return
+      *   Future containing the configured BlockfrostProvider
+      */
+    def preview(apiKey: String, maxConcurrentRequests: Int = 5)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(apiKey, previewUrl, Network.Testnet, SlotConfig.preview, maxConcurrentRequests)
+
+    /** Create a BlockfrostProvider for Cardano preprod testnet.
+      *
+      * Fetches protocol parameters during construction.
+      *
+      * @param apiKey
+      *   Blockfrost API key
+      * @param maxConcurrentRequests
+      *   Maximum concurrent HTTP requests (default 5)
+      * @return
+      *   Future containing the configured BlockfrostProvider
+      */
+    def preprod(apiKey: String, maxConcurrentRequests: Int = 5)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(apiKey, preprodUrl, Network.Testnet, SlotConfig.preprod, maxConcurrentRequests)
+
+    /** Create a BlockfrostProvider for local Yaci DevKit.
+      *
+      * Fetches protocol parameters during construction.
+      *
+      * @param baseUrl
+      *   API base URL (default: http://localhost:8080/api/v1)
+      * @param maxConcurrentRequests
+      *   Maximum concurrent HTTP requests (default 5)
+      * @param slotConfig
+      *   Slot configuration (default: Yaci DevKit config with 1s slots)
+      * @return
+      *   Future containing the configured BlockfrostProvider
+      */
+    def localYaci(
+        baseUrl: String = localUrl,
+        maxConcurrentRequests: Int = 5,
+        slotConfig: SlotConfig = SlotConfig(0L, 0L, 1000)
+    )(using ec: ExecutionContext): Future[BlockfrostProvider] =
+        create("", baseUrl, Network.Testnet, slotConfig, maxConcurrentRequests)
+
+    /** Create a BlockfrostProvider with custom configuration.
+      *
+      * Fetches protocol parameters during construction.
+      *
+      * @param apiKey
+      *   Blockfrost API key
+      * @param baseUrl
+      *   Blockfrost-compatible API base URL
+      * @param network
+      *   Cardano network (Mainnet or Testnet)
+      * @param slotConfig
+      *   Slot configuration for the network
+      * @param maxConcurrentRequests
+      *   Maximum concurrent HTTP requests (default 5)
+      * @return
+      *   Future containing the configured BlockfrostProvider
+      */
+    def create(
+        apiKey: String,
+        baseUrl: String,
+        network: Network,
+        slotConfig: SlotConfig,
+        maxConcurrentRequests: Int = 5
+    )(using ec: ExecutionContext): Future[BlockfrostProvider] = {
+        given backend: Backend[Future] = BlockfrostProviderPlatform.defaultBackend
+        fetchProtocolParams(apiKey, baseUrl).map { params =>
+            new BlockfrostProvider(
+              apiKey,
+              baseUrl,
+              maxConcurrentRequests,
+              CardanoInfo(params, network, slotConfig)
+            )
+        }
+    }
+
+    /** Fetch protocol parameters from Blockfrost-compatible API. */
+    private def fetchProtocolParams(apiKey: String, baseUrl: String)(using
+        backend: Backend[Future],
+        ec: ExecutionContext
+    ): Future[ProtocolParams] = {
+        val url = s"$baseUrl/epochs/latest/parameters"
+        val headers = Map("project_id" -> apiKey)
+        basicRequest
+            .get(uri"$url")
+            .headers(headers)
+            .send(backend)
+            .map { response =>
+                if response.code == StatusCode.Ok then {
+                    response.body match {
+                        case Right(body) => ProtocolParams.fromBlockfrostJson(body)
+                        case Left(error) =>
+                            throw RuntimeException(
+                              s"Failed to fetch protocol parameters. Status: ${response.code}, Body: $error"
+                            )
+                    }
+                } else {
+                    throw RuntimeException(
+                      s"Failed to fetch protocol parameters. Status: ${response.code}, Body: ${response.body}"
+                    )
+                }
+            }
     }
 }

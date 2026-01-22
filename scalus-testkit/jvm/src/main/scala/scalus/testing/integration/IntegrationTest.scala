@@ -12,12 +12,8 @@ import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
 import scalus.testing.kit.{Party, ScalusTest}
 import scalus.testing.yaci.{YaciConfig, YaciContainer}
 import scalus.utils.await
-import sttp.client4.DefaultFutureBackend
 
 import scala.concurrent.ExecutionContext.Implicits.global
-
-// Provide sttp backend for BlockfrostProvider
-given sttp.client4.Backend[scala.concurrent.Future] = DefaultFutureBackend()
 
 /** Base trait for multi-environment integration tests.
   *

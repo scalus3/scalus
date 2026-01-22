@@ -67,7 +67,7 @@ object EscrowValidator extends Validator {
         }
     }
 
-    inline def handleDeposit(
+    private inline def handleDeposit(
         escrowDatum: Config,
         txInfo: TxInfo,
         contractAddress: Address,
@@ -110,7 +110,7 @@ object EscrowValidator extends Validator {
         }
     }
 
-    inline def handlePay(
+    private inline def handlePay(
         escrowDatum: Config,
         txInfo: TxInfo,
         contractBalance: Lovelace
@@ -148,7 +148,7 @@ object EscrowValidator extends Validator {
         )
     }
 
-    inline def handleRefund(
+    private inline def handleRefund(
         escrowDatum: Config,
         txInfo: TxInfo,
         contractBalance: Lovelace

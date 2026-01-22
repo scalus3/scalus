@@ -86,6 +86,26 @@ These interpolators validate the address format at runtime and throw an exceptio
     The `addr` interpolator returns `Address` (the base trait), while `stake` returns `StakeAddress` specifically. Use `stake` when you need the more specific type.
 </Callout>
 
+## Connect to the Blockchain and Query UTXOs
+
+To interact with the Cardano blockchain, you need a `BlockchainProvider`. Connect to a Blockfrost-compatible API and query UTXOs to spend:
+
+```scala copy
+import scalus.cardano.node.BlockfrostProvider
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+// Connect to preprod testnet (get API key at blockfrost.io)
+val provider = BlockfrostProvider.preprod("your-blockfrost-api-key").await(30.seconds)
+
+// Query UTXOs at your address
+val myAddress = addr"addr_test1qz2fxv2umyhttkxyxp8x0dlpdt3k6cwng5pxj3jhsydzer..."
+val utxos = provider.findUtxos(myAddress).await(30.seconds).getOrElse(Map.empty)
+```
+
+See [Blockchain Providers](/docs/dapp-development/blockchain-providers) for more details on providers and advanced UTXO queries.
+
 ## Build the Transaction
 
 Use TxBuilder's fluent API to specify inputs, outputs, and change handling:
@@ -151,12 +171,11 @@ The `sign()` method adds the signature to the transaction's witness set. You can
 Finally, submit the signed transaction to the Cardano network:
 
 ```scala copy
-import scalus.cardano.node.Provider
+import scalus.cardano.node.BlockchainProvider
 import scalus.utils.await
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
 
-val provider: Provider = // ... blockfrost, ogmios, etc.
+val provider: BlockchainProvider = // ... blockfrost, emulator, etc.
 
 provider.submit(transaction).await(30.seconds) match {
   case Right(txHash) =>
@@ -176,7 +195,7 @@ Here's the full workflow in one place:
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.cardano.address.Address
-import scalus.cardano.node.Provider
+import scalus.cardano.node.BlockchainProvider
 import scalus.utils.await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
@@ -187,7 +206,7 @@ val myUtxo: Utxo = // ...
 val recipientAddress: Address = // ...
 val changeAddress: Address = // ...
 val signer: TransactionSigner = // ...
-val provider: Provider = // ...
+val provider: BlockchainProvider = // ...
 
 // Build, sign, and submit using txBuilder with context parameter
 val transaction = txBuilder
