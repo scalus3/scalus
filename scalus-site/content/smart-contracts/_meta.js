@@ -1,5 +1,6 @@
 export default {
   'developing-smart-contracts': '',
+  'htlc-tutorial': '',
   'validators': '',
   'parameterized-validators': '',
   'plutus-data': '',
