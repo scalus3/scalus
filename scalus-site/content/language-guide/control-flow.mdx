@@ -150,29 +150,61 @@ compile {
   val pair = (BigInt(10), hex"abc")
 
   pair match
-    case (amount, hash) if amount > BigInt(0) => hash
-    case _ => hex""
+    case (amount, hash) =>
+      if amount > BigInt(0) then hash else hex""
+}
+```
+
+### Guard Clauses
+
+Guards add conditions to patterns using `if`:
+
+```scala
+import scalus.prelude.*
+
+compile {
+  def categorize(opt: Option[BigInt]): String =
+    opt match
+      case Option.Some(v) if v > BigInt(100) => "large"
+      case Option.Some(v) if v > BigInt(0) => "positive"
+      case Option.Some(v) if v < BigInt(0) => "negative"
+      case Option.Some(_) => "zero"
+      case Option.None => "none"
+
+  // Complex guards with multiple conditions
+  def processItem(list: List[BigInt]): String =
+    list match
+      case List.Cons(h, t) if h > BigInt(0) && t.length > 0 => "positive with tail"
+      case List.Cons(h, _) if h > BigInt(0) => "positive no tail"
+      case List.Cons(_, t) if t.length > 0 => "has tail"
+      case _ => "other"
 }
 ```
 
 ### Pattern Matching with Constants
 
+Pattern matching on boolean and string constants is supported:
+
 ```scala
 compile {
-  val value = BigInt(42)
-
-  value match
-    case BigInt(0) => "zero"
-    case BigInt(1) => "one"
-    case _ => "other"
-
   // Boolean patterns
   val flag = true
   flag match
     case true => "yes"
     case false => "no"
+
+  // String patterns
+  val cmd = "start"
+  cmd match
+    case "start" => BigInt(1)
+    case "stop" => BigInt(0)
+    case _ => BigInt(-1)
 }
 ```
+
+<Callout type="info">
+  Integer constant patterns like `case BigInt(0) =>` are not yet supported. Use guards instead: `case n if n == BigInt(0) =>`.
+</Callout>
 
 ## Exhaustiveness Checking
 
@@ -334,14 +366,12 @@ compile {
     else if value > BigInt(100) then BigInt(100)
     else value * 2
 
-  // Or use match
+  // Or use match with guards
   def processWithMatch(value: BigInt): BigInt =
     value match
-      case v if v < BigInt(0) => BigInt(0)  // Guard not supported
-      case v => // Workaround:
-        if v < BigInt(0) then BigInt(0)
-        else if v > BigInt(100) then BigInt(100)
-        else v * 2
+      case v if v < BigInt(0) => BigInt(0)
+      case v if v > BigInt(100) => BigInt(100)
+      case v => v * 2
 }
 ```
 
@@ -352,7 +382,7 @@ compile {
 3. **Keep conditions simple** - Complex logic should be extracted to functions
 4. **Use meaningful patterns** - Destructure to give names to values
 5. **Avoid deep nesting** - Extract to helper functions
-6. **Move guard conditions to RHS** - Since guards aren't supported
+6. **Use guards for filtering** - `case Some(v) if v > 0 => ...` is cleaner than nested ifs
 7. **Use recursion judiciously** - Be aware of stack depth
 8. **Leverage type system** - Let compiler check exhaustiveness
 

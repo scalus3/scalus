@@ -19,8 +19,13 @@ Below is a comprehensive list of what Scala features are currently supported in 
 * recursive functions
 * passing/returning functions as arguments (higher-order functions)
 * `if-then-else` expressions
-* simple `match` expressions on case classes and enums
-    * only simple bindings are supported like `case Costr(field, other) => ...`
+* `match` expressions on case classes and enums with:
+    * nested patterns: `case List.Cons(Option.Some(v), _) => ...`
+    * wildcard patterns: `case _ => ...`
+    * constant patterns for booleans and strings: `case true => ...`, `case "hello" => ...`
+    * guard clauses: `case Option.Some(v) if v > 0 => ...`
+    * variable bindings with `@`: `case some @ Option.Some(v) => ...`
+    * non-exhaustive matching with `@unchecked`
 * `given` arguments and `using` clauses
 * `throw` expressions but no `try-catch` expressions
 * built-in functions and operators
