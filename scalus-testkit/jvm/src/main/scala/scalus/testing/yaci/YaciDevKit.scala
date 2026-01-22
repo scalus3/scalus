@@ -1,33 +1,27 @@
 package scalus.testing.yaci
 
 import com.bloxbean.cardano.yaci.test.YaciCardanoContainer
-import org.scalatest.{BeforeAndAfterAll, Suite}
-import scalus.cardano.address.Network
-import scalus.cardano.ledger.{Bech32, PoolKeyHash, SlotConfig}
-import scalus.cardano.node.BlockfrostProvider
-import scalus.cardano.txbuilder.TransactionSigner
-import scalus.cardano.wallet.hd.HdAccount
-import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
-import scalus.utils.await
-import sttp.client4.DefaultFutureBackend
-
-import scala.compiletime.uninitialized
-import scala.concurrent.ExecutionContext.Implicits.global
-
-// Provide sttp backend for BlockfrostProvider
-given sttp.client4.Backend[scala.concurrent.Future] = DefaultFutureBackend()
+import org.scalatest.Suite
+import scalus.cardano.ledger.{Bech32, PoolKeyHash}
+import scalus.testing.integration.IntegrationTest
 
 /** Base trait for integration tests using Yaci DevKit with ScalaTest
   *
-  * This trait provides lifecycle management for Yaci DevKit containers in ScalaTest-based tests. It
-  * handles container startup/shutdown automatically using BeforeAndAfterAll hooks.
+  * This trait extends [[IntegrationTest]] and forces Yaci environment (ignores SCALUS_TEST_ENV).
+  * Use `createYaciContext()` to get a [[scalus.testing.integration.YaciTestContext]] with:
+  *   - Multi-party access (alice, bob, eve)
+  *   - Full HD account access via `account` (Party.Alice with stake, drep, change keys)
+  *   - Pre-registered pool ID for staking tests
+  *
+  * For multi-environment tests, use [[IntegrationTest]] directly instead.
   *
   * Usage:
   * {{{
   * class MyIntegrationTest extends AnyFunSuite with YaciDevKit {
   *   test("submit transaction to devnet") {
-  *     val ctx = createTestContext()
-  *     // Use ctx for testing
+  *     val ctx = createYaciContext()
+  *     // ctx.account provides full HD wallet access (Party.Alice)
+  *     // ctx.alice, ctx.bob, ctx.eve for multi-party scenarios
   *   }
   * }
   * }}}
@@ -42,20 +36,10 @@ given sttp.client4.Backend[scala.concurrent.Future] = DefaultFutureBackend()
   * )
   * }}}
   */
-trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
+trait YaciDevKit extends IntegrationTest { self: Suite =>
 
-    // Use JVM Ed25519 signer for key derivation
-    given Ed25519Signer = JvmEd25519Signer
-
-    /** Override this to customize the Yaci DevKit configuration */
-    def yaciConfig: YaciConfig = YaciConfig()
-
-    /** Fixed mnemonic for reproducible tests (same as Yaci CLI default) */
-    val testMnemonic: String =
-        "test test test test test test test test test test test test test test test test test test test test test test test sauce"
-
-    /** Test HD account created from the fixed mnemonic (CIP-1852 compatible) */
-    lazy val testHdAccount: HdAccount = HdAccount.fromMnemonic(testMnemonic)
+    // Force Yaci environment regardless of SCALUS_TEST_ENV
+    override protected lazy val testEnvName: String = "yaci"
 
     /** Pre-registered pool ID in Yaci DevKit */
     val preRegisteredPoolId: PoolKeyHash = {
@@ -63,62 +47,8 @@ trait YaciDevKit extends BeforeAndAfterAll { self: Suite =>
         PoolKeyHash.fromArray(decoded.data)
     }
 
-    private var _container: YaciCardanoContainer = uninitialized
-
     /** Get the running container */
-    def container: YaciCardanoContainer = _container
-
-    override def beforeAll(): Unit = {
-        super.beforeAll()
-        _container = YaciContainer.acquire(yaciConfig)
-    }
-
-    override def afterAll(): Unit = {
-        YaciContainer.release()
-        super.afterAll()
-    }
-
-    /** Create TestContext from the running YaciCardanoContainer
-      *
-      * This method sets up all the necessary components for transaction building and submission:
-      *   - BlockfrostProvider connected to Yaci Store API
-      *   - Protocol parameters from the devnet
-      *   - Slot configuration (1 second slots, zero start time)
-      *   - HdAccount with CIP-1852 compatible HD wallet support
-      *   - Transaction signer with payment key
-      *   - Base and stake addresses
-      *
-      * @return
-      *   TestContext ready for use in tests
-      */
-    def createTestContext(): TestContext = {
-        // Empty API key for local Yaci Store (Blockfrost-compatible API)
-        // Strip trailing slash to avoid double-slash in URLs
-        val baseUrl = _container.getYaciStoreApiUrl.stripSuffix("/")
-
-        // Yaci DevKit uses slot length of 1 second and start time of 0
-        val yaciSlotConfig = SlotConfig(
-          zeroTime = 0L,
-          zeroSlot = 0L,
-          slotLength = 1000
-        )
-
-        // Create provider (async) - fetches protocol params during construction
-        val provider = BlockfrostProvider.localYaci(baseUrl, 5, yaciSlotConfig).await()
-
-        // Default signer with only payment key - sufficient for most transactions
-        val signer = new TransactionSigner(Set(testHdAccount.paymentKeyPair))
-
-        val address = testHdAccount.baseAddress(Network.Testnet)
-        val stakeAddress = testHdAccount.stakeAddress(Network.Testnet)
-
-        TestContext(
-          provider.cardanoInfo,
-          provider,
-          testHdAccount,
-          signer,
-          address,
-          stakeAddress
-        )
-    }
+    def container: YaciCardanoContainer = yaciContainer.getOrElse(
+      throw new IllegalStateException("YaciDevKit container not started")
+    )
 }

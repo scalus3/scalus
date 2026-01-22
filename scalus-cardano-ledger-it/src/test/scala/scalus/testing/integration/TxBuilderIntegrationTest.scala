@@ -6,7 +6,8 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.compiler.compile
-import scalus.testing.yaci.{TestContext, YaciDevKit}
+import scalus.testing.kit.Party
+import scalus.testing.yaci.YaciDevKit
 import scalus.toUplc
 import scalus.utils.await
 
@@ -27,16 +28,20 @@ import scala.concurrent.duration.*
 class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     // Shared test context - created once for all tests in the suite
-    private lazy val ctx: TestContext = createTestContext()
+    private lazy val ctx = createYaciContext()
+
+    // Alice's full HD account for advanced operations (staking, governance)
+    private def account = Party.Alice.account
+    private def stakeAddress = account.stakeAddress(Network.Testnet)
 
     // Compute DRep key hash from account
     private def drepKeyHash: AddrKeyHash = {
-        val drepVkey = ctx.account.drepKeyPair.verificationKey
+        val drepVkey = account.drepKeyPair.verificationKey
         Hash(platform.blake2b_224(ByteString.fromArray(drepVkey.bytes)))
     }
 
     // Helper to run a test and print transaction info
-    private def runTxTest(name: String)(buildTx: TestContext => Transaction): Unit = {
+    private def runTxTest(name: String)(buildTx: YaciTestContext => Transaction): Unit = {
         val tx = buildTx(ctx)
         println(s"[$name] Transaction ID: ${tx.id.toHex}")
 
@@ -56,7 +61,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
     test("1. simple payment transaction") {
         runTxTest("SimplePayment") { ctx =>
             // Create a second address to send to (using change key)
-            val recipientVkey = ctx.account.changeKeyPair.verificationKey
+            val recipientVkey = account.changeKeyPair.verificationKey
             val recipientKeyHash: AddrKeyHash =
                 Hash(platform.blake2b_224(ByteString.fromArray(recipientVkey.bytes)))
             val recipientAddress = ShelleyAddress(
@@ -67,9 +72,9 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
             TxBuilder(ctx.cardanoInfo)
                 .payTo(recipientAddress, Value.ada(10))
-                .complete(ctx.provider, ctx.address)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
-                .sign(ctx.signer)
+                .sign(ctx.alice.signer)
                 .transaction
         }
     }
@@ -95,10 +100,10 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
             TxBuilder(ctx.cardanoInfo)
                 .mint(mintingPolicyScript, Map(assetName -> mintAmount), ())
-                .payTo(ctx.address, mintedValue)
-                .complete(ctx.provider, ctx.address)
+                .payTo(ctx.alice.address, mintedValue)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
-                .sign(ctx.signer)
+                .sign(ctx.alice.signer)
                 .transaction
         }
     }
@@ -112,10 +117,10 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
             // Conway-era RegCert only requires payment key (for fees)
             // Stake key signature is NOT required for registration
             TxBuilder(ctx.cardanoInfo)
-                .registerStake(ctx.stakeAddress)
-                .complete(ctx.provider, ctx.address)
+                .registerStake(stakeAddress)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
-                .sign(ctx.signer)
+                .sign(ctx.alice.signer)
                 .transaction
         }
     }
@@ -128,12 +133,12 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
         runTxTest("StakeDelegation") { ctx =>
             // Stake delegation requires both payment key (for fees) and stake key
             val stakeSigner = new TransactionSigner(
-              Set(ctx.account.paymentKeyPair, ctx.account.stakeKeyPair)
+              Set(account.paymentKeyPair, account.stakeKeyPair)
             )
 
             TxBuilder(ctx.cardanoInfo)
-                .delegateTo(ctx.stakeAddress, preRegisteredPoolId)
-                .complete(ctx.provider, ctx.address)
+                .delegateTo(stakeAddress, preRegisteredPoolId)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
                 .sign(stakeSigner)
                 .transaction
@@ -157,12 +162,12 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
             // DRep registration requires payment key (for fees) and drep key
             val drepSigner = new TransactionSigner(
-              Set(ctx.account.paymentKeyPair, ctx.account.drepKeyPair)
+              Set(account.paymentKeyPair, account.drepKeyPair)
             )
 
             TxBuilder(ctx.cardanoInfo)
                 .addSteps(TransactionBuilderStep.IssueCertificate(cert, PubKeyWitness))
-                .complete(ctx.provider, ctx.address)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
                 .sign(drepSigner)
                 .transaction
@@ -179,12 +184,12 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
             // Vote delegation requires both payment key (for fees) and stake key
             val stakeSigner = new TransactionSigner(
-              Set(ctx.account.paymentKeyPair, ctx.account.stakeKeyPair)
+              Set(account.paymentKeyPair, account.stakeKeyPair)
             )
 
             TxBuilder(ctx.cardanoInfo)
-                .delegateVoteToDRep(ctx.stakeAddress, drep)
-                .complete(ctx.provider, ctx.address)
+                .delegateVoteToDRep(stakeAddress, drep)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
                 .sign(stakeSigner)
                 .transaction
@@ -201,7 +206,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
     test("7. proposal submission") {
         runTxTest("ProposalSubmission") { ctx =>
             val deposit = Coin(ctx.cardanoInfo.protocolParams.govActionDeposit)
-            val rewardAccount = RewardAccount(ctx.stakeAddress)
+            val rewardAccount = RewardAccount(stakeAddress)
             val govAction = GovAction.InfoAction
             val anchor = Anchor(
               "https://example.com/proposal-metadata.json",
@@ -212,9 +217,9 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
             val tx = TxBuilder(ctx.cardanoInfo)
                 .addSteps(TransactionBuilderStep.SubmitProposal(proposal, PubKeyWitness))
-                .complete(ctx.provider, ctx.address)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
-                .sign(ctx.signer)
+                .sign(ctx.alice.signer)
                 .transaction
 
             // Store the governance action ID for the voting test
@@ -241,14 +246,14 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
             // Voting requires payment key (for fees) and drep key (for voting authority)
             val drepSigner = new TransactionSigner(
-              Set(ctx.account.paymentKeyPair, ctx.account.drepKeyPair)
+              Set(account.paymentKeyPair, account.drepKeyPair)
             )
 
             TxBuilder(ctx.cardanoInfo)
                 .addSteps(
                   TransactionBuilderStep.SubmitVotingProcedure(voter, votes, PubKeyWitness)
                 )
-                .complete(ctx.provider, ctx.address)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
                 .sign(drepSigner)
                 .transaction
@@ -262,7 +267,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
     test("9. native script minting") {
         runTxTest("NativeScriptMinting") { ctx =>
             // Get payment key hash for the native script
-            val paymentVkey = ctx.account.paymentKeyPair.verificationKey
+            val paymentVkey = account.paymentKeyPair.verificationKey
             val paymentKeyHash: AddrKeyHash =
                 Hash(platform.blake2b_224(ByteString.fromArray(paymentVkey.bytes)))
 
@@ -291,10 +296,10 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
                     witness = nativeScriptWitness
                   )
                 )
-                .payTo(ctx.address, mintedValue)
-                .complete(ctx.provider, ctx.address)
+                .payTo(ctx.alice.address, mintedValue)
+                .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
-                .sign(ctx.signer)
+                .sign(ctx.alice.signer)
                 .transaction
         }
     }

@@ -7,7 +7,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.*
 import scalus.cardano.txbuilder.*
 import scalus.compiler.compile
-import scalus.testing.yaci.{TestContext, YaciDevKit}
+import scalus.testing.kit.Party
+import scalus.testing.yaci.YaciDevKit
 import scalus.toUplc
 import scalus.utils.await
 
@@ -21,14 +22,14 @@ import scala.concurrent.duration.*
   */
 class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
-    private lazy val ctx: TestContext = createTestContext()
+    private lazy val ctx = createYaciContext()
 
     // =========================================================================
     // Test: Simple address query
     // =========================================================================
 
     test("UtxoQuery.Simple with FromAddress returns UTxOs at address") {
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address))
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.alice.address))
         val result = ctx.provider.findUtxos(query).await(30.seconds)
 
         result match {
@@ -37,7 +38,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
                 assert(utxos.nonEmpty, "Should have UTxOs from Yaci genesis")
                 // Verify all UTxOs are at the expected address
                 utxos.foreach { case (_, output) =>
-                    assert(output.address == ctx.address, "UTxO should be at queried address")
+                    assert(output.address == ctx.alice.address, "UTxO should be at queried address")
                 }
             case Left(error) =>
                 fail(s"Query failed: $error")
@@ -50,7 +51,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery with MinLovelace filter") {
         val minAmount = Coin.ada(100)
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)) &&
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.alice.address)) &&
             UtxoFilter.MinLovelace(minAmount)
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
@@ -75,7 +76,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery with limit") {
         val limit = 2
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)).limit(limit)
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.alice.address)).limit(limit)
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
 
@@ -94,7 +95,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery with minRequiredTotalAmount") {
         val minTotal = Coin.ada(50)
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)).minTotal(minTotal)
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.alice.address)).minTotal(minTotal)
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
 
@@ -117,7 +118,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery.FromTransaction returns outputs from a transaction") {
         // First, submit a transaction to get a known txId
-        val recipientVkey = ctx.account.changeKeyPair.verificationKey
+        val recipientVkey = Party.Alice.account.changeKeyPair.verificationKey
         val recipientKeyHash: AddrKeyHash =
             Hash(platform.blake2b_224(ByteString.fromArray(recipientVkey.bytes)))
         val recipientAddress = ShelleyAddress(
@@ -128,9 +129,9 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
         val tx = TxBuilder(ctx.cardanoInfo)
             .payTo(recipientAddress, Value.ada(10))
-            .complete(ctx.provider, ctx.address)
+            .complete(ctx.provider, ctx.alice.address)
             .await(30.seconds)
-            .sign(ctx.signer)
+            .sign(ctx.alice.signer)
             .transaction
 
         val txId = tx.id
@@ -164,8 +165,8 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery.Or combines results from two queries") {
         // Create two addresses
-        val addr1 = ctx.address
-        val changeVkey = ctx.account.changeKeyPair.verificationKey
+        val addr1 = ctx.alice.address
+        val changeVkey = Party.Alice.account.changeKeyPair.verificationKey
         val changeKeyHash: AddrKeyHash =
             Hash(platform.blake2b_224(ByteString.fromArray(changeVkey.bytes)))
         val addr2 = ShelleyAddress(
@@ -177,9 +178,9 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
         // First send some ADA to addr2 so it has UTxOs
         val tx = TxBuilder(ctx.cardanoInfo)
             .payTo(addr2, Value.ada(5))
-            .complete(ctx.provider, ctx.address)
+            .complete(ctx.provider, ctx.alice.address)
             .await(30.seconds)
-            .sign(ctx.signer)
+            .sign(ctx.alice.signer)
             .transaction
 
         ctx.provider.submit(tx).await(30.seconds) match {
@@ -224,10 +225,10 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
         val tx = TxBuilder(ctx.cardanoInfo)
             .mint(mintingPolicyScript, Map(assetName -> mintAmount), ())
-            .payTo(ctx.address, mintedValue)
-            .complete(ctx.provider, ctx.address)
+            .payTo(ctx.alice.address, mintedValue)
+            .complete(ctx.provider, ctx.alice.address)
             .await(30.seconds)
-            .sign(ctx.signer)
+            .sign(ctx.alice.signer)
             .transaction
 
         ctx.provider.submit(tx).await(30.seconds) match {
@@ -236,7 +237,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
         }
 
         // Query for UTxOs with this asset
-        val query = UtxoQuery(UtxoSource.FromAddress(ctx.address)) &&
+        val query = UtxoQuery(UtxoSource.FromAddress(ctx.alice.address)) &&
             UtxoFilter.HasAsset(policyId, assetName)
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
@@ -264,10 +265,10 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
     test("UtxoQuery with And combinator filters by intersection") {
         // Submit a transaction first
         val tx = TxBuilder(ctx.cardanoInfo)
-            .payTo(ctx.address, Value.ada(3))
-            .complete(ctx.provider, ctx.address)
+            .payTo(ctx.alice.address, Value.ada(3))
+            .complete(ctx.provider, ctx.alice.address)
             .await(30.seconds)
-            .sign(ctx.signer)
+            .sign(ctx.alice.signer)
             .transaction
 
         val txId = tx.id
@@ -279,7 +280,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
         // Query for UTxOs at address AND from this transaction
         val query = UtxoQuery(
-          UtxoSource.FromAddress(ctx.address) && UtxoSource.FromTransaction(txId)
+          UtxoSource.FromAddress(ctx.alice.address) && UtxoSource.FromTransaction(txId)
         )
 
         val result = ctx.provider.findUtxos(query).await(30.seconds)
@@ -289,7 +290,7 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
                 println(s"Found ${utxos.size} UTxOs at address from tx ${txId.toHex.take(16)}...")
                 // Should only have UTxOs that are both at the address AND from the transaction
                 utxos.foreach { case (input, output) =>
-                    assert(output.address == ctx.address, "UTxO should be at queried address")
+                    assert(output.address == ctx.alice.address, "UTxO should be at queried address")
                     assert(
                       input.transactionId == txId,
                       "UTxO should be from queried transaction"
