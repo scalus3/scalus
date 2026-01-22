@@ -10,6 +10,19 @@ import { Callout } from 'nextra/components'
 
 A Cardano validator is a predicate function that approves or rejects transactions. It either succeeds (returns `Unit`) or fails (throws an exception). Scalus compiles Scala validators to Plutus Core bytecode.
 
+## Quick Reference
+
+| Purpose | Method | Validates | Common Use Cases |
+|---------|--------|-----------|------------------|
+| Spending | `spend(...)` | UTxO consumption | Escrow, vesting, DEX orders |
+| Minting | `mint(...)` | Token creation/burning | NFT collections, fungible tokens |
+| Rewarding | `reward(...)` | Stake reward withdrawal | DAO treasuries |
+| Certifying | `certify(...)` | Delegation certificates | Controlled delegation |
+| Voting | `vote(...)` | Governance votes | DAO voting |
+| Proposing | `propose(...)` | Governance proposals | Treasury limits |
+
+## Creating a Validator
+
 To create a validator, extend the `Validator` trait and annotate with `@Compile`:
 
 ```scala copy
@@ -63,18 +76,7 @@ trait Validator {
 
 The `validate` method is the entry point called by Cardano. It deserializes the script context and routes to the appropriate handler method.
 
-## Script Purposes (Plutus V3)
-
-Cardano supports six script purposes in Plutus V3. Each has a specific use case:
-
-| Purpose	    | Method | Used for                                                                  |
-|---            | ---    | ---                                                                       |
-| `spend`       | `spend(...)` | Spending UTxOs locked at the script address |
-| `mint`	    | `mint(...)` | Minting/burning native tokens |
-| `reward`      | `reward(...)` | Withdrawing staking rewards |
-| `certify`	    | `certify(...)` | Publishing delegation certificates |
-| `vote`	    | `vote(...)` | Voting on governance proposals |
-| `propose`	    | `propose(...)` | Constitution guardrails for governance proposals |
+## Script Purposes
 
 ### Spending Scripts
 
