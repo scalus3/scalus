@@ -4,13 +4,13 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Script, ScriptHash, Transaction, Utxo, Value as LedgerValue}
-import scalus.cardano.node.Provider
+import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.ledger.api.v1.PubKeyHash
 import scalus.uplc.PlutusV3
 
 import java.time.Instant
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 /** Endpoints for building crowdfunding transactions.
   *
@@ -25,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
   *   Compiled donation minting policy (parameterized)
   */
 class CrowdfundingEndpoints(
-    provider: Provider,
+    provider: BlockchainProvider,
     crowdfundingContract: PlutusV3[Data => Unit],
     donationMintingContract: PlutusV3[Data => Data => Unit]
 ) {
@@ -90,7 +90,8 @@ class CrowdfundingEndpoints(
         deadline: Long,
         initialValue: Coin,
         signer: TransactionSigner
-    )(using ExecutionContext): Future[(Transaction, ByteString)] =
+    ): Future[(Transaction, ByteString)] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         val recipientPkh = extractPkh(recipientAddress)
         val recipientAddrKeyHash = AddrKeyHash.fromByteString(recipientPkh.hash)
 
@@ -177,7 +178,8 @@ class CrowdfundingEndpoints(
         donorAddress: ShelleyAddress,
         amount: Long,
         signer: TransactionSigner
-    )(using ExecutionContext): Future[Transaction] =
+    ): Future[Transaction] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         for
             campaignUtxo <- findCampaignUtxo(campaignId).map(
               _.getOrElse(throw RuntimeException(s"No campaign found for id: $campaignId"))
@@ -287,7 +289,8 @@ class CrowdfundingEndpoints(
         recipientAddress: ShelleyAddress,
         donationUtxos: Seq[Utxo],
         signer: TransactionSigner
-    )(using ExecutionContext): Future[Transaction] =
+    ): Future[Transaction] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         val recipientPkh = extractPkh(recipientAddress)
         val recipientAddrKeyHash = AddrKeyHash.fromByteString(recipientPkh.hash)
 
@@ -433,7 +436,8 @@ class CrowdfundingEndpoints(
         campaignId: ByteString,
         donationUtxos: Seq[Utxo],
         signer: TransactionSigner
-    )(using ExecutionContext): Future[Transaction] =
+    ): Future[Transaction] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         for
             campaignUtxo <- findCampaignUtxo(campaignId).map(
               _.getOrElse(throw RuntimeException(s"No campaign found for id: $campaignId"))
@@ -580,7 +584,8 @@ class CrowdfundingEndpoints(
     /** Finds the campaign UTxO containing the campaign NFT with the given ID. */
     def findCampaignUtxo(
         campaignId: ByteString
-    )(using ExecutionContext): Future[scala.Option[Utxo]] =
+    ): Future[scala.Option[Utxo]] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         for utxos <- provider
                 .findUtxos(scriptAddress)
                 .map(_.getOrElse(Map.empty))
@@ -603,7 +608,8 @@ class CrowdfundingEndpoints(
       *   - NOT containing the campaign NFT
       *   - Containing a donation token (from the campaign's donation policy)
       */
-    def findDonationUtxos(campaignId: ByteString)(using ExecutionContext): Future[Seq[Utxo]] =
+    def findDonationUtxos(campaignId: ByteString): Future[Seq[Utxo]] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         for
             utxos <- provider.findUtxos(scriptAddress).map(_.getOrElse(Map.empty))
             campaignUtxo <- findCampaignUtxo(campaignId)

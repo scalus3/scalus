@@ -132,7 +132,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 
 object AuctionValidatorTest extends ScalusTest {
     import scalus.ledger.api.v3.{TxId, TxOutRef}
-    import scalus.cardano.node.Provider
+    import scalus.cardano.node.BlockchainProvider
     import scalus.cardano.address.Network
 
     // Party to role mapping
@@ -167,7 +167,7 @@ object AuctionValidatorTest extends ScalusTest {
         (factory.createInstance(oneShot), oneShotUtxo)
     }
 
-    private def getAuctionEndTime(provider: Provider): PosixTime =
+    private def getAuctionEndTime(provider: BlockchainProvider): PosixTime =
         BigInt(provider.cardanoInfo.slotConfig.slotToTime(slot))
 
     enum TestAction:

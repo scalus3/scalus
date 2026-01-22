@@ -6,7 +6,7 @@ import scalus.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Transaction, Utxo, Value as LedgerValue}
-import scalus.cardano.node.Provider
+import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.compiler.Options
 import scalus.ledger.api.v1.{Address, Credential, PubKeyHash}
@@ -16,7 +16,7 @@ import scalus.prelude.*
 import scalus.uplc.PlutusV3
 
 import java.time.Instant
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 /** Auction datum representing the state of an auction
   * @param seller
@@ -473,7 +473,7 @@ lazy val AuctionContract: PlutusV3[Data => Data => Unit] =
   * @param withErrorTraces
   *   If true, include error traces for debugging (default: false for production)
   */
-class AuctionFactory(provider: Provider, withErrorTraces: Boolean = false) {
+class AuctionFactory(provider: BlockchainProvider, withErrorTraces: Boolean = false) {
 
     private val baseContract =
         if withErrorTraces then AuctionContract.withErrorTraces else AuctionContract
@@ -505,7 +505,7 @@ class AuctionFactory(provider: Provider, withErrorTraces: Boolean = false) {
   *   The compiled contract with oneShot applied
   */
 class AuctionInstance(
-    provider: Provider,
+    provider: BlockchainProvider,
     val oneShot: TxOutRef,
     compiledContract: PlutusV3[Data => Unit]
 ) {
@@ -558,7 +558,8 @@ class AuctionInstance(
         auctionEndTime: PosixTime,
         initialValue: Coin,
         signer: TransactionSigner
-    )(using ExecutionContext): Future[Transaction] =
+    ): Future[Transaction] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         // Verify the provided UTxO matches the oneShot parameter
         require(
           oneShotUtxo.input.transactionId == oneShot.id.hash &&
@@ -621,7 +622,8 @@ class AuctionInstance(
         bidderAddress: ShelleyAddress,
         bidAmount: Long,
         signer: TransactionSigner
-    )(using ExecutionContext): Future[Transaction] =
+    ): Future[Transaction] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         val bidderPkh = extractPkh(bidderAddress)
         for
             auctionUtxo <- findAuctionUtxo().map(
@@ -716,7 +718,8 @@ class AuctionInstance(
     def endAuction(
         sponsorAddress: ShelleyAddress,
         signer: TransactionSigner
-    )(using ExecutionContext): Future[Transaction] =
+    ): Future[Transaction] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         for
             auctionUtxo <- findAuctionUtxo().map(
               _.getOrElse(throw RuntimeException(s"No active auction found at $scriptAddress"))
@@ -801,7 +804,8 @@ class AuctionInstance(
       * @return
       *   The auction UTxO if found
       */
-    def findAuctionUtxo()(using ExecutionContext): Future[scala.Option[Utxo]] =
+    def findAuctionUtxo(): Future[scala.Option[Utxo]] =
+        given scala.concurrent.ExecutionContext = provider.executionContext
         provider
             .queryUtxos { u =>
                 u.output.address == scriptAddress

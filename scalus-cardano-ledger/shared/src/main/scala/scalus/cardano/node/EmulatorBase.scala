@@ -12,7 +12,11 @@ import scala.concurrent.{ExecutionContext, Future}
   * Platform-specific implementations (JVM/JS) extend this trait and provide thread-safe or
   * single-threaded state management as appropriate.
   */
-trait EmulatorBase extends Provider {
+trait EmulatorBase extends BlockchainProvider {
+
+    /** Emulator uses parasitic EC since all operations are synchronous. */
+    override def executionContext: ExecutionContext = ExecutionContext.parasitic
+
     def validators: Iterable[STS.Validator]
     def mutators: Iterable[STS.Mutator]
 
@@ -30,22 +34,15 @@ trait EmulatorBase extends Provider {
         CardanoInfo(ctx.env.params, ctx.env.network, ctx.slotConfig)
     }
 
-    override def fetchCardanoInfo(using ExecutionContext): Future[CardanoInfo] =
-        Future.successful(cardanoInfo)
-
-    def fetchLatestParams(using ExecutionContext): Future[ProtocolParams] = {
+    def fetchLatestParams: Future[ProtocolParams] = {
         val params = currentContext.env.params
         Future.successful(params)
     }
 
-    def submit(transaction: Transaction)(using
-        ExecutionContext
-    ): Future[Either[SubmitError, TransactionHash]] =
+    def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
         Future.successful(submitSync(transaction))
 
-    def findUtxos(
-        query: UtxoQuery
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
+    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] = {
         // Evaluate source to get candidate UTxOs
         def evalSource(source: UtxoSource): Utxos = source match
             case UtxoSource.FromAddress(addr) =>

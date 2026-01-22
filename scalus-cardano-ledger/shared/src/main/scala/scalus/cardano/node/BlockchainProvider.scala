@@ -3,16 +3,52 @@ package scalus.cardano.node
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
+
+@deprecated("Use BlockchainProvider instead", "0.14.2")
+type Provider = BlockchainProvider
+
+/** Trait for blockchain providers with generic effect type. (TF is for "tagless final" style, often
+  * term used in FP literature).
+  */
+trait BlockchainProviderTF[F[_]] {
+
+    /** Returns CardanoInfo for this provider.
+      */
+    def cardanoInfo: CardanoInfo
+
+    /** Fetches the latest protocol parameters from the network.
+      */
+    def fetchLatestParams: F[ProtocolParams]
+
+    /** Submits a transaction to the network.
+      */
+    def submit(transaction: Transaction): F[Either[SubmitError, TransactionHash]]
+
+    /** Find UTxOs using a type-safe query.
+      */
+    def findUtxos(query: UtxoQuery): F[Either[UtxoQueryError, Utxos]]
+
+}
 
 /** Provider for Cardano blockchain operations.
   *
   * Provider is the cross-platform interface for interacting with Cardano nodes. All methods return
   * `Future` values and work on both JVM and JavaScript platforms.
   *
+  * Implementations capture their ExecutionContext at construction time, so callers don't need to
+  * provide it for each method call.
+  *
   * Use `scalus.utils.await` extension for blocking operations on JVM when needed.
   */
-trait Provider {
+trait BlockchainProvider extends BlockchainProviderTF[Future] {
+
+    /** Returns the ExecutionContext captured by this provider.
+      *
+      * This is used internally by default method implementations. External code can use this when
+      * working with Futures returned by provider methods, or provide their own.
+      */
+    def executionContext: scala.concurrent.ExecutionContext
 
     /** Returns CardanoInfo for this provider.
       *
@@ -22,18 +58,9 @@ trait Provider {
       */
     def cardanoInfo: CardanoInfo
 
-    /** Fetches fresh CardanoInfo from the network.
-      *
-      * For emulators: returns current value immediately. For remote providers: fetches protocol
-      * params from the network and updates the internal cache.
-      */
-    def fetchCardanoInfo(using ExecutionContext): Future[CardanoInfo]
+    def fetchLatestParams: Future[ProtocolParams]
 
-    def fetchLatestParams(using ExecutionContext): Future[ProtocolParams]
-
-    def submit(transaction: Transaction)(using
-        ExecutionContext
-    ): Future[Either[SubmitError, TransactionHash]]
+    def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]]
 
     /** Find a single UTxO by its transaction input.
       *
@@ -42,16 +69,14 @@ trait Provider {
       * @return
       *   Either a UtxoQueryError or the found Utxo
       */
-    def findUtxo(input: TransactionInput)(using
-        ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxo]] = {
+    def findUtxo(input: TransactionInput): Future[Either[UtxoQueryError, Utxo]] = {
         findUtxos(UtxoQuery(UtxoSource.FromInputs(Set(input)))).map { result =>
             result.flatMap { utxos =>
                 utxos.headOption match
                     case Some((i, o)) => Right(Utxo(i, o))
                     case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
             }
-        }
+        }(executionContext)
     }
 
     /** Find UTxOs by a set of transaction inputs.
@@ -61,15 +86,13 @@ trait Provider {
       * @return
       *   Either a UtxoQueryError or the found UTxOs (fails if not all inputs are found)
       */
-    def findUtxos(inputs: Set[TransactionInput])(using
-        ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxos]] = {
+    def findUtxos(inputs: Set[TransactionInput]): Future[Either[UtxoQueryError, Utxos]] = {
         findUtxos(UtxoQuery(UtxoSource.FromInputs(inputs))).map { result =>
             result.flatMap { foundUtxos =>
                 if foundUtxos.size == inputs.size then Right(foundUtxos)
                 else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
             }
-        }
+        }(executionContext)
     }
 
     /** Find all UTxOs at the given address.
@@ -79,9 +102,7 @@ trait Provider {
       * @return
       *   Either a UtxoQueryError or the found UTxOs
       */
-    def findUtxos(address: Address)(using
-        ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxos]] = {
+    def findUtxos(address: Address): Future[Either[UtxoQueryError, Utxos]] = {
         findUtxos(UtxoQuery(UtxoSource.FromAddress(address)))
     }
 
@@ -96,14 +117,14 @@ trait Provider {
         transactionId: Option[TransactionHash] = None,
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxo]] = {
+    ): Future[Either[UtxoQueryError, Utxo]] = {
         findUtxos(address, transactionId, datum, minAmount, None).map { result =>
             result.flatMap { utxos =>
                 utxos.headOption match
                     case Some((i, o)) => Right(Utxo(i, o))
                     case None => Left(UtxoQueryError.NotFound(UtxoSource.FromAddress(address)))
             }
-        }
+        }(executionContext)
     }
 
     /** Find UTxOs by address and optional filters.
@@ -118,7 +139,7 @@ trait Provider {
         datum: Option[DatumOption] = None,
         minAmount: Option[Coin] = None,
         minRequiredTotalAmount: Option[Coin] = None
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
+    ): Future[Either[UtxoQueryError, Utxos]] = {
         if minRequiredTotalAmount.exists(_ <= Coin(0)) then
             return Future.successful(Right(Map.empty))
 
@@ -149,7 +170,7 @@ trait Provider {
       * @return
       *   Either a UtxoQueryError or the matching UTxOs
       */
-    def findUtxos(query: UtxoQuery)(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]]
+    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]]
 
     /** Query UTxOs using lambda DSL.
       *
@@ -196,7 +217,7 @@ trait Provider {
   * @param query
   *   The query to execute
   */
-case class UtxoQueryWithProvider(provider: Provider, query: UtxoQuery) {
+case class UtxoQueryWithProvider(provider: BlockchainProvider, query: UtxoQuery) {
 
     /** Limit the number of results */
     def limit(n: Int): UtxoQueryWithProvider = copy(query = query.limit(n))
@@ -211,7 +232,7 @@ case class UtxoQueryWithProvider(provider: Provider, query: UtxoQuery) {
     def minTotal(amount: Coin): UtxoQueryWithProvider = copy(query = query.minTotal(amount))
 
     /** Execute the query and return the results */
-    def execute()(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] =
+    def execute(): Future[Either[UtxoQueryError, Utxos]] =
         provider.findUtxos(query)
 }
 

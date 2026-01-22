@@ -6,8 +6,6 @@ import scalus.cardano.address.{Address, Network, ShelleyAddress, ShelleyDelegati
 import scalus.cardano.ledger.*
 import scalus.testing.kit.TestUtil
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 /** Usage examples for the UTxO query DSL with Emulator.
   *
   * These tests demonstrate how to use `provider.queryUtxos` with lambda expressions.
@@ -45,7 +43,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(50)),
           TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, Value.ada(200))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find all UTxOs at Alice's address
         val result = provider
@@ -68,7 +66,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(50)),
           TransactionInput(genesisHash, 2) -> TransactionOutput(aliceAddress, Value.ada(10))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find UTxOs with at least 50 ADA
         val minAmount = Coin.ada(50)
@@ -94,7 +92,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, valueWithAsset),
           TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, Value.ada(200))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find UTxOs containing the test token
         val result = provider
@@ -119,7 +117,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, valueWithAsset),
           TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, valueWithAsset)
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find Alice's UTxOs that contain the test token
         // This lambda translates to:
@@ -160,7 +158,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 1) -> TransactionOutput(bobAddress, Value.ada(50)),
           TransactionInput(genesisHash, 2) -> TransactionOutput(charlieAddress, Value.ada(200))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find UTxOs at Alice's OR Bob's address
         // This lambda translates to:
@@ -190,7 +188,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 3) -> TransactionOutput(aliceAddress, Value.ada(40)),
           TransactionInput(genesisHash, 4) -> TransactionOutput(aliceAddress, Value.ada(50))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find UTxOs until we have at least 75 ADA
         // This is useful for coin selection - stop fetching once we have enough
@@ -225,7 +223,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, Value.ada(100)),
           TransactionInput(genesisHash, 3) -> TransactionOutput(bobAddress, Value.ada(200))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find UTxOs from Alice OR Bob until we have 150 ADA
         val requiredAmount = Coin.ada(150)
@@ -255,7 +253,7 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
           TransactionInput(genesisHash, 3) -> TransactionOutput(aliceAddress, Value.ada(40)),
           TransactionInput(genesisHash, 4) -> TransactionOutput(aliceAddress, Value.ada(50))
         )
-        val provider: Provider = new Emulator(initialUtxos)
+        val provider: BlockchainProvider = new Emulator(initialUtxos)
 
         // Query: Find at most 2 UTxOs
         val result = provider

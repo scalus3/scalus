@@ -33,7 +33,9 @@ class BlockfrostProvider(
 )(using
     backend: Backend[Future],
     ec: ExecutionContext
-) extends Provider {
+) extends BlockchainProvider {
+
+    override def executionContext: ExecutionContext = ec
 
     @volatile private var _cardanoInfo: CardanoInfo = initialCardanoInfo
 
@@ -46,11 +48,12 @@ class BlockfrostProvider(
 
     private def headers = Map("project_id" -> apiKey)
 
-    override def fetchCardanoInfo(using ExecutionContext): Future[CardanoInfo] =
-        refreshCardanoInfo
-
-    /** Force refresh of cached CardanoInfo from the network. */
-    def refreshCardanoInfo(using ExecutionContext): Future[CardanoInfo] =
+    /** Force refresh of cached CardanoInfo from the network.
+      *
+      * Fetches latest protocol parameters and updates the internal cache.
+      * Use this for long-running applications that need to stay current with network changes.
+      */
+    def refreshCardanoInfo: Future[CardanoInfo] =
         fetchLatestParams.map { params =>
             val info = CardanoInfo(params, _cardanoInfo.network, _cardanoInfo.slotConfig)
             _cardanoInfo = info
@@ -60,7 +63,7 @@ class BlockfrostProvider(
     /** Wrap an HTTP request with rate limiting */
     private def rateLimited[T](request: => Future[T]): Future[T] = limiter(request)
 
-    def fetchLatestParams(using ExecutionContext): Future[ProtocolParams] = {
+    def fetchLatestParams: Future[ProtocolParams] = {
         val url = s"$baseUrl/epochs/latest/parameters"
         rateLimited(
           basicRequest
@@ -110,7 +113,7 @@ class BlockfrostProvider(
 
     override def submit(
         tx: Transaction
-    )(using ExecutionContext): Future[Either[SubmitError, TransactionHash]] = {
+    ): Future[Either[SubmitError, TransactionHash]] = {
         val url = s"$baseUrl/tx/submit"
         val txCbor = tx.toCbor
 
@@ -140,9 +143,7 @@ class BlockfrostProvider(
         }
     }
 
-    override def findUtxos(query: UtxoQuery)(using
-        ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxos]] = {
+    override def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] = {
         // Evaluate source to get candidate UTxOs
         def evalSource(source: UtxoSource): Future[Either[UtxoQueryError, Utxos]] = source match
             case UtxoSource.FromAddress(addr) =>
@@ -266,9 +267,7 @@ class BlockfrostProvider(
     }
 
     /** Fetch UTxOs from an address using Blockfrost API */
-    private def fetchUtxosFromAddress(address: Address)(using
-        ExecutionContext
-    ): Future[Either[UtxoQueryError, Utxos]] = {
+    private def fetchUtxosFromAddress(address: Address): Future[Either[UtxoQueryError, Utxos]] = {
         import scala.util.{Success, Failure}
         val bech32 = address match {
             case sh @ ShelleyAddress(_, _, _) =>
@@ -323,7 +322,7 @@ class BlockfrostProvider(
         address: Address,
         policyId: PolicyId,
         assetName: AssetName
-    )(using ExecutionContext): Future[Either[UtxoQueryError, Utxos]] = {
+    ): Future[Either[UtxoQueryError, Utxos]] = {
         import scala.util.{Success, Failure}
         val bech32 = address match {
             case sh @ ShelleyAddress(_, _, _) =>
@@ -374,8 +373,8 @@ class BlockfrostProvider(
     }
 
     /** Fetch UTxOs from a transaction using Blockfrost API */
-    private def fetchUtxosFromTransaction(txId: TransactionHash)(using
-        ExecutionContext
+    private def fetchUtxosFromTransaction(
+        txId: TransactionHash
     ): Future[Either[UtxoQueryError, Utxos]] = {
         val url = s"$baseUrl/txs/${txId.toHex}/utxos"
         rateLimited(
@@ -483,8 +482,8 @@ class BlockfrostProvider(
     }
 
     /** Fetch a single UTxO by its input */
-    private def fetchUtxoFromInput(input: TransactionInput)(using
-        ExecutionContext
+    private def fetchUtxoFromInput(
+        input: TransactionInput
     ): Future[Either[UtxoQueryError, Utxo]] = {
         fetchUtxosFromTransaction(input.transactionId).map {
             case Left(e) => Left(e)

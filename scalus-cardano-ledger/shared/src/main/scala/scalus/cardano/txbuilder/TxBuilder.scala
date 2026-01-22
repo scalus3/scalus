@@ -5,11 +5,11 @@ import scalus.builtin.Data.toData
 import scalus.builtin.{Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
-import scalus.cardano.node.Provider
+import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.SomeBuildError
 
 import java.time.Instant
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 // -----------------------------------------------------------------------------
 // TxBuilderException Hierarchy
@@ -1452,9 +1452,7 @@ case class TxBuilder(
       * @return
       *   a Future containing a new TxBuilder with the transaction completed
       */
-    def complete(provider: Provider, sponsor: Address)(using
-        ExecutionContext
-    ): Future[TxBuilder] = {
+    def complete(provider: BlockchainProvider, sponsor: Address): Future[TxBuilder] = {
         // Build initial context FIRST (fail-fast before async call)
         val initialBuildResult = TransactionBuilder.build(env.network, steps)
 
@@ -1464,6 +1462,8 @@ case class TxBuilder(
 
             case Right(initialCtx) =>
                 // Only fetch UTXOs if initial build succeeds
+                // Use provider's ExecutionContext for the map operation
+                given scala.concurrent.ExecutionContext = provider.executionContext
                 provider.findUtxos(address = sponsor).map { utxosResult =>
                     val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
                     completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)

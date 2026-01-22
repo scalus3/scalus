@@ -6,7 +6,7 @@ import scalus.builtin.Data.toData
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
-import scalus.cardano.node.{Emulator, Provider}
+import scalus.cardano.node.{BlockchainProvider, Emulator}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
@@ -103,7 +103,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
         case Success
         case Failure(errorContains: String)
 
-    private def getDeadline(provider: Provider): PosixTime =
+    private def getDeadline(provider: BlockchainProvider): PosixTime =
         BigInt(provider.cardanoInfo.slotConfig.slotToTime(slot))
 
     case class TestCase(
