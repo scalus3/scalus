@@ -3,15 +3,21 @@ package scalus.examples.pricebet
 import scalus.Compile
 import scalus.builtin.ByteString
 import scalus.builtin.Data.{FromData, ToData}
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.ledger.api.v3.{TxInfo, TxOutRef}
+import scalus.builtin.Data
+import scalus.ledger.api.v1.{Credential, PosixTime, PubKeyHash}
+import scalus.ledger.api.v3.{TxInInfo, TxInfo, TxOutRef}
 import scalus.ledger.api.v2
 import scalus.prelude.*
+import scalus.prelude.Ord.>
+
+// Parameter
+case class PricebetConfig(
+    oracleScriptHash: ByteString
+) derives FromData,
+      ToData
 
 /** @param owner
   *   a party that initiates the bet
-  * @param oracleScriptHash
-  *   the script hash of the oracle validator
   * @param player
   *   a player that has accepted the bet. If no player accepts the bet, the owner can redeem the
   *   initial bet using [[Action.Timeout]]
@@ -23,22 +29,23 @@ import scalus.prelude.*
   */
 case class PricebetState(
     owner: PubKeyHash,
-    oracleScriptHash: ByteString,
     player: Option[PubKeyHash],
     deadline: PosixTime,
-    exchangeRate: (BigInt, BigInt)
+    exchangeRate: Rational,
 ) derives FromData,
       ToData
 
+// Redeemer
 enum Action derives FromData, ToData:
     case Join
-    case Win
+    case Win(oracleOut: BigInt) // oracle input idx
     case Timeout
 
 @Compile
-object PricebetValidator extends Validator {
+object PricebetValidator extends DataParameterizedValidator {
 
     inline def spend(
+        param: Data,
         datum: Option[BuiltinData],
         redeemer: BuiltinData,
         tx: TxInfo,
@@ -46,6 +53,7 @@ object PricebetValidator extends Validator {
     ): Unit = {
         val state = datum.getOrFail("Datum must be present").to[PricebetState]
         val action = redeemer.to[Action]
+        val config = param.to[PricebetConfig]
         val ownInput = tx.findOwnInputOrFail(ownRef)
 
         action match {
@@ -71,48 +79,40 @@ object PricebetValidator extends Validator {
                 )
 
                 // Verify new datum
-                val newDatum = continuationOutput.datum match {
+                val newState = continuationOutput.datum match {
                     case v2.OutputDatum.OutputDatum(d) => d.to[PricebetState]
                     case _ => fail("Continuation must have inline datum")
                 }
 
                 // Find who signed and verify they're the player
-                require(newDatum.player.isDefined, "Player must be set in new datum")
-                val playerPkh = newDatum.player.get
-                require(tx.signatories.exists(_ === playerPkh), "Must be signed by player")
+                require(newState.player.isDefined, "Player must be set in new datum")
+                val playerPkh = newState.player.get
+                require(tx.isSignedBy(playerPkh), "Must be signed by player")
 
                 // Verify other fields unchanged
-                require(newDatum.owner === state.owner, "Owner must not change")
+                require(newState.owner === state.owner, "Owner must not change")
+                require(newState.deadline === state.deadline, "Deadline must not change")
                 require(
-                  newDatum.oracleScriptHash === state.oracleScriptHash,
-                  "Oracle must not change"
-                )
-                require(newDatum.deadline === state.deadline, "Deadline must not change")
-                require(
-                  newDatum.exchangeRate === state.exchangeRate,
+                  newState.exchangeRate === state.exchangeRate,
                   "Exchange rate must not change"
                 )
 
-            case Action.Win =>
+            case Action.Win(index) =>
                 // Verify player exists and signed
                 require(state.player.isDefined, "No player joined yet")
                 val playerPkh = state.player.get
-                require(tx.signatories.exists(_ === playerPkh), "Must be signed by player")
+                require(tx.isSignedBy(playerPkh), "Must be signed by player")
 
                 // Verify before deadline
                 require(!tx.validRange.isEntirelyAfter(state.deadline), "Deadline passed")
 
-                // Find oracle in reference inputs by script hash
-                val oracleInputs = tx.referenceInputs.filter { input =>
-                    input.resolved.address.credential match {
-                        case scalus.ledger.api.v1.Credential.ScriptCredential(hash) =>
-                            hash === state.oracleScriptHash
-                        case _ => false
-                    }
+                val oracleInput: TxInInfo = tx.referenceInputs.at(index)
+                oracleInput.resolved.address.credential match {
+                    case Credential.PubKeyCredential(hash) => fail(OracleInputMustBeOracleScript)
+                    case Credential.ScriptCredential(hash) =>
+                        require(hash == config.oracleScriptHash, OracleInputMustBeOracleScript)
                 }
-                require(oracleInputs.length >= BigInt(1), "Oracle reference input required")
 
-                val oracleInput = oracleInputs.head
                 val oracleState = oracleInput.resolved.datum match {
                     case v2.OutputDatum.OutputDatum(d) => d.to[scalus.examples.pricebet.OracleState]
                     case _                             => fail("Oracle must have inline datum")
@@ -121,17 +121,14 @@ object PricebetValidator extends Validator {
                 // Verify oracle timestamp is within tx validity window
                 val validRange = tx.validRange
                 require(
-                  validRange.contains(oracleState.timestamp),
+                  validRange.isEntirelyAfter(oracleState.timestamp),
                   "Oracle timestamp must be within transaction validity range"
                 )
 
-                val (betNom, betDenom) = state.exchangeRate
-                val oracleNom = oracleState.exchangeRateNominator
-                val oracleDenom = oracleState.exchangeRateDenominator
-
+                val rateToBeat = state.exchangeRate
                 require(
                   // by way of cross multiplication
-                  oracleNom * betDenom > betNom * oracleDenom,
+                  oracleState.exchangeRate > rateToBeat,
                   "Oracle rate must exceed bet rate"
                 )
 
@@ -143,4 +140,7 @@ object PricebetValidator extends Validator {
                 require(tx.validRange.isEntirelyAfter(state.deadline), "Deadline not reached")
         }
     }
+
+    private inline val OracleInputMustBeOracleScript =
+        "Oracle input must be locked by the oracle script"
 }

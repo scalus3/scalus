@@ -205,6 +205,14 @@ object Rational:
 
     given rationalToData: ToData[Rational] = ToData.derived
 
+    extension (self: Rational) {
+
+        def isZero: Boolean = self.numerator === BigInt(0)
+
+        inline def checkDenominator(): Unit =
+            require(self.denominator !== BigInt(0), "Division by zero in Rational")
+    }
+
 extension [A](self: scala.Seq[A]) {
 
     /** Converts a [[scala.Seq]] to a `List`.

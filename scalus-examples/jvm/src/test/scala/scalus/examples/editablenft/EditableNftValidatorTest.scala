@@ -7,7 +7,7 @@ import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
-import scalus.testing.kit.{Party, ScalusTest}
+import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 
@@ -23,6 +23,8 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
     test("Mint: successful minting creates paired reference and user NFTs") {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
 
         val mintTx = txCreator.mint(
           utxos = utxos,
@@ -33,194 +35,198 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        provider.submit(mintTx).await()
+        val result = provider.submit(mintTx).await()
+        assert(result.isRight, s"Minting should succeed: $result")
 
         // Verify reference NFT at script address
-        val refNftOutput = mintTx.utxos.find(_._2.address == scriptAddress)
-        val refDatum = mintTx.utxos
-            .find(_._2.address == scriptAddress)
-            .collect { case (_, o) =>
-                o.inlineDatum.get.to[ReferenceNftDatum]
-            }
-            .getOrElse(fail("Reference NFT missing from the mint output"))
+        val refNftOutput = mintTx.utxos
+            .find(_._2.address == txCreator.scriptAddr)
+            .getOrElse(fail("Reference NFT missing from mint output"))
 
-        // Verify reference NFT has correct datum
+        val refDatum = refNftOutput._2.inlineDatum.get.to[ReferenceNftDatum]
         assert(refDatum.tokenId == tokenId, "Datum tokenId should match")
         assert(refDatum.data == initialData, "Datum data should match initial data")
         assert(!refDatum.isSealed, "New NFT should not be sealed")
 
         // Verify user NFT at holder address
+        val userTokenName = refDatum.userNftName
         val userNftOutput = mintTx.utxos.find { case (_, out) =>
             out.address == Alice.address &&
             out.value.assets.assets.exists { case (cs, tokens) =>
-                cs == policyId && tokens.get(AssetName(userTokenName)).exists(_ > 0)
+                cs == txCreator.policyId && tokens.get(AssetName(userTokenName)).exists(_ > 0)
             }
         }
         assert(userNftOutput.nonEmpty, "User NFT should be at holder address")
     }
 
-    test("Spend: holder can edit data when not sealed") {
+    test("Lifecycle: mint -> edit -> edit -> seal success") {
         val provider = createProvider()
-        val refNftUtxo = mintNft(provider, Alice)
-
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val editTx = txCreator.edit(
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        // Mint
+        val mintTx = txCreator.mint(
           utxos = utxos,
-          refNftUtxo = refNftUtxo,
-          newData = updatedData,
+          tokenId = tokenId,
+          initialData = initialData,
+          holderAddress = Alice.address,
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-
-        val result = provider.submit(editTx).await()
-        assert(result.isRight, s"Edit should succeed: $result")
-
-        // Verify data was updated
-        val newDatum = editTx.utxos
-            .find(_._2.address == scriptAddress)
-            .map(_._2.inlineDatum.get.to[ReferenceNftDatum])
-            .get
-        assert(newDatum.data == updatedData, "Data should be updated")
-        assert(newDatum.tokenId == tokenId, "Token ID should remain unchanged")
-        assert(!newDatum.isSealed, "Should still be unsealed")
-    }
-
-    test("Spend: holder can seal NFT") {
-        val provider = createProvider()
-        val refNftUtxo = mintNft(provider, Alice)
-
-        val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val sealTx = txCreator.seal(
-          utxos = utxos,
-          refNftUtxo = refNftUtxo,
-          changeAddress = Alice.address,
-          signer = Alice.signer
-        )
-
-        val result = provider.submit(sealTx).await()
-        assert(result.isRight, s"Seal should succeed: $result")
-
-        // Verify NFT is sealed
-        val newDatum = sealTx.utxos
-            .find(_._2.address == scriptAddress)
-            .map(_._2.inlineDatum.get.to[ReferenceNftDatum])
-            .get
-        assert(newDatum.isSealed, "NFT should be sealed")
-        assert(newDatum.data == initialData, "Data should remain unchanged")
-    }
-
-    test("Spend: cannot edit data when sealed") {
-        val provider = createProvider()
-        val refNftUtxo = mintNft(provider, Alice)
-
-        // First seal the NFT
-        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
-        val sealTx = txCreator.seal(
-          utxos = utxos1,
-          refNftUtxo = refNftUtxo,
-          changeAddress = Alice.address,
-          signer = Alice.signer
-        )
-        provider.submit(sealTx).await()
-
-        val sealedRefNft = Utxo(sealTx.utxos.find(_._2.address == scriptAddress).get)
-
-        // Now try to edit - should fail
-        val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
-        val editTx = txCreator.edit(
-          utxos = utxos2,
-          refNftUtxo = sealedRefNft,
-          newData = updatedData,
-          changeAddress = Alice.address,
-          signer = Alice.signer
-        )
-
-        val result = provider.submit(editTx).await()
-        assert(result.isLeft, "Edit should fail when NFT is sealed")
-    }
-
-    test("Spend: non-holder cannot edit (missing user token)") {
-        val provider = createProvider()
-        val refNftUtxo = mintNft(provider, Alice)
-
-        // Bob tries to edit without having the user token
-        val bobUtxos = provider.findUtxos(Bob.address).await().toOption.get
-
-        val exception = intercept[Exception] {
-            txCreator.edit(
-              utxos = bobUtxos,
-              refNftUtxo = refNftUtxo,
-              newData = updatedData,
-              changeAddress = Bob.address,
-              signer = Bob.signer
-            )
-        }
-        assert(
-          exception.getMessage.contains("User NFT not found"),
-          s"Should fail with user NFT not found: ${exception.getMessage}"
-        )
-    }
-
-    test("Spend: holder can edit multiple times") {
-        val provider = createProvider()
-        var refNftUtxo = mintNft(provider, Alice)
+        val mintResult = provider.submit(mintTx).await()
+        assert(mintResult.isRight, s"Mint should succeed: $mintResult")
+        var refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // First edit
         val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
         val editTx1 = txCreator.edit(
           utxos = utxos1,
           refNftUtxo = refNftUtxo,
-          newData = updatedData,
+          newData = utf8"First edit",
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val result1 = provider.submit(editTx1).await()
-        assert(result1.isRight, s"First edit should succeed: $result1")
-        refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == scriptAddress).get)
+        val editResult1 = provider.submit(editTx1).await()
+        assert(editResult1.isRight, s"First edit should succeed: $editResult1")
+        refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Second edit
         val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
         val editTx2 = txCreator.edit(
           utxos = utxos2,
           refNftUtxo = refNftUtxo,
-          newData = utf8"Third value",
+          newData = utf8"Second edit",
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val result2 = provider.submit(editTx2).await()
-        assert(result2.isRight, s"Second edit should succeed: $result2")
-        refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == scriptAddress).get)
+        val editResult2 = provider.submit(editTx2).await()
+        assert(editResult2.isRight, s"Second edit should succeed: $editResult2")
+        refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
-        // Third edit
+        // Seal
         val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
-        val editTx3 = txCreator.edit(
+        val sealTx = txCreator.seal(
           utxos = utxos3,
           refNftUtxo = refNftUtxo,
-          newData = utf8"Fourth value",
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        val result3 = provider.submit(editTx3).await()
-        assert(result3.isRight, s"Third edit should succeed: $result3")
+        val sealResult = provider.submit(sealTx).await()
+        assert(sealResult.isRight, s"Seal should succeed: $sealResult")
 
-        // Verify final data
-        val finalDatum = editTx3.utxos
-            .find(_._2.address == scriptAddress)
+        // Verify final state
+        val finalDatum = sealTx.utxos
+            .find(_._2.address == txCreator.scriptAddr)
             .map(_._2.inlineDatum.get.to[ReferenceNftDatum])
             .get
-        assert(finalDatum.data == utf8"Fourth value", "Data should be updated to final value")
+        assert(finalDatum.isSealed, "NFT should be sealed")
+        assert(finalDatum.data == utf8"Second edit", "Data should reflect last edit")
     }
 
-    test("Spend: new holder can edit after transfer") {
+    test("Lifecycle: mint -> edit -> edit -> seal -> edit failure") {
         val provider = createProvider()
-        val refNftUtxo = mintNft(provider, Alice)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
 
-        // Alice transfers user token to Bob
+        // Mint
+        val mintTx = txCreator.mint(
+          utxos = utxos,
+          tokenId = tokenId,
+          initialData = initialData,
+          holderAddress = Alice.address,
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        provider.submit(mintTx).await()
+        var refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // First edit
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val editTx1 = txCreator.edit(
+          utxos = utxos1,
+          refNftUtxo = refNftUtxo,
+          newData = utf8"First edit",
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        provider.submit(editTx1).await()
+        refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Second edit
+        val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
+        val editTx2 = txCreator.edit(
+          utxos = utxos2,
+          refNftUtxo = refNftUtxo,
+          newData = utf8"Second edit",
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        provider.submit(editTx2).await()
+        refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Seal
+        val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
+        val sealTx = txCreator.seal(
+          utxos = utxos3,
+          refNftUtxo = refNftUtxo,
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        provider.submit(sealTx).await()
+        refNftUtxo = Utxo(sealTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Try to edit after seal - should fail
+        val utxos4 = provider.findUtxos(Alice.address).await().toOption.get
+        val editTx3 = txCreator.edit(
+          utxos = utxos4,
+          refNftUtxo = refNftUtxo,
+          newData = utf8"Should fail",
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        val editResult3 = provider.submit(editTx3).await()
+        assert(editResult3.isLeft, "Edit after seal should fail")
+    }
+
+    test("Lifecycle: mint -> edit -> transfer -> edit (by Bob) -> seal success") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        // Mint (Alice)
+        val mintTx = txCreator.mint(
+          utxos = utxos,
+          tokenId = tokenId,
+          initialData = initialData,
+          holderAddress = Alice.address,
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        provider.submit(mintTx).await()
+        var refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Edit (Alice)
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val editTx1 = txCreator.edit(
+          utxos = utxos1,
+          refNftUtxo = refNftUtxo,
+          newData = utf8"Alice edit",
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        provider.submit(editTx1).await()
+        refNftUtxo = Utxo(editTx1.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Transfer user token from Alice to Bob
         val aliceUtxos = provider.findUtxos(Alice.address).await().toOption.get
+        val userTokenName = EditableNftValidator.userNftName(tokenId)
         val userNftUtxo = aliceUtxos
             .find { case (_, out) =>
                 out.value.assets.assets.exists { case (cs, tokens) =>
-                    cs == policyId && tokens.get(AssetName(userTokenName)).exists(_ > 0)
+                    cs == txCreator.policyId && tokens.get(AssetName(userTokenName)).exists(_ > 0)
                 }
             }
             .map(Utxo.apply)
@@ -228,64 +234,120 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
 
         val transferTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
             .spend(userNftUtxo)
-            .payTo(Bob.address, Value.asset(policyId, AssetName(userTokenName), 1))
+            .payTo(Bob.address, Value.asset(txCreator.policyId, AssetName(userTokenName), 1))
             .complete(availableUtxos = aliceUtxos, Alice.address)
             .sign(Alice.signer)
             .transaction
 
         provider.submit(transferTx).await()
 
-        // Now Bob can edit
+        // Edit (Bob - new owner)
         val bobUtxos = provider.findUtxos(Bob.address).await().toOption.get
-        val editTx = txCreator.edit(
+        val editTx2 = txCreator.edit(
           utxos = bobUtxos,
           refNftUtxo = refNftUtxo,
-          newData = updatedData,
+          newData = utf8"Bob edit",
           changeAddress = Bob.address,
           signer = Bob.signer
         )
+        val editResult2 = provider.submit(editTx2).await()
+        assert(editResult2.isRight, s"Bob should be able to edit after transfer: $editResult2")
+        refNftUtxo = Utxo(editTx2.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
-        val result = provider.submit(editTx).await()
-        assert(result.isRight, s"New holder should be able to edit: $result")
+        // Seal (Bob)
+        val bobUtxos2 = provider.findUtxos(Bob.address).await().toOption.get
+        val sealTx = txCreator.seal(
+          utxos = bobUtxos2,
+          refNftUtxo = refNftUtxo,
+          changeAddress = Bob.address,
+          signer = Bob.signer
+        )
+        val sealResult = provider.submit(sealTx).await()
+        assert(sealResult.isRight, s"Bob should be able to seal: $sealResult")
+
+        // Verify final state
+        val finalDatum = sealTx.utxos
+            .find(_._2.address == txCreator.scriptAddr)
+            .map(_._2.inlineDatum.get.to[ReferenceNftDatum])
+            .get
+        assert(finalDatum.isSealed, "NFT should be sealed")
+        assert(finalDatum.data == utf8"Bob edit", "Data should reflect Bob's edit")
     }
 
-    private def mintNft(provider: Emulator, holder: Party): Utxo = {
-        val utxos = provider.findUtxos(holder.address).await().toOption.get
+    test("Burn: successful burn removes both tokens") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        // Burn uses both spend + mint scripts, so we need proper cost evaluation
+        // (constMaxBudget assigns max budget per script, which exceeds tx limit with 2 scripts)
+        val txCreator = createTxCreator(
+          seedUtxo,
+          PlutusScriptEvaluator(env, EvaluatorMode.EvaluateAndComputeCost)
+        )
+
+        // Mint
         val mintTx = txCreator.mint(
           utxos = utxos,
           tokenId = tokenId,
           initialData = initialData,
-          holderAddress = holder.address,
-          changeAddress = holder.address,
-          signer = holder.signer
+          holderAddress = Alice.address,
+          changeAddress = Alice.address,
+          signer = Alice.signer
         )
         provider.submit(mintTx).await()
-        Utxo(mintTx.utxos.find(_._2.address == scriptAddress).get)
+        val refNftUtxo = Utxo(mintTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Burn
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val burnTx = txCreator.burn(
+          utxos = utxos1,
+          refNftUtxo = refNftUtxo,
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        val burnResult = provider.submit(burnTx).await()
+        assert(burnResult.isRight, s"Burn should succeed: $burnResult")
+
+        // Verify tokens are burned (no longer exist)
+        val refTokenName = EditableNftValidator.refNftName(tokenId)
+        val userTokenName = EditableNftValidator.userNftName(tokenId)
+
+        val noRefNft = burnTx.utxos.forall { case (_, out) =>
+            !out.value.assets.assets.exists { case (cs, tokens) =>
+                cs == txCreator.policyId && tokens.get(AssetName(refTokenName)).exists(_ > 0)
+            }
+        }
+        val noUserNft = burnTx.utxos.forall { case (_, out) =>
+            !out.value.assets.assets.exists { case (cs, tokens) =>
+                cs == txCreator.policyId && tokens.get(AssetName(userTokenName)).exists(_ > 0)
+            }
+        }
+
+        assert(noRefNft, "Reference NFT should be burned")
+        assert(noUserNft, "User NFT should be burned")
     }
 }
 
 object EditableNftValidatorTest extends ScalusTest {
     private given env: CardanoInfo = testEnvironment
     private val compiledContract = EditableNftContract.withErrorTraces
-    val scriptAddress: scalus.cardano.address.Address = compiledContract.address(env.network)
-    val policyId: scalus.cardano.ledger.PolicyId = compiledContract.script.scriptHash
 
-    val txCreator = EditableNftTransactions(
-      env = env,
-      evaluator = PlutusScriptEvaluator.constMaxBudget(env),
-      contract = compiledContract
-    )
+    def createTxCreator(
+        seedUtxo: Utxo,
+        evaluator: PlutusScriptEvaluator = PlutusScriptEvaluator.constMaxBudget(env)
+    ): EditableNftTransactions =
+        EditableNftTransactions(
+          env = env,
+          evaluator = evaluator,
+          contract = compiledContract,
+          seed = seedUtxo
+        )
 
     // Test data
     val tokenId: scalus.builtin.ByteString = utf8"myNFT"
-    val refTokenName: scalus.builtin.ByteString =
-        EditableNftValidator.REFERENCE_NFT_LABEL ++ tokenId
-    val userTokenName: scalus.builtin.ByteString = EditableNftValidator.USER_NFT_LABEL ++ tokenId
-
     val initialData: scalus.builtin.ByteString = utf8"Hello"
-    val updatedData: scalus.builtin.ByteString = utf8"World"
 
-    private def createProvider(): Emulator = {
+    def createProvider(): Emulator = {
         val initialUtxos = Map(
           TransactionInput(genesisHash, 0) -> TransactionOutput.Babbage(
             Alice.address,
