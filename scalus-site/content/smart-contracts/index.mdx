@@ -1,37 +1,36 @@
 ---
 asIndexPage: true
-title: Cardano Smart Contracts with Scalus
+title: Cardano Smart Contract Development Guide
 sidebarTitle: Smart Contracts
-description: Build type-safe, debuggable Cardano smart contracts using Scala. Write validators, test them locally, and compile to Plutus Core with Scalus.
+description: Complete guide to Cardano smart contract development with Scala. Learn validators, testing, debugging, and optimization for production Plutus scripts.
 ---
 
-# Cardano Smart Contracts
+# Cardano Smart Contract Development
 
-Scalus enables you to build type-safe, debuggable smart contracts for Cardano using Scala. Write validators in familiar Scala syntax, test them with standard tooling, and compile directly to Plutus Core bytecode.
+Build type-safe smart contracts for Cardano using Scala. Debug validators with breakpoints in your IDE, test with ScalaCheck, and compile to Plutus Core.
 
-This section covers everything from writing your first validator to advanced optimization techniques for production-ready contracts.
+## Tutorials
 
-## Getting Started
+- **[Build Your First Validator](/docs/smart-contracts/developing-smart-contracts)** — Create a spending validator, write tests, and debug step-by-step
+- **[Compiling to Plutus](/docs/smart-contracts/compiling)** — Generate scripts, blueprints, and parameterized validators
 
-- **[Developing Smart Contracts](/docs/smart-contracts/developing-smart-contracts)** - Write your first Cardano validator step-by-step. Learn about spending validators, datums, redeemers, and how to test your contracts.
+## Validators
 
-## Core Concepts
+- **[Validator Types](/docs/smart-contracts/validators)** — Spending, minting, rewarding, and certifying validators
+- **[FromData Derivation](/docs/smart-contracts/from-data)** — Type-safe conversion between Scala and Plutus Data
 
-- **[Validators in Depth](/docs/smart-contracts/validators)** - Understand different validator types (spending, minting, rewarding, certifying) and how they work on Cardano.
-- **[FromData Derivation](/docs/smart-contracts/from-data)** - Automatic conversion between Scala types and Plutus Data for type-safe datum and redeemer handling.
+## Testing & Debugging
 
-## Development Workflow
+- **[Unit Testing](/docs/testing/unit-testing)** — ScalusTest trait and property-based testing with ScalaCheck
+- **[Debugging](/docs/testing/debugging)** — Breakpoints, logging, and IDE debugger integration
 
-- **[Testing](/docs/testing/unit-testing)** - Property-based testing with ScalaCheck, using the `ScalusTest` trait, and creating robust test scenarios.
-- **[Debugging](/docs/testing/debugging)** - Debug validators as regular Scala code using your IDE's debugger, breakpoints, and logging.
-- **[Compiling](/docs/smart-contracts/compiling)** - Transform Scala validators into Plutus scripts, generate contract blueprints, and handle parameterized validators.
+## Production
 
-## Advanced Topics
-
-- **[Advanced Optimisations](/docs/smart-contracts/optimisations)** - Macros, direct Script Context access, SIR debugging, and UPLC optimisations to reduce script size and execution costs.
+- **[Security](/docs/security)** — Common vulnerabilities and how to avoid them
+- **[Optimizations](/docs/smart-contracts/optimisations)** — Reduce script size and execution costs
+- **[Design Patterns](/docs/design-patterns)** — Patterns for multi-input validators
 
 ## Related
 
-- [Design Patterns](/docs/design-patterns) — Optimization patterns for multi-input validators
-- [Security](/docs/security) — Common vulnerabilities and how to avoid them
-- [Building Transactions](/docs/transactions/building-first-transaction) — Use your validators in transactions
+- [Building Transactions](/docs/transactions/building-first-transaction) — Use validators in transactions
+- [DApp Development](/docs/dapp-development) — Full application development
