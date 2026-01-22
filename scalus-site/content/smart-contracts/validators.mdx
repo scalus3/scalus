@@ -1,21 +1,16 @@
 ---
-title: Understanding Cardano Validators
-sidebarTitle: Validators in Depth
+title: Cardano Validators - Spending, Minting, Staking Scripts
+sidebarTitle: Validator Types
+description: Guide to all six Cardano validator types. Learn spending validators, minting policies, staking scripts, and governance validators with the Plutus V3 Validator trait.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Understanding Cardano Validators
+# Cardano Validator Types
 
-## What is a Validator?
+A Cardano validator is a predicate function that approves or rejects transactions. It either succeeds (returns `Unit`) or fails (throws an exception). Scalus compiles Scala validators to Plutus Core bytecode.
 
-A validator is a boolean function that determines whether a transaction is valid. In Scalus, validators are written in Scala and compiled to Plutus Core bytecode that runs on the Cardano blockchain.
-
-Every validator either:
-- **Succeeds** by returning `Unit` (allows the transaction)
-- **Fails** by throwing an exception (rejects the transaction)
-
-To create a validator in Scalus, you write an object that extends the `Validator` trait and annotate it with `@Compile`:
+To create a validator, extend the `Validator` trait and annotate with `@Compile`:
 
 ```scala copy
 @Compile
@@ -32,115 +27,7 @@ object MyValidator extends Validator:
 
 The `@Compile` annotation tells Scalus to compile your Scala code into Plutus Core bytecode.
 
-Let's explore the simple spending validator example from the template (run in console):
-```sh copy
-sbt new scalus3/hello.g8
-```
-
-## Example: HelloCardano
-
-HelloCardano validator demonstrates two key validation checks:
-1. It verifies that the transaction is signed by the owner's public key hash (stored in the datum)
-2. It confirms that the redeemer contains the exact string "Hello, Cardano!"
-
-Both conditions must be met for the validator to approve spending the UTxO.
-
-```scala copy
-@Compile
-object HelloCardano extends Validator:
-    inline override def spend(
-        datum: Option[Data],
-        redeemer: Data,
-        tx: TxInfo,
-        outRef: TxOutRef
-    ): Unit =
-        val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
-        val signed = tx.signatories.contains(owner)
-        require(signed, "Must be signed")
-        val saysHello = redeemer.to[String] == "Hello, Cardano!"
-        require(saysHello, "Invalid redeemer")
-```
-
-## Working with `Data`
-
-On-chain, data is stored in a universal format called `Data`. Scalus provides type-safe conversions to deserialize `Data` into your Scala types:
-
-```scala copy
-// Using .to[T] method
-val myDatum = datumData.to[MyDatumType]
-
-// Using fromData function
-import scalus.builtin.Data.fromData
-val myDatum = fromData[MyDatumType](datumData)
-```
-
-In the HelloCardano example, we use `.to[T]` to convert the datum:
-
-```scala copy
-val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
-```
-
-Learn more about Scalus [Data serialization](/docs/smart-contracts/from-data).
-
-## Understanding Validation Process
-
-Validators are boolean functions that either succeed or fail. Understanding how validation works is key to writing secure smart contracts.
-
-### Validators as Boolean Functions
-
-At their core, validators check a series of conditions. If all conditions are true, the transaction is approved. If any condition is false, the transaction is rejected:
-
-```scala copy
-inline override def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef): Unit =
-    // Step 1: Extract and deserialize the owner from datum
-    val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
- 
-    // Step 2: Check if transaction is signed by owner
-    val signed = tx.signatories.contains(owner)
-    require(signed, "Must be signed")  // ← Fails here if not signed
- 
-    // Step 3: Check if redeemer matches expected string
-    val saysHello = redeemer.to[String] == "Hello, Cardano!"
-    require(saysHello, "Invalid redeemer")  // ← Fails here if wrong string
- 
-    // Step 4: If we reach here, validation succeeds!
-```
-
-### The `require` Function
-
-The `require` function enforces validation conditions:
-
-```scala copy
-require(condition: Boolean, errorMessage: String): Unit
-```
-
-**Behavior:**
-- If `condition` is `true` → execution continues to the next line
-- If `condition` is `false` → validator fails with `errorMessage` and rejects the transaction
-
-**Example from HelloCardano:**
-
-```scala copy
-val signed = tx.signatories.contains(owner)
-require(signed, "Must be signed")
-```
-
-This checks that the owner's signature is present in the transaction. If `signed` is false, the validator throws an error with the message "Must be signed" and stops execution.
-
-<Callout type="warning">
-  Use clear, descriptive error messages. They help with debugging and make your contract easier to audit.
-</Callout>
-
-### The `getOrFail` Pattern
-
-When working with `Option` types, use `getOrFail` to safely extract values or fail with a meaningful error:
-
-```scala copy
-val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
-```
-
-
-## The `Validator` Trait
+## The Validator Trait
 
 The `Validator` trait is the foundation for all smart contracts. It provides methods for all six Plutus V3 script purposes:
 

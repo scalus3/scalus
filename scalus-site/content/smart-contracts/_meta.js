@@ -1,7 +1,8 @@
 export default {
   'developing-smart-contracts': '',
   'validators': '',
-  'from-data': '',
+  'parameterized-validators': '',
+  'plutus-data': '',
   compiling: '',
   'evaluating-script': '',
   optimisations: '',
