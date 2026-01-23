@@ -17,9 +17,17 @@ trait ArbitraryInstances extends scalus.uplc.test.ArbitraryInstances {
         )
     }
 
-    // TODO make valid Byron addresses
+    // Generate valid Byron addresses with proper CBOR structure
     given Arbitrary[ByronAddress] = Arbitrary {
-        Gen.choose(76, 128).flatMap(genByteStringOfN).map(ByronAddress.apply(_))
+        for {
+            addrRoot <- genByteStringOfN(28) // 28-byte address root
+            addrType <- Gen.oneOf(0, 2) // 0 = VerKey, 2 = Redeem
+            hasNetworkMagic <- Gen.oneOf(true, false)
+            // Use actual Cardano network magic values: mainnet, preprod, preview
+            networkMagic: Option[Long] <-
+                if hasNetworkMagic then Gen.oneOf(764824073L, 1097911063L, 1L).map(Some(_))
+                else Gen.const(None)
+        } yield ByronAddress.create(addrRoot, addrType, networkMagic)
     }
 
     given Arbitrary[StakePayload] = Arbitrary {
@@ -71,6 +79,6 @@ trait ArbitraryInstances extends scalus.uplc.test.ArbitraryInstances {
         val genByron = arbitrary[ByronAddress]
         val genShelley = arbitrary[ShelleyAddress]
         val genStake = arbitrary[StakeAddress]
-        Gen.oneOf(genShelley, genStake)
+        Gen.oneOf(genByron, genShelley, genStake)
     }
 }

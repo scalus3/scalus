@@ -395,4 +395,197 @@ class CardanoAddressTest extends AnyFunSuite {
         assert(interpolated.isInstanceOf[ShelleyAddress])
         assert(interpolated.asInstanceOf[ShelleyAddress].network == Network.Mainnet)
     }
+
+    // Byron address test vectors from Cardano ledger golden tests
+    // These are verified valid addresses with correct CRC32 checksums
+
+    // Icarus-style Byron addresses - no HD derivation path (empty attributes)
+    // From cardano-ledger Address1 golden test
+    private val byronIcarusAddresses = List(
+      "Ae2tdPwUPEZDoUnyXuAgqzhkjNXNJeiZ5nqwprg9sArZmRNjySfJ5uz4FjB"
+    )
+
+    // Daedalus-style Byron addresses - include HD derivation path in attributes
+    // From cardano-ledger Address0 golden test (type ATVerKey with HDAddressPayload)
+    private val byronDaedalusAddresses = List(
+      "2RhQhCGqYPDpFgTsnBTbnvPvCwpqAkjwLqQkWpkqXbLRmNxd4xNd262nGsr8JiynyKRUeMLSJ9Ntho9i76uvBTrVXdJJG5yiNLb8frmUe5qX7E"
+    )
+
+    // ATRedeem Byron addresses - type 2 for redeem keys
+    // From cardano-ledger Address2 golden test
+    private val byronRedeemAddresses = List(
+      "2RhQhCGqYPDpeh7hWZC5PsveBT6mdsT5TGN8RyWBGFECyke59YY6XfQPWK1wrPZVErkpS73P52oQG17DN7H72tgiwh8kzxcAzaqoANgRfWk7eX"
+    )
+
+    // Combined list for tests that apply to all types
+    private val byronMainnetAddresses =
+        byronIcarusAddresses ++ byronDaedalusAddresses ++ byronRedeemAddresses
+
+    test("Byron address should decode from Base58") {
+        for base58 <- byronMainnetAddresses do {
+            val result = ByronAddress.fromBase58(base58)
+            assert(result.isSuccess, s"Failed to decode: $base58")
+            val addr = result.get
+            assert(addr.typeId == 0x08, "Byron addresses should have type ID 0x08")
+        }
+    }
+
+    test("Byron address should encode to Base58") {
+        for base58 <- byronMainnetAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(addr.toBase58 == base58, s"Round-trip failed for: $base58")
+        }
+    }
+
+    test("Byron address should round-trip through encode") {
+        for base58 <- byronMainnetAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(addr.encode == Success(base58), s"encode() should return Base58 for: $base58")
+        }
+    }
+
+    test("Byron address should detect mainnet") {
+        for base58 <- byronMainnetAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(
+              addr.getNetwork == Some(Network.Mainnet),
+              s"Should detect mainnet for: $base58, got: ${addr.getNetwork}"
+            )
+        }
+    }
+
+    test("Byron address should extract addrRoot (keyHashOption)") {
+        for base58 <- byronMainnetAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(addr.keyHashOption.isDefined, s"keyHashOption should be defined for: $base58")
+            val keyHash = addr.keyHashOption.get
+            assert(keyHash.size == 28, s"Key hash should be 28 bytes for: $base58")
+        }
+    }
+
+    test("Byron address should have correct properties") {
+        val addr = ByronAddress.fromBase58(byronMainnetAddresses.head).get
+        assert(!addr.hasScript, "Byron addresses don't have scripts")
+        assert(!addr.isEnterprise, "Byron addresses are not enterprise addresses")
+        assert(addr.scriptHashOption.isEmpty, "Byron addresses don't have script hashes")
+        assert(addr.hrp.isFailure, "Byron addresses don't use bech32")
+    }
+
+    test("Byron address CRC32 validation should reject invalid addresses") {
+        val validBase58 = byronMainnetAddresses.head
+        // Corrupt the last character
+        val corruptedBase58 =
+            validBase58.dropRight(1) + (if validBase58.last == 'i' then "j" else "i")
+
+        val result = ByronAddress.fromBase58(corruptedBase58)
+        assert(result.isFailure, "Should reject address with invalid CRC32")
+    }
+
+    test("Byron address should parse via Address.fromString") {
+        for base58 <- byronMainnetAddresses do {
+            val addr = Address.fromString(base58)
+            assert(addr.isInstanceOf[ByronAddress], s"Should parse as ByronAddress: $base58")
+        }
+    }
+
+    test("Byron address parsed components should be accessible") {
+        val addr = ByronAddress.fromBase58(byronMainnetAddresses.head).get
+        val parsed = addr.parsed
+
+        // Check parsed structure
+        assert(parsed.addrRoot.size == 28, "addrRoot should be 28 bytes")
+        assert(parsed.isValid, "CRC32 should be valid")
+        assert(
+          parsed.addrType == 0 || parsed.addrType == 2,
+          "addrType should be 0 (VerKey) or 2 (Redeem)"
+        )
+    }
+
+    test("Byron address attributesSize should be calculated") {
+        for base58 <- byronMainnetAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            // attributesSize should return non-negative value
+            assert(addr.attributesSize >= 0, s"attributesSize should be >= 0 for: $base58")
+        }
+    }
+
+    test("Daedalus Byron addresses should have derivation path") {
+        for base58 <- byronDaedalusAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(
+              addr.derivationPath.isDefined,
+              s"Daedalus address should have derivation path: $base58"
+            )
+            // Daedalus derivation paths are encrypted, so we just check they exist and have data
+            val path = addr.derivationPath.get
+            assert(path.size > 0, s"Derivation path should not be empty for: $base58")
+            // Daedalus addresses should have larger attributesSize due to derivation path
+            assert(addr.attributesSize > 0, s"Daedalus should have attributesSize > 0 for: $base58")
+        }
+    }
+
+    test("Icarus Byron addresses should not have derivation path") {
+        for base58 <- byronIcarusAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(
+              addr.derivationPath.isEmpty,
+              s"Icarus address should not have derivation path: $base58, got: ${addr.derivationPath}"
+            )
+            // Icarus addresses typically have attributesSize = 0 (no derivation path, no unknown attrs)
+            assert(
+              addr.attributesSize == 0,
+              s"Icarus should have attributesSize = 0 for: $base58, got: ${addr.attributesSize}"
+            )
+        }
+    }
+
+    test("Byron address types should be correctly identified") {
+        // ATVerKey (type 0) addresses - Icarus and Daedalus
+        for base58 <- byronIcarusAddresses ++ byronDaedalusAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(
+              addr.byronAddrType == 0,
+              s"Address should be ATVerKey (type 0): $base58, got: ${addr.byronAddrType}"
+            )
+        }
+        // ATRedeem (type 2) addresses
+        for base58 <- byronRedeemAddresses do {
+            val addr = ByronAddress.fromBase58(base58).get
+            assert(
+              addr.byronAddrType == 2,
+              s"Address should be ATRedeem (type 2): $base58, got: ${addr.byronAddrType}"
+            )
+        }
+    }
+
+    test("Daedalus and Icarus addresses should have different lengths") {
+        // Icarus addresses are shorter (no derivation path)
+        val icarusLen = byronIcarusAddresses.head.length
+        // Daedalus addresses are longer (include encrypted derivation path)
+        val daedalusLen = byronDaedalusAddresses.head.length
+
+        assert(
+          daedalusLen > icarusLen,
+          s"Daedalus ($daedalusLen) should be longer than Icarus ($icarusLen)"
+        )
+    }
+
+    test("Byron address round-trip preserves all data") {
+        for base58 <- byronMainnetAddresses do {
+            val addr1 = ByronAddress.fromBase58(base58).get
+            val encoded = addr1.toBase58
+            val addr2 = ByronAddress.fromBase58(encoded).get
+
+            assert(addr1.toBytes == addr2.toBytes, s"Bytes should match for: $base58")
+            assert(
+              addr1.parsed.addrRoot == addr2.parsed.addrRoot,
+              s"addrRoot should match for: $base58"
+            )
+            assert(
+              addr1.derivationPath == addr2.derivationPath,
+              s"derivationPath should match for: $base58"
+            )
+            assert(addr1.byronAddrType == addr2.byronAddrType, s"byronAddrType should match")
+        }
+    }
 }

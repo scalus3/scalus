@@ -2,8 +2,8 @@ package scalus.cardano.address
 
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
 import org.typelevel.paiges.Doc
-import scalus.builtin.ByteString
 import scalus.cardano.ledger.*
+import scalus.uplc.builtin.ByteString
 import scalus.utils.{Pretty, Style}
 
 import scala.collection.mutable
@@ -443,9 +443,13 @@ case class StakeAddress(network: Network, payload: StakePayload) extends Address
         case StakePayload.Script(hash) => Some(hash)
         case _                         => None
 
-    /** Convert the stake address payload to a Credential */
+    /** Convert the stake address payload to a Credential.
+      *
+      * Note: StakeKeyHash and AddrKeyHash are both Blake2b_224 hashes of Ed25519 public keys. They
+      * differ only in their phantom type parameter for type safety purposes.
+      */
     def credential: Credential = payload match
-        case StakePayload.Stake(hash)  => Credential.KeyHash(hash.asInstanceOf[AddrKeyHash])
+        case StakePayload.Stake(hash)  => Credential.KeyHash(AddrKeyHash(hash: ByteString))
         case StakePayload.Script(hash) => Credential.ScriptHash(hash)
 
     inline override def getNetwork: Option[Network] = Some(network)
@@ -477,33 +481,383 @@ object StakeAddress {
     )
 }
 
-/** Placeholder for Byron address - complex legacy format */
+/** Parsed Byron address components */
+case class ParsedByronAddress(
+    addrRoot: ByteString,
+    addrType: Int,
+    derivationPath: Option[ByteString],
+    networkMagic: Option[Long],
+    crc32: Long,
+    computedCrc32: Long
+) {
+
+    /** Check if the CRC32 checksum is valid */
+    def isValid: Boolean = crc32 == computedCrc32
+}
+
+object ParsedByronAddress {
+
+    /** CRC32 lookup table for polynomial 0xEDB88320 (IEEE 802.3 / ISO 3309) */
+    private val crc32Table: Array[Long] = {
+        val table = new Array[Long](256)
+        for i <- 0 until 256 do {
+            var crc = i.toLong
+            for _ <- 0 until 8 do {
+                crc =
+                    if (crc & 1) != 0 then 0xedb88320L ^ (crc >>> 1)
+                    else crc >>> 1
+            }
+            table(i) = crc
+        }
+        table
+    }
+
+    /** Parse Byron address CBOR structure using direct byte manipulation.
+      *
+      * Byron address structure:
+      *   - Outer: `[tag24(payload_bytes), crc32_checksum]`
+      *   - Inner payload: `[addrRoot (28 bytes), addrAttributes (map), addrType (uint)]`
+      *
+      * This implementation avoids borer DOM parsing which has issues with some Byron addresses.
+      *
+      * @param addressBytes
+      *   The raw CBOR bytes of the Byron address
+      * @return
+      *   Parsed Byron address components
+      */
+    private[address] def parse(addressBytes: ByteString): ParsedByronAddress = {
+        val bytes = addressBytes.bytes
+        try {
+            var pos = 0
+
+            // Parse outer array header - must be array of 2
+            val outerHeader = bytes(pos) & 0xff
+            if (outerHeader >> 5) != 4 then
+                throw new IllegalArgumentException(
+                  s"Expected array, got major type ${outerHeader >> 5}"
+                )
+            val arrayLen = outerHeader & 0x1f
+            if arrayLen != 2 then
+                throw new IllegalArgumentException(
+                  s"Expected array of 2, got array of $arrayLen"
+                )
+            pos += 1
+
+            // Parse element 0: tag24(bytestring)
+            val tagHeader = bytes(pos) & 0xff
+            if (tagHeader >> 5) != 6 then
+                throw new IllegalArgumentException(
+                  s"Expected tag, got major type ${tagHeader >> 5}"
+                )
+            val tagAdditional = tagHeader & 0x1f
+            val (tagValue, tagHeaderLen) =
+                if tagAdditional < 24 then (tagAdditional, 1)
+                else if tagAdditional == 24 then ((bytes(pos + 1) & 0xff), 2)
+                else
+                    throw new IllegalArgumentException(
+                      s"Unsupported tag encoding: $tagAdditional"
+                    )
+
+            if tagValue != 24 then
+                throw new IllegalArgumentException(s"Expected tag24, got tag$tagValue")
+            pos += tagHeaderLen
+
+            // Parse the bytestring (payload)
+            val bsHeader = bytes(pos) & 0xff
+            if (bsHeader >> 5) != 2 then
+                throw new IllegalArgumentException(
+                  s"Expected bytestring, got major type ${bsHeader >> 5}"
+                )
+            val bsAdditional = bsHeader & 0x1f
+            val (payloadLen, bsHeaderLen) =
+                if bsAdditional < 24 then (bsAdditional, 1)
+                else if bsAdditional == 24 then ((bytes(pos + 1) & 0xff), 2)
+                else if bsAdditional == 25 then
+                    (((bytes(pos + 1) & 0xff) << 8) | (bytes(pos + 2) & 0xff), 3)
+                else
+                    throw new IllegalArgumentException(
+                      s"Unsupported bytestring length encoding: $bsAdditional"
+                    )
+            pos += bsHeaderLen
+
+            val payloadBytes = bytes.slice(pos, pos + payloadLen)
+            pos += payloadLen
+
+            // Parse element 1: CRC32 (unsigned integer)
+            val crcHeader = bytes(pos) & 0xff
+            val crcMajorType = crcHeader >> 5
+            if crcMajorType != 0 then
+                throw new IllegalArgumentException(
+                  s"Expected unsigned integer for CRC32, got major type $crcMajorType"
+                )
+            val crcAdditional = crcHeader & 0x1f
+            val crc32: Long =
+                if crcAdditional < 24 then crcAdditional.toLong
+                else if crcAdditional == 24 then (bytes(pos + 1) & 0xff).toLong
+                else if crcAdditional == 25 then
+                    (((bytes(pos + 1) & 0xff) << 8) | (bytes(pos + 2) & 0xff)).toLong
+                else if crcAdditional == 26 then
+                    ((bytes(pos + 1) & 0xffL) << 24) | ((bytes(pos + 2) & 0xffL) << 16) |
+                        ((bytes(pos + 3) & 0xffL) << 8) | (bytes(pos + 4) & 0xffL)
+                else
+                    throw new IllegalArgumentException(
+                      s"Unsupported CRC32 encoding: $crcAdditional"
+                    )
+
+            // Compute CRC32 of payload for validation
+            val computedCrc32 = computeCrc32(payloadBytes)
+
+            // Parse inner payload: [addrRoot, addrAttributes, addrType]
+            val (addrRoot, addrType, derivationPath, networkMagic) =
+                parseInnerPayload(payloadBytes)
+
+            ParsedByronAddress(
+              addrRoot,
+              addrType,
+              derivationPath,
+              networkMagic,
+              crc32,
+              computedCrc32
+            )
+        } catch {
+            case e: IllegalArgumentException => throw e
+            case e: ArrayIndexOutOfBoundsException =>
+                throw new IllegalArgumentException("Byron address too short", e)
+            case e: Exception =>
+                throw new IllegalArgumentException(
+                  s"Failed to parse Byron address: ${e.getMessage}",
+                  e
+                )
+        }
+    }
+
+    /** Parse inner payload using direct byte manipulation.
+      *
+      * @return
+      *   Tuple of (addrRoot, addrType, derivationPath, networkMagic)
+      */
+    private def parseInnerPayload(
+        payload: Array[Byte]
+    ): (ByteString, Int, Option[ByteString], Option[Long]) = {
+        var pos = 0
+
+        // Parse array header - must be array of 3
+        val arrayHeader = payload(pos) & 0xff
+        if (arrayHeader >> 5) != 4 then
+            throw new IllegalArgumentException(
+              s"Inner payload: expected array, got major type ${arrayHeader >> 5}"
+            )
+        val arrayLen = arrayHeader & 0x1f
+        if arrayLen < 3 then
+            throw new IllegalArgumentException(
+              s"Inner payload: expected array of at least 3, got $arrayLen"
+            )
+        pos += 1
+
+        // Parse addrRoot (28-byte bytestring)
+        val rootHeader = payload(pos) & 0xff
+        if (rootHeader >> 5) != 2 then
+            throw new IllegalArgumentException(
+              s"addrRoot: expected bytestring, got major type ${rootHeader >> 5}"
+            )
+        val rootAdditional = rootHeader & 0x1f
+        val (rootLen, rootHeaderLen) =
+            if rootAdditional < 24 then (rootAdditional, 1)
+            else if rootAdditional == 24 then ((payload(pos + 1) & 0xff), 2)
+            else
+                throw new IllegalArgumentException(
+                  s"addrRoot: unsupported length encoding $rootAdditional"
+                )
+        pos += rootHeaderLen
+
+        if rootLen != 28 then
+            throw new IllegalArgumentException(
+              s"addrRoot: expected 28 bytes, got $rootLen"
+            )
+        val addrRoot = ByteString.unsafeFromArray(payload.slice(pos, pos + 28))
+        pos += 28
+
+        // Parse addrAttributes (map)
+        val (derivationPath, networkMagic, attrBytesConsumed) =
+            parseAttributesDirect(payload, pos)
+        pos += attrBytesConsumed
+
+        // Parse addrType (unsigned integer)
+        val typeHeader = payload(pos) & 0xff
+        if (typeHeader >> 5) != 0 then
+            throw new IllegalArgumentException(
+              s"addrType: expected unsigned integer, got major type ${typeHeader >> 5}"
+            )
+        val addrType = typeHeader & 0x1f
+
+        (addrRoot, addrType, derivationPath, networkMagic)
+    }
+
+    /** Parse address attributes map directly from bytes.
+      *
+      * @return
+      *   Tuple of (derivationPath, networkMagic, bytesConsumed)
+      */
+    private def parseAttributesDirect(
+        data: Array[Byte],
+        startPos: Int
+    ): (Option[ByteString], Option[Long], Int) = {
+        var pos = startPos
+        var derivationPath: Option[ByteString] = None
+        var networkMagic: Option[Long] = None
+
+        val mapHeader = data(pos) & 0xff
+        val majorType = mapHeader >> 5
+
+        if majorType != 5 then
+            throw new IllegalArgumentException(
+              s"addrAttributes: expected map, got major type $majorType"
+            )
+
+        val mapLen = mapHeader & 0x1f
+        pos += 1
+
+        // Parse map entries
+        var i = 0
+        while i < mapLen do {
+            // Parse key (unsigned integer)
+            val keyHeader = data(pos) & 0xff
+            if (keyHeader >> 5) != 0 then
+                throw new IllegalArgumentException("Map key must be unsigned integer")
+            val key = keyHeader & 0x1f
+            pos += 1
+
+            // Parse value (bytestring)
+            val valHeader = data(pos) & 0xff
+            if (valHeader >> 5) != 2 then
+                throw new IllegalArgumentException("Map value must be bytestring")
+            val valAdditional = valHeader & 0x1f
+            val (valLen, valHeaderLen) =
+                if valAdditional < 24 then (valAdditional, 1)
+                else if valAdditional == 24 then ((data(pos + 1) & 0xff), 2)
+                else if valAdditional == 25 then
+                    (((data(pos + 1) & 0xff) << 8) | (data(pos + 2) & 0xff), 3)
+                else
+                    throw new IllegalArgumentException(
+                      s"Unsupported value length encoding: $valAdditional"
+                    )
+            pos += valHeaderLen
+
+            val valueBytes = data.slice(pos, pos + valLen)
+            pos += valLen
+
+            key match {
+                case 1 => // Derivation path (HD address payload)
+                    derivationPath = Some(ByteString.unsafeFromArray(valueBytes))
+                case 2 => // Network magic (CBOR-encoded Word32)
+                    // The network magic is CBOR-encoded inside the bytestring
+                    networkMagic = parseNetworkMagic(valueBytes)
+                case _ => // Unknown attribute, skip
+            }
+            i += 1
+        }
+
+        (derivationPath, networkMagic, pos - startPos)
+    }
+
+    /** Parse network magic from CBOR-encoded bytes. */
+    private def parseNetworkMagic(cborBytes: Array[Byte]): Option[Long] = {
+        if cborBytes.isEmpty then return None
+        try {
+            val header = cborBytes(0) & 0xff
+            val majorType = header >> 5
+            if majorType != 0 then return None // Not an unsigned integer
+
+            val additional = header & 0x1f
+            val value: Long =
+                if additional < 24 then additional.toLong
+                else if additional == 24 then (cborBytes(1) & 0xff).toLong
+                else if additional == 25 then
+                    (((cborBytes(1) & 0xff) << 8) | (cborBytes(2) & 0xff)).toLong
+                else if additional == 26 then
+                    ((cborBytes(1) & 0xffL) << 24) | ((cborBytes(2) & 0xffL) << 16) |
+                        ((cborBytes(3) & 0xffL) << 8) | (cborBytes(4) & 0xffL)
+                else return None
+
+            Some(value)
+        } catch {
+            case _: Exception => None
+        }
+    }
+
+    /** Compute CRC32 checksum of byte array (cross-platform implementation) */
+    private[address] def computeCrc32(data: Array[Byte]): Long = {
+        var crc = 0xffffffffL
+        for b <- data do {
+            crc = crc32Table(((crc ^ (b & 0xff)) & 0xff).toInt) ^ (crc >>> 8)
+        }
+        crc ^ 0xffffffffL
+    }
+}
+
+/** Byron address - legacy Cardano address format using Base58 encoding.
+  *
+  * Byron addresses have the following CBOR structure:
+  *   - Outer: `[tag24(payload_bytes), crc32_checksum]`
+  *   - Inner payload: `[addrRoot (28 bytes), addrAttributes (map), addrType (uint)]`
+  *
+  * Address attributes (map):
+  *   - Key 1: Optional derivation path (HD address payload)
+  *   - Key 2: Optional network magic (CBOR-encoded Word32)
+  *
+  * Address types:
+  *   - 0: Verification key address (ATVerKey)
+  *   - 2: Redeem address (ATRedeem)
+  */
 case class ByronAddress(bytes: ByteString) extends Address {
     def typeId: Byte = 0x08
     def toBytes: ByteString = bytes
     def toHex: String = bytes.toString
-    // Byron addresses use Base58 encoding, not implemented here
-    def toBase58: String = ??? // Would need Base58 implementation
+
+    /** Lazily parsed Byron address structure */
+    @transient lazy val parsed: ParsedByronAddress = ParsedByronAddress.parse(bytes)
+
+    /** Encode to Base58 string (Byron addresses use Base58, not Bech32) */
+    def toBase58: String = Base58.encode(bytes.bytes)
+
+    /** HRP is not applicable for Byron addresses (they use Base58) */
     def hrp: Try[String] = Failure(
       new UnsupportedOperationException("Byron addresses don't use bech32")
     )
-    inline override def getNetwork: Option[Network] =
-        None // Byron addresses don't have explicit network
+
+    /** Get network from address attributes.
+      *
+      * Byron addresses encode network magic in attribute key 2. If absent or equals mainnet magic
+      * (764824073), returns Mainnet. Otherwise returns Testnet.
+      */
+    inline override def getNetwork: Option[Network] = parsed.networkMagic match {
+        case None             => Some(Network.Mainnet) // No magic = mainnet
+        case Some(764824073L) => Some(Network.Mainnet) // Explicit mainnet magic
+        case Some(_)          => Some(Network.Testnet) // Any other magic = testnet
+    }
+
     def hasScript: Boolean = false // Byron addresses don't have scripts
     def isEnterprise: Boolean = false // Byron addresses are not enterprise addresses
-    def encode: Try[String] = Failure(
-      new UnsupportedOperationException("Byron addresses don't use bech32")
-    )
+
+    /** Encode to human-readable format (Base58 for Byron addresses) */
+    def encode: Try[String] = Success(toBase58)
+
+    /** Get the address type (0 = VerKey, 2 = Redeem) */
+    def byronAddrType: Int = parsed.addrType
+
+    /** Get the derivation path if present (HD wallet addresses) */
+    def derivationPath: Option[ByteString] = parsed.derivationPath
+
+    /** Get the network magic if present */
+    def networkMagic: Option[Long] = parsed.networkMagic
 
     /** Extract payment key hash from Byron address.
       *
-      * Byron addresses contain an `addrRoot` which is the payment key hash. The CBOR structure is:
-      * [tag24(payload), crc32] The payload is: [addrRoot, addrAttributes, addrType]
-      *
-      * This implementation extracts the addrRoot to match Haskell's bootstrapKeyHash.
+      * Byron addresses contain an `addrRoot` which is the payment key hash. This matches Haskell's
+      * bootstrapKeyHash.
       */
     def keyHashOption: Option[AddrKeyHash | StakeKeyHash] = {
-        extractAddrRoot(bytes).map(AddrKeyHash(_))
+        Some(AddrKeyHash(parsed.addrRoot))
     }
 
     def scriptHashOption: Option[ScriptHash] =
@@ -525,103 +879,10 @@ case class ByronAddress(bytes: ByteString) extends Address {
       *   The total size of relevant attributes in bytes
       */
     def attributesSize: Int = {
-        import io.bullet.borer.{Cbor, Dom}
-
-        try {
-            // Decode the outer array [tag24(payload), crc32]
-            val outerDom = Cbor.decode(bytes.bytes).to[Dom.Element].value
-            outerDom match {
-                case Dom.ArrayElem.Sized(elems) if elems.length >= 1 =>
-                    // First element is tag24 containing the payload bytes
-                    val taggedElem = elems.head
-                    val payloadBytes = taggedElem match {
-                        case Dom.ByteArrayElem(bs) => bs
-                        case _                     => return 0
-                    }
-
-                    // Decode the inner payload [addrRoot, addrAttributes, addrType]
-                    val innerDom = Cbor.decode(payloadBytes).to[Dom.Element].value
-                    innerDom match {
-                        case Dom.ArrayElem.Sized(innerElems) if innerElems.length >= 2 =>
-                            val attrElem = innerElems(1)
-                            calculateAttributesSize(attrElem)
-                        case _ => 0
-                    }
-                case _ => 0
-            }
-        } catch {
-            case _: Exception => 0
-        }
-    }
-
-    private def calculateAttributesSize(attrElem: io.bullet.borer.Dom.Element): Int = {
-        import io.bullet.borer.Dom
-
-        attrElem match {
-            case mapElem: Dom.MapElem =>
-                var derivationPathLen = 0
-                var unknownAttrsLen = 0
-
-                val attrMap = mapElem.toMap
-                for (keyElem, valueElem) <- attrMap do {
-                    val key = keyElem match {
-                        case Dom.IntElem(v)  => v.toInt
-                        case Dom.LongElem(v) => v.toInt
-                        case _               => -1
-                    }
-                    val valueLen = valueElem match {
-                        case Dom.ByteArrayElem(bs) => bs.length
-                        case _                     => 0
-                    }
-
-                    key match {
-                        case 1 => derivationPathLen = valueLen // Derivation path
-                        case 2 => () // Network magic - NOT counted
-                        case _ => unknownAttrsLen += valueLen // Unknown attributes
-                    }
-                }
-
-                derivationPathLen + unknownAttrsLen
-
-            case _ => 0
-        }
-    }
-
-    /** Extract addrRoot (payment key hash) from Byron address CBOR bytes.
-      *
-      * Byron address structure:
-      *   - Array of 2 elements: [tag24(addressPayload), crc32]
-      *   - addressPayload is an array: [addrRoot, addrAttributes, addrType]
-      *   - addrRoot is the 28-byte payment key hash
-      */
-    private def extractAddrRoot(addressBytes: ByteString): Option[ByteString] = {
-        import io.bullet.borer.Cbor
-
-        try {
-            // Decode the outer array [tag24(payload), crc32]
-            val result = Cbor.decode(addressBytes.bytes).to[Array[Array[Byte]]].valueEither
-
-            result match {
-                case Right(outerArray) if outerArray.length >= 1 =>
-                    // The first element is the tagged address payload
-                    // Decode the inner array [addrRoot, addrAttributes, addrType]
-                    val payloadResult =
-                        Cbor.decode(outerArray(0)).to[Array[Array[Byte]]].valueEither
-
-                    payloadResult match {
-                        case Right(payload) if payload.length >= 1 =>
-                            // The first element is addrRoot (28 bytes)
-                            val addrRoot = payload(0)
-                            if addrRoot.length == 28 then {
-                                Some(ByteString.unsafeFromArray(addrRoot))
-                            } else None
-                        case _ => None
-                    }
-                case _ => None
-            }
-        } catch {
-            case _: Exception => None
-        }
+        // Use the already-parsed derivation path from ParsedByronAddress
+        // The derivation path size is the primary component of attributesSize
+        // Network magic (key 2) is NOT counted per Haskell's bootstrapAddressAttrsSize
+        parsed.derivationPath.map(_.size).getOrElse(0)
     }
 }
 
@@ -635,10 +896,93 @@ object ByronAddress {
             w
         }
 
-    /** Pretty prints ByronAddress as hex (Byron doesn't use bech32) */
+    /** Pretty prints ByronAddress as Base58 */
     given Pretty[ByronAddress] with
         def pretty(a: ByronAddress, style: Style): Doc =
-            text("ByronAddress") + inParens(text(a.toHex))
+            text("ByronAddress") + inParens(text(a.toBase58))
+
+    /** Parse a Byron address from a Base58-encoded string.
+      *
+      * @param base58
+      *   The Base58 encoded Byron address
+      * @return
+      *   Success with ByronAddress if valid, Failure otherwise
+      */
+    def fromBase58(base58: String): Try[ByronAddress] = Try {
+        val decoded = Base58.decode(base58)
+        val addr = ByronAddress(ByteString.fromArray(decoded))
+        if !addr.parsed.isValid then {
+            throw new IllegalArgumentException(
+              s"Invalid Byron address CRC32 checksum: expected ${addr.parsed.crc32}, got ${addr.parsed.computedCrc32}"
+            )
+        }
+        addr
+    }
+
+    /** Create a Byron address with proper CBOR structure.
+      *
+      * This is useful for testing - it creates a valid Byron address with CRC32 checksum.
+      *
+      * @param addrRoot
+      *   The 28-byte address root (payment key hash)
+      * @param addrType
+      *   Address type: 0 for VerKey, 2 for Redeem
+      * @param networkMagic
+      *   Optional network magic (None for mainnet)
+      * @return
+      *   A valid ByronAddress
+      */
+    def create(
+        addrRoot: ByteString,
+        addrType: Int = 0,
+        networkMagic: Option[Long] = None
+    ): ByronAddress = {
+        import io.bullet.borer.{Cbor, Encoder, Writer}
+
+        require(addrRoot.size == 28, s"addrRoot must be 28 bytes, got ${addrRoot.size}")
+        require(addrType == 0 || addrType == 2, s"addrType must be 0 or 2, got $addrType")
+
+        // Build attributes map
+        val attributes: Map[Int, Array[Byte]] = networkMagic match {
+            case Some(magic) =>
+                // Network magic is CBOR-encoded inside the bytestring
+                val magicBytes = Cbor.encode(magic).toByteArray
+                Map(2 -> magicBytes)
+            case None => Map.empty
+        }
+
+        // Build inner payload: [addrRoot, addrAttributes, addrType]
+        val payloadBytes = Cbor
+            .encode(
+              (
+                addrRoot.bytes,
+                attributes,
+                addrType
+              )
+            )
+            .toByteArray
+
+        // Compute CRC32 of payload
+        val crc32 = ParsedByronAddress.computeCrc32(payloadBytes)
+
+        // Build outer structure: [tag24(payload), crc32]
+        // tag24 (0xd818) wraps a bytestring containing CBOR
+        // Use custom encoder to write tag24 + bytestring
+        given Encoder[(Array[Byte], Long)] with
+            def write(w: Writer, value: (Array[Byte], Long)): Writer = {
+                w.writeArrayOpen(2)
+                // Write tag24 (Embedded CBOR) followed by bytestring
+                w.writeTag(io.bullet.borer.Tag.EmbeddedCBOR)
+                w.writeBytes(value._1)
+                w.writeLong(value._2)
+                w.writeArrayClose()
+                w
+            }
+
+        val outerBytes = Cbor.encode((payloadBytes, crc32)).toByteArray
+
+        ByronAddress(ByteString.fromArray(outerBytes))
+    }
 }
 
 /** Base trait for all Cardano addresses
@@ -703,7 +1047,8 @@ object Address {
 
         val delegationPart = delegation match
             case Credential.KeyHash(hash) =>
-                ShelleyDelegationPart.Key(hash.asInstanceOf[StakeKeyHash]) // This is fine
+                // AddrKeyHash → StakeKeyHash: both are Blake2b_224 hashes, differ only in phantom type
+                ShelleyDelegationPart.Key(StakeKeyHash.fromByteString(hash))
             case Credential.ScriptHash(hash) => ShelleyDelegationPart.Script(hash)
 
         ShelleyAddress(network, paymentPart, delegationPart)
@@ -787,13 +1132,21 @@ object Address {
         fromBytes(Bech32.decode(bech32).data)
     }
 
-    /** Parse address from any string format (bech32, base58, or hex) */
+    /** Parse address from any string format (bech32 or base58).
+      *
+      * Tries Bech32 first (for Shelley-era addresses), then Base58 (for Byron addresses).
+      *
+      * @param str
+      *   The address string to parse
+      * @return
+      *   The parsed Address
+      * @throws IllegalArgumentException
+      *   if the string is not a valid address in any supported format
+      */
     def fromString(str: String): Address = {
         // Try bech32 first (most common for modern addresses)
         Try(fromBech32(str))
-            .orElse(
-              Try(ByronAddress(ByteString.fromString(str))) // TODO: test Byron
-            )
+            .orElse(ByronAddress.fromBase58(str)) // Try Base58 for Byron addresses
             .get
     }
 

@@ -52,6 +52,6 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         }
         // TODO: Investigate and fix remaining validation failures
         // Current failures are due to incomplete ledger rule implementation
-        assert(failed.size == 310, s"Expected 310 failures, got ${failed.size}")
+        assert(failed.size == 45, s"Expected 45 failures, got ${failed.size}")
     }
 }
