@@ -2,6 +2,7 @@
 .env.*
 target
 out
+it-data
 /.bsp
 .bloop/
 .direnv
