@@ -133,7 +133,7 @@ object Transaction {
     }
 
     import Doc.*
-    import Pretty.{bulletList, lit}
+    import Pretty.{bulletList, formatAda, lit}
 
     /** Pretty prints Transaction with inlined body and witness fields */
     given Pretty[Transaction] with
@@ -171,10 +171,87 @@ object Transaction {
             // Mint
             body.mint.foreach(m => fields += text("mint:") & Pretty[MultiAsset].pretty(m, style))
 
+            // Certificates
+            val certDocs = body.certificates.toSeq.map(Pretty[Certificate].pretty(_, style)).toList
+            if certDocs.nonEmpty then fields += bulletList("certificates", certDocs)
+
+            // Withdrawals
+            body.withdrawals.foreach { w =>
+                val entries = w.withdrawals.toList.map { case (ra, coin) =>
+                    val addrStr = ra.address.toBech32.getOrElse(ra.address.toHex)
+                    text(addrStr) + text(" -> ") + text(formatAda(coin.value))
+                }
+                if entries.nonEmpty then
+                    fields += text("withdrawals:") / stack(entries.map(text("- ") + _)).indent(2)
+            }
+
+            // Auxiliary data hash
+            body.auxiliaryDataHash.foreach(h => fields += text(s"auxiliaryDataHash: ${h.toHex}"))
+
+            // Script data hash
+            body.scriptDataHash.foreach(h => fields += text(s"scriptDataHash: ${h.toHex}"))
+
             // Collateral
             val collateralDocs =
                 body.collateralInputs.toSeq.map(Pretty[TransactionInput].pretty(_, style)).toList
             if collateralDocs.nonEmpty then fields += bulletList("collateral", collateralDocs)
+
+            // Required signers
+            val reqSignerDocs = body.requiredSigners.toSeq.map(h => text(h.toHex)).toList
+            if reqSignerDocs.nonEmpty then fields += bulletList("requiredSigners", reqSignerDocs)
+
+            // Network ID
+            body.networkId.foreach(id => fields += text(s"networkId: $id"))
+
+            // Collateral return
+            body.collateralReturnOutput.foreach { out =>
+                fields += text("collateralReturn:") & Pretty[TransactionOutput].pretty(
+                  out.value,
+                  style
+                )
+            }
+
+            // Total collateral
+            body.totalCollateral.foreach(c =>
+                fields += text(s"totalCollateral: ${formatAda(c.value)}")
+            )
+
+            // Voting procedures
+            body.votingProcedures.foreach { vp =>
+                val entries = vp.procedures.toList.flatMap { case (voter, actions) =>
+                    actions.toList.map { case (govActionId, procedure) =>
+                        val voterStr = voter match
+                            case Voter.ConstitutionalCommitteeHotKey(kh) =>
+                                s"CommitteeHotKey(${kh.toHex.take(16)}...)"
+                            case Voter.ConstitutionalCommitteeHotScript(sh) =>
+                                s"CommitteeHotScript(${sh.toHex.take(16)}...)"
+                            case Voter.DRepKey(kh)        => s"DRepKey(${kh.toHex.take(16)}...)"
+                            case Voter.DRepScript(sh)     => s"DRepScript(${sh.toHex.take(16)}...)"
+                            case Voter.StakingPoolKey(kh) => s"PoolKey(${kh.toHex.take(16)}...)"
+                        val actionStr =
+                            s"${govActionId.transactionId.toHex.take(16)}...#${govActionId.govActionIndex}"
+                        text(s"$voterStr on $actionStr: ${procedure.vote}")
+                    }
+                }
+                if entries.nonEmpty then
+                    fields += text("votingProcedures:") / stack(entries.map(text("- ") + _))
+                        .indent(2)
+            }
+
+            // Proposal procedures
+            if body.proposalProcedures.toSeq.nonEmpty then
+                val entries = body.proposalProcedures.toSeq.toList.map { p =>
+                    text(s"deposit=${formatAda(p.deposit.value)}, action=${p.govAction}")
+                }
+                fields += text("proposalProcedures:") / stack(entries.map(text("- ") + _)).indent(2)
+
+            // Current treasury value
+            body.currentTreasuryValue.foreach { c =>
+                fields += text(s"currentTreasuryValue: ${formatAda(c.value)}")
+            }
+
+            // Donation
+            body.donation.foreach(c => fields += text(s"donation: ${formatAda(c.value)}"))
 
             // VKey witnesses (just hashes)
             val vkeyDocs = ws.vkeyWitnesses.toSeq.map(Pretty[VKeyWitness].pretty(_, style)).toList

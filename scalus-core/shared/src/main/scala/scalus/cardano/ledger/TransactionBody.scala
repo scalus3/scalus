@@ -347,12 +347,14 @@ object TransactionBody:
             )
 
     import Doc.*
+    import Pretty.formatAda
 
     /** Pretty prints TransactionBody with multi-line structured output */
     given Pretty[TransactionBody] with
         def pretty(a: TransactionBody, style: Style): Doc =
             def inputDoc(i: TransactionInput) = Pretty[TransactionInput].pretty(i, style)
             def outputDoc(o: TransactionOutput) = Pretty[TransactionOutput].pretty(o, style)
+            def certDoc(c: Certificate) = Pretty[Certificate].pretty(c, style)
 
             val inputsDoc = Pretty.bulletList("inputs", a.inputs.toSet.toList.map(inputDoc))
 
@@ -371,6 +373,27 @@ object TransactionBody:
             val mintDoc =
                 a.mint.fold(empty)(m => line + text("mint:") & Pretty[MultiAsset].pretty(m, style))
 
+            val certificatesDoc =
+                Pretty.bulletList("certificates", a.certificates.toSeq.toList.map(certDoc))
+            val certificatesPrefixed =
+                if a.certificates.toSeq.nonEmpty then line + certificatesDoc else empty
+
+            val withdrawalsDoc = a.withdrawals.fold(empty) { w =>
+                val entries = w.withdrawals.toList.map { case (ra, coin) =>
+                    val addrStr = ra.address.toBech32.getOrElse(ra.address.toHex)
+                    text(addrStr) + text(" -> ") + text(formatAda(coin.value))
+                }
+                if entries.nonEmpty then
+                    line + text("withdrawals:") / stack(entries.map(text("- ") + _)).indent(2)
+                else empty
+            }
+
+            val auxiliaryDataHashDoc =
+                a.auxiliaryDataHash.fold(empty)(h => line + text(s"auxiliaryDataHash: ${h.toHex}"))
+
+            val scriptDataHashDoc =
+                a.scriptDataHash.fold(empty)(h => line + text(s"scriptDataHash: ${h.toHex}"))
+
             val refInputsDoc =
                 Pretty.bulletList("referenceInputs", a.referenceInputs.toSet.toList.map(inputDoc))
 
@@ -382,4 +405,64 @@ object TransactionBody:
             val collateralPrefixed =
                 if a.collateralInputs.toSet.nonEmpty then line + collateralDoc else empty
 
-            (inputsDoc / outputsDoc / feeDoc + ttlDoc + validityStartDoc + mintDoc + refInputsPrefixed + collateralPrefixed).grouped
+            val requiredSignersDoc =
+                if a.requiredSigners.toSet.nonEmpty then
+                    line + Pretty.bulletList(
+                      "requiredSigners",
+                      a.requiredSigners.toSet.toList.map(h => text(h.toHex))
+                    )
+                else empty
+
+            val networkIdDoc = a.networkId.fold(empty)(id => line + text(s"networkId: $id"))
+
+            val collateralReturnDoc = a.collateralReturnOutput.fold(empty) { out =>
+                line + text("collateralReturn:") & outputDoc(out.value)
+            }
+
+            val totalCollateralDoc = a.totalCollateral.fold(empty) { c =>
+                line + text(s"totalCollateral: ${formatAda(c.value)}")
+            }
+
+            val votingProceduresDoc = a.votingProcedures.fold(empty) { vp =>
+                val entries = vp.procedures.toList.flatMap { case (voter, actions) =>
+                    actions.toList.map { case (govActionId, procedure) =>
+                        val voterStr = voter match
+                            case Voter.ConstitutionalCommitteeHotKey(kh) =>
+                                s"CommitteeHotKey(${kh.toHex.take(16)}...)"
+                            case Voter.ConstitutionalCommitteeHotScript(sh) =>
+                                s"CommitteeHotScript(${sh.toHex.take(16)}...)"
+                            case Voter.DRepKey(kh)        => s"DRepKey(${kh.toHex.take(16)}...)"
+                            case Voter.DRepScript(sh)     => s"DRepScript(${sh.toHex.take(16)}...)"
+                            case Voter.StakingPoolKey(kh) => s"PoolKey(${kh.toHex.take(16)}...)"
+                        val actionStr =
+                            s"${govActionId.transactionId.toHex.take(16)}...#${govActionId.govActionIndex}"
+                        text(s"$voterStr on $actionStr: ${procedure.vote}")
+                    }
+                }
+                if entries.nonEmpty then
+                    line + text("votingProcedures:") / stack(entries.map(text("- ") + _)).indent(2)
+                else empty
+            }
+
+            val proposalProceduresDoc =
+                if a.proposalProcedures.toSeq.nonEmpty then
+                    val entries = a.proposalProcedures.toSeq.toList.map { p =>
+                        text(s"deposit=${formatAda(p.deposit.value)}, action=${p.govAction}")
+                    }
+                    line + text("proposalProcedures:") / stack(entries.map(text("- ") + _))
+                        .indent(2)
+                else empty
+
+            val currentTreasuryValueDoc = a.currentTreasuryValue.fold(empty) { c =>
+                line + text(s"currentTreasuryValue: ${formatAda(c.value)}")
+            }
+
+            val donationDoc = a.donation.fold(empty) { c =>
+                line + text(s"donation: ${formatAda(c.value)}")
+            }
+
+            (inputsDoc / outputsDoc / feeDoc + ttlDoc + validityStartDoc + mintDoc +
+                certificatesPrefixed + withdrawalsDoc + auxiliaryDataHashDoc + scriptDataHashDoc +
+                refInputsPrefixed + collateralPrefixed + requiredSignersDoc + networkIdDoc +
+                collateralReturnDoc + totalCollateralDoc + votingProceduresDoc +
+                proposalProceduresDoc + currentTreasuryValueDoc + donationDoc).grouped
