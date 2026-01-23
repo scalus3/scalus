@@ -12,7 +12,6 @@ import scalus.testing.yaci.YaciDevKit
 import scalus.toUplc
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
 
 /** Integration tests for UtxoQuery with BlockfrostProvider using Yaci DevKit

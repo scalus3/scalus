@@ -12,7 +12,6 @@ import scalus.toUplc
 import scalus.utils.await
 
 import scala.collection.immutable.SortedMap
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
 
 /** Integration tests for TxBuilder with Yaci DevKit

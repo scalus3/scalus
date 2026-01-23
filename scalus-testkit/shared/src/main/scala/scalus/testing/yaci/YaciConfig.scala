@@ -14,13 +14,3 @@ case class YaciConfig(
     containerName: String = "scalus-yaci-devkit",
     reuseContainer: Boolean = false
 )
-
-object YaciConfig:
-    /** Default configuration for local development */
-    def default: YaciConfig = YaciConfig()
-
-    /** Configuration for CI environments (no reuse, no logs) */
-    def ci: YaciConfig = YaciConfig(
-      enableLogs = false,
-      reuseContainer = false
-    )

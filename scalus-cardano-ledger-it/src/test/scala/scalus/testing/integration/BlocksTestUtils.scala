@@ -37,8 +37,10 @@ object BlocksTestUtils {
         ""
     }
 
-    val resourcesPath: Path = Paths.get(System.getenv("SCALUS_IT_DATA_PATH")) ?? sys.error(
-      "SCALUS_IT_DATA_PATH is not set, please set it before running the test"
+    val resourcesPath: Path = Paths.get(
+      System.getenv("SCALUS_IT_DATA_PATH") ?? sys.error(
+        "SCALUS_IT_DATA_PATH is not set, please set it before running the test"
+      )
     )
 
     val epochMagic: Int = (System.getenv("SCALUS_IT_EPOCH") ?? "543").toInt
