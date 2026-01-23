@@ -36,7 +36,6 @@
 - /docs/transactions/minting-burning-assets - Token minting and burning
 - /docs/transactions/staking-rewards - Delegation and rewards
 - /docs/transactions/governance - DRep and voting
-- /docs/transactions/validator-interactions - Interacting with Plutus validators
 
 ### Testing
 - /docs/testing - Testing overview
