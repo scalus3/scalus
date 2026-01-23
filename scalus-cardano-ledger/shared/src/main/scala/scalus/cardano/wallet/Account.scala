@@ -1,6 +1,6 @@
 package scalus.cardano.wallet
 
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.crypto.ed25519.{ExtendedSigningKey, Signature, SigningKey, VerificationKey}
 

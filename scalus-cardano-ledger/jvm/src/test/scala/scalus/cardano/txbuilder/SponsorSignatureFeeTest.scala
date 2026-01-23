@@ -23,7 +23,7 @@ class SponsorSignatureFeeTest extends AnyFunSuite {
     private given env: CardanoInfo = CardanoInfo.mainnet
 
     private val genesisHash: TransactionHash =
-        TransactionHash.fromByteString(scalus.builtin.ByteString.fromHex("0" * 64))
+        TransactionHash.fromByteString(scalus.uplc.builtin.ByteString.fromHex("0" * 64))
 
     ignore("BUG: Fee calculation does not account for sponsor signature") {
         val sender = Alice

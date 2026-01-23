@@ -2,10 +2,10 @@ package scalus.uplc
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.Constant.{asConstant, Pair}
 import scalus.uplc.DefaultFun.*
@@ -321,7 +321,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("verifyEd25519Signature") {
-        val sir = compile { scalus.builtin.Builtins.verifyEd25519Signature }
+        val sir = compile { scalus.uplc.builtin.Builtins.verifyEd25519Signature }
         val verify = sir.toUplc()
         val valid = verify $
             hex"9518c18103cbdab9c6e60b58ecc3e2eb439fef6519bb22570f391327381900a8" $
@@ -354,7 +354,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
     test("verifyEcdsaSecp256k1Signature follows CIP-49") {
         // https://cips.cardano.org/cip/CIP-49
-        val sir = compile { scalus.builtin.Builtins.verifyEcdsaSecp256k1Signature }
+        val sir = compile { scalus.uplc.builtin.Builtins.verifyEcdsaSecp256k1Signature }
         val verify = sir.toUplc()
         val pubKey = hex"03427d3132a06e31bf66791dda478b5ebec79bd045247126396fccdf11e42a3627"
 
@@ -398,7 +398,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
     test("verifySchnorrSecp256k1Signature follows CIP-49") {
         // https://cips.cardano.org/cip/CIP-49
-        val sir = compile { scalus.builtin.Builtins.verifySchnorrSecp256k1Signature }
+        val sir = compile { scalus.uplc.builtin.Builtins.verifySchnorrSecp256k1Signature }
         val verify = sir.toUplc()
         val pubKey = hex"427d3132a06e31bf66791dda478b5ebec79bd045247126396fccdf11e42a3627"
 
@@ -433,7 +433,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("AndByteString follows CIP-122") {
-        val AndByteString = compile(scalus.builtin.Builtins.andByteString).toUplc()
+        val AndByteString = compile(scalus.uplc.builtin.Builtins.andByteString).toUplc()
 
         assertTermEvalEq(AndByteString $ false $ hex"" $ hex"", hex"")
 
@@ -471,7 +471,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("OrByteString follows CIP-122") {
-        val OrByteString = compile(scalus.builtin.Builtins.orByteString).toUplc()
+        val OrByteString = compile(scalus.uplc.builtin.Builtins.orByteString).toUplc()
 
         assertTermEvalEq(OrByteString $ false $ hex"" $ hex"", hex"")
 
@@ -509,7 +509,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("XorByteString follows CIP-122") {
-        val XorByteString = compile(scalus.builtin.Builtins.xorByteString).toUplc()
+        val XorByteString = compile(scalus.uplc.builtin.Builtins.xorByteString).toUplc()
 
         assertTermEvalEq(XorByteString $ false $ hex"" $ hex"", hex"")
 
@@ -547,7 +547,8 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("ComplementByteString follows CIP-122") {
-        val ComplementByteString = compile(scalus.builtin.Builtins.complementByteString).toUplc()
+        val ComplementByteString =
+            compile(scalus.uplc.builtin.Builtins.complementByteString).toUplc()
 
         assertTermEvalEq(ComplementByteString $ hex"", hex"")
 
@@ -558,7 +559,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("ReadBit follows CIP-122") {
-        val ReadBit = compile(scalus.builtin.Builtins.readBit).toUplc()
+        val ReadBit = compile(scalus.uplc.builtin.Builtins.readBit).toUplc()
 
         assertTermEvalThrows[BuiltinError](ReadBit $ hex"" $ 0)
         assertTermEvalThrows[BuiltinError](ReadBit $ hex"" $ 345)
@@ -581,7 +582,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("WriteBits follows CIP-122") {
-        val WriteBits = compile(scalus.builtin.Builtins.writeBits).toUplc()
+        val WriteBits = compile(scalus.uplc.builtin.Builtins.writeBits).toUplc()
 
         assertTermEvalThrows[BuiltinError](WriteBits $ hex"" $ List(0) $ false)
         assertTermEvalThrows[BuiltinError](WriteBits $ hex"" $ List(15) $ false)
@@ -615,7 +616,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("ReplicateByte follows CIP-122") {
-        val ReplicateByte = compile(scalus.builtin.Builtins.replicateByte).toUplc()
+        val ReplicateByte = compile(scalus.uplc.builtin.Builtins.replicateByte).toUplc()
 
         assertTermEvalThrows[BuiltinError](ReplicateByte $ -1 $ 0)
         assertTermEvalThrows[BuiltinError](ReplicateByte $ -1 $ 3)
@@ -631,7 +632,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("ShiftByteString follows CIP-123") {
-        val ShiftByteString = compile(scalus.builtin.Builtins.shiftByteString).toUplc()
+        val ShiftByteString = compile(scalus.uplc.builtin.Builtins.shiftByteString).toUplc()
 
         assertTermEvalEq(ShiftByteString $ hex"" $ 3, hex"")
         assertTermEvalEq(ShiftByteString $ hex"" $ -3, hex"")
@@ -649,16 +650,16 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
         for i <- 0 to size do
             assertResult(binaryStr.drop(i) + "0" * i)(
-              scalus.builtin.Builtins.shiftByteString(byteString, i).toBinaryString
+              scalus.uplc.builtin.Builtins.shiftByteString(byteString, i).toBinaryString
             )
 
             assertResult("0" * i + binaryStr.dropRight(i))(
-              scalus.builtin.Builtins.shiftByteString(byteString, -i).toBinaryString
+              scalus.uplc.builtin.Builtins.shiftByteString(byteString, -i).toBinaryString
             )
     }
 
     test("RotateByteString follows CIP-123") {
-        val RotateByteString = compile(scalus.builtin.Builtins.rotateByteString).toUplc()
+        val RotateByteString = compile(scalus.uplc.builtin.Builtins.rotateByteString).toUplc()
 
         assertTermEvalEq(RotateByteString $ hex"" $ 3, hex"")
         assertTermEvalEq(RotateByteString $ hex"" $ -3, hex"")
@@ -678,16 +679,16 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
         for i <- 0 to size do
             assertResult(binaryStr.drop(i) + binaryStr.take(i))(
-              scalus.builtin.Builtins.rotateByteString(byteString, i).toBinaryString
+              scalus.uplc.builtin.Builtins.rotateByteString(byteString, i).toBinaryString
             )
 
             assertResult(binaryStr.takeRight(i) + binaryStr.dropRight(i))(
-              scalus.builtin.Builtins.rotateByteString(byteString, -i).toBinaryString
+              scalus.uplc.builtin.Builtins.rotateByteString(byteString, -i).toBinaryString
             )
     }
 
     test("CountSetBits follows CIP-123") {
-        val CountSetBits = compile(scalus.builtin.Builtins.countSetBits).toUplc()
+        val CountSetBits = compile(scalus.uplc.builtin.Builtins.countSetBits).toUplc()
 
         assertTermEvalEq(CountSetBits $ hex"", 0)
         assertTermEvalEq(CountSetBits $ hex"0000", 0)
@@ -698,7 +699,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
     }
 
     test("FindFirstSetBit follows CIP-123") {
-        val FindFirstSetBit = compile(scalus.builtin.Builtins.findFirstSetBit).toUplc()
+        val FindFirstSetBit = compile(scalus.uplc.builtin.Builtins.findFirstSetBit).toUplc()
 
         assertTermEvalEq(FindFirstSetBit $ hex"", -1)
         assertTermEvalEq(FindFirstSetBit $ hex"0000", -1)

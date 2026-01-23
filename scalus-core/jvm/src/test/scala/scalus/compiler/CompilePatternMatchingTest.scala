@@ -1,10 +1,10 @@
 package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1.*
+import scalus.cardano.onchain.plutus.v1.*
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
@@ -25,7 +25,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test nested pattern matching with enums
     test("nested pattern matching on List[Option[BigInt]]") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: List[Option[BigInt]]) =>
             x match
                 case List.Cons(Option.Some(v), _) => v
@@ -53,7 +53,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test nested pattern matching with multiple levels
     test("deeply nested pattern matching on List[Option[These[BigInt, Boolean]]]") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: List[Option[These[BigInt, Boolean]]]) =>
             x match
                 case List.Cons(Option.Some(These.This(n)), _) => n
@@ -125,7 +125,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test wildcard patterns
     test("pattern matching with wildcards") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: Option[BigInt]) =>
             x match
                 case Option.Some(v) => v
@@ -143,7 +143,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test wildcard in nested patterns
     test("pattern matching with wildcards in nested positions") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: List[Option[BigInt]]) =>
             x match
                 case List.Cons(Option.Some(v), _) => v
@@ -168,7 +168,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
     // TODO: Add special handling for BigInt() constructor in PatternMatchingCompiler
     /*
     test("pattern matching on integer constants") {
-        import scalus.prelude.unapply
+        import scalus.cardano.onchain.plutus.prelude.unapply
         val compiled = compile { (x: BigInt) =>
             x match
                 case BigInt(0) => "zero"
@@ -260,7 +260,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
     // TODO: Add special handling for BigInt() constructor in PatternMatchingCompiler
     /*
     test("pattern matching with mixed patterns") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: Option[BigInt]) =>
             x match
                 case Option.Some(BigInt(0)) => "zero"
@@ -287,7 +287,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test guards with if expressions
     test("pattern matching with if guards") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: Option[BigInt]) =>
             x match
                 case Option.Some(v) if v > BigInt(0) => "positive"
@@ -313,7 +313,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test guards with complex conditions
     test("pattern matching with complex guards") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: List[BigInt]) =>
             x match
                 case List.Cons(h, t) if h > BigInt(0) && t.length > 0 => "positive head with tail"
@@ -395,7 +395,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test pattern matching with variable binding at different levels
     test("pattern matching with variable bindings") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: List[Option[BigInt]]) =>
             x match
                 case List.Cons(some @ Option.Some(v), _) if v > BigInt(0) => v
@@ -424,7 +424,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
 
     // Test exhaustiveness checking with @unchecked
     test("non-exhaustive pattern matching with @unchecked") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: Option[BigInt]) =>
             (x: @unchecked) match
                 case Option.Some(v) => v
@@ -445,7 +445,7 @@ class CompilePatternMatchingTest extends AnyFunSuite {
     // TODO: Fix issue with sequential match expressions
     /*
     test("pattern matching within pattern matching") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (x: Option[List[BigInt]]) =>
             x match
                 case Option.Some(list) =>
@@ -475,11 +475,11 @@ class CompilePatternMatchingTest extends AnyFunSuite {
      */
 
     test("List in List pattern matching") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile { (l: List[List[BigInt]]) =>
             l match
                 case List.Cons(headNode, List.Nil) => ()
-                case _                             => scalus.prelude.fail("123")
+                case _ => scalus.cardano.onchain.plutus.prelude.fail("123")
         }
 
         // println(compiled.pretty.render(100))

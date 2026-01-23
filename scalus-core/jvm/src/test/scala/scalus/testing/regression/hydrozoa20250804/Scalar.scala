@@ -1,9 +1,9 @@
 package scalus.testing.regression.hydrozoa20250804
 
-import scalus.builtin.Builtins.{byteStringToInteger, integerToByteString}
-import scalus.builtin.ByteString
-import scalus.prelude.{require, Option}
-import scalus.prelude.Option.{None, Some}
+import scalus.uplc.builtin.Builtins.{byteStringToInteger, integerToByteString}
+import scalus.uplc.builtin.ByteString
+import scalus.cardano.onchain.plutus.prelude.{require, Option}
+import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
 import scalus.Compile
 
 import scala.annotation.tailrec

@@ -2,8 +2,8 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.*
 import scalus.testing.kit.ScalusTest
@@ -113,7 +113,7 @@ object FibUnfold {
 
 @Compile
 object BrokenFib {
-    import scalus.prelude.*
+    import scalus.cardano.onchain.plutus.prelude.*
     import List.*
     def fib(n: BigInt): List[BigInt] = if n > 1 then
         (fib(n - 1): @unchecked) match

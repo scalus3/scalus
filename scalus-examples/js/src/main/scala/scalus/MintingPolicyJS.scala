@@ -1,10 +1,10 @@
 package scalus
 
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
 import scalus.compiler.sir.SIR
 import scalus.examples.MintingPolicy
-import scalus.prelude.SortedMap
+import scalus.cardano.onchain.plutus.prelude.SortedMap
 import scalus.uplc.Term
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM

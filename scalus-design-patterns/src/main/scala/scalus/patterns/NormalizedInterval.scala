@@ -1,9 +1,9 @@
 package scalus.patterns
 
 import scalus.Compile
-import scalus.prelude.*
-import scalus.ledger.api.v1.*
-import scalus.builtin.{Builtins, FromData, ToData}
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v1.*
+import scalus.uplc.builtin.{Builtins, FromData, ToData}
 
 /** Datatype for eliminating meaningless ranges, without the redundant inclusiveness flag (instead
   * all range values are inclusive). Interval.never is represented as an improper interval.
@@ -102,7 +102,7 @@ extension (self: Interval) {
       *   from = IntervalBound(IntervalBoundType.PosInf, false),
       *   to = IntervalBound(IntervalBoundType.Finite(100), true)
       * )
-      * invalidInterval.normalize // throws scalus.prelude.OnchainError: "Improper interval encountered"
+      * invalidInterval.normalize // throws scalus.cardano.onchain.plutus.prelude.OnchainError: "Improper interval encountered"
       *   }}}
       *
       * @throws scalus.cardano.onchain.OnchainError

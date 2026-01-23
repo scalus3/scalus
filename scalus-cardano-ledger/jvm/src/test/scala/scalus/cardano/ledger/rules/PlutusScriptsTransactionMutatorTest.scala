@@ -4,7 +4,7 @@ package rules
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.compiler.compile
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.*
 import scalus.cardano.address.Network.Testnet
 
@@ -39,7 +39,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -91,7 +91,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -143,7 +143,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -223,7 +223,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                     Redeemer(
                       tag = RedeemerTag.Spend,
                       index = 0,
-                      data = scalus.builtin.Data.unit,
+                      data = scalus.uplc.builtin.Data.unit,
                       exUnits = ExUnits(100000000, 100000000)
                     )
                   )
@@ -316,7 +316,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                     Redeemer(
                       tag = RedeemerTag.Spend,
                       index = 0,
-                      data = scalus.builtin.Data.unit,
+                      data = scalus.uplc.builtin.Data.unit,
                       exUnits = ExUnits(100000000, 100000000)
                     )
                   )
@@ -364,7 +364,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -421,7 +421,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -472,7 +472,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -524,7 +524,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -576,7 +576,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -633,7 +633,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -684,7 +684,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -736,7 +736,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -788,7 +788,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -842,7 +842,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -896,7 +896,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -956,7 +956,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -1010,7 +1010,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -1070,7 +1070,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -1134,7 +1134,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
                   Redeemer(
                     tag = RedeemerTag.Spend,
                     index = 0,
-                    data = scalus.builtin.Data.unit,
+                    data = scalus.uplc.builtin.Data.unit,
                     exUnits = ExUnits(100000000, 100000000)
                   )
                 )
@@ -1180,7 +1180,9 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
     private def invalidPlutusV3Script = {
         import scalus.*
-        val program = compile((data: Data) => scalus.prelude.fail()).toUplc(true).plutusV3
+        val program = compile((data: Data) => scalus.cardano.onchain.plutus.prelude.fail())
+            .toUplc(true)
+            .plutusV3
         Script.PlutusV3(program.cborByteString)
     }
 }

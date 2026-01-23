@@ -4,9 +4,9 @@ import monocle.syntax.all.*
 import monocle.{Focus, Lens}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
-import scalus.prelude.List as PList
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.RedeemerTag.Spend
 import scalus.cardano.txbuilder.*

@@ -29,7 +29,7 @@ sealed trait TransactionOutput {
       * @return
       *   The resolved datum data, or None if no datum is present or if the hash is not found
       */
-    def resolveDatum(tx: Transaction): Option[scalus.builtin.Data] =
+    def resolveDatum(tx: Transaction): Option[scalus.uplc.builtin.Data] =
         datumOption match
             case Some(DatumOption.Hash(hash)) =>
                 tx.witnessSet.plutusData.value.toSortedMap.get(hash).map(_.value)
@@ -37,13 +37,13 @@ sealed trait TransactionOutput {
             case None                           => None
 
     /** Get inline datum if present, None otherwise */
-    def inlineDatum: Option[scalus.builtin.Data] =
+    def inlineDatum: Option[scalus.uplc.builtin.Data] =
         datumOption match
             case Some(DatumOption.Inline(data)) => Some(data)
             case _                              => None
 
     /** Get inline datum, throwing if not present */
-    def requireInlineDatum: scalus.builtin.Data =
+    def requireInlineDatum: scalus.uplc.builtin.Data =
         inlineDatum.getOrElse(
           throw IllegalStateException(
             s"Inline datum required but not present. Output: address=${address.encode.getOrElse("?")} value=$value"
@@ -198,7 +198,7 @@ object TransactionOutput:
     def apply(
         address: Address,
         value: Value,
-        inlineDatum: scalus.builtin.Data
+        inlineDatum: scalus.uplc.builtin.Data
     ): TransactionOutput = Babbage(address, value, Some(DatumOption.Inline(inlineDatum)), None)
 
     /** Creates a Babbage-era transaction output with all optional parameters.

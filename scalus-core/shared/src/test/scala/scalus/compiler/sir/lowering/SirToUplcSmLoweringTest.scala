@@ -3,8 +3,8 @@ package scalus.compiler.sir.lowering
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.I
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.I
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
@@ -232,7 +232,9 @@ class SirToUplcSmLoweringTest
         val result1 = origin1.evaluateDebug
         result1 match {
             case Result.Success(term, _, _, _) =>
-                val nilData = scalus.prelude.List.empty[scalus.builtin.Data].toData
+                val nilData = scalus.cardano.onchain.plutus.prelude.List
+                    .empty[scalus.uplc.builtin.Data]
+                    .toData
                 val termValue = term match {
                     case Term.Const(Constant.List(DefaultUni.Data, value)) => value
                     case _ => fail(s"Expected a List constant, got: ${term}")

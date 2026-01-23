@@ -1,11 +1,11 @@
 package scalus.examples.lottery
 
-import scalus.builtin.Builtins.sha2_256
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.ledger.api.v3.{TxInfo, TxOutRef}
-import scalus.ledger.api.{v1, v2}
-import scalus.prelude.*
+import scalus.uplc.builtin.Builtins.sha2_256
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.{v1, v2}
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.{prelude, Compile}
 
 type Preimage = ByteString

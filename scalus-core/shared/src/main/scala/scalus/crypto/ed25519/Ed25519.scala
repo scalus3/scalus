@@ -1,6 +1,6 @@
 package scalus.crypto.ed25519
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Ed25519 verification key (public key) - 32 bytes. Subtype of ByteString for seamless interop.
   */

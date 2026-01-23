@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Represents a VRF certificate in Cardano, consisting of output and proof */
 case class VrfCert(

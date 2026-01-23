@@ -3,7 +3,7 @@ package rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import TransactionWitnessSet.given
 
@@ -348,7 +348,8 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
 
     test("MissingRequiredDatumsValidator success with native script") {
         val (privateKey, publicKey) = generateKeyPair()
-        val nativeScript = Timelock.Signature(Hash(scalus.builtin.platform.blake2b_224(publicKey)))
+        val nativeScript =
+            Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
           input -> Output(

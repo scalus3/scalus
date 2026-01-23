@@ -564,8 +564,8 @@ class CaseOnBuiltinsTest extends AnyFunSuite:
     // Data has 5 constructors: Constr=0 (tag, args), Map=1, List=2, I=3, B=4
     // Each branch receives the inner value(s) as arguments
 
-    import scalus.builtin.{ByteString, Data}
-    import scalus.prelude.List as PList
+    import scalus.uplc.builtin.{ByteString, Data}
+    import scalus.cardano.onchain.plutus.prelude.List as PList
 
     def mkDataConst(d: Data): Constant = Constant.Data(d)
 

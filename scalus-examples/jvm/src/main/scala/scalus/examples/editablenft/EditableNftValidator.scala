@@ -1,13 +1,13 @@
 package scalus.examples.editablenft
 
 import scalus.Compile
-import scalus.builtin.{ByteString, Data}
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.ledger.api.v1.{Credential, PolicyId}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.builtin.Data.toData
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.cardano.onchain.plutus.v1.{Credential, PolicyId}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 case class ReferenceNftParam(seed: TxOutRef) derives FromData, ToData
 

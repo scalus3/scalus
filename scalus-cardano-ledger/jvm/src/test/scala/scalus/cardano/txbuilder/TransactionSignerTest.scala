@@ -5,8 +5,8 @@ import com.bloxbean.cardano.client.common.model.Network as BBNetwork
 import com.bloxbean.cardano.client.crypto.cip1852.DerivationPath.createExternalAddressDerivationPathForAccount
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
-import scalus.builtin.platform
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
 import scalus.cardano.wallet.{BloxbeanKeyPair, KeyPair}
 

@@ -1,4 +1,4 @@
-package scalus.ledger.api.v1
+package scalus.cardano.onchain.plutus.v1
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
@@ -11,7 +11,7 @@ import scala.annotation.nowarn
 class IntervalTest
     extends AnyFunSuite
     with EvalTestKit
-    with scalus.ledger.api.v1.ArbitraryInstances {
+    with scalus.cardano.onchain.plutus.v1.ArbitraryInstances {
 
     test("`never` contains no values") {
         checkEval { (time: PosixTime) =>

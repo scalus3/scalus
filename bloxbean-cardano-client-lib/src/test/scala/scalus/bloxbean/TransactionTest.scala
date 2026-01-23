@@ -2,7 +2,7 @@ package scalus.bloxbean
 
 import com.bloxbean.cardano.client.transaction.util.TransactionUtil.getTxHash
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{platform, ByteString, given}
+import scalus.uplc.builtin.{platform, ByteString, given}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.serialization.cbor.Cbor

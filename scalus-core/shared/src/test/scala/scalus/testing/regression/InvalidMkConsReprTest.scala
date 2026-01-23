@@ -2,16 +2,16 @@ package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.utf8
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.utf8
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v1.Value.getLovelace
-import scalus.ledger.api.v1.{Credential, PubKeyHash, Value}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.Credential.{PubKeyCredential, ScriptCredential}
+import scalus.cardano.onchain.plutus.v1.Value.getLovelace
+import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.eval.*
 
 class InvalidMkConsReprTest extends AnyFunSuite {
@@ -74,7 +74,7 @@ class InvalidMkConsReprTest extends AnyFunSuite {
         // val txCert = TxCert.RegStaking(Credential.PubKeyCredential(pkhA), Option.None)
         val txOutRef = TxOutRef(lockTxId, 0)
 
-        val inputs = scalus.prelude.List(
+        val inputs = scalus.cardano.onchain.plutus.prelude.List(
           TxInInfo(
             outRef = TxOutRef(inTxId, 0),
             resolved = TxOut(
@@ -124,7 +124,7 @@ class InvalidMkConsReprTest extends AnyFunSuite {
 
         val context = ScriptContext(
           txInfo = TxInfo(
-            inputs = scalus.prelude.List(
+            inputs = scalus.cardano.onchain.plutus.prelude.List(
               TxInInfo(
                 outRef = TxOutRef(inTxId, 0),
                 resolved = TxOut(
@@ -150,10 +150,11 @@ class InvalidMkConsReprTest extends AnyFunSuite {
               )
             ),
             fee = 2,
-            certificates = scalus.prelude.List(txCert),
-            signatories = scalus.prelude.List(pkhA),
+            certificates = scalus.cardano.onchain.plutus.prelude.List(txCert),
+            signatories = scalus.cardano.onchain.plutus.prelude.List(pkhA),
             redeemers = SortedMap.fromList(
-              scalus.prelude.List((ScriptPurpose.Spending(txOutRef), Data.unit))
+              scalus.cardano.onchain.plutus.prelude
+                  .List((ScriptPurpose.Spending(txOutRef), Data.unit))
             ),
             id = currentTxId
           ),
@@ -233,7 +234,7 @@ class InvalidMkConsReprTest extends AnyFunSuite {
 
         val context = ScriptContext(
           txInfo = TxInfo(
-            inputs = scalus.prelude.List(
+            inputs = scalus.cardano.onchain.plutus.prelude.List(
               TxInInfo(
                 outRef = TxOutRef(inTxId, 0),
                 resolved = TxOut(
@@ -259,10 +260,11 @@ class InvalidMkConsReprTest extends AnyFunSuite {
               )
             ),
             fee = 2,
-            certificates = scalus.prelude.List(txCert),
-            signatories = scalus.prelude.List(pkhA),
+            certificates = scalus.cardano.onchain.plutus.prelude.List(txCert),
+            signatories = scalus.cardano.onchain.plutus.prelude.List(pkhA),
             redeemers = SortedMap.fromList(
-              scalus.prelude.List((ScriptPurpose.Spending(txOutRef), Data.unit))
+              scalus.cardano.onchain.plutus.prelude
+                  .List((ScriptPurpose.Spending(txOutRef), Data.unit))
             ),
             id = currentTxId
           ),

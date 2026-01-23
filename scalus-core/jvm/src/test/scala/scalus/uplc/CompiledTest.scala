@@ -1,8 +1,8 @@
 package scalus.uplc
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
 import scalus.compiler.Options
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM

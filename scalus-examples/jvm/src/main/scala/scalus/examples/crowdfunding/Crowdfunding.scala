@@ -1,12 +1,12 @@
 package scalus.examples.crowdfunding
 
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.Options
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 import scalus.Compile
 
@@ -682,8 +682,8 @@ object CrowdfundingValidator extends Validator {
             case List.Nil            => fail("Must consume at least one UTxO")
 
         // Hash the serialized TxOutRef to get a 32-byte campaign ID (AssetName limit)
-        val campaignId = scalus.builtin.Builtins.blake2b_256(
-          scalus.builtin.Builtins.serialiseData(consumedUtxo.toData)
+        val campaignId = scalus.uplc.builtin.Builtins.blake2b_256(
+          scalus.uplc.builtin.Builtins.serialiseData(consumedUtxo.toData)
         )
 
         // 5. Verify exactly one campaign NFT is minted

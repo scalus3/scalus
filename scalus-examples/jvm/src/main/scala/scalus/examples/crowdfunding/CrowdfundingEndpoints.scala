@@ -1,12 +1,12 @@
 package scalus.examples.crowdfunding
 
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Script, ScriptHash, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
-import scalus.ledger.api.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.uplc.PlutusV3
 
 import java.time.Instant
@@ -106,12 +106,12 @@ class CrowdfundingEndpoints(
             // Use first UTxO to derive campaign ID (same as validator does)
             // Hash the serialized TxOutRef to get a 32-byte campaign ID (AssetName limit)
             firstUtxo = utxos.head
-            txOutRef = scalus.ledger.api.v3.TxOutRef(
-              scalus.ledger.api.v3.TxId(firstUtxo._1.transactionId),
+            txOutRef = scalus.cardano.onchain.plutus.v3.TxOutRef(
+              scalus.cardano.onchain.plutus.v3.TxId(firstUtxo._1.transactionId),
               firstUtxo._1.index
             )
-            campaignId = scalus.builtin.Builtins.blake2b_256(
-              scalus.builtin.Builtins.serialiseData(txOutRef.toData)
+            campaignId = scalus.uplc.builtin.Builtins.blake2b_256(
+              scalus.uplc.builtin.Builtins.serialiseData(txOutRef.toData)
             )
 
             // Compute donation policy ID for this campaign
@@ -367,7 +367,7 @@ class CrowdfundingEndpoints(
                       BigInt(inputIdx),
                       BigInt(campaignOutputIdx),
                       BigInt(recipientOutputIdx),
-                      scalus.prelude.List.from(donationInputIndices)
+                      scalus.cardano.onchain.plutus.prelude.List.from(donationInputIndices)
                     )
                     .toData
             }
@@ -525,8 +525,8 @@ class CrowdfundingEndpoints(
                     .Reclaim(
                       BigInt(inputIdx),
                       BigInt(campaignOutputIdx),
-                      scalus.prelude.List.from(donationInputIndices),
-                      scalus.prelude.List.from(reclaimerOutputIndices)
+                      scalus.cardano.onchain.plutus.prelude.List.from(donationInputIndices),
+                      scalus.cardano.onchain.plutus.prelude.List.from(reclaimerOutputIndices)
                     )
                     .toData
             }

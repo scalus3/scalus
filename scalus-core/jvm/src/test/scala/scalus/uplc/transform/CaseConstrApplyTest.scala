@@ -2,8 +2,8 @@ package scalus.uplc.transform
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.ledger.ExUnits.given
 import scalus.cardano.ledger.{ExUnits, Word64}
 import scalus.compiler.sir.TargetLoweringBackend

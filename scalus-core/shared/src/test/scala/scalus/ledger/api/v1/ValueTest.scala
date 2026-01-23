@@ -1,10 +1,10 @@
-package scalus.ledger.api.v1
+package scalus.cardano.onchain.plutus.v1
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data.{fromData, toData}
-import scalus.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.Data.{fromData, toData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.ledger.LedgerToPlutusTranslation
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
 class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
@@ -121,10 +121,10 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         val sir = scalus.compiler.compile {
             // (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             (d: Data) =>
-                import scalus.prelude.*
+                import scalus.cardano.onchain.plutus.prelude.*
                 val list = Data.fromData[
-                  scalus.prelude.List[
-                    (PolicyId, scalus.prelude.List[(TokenName, BigInt)])
+                  scalus.cardano.onchain.plutus.prelude.List[
+                    (PolicyId, scalus.cardano.onchain.plutus.prelude.List[(TokenName, BigInt)])
                   ]
                 ](d)
                 // val validList = list
@@ -170,7 +170,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         }
         /*
         import scalus.*
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         import scalus.uplc.*
 
         println(s"sir=${sir.pretty.render(100)}")
@@ -183,7 +183,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         val listFromDataSir = scalus.compiler.compile { (x: Data) =>
             Data.fromData[
-              scalus.prelude.List[(PolicyId, scalus.prelude.List[(TokenName, BigInt)])]
+              scalus.cardano.onchain.plutus.prelude.List[(PolicyId, scalus.cardano.onchain.plutus.prelude.List[(TokenName, BigInt)])]
             ](x)
         }
 

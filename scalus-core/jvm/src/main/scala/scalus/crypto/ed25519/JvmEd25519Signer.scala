@@ -3,7 +3,7 @@ package scalus.crypto.ed25519
 import org.bouncycastle.crypto.digests.SHA512Digest
 import org.bouncycastle.crypto.params.{Ed25519PrivateKeyParameters, Ed25519PublicKeyParameters}
 import org.bouncycastle.crypto.signers.Ed25519Signer as BCSigner
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** JVM implementation of Ed25519Signer using BouncyCastle. */
 object JvmEd25519Signer extends Ed25519Signer:

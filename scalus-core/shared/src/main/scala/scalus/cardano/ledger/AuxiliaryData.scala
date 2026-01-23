@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable
 

@@ -1,13 +1,13 @@
 package scalus.examples.crowdfunding
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
-import scalus.builtin.Data.toData
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.ledger.api.v3.ScriptInfo.SpendingScript
-import scalus.prelude.{List, Option}
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
+import scalus.cardano.onchain.plutus.prelude.{List, Option}
 import scalus.testing.kit.ScalusTest
 
 class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
@@ -40,8 +40,8 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
         val goal = BigInt(10_000_000)
 
         val txOutRef = random[TxOutRef]
-        val campaignId = scalus.builtin.Builtins.blake2b_256(
-          scalus.builtin.Builtins.serialiseData(txOutRef.toData)
+        val campaignId = scalus.uplc.builtin.Builtins.blake2b_256(
+          scalus.uplc.builtin.Builtins.serialiseData(txOutRef.toData)
         )
         val policyId = crowdfundingContract.script.scriptHash
 

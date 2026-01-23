@@ -1,6 +1,6 @@
 package scalus.cardano.ledger
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 import scala.collection.immutable.SortedMap
 import scala.jdk.CollectionConverters.*

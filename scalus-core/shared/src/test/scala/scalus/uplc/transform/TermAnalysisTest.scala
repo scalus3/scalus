@@ -4,7 +4,7 @@ package transform
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.Constant.given
-import scalus.builtin.ByteString.hex
+import scalus.uplc.builtin.ByteString.hex
 import DefaultFun.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.Word64

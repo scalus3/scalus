@@ -1,8 +1,8 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.prelude.*
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.*
 
 /** This design pattern couples the spend and minting endpoints of a validator, in order to have
   * minimal spend costs, in exchange for a single execution of the minting endpoint. In other words,

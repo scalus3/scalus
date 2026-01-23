@@ -11,9 +11,9 @@ class HzMinCompilationTest extends AnyFunSuite {
         //    HzMinValidator.validate
         // }
 
-        import scalus.builtin.ByteString
-        import scalus.ledger.api.v1.Value
-        import scalus.prelude.{List, SortedMap}
+        import scalus.uplc.builtin.ByteString
+        import scalus.cardano.onchain.plutus.v1.Value
+        import scalus.cardano.onchain.plutus.prelude.{List, SortedMap}
 
         val sir1 = compile { (value: Value) =>
             val headMp = ByteString.fromHex("03")

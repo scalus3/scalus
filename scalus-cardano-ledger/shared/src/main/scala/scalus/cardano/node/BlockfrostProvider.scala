@@ -1,6 +1,6 @@
 package scalus.cardano.node
 
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import scalus.cardano.ledger.*
 import scalus.utils.Hex.hexToBytes

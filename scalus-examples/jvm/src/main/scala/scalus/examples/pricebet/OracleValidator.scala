@@ -1,12 +1,12 @@
 package scalus.examples.pricebet
 
 import scalus.Compile
-import scalus.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.ledger.api.v2
-import scalus.ledger.api.v3.{TxInfo, TxOutRef}
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.prelude.*
 
 // Parameter
 case class OracleConfig(
@@ -41,7 +41,7 @@ object OracleValidator extends DataParameterizedValidator {
     inline def mint(
         param: Data,
         redeemer: Data,
-        policyId: scalus.ledger.api.v3.PolicyId,
+        policyId: scalus.cardano.onchain.plutus.v3.PolicyId,
         tx: TxInfo
     ): Unit = {
         val mintRedeemer = redeemer.to[MintOracleRedeemer]
@@ -134,7 +134,7 @@ object OracleValidator extends DataParameterizedValidator {
             case SpendOracleRedeemer.Burn =>
                 // Verify the beacon token is being burned in this transaction
                 val ownScriptHash = ownInput.resolved.address.credential match {
-                    case scalus.ledger.api.v1.Credential.ScriptCredential(hash) => hash
+                    case scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential(hash) => hash
                     case _ => fail("Own input must be a script")
                 }
                 val burnedAmount = tx.mint.quantityOf(ownScriptHash, config.beaconName)

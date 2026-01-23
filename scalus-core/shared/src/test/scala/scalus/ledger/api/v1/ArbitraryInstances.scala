@@ -1,10 +1,10 @@
-package scalus.ledger.api.v1
+package scalus.cardano.onchain.plutus.v1
 
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.*
-import scalus.builtin.ByteString
-import scalus.prelude.{List, Option, Ord, Order}
+import scalus.uplc.builtin.ByteString
+import scalus.cardano.onchain.plutus.prelude.{List, Option, Ord, Order}
 import scalus.testing.ArbitraryDerivation.autoDerived
 import scalus.uplc.test
 

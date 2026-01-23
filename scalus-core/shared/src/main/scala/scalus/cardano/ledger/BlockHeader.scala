@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Represents a block header in Cardano */
 case class BlockHeader(

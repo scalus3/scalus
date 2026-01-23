@@ -2,9 +2,9 @@ package scalus.testing.kit
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.ByteString.*
-import scalus.ledger.api.v1.*
-import scalus.prelude.Option.*
+import scalus.uplc.builtin.ByteString.*
+import scalus.cardano.onchain.plutus.v1.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.testing.assertions.Expected
 import scalus.uplc.*
 import scalus.uplc.eval.{BuiltinError, PlutusVM}

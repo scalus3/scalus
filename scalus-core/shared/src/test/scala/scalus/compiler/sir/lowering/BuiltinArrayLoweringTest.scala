@@ -2,8 +2,8 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.{BuiltinArray, Data}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinArray, Data}
 import scalus.compiler.compile
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.{Constant, Term}

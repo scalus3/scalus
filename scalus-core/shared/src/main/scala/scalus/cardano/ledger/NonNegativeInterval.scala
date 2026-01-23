@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import upickle.default.{readwriter as upickleReadwriter, ReadWriter as UpickleReadWriter}
-import scalus.builtin.{BuiltinList, Data, FromData, ToData}
-import scalus.builtin.Builtins.{iData, listData, unIData, unListData}
+import scalus.uplc.builtin.{BuiltinList, Data, FromData, ToData}
+import scalus.uplc.builtin.Builtins.{iData, listData, unIData, unListData}
 
 import scala.annotation.tailrec
 

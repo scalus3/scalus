@@ -2,8 +2,8 @@ package scalus.testing.regression.binocularmin20250826
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.uplc.Program

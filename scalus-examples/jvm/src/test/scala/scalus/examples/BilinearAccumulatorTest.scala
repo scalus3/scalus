@@ -1,12 +1,12 @@
 package scalus
 package examples
 
-import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element}
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element}
+import scalus.uplc.builtin.ByteString.*
 import scalus.examples.BilinearAccumulator.checkMembership
 import scalus.examples.BilinearAccumulator.checkNonMembership
 import scalus.examples.BilinearAccumulator.getFinalPoly
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.List
 import scalus.testing.kit.BaseValidatorTest
 
 import scala.language.implicitConversions

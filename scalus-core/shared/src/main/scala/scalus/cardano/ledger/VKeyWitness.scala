@@ -3,7 +3,7 @@ package scalus.cardano.ledger
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.{Codec, Decoder, Encoder, Writer}
 import org.typelevel.paiges.Doc
-import scalus.builtin.{platform, ByteString, given}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.utils.{Pretty, Style}
 
 /** Represents a verification key witness in Cardano */

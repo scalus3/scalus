@@ -1,6 +1,6 @@
 package scalus.cardano.ledger
 
-import scalus.builtin.{platform, ByteString, Data, given}
+import scalus.uplc.builtin.{platform, ByteString, Data, given}
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 
 import scala.collection.immutable.{ListMap, TreeSet}

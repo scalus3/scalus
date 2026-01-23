@@ -1,12 +1,12 @@
 package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.*
-import scalus.builtin.{Builtins, ByteString, JVMPlatformSpecific}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.{Builtins, ByteString, JVMPlatformSpecific}
 import scalus.cardano.ledger.{CardanoInfo, Language}
 import scalus.compiler.sir.*
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1.*
+import scalus.cardano.onchain.plutus.v1.*
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
@@ -44,7 +44,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
 
     test("compile match on a case class") {
         val compiled = compile {
-            val pkh = new scalus.ledger.api.v1.PubKeyHash(hex"deadbeef")
+            val pkh = new scalus.cardano.onchain.plutus.v1.PubKeyHash(hex"deadbeef")
             pkh match
                 case PubKeyHash(hash) => hash
         }
@@ -53,8 +53,8 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("compile match on ADT") {
-        import scalus.prelude.List
-        import scalus.prelude.List.*
+        import scalus.cardano.onchain.plutus.prelude.List
+        import scalus.cardano.onchain.plutus.prelude.List.*
         val compiled = compile {
             val ls: List[BigInt] = single(BigInt(1))
             ls match
@@ -67,7 +67,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("compile wildcard match on ADT") {
-        import scalus.prelude.These
+        import scalus.cardano.onchain.plutus.prelude.These
         val compiled = compile {
             val t: These[BigInt, Boolean] = new These.This(BigInt(1))
             t match
@@ -80,8 +80,8 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("compile inner matches") {
-        import scalus.prelude.List
-        import scalus.prelude.List.*
+        import scalus.cardano.onchain.plutus.prelude.List
+        import scalus.cardano.onchain.plutus.prelude.List.*
         val compiled = compile {
             val ls: List[(BigInt, TxOutRef)] =
                 List.single((1, new TxOutRef(new TxId(hex"deadbeef"), 2)))
@@ -103,7 +103,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("? operator produces a debug log") {
-        import scalus.prelude.?
+        import scalus.cardano.onchain.plutus.prelude.?
         val compiled = compile {
             val oneEqualsTwo = BigInt(1) == BigInt(2)
             oneEqualsTwo.?
@@ -173,7 +173,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("compile varargs") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile {
             def sum(x: BigInt*): BigInt = {
                 x.list.foldLeft(BigInt(0))(_ + _)
@@ -189,7 +189,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
     }
 
     test("compile inner matches on enum") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val sir = compile { (x: List[Option[BigInt]]) =>
             x match
                 case List.Cons(Option.Some(v), _) => v

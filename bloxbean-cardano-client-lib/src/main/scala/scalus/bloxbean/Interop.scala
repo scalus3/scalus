@@ -11,18 +11,18 @@ import com.bloxbean.cardano.client.transaction.spec.governance.*
 import com.bloxbean.cardano.client.transaction.spec.governance.actions.*
 import com.bloxbean.cardano.client.transaction.util.TransactionUtil
 import io.bullet.borer.Cbor
-import scalus.builtin.Builtins.*
-import scalus.builtin.Data.{toData, ToData}
-import scalus.builtin.{BuiltinPair, ByteString, Data, ToData}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data.{toData, ToData}
+import scalus.uplc.builtin.{BuiltinPair, ByteString, Data, ToData}
 import scalus.cardano.ledger.{CostModels, DatumOption, Hash, Language, MajorProtocolVersion, Script, ScriptRef, SlotConfig, TransactionHash, TransactionInput as ScalusTransactionInput, TransactionOutput as ScalusTransactionOutput}
 import scalus.cardano.ledger.BloxbeanToLedgerTranslation.toLedgerValue
 import scalus.utils.Hex.hexToBytes
 import scalus.ledger.api
-import scalus.ledger.api.v1.{DCert, ScriptPurpose, StakingCredential}
-import scalus.ledger.api.v3.GovernanceActionId
-import scalus.ledger.api.{v1, v2, v3}
-import scalus.prelude.List.toScalaList
-import scalus.prelude.{asScalus, List as PList, SortedMap}
+import scalus.cardano.onchain.plutus.v1.{DCert, ScriptPurpose, StakingCredential}
+import scalus.cardano.onchain.plutus.v3.GovernanceActionId
+import scalus.cardano.onchain.plutus.{v1, v2, v3}
+import scalus.cardano.onchain.plutus.prelude.List.toScalaList
+import scalus.cardano.onchain.plutus.prelude.{asScalus, List as PList, SortedMap}
 import scalus.uplc.eval.*
 import scalus.{builtin, ledger, prelude}
 
@@ -143,7 +143,7 @@ object Interop {
     }
 
     /** Converts Cardano Client Lib's [[com.bloxbean.cardano.client.plutus.spec.PlutusData]] to
-      * Scalus' [[scalus.builtin.Data]]
+      * Scalus' [[scalus.uplc.builtin.Data]]
       */
     extension (datum: PlutusData)
         def toScalusData: Data = {
@@ -166,7 +166,7 @@ object Interop {
                     Data.B(ByteString.fromArray(b.getValue))
         }
 
-    /** Converts Scalus' [[scalus.builtin.Data]] to Cardano Client Lib's
+    /** Converts Scalus' [[scalus.uplc.builtin.Data]] to Cardano Client Lib's
       * [[com.bloxbean.cardano.client.plutus.spec.PlutusData]]
       */
     def toPlutusData(data: Data): PlutusData = {

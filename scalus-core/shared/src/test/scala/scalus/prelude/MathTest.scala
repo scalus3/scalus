@@ -2,9 +2,9 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.ExUnits
-import scalus.prelude.Math.*
-import scalus.prelude.Option.None
-import scalus.prelude.Option.Some
+import scalus.cardano.onchain.plutus.prelude.Math.*
+import scalus.cardano.onchain.plutus.prelude.Option.None
+import scalus.cardano.onchain.plutus.prelude.Option.Some
 import scalus.testing.kit.EvalTestKit
 
 class MathTest extends AnyFunSuite with EvalTestKit:

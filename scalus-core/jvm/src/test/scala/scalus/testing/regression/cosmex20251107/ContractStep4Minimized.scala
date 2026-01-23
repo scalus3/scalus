@@ -1,8 +1,8 @@
 package scalus.testing.regression.cosmex20251107.minimized
 import scalus.*
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 case class Snapshot(version: BigInt)
 

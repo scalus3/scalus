@@ -1,11 +1,11 @@
 package scalus.examples.simpletransfer
 
 import scalus.Compile
-import scalus.builtin.{Data, FromData, ToData}
-import scalus.ledger.api.v1.PubKeyHash
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.{Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 // Datum
 case class Parties(

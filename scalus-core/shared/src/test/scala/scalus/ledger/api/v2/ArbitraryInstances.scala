@@ -1,10 +1,10 @@
-package scalus.ledger.api.v2
+package scalus.cardano.onchain.plutus.v2
 
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.DataHash
-import scalus.ledger.api.v1
+import scalus.cardano.onchain.plutus.v1
 import scalus.testing.ArbitraryDerivation.autoDerived
 
 object ArbitraryInstances extends ArbitraryInstances

@@ -2,7 +2,7 @@ package scalus.cardano.blueprint
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.{Language, PlutusScript, Script}
 import scalus.uplc.PlutusV3
 import scalus.utils.BuildInfo

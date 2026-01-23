@@ -1,11 +1,11 @@
-package scalus.ledger.api.v3
+package scalus.cardano.onchain.plutus.v3
 
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.*
-import scalus.ledger.api.v1.{Interval, PubKeyHash, Value}
-import scalus.ledger.api.v2
-import scalus.prelude.{List, SortedMap}
+import scalus.cardano.onchain.plutus.v1.{Interval, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.prelude.{List, SortedMap}
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends v2.ArbitraryInstances {

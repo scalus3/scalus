@@ -1,13 +1,13 @@
 package scalus
 package examples
 
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data
 import scalus.compiler.compile
-import scalus.ledger.api.v1.*
-import scalus.ledger.api.v2
-import scalus.prelude.*
-import scalus.prelude.Option.*
+import scalus.cardano.onchain.plutus.v1.*
+import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.testing.assertions.Expected
 import scalus.testing.kit.BaseValidatorTest
 import scalus.uplc.TermDSL.given
@@ -17,35 +17,41 @@ import scala.language.implicitConversions
 
 class MintingPolicyExampleTest extends BaseValidatorTest {
 
-    private def scriptContextV1(txInfoInputs: scalus.prelude.List[TxInInfo], value: Value) =
+    private def scriptContextV1(
+        txInfoInputs: scalus.cardano.onchain.plutus.prelude.List[TxInInfo],
+        value: Value
+    ) =
         ScriptContext(
           TxInfo(
             inputs = txInfoInputs,
-            outputs = scalus.prelude.List.Nil,
+            outputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
             fee = Value.lovelace(BigInt("188021")),
             mint = value,
-            dcert = scalus.prelude.List.Nil,
-            withdrawals = scalus.prelude.List.Nil,
+            dcert = scalus.cardano.onchain.plutus.prelude.List.Nil,
+            withdrawals = scalus.cardano.onchain.plutus.prelude.List.Nil,
             validRange = Interval.always,
-            signatories = scalus.prelude.List.Nil,
-            data = scalus.prelude.List.Nil,
+            signatories = scalus.cardano.onchain.plutus.prelude.List.Nil,
+            data = scalus.cardano.onchain.plutus.prelude.List.Nil,
             id = TxId(hex"1e0612fbd127baddfcd555706de96b46c4d4363ac78c73ab4dee6e6a7bf61fe9")
           ),
           ScriptPurpose.Minting(hex"a0028f350aaabe0545fdcb56b039bfb08e4bb4d8c4d7c3c7d481c235")
         )
 
-    private def scriptContextV2(txInfoInputs: scalus.prelude.List[v2.TxInInfo], value: Value) =
+    private def scriptContextV2(
+        txInfoInputs: scalus.cardano.onchain.plutus.prelude.List[v2.TxInInfo],
+        value: Value
+    ) =
         v2.ScriptContext(
           v2.TxInfo(
             inputs = txInfoInputs,
-            referenceInputs = scalus.prelude.List.Nil,
-            outputs = scalus.prelude.List.Nil,
+            referenceInputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
+            outputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
             fee = Value.lovelace(BigInt("188021")),
             mint = value,
-            dcert = scalus.prelude.List.Nil,
+            dcert = scalus.cardano.onchain.plutus.prelude.List.Nil,
             withdrawals = SortedMap.empty,
             validRange = Interval.always,
-            signatories = scalus.prelude.List.Nil,
+            signatories = scalus.cardano.onchain.plutus.prelude.List.Nil,
             redeemers = SortedMap.empty,
             data = SortedMap.empty,
             id = TxId(hex"1e0612fbd127baddfcd555706de96b46c4d4363ac78c73ab4dee6e6a7bf61fe9")
@@ -55,7 +61,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
 
     def withScriptContextV1(
         validator: Term,
-        txInfoInputs: scalus.prelude.List[TxInInfo],
+        txInfoInputs: scalus.cardano.onchain.plutus.prelude.List[TxInInfo],
         value: Value
     ) =
         import Data.toData
@@ -63,7 +69,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
 
     def withScriptContextV2(
         validator: Term,
-        txInfoInputs: scalus.prelude.List[TxInInfo],
+        txInfoInputs: scalus.cardano.onchain.plutus.prelude.List[TxInInfo],
         value: Value
     ) =
         import Data.toData
@@ -76,7 +82,13 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
 
     private def performMintingPolicyValidatorChecks(
         validator: Term
-    )(withScriptContext: (Term, scalus.prelude.List[TxInInfo], Value) => Program) = {
+    )(
+        withScriptContext: (
+            Term,
+            scalus.cardano.onchain.plutus.prelude.List[TxInInfo],
+            Value
+        ) => Program
+    ) = {
         // The minting policy script should succeed when the TxOutRef is spent and the minted tokens are correct
         assertEvalResult(Expected.success(()))(
           withScriptContext(

@@ -3,7 +3,7 @@ package scalus.cardano.onchain.plutus.prelude.crypto.bls12_381
 import scalus.Compile
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{BLS12_381_G2_Element, ByteString, PlatformSpecific}
-import scalus.prelude.Eq
+import scalus.cardano.onchain.plutus.prelude.Eq
 
 import scala.annotation.nowarn
 

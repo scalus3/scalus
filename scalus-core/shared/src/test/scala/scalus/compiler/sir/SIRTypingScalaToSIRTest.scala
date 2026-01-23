@@ -106,8 +106,8 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
     }
 
     test("check that apply with implicit parameters is mapped to corret SIR.Apply") {
-        import scalus.builtin.ByteString
-        import scalus.prelude.*
+        import scalus.uplc.builtin.ByteString
+        import scalus.cardano.onchain.plutus.prelude.*
         val sir = compile {
             (l: scalus.cardano.onchain.plutus.prelude.List[ByteString], v: ByteString) =>
                 l.contains(v)
@@ -169,7 +169,7 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
     }
 
     test("sirtype from Eq[B] should be a function") {
-        val sir = compile { (x: scalus.prelude.Eq[BigInt]) => x }
+        val sir = compile { (x: scalus.cardano.onchain.plutus.prelude.Eq[BigInt]) => x }
         // println(s"sir.tp=${sir.tp.show}")
         sir.tp match {
             case SIRType.Fun(x1, y1) =>

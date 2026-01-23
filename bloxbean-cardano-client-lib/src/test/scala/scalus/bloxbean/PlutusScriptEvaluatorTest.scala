@@ -3,8 +3,8 @@ package scalus.bloxbean
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.bloxbean.Interop.??
-import scalus.builtin.ByteString.*
-import scalus.builtin.{platform, ByteString, Data}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.{platform, ByteString, Data}
 import scalus.cardano.address.Address.addr
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*

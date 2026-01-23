@@ -1,6 +1,5 @@
 package scalus.uplc
 
-import scalus.uplc.builtin
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.uplc.DefaultUni.{decodeUni, encodeUni, flatForUni}
 

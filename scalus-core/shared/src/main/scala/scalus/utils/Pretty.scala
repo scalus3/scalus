@@ -4,7 +4,7 @@ import org.typelevel.paiges
 import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
 import org.typelevel.paiges.Style.XTerm.Fg
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 import scala.compiletime.{constValue, erasedValue, summonInline}
 import scala.deriving.Mirror

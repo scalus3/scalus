@@ -1,6 +1,6 @@
 package scalus.crypto.ed25519
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Cross-platform Ed25519 signing capability.
   *

@@ -7,7 +7,7 @@ import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.Constant.given
 import scalus.uplc.eval.*
-import scalus.builtin.*
+import scalus.uplc.builtin.*
 
 /*
 
@@ -80,7 +80,7 @@ class DerivingTest extends AnyFunSuite {
     test("Compile To/From Data for AE1") {
 
         val sir = compile { (d: Data) =>
-            val a = summon[scalus.prelude.FromData[AE1]](d)
+            val a = summon[scalus.cardano.onchain.plutus.prelude.FromData[AE1]](d)
             a match
                 case AE1.A        => BigInt(1)
                 case AE1.B(b)     => BigInt(2)
@@ -107,7 +107,7 @@ class DerivingTest extends AnyFunSuite {
                 println(s"logs=${logs}")
 
                 println("loading module")
-                val module = SIRModules.load("scalus.prelude.DerivingSpecScope$.AE1$")
+                val module = SIRModules.load("scalus.cardano.onchain.plutus.prelude.DerivingSpecScope$.AE1$")
 
                 module.defs.foreach { b =>
                     println(s"${b.name}:\n ${b.value.pretty.render(100)}")
@@ -148,7 +148,7 @@ class DerivingTest extends AnyFunSuite {
                 println(s"logs=${logs}")
 
                 // println("loading module")
-                // val module = SIRModules.load("scalus.prelude.DerivingSpec_AE3$")
+                // val module = SIRModules.load("scalus.cardano.onchain.plutus.prelude.DerivingSpec_AE3$")
                 // module.defs.foreach { b =>
                 //    println(s"${b.name}:\n ${b.value.pretty.render(100)}")
                 // }

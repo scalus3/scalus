@@ -2,10 +2,10 @@ package scalus.compiler.sir
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.*
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.*
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 class SIRTypeSerializationTest extends AnyFunSuite {
 
@@ -52,13 +52,14 @@ class SIRTypeSerializationTest extends AnyFunSuite {
               datum = OutputDatum.NoOutputDatum,
               referenceScript = prelude.Option.None
             )
-            val inputs = scalus.prelude.List.single(new TxInInfo(outRef, outRefResolved))
+            val inputs = scalus.cardano.onchain.plutus.prelude.List
+                .single(new TxInInfo(outRef, outRefResolved))
             val credential2 =
                 new Credential.PubKeyCredential(new PubKeyHash(ByteString.fromString("5")))
             val addressOut =
                 new Address(credential = credential2, stakingCredential = prelude.Option.None)
             val valueOut = Value(ByteString.empty, ByteString.empty, 2)
-            val outputs = scalus.prelude.List.single(
+            val outputs = scalus.cardano.onchain.plutus.prelude.List.single(
               new TxOut(addressOut, valueOut, OutputDatum.NoOutputDatum, prelude.Option.None)
             )
             val txId = new TxId(ByteString.fromString("0x123456789"))
@@ -66,19 +67,19 @@ class SIRTypeSerializationTest extends AnyFunSuite {
             val mint = Value.zero
             def txInfo = new TxInfo(
               inputs = inputs,
-              referenceInputs = scalus.prelude.List.empty,
+              referenceInputs = scalus.cardano.onchain.plutus.prelude.List.empty,
               outputs = outputs,
               fee = fee,
               mint = mint,
-              certificates = scalus.prelude.List.empty,
+              certificates = scalus.cardano.onchain.plutus.prelude.List.empty,
               withdrawals = SortedMap.empty,
               validRange = Interval.always,
-              signatories = scalus.prelude.List.empty,
+              signatories = scalus.cardano.onchain.plutus.prelude.List.empty,
               redeemers = SortedMap.empty,
               data = SortedMap.empty,
               id = txId,
               votes = SortedMap.empty,
-              proposalProcedures = scalus.prelude.List.empty,
+              proposalProcedures = scalus.cardano.onchain.plutus.prelude.List.empty,
               currentTreasuryAmount = prelude.Option.None,
               treasuryDonation = prelude.Option.None
             )

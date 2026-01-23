@@ -1,11 +1,11 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.builtin.Data
-import scalus.ledger.api.v1.{Credential, ValidatorHash}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.v1.{Credential, ValidatorHash}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 import scala.annotation.tailrec
 

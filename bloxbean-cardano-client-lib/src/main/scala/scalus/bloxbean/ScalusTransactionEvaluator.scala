@@ -8,10 +8,10 @@ import com.bloxbean.cardano.client.plutus.spec.*
 import com.bloxbean.cardano.client.transaction.spec.{Transaction, TransactionInput, TransactionOutput}
 import com.bloxbean.cardano.client.transaction.util.TransactionUtil
 import com.bloxbean.cardano.client.util.JsonUtil
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{MajorProtocolVersion, PlutusScriptEvaluationException, PlutusScriptEvaluator, SlotConfig}
-import scalus.ledger.api.ScriptContext
+import scalus.cardano.onchain.plutus.ScriptContext
 import scalus.uplc.eval.ExBudget
 
 import java.math.BigInteger
@@ -246,7 +246,7 @@ class ScalusTransactionEvaluator(
     def evaluateTx(
         transaction: Transaction,
         inputUtxos: util.Set[Utxo],
-        datums: util.List[scalus.builtin.ByteString],
+        datums: util.List[scalus.uplc.builtin.ByteString],
         txhash: String
     ): Result[util.List[EvaluationResult]] = ???
 
@@ -255,7 +255,7 @@ class ScalusTransactionEvaluator(
     def evaluateTxWithContexts(
         transaction: Transaction,
         inputUtxos: util.Set[Utxo],
-        datums: util.List[scalus.builtin.ByteString],
+        datums: util.List[scalus.uplc.builtin.ByteString],
         txhash: String
     ): Either[TxEvaluationException, collection.Seq[(EvaluationResult, ScriptContext)]] = ???
 }
@@ -444,7 +444,7 @@ class LegacyScalusTransactionEvaluator(
     def evaluateTx(
         transaction: Transaction,
         inputUtxos: util.Set[Utxo],
-        datums: util.List[scalus.builtin.ByteString],
+        datums: util.List[scalus.uplc.builtin.ByteString],
         txhash: String
     ): Result[util.List[EvaluationResult]] =
         try {
@@ -469,7 +469,7 @@ class LegacyScalusTransactionEvaluator(
     def evaluateTxWithContexts(
         transaction: Transaction,
         inputUtxos: util.Set[Utxo],
-        datums: util.List[scalus.builtin.ByteString],
+        datums: util.List[scalus.uplc.builtin.ByteString],
         txhash: String
     ): Either[TxEvaluationException, collection.Seq[(EvaluationResult, ScriptContext)]] =
         try {

@@ -2,11 +2,11 @@ package scalus.benchmarks
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.{multiplyInteger, remainderInteger}
+import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
 import scalus.cardano.ledger.{ExUnits, Language}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 
 class KnightsTest extends AnyFunSuite, ScalusTest:
@@ -164,7 +164,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val result = compile {
             val result = runKnights(100, 8)
 
-            import scalus.prelude.List.*
+            import scalus.cardano.onchain.plutus.prelude.List.*
             val expected: Solution = Cons(
               (
                 0,

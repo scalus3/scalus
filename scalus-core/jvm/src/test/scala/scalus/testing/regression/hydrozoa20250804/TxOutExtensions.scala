@@ -1,9 +1,9 @@
 package scalus.testing.regression.hydrozoa20250804
 
 import scalus.*
-import scalus.builtin.{Data, FromData}
-import scalus.ledger.api.v2.OutputDatum.OutputDatum
-import scalus.ledger.api.v3.TxOut
+import scalus.uplc.builtin.{Data, FromData}
+import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
+import scalus.cardano.onchain.plutus.v3.TxOut
 
 @Compile
 object TxOutExtensions {

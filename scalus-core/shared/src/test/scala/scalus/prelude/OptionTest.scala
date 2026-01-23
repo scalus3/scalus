@@ -2,9 +2,9 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data.{fromData, toData}
-import scalus.builtin.ByteString.hex
-import scalus.prelude.Option.{None, Some}
+import scalus.uplc.builtin.Data.{fromData, toData}
+import scalus.uplc.builtin.ByteString.hex
+import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
 import scalus.compiler.sir.SIR
 import scalus.testing.kit.EvalTestKit
 

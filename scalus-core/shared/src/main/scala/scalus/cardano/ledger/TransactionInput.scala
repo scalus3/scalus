@@ -3,8 +3,8 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.given
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.given
 import scalus.utils.{Pretty, Style}
 
 /** Represents an input to a transaction

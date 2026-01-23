@@ -2,11 +2,11 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
-import scalus.ledger.api.v1.PubKeyHash
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 
 import scala.language.implicitConversions

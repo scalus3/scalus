@@ -6,8 +6,8 @@ import org.scalacheck.{Gen, Shrink}
 import org.scalatest.compatible.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.ByteString.utf8
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.ByteString.utf8
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.*

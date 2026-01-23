@@ -1,8 +1,8 @@
 package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.{compileWithOptions, Options}
 import scalus.compiler.sir.TargetLoweringBackend

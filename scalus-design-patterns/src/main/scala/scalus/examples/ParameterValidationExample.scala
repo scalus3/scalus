@@ -1,13 +1,13 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.Data.toData
 import scalus.compiler.Options
-import scalus.ledger.api.v1.Value.*
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v1.Value.*
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.{ParameterValidation, ParameterValidationOnChain}
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 
 /** Parameter Validation Example - NFT with Verified Marketplace

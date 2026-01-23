@@ -3,7 +3,7 @@ package scalus.uplc
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.serialization.cbor.Cbor
 
 class DeBruijnedProgramTest extends AnyFunSuite {

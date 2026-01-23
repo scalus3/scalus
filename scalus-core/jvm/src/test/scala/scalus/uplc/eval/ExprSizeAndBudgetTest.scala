@@ -2,10 +2,10 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
-import scalus.builtin.{BuiltinList, ByteString, Data}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.ledger.ExUnits.given
 import scalus.compiler.sir.TargetLoweringBackend

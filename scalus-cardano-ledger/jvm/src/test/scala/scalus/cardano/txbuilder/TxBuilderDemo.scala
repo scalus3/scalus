@@ -1,8 +1,8 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Address.{addr, stake}
 import scalus.cardano.ledger.*
@@ -217,7 +217,7 @@ class TxBuilderDemo extends AnyFunSuite {
     }
 
     test("Blueprint usage examples") {
-        import scalus.builtin.Data.toData
+        import scalus.uplc.builtin.Data.toData
         import scalus.cardano.blueprint.Blueprint
         import scalus.cardano.ledger.Script
         import scalus.uplc.Program

@@ -4,7 +4,7 @@ import io.bullet.borer.*
 import io.bullet.borer.NullOptions.given
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
-import scalus.builtin.{platform, ByteString, given}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.serialization.cbor.Cbor
 import scalus.utils.{Pretty, Style}
 
@@ -203,7 +203,7 @@ object Transaction {
             // Plutus data
             if ws.plutusData.value.toMap.nonEmpty then
                 val dataDocs = ws.plutusData.value.toMap.values
-                    .map(kr => Pretty[scalus.builtin.Data].pretty(kr.value, style))
+                    .map(kr => Pretty[scalus.uplc.builtin.Data].pretty(kr.value, style))
                     .toList
                 fields += bulletList("datums", dataDocs)
 

@@ -2,11 +2,11 @@ package scalus.examples
 
 import scalus.Compile
 import scalus.builtin
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data
-import scalus.prelude.log
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.prelude.log
 
 @Compile
 object PubKeyValidator {
@@ -25,7 +25,7 @@ object PubKeyValidator {
     }
 
     inline def validatorV2(inline pubKey: ByteString)(datum: Unit, redeemer: Unit, ctx: Data) = {
-        import scalus.ledger.api.v2.ScriptContext
+        import scalus.cardano.onchain.plutus.v2.ScriptContext
         val signatories = ctx.field[ScriptContext](_.txInfo.signatories).toList
         log("got signatories")
 
@@ -40,7 +40,7 @@ object PubKeyValidator {
     }
 
     inline def validatorV3(inline pubKey: ByteString)(ctx: Data) = {
-        import scalus.ledger.api.v3.ScriptContext
+        import scalus.cardano.onchain.plutus.v3.ScriptContext
         val signatories = ctx.field[ScriptContext](_.txInfo.signatories).toList
         log("got signatories")
 

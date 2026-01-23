@@ -1,10 +1,10 @@
 package scalus.cardano.blueprint
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.blueprint.HtlcValidatorInputs.{Action, ContractDatum}
 import scalus.cardano.ledger.Language
-import scalus.ledger.api.v1.{IntervalBoundType, PosixTime}
+import scalus.cardano.onchain.plutus.v1.{IntervalBoundType, PosixTime}
 import scalus.uplc.PlutusV3
 
 // Copied from examples

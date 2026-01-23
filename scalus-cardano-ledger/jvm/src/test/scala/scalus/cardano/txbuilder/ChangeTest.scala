@@ -3,7 +3,7 @@ package scalus.cardano.txbuilder
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.ByteString.utf8
+import scalus.uplc.builtin.ByteString.utf8
 import scalus.cardano.address.{Address, Network, ShelleyAddress, ShelleyDelegationPart}
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.address.ShelleyPaymentPart.Key

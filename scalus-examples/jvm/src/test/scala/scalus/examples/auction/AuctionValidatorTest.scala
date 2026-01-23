@@ -1,14 +1,14 @@
 package scalus.examples.auction
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
-import scalus.ledger.api.v1.PosixTime
+import scalus.cardano.onchain.plutus.v1.PosixTime
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
@@ -131,7 +131,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
 }
 
 object AuctionValidatorTest extends ScalusTest {
-    import scalus.ledger.api.v3.{TxId, TxOutRef}
+    import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
     import scalus.cardano.node.BlockchainProvider
     import scalus.cardano.address.Network
 

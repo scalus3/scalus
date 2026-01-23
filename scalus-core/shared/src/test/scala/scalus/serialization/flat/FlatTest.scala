@@ -274,7 +274,7 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
     }
 
     test("encode/decode Constant") {
-        import scalus.builtin.Data.*
+        import scalus.uplc.builtin.Data.*
         val fl = summon[Flat[Constant]]
         assert(fl.bitSize(Constant.Unit) == 6)
         assert(fl.bitSize(Constant.Bool(true)) == 7)
@@ -295,7 +295,7 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
     }
 
     test("encode/decode Term") {
-        import scalus.builtin.Data.toData
+        import scalus.uplc.builtin.Data.toData
         val fl = summon[Flat[Term]]
         assert(fl.bitSize(Term.Error) == 4)
         assert(fl.bitSize(Term.Var(NamedDeBruijn("any name", 12))) == 12)

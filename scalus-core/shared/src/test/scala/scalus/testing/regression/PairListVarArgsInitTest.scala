@@ -5,7 +5,10 @@ import scalus.*
 import scalus.compiler.compile
 import scalus.uplc.eval.*
 
-case class PairListVarArgsInitCaseClass(name: String, pairs: scalus.prelude.List[(BigInt, BigInt)])
+case class PairListVarArgsInitCaseClass(
+    name: String,
+    pairs: scalus.cardano.onchain.plutus.prelude.List[(BigInt, BigInt)]
+)
 
 class PairListVarArgsInitTest extends AnyFunSuite {
 
@@ -20,7 +23,10 @@ class PairListVarArgsInitTest extends AnyFunSuite {
 
     test("initialization of struct  ehuch have list of pairs as varargs") {
         val sir = compile {
-            val expected = PairListVarArgsInitCaseClass("test", scalus.prelude.List((1, 2), (3, 4)))
+            val expected = PairListVarArgsInitCaseClass(
+              "test",
+              scalus.cardano.onchain.plutus.prelude.List((1, 2), (3, 4))
+            )
         }
         // println(sir.pretty.render(100))
         // val lw = sir.toLoweredValue()
@@ -34,7 +40,8 @@ class PairListVarArgsInitTest extends AnyFunSuite {
 
     test("initialization of case class with pairlist filds") {
         val sir = compile {
-            val list = scalus.prelude.List((BigInt(1), BigInt(2)), (BigInt(3), BigInt(4)))
+            val list = scalus.cardano.onchain.plutus.prelude
+                .List((BigInt(1), BigInt(2)), (BigInt(3), BigInt(4)))
             val expected = PairListVarArgsInitCaseClass("test", list)
         }
         val uplc = sir.toUplc(generateErrorTraces = true)

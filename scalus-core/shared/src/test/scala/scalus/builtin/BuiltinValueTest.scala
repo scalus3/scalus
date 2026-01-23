@@ -1,7 +1,7 @@
 package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{BuiltinValue, ByteString, Data}
+import scalus.uplc.builtin.{BuiltinValue, ByteString, Data}
 import scalus.uplc.Constant
 import scalus.uplc.eval.{BuiltinException, BuiltinValueOps}
 
@@ -186,8 +186,8 @@ class BuiltinValueTest extends AnyFunSuite {
     test("fromData rejects invalid key length") {
         val longKey = ByteString.fromArray(Array.fill(33)(0.toByte))
         val invalidData = Data.Map(
-          scalus.prelude.List(
-            (Data.B(longKey), Data.Map(scalus.prelude.List.empty))
+          scalus.cardano.onchain.plutus.prelude.List(
+            (Data.B(longKey), Data.Map(scalus.cardano.onchain.plutus.prelude.List.empty))
           )
         )
 

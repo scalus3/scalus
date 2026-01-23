@@ -1,18 +1,18 @@
 package scalus.patterns
 
-import scalus.builtin.Builtins
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.hex
-import scalus.builtin.ByteString.utf8
-import scalus.builtin.Data
-import scalus.builtin.Data.FromData
-import scalus.builtin.Data.ToData
-import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
-import scalus.prelude.Option.*
-import scalus.prelude.Ord.*
+import scalus.uplc.builtin.Builtins
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.ByteString.utf8
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.FromData
+import scalus.uplc.builtin.Data.ToData
+import scalus.cardano.onchain.plutus.v1.Address
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
+import scalus.cardano.onchain.plutus.prelude.Ord.*
 import scalus.{show as _, *}
 
 /** Linked list configuration parameter
@@ -42,12 +42,14 @@ type NodeKey = Option[TokenName]
   *
   * @param key
   *   Has unique key (unless it's the root node).
-  *   - [[scalus.prelude.Option.None]] means a head of the linked list
-  *   - [[scalus.prelude.Option.Some]] means a node of the linked list.
+  *   - [[scalus.cardano.onchain.plutus.prelude.Option.None]] means a head of the linked list
+  *   - [[scalus.cardano.onchain.plutus.prelude.Option.Some]] means a node of the linked list.
   * @param ref
   *   Has a unique link to another node's key (unless it's the last node of the list)
-  *   - [[scalus.prelude.Option.None]] means an end of the linked list (or empty head)
-  *   - [[scalus.prelude.Option.Some]] contains a reference key to the next node.
+  *   - [[scalus.cardano.onchain.plutus.prelude.Option.None]] means an end of the linked list (or
+  *     empty head)
+  *   - [[scalus.cardano.onchain.plutus.prelude.Option.Some]] contains a reference key to the next
+  *     node.
   * @param data
   *   User data stored in this node
   *
@@ -96,7 +98,7 @@ object Cons:
 
 /** The linked list node UTxO:
   *
-  * Representation of an [[scalus.ledger.api.v2.TxOut]] of the node for the
+  * Representation of an [[scalus.cardano.onchain.plutus.v2.TxOut]] of the node for the
   * [[scalus.patterns.Common]] argument with inputs and outputs of the transactions.
   *
   * @param value

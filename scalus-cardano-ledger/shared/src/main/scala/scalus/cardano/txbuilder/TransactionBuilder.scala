@@ -9,8 +9,8 @@ package scalus.cardano.txbuilder
 import io.bullet.borer.Encoder
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data, ToData}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.STS.Validator

@@ -14,12 +14,12 @@ import com.bloxbean.cardano.client.quicktx.{QuickTxBuilder, ScriptTx, Tx}
 import scalus.*
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
-import scalus.builtin.Data.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.*
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.SlotConfig
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compileWithOptions, Options}
-import scalus.ledger.api.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
 
 import java.util.Optional
 import scala.util.control.Breaks.*

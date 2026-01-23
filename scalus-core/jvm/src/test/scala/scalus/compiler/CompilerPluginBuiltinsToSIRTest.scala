@@ -3,8 +3,8 @@ package scalus.compiler
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin
-import scalus.builtin.ByteString.*
-import scalus.builtin.{Builtins, ByteString, Data, JVMPlatformSpecific}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.{Builtins, ByteString, Data, JVMPlatformSpecific}
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.Fun
@@ -1584,7 +1584,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         )
         val eqterm = eq.toUplc()
         val neterm = ne.toUplc()
-        import scalus.builtin.Data.toData
+        import scalus.uplc.builtin.Data.toData
         import scalus.uplc.TermDSL.given
 
         assert(

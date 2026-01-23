@@ -3,7 +3,7 @@ package rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress, StakeAddress, StakePayload}
 import TransactionWitnessSet.given
 import scala.collection.immutable.SortedMap
@@ -664,7 +664,8 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
 
     test("ExactSetOfRedeemersValidator success with native scripts (no redeemers needed)") {
         val (privateKey, publicKey) = generateKeyPair()
-        val nativeScript = Timelock.Signature(Hash(scalus.builtin.platform.blake2b_224(publicKey)))
+        val nativeScript =
+            Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
           input -> Output(
@@ -701,7 +702,8 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
 
     test("ExactSetOfRedeemersValidator success with mixed native and Plutus scripts") {
         val (privateKey, publicKey) = generateKeyPair()
-        val nativeScript = Timelock.Signature(Hash(scalus.builtin.platform.blake2b_224(publicKey)))
+        val nativeScript =
+            Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
 
         val input1 = Input(

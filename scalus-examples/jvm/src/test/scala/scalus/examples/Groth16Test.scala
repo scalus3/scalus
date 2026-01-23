@@ -1,13 +1,13 @@
 package scalus.examples
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
-import scalus.builtin.Data
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.Data
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.examples.Groth16.*
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.List
 import scalus.uplc.TermDSL.given
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{Constant, Term}

@@ -2,7 +2,7 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.RequirementError
-import scalus.builtin.Data.{fromData, toData, FromData}
+import scalus.uplc.builtin.Data.{fromData, toData, FromData}
 import scalus.testing.kit.EvalTestKit
 
 class SortedMapTest extends AnyFunSuite with EvalTestKit {
@@ -1449,8 +1449,8 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
     }
 
     test("from") {
-        import scalus.builtin.ByteString
-        import scalus.builtin.ByteString.{hex, given}
+        import scalus.uplc.builtin.ByteString
+        import scalus.uplc.builtin.ByteString.{hex, given}
 
         // Test with empty collection
         val emptyMap = SortedMap.from(scala.List.empty[(ByteString, BigInt)])

@@ -3,7 +3,7 @@ package rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
 import TransactionWitnessSet.given
 

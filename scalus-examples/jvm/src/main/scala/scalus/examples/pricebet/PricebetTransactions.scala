@@ -1,12 +1,12 @@
 package scalus.examples.pricebet
 
-import scalus.builtin.{ByteString, Data, FromData}
+import scalus.uplc.builtin.{ByteString, Data, FromData}
 import scalus.cardano.address.Address as OffchainAddress
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.ledger.api.v3.TxOutRef
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.TxOutRef
+import scalus.cardano.onchain.plutus.prelude.*
 
 import java.time.Instant
 

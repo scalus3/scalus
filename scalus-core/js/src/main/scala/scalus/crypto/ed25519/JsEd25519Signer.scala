@@ -4,7 +4,7 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.*
 import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
 import scala.scalajs.js.JSConverters.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 @JSImport("@noble/curves/ed25519", JSImport.Namespace)
 @js.native

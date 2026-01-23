@@ -2,7 +2,7 @@ package scalus.testing.regression.gr20251006
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 
@@ -16,8 +16,8 @@ import scala.util.{Failure, Success, Try}
   * recursion.
   *
   * The error was: "Cannot unify result type of apply: Proxy(X) -> BLS12_381_G1_Element ->
-  * BLS12_381_G1_Element and scalus.prelude.List[Int] -> BLS12_381_G1_Element ->
-  * BLS12_381_G1_Element"
+  * BLS12_381_G1_Element and scalus.cardano.onchain.plutus.prelude.List[Int] -> BLS12_381_G1_Element
+  * -> BLS12_381_G1_Element"
   */
 class Groth16MinimalTest extends AnyFunSuite:
 

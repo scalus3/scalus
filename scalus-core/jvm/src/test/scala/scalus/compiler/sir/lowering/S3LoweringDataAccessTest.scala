@@ -2,12 +2,12 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.*
-import scalus.builtin.ByteString.hex
+import scalus.uplc.builtin.*
+import scalus.uplc.builtin.ByteString.hex
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
@@ -132,8 +132,8 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
 
     test("IntervalBound data representation") {
         // Test each part separately then use in isEntirelyBefore
-        import scalus.builtin.Data.toData
-        import scalus.prelude.show
+        import scalus.uplc.builtin.Data.toData
+        import scalus.cardano.onchain.plutus.prelude.show
         val sir = compile { (data: Data) =>
             val intervalBound = data.to[IntervalBound]
             log("from:")
@@ -168,8 +168,8 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
             ctx.validRange.isEntirelyBefore(extracted)
         }
 
-        import scalus.builtin.Data.toData
-        import scalus.prelude.Option
+        import scalus.uplc.builtin.Data.toData
+        import scalus.cardano.onchain.plutus.prelude.Option
 
         val data = Option.Some(BigInt(86_400_000L)).toData
         val tx = TxInfo.placeholder
@@ -194,7 +194,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
     test("get txInfop.validRange from ScriptContext") {
         val sir =
             compile: (ctxData: Data) =>
-                import scalus.builtin.Data.toData
+                import scalus.uplc.builtin.Data.toData
                 val ctx = Data.fromData[ScriptContext](ctxData)
                 ctx.txInfo.validRange.toData
 
@@ -220,7 +220,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
           redeemer = Data.unit,
           scriptInfo = ScriptInfo.MintingScript(ByteString.empty)
         )
-        import scalus.builtin.Data.toData
+        import scalus.uplc.builtin.Data.toData
         val ctxData = ctx.toData
 
         // println(sir.showHighlighted)

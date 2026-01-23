@@ -1,18 +1,18 @@
 package scalus.examples.auction
 
 import scalus.Compile
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data, ToData}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.compiler.Options
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 
 import java.time.Instant

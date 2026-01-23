@@ -7,9 +7,12 @@ import scalus.compiler.compile
 class SIRTypeUnifyTest extends AnyFunSuite {
 
     test("Unification with upcasting [List and Cons]") {
-        val list1FunSir = compile { (x: scalus.prelude.List[BigInt]) => x }
+        val list1FunSir = compile { (x: scalus.cardano.onchain.plutus.prelude.List[BigInt]) => x }
         val consFunSir =
-            compile((x: BigInt) => scalus.prelude.List.Cons(x, scalus.prelude.List.Nil))
+            compile((x: BigInt) =>
+                scalus.cardano.onchain.plutus.prelude.List
+                    .Cons(x, scalus.cardano.onchain.plutus.prelude.List.Nil)
+            )
 
         val listTp = list1FunSir.tp match {
             case SIRType.Fun(x, tp) => tp
@@ -64,9 +67,10 @@ class SIRTypeUnifyTest extends AnyFunSuite {
 
     test("parentSeq fron Nil:List[Nothing] to List[Tuple2[BigInt, String]]") {
         // pending
-        val nilFun = compile { (x: scalus.prelude.List.Nil.type) => x }
-        val abList: SIR = compile { (x: scalus.prelude.List[(BigInt, String)]) =>
-            x
+        val nilFun = compile { (x: scalus.cardano.onchain.plutus.prelude.List.Nil.type) => x }
+        val abList: SIR = compile {
+            (x: scalus.cardano.onchain.plutus.prelude.List[(BigInt, String)]) =>
+                x
         }
 
         val nilListType = nilFun.tp match {
@@ -87,9 +91,10 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("parentSeq from Nil to List[Tuple]") {
-        val nilFun = compile { (x: scalus.prelude.List.Nil.type) => x }
-        val abList: SIR = compile { (x: scalus.prelude.List[(BigInt, String)]) =>
-            x
+        val nilFun = compile { (x: scalus.cardano.onchain.plutus.prelude.List.Nil.type) => x }
+        val abList: SIR = compile {
+            (x: scalus.cardano.onchain.plutus.prelude.List[(BigInt, String)]) =>
+                x
         }
         val nilListType = nilFun.tp match {
             case SIRType.Fun(_, tp) => tp

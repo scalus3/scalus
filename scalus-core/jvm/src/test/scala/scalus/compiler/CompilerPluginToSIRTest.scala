@@ -2,13 +2,13 @@ package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.ByteString.*
-import scalus.builtin.*
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.{Boolean, Fun, TypeVar}
 import scalus.compiler.{compile, fieldAsData, Options}
-import scalus.prelude.List.{Cons, Nil}
+import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
@@ -357,7 +357,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     test("compile ToData") {
-        import scalus.builtin.Data.*
+        import scalus.uplc.builtin.Data.*
         val compiled = compile {
             BigInt(1).toData
         }
@@ -415,7 +415,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     test("compile type-safe equality") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val compiled = compile {
             val a = BigInt(0)
             val bs = hex"deadbeef"
@@ -513,9 +513,9 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     test("compile fieldAsData macro") {
-        import scalus.ledger.api.v1.*
+        import scalus.cardano.onchain.plutus.v1.*
 
-        val compiled = compile { (ctx: scalus.builtin.Data) =>
+        val compiled = compile { (ctx: scalus.uplc.builtin.Data) =>
             // check multiple nested fields
             val sigsData = fieldAsData[ScriptContext](_.txInfo.signatories)(ctx)
             // check type aliased fields
@@ -544,7 +544,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
               ),
               ScriptPurpose.Spending(TxOutRef(TxId(hex"deadbeef"), 0))
             )
-        import scalus.builtin.Data.*
+        import scalus.uplc.builtin.Data.*
         val appliedScript = term.plutusV1 $ scriptContext.toData
         assert(appliedScript.evaluate == hex"deadbeef".asTerm)
         val flatBytesLength = appliedScript.flatEncoded.length
@@ -567,8 +567,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     test("compile pattern in val with one argument") {
-        import scalus.builtin.{FromData, ToData}
-        import scalus.prelude.Option
+        import scalus.uplc.builtin.{FromData, ToData}
+        import scalus.cardano.onchain.plutus.prelude.Option
         val compiled = compile { (x: Data) =>
             val Option.Some(v0) = summon[FromData[Option[BigInt]]](x): @unchecked
             // val Option.Some(v) = x
@@ -608,8 +608,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     test("compile pattern with val with two arguments") {
-        import scalus.builtin.{FromData, ToData}
-        import scalus.prelude.List
+        import scalus.uplc.builtin.{FromData, ToData}
+        import scalus.cardano.onchain.plutus.prelude.List
 
         val compiled = compile { (x: Data) =>
             val List.Cons(head, tail) = summon[FromData[List[BigInt]]](x): @unchecked
@@ -659,9 +659,9 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     test("Compile pattern in val with three arguments") {
-        import scalus.builtin.Data.{FromData, ToData}
-        import scalus.ledger.api.v3.*
-        import scalus.prelude.Option
+        import scalus.uplc.builtin.Data.{FromData, ToData}
+        import scalus.cardano.onchain.plutus.v3.*
+        import scalus.cardano.onchain.plutus.prelude.Option
 
         val compiled = compile { (x: Data) =>
             val ScriptContext(txInfo, redeemer, scriptInfo) = summon[FromData[ScriptContext]](x)
@@ -708,7 +708,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
     test("compile scala functions with zero arguments and type parameter") {
         val compiled = compile {
-            def fooZeroArgsTp[T]: scalus.prelude.List[T] = scalus.prelude.List.empty[T]
+            def fooZeroArgsTp[T]: scalus.cardano.onchain.plutus.prelude.List[T] =
+                scalus.cardano.onchain.plutus.prelude.List.empty[T]
             val z = fooZeroArgsTp[BigInt]
             z.isEmpty
         }
@@ -727,7 +728,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
     test("compile scala methd with zero arguments") {
         val compiled = compile {
-            import scalus.prelude.*
+            import scalus.cardano.onchain.plutus.prelude.*
             val m: SortedMap[BigInt, BigInt] = SortedMap.empty[BigInt, BigInt]
             m.get(BigInt(1)) match {
                 case Option.None    => BigInt(0)
@@ -797,7 +798,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     test("compile scala method with zero arguments in non-var position") {
 
         val compiled = compile {
-            import scalus.prelude.*
+            import scalus.cardano.onchain.plutus.prelude.*
             SortedMap.empty[BigInt, BigInt].get(BigInt(1)) match {
                 case Option.None    => BigInt(0)
                 case Option.Some(v) => v

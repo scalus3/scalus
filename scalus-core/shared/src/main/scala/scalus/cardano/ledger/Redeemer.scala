@@ -4,7 +4,7 @@ import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.utils.{Pretty, Style}
 
 import scala.annotation.threadUnsafe
@@ -68,7 +68,7 @@ object Redeemer {
     /** Pretty prints Redeemer showing tag, index, data, and execution units */
     given Pretty[Redeemer] with
         def pretty(a: Redeemer, style: Style): Doc =
-            import scalus.builtin.Data
+            import scalus.uplc.builtin.Data
             val dataDoc = Pretty[Data].pretty(a.data, style)
             val exUnitsDoc = Pretty[ExUnits].pretty(a.exUnits, style)
             (text(s"${a.tag}#${a.index}") & dataDoc & exUnitsDoc).grouped

@@ -2,10 +2,10 @@ package scalus.testing.regression.cosmex20251107
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v3.*
 
 /** Regression test for cosmex shadowing bug.
   *

@@ -1,7 +1,7 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.Value.ada
@@ -9,7 +9,7 @@ import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.compiler.compileInline
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.toUplc
 import scalus.utils.await
@@ -282,7 +282,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
             override def evalPlutusScriptsWithContexts(
                 tx: Transaction,
                 utxos: Utxos
-            ): Seq[(Redeemer, scalus.ledger.api.ScriptContext, ScriptHash)] = {
+            ): Seq[(Redeemer, scalus.cardano.onchain.plutus.ScriptContext, ScriptHash)] = {
                 evaluationCount += 1
                 delegate.evalPlutusScriptsWithContexts(tx, utxos)
             }

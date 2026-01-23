@@ -2,14 +2,14 @@ package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
-import scalus.builtin.Data.toData
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v1.{Address, PubKeyHash, Value}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.*
-import scalus.ledger.api.v3.ScriptInfo.SpendingScript
-import scalus.prelude.{List as SList, Option as SOption, SortedMap}
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.v1.Credential.{PubKeyCredential, ScriptCredential}
+import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
+import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for NaivePaymentSplitterValidator using shared test cases. */

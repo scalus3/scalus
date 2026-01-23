@@ -1,15 +1,15 @@
 package scalus.examples.storage
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.hex
-import scalus.builtin.{ByteString, Data}
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.examples.UnorderedLinkedListContract
-import scalus.ledger.api.v1.Credential.ScriptCredential
-import scalus.ledger.api.v3.{Address as OnchainAddress, TxId, TxOutRef}
+import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
+import scalus.cardano.onchain.plutus.v3.{Address as OnchainAddress, TxId, TxOutRef}
 import scalus.patterns.Cons
 import scalus.testing.kit.Party.Alice
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -33,7 +33,7 @@ class StorageTest extends AnyFunSuite, ScalusTest:
       deadline = 9999999999999L, // Far future deadline (milliseconds since epoch)
       penalty = OnchainAddress(
         ScriptCredential(hex"0000000000000000000000000000000000000000000000000000000000"),
-        scalus.prelude.Option.empty
+        scalus.cardano.onchain.plutus.prelude.Option.empty
       )
     )
 
@@ -207,12 +207,12 @@ class StorageTest extends AnyFunSuite, ScalusTest:
 
         // Follow the ref chain and collect data
         def followChain(
-            currentRef: scalus.prelude.Option[ByteString],
+            currentRef: scalus.cardano.onchain.plutus.prelude.Option[ByteString],
             acc: List[ByteString]
         ): List[ByteString] =
             currentRef match
-                case scalus.prelude.Option.None          => acc
-                case scalus.prelude.Option.Some(nextKey) =>
+                case scalus.cardano.onchain.plutus.prelude.Option.None          => acc
+                case scalus.cardano.onchain.plutus.prelude.Option.Some(nextKey) =>
                     // Find the node with this key
                     val nodeUtxo = utxos
                         .find { case (_, output) =>

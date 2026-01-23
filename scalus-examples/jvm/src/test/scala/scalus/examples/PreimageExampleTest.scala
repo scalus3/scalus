@@ -1,34 +1,34 @@
 package scalus
 package examples
 
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1.{PubKeyHash, TxId}
-import scalus.ledger.api.v2.*
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.v1.{PubKeyHash, TxId}
+import scalus.cardano.onchain.plutus.v2.*
+import scalus.cardano.onchain.plutus.prelude.List
 import scalus.testing.assertions.Expected
 import scalus.testing.kit.BaseValidatorTest
 import scalus.uplc.*
 
 class PreimageExampleTest extends BaseValidatorTest {
 
-    private def scriptContext(signatories: scalus.prelude.List[PubKeyHash]) =
+    private def scriptContext(signatories: scalus.cardano.onchain.plutus.prelude.List[PubKeyHash]) =
         ScriptContext(
           TxInfo(
-            inputs = scalus.prelude.List.Nil,
-            referenceInputs = scalus.prelude.List.Nil,
-            outputs = scalus.prelude.List.Nil,
+            inputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
+            referenceInputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
+            outputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
             fee = Value.lovelace(BigInt("188021")),
             mint = Value.lovelace(BigInt("188021")),
-            dcert = scalus.prelude.List.Nil,
-            withdrawals = scalus.prelude.SortedMap.empty,
+            dcert = scalus.cardano.onchain.plutus.prelude.List.Nil,
+            withdrawals = scalus.cardano.onchain.plutus.prelude.SortedMap.empty,
             validRange = Interval.always,
             signatories = signatories,
-            redeemers = scalus.prelude.SortedMap.empty,
-            data = scalus.prelude.SortedMap.empty,
+            redeemers = scalus.cardano.onchain.plutus.prelude.SortedMap.empty,
+            data = scalus.cardano.onchain.plutus.prelude.SortedMap.empty,
             id = TxId(hex"1e0612fbd127baddfcd555706de96b46c4d4363ac78c73ab4dee6e6a7bf61fe9")
           ),
           ScriptPurpose.Spending(hoskyMintTxOutRef)
@@ -39,7 +39,7 @@ class PreimageExampleTest extends BaseValidatorTest {
             preimage: ByteString,
             pubKeyHash: PubKeyHash,
             hash: ByteString,
-            signatories: scalus.prelude.List[PubKeyHash]
+            signatories: scalus.cardano.onchain.plutus.prelude.List[PubKeyHash]
         ) =
             val datum = (hash, pubKeyHash).toData
             val redeemer = preimage.toData

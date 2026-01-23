@@ -1,11 +1,11 @@
-package scalus.prelude.crypto.bls12_381
+package scalus.cardano.onchain.plutus.prelude.crypto.bls12_381
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Builtins.*
-import scalus.builtin.PlatformSpecific.bls12_381_G1_compressed_zero
-import scalus.builtin.{Builtins, ByteString}
-import scalus.prelude.*
-import scalus.prelude.crypto.bls12_381.G1.{*, given}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.PlatformSpecific.bls12_381_G1_compressed_zero
+import scalus.uplc.builtin.{Builtins, ByteString}
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.{*, given}
 import scalus.testing.kit.EvalTestKit
 
 class BLS12_381_G1Test extends AnyFunSuite with EvalTestKit {

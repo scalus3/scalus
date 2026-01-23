@@ -2,13 +2,13 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.*
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.*
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
 import scalus.compiler.compile
 import scalus.compiler.sir.*
-import scalus.ledger.api.v3.*
-import scalus.ledger.api.v3.ScriptInfo.SpendingScript
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
@@ -40,7 +40,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
         val scriptContext = makeSpendingScriptContext(
           datum = ownerPkh.toData,
           redeemer = "Hello, World!".toData,
-          signatories = scalus.prelude.List(ownerPkh)
+          signatories = scalus.cardano.onchain.plutus.prelude.List(ownerPkh)
         )
 
         val termWithSc = term $ Data.toData(scriptContext).asTerm
@@ -62,16 +62,17 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
             val scriptInfo = Data.fromData[ScriptInfo](spData)
             scriptInfo match {
                 case SpendingScript(txOutRef, datum) =>
-                    if datum.isEmpty then scalus.prelude.fail("Expected datum to be present")
+                    if datum.isEmpty then
+                        scalus.cardano.onchain.plutus.prelude.fail("Expected datum to be present")
                     else
-                        scalus.prelude.fail("datum is present")
+                        scalus.cardano.onchain.plutus.prelude.fail("datum is present")
                         //
                         // val signed = sc.txInfo.signatories.contains(owner)
                         // require(signed, "Must be signed")
                         // val saysHello = sc.redeemer.to[String] == "Hello, World!"
                         // require(saysHello, "Invalid redeemer")
                 case _ =>
-                    scalus.prelude.fail("Expected SpendingScript")
+                    scalus.cardano.onchain.plutus.prelude.fail("Expected SpendingScript")
             }
         }
         val lowering = SirToUplcV3Lowering(sir, generateErrorTraces = true)
@@ -81,7 +82,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
         val scriptContext = makeSpendingScriptContext(
           datum = ownerPkh.toData,
           redeemer = "Hello, World!".toData,
-          signatories = scalus.prelude.List(ownerPkh)
+          signatories = scalus.cardano.onchain.plutus.prelude.List(ownerPkh)
         )
 
         val termWithSc = term $ Data.toData(scriptContext.scriptInfo).asTerm
@@ -99,13 +100,13 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
     }
 
     test("Import Option[PubkeyHash] from Data and look on it") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val sir = compile { (data: Data) =>
-            val optDatum = Data.fromData[scalus.prelude.Option[Datum]](data)
+            val optDatum = Data.fromData[scalus.cardano.onchain.plutus.prelude.Option[Datum]](data)
             optDatum match {
                 case Option.Some(datum) =>
                 case _ =>
-                    scalus.prelude.fail("Expected non-empty PubKeyHash")
+                    scalus.cardano.onchain.plutus.prelude.fail("Expected non-empty PubKeyHash")
             }
         }
         val lowering = SirToUplcV3Lowering(sir, generateErrorTraces = true)
@@ -115,13 +116,14 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
         val scriptContext = makeSpendingScriptContext(
           datum = ownerPkh.toData,
           redeemer = "Hello, World!".toData,
-          signatories = scalus.prelude.List(ownerPkh)
+          signatories = scalus.cardano.onchain.plutus.prelude.List(ownerPkh)
         )
 
-        val optDatum: scalus.prelude.Option[Datum] = scriptContext.scriptInfo match {
-            case SpendingScript(_, x) => x
-            case _                    => scalus.prelude.Option.None
-        }
+        val optDatum: scalus.cardano.onchain.plutus.prelude.Option[Datum] =
+            scriptContext.scriptInfo match {
+                case SpendingScript(_, x) => x
+                case _                    => scalus.cardano.onchain.plutus.prelude.Option.None
+            }
 
         val termWithSc = term $ Data.toData(optDatum).asTerm
 
@@ -134,7 +136,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
     }
 
     test("run Hello World") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val sir = compile { (scData: Data) =>
             val sc = Data.fromData[ScriptContext](scData)
             val tx = sc.txInfo
@@ -147,7 +149,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
                     val saysHello = sc.redeemer.to[String] == "Hello, World!"
                     require(saysHello, "Invalid redeemer")
                 case _ =>
-                    scalus.prelude.fail("Expected SpendingScript")
+                    scalus.cardano.onchain.plutus.prelude.fail("Expected SpendingScript")
             }
         }
         // println(sir.showHighlighted)
@@ -157,7 +159,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
         val scriptContext = makeSpendingScriptContext(
           datum = PubKeyHash(hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678").toData,
           redeemer = "Hello, World!".toData,
-          signatories = scalus.prelude.List(
+          signatories = scalus.cardano.onchain.plutus.prelude.List(
             PubKeyHash(hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678")
           )
         )
@@ -172,9 +174,9 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
     private def makeSpendingScriptContext(
         datum: Data,
         redeemer: Redeemer,
-        signatories: scalus.prelude.List[PubKeyHash]
+        signatories: scalus.cardano.onchain.plutus.prelude.List[PubKeyHash]
     ): ScriptContext = {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val ownInput =
             TxInInfo(
               outRef = TxOutRef(
@@ -205,7 +207,7 @@ class SirToUplcFromDataReplacementTest extends AnyFunSuite {
     }
 
     def randomByteString(n: Int, seed: Int = 10): ByteString = {
-        import scalus.builtin.ByteString
+        import scalus.uplc.builtin.ByteString
         val random = scala.util.Random(seed)
         ByteString(random.nextBytes(n)*)
     }

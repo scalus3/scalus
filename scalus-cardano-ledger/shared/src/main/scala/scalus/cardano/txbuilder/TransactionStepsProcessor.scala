@@ -4,7 +4,7 @@ import cats.*
 import cats.implicits.*
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
-import scalus.builtin.{platform, ByteString, Data}
+import scalus.uplc.builtin.{platform, ByteString, Data}
 import scalus.cardano.address
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*

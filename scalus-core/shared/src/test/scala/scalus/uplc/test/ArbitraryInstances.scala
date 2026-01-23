@@ -3,16 +3,16 @@ package test
 
 import org.scalacheck.{Arbitrary, Gen, Shrink}
 import scalus.*
-import scalus.builtin.Builtins
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.utf8
-import scalus.builtin.Data
-import scalus.builtin.Data.{B, Constr, I, List, Map}
+import scalus.uplc.builtin.Builtins
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.utf8
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.{B, Constr, I, List, Map}
 import scalus.cardano.ledger.Word64
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.DefaultUni.{ProtoList, ProtoPair}
 import scalus.uplc.Term.*
-import scalus.prelude.{asScalus, Eq, Ord}
+import scalus.cardano.onchain.plutus.prelude.{asScalus, Eq, Ord}
 
 import scala.collection.immutable
 import scala.annotation.nowarn
@@ -341,24 +341,28 @@ trait ArbitraryInstances:
         tShrunk
     }
 
-    given arbList[A: Arbitrary]: Arbitrary[scalus.prelude.List[A]] = Arbitrary {
-        for lst <- Arbitrary.arbitrary[immutable.List[A]]
-        yield scalus.prelude.List(lst*)
-    }
-
-    given arbOption[A: Arbitrary]: Arbitrary[scalus.prelude.Option[A]] = Arbitrary {
-        for o <- Arbitrary.arbitrary[Option[A]]
-        yield o.asScalus
-    }
-
-    given arbAssocMap[A: Arbitrary: Eq, B: Arbitrary]: Arbitrary[scalus.prelude.AssocMap[A, B]] =
+    given arbList[A: Arbitrary]: Arbitrary[scalus.cardano.onchain.plutus.prelude.List[A]] =
         Arbitrary {
-            for list <- Arbitrary.arbitrary[scalus.prelude.List[(A, B)]]
-            yield scalus.prelude.AssocMap.fromList(list)
+            for lst <- Arbitrary.arbitrary[immutable.List[A]]
+            yield scalus.cardano.onchain.plutus.prelude.List(lst*)
         }
 
-    given arbSortedMap[A: Arbitrary: Ord, B: Arbitrary]: Arbitrary[scalus.prelude.SortedMap[A, B]] =
+    given arbOption[A: Arbitrary]: Arbitrary[scalus.cardano.onchain.plutus.prelude.Option[A]] =
         Arbitrary {
-            for list <- Arbitrary.arbitrary[scalus.prelude.List[(A, B)]]
-            yield scalus.prelude.SortedMap.fromList(list)
+            for o <- Arbitrary.arbitrary[Option[A]]
+            yield o.asScalus
+        }
+
+    given arbAssocMap[A: Arbitrary: Eq, B: Arbitrary]
+        : Arbitrary[scalus.cardano.onchain.plutus.prelude.AssocMap[A, B]] =
+        Arbitrary {
+            for list <- Arbitrary.arbitrary[scalus.cardano.onchain.plutus.prelude.List[(A, B)]]
+            yield scalus.cardano.onchain.plutus.prelude.AssocMap.fromList(list)
+        }
+
+    given arbSortedMap[A: Arbitrary: Ord, B: Arbitrary]
+        : Arbitrary[scalus.cardano.onchain.plutus.prelude.SortedMap[A, B]] =
+        Arbitrary {
+            for list <- Arbitrary.arbitrary[scalus.cardano.onchain.plutus.prelude.List[(A, B)]]
+            yield scalus.cardano.onchain.plutus.prelude.SortedMap.fromList(list)
         }

@@ -1,15 +1,15 @@
 package scalus.examples.betting
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
-import scalus.builtin.platform
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
 import scalus.cardano.node.{Emulator, UtxoFilter, UtxoQuery, UtxoSource}
 import scalus.cardano.txbuilder.{RedeemerPurpose, TransactionSigner}
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result

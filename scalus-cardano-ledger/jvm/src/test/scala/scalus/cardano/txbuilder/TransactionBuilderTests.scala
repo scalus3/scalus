@@ -7,8 +7,8 @@ import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Network.{Mainnet, Testnet}
 import scalus.cardano.address.ShelleyDelegationPart.{Key, Null}
 import scalus.cardano.address.{Network, ShelleyAddress, ShelleyPaymentPart}
@@ -29,7 +29,7 @@ import scalus.testing.kit.Party.Alice
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
 import scalus.cardano.txbuilder.TransactionBuilder.{build, Context, ResolvedUtxos}
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint, *}
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.|>
 
 import scala.collection.immutable.SortedMap

@@ -1,6 +1,6 @@
 package scalus.crypto
 
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString}
 
 /** HMAC (Hash-based Message Authentication Code) implementation.
   *

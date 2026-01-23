@@ -1,18 +1,16 @@
 package scalus.cardano.ledger
 
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address
 import scalus.cardano.address.*
 import scalus.cardano.address.StakePayload.Stake
 import scalus.cardano.ledger.*
-import scalus.ledger.api
-import scalus.ledger.api.*
-import scalus.ledger.api.v1.{DCert, ScriptPurpose, StakingCredential}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.GovernanceActionId
-import scalus.prelude.{asScalus, List, SortedMap}
-import scalus.{builtin, ledger, prelude}
+import scalus.cardano.onchain.plutus.*
+import scalus.cardano.onchain.plutus.v1.{DCert, ScriptPurpose, StakingCredential}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.GovernanceActionId
+import scalus.cardano.onchain.plutus.prelude.{asScalus, List, SortedMap}
 
 import scala.annotation.{nowarn, unused}
 import scala.collection.mutable

@@ -1,6 +1,6 @@
 package scalus.cardano.wallet.hd
 
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.crypto.Pbkdf2
 
 /** BIP-39 mnemonic sentence handling for Cardano wallets.

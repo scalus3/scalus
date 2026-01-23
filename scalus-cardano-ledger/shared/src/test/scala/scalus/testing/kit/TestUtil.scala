@@ -1,21 +1,21 @@
 package scalus.testing.kit
 
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.builtin.Builtins.{appendByteString, blake2b_224, blake2b_256}
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Builtins.{appendByteString, blake2b_224, blake2b_256}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.ArbitraryInstances.given
 import scalus.cardano.txbuilder.{PubKeyWitness, RedeemerManagement, RedeemerPurpose, TransactionBuilder, Wallet as WalletTrait, Witness}
-import scalus.ledger.api.v1.PubKeyHash
-import scalus.ledger.api.v3.{TxId, TxOutRef, ValidatorHash}
-import scalus.ledger.api.{v1, v2, v3, ScriptContext}
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef, ValidatorHash}
+import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.Program
 import scalus.uplc.eval.PlutusVM
 
 object TestUtil {
-    import scalus.builtin.ByteString.*
+    import scalus.uplc.builtin.ByteString.*
 
     // Mock data generation constants and methods
     val rootKeyHash: ByteString =

@@ -17,7 +17,7 @@ import com.bloxbean.cardano.client.quicktx.Tx
 import scalus.*
 import scalus.bloxbean.Interop.toPlutusData
 import scalus.bloxbean.ScalusTransactionEvaluator
-import scalus.builtin.{platform, ByteString, Data, given}
+import scalus.uplc.builtin.{platform, ByteString, Data, given}
 import scalus.utils.Utils
 
 object SendTx:
@@ -99,7 +99,7 @@ object SendTx:
         val preimageHash = platform.sha2_256(preimageBytes)
         val pubKeyHashBytes = ByteString.fromArray(sender.hdKeyPair().getPublicKey.getKeyHash)
         val pubKeyHash = pubKeyHashBytes.toHex
-        import scalus.builtin.Data.toData
+        import scalus.uplc.builtin.Data.toData
         val datum = (preimageHash, pubKeyHashBytes).toData
         val datumCbor = datum.toCborByteString
         val datumHash = platform.blake2b_256(datumCbor)

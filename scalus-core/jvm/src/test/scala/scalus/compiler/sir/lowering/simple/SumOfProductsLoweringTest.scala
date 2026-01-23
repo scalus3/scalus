@@ -1,11 +1,11 @@
 package scalus.compiler.sir.lowering.simple
 
 import scalus.*
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.ledger.Word64
 import scalus.compiler.compile
 import scalus.compiler.sir.*
-import scalus.ledger.api.v3.TxId
+import scalus.cardano.onchain.plutus.v3.TxId
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*

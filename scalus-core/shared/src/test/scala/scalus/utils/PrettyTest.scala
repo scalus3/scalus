@@ -1,7 +1,7 @@
 package scalus.utils
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 
@@ -186,7 +186,7 @@ class PrettyTest extends AnyFunSuite {
     }
 
     test("Pretty[DatumOption] Inline shows data") {
-        val data = scalus.builtin.Data.I(BigInt(42))
+        val data = scalus.uplc.builtin.Data.I(BigInt(42))
         val datum = DatumOption.Inline(data)
         val result = datum.show
         assert(result == "42")
@@ -218,7 +218,7 @@ class PrettyTest extends AnyFunSuite {
     // === Redeemer Tests ===
 
     test("Pretty[Redeemer] shows tag, index, and exUnits") {
-        val data = scalus.builtin.Data.I(BigInt(42))
+        val data = scalus.uplc.builtin.Data.I(BigInt(42))
         val redeemer = Redeemer(RedeemerTag.Spend, 0, data, ExUnits(100000, 200000))
         val result = redeemer.show
         assert(result.contains("Spend"))

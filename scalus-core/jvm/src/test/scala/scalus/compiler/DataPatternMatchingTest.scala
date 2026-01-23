@@ -1,11 +1,11 @@
 package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.Language
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
 import scalus.compiler.{compile, Options}
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
@@ -150,11 +150,12 @@ class DataPatternMatchingTest extends AnyFunSuite:
         given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.List from a list parameter
-        val sirFun = compile { (elements: scalus.prelude.List[Data]) =>
+        val sirFun = compile { (elements: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
             Data.List(elements)
         }
 
-        val inputList = scalus.prelude.List[Data](Data.I(BigInt(1)), Data.I(BigInt(2)))
+        val inputList =
+            scalus.cardano.onchain.plutus.prelude.List[Data](Data.I(BigInt(1)), Data.I(BigInt(2)))
         val inputConst =
             Constant.List(DefaultUni.Data, inputList.toScalaList.map(Constant.Data.apply))
         val sirWithArg =
@@ -169,8 +170,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
         given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.Map from a list of pairs parameter
-        val sirFun = compile { (entries: scalus.prelude.List[(Data, Data)]) =>
-            Data.Map(entries)
+        val sirFun = compile {
+            (entries: scalus.cardano.onchain.plutus.prelude.List[(Data, Data)]) =>
+                Data.Map(entries)
         }
 
         val inputPairs = List(
@@ -201,11 +203,13 @@ class DataPatternMatchingTest extends AnyFunSuite:
         given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
         // Use a function to construct Data.Constr from tag and args parameters
-        val sirFun = compile { (tag: BigInt, args: scalus.prelude.List[Data]) =>
-            Data.Constr(tag, args)
+        val sirFun = compile {
+            (tag: BigInt, args: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
+                Data.Constr(tag, args)
         }
 
-        val inputArgs = scalus.prelude.List[Data](Data.I(BigInt(100)), Data.I(BigInt(200)))
+        val inputArgs = scalus.cardano.onchain.plutus.prelude
+            .List[Data](Data.I(BigInt(100)), Data.I(BigInt(200)))
         val argsConst =
             Constant.List(DefaultUni.Data, inputArgs.toScalaList.map(Constant.Data.apply))
 
@@ -303,8 +307,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
         given PlutusVM = PlutusVM.makePlutusV4VM()
         given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
-        val inputList = scalus.prelude.List[Data](Data.I(BigInt(1)), Data.I(BigInt(2)))
-        val sirFun = compile { (elements: scalus.prelude.List[Data]) =>
+        val inputList =
+            scalus.cardano.onchain.plutus.prelude.List[Data](Data.I(BigInt(1)), Data.I(BigInt(2)))
+        val sirFun = compile { (elements: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
             val x = Data.List(elements)
             x.values
         }
@@ -325,9 +330,10 @@ class DataPatternMatchingTest extends AnyFunSuite:
           (Data.I(BigInt(1)), Data.I(BigInt(10))),
           (Data.I(BigInt(2)), Data.I(BigInt(20)))
         )
-        val sirFun = compile { (entries: scalus.prelude.List[(Data, Data)]) =>
-            val x = Data.Map(entries)
-            x.values
+        val sirFun = compile {
+            (entries: scalus.cardano.onchain.plutus.prelude.List[(Data, Data)]) =>
+                val x = Data.Map(entries)
+                x.values
         }
 
         val pairType =
@@ -359,12 +365,14 @@ class DataPatternMatchingTest extends AnyFunSuite:
         given PlutusVM = PlutusVM.makePlutusV4VM()
         given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
-        val sirFun = compile { (tag: BigInt, args: scalus.prelude.List[Data]) =>
-            val x = Data.Constr(tag, args)
-            x.constr
+        val sirFun = compile {
+            (tag: BigInt, args: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
+                val x = Data.Constr(tag, args)
+                x.constr
         }
 
-        val inputArgs = scalus.prelude.List[Data](Data.I(BigInt(100)), Data.I(BigInt(200)))
+        val inputArgs = scalus.cardano.onchain.plutus.prelude
+            .List[Data](Data.I(BigInt(100)), Data.I(BigInt(200)))
         val argsConst =
             Constant.List(DefaultUni.Data, inputArgs.toScalaList.map(Constant.Data.apply))
 
@@ -381,12 +389,14 @@ class DataPatternMatchingTest extends AnyFunSuite:
         given PlutusVM = PlutusVM.makePlutusV4VM()
         given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
 
-        val sirFun = compile { (tag: BigInt, args: scalus.prelude.List[Data]) =>
-            val x = Data.Constr(tag, args)
-            x.args
+        val sirFun = compile {
+            (tag: BigInt, args: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
+                val x = Data.Constr(tag, args)
+                x.args
         }
 
-        val inputArgs = scalus.prelude.List[Data](Data.I(BigInt(100)), Data.I(BigInt(200)))
+        val inputArgs = scalus.cardano.onchain.plutus.prelude
+            .List[Data](Data.I(BigInt(100)), Data.I(BigInt(200)))
         val argsConst =
             Constant.List(DefaultUni.Data, inputArgs.toScalaList.map(Constant.Data.apply))
 

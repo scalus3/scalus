@@ -4,7 +4,7 @@ import org.typelevel.paiges.Doc
 import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.pretty
 import scalus.uplc.*
 
@@ -733,17 +733,17 @@ object Lowering {
       * to avoid this transformation and keep native UPLC list types.
       */
     private def constantToData(c: Constant): Constant = c match {
-        case Constant.Integer(v)    => Constant.Data(scalus.builtin.Data.I(v))
-        case Constant.ByteString(v) => Constant.Data(scalus.builtin.Data.B(v))
+        case Constant.Integer(v)    => Constant.Data(scalus.uplc.builtin.Data.I(v))
+        case Constant.ByteString(v) => Constant.Data(scalus.uplc.builtin.Data.B(v))
         case Constant.String(v)     =>
             // String doesn't have direct Data representation, encode as ByteString
-            Constant.Data(scalus.builtin.Data.B(scalus.builtin.ByteString.fromString(v)))
+            Constant.Data(scalus.uplc.builtin.Data.B(scalus.uplc.builtin.ByteString.fromString(v)))
         case Constant.Bool(v) =>
             // Bool encoded as Constr(0/1, [])
-            Constant.Data(scalus.builtin.Data.Constr(if v then 1 else 0, PList.Nil))
+            Constant.Data(scalus.uplc.builtin.Data.Constr(if v then 1 else 0, PList.Nil))
         case Constant.Unit =>
             // Unit encoded as Constr(0, [])
-            Constant.Data(scalus.builtin.Data.Constr(0, PList.Nil))
+            Constant.Data(scalus.uplc.builtin.Data.Constr(0, PList.Nil))
         case Constant.Data(d) => c // already Data
         case Constant.List(elemTpe, elements) =>
             val dataElements = elements.map { elem =>
@@ -752,7 +752,7 @@ object Lowering {
                     case other => throw new RuntimeException(s"Expected Data constant, got $other")
                 }
             }
-            Constant.Data(scalus.builtin.Data.List(PList.from(dataElements)))
+            Constant.Data(scalus.uplc.builtin.Data.List(PList.from(dataElements)))
         case Constant.Pair(a, b) =>
             val aData = constantToData(a) match {
                 case Constant.Data(d) => d
@@ -762,7 +762,7 @@ object Lowering {
                 case Constant.Data(d) => d
                 case other => throw new RuntimeException(s"Expected Data constant, got $other")
             }
-            Constant.Data(scalus.builtin.Data.List(PList.from(List(aData, bData))))
+            Constant.Data(scalus.uplc.builtin.Data.List(PList.from(List(aData, bData))))
         case other =>
             throw new RuntimeException(s"Cannot convert constant $other to Data")
     }

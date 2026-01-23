@@ -5,7 +5,7 @@ import com.bloxbean.cardano.client.common.model.Networks
 import com.bloxbean.cardano.client.crypto.bip32.HdKeyPair
 import com.bloxbean.cardano.client.crypto.cip1852.{DerivationPath, Segment}
 import com.bloxbean.cardano.client.crypto.config.CryptoConfiguration
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Network
 import scalus.crypto.ed25519.{ExtendedSigningKey, JvmEd25519Signer, Signature, VerificationKey}
 

@@ -1,8 +1,8 @@
 package scalus.cardano.txbuilder
 
-import scalus.builtin.Builtins.{blake2b_256, serialiseData}
-import scalus.builtin.Data.toData
-import scalus.builtin.{Data, ToData}
+import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.BlockchainProvider

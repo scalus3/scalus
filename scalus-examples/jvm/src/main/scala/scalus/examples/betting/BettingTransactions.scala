@@ -1,11 +1,11 @@
 package scalus.examples.betting
 
-import scalus.builtin.ByteString.{hex, utf8}
-import scalus.builtin.Data
+import scalus.uplc.builtin.ByteString.{hex, utf8}
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.uplc.PlutusV3
 
 case class BettingTransactions(

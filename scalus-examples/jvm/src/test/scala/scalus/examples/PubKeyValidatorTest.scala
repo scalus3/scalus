@@ -3,12 +3,12 @@ package scalus.examples
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1.*
-import scalus.prelude.List.{Cons, Nil}
+import scalus.cardano.onchain.plutus.v1.*
+import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.uplc.*
 import scalus.uplc.eval.PlutusVM
 

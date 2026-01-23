@@ -2,8 +2,8 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.BuiltinList
-import scalus.builtin.Builtins.*
+import scalus.uplc.builtin.BuiltinList
+import scalus.uplc.builtin.Builtins.*
 import scalus.compiler.compile
 import scalus.uplc.eval.{PlutusVM, Result}
 
@@ -13,7 +13,7 @@ import scalus.uplc.eval.{PlutusVM, Result}
   * lowering phase has trouble with representation conversion for BuiltinList types.
   *
   * Error: LoweringException: Unexpected representation conversion for
-  * scalus.builtin.BuiltinList[Int] from DataConstr to SumDataList
+  * scalus.uplc.builtin.BuiltinList[Int] from DataConstr to SumDataList
   */
 class BuiltinListLoweringTest extends AnyFunSuite {
 
@@ -21,7 +21,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
 
     // TODO: Fix lowering issue with BuiltinList literal in dropList result
     // This test fails with LoweringException: Unexpected representation conversion
-    // for scalus.builtin.BuiltinList[Int] from DataConstr to SumDataList
+    // for scalus.uplc.builtin.BuiltinList[Int] from DataConstr to SumDataList
     test("dropList with BuiltinList literal") {
         import scalus.compiler.sir.SIRType
         import scalus.compiler.sir.lowering.LoweringContext

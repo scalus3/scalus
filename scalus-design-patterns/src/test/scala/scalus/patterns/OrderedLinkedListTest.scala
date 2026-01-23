@@ -2,15 +2,15 @@ package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
 import scalus.examples.{OrderedLinkedListContract, OrderedNodeAction}
-import scalus.ledger.api.v2.{OutputDatum, TxOut}
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.OrderedLinkedList as LinkedList
-import scalus.prelude.*
-import scalus.prelude.Option.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
 

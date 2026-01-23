@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.Arbitrary
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.address.{StakeAddress, StakePayload}
 import org.scalatest.funsuite.AnyFunSuite
 import scala.collection.immutable.SortedMap

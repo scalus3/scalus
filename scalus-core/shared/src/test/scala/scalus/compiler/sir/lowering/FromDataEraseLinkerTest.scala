@@ -2,11 +2,11 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.compiler.compile
 import scalus.compiler.sir.*
-import scalus.ledger.api.v3.ScriptContext
-import scalus.ledger.api.v3.ScriptInfo.SpendingScript
+import scalus.cardano.onchain.plutus.v3.ScriptContext
+import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
 
 class FromDataEraseLinkerTest extends AnyFunSuite {
 
@@ -62,7 +62,8 @@ class FromDataEraseLinkerTest extends AnyFunSuite {
             val sc = Data.fromData[ScriptContext](data)
             sc.scriptInfo match {
                 case SpendingScript(ref, datum) =>
-                    if datum.isEmpty then scalus.prelude.fail("Expected datum to be present")
+                    if datum.isEmpty then
+                        scalus.cardano.onchain.plutus.prelude.fail("Expected datum to be present")
                     else BigInt(1)
             }
         }
@@ -70,7 +71,7 @@ class FromDataEraseLinkerTest extends AnyFunSuite {
         val foundFromDate = containsSubterm(sir) {
             case SIR.ExternalVar(
                   _,
-                  "scalus.ledger.api.v3.ScriptContext$.given_FromData_ScriptContext",
+                  "scalus.cardano.onchain.plutus.v3.ScriptContext$.given_FromData_ScriptContext",
                   _,
                   _
                 ) =>

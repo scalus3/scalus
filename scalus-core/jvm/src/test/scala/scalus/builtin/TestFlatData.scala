@@ -2,8 +2,8 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.serialization.flat.Flat
-import scalus.builtin.Data.*
-import scalus.prelude.List as PList
+import scalus.uplc.builtin.Data.*
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.utils.Hex.*
 
 class TestFlatDataTest extends AnyFunSuite {

@@ -1,8 +1,8 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.prelude.*
-import scalus.ledger.api.v3.{Credential, Lovelace, Redeemer, ScriptPurpose, TxInfo, ValidatorHash}
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.{Credential, Lovelace, Redeemer, ScriptPurpose, TxInfo, ValidatorHash}
 
 /** This pattern allows for delegating some computations to a given staking script. The primary
   * application for this is the so-called "withdraw zero trick," which is most effective for

@@ -2,10 +2,10 @@ package scalus.testing.regression.binocular20251117
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.prelude.{List, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{List, SortedMap}
 
 /** Regression test for SortedMap.insert behavior with ByteString keys
   *
@@ -65,8 +65,8 @@ class SortedMapInsertTest extends AnyFunSuite {
 
         // Verify the value was actually updated
         val value = map.find((k, _) => k == BigInt(1)) match {
-            case scalus.prelude.Option.Some((_, v)) => v
-            case _                                  => BigInt(-1)
+            case scalus.cardano.onchain.plutus.prelude.Option.Some((_, v)) => v
+            case _                                                         => BigInt(-1)
         }
         assert(value == BigInt(111), s"Expected value 111, got $value")
     }

@@ -3,11 +3,11 @@ package scalus.examples.simpletransfer
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
-import scalus.builtin.Data.toData
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 
 class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {

@@ -1,6 +1,6 @@
 package scalus.cardano.node
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*

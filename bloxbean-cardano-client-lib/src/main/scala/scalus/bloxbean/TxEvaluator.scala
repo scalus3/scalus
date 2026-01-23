@@ -11,12 +11,12 @@ import com.bloxbean.cardano.client.transaction.util.TransactionUtil
 import io.bullet.borer.{Cbor, Decoder}
 import org.slf4j.LoggerFactory
 import scalus.bloxbean.Interop.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.{Language, MajorProtocolVersion, Script}
 import scalus.ledger
 import scalus.ledger.api
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.{v1, v2, v3, ScriptContext}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.eval
 import scalus.uplc.eval.*
 import scalus.utils.Hex.hexToBytes
@@ -292,7 +292,7 @@ class TxEvaluator(
         lookupTable: LookupTable
     ): (Redeemer, ScriptContext) = {
         import scalus.bloxbean.Interop.toScalusData
-        import scalus.builtin.Data.toData
+        import scalus.uplc.builtin.Data.toData
 
         val result = findScript(tx, redeemer, lookupTable, utxos) match
             case (_: Script.Native, _) =>

@@ -3,13 +3,13 @@ package rules
 
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import org.scalatest.funsuite.AnyFunSuite
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator rule success") {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -66,7 +66,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -119,8 +119,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test(
       "FeesOkValidator If the total ExUnits are 0 in both Memory and Steps, no further part needs to be checked"
     ) {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -168,8 +168,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("FeesOkValidator feePaidIsGreeterOrEqualThanMinimumFee rule failure") {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -224,7 +224,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -270,8 +270,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("FeesOkValidator collateralConsistsOnlyOfVKeyAddress rule failure") {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -319,7 +319,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -367,8 +367,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test(
       "FeesOkValidator collateralDoesNotContainAnyNonADA rule failure when collateralReturnOutput has more tokens than collaterals"
     ) {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -431,7 +431,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -479,8 +479,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test(
       "FeesOkValidator collateralDoesNotContainAnyNonADA rule failure when collateralReturnOutput has less tokens than collaterals"
     ) {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -537,7 +537,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -591,8 +591,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("FeesOkValidator totalSumOfCollateralCoinsIsSufficient rule failure") {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -647,7 +647,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -693,8 +693,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("FeesOkValidator totalSumOfCollateralCoinsIsEquivalentToTotalCollateral rule failure") {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -749,7 +749,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )
@@ -795,8 +795,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     }
 
     test("FeesOkValidator isAtLeastOneCollateralInput rule failure") {
-        given Arbitrary[scalus.builtin.Data] = Arbitrary(
-          Gen.const(scalus.builtin.Data.unit) // Simplified for testing
+        given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
+          Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
         val context = Context()
@@ -838,7 +838,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                           Redeemer(
                             tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
                             index = Gen.choose(0, Int.MaxValue).sample.get,
-                            data = scalus.builtin.Data.unit,
+                            data = scalus.uplc.builtin.Data.unit,
                             exUnits = Arbitrary.arbitrary[ExUnits].sample.get
                           )
                         )

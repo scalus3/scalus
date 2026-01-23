@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.{Data, FromData, ToData}
+import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.compiler.compile
 import scalus.compiler.sir.*
 import scalus.uplc.eval.{PlutusVM, Result}
@@ -51,7 +51,7 @@ class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
             aa match {
                 case AA(flag, a) =>
                     if a != BigInt(123) then {
-                        scalus.prelude.fail("Expected a to be 123")
+                        scalus.cardano.onchain.plutus.prelude.fail("Expected a to be 123")
                     }
             }
         }
@@ -90,7 +90,7 @@ class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
     }
 
     test("lowering constr/deconstr tuple3") {
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
         val sir = compile {
             val input = (BigInt(1), BigInt(2), BigInt(3))
             val output = input match
@@ -127,10 +127,10 @@ class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
 
     test("lowering unmapping to builtin list") {
         val sir = compile {
-            import scalus.builtin.Data.toData
-            import scalus.prelude.*
+            import scalus.uplc.builtin.Data.toData
+            import scalus.cardano.onchain.plutus.prelude.*
             val mapData = SortedMap.unsafeFromList(List(("a", BigInt(1)), ("b", BigInt(2)))).toData
-            val list_138 = scalus.builtin.Builtins.unMapData(mapData)
+            val list_138 = scalus.uplc.builtin.Builtins.unMapData(mapData)
             val h1 = list_138.head
             h1.fst
         }
@@ -157,7 +157,7 @@ class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
 
     test("lowering pairlist repr") {
         import scalus.*
-        import scalus.prelude.*
+        import scalus.cardano.onchain.plutus.prelude.*
 
         val sir = scalus.compiler.compile {
             def go(lst: List[(BigInt, BigInt)]): List[(BigInt, BigInt)] =

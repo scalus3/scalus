@@ -1,10 +1,10 @@
 package scalus.examples
 import scalus.Compile
-import scalus.builtin.BLS12_381_G1_Element
-import scalus.builtin.BLS12_381_G2_Element
-import scalus.builtin.Builtins.*
-import scalus.prelude.*
-import scalus.prelude.crypto.bls12_381.G1.*
+import scalus.uplc.builtin.BLS12_381_G1_Element
+import scalus.uplc.builtin.BLS12_381_G2_Element
+import scalus.uplc.builtin.Builtins.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.*
 
 /** A Bilinear Accumulator is a cryptographic primitive that allows for efficient membership and
   * non-membership proofs for a set of elements.

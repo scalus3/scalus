@@ -1,9 +1,9 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.builtin.Data
-import scalus.ledger.api.v3.{Credential, Redeemer, ScriptPurpose, TxInfo, ValidatorHash}
-import scalus.prelude.*
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.v3.{Credential, Redeemer, ScriptPurpose, TxInfo, ValidatorHash}
+import scalus.cardano.onchain.plutus.prelude.*
 
 /** Merkelized Validators Pattern
   *

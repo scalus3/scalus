@@ -2,21 +2,21 @@ package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.Script
 import scalus.cardano.onchain.RequirementError
 import scalus.examples.{MarketplaceBaseProgram, ParameterValidationUsage}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.PlutusV3
 
 class ParameterValidationTest
     extends AnyFunSuite
     with EvalTestKit
-    with scalus.ledger.api.v3.ArbitraryInstances {
+    with scalus.cardano.onchain.plutus.v3.ArbitraryInstances {
 
     // --- Off-chain Tests ---
 

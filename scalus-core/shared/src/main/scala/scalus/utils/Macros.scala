@@ -1,7 +1,7 @@
 package scalus.utils
 
-import scalus.builtin.Builtins
-import scalus.builtin.Data
+import scalus.uplc.builtin.Builtins
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.{ProtocolParams, ProtocolParamsToExpr}
 import scalus.compiler.sir.SIR
 import scalus.uplc.{BuiltinRuntime, CardanoBuiltins, DefaultFun, Expr as Exp, NamedDeBruijn, Term as Trm}

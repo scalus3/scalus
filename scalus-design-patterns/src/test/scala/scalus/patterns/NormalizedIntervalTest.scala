@@ -2,8 +2,8 @@ package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.OnchainError
-import scalus.ledger.api.v1.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
 class NormalizedIntervalTest extends AnyFunSuite with EvalTestKit {

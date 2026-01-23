@@ -1,6 +1,6 @@
 package scalus.cardano.wallet.hd
 
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.address.*
 import scalus.cardano.ledger.{AddrKeyHash, Hash, StakeKeyHash}
 import scalus.cardano.wallet.{Account, KeyPair}

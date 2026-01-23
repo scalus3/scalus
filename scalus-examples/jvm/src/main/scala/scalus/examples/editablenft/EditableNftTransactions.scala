@@ -1,13 +1,13 @@
 package scalus.examples.editablenft
 
-import scalus.builtin.{ByteString, Data}
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v3.TxOutRef
+import scalus.cardano.onchain.plutus.v3.TxOutRef
 import scalus.uplc.PlutusV3
-import scalus.ledger.api.v3.TxId
+import scalus.cardano.onchain.plutus.v3.TxId
 
 /** Transaction creator for CIP-68 style editable NFTs.
   *

@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 

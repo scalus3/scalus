@@ -1,7 +1,7 @@
 package scalus.examples.vault
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.ledger.utils.AllResolvedScripts

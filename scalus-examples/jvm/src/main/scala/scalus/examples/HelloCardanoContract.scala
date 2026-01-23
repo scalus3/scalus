@@ -2,7 +2,7 @@ package scalus.examples
 
 import scalus.cardano.blueprint.Blueprint
 import scalus.compiler.Options
-import scalus.ledger.api.v3.PubKeyHash
+import scalus.cardano.onchain.plutus.v3.PubKeyHash
 import scalus.uplc.PlutusV3
 
 private object HelloCardanoCompiler:

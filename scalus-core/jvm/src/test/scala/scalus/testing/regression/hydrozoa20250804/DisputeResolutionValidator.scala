@@ -4,7 +4,7 @@ package scalus.testing.regression.hydrozoa20250804
 //import com.bloxbean.cardano.client.address.AddressProvider
 //import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 //import hydrozoa.infra.{encodeHex, toBB}
-import scalus.builtin.Builtins
+import scalus.uplc.builtin.Builtins
 import scalus.compiler.compile
 import scalus.testing.regression.hydrozoa20250804.DisputeResolutionValidator.TallyRedeemer.{Continuing, Removed}
 import scalus.testing.regression.hydrozoa20250804.TreasuryValidator.TreasuryDatum.Unresolved
@@ -16,16 +16,16 @@ import scalus.testing.regression.hydrozoa20250804.ValueExtensions.{containsCurre
 //import hydrozoa.l2.block.BlockTypeL2
 //import hydrozoa.{PosixTime, *}
 import scalus.*
-import scalus.builtin.Builtins.{serialiseData, verifyEd25519Signature}
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v1.IntervalBoundType.Finite
-import scalus.ledger.api.v1.Value.+
-import scalus.ledger.api.v1.{PosixTime, Value}
-import scalus.ledger.api.v3.*
-import scalus.prelude.Option.{None, Some}
-import scalus.prelude.{!==, ===, fail, log, require, Eq, List, Option, SortedMap, Validator}
+import scalus.uplc.builtin.Builtins.{serialiseData, verifyEd25519Signature}
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v1.IntervalBoundType.Finite
+import scalus.cardano.onchain.plutus.v1.Value.+
+import scalus.cardano.onchain.plutus.v1.{PosixTime, Value}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
+import scalus.cardano.onchain.plutus.prelude.{!==, ===, fail, log, require, Eq, List, Option, SortedMap, Validator}
 
 @Compile
 object DisputeResolutionValidator extends Validator:

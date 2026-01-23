@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder}
 import org.typelevel.paiges.Doc
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.utils.{Pretty, Style}
 
 trait Blake2b_256

@@ -1,14 +1,14 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.blueprint.Blueprint
 import scalus.compiler.Options
 import scalus.compiler.sir.{SIR, TargetLoweringBackend}
 import scalus.compiler.compile
-import scalus.ledger.api.v2.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v2.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.*
 
 @Compile
@@ -27,7 +27,7 @@ object PreimageValidator {
 
 @Compile
 object PreimageValidatorV3 extends Validator {
-    import scalus.ledger.api.v3.*
+    import scalus.cardano.onchain.plutus.v3.*
     inline override def spend(
         datum: Option[Data],
         redeemer: Data,

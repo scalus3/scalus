@@ -1,7 +1,7 @@
 package scalus.cardano.txbuilder
 
 import io.bullet.borer.Cbor
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.TransactionBuilder.Operation

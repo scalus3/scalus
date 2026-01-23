@@ -1,7 +1,7 @@
 package scalus.examples.buidlerfest
 
 import scalus.bloxbean.Interop.??
-import scalus.builtin.Data.{toData, FromData, ToData}
+import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Address.addr
 import scalus.cardano.ledger.*

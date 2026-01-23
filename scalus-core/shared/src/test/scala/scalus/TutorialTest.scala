@@ -3,15 +3,15 @@ package scalus
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile
-import scalus.builtin.Builtins
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data
-import scalus.builtin.Data.FromData
-import scalus.builtin.Data.fromData
-import scalus.builtin.FromData
+import scalus.uplc.builtin.Builtins
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.FromData
+import scalus.uplc.builtin.Data.fromData
+import scalus.uplc.builtin.FromData
 import scalus.cardano.ledger.{Language, ProtocolParams}
-import scalus.prelude.===
+import scalus.cardano.onchain.plutus.prelude.===
 import scalus.uplc.eval.CountingBudgetSpender
 import scalus.uplc.eval.Log
 import scalus.uplc.eval.MachineParams
@@ -37,7 +37,7 @@ val constants = compile {
 }
 
 val builtinFunctions = compile {
-    // See scalus.builtin.Builtins for what is available
+    // See scalus.uplc.builtin.Builtins for what is available
     val data = Builtins.iData(123)
     val eqData = data == Builtins.iData(123) || data != Builtins.iData(123)
     val eq = Builtins.equalsByteString(hex"deadbeef", ByteString.empty)
@@ -134,8 +134,8 @@ val fromDataExample = compile {
     }
 }
 
-import scalus.ledger.api.v3.*
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.List
 val pubKeyValidator = compile {
     def validator(ctxData: Data) = {
         val ctx = ctxData.to[ScriptContext]
@@ -220,7 +220,7 @@ def evaluation() = {
 
 def fieldAsDataExample() = {
     import scalus.compiler.*, builtin.{Data, Builtins}, Builtins.*
-    import scalus.ledger.api.v3.*
+    import scalus.cardano.onchain.plutus.v3.*
     val pubKeyValidator = compile:
         def validator(ctxData: Data) =
             // this generates headList(...headList(sndPair(unConstrData(ctxData)))) code

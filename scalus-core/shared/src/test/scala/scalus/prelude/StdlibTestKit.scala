@@ -7,8 +7,8 @@ import org.scalatest.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.builtin.Data
-import scalus.builtin.Data.{fromData, toData, FromData, ToData}
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.sir.{SIR, TargetLoweringBackend}
 import scalus.compiler.{compileInline, Options}
@@ -29,10 +29,10 @@ import scala.util.control.NonFatal
 class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
     export org.scalatestplus.scalacheck.Checkers.*
     export org.scalacheck.{Arbitrary, Gen, Shrink}
-    // export scalus.builtin.Data
-    // export scalus.builtin.Data.{fromData, toData, FromData, ToData}
-    export scalus.prelude.{!==, <=>, ===}
-    // export scalus.prelude.{Eq, Ord}
+    // export scalus.uplc.builtin.Data
+    // export scalus.uplc.builtin.Data.{fromData, toData, FromData, ToData}
+    export scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===}
+    // export scalus.cardano.onchain.plutus.prelude.{Eq, Ord}
 
     given Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,

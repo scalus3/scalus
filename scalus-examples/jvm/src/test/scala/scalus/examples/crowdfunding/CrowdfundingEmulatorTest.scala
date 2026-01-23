@@ -1,14 +1,14 @@
 package scalus.examples.crowdfunding
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.cardano.node.{BlockchainProvider, Emulator}
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.testing.kit.TestUtil.genesisHash
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -380,7 +380,7 @@ object CrowdfundingEmulatorTest extends ScalusTest {
             signer: TransactionSigner
         )(using ExecutionContext): Future[Transaction] =
             import scalus.cardano.txbuilder.TxBuilder
-            import scalus.builtin.Data.toData
+            import scalus.uplc.builtin.Data.toData
             import java.time.Instant
 
             for
@@ -411,8 +411,10 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                         .getOrElse(1)
                     // Attack: same index twice!
                     val duplicateIndices =
-                        scalus.prelude.List(BigInt(donationIdx), BigInt(donationIdx))
-                    val outputIndices = scalus.prelude.List(BigInt(0), BigInt(1))
+                        scalus.cardano.onchain.plutus.prelude
+                            .List(BigInt(donationIdx), BigInt(donationIdx))
+                    val outputIndices =
+                        scalus.cardano.onchain.plutus.prelude.List(BigInt(0), BigInt(1))
                     Action
                         .Reclaim(
                           BigInt(inputIdx),

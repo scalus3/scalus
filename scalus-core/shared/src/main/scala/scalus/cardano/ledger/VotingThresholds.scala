@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
 import upickle.ReadWriter
-import scalus.builtin.{BuiltinList, Data, FromData, ToData}
-import scalus.builtin.Builtins.{listData, unListData}
+import scalus.uplc.builtin.{BuiltinList, Data, FromData, ToData}
+import scalus.uplc.builtin.Builtins.{listData, unListData}
 
 /** Represents voting thresholds for stake pools in the Cardano blockchain.
   *

@@ -2,16 +2,16 @@ package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data.toData
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.ExUnits
 import scalus.examples.{AuctionSettlementRedeemer, BatchAuctionContract, BidDatum, BidRedeemer}
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
-import scalus.ledger.api.v2.{OutputDatum, TxOut}
-import scalus.ledger.api.v3.*
-import scalus.ledger.api.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.prelude.{List, Option as POption, SortedMap}
+import scalus.cardano.onchain.plutus.v1.Credential.{PubKeyCredential, ScriptCredential}
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
+import scalus.cardano.onchain.plutus.prelude.{List, Option as POption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for the Batch Auction Example.

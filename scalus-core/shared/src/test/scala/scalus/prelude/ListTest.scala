@@ -1,9 +1,9 @@
 package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data.{fromData, toData}
-import scalus.prelude.List.{Cons, Nil}
-import scalus.prelude.Option.{None, Some}
+import scalus.uplc.builtin.Data.{fromData, toData}
+import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
+import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
 import scalus.testing.kit.EvalTestKit
 
 class ListTest extends AnyFunSuite with EvalTestKit {

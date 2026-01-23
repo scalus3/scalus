@@ -2,9 +2,9 @@ package scalus.bloxbean
 
 import com.bloxbean.cardano.client.plutus.spec.*
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{ByteString, Data}
-import scalus.prelude.List as PList
-import scalus.prelude.List.toScalaList
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 
 class InteropMapOrderingTest extends AnyFunSuite:
 

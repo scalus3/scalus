@@ -1,11 +1,11 @@
 package scalus.examples.htlc
 
 import scalus.Compile
-import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 type Preimage = ByteString
 type Image = ByteString

@@ -1,14 +1,14 @@
 package scalus.examples
 
-import scalus.builtin.{Builtins, Data}
-import scalus.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{Builtins, Data}
+import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.blueprint.{Blueprint, HasTypeDescription, Preamble, Validator}
 import scalus.compiler.Options
-import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v1.Address
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.{Config, Cons}
 import scalus.patterns.UnorderedLinkedList.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 import scalus.utils.Hex.toHex
 import scalus.{show as _, *}
@@ -73,7 +73,8 @@ object UnorderedNodeAction
   * ===Entry Structure&#10;===
   * &nbsp;
   *   - Each entry in the list comprises: &#10;&nbsp;
-  *     - [[scalus.ledger.api.v1.TokenName]] '''NFT''': A unique identifier for each entry.
+  *     - [[scalus.cardano.onchain.plutus.v1.TokenName]] '''NFT''': A unique identifier for each
+  *       entry.
   *     - [[scalus.patterns.Cons]] '''Datum''': A data structure containing the key/value pair, a
   *       reference to the entry's NFT, and a pointer to the next NFT in the list.
   *

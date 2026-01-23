@@ -1,7 +1,7 @@
 package scalus.cardano.wallet.hd
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer}
 import scalus.utils.Hex.toHex
 

@@ -1,6 +1,5 @@
 package scalus.uplc
 
-import scalus.uplc.builtin
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.serialization.flat.{listFlat, Flat, given}
 

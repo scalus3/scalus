@@ -7,19 +7,19 @@ package scalus.testing.regression.hydrozoa20250804
 import Scalar as ScalusScalar
 
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.hex
-import scalus.builtin.Data.toData
-import scalus.builtin.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.*
 import scalus.compiler.compile
-import scalus.ledger.api.v1.Value.+
-import scalus.ledger.api.v1.{PosixTime, Value}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
-import scalus.prelude.List.Nil
-import scalus.prelude.Option.{None, Some}
-import scalus.prelude.crypto.bls12_381.G1
-import scalus.prelude.crypto.bls12_381.G1.scale
+import scalus.cardano.onchain.plutus.v1.Value.+
+import scalus.cardano.onchain.plutus.v1.{PosixTime, Value}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.List.Nil
+import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.scale
 import scalus.testing.regression.hydrozoa20250804.ByteStringExtensions.take
 import scalus.testing.regression.hydrozoa20250804.DisputeResolutionValidator.VoteDatum
 import scalus.testing.regression.hydrozoa20250804.DisputeResolutionValidator.VoteStatus.{NoVote, Vote}

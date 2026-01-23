@@ -1,10 +1,10 @@
 package scalus.testing.regression.hydrozoa20250804
 
 import scalus.Compile
-import scalus.ledger.api.v1.Value.{-, zero}
-import scalus.ledger.api.v3.{PolicyId, TokenName, Value}
-import scalus.prelude.List.Cons
-import scalus.prelude.{fail, require, List}
+import scalus.cardano.onchain.plutus.v1.Value.{-, zero}
+import scalus.cardano.onchain.plutus.v3.{PolicyId, TokenName, Value}
+import scalus.cardano.onchain.plutus.prelude.List.Cons
+import scalus.cardano.onchain.plutus.prelude.{fail, require, List}
 
 @Compile
 object ValueExtensions:

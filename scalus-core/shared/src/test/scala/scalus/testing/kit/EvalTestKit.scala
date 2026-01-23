@@ -6,12 +6,12 @@ import org.scalactic.{source, Prettifier}
 import org.scalatest.Assertion
 import org.scalatest.Assertions
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.Data
-import scalus.builtin.Data.{toData, FromData, ToData}
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.prelude.{Eq, Option as ScalusOption}
+import scalus.cardano.onchain.plutus.prelude.{Eq, Option as ScalusOption}
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
@@ -34,7 +34,7 @@ import scala.util.control.NonFatal
 trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with ArbitraryInstances {
     export org.scalatestplus.scalacheck.Checkers.*
     export org.scalacheck.{Arbitrary, Gen, Shrink}
-    export scalus.prelude.{!==, <=>, ===}
+    export scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===}
 
     given compilerOptions: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,

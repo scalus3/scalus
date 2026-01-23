@@ -1,11 +1,11 @@
 package scalus.examples.auction
 
 import scalus.Compile
-import scalus.builtin.{ByteString, Data}
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.{Datum as _, *}
-import scalus.prelude.*
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.{Datum as _, *}
+import scalus.cardano.onchain.plutus.prelude.*
 
 /** VULNERABLE Auction Validator - DO NOT USE IN PRODUCTION
   *

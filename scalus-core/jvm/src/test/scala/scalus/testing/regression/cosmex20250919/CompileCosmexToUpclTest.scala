@@ -1,11 +1,11 @@
 package scalus.testing.regression.cosmex20250919
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 class CompileCosmexToUpclTest extends AnyFunSuite {
 
-    import scalus.ledger.api.v3.*
+    import scalus.cardano.onchain.plutus.v3.*
 
     test("compile cosmex to uplc") {
         // import scalus.compiler.compile

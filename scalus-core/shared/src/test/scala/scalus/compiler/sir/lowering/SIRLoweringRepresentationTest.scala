@@ -43,21 +43,21 @@ class SIRLoweringRepresentationTest extends AnyFunSuite {
         val someTypeVar = SIRType.TypeVar("A", Some(12L), false)
         val optionProxy = SIRType.TypeProxy(null)
         val someConstrDecl = ConstrDecl(
-          "scalus.prelude.Option$.Some",
+          "scalus.cardano.onchain.plutus.prelude.Option$.Some",
           List(TypeBinding("x", someTypeVar)),
           List(someTypeVar),
           List(someTypeVar),
           AnnotationsDecl.empty
         )
         val noneConstrDecl = ConstrDecl(
-          "scalus.prelude.Option$.None",
+          "scalus.cardano.onchain.plutus.prelude.Option$.None",
           List.empty,
           List.empty,
           List(SIRType.TypeNothing),
           AnnotationsDecl.empty
         )
         val optionDataDecl = DataDecl(
-          "scalus.prelude.Option",
+          "scalus.cardano.onchain.plutus.prelude.Option",
           List(someConstrDecl, noneConstrDecl),
           List(optionTypeVar),
           AnnotationsDecl.empty

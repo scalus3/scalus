@@ -6,7 +6,7 @@ import scalus.compiler.compile
 
 @Compile
 object BrokenFib {
-    import scalus.prelude.*
+    import scalus.cardano.onchain.plutus.prelude.*
     import List.*
     def fib(n: BigInt): List[BigInt] = if n > 1 then
         (fib(n - 1): @unchecked) match
@@ -17,7 +17,7 @@ object BrokenFib {
 
 class BrokenFibTest extends AnyFunSuite {
 
-    import scalus.builtin.Data
+    import scalus.uplc.builtin.Data
     import scalus.uplc.*
     import scalus.uplc.eval.PlutusVM
     private given PlutusVM = PlutusVM.makePlutusV2VM()
@@ -38,7 +38,7 @@ class BrokenFibTest extends AnyFunSuite {
             Term.Const(
               Constant.Data(
                 Data.toData(
-                  scalus.prelude.List(
+                  scalus.cardano.onchain.plutus.prelude.List(
                     BigInt(55),
                     BigInt(34),
                     BigInt(21),

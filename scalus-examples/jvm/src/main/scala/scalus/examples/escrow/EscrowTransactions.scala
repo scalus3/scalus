@@ -1,10 +1,10 @@
 package scalus.examples.escrow
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.uplc.PlutusV3
 
 /** Transaction builder for Escrow contract operations.

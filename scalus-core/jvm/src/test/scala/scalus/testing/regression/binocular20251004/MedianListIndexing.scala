@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.List
 
 /** Regression test for "Cannot upcast Unit -> Int to Int" error
   *

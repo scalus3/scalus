@@ -1,10 +1,10 @@
 package scalus.examples.lottery
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.PosixTime
+import scalus.cardano.onchain.plutus.v1.PosixTime
 import scalus.uplc.PlutusV3
 
 import java.time.Instant
@@ -71,7 +71,7 @@ case class LotteryTransactions(
         // Construct new state with PlayerOneRevealed
         val newLotteryState = LotteryState.PlayerOneRevealed(
           BigInt(preimage.bytes.length),
-          scalus.ledger.api.v1.PubKeyHash(playerOnePkh)
+          scalus.cardano.onchain.plutus.v1.PubKeyHash(playerOnePkh)
         )
         val newState = State(
           playerOneSecret = playerOneSecret,
@@ -105,7 +105,7 @@ case class LotteryTransactions(
 
         val newLotteryState = LotteryState.PlayerTwoRevealed(
           BigInt(preimage.bytes.length),
-          scalus.ledger.api.v1.PubKeyHash(playerTwoPkh)
+          scalus.cardano.onchain.plutus.v1.PubKeyHash(playerTwoPkh)
         )
         val newState = State(
           playerOneSecret = playerOneSecret,

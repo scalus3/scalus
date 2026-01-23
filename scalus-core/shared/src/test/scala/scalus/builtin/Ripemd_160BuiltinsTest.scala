@@ -1,8 +1,8 @@
 package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString.*
 
 import scala.language.implicitConversions
 

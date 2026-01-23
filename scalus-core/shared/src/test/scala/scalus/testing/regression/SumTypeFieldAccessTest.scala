@@ -3,7 +3,7 @@ package scalus.testing.regression
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.Constant.given
 import scalus.uplc.eval.*

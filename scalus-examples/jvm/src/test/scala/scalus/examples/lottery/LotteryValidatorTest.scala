@@ -1,13 +1,13 @@
 package scalus.examples.lottery
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Builtins.sha2_256
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Builtins.sha2_256
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.{Emulator, SubmitError}
 import scalus.cardano.txbuilder.RedeemerPurpose
-import scalus.ledger.api.v3.ScriptContext
+import scalus.cardano.onchain.plutus.v3.ScriptContext
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}

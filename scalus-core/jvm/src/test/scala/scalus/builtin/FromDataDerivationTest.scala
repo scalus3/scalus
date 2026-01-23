@@ -7,8 +7,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.compiler.compile
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.Data.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data.*
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
@@ -51,8 +51,11 @@ case class BigRecord(
     bs: ByteString,
     s: String,
     d: Data,
-    ls: scalus.prelude.List[BigInt],
-    m: scalus.prelude.SortedMap[BigInt, scalus.prelude.Option[String]]
+    ls: scalus.cardano.onchain.plutus.prelude.List[BigInt],
+    m: scalus.cardano.onchain.plutus.prelude.SortedMap[
+      BigInt,
+      scalus.cardano.onchain.plutus.prelude.Option[String]
+    ]
 )
 
 @Compile
@@ -66,7 +69,7 @@ object ToDataBigRecord:
       case BigRecord(a, b, bs, s, d, ls, m) =>
         constrData(
           0,
-          scalus.builtin.List(a.toData, b.toData, bs.toData, s.toData, d, ls.toData, m.toData)
+          scalus.uplc.builtin.List(a.toData, b.toData, bs.toData, s.toData, d, ls.toData, m.toData)
         ) */
     given ToData[BigRecord] = ToData.derived
 
@@ -82,8 +85,11 @@ class FromDataDerivationTest
           bs <- Arbitrary.arbitrary[ByteString]
           s <- Arbitrary.arbitrary[String]
           d <- Arbitrary.arbitrary[Data]
-          ls <- Arbitrary.arbitrary[scalus.prelude.List[BigInt]]
-          m <- Arbitrary.arbitrary[scalus.prelude.SortedMap[BigInt, scalus.prelude.Option[String]]]
+          ls <- Arbitrary.arbitrary[scalus.cardano.onchain.plutus.prelude.List[BigInt]]
+          m <- Arbitrary.arbitrary[scalus.cardano.onchain.plutus.prelude.SortedMap[
+            BigInt,
+            scalus.cardano.onchain.plutus.prelude.Option[String]
+          ]]
       yield BigRecord(a, b, bs, s, d, ls, m)
     )
 

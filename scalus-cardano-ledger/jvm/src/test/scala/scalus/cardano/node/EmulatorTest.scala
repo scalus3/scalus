@@ -3,7 +3,7 @@ package scalus.cardano.node
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.cardano.txbuilder.TxBuilder

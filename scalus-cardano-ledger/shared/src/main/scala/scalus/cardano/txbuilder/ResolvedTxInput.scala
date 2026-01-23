@@ -1,6 +1,6 @@
 package scalus.cardano.txbuilder
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.{DatumOption, PlutusScript, TransactionInput, TransactionOutput}
 
 enum ResolvedTxInput {

@@ -2,16 +2,16 @@ package scalus.examples.betting
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.toData
-import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v1.PubKeyHash
-import scalus.ledger.api.v1.PubKeyHash.*
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
-import scalus.prelude.Option.*
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.v1.Address
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.PubKeyHash.*
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.testing.kit.{ScalusTest, TestUtil}
 
 import scala.language.implicitConversions

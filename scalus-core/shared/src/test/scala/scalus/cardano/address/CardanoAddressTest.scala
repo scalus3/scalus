@@ -1,7 +1,7 @@
 package scalus.cardano.address
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.{Hash, *}
 
 import scala.util.Success

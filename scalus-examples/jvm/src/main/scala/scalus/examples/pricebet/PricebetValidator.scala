@@ -1,14 +1,14 @@
 package scalus.examples.pricebet
 
 import scalus.Compile
-import scalus.builtin.ByteString
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.builtin.Data
-import scalus.ledger.api.v1.{Credential, PosixTime, PubKeyHash}
-import scalus.ledger.api.v3.{TxInInfo, TxInfo, TxOutRef}
-import scalus.ledger.api.v2
-import scalus.prelude.*
-import scalus.prelude.Ord.>
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Ord.>
 
 // Parameter
 case class PricebetConfig(

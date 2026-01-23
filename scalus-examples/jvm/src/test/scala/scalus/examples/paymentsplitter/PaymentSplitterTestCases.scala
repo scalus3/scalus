@@ -1,7 +1,7 @@
 package scalus.examples.paymentsplitter
 
-import scalus.builtin.ByteString
-import scalus.prelude.List as SList
+import scalus.uplc.builtin.ByteString
+import scalus.cardano.onchain.plutus.prelude.List as SList
 import scalus.testing.kit.ScalusTest
 
 /** Shared test cases for PaymentSplitter validators.

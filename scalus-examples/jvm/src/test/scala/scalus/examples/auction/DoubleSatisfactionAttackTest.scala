@@ -1,16 +1,16 @@
 package scalus.examples.auction
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{RedeemerPurpose, TxBuilder}
 import scalus.compiler.Options
-import scalus.ledger.api.v1.{PosixTime, PubKeyHash}
-import scalus.prelude.Option as ScalusOption
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.prelude.Option as ScalusOption
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.testing.kit.Party.{Alice, Bob}

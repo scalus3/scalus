@@ -1,6 +1,6 @@
 package scalus.examples.vault
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
@@ -24,7 +24,7 @@ case class VaultTransactions(
     ): Transaction = {
         val ownerCredentialHash = owner match {
             case addr: scalus.cardano.address.ShelleyAddress =>
-                scalus.builtin.ByteString.fromArray(addr.payment.asHash.bytes)
+                scalus.uplc.builtin.ByteString.fromArray(addr.payment.asHash.bytes)
             case _ => throw new IllegalArgumentException("Shelley addresses only.")
         }
         val datum = State(

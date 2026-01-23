@@ -3,8 +3,8 @@ package scalus.testing.regression
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile
-import scalus.ledger.api.v1.Value.getLovelace
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v1.Value.getLovelace
+import scalus.cardano.onchain.plutus.v3.*
 
 class GenUpcastFailureTest extends AnyFunSuite {
 
@@ -19,7 +19,7 @@ class GenUpcastFailureTest extends AnyFunSuite {
         // pending
         val sir = compile { (value: Value) =>
             val lv = value.getLovelace
-            if lv < 10 then scalus.prelude.fail("lv < 10")
+            if lv < 10 then scalus.cardano.onchain.plutus.prelude.fail("lv < 10")
         }
         // println(sir.pretty.render(100))
         val uplc = sir.toUplc(generateErrorTraces = true)

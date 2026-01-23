@@ -4,7 +4,7 @@ package simple
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
 import scalus.uplc.DefaultFun.*

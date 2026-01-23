@@ -4,7 +4,7 @@ import io.bullet.borer.{Cbor, Decoder}
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.{*, given}
+import scalus.uplc.builtin.{*, given}
 import scalus.cardano.ledger.*
 
 class TimelockTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances:

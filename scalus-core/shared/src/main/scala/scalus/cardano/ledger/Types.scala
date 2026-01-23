@@ -6,8 +6,8 @@ import io.bullet.borer.NullOptions.given
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import monocle.*
 import org.typelevel.paiges.Doc
-import scalus.builtin.Builtins.*
-import scalus.builtin.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.*
 import scalus.cardano.address.Address
 import scalus.serialization.cbor.Cbor
 import scalus.uplc.eval.ExCPU
@@ -534,7 +534,7 @@ object ExUnits {
         listData(BuiltinList.from(List(iData(exUnits.memory), iData(exUnits.steps))))
 
     /** FromData instance for ExUnits. Decodes from array [memory, steps] */
-    given FromData[ExUnits] = (data: scalus.builtin.Data) => {
+    given FromData[ExUnits] = (data: scalus.uplc.builtin.Data) => {
         val list = unListData(data)
         ExUnits(unIData(list.head).toLong, unIData(list.tail.head).toLong)
     }

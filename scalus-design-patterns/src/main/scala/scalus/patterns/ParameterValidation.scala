@@ -1,10 +1,10 @@
 package scalus.patterns
 
 import scalus.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.{Script, ScriptHash}
-import scalus.ledger.api.v3.{Address, Credential, TxOut, ValidatorHash}
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v3.{Address, Credential, TxOut, ValidatorHash}
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.DeBruijnedProgram
 
 /** Parameter Validation Pattern

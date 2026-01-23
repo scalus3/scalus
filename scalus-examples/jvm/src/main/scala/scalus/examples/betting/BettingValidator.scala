@@ -1,15 +1,15 @@
 package scalus.examples.betting
 
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data
-import scalus.builtin.Data.FromData
-import scalus.builtin.Data.ToData
-import scalus.builtin.ToData.*
-import scalus.ledger.api.v1.Address
-import scalus.ledger.api.v1.Credential.ScriptCredential
-import scalus.ledger.api.v2.OutputDatum.OutputDatum
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.FromData
+import scalus.uplc.builtin.Data.ToData
+import scalus.uplc.builtin.ToData.*
+import scalus.cardano.onchain.plutus.v1.Address
+import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
+import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.{show as _, *}
 
 // Datum

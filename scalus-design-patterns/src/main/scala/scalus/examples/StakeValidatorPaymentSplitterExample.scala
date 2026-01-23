@@ -1,15 +1,15 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.compiler.Options
-import scalus.ledger.api.v1.Value.*
-import scalus.ledger.api.v1.{Credential, PubKeyHash}
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v1.Value.*
+import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.StakeValidator
-import scalus.prelude.*
-import scalus.prelude.List.*
-import scalus.prelude.Option.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.List.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.uplc.PlutusV3
 
 /** Stake Validator Payment Splitter - demonstrates the Stake Validator pattern (withdraw zero

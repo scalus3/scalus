@@ -1,14 +1,14 @@
 package scalus.examples
 
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.fromData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.fromData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1.*
-import scalus.prelude.*
-import scalus.prelude.Option.*
+import scalus.cardano.onchain.plutus.v1.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.{Compile, Ignore}
 
 case class TxInInfoTxOutRefOnly(txInInfoOutRef: TxOutRef)
@@ -132,7 +132,7 @@ object MintingPolicy {
 
 @Compile
 object MintingPolicyV2 {
-    import scalus.ledger.api.v2.*
+    import scalus.cardano.onchain.plutus.v2.*
     import ScriptPurpose.*
 
     val simpleCtxV2Deserializer: Data => MintingContext = (ctxData: Data) => {

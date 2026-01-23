@@ -1,7 +1,7 @@
 package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.eval.BuiltinException

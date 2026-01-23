@@ -2,16 +2,16 @@ package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.ExUnits
 import scalus.examples.{SplitVerificationRedeemer, StakeValidatorPaymentSplitterContract}
-import scalus.ledger.api.v1.Credential.{PubKeyCredential, ScriptCredential}
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.*
-import scalus.ledger.api.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.prelude.{List, Option as POption, SortedMap}
+import scalus.cardano.onchain.plutus.v1.Credential.{PubKeyCredential, ScriptCredential}
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
+import scalus.cardano.onchain.plutus.prelude.{List, Option as POption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for the Stake Validator Payment Splitter pattern.
@@ -212,7 +212,10 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
                 TxInInfo(
                   outRef = TxOutRef(lockTxId, idx),
                   resolved = TxOut(
-                    address = Address(ScriptCredential(scriptHash), scalus.prelude.Option.None),
+                    address = Address(
+                      ScriptCredential(scriptHash),
+                      scalus.cardano.onchain.plutus.prelude.Option.None
+                    ),
                     value = Value.lovelace(BigInt(value))
                   )
                 )
@@ -223,7 +226,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
               resolved = TxOut(
                 address = Address(
                   PubKeyCredential(PubKeyHash(feePayerInput._1.pkh)),
-                  scalus.prelude.Option.None
+                  scalus.cardano.onchain.plutus.prelude.Option.None
                 ),
                 value = Value.lovelace(BigInt(feePayerInput._2))
               )
@@ -234,8 +237,10 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
             // Build outputs
             val txOutputs = List.from(outputs.map { case (payee, amount) =>
                 TxOut(
-                  address =
-                      Address(PubKeyCredential(PubKeyHash(payee.pkh)), scalus.prelude.Option.None),
+                  address = Address(
+                    PubKeyCredential(PubKeyHash(payee.pkh)),
+                    scalus.cardano.onchain.plutus.prelude.Option.None
+                  ),
                   value = Value.lovelace(BigInt(amount))
                 )
             })
@@ -311,7 +316,10 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
                 TxInInfo(
                   outRef = TxOutRef(lockTxId, idx),
                   resolved = TxOut(
-                    address = Address(ScriptCredential(scriptHash), scalus.prelude.Option.None),
+                    address = Address(
+                      ScriptCredential(scriptHash),
+                      scalus.cardano.onchain.plutus.prelude.Option.None
+                    ),
                     value = Value.lovelace(BigInt(value))
                   )
                 )
@@ -322,7 +330,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
               resolved = TxOut(
                 address = Address(
                   PubKeyCredential(PubKeyHash(feePayerInput._1.pkh)),
-                  scalus.prelude.Option.None
+                  scalus.cardano.onchain.plutus.prelude.Option.None
                 ),
                 value = Value.lovelace(BigInt(feePayerInput._2))
               )
@@ -333,8 +341,10 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
             // Build outputs
             val txOutputs = List.from(outputs.map { case (payee, amount) =>
                 TxOut(
-                  address =
-                      Address(PubKeyCredential(PubKeyHash(payee.pkh)), scalus.prelude.Option.None),
+                  address = Address(
+                    PubKeyCredential(PubKeyHash(payee.pkh)),
+                    scalus.cardano.onchain.plutus.prelude.Option.None
+                  ),
                   value = Value.lovelace(BigInt(amount))
                 )
             })

@@ -1,7 +1,7 @@
 package scalus.uplc.transform
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.*
+import scalus.uplc.builtin.Builtins.*
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.uplc.Constant.given

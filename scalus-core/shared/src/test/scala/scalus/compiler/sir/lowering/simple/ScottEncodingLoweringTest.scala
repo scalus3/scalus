@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 package simple
 
 import scalus.*
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeNothing}
@@ -109,17 +109,17 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
         val tailTypeProxy = new TypeProxy(null)
         val listData =
             DataDecl(
-              "scalus.prelude.List",
+              "scalus.cardano.onchain.plutus.prelude.List",
               List(
                 ConstrDecl(
-                  "scalus.prelude.List$.Nil",
+                  "scalus.cardano.onchain.plutus.prelude.List$.Nil",
                   List(),
                   List(),
                   List(TypeNothing),
                   ae
                 ),
                 ConstrDecl(
-                  "scalus.prelude.List$.Cons",
+                  "scalus.cardano.onchain.plutus.prelude.List$.Cons",
                   List(TypeBinding("head", a2TypeVar), TypeBinding("tail", tailTypeProxy)),
                   List(a2TypeVar),
                   List(a2TypeVar),
@@ -141,14 +141,17 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
         def withDecls(sir: SIR) = SIR.Decl(listData, SIR.Decl(txIdData, sir))
         withDecls(
           SIR.Constr(
-            "scalus.prelude.List$.Nil",
+            "scalus.cardano.onchain.plutus.prelude.List$.Nil",
             listData,
             List(),
-            listData.constrType("scalus.prelude.List$.Nil"),
+            listData.constrType("scalus.cardano.onchain.plutus.prelude.List$.Nil"),
             ae
           )
-        ) lowersTo (lam("scalus.prelude.List$.Nil", "scalus.prelude.List$.Cons")(
-          !vr"scalus.prelude.List$$.Nil"
+        ) lowersTo (lam(
+          "scalus.cardano.onchain.plutus.prelude.List$.Nil",
+          "scalus.cardano.onchain.plutus.prelude.List$.Cons"
+        )(
+          !vr"scalus.cardano.onchain.plutus.prelude.List$$.Nil"
         ))
         withDecls(
           SIR.Constr(

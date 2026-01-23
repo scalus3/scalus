@@ -1,6 +1,6 @@
 package scalus.compiler
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.Language
 import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType, TargetLoweringBackend}
 import scalus.utils.Macros

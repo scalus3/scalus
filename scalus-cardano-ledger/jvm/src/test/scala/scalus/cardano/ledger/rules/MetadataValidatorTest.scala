@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString}
 
 class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("MetadataValidator success when both hash and data are absent") {

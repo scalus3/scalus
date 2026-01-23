@@ -2,18 +2,18 @@ package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.onchain.RequirementError
-import scalus.ledger.api.v1.{Address, Credential, PubKeyHash, Value}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
 class UtxoIndexerTest
     extends AnyFunSuite
     with EvalTestKit
-    with scalus.ledger.api.v3.ArbitraryInstances {
+    with scalus.cardano.onchain.plutus.v3.ArbitraryInstances {
 
     test("success validateInput with value check") {
         assertEvalSuccess {

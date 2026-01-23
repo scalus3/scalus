@@ -1,6 +1,6 @@
 package scalus.cardano.txbuilder
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.{TaggedSortedSet, Transaction, VKeyWitness}
 import scalus.cardano.wallet.{KeyPair, StandardKeyPair}
 import scalus.crypto.ed25519.{JvmEd25519Signer, Signature, SigningKey, VerificationKey}

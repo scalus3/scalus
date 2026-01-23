@@ -1,6 +1,6 @@
 package scalus.cardano.wallet.hd
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.wallet.ExtendedKeyPair
 import scalus.crypto.ed25519.{Ed25519Signer, ExtendedSigningKey, Signature, SigningKey, VerificationKey}
 

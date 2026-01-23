@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 
 //import io.bullet.borer.NullOptions.given
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
-import scalus.builtin.{BuiltinList, BuiltinPair, Data, FromData, ToData}
-import scalus.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data, FromData, ToData}
+import scalus.uplc.builtin.Builtins.*
 
 /** Represents a protocol parameter update in the Cardano blockchain.
   *

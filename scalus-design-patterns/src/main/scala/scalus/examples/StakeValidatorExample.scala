@@ -1,11 +1,11 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.compiler.Options
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.StakeValidator
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 
 /** Example for a validator that requires a withdrawal from its script for each spend. Note that

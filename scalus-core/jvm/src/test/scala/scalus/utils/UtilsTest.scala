@@ -14,7 +14,7 @@ class UtilsTest
     extends AnyFunSuite
     with ScalaCheckPropertyChecks
     with ArbitraryInstances
-    with scalus.ledger.api.v1.ArbitraryInstances {
+    with scalus.cardano.onchain.plutus.v1.ArbitraryInstances {
 
     test("programToPlutusFileContent/readPlutusFileContent work") {
         val term = Arbitrary.arbitrary[Term].sample.get

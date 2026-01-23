@@ -1,7 +1,7 @@
 package scalus.examples.editablenft
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.utf8
+import scalus.uplc.builtin.ByteString.utf8
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
@@ -344,8 +344,8 @@ object EditableNftValidatorTest extends ScalusTest {
         )
 
     // Test data
-    val tokenId: scalus.builtin.ByteString = utf8"myNFT"
-    val initialData: scalus.builtin.ByteString = utf8"Hello"
+    val tokenId: scalus.uplc.builtin.ByteString = utf8"myNFT"
+    val initialData: scalus.uplc.builtin.ByteString = utf8"Hello"
 
     def createProvider(): Emulator = {
         val initialUtxos = Map(

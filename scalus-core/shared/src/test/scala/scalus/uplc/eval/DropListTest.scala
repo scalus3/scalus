@@ -2,8 +2,8 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.{BuiltinList, ByteString}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinList, ByteString}
 import scalus.compiler.compile
 
 /** Tests for the dropList builtin function.
@@ -69,7 +69,7 @@ class DropListTest extends AnyFunSuite {
     }
 
     test("dropList: works with ByteString list") {
-        import scalus.builtin.ByteString.hex
+        import scalus.uplc.builtin.ByteString.hex
         val list = BuiltinList[ByteString](hex"01", hex"02", hex"03")
         val result = dropList(BigInt(1), list)
         assert(result.toList == List(hex"02", hex"03"))

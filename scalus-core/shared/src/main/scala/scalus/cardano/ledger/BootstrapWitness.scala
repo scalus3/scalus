@@ -4,7 +4,7 @@ import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.utils.Pretty.ctr
 import scalus.utils.{Pretty, Style}
 

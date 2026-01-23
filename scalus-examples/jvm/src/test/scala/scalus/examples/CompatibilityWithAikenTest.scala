@@ -2,13 +2,13 @@ package scalus.examples
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, FromData, ToData}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, FromData, ToData}
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.ledger.Script.PlutusV3
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.Program
 import scalus.uplc.eval.Result
@@ -159,7 +159,8 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
             fee = fee,
             signatories = extraSignatories.map(x => PubKeyHash(x)),
             redeemers = SortedMap.fromList(
-              scalus.prelude.List((ScriptPurpose.Spending(txOutRef), redeemer))
+              scalus.cardano.onchain.plutus.prelude
+                  .List((ScriptPurpose.Spending(txOutRef), redeemer))
             ),
             id = txId
           ),

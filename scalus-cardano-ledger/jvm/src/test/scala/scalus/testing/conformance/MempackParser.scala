@@ -1,7 +1,7 @@
 package scalus.testing.conformance
 
 import io.bullet.borer.Cbor
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 
@@ -408,7 +408,7 @@ object MempackParser {
                 offset += varLenEncodedLength(scriptLenBytes)
 
                 val scriptBytes = bytes.slice(offset, offset + scriptLen)
-                val scriptBs = scalus.builtin.ByteString.fromArray(scriptBytes)
+                val scriptBs = scalus.uplc.builtin.ByteString.fromArray(scriptBytes)
 
                 val script = versionTag match {
                     case 0 => Script.PlutusV1(scriptBs)

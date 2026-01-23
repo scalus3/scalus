@@ -3,7 +3,7 @@ package uplc
 package eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.{CardanoInfo, Language, MajorProtocolVersion}
 
 import scala.util.Failure

@@ -1,15 +1,15 @@
 package scalus.examples.vault
 
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
 import scalus.ledger.api
-import scalus.ledger.api.v1.Credential.ScriptCredential
-import scalus.ledger.api.v1.{Credential, Interval, PosixTime, Value}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.{TxInInfo, TxInfo, TxOutRef}
-import scalus.ledger.api.v1
-import scalus.prelude.{===, fail, require, Validator}
+import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
+import scalus.cardano.onchain.plutus.v1.{Credential, Interval, PosixTime, Value}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v1
+import scalus.cardano.onchain.plutus.prelude.{===, fail, require, Validator}
 import scalus.*
 
 // Datum
@@ -203,7 +203,7 @@ object VaultValidator extends Validator {
 
     private def requireSameOwner(out: TxOut, datum: State): Unit =
         out.datum match {
-            case scalus.ledger.api.v2.OutputDatum.OutputDatum(newDatum) =>
+            case scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum(newDatum) =>
                 require(
                   newDatum.to[State].owner == datum.owner,
                   VaultOwnerChanged

@@ -1,9 +1,9 @@
 package scalus.examples.paymentsplitter
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.blueprint.{Blueprint, HasTypeDescription, Preamble, Validator}
 import scalus.compiler.Options
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.List
 import scalus.uplc.PlutusV3
 import scalus.utils.Hex.toHex
 

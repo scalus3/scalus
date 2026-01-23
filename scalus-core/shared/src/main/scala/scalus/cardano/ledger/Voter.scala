@@ -3,7 +3,7 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.derivation.key
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Represents voting options in the Cardano blockchain governance system.
   *

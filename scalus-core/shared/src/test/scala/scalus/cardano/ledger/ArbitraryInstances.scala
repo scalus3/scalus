@@ -4,8 +4,8 @@ import io.bullet.borer.Encoder
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.builtin
-import scalus.builtin.Data.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.*
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.testing.ArbitraryDerivation.autoDerived
 

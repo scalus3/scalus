@@ -9,7 +9,7 @@ import com.bloxbean.cardano.client.plutus.spec.*
 import com.bloxbean.cardano.client.transaction.spec.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.ledger.SlotConfig
 import scalus.compiler.compile
 import scalus.examples.PubKeyValidator

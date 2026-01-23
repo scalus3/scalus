@@ -2,13 +2,13 @@ package scalus.examples.paymentsplitter
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
-import scalus.ledger.api.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.utils.await
 
@@ -88,7 +88,7 @@ class PaymentSplitterTxBuilderTest
 
     private def runNaive(tc: PaymentSplitterTestCase): TxResult = {
         // Use Party PKHs for the validator parameter (matches Party addresses we'll use for UTxOs)
-        val payeePkhs: scalus.prelude.List[scalus.builtin.ByteString] =
+        val payeePkhs: scalus.cardano.onchain.plutus.prelude.List[scalus.uplc.builtin.ByteString] =
             tc.payees.map(p => payeeParty(p).addrKeyHash)
         val paramScript = applyParam(NaivePaymentSplitterContract, payeePkhs.toData)
         val (contractUtxos, feePayerUtxo, collateralUtxo) = buildUtxos(tc, paramScript.scriptHash)
@@ -156,7 +156,7 @@ class PaymentSplitterTxBuilderTest
 
         // Use Party PKHs for the validator parameter (matches Party addresses we'll use for UTxOs)
         // AddrKeyHash is an opaque type extending ByteString, so it can be used directly
-        val payeePkhs: scalus.prelude.List[scalus.builtin.ByteString] =
+        val payeePkhs: scalus.cardano.onchain.plutus.prelude.List[scalus.uplc.builtin.ByteString] =
             tc.payees.map(p => payeeParty(p).addrKeyHash)
         val paramScript = applyParam(OptimizedPaymentSplitterContract, payeePkhs.toData)
         val (contractUtxos, feePayerUtxo, collateralUtxo) = buildUtxos(tc, paramScript.scriptHash)

@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import upickle.{readwriter, ReadWriter}
-import scalus.builtin.{BuiltinList, Data, FromData, ToData}
-import scalus.builtin.Builtins.{iData, listData, unIData, unListData}
+import scalus.uplc.builtin.{BuiltinList, Data, FromData, ToData}
+import scalus.uplc.builtin.Builtins.{iData, listData, unIData, unListData}
 
 /** Represents a unit interval (a number between 0 and 1) in the Cardano blockchain.
   *

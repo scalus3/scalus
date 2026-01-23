@@ -5,7 +5,7 @@ import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
 import org.typelevel.paiges.Style.XTerm.Fg
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.uplc.Constant
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultUni

@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.*
 import org.typelevel.paiges.Doc
-import scalus.builtin.{platform, ByteString, given}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.utils.Pretty.{ctr, inParens, lit}
 import scalus.utils.{Pretty, Style}
 

@@ -2,10 +2,10 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.ByteString.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.{Constant, Term}
 

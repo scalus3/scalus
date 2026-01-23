@@ -1,7 +1,7 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
 import scalus.testing.kit.Party.Alice

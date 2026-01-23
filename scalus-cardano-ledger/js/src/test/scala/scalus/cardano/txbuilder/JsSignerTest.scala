@@ -1,7 +1,7 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.wallet.hd.HdAccount
 import scalus.crypto.ed25519.{Ed25519Signer, JsEd25519Signer}
 

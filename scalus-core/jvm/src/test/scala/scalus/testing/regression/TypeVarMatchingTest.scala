@@ -2,10 +2,10 @@ package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Data.toData
 import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.ledger.api.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v2.OutputDatum
 
 class TypeVarMatchingTest extends AnyFunSuite:
 
@@ -23,7 +23,7 @@ class TypeVarMatchingTest extends AnyFunSuite:
         }
         /*
         This test failed when the `OutputDatum` was used as a type variable in the `ToData` instance.
-            given [T <: scalus.ledger.api.v2.OutputDatum]: ToData[T] = (d: T) =>
+            given [T <: scalus.cardano.onchain.plutus.v2.OutputDatum]: ToData[T] = (d: T) =>
                 d match
                     case _ => ...
          */

@@ -3,7 +3,7 @@ package scalus.uplc
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.*
 import scalus.uplc.Term.asTerm

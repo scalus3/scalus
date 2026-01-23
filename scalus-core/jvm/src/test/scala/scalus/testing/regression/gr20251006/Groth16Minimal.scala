@@ -1,15 +1,15 @@
 package scalus.testing.regression.gr20251006
 
 import scalus.Compile
-import scalus.builtin.ByteString
-import scalus.builtin.BLS12_381_G1_Element
-import scalus.builtin.Data.FromData
-import scalus.builtin.Data.ToData
-import scalus.builtin.FromData
-import scalus.builtin.ToData
-import scalus.prelude.*
-import scalus.prelude.crypto.bls12_381.G1
-import scalus.prelude.crypto.bls12_381.G1.*
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.BLS12_381_G1_Element
+import scalus.uplc.builtin.Data.FromData
+import scalus.uplc.builtin.Data.ToData
+import scalus.uplc.builtin.FromData
+import scalus.uplc.builtin.ToData
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.*
 
 import scala.annotation.tailrec
 
@@ -23,7 +23,7 @@ import scala.annotation.tailrec
   *   5. The function is called through Data.to[] conversion
   *
   * Error: "Cannot unify Proxy(X) -> BLS12_381_G1_Element -> BLS12_381_G1_Element and
-  * scalus.prelude.List[Int] -> BLS12_381_G1_Element -> BLS12_381_G1_Element"
+  * scalus.cardano.onchain.plutus.prelude.List[Int] -> BLS12_381_G1_Element -> BLS12_381_G1_Element"
   */
 @Compile
 //@ScalusDebug(20)

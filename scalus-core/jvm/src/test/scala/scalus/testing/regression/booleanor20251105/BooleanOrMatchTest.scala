@@ -2,8 +2,8 @@ package scalus.testing.regression.booleanor20251105
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
-import scalus.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 

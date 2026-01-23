@@ -1,13 +1,13 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.compiler.Options
-import scalus.ledger.api.v1.{Credential, PubKeyHash}
-import scalus.ledger.api.v2.OutputDatum
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.MerkelizedValidator
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 
 /** Batch Auction Example - demonstrates when MerkelizedValidator is useful.

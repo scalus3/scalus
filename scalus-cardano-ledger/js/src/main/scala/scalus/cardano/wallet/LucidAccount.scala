@@ -1,10 +1,10 @@
 package scalus.cardano.wallet
 
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Network
 import scalus.cardano.txbuilder.TransactionSigner
-import scalus.builtin.NodeJsPlatformSpecific.toByteString
-import scalus.builtin.NodeJsPlatformSpecific.toUint8Array
+import scalus.uplc.builtin.NodeJsPlatformSpecific.toByteString
+import scalus.uplc.builtin.NodeJsPlatformSpecific.toUint8Array
 import scalus.crypto.ed25519.{JsEd25519Signer, Signature, VerificationKey}
 
 import scala.util.{Failure, Success, Try}

@@ -8,26 +8,29 @@ class PreludeTest extends AnyFunSuite with EvalTestKit {
 
     test("fail() should throw an exception") {
         assertEvalFails[OnchainError] {
-            scalus.prelude.fail()
+            scalus.cardano.onchain.plutus.prelude.fail()
         }
         assertEvalFails[OnchainError] {
-            scalus.prelude.fail("This is a failure message")
+            scalus.cardano.onchain.plutus.prelude.fail("This is a failure message")
         }
     }
 
     test("require() should throw an exception when condition is false") {
         assertEvalFails[RequirementError] {
-            require(false, "Condition failed")
+            scalus.cardano.onchain.plutus.prelude.require(false, "Condition failed")
         }
     }
 
     test("require() should return () when condition is true") {
-        assertEvalEq(require(true, "This should not fail"), ())
+        assertEvalEq(
+          scalus.cardano.onchain.plutus.prelude.require(true, "This should not fail"),
+          ()
+        )
     }
 
     test("impossible() should throw an exception") {
         assertEvalFails[ImpossibleLedgerStateError] {
-            impossible()
+            scalus.cardano.onchain.plutus.prelude.impossible()
         }
     }
 

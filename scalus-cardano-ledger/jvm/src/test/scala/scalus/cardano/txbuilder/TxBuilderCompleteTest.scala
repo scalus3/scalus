@@ -1,15 +1,15 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinTransactionFee}
 import scalus.cardano.node.Emulator
 import scalus.compiler.compileInline
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo

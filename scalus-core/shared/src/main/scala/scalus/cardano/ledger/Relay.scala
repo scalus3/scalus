@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.NullOptions.given
 import io.bullet.borer.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Represents a relay for a stake pool in the Cardano blockchain.
   *

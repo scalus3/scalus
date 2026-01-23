@@ -5,7 +5,7 @@ import scalus.*
 import scalus.cardano.ledger.{ExUnits, Language}
 import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
 
 import scala.annotation.nowarn
@@ -132,7 +132,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
             // (a = b = c) = (d = e) = (f = g)
             val formula = (1 <-> (2 <-> 3)) <-> ((4 <-> 5) <-> (6 <-> 7))
 
-            import scalus.prelude.List.*
+            import scalus.cardano.onchain.plutus.prelude.List.*
             val expected = Cons[LRVars](
               (Cons(1, Nil), Cons(2, Cons(3, Cons(4, Cons(5, Cons(6, Cons(7, Nil))))))),
               Cons(

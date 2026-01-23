@@ -1,17 +1,17 @@
 package scalus.testing.regression.cosmex20250919
 
 import scalus.*
-import scalus.builtin.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data.toData
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.ledger.api.v1.IntervalBound
-import scalus.ledger.api.v1.IntervalBoundType.Finite
-import scalus.ledger.api.v2
-import scalus.ledger.api.v2.Value.*
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.v1.IntervalBound
+import scalus.cardano.onchain.plutus.v1.IntervalBoundType.Finite
+import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.v2.Value.*
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.Program
 
 type DiffMilliSeconds = BigInt

@@ -1,14 +1,14 @@
 package scalus.examples.pricebet
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.EvaluatorMode.EvaluateAndComputeCost
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose
-import scalus.ledger.api.v3.TxOutRef
-import scalus.prelude.Rational
+import scalus.cardano.onchain.plutus.v3.TxOutRef
+import scalus.cardano.onchain.plutus.prelude.Rational
 import scalus.testing.kit.Party.{Alice, Bob, Oracle}
 import scalus.testing.kit.TestUtil.getScriptContextV3
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -558,7 +558,7 @@ object PricebetValidatorTest extends ScalusTest {
         val oracleUtxos = provider.findUtxos(Oracle.address).await().toOption.get
         val seedUtxo = oracleUtxos.head
         val seedTxOutRef = TxOutRef(
-          scalus.ledger.api.v3.TxId(seedUtxo._1.transactionId),
+          scalus.cardano.onchain.plutus.v3.TxId(seedUtxo._1.transactionId),
           seedUtxo._1.index.toLong
         )
 
@@ -566,7 +566,7 @@ object PricebetValidatorTest extends ScalusTest {
           seedUtxo = seedTxOutRef,
           beaconPolicyId = ByteString.empty, // Will be set from script hash
           beaconName = beaconTokenName,
-          authorizedSigner = scalus.ledger.api.v1.PubKeyHash(Oracle.addrKeyHash)
+          authorizedSigner = scalus.cardano.onchain.plutus.v1.PubKeyHash(Oracle.addrKeyHash)
         )
 
         val oracleContract = OracleContract(oracleConfig)

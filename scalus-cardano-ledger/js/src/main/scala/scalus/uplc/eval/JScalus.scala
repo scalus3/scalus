@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import io.bullet.borer.Cbor
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
 

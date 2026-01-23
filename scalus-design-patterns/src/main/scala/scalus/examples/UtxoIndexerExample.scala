@@ -1,13 +1,13 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.Data
-import scalus.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.compiler.Options
-import scalus.ledger.api.v3.{TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
 import scalus.patterns.UtxoIndexer
-import scalus.prelude.Validator
+import scalus.cardano.onchain.plutus.prelude.Validator
 import scalus.uplc.PlutusV3
 
 /** Example validator using the UTxO Indexer pattern. */
@@ -50,7 +50,7 @@ lazy val IndexerValidatorContract = IndexerCompilation.contract
 
 /** Off-chain code demonstrating how to use SpendWithDelayedRedeemer to compute the indices. */
 object Offchain:
-    import scalus.builtin.Data.toData
+    import scalus.uplc.builtin.Data.toData
     import scalus.cardano.address.Address
     import scalus.cardano.ledger.{CardanoInfo, Transaction, Utxo}
     import scalus.cardano.txbuilder.TxBuilder

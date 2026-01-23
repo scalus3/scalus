@@ -2,15 +2,16 @@ package scalus.testing.regression.orddata20251106
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.prelude.<=>
-import scalus.prelude.Ord.{*, given}
+import scalus.cardano.onchain.plutus.prelude.<=>
+import scalus.cardano.onchain.plutus.prelude.Ord.{*, given}
 
 /** Regression test for Data Ord upcasting issue found in cosmex contract.
   *
-  * Error: Cannot upcast Unit -> scalus.prelude.Order$.Less to Unit -> scalus.prelude.Order
+  * Error: Cannot upcast Unit -> scalus.cardano.onchain.plutus.prelude.Order$.Less to Unit ->
+  * scalus.cardano.onchain.plutus.prelude.Order
   *
   * The issue occurs in Ord.scala lines 64-66 where lambda return types are inferred as specific
   * Order enum cases (Order.Less, Order.Greater) instead of the general Order type.

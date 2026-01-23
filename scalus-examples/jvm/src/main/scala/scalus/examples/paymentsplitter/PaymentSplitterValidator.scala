@@ -1,15 +1,15 @@
 package scalus.examples.paymentsplitter
 
 import scalus.*
-import scalus.builtin.{ByteString, Data}
-import scalus.ledger.api.v1
-import scalus.ledger.api.v1.Value.*
-import scalus.ledger.api.v1.{Credential, PubKeyHash}
-import scalus.ledger.api.v2.TxOut
-import scalus.ledger.api.v3.{TxInfo, TxOutRef}
-import scalus.prelude.{AssocMap, *}
-import scalus.prelude.List.*
-import scalus.prelude.Option.*
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.onchain.plutus.v1
+import scalus.cardano.onchain.plutus.v1.Value.*
+import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
+import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, *}
+import scalus.cardano.onchain.plutus.prelude.List.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 
 /** Naive Payment Splitter - Split payouts equally among a list of specified payees.
   *

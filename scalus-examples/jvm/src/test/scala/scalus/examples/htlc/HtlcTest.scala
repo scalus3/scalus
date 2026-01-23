@@ -1,8 +1,8 @@
 package scalus.examples.htlc
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend

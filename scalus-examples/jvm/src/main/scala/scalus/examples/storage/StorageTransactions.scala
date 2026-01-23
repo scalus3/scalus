@@ -1,6 +1,6 @@
 package scalus.examples.storage
 
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
@@ -8,7 +8,7 @@ import scalus.examples.UnorderedNodeAction
 import scalus.patterns.{Config, Cons}
 import scalus.patterns.UnorderedLinkedList as LinkedList
 import scalus.uplc.PlutusV3
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Data.toData
 
 /** Transaction creator for operations that allow uncapped data storage on the blockchain.
   *
@@ -185,7 +185,8 @@ case class StorageTransactions(
         val newNodeDatum = Cons.cons(chunkKey, data = Data.B(chunk))
 
         // we're updating the tail to point to a new utxo with the current chunk
-        val updatedTailDatum = tailDatum.copy(ref = scalus.prelude.Option.Some(chunkKey))
+        val updatedTailDatum =
+            tailDatum.copy(ref = scalus.cardano.onchain.plutus.prelude.Option.Some(chunkKey))
 
         // make sure to not double spend
         val unspentUserUtxos = userUtxos.filterNot { case (input, _) =>
@@ -207,7 +208,7 @@ case class StorageTransactions(
         // We sign with userPkh, validator will check that chunkKey starts with userPkh
         val redeemer =
             UnorderedNodeAction
-                .Append(scalus.ledger.api.v1.PubKeyHash(chunkKey), covering = tailDatum)
+                .Append(scalus.cardano.onchain.plutus.v1.PubKeyHash(chunkKey), covering = tailDatum)
                 .toData
 
         TxBuilder(env, evaluator)

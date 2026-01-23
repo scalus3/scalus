@@ -2,9 +2,9 @@ package scalus.cardano.txbuilder
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString.{hex, utf8}
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.{hex, utf8}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
@@ -12,7 +12,7 @@ import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.txBuilder
 import scalus.compiler.compile
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
@@ -246,7 +246,8 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
 
         val datum = Data.Constr(0, PList(100.toData, hex"abcd".toData))
         val datumHash = DataHash.fromByteString(
-          scalus.builtin.Builtins.blake2b_256(scalus.builtin.Builtins.serialiseData(datum))
+          scalus.uplc.builtin.Builtins
+              .blake2b_256(scalus.uplc.builtin.Builtins.serialiseData(datum))
         )
 
         val tx = txBuilder

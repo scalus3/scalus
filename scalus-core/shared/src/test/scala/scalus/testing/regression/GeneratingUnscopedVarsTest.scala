@@ -2,9 +2,9 @@ package scalus.testing.regression
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.compiler.compile
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 @Compile
 object Min20250702 {

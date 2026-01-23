@@ -1,14 +1,14 @@
 package scalus.cardano.ledger
 
-import scalus.builtin.Data.toData
-import scalus.builtin.{platform, Data}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{platform, Data}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.Language.*
 import scalus.cardano.ledger.LedgerToPlutusTranslation.*
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 import scalus.ledger
 import scalus.ledger.api
-import scalus.ledger.api.{v1, v2, v3, ScriptContext}
+import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.eval.*
 import scalus.uplc.{DeBruijnedProgram, Term}
 import scribe.Logger

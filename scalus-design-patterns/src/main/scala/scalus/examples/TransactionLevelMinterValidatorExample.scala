@@ -1,12 +1,12 @@
 package scalus.examples
 
 import scalus.*
-import scalus.builtin.{ByteString, Data, FromData}
-import scalus.builtin.ByteString.utf8
+import scalus.uplc.builtin.{ByteString, Data, FromData}
+import scalus.uplc.builtin.ByteString.utf8
 import scalus.compiler.Options
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.TransactionLevelMinterValidator
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 
 @Compile

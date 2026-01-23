@@ -3,7 +3,7 @@ package scalus.cardano.wallet.hd
 import com.bloxbean.cardano.client.account.Account
 import com.bloxbean.cardano.client.common.model.Networks
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Network
 import scalus.crypto.ed25519.{Ed25519Signer, JvmEd25519Signer, Signature}
 
@@ -240,7 +240,7 @@ class HdAccountTest extends AnyFunSuite {
 
         // Verify using bloxbean's signing provider
         val bbPublicKey = bbAccount.hdKeyPair().getPublicKey.getKeyData
-        val isValid = scalus.builtin.platform.verifyEd25519Signature(
+        val isValid = scalus.uplc.builtin.platform.verifyEd25519Signature(
           ByteString.unsafeFromArray(bbPublicKey),
           message,
           hdSignature

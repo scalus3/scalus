@@ -1,10 +1,10 @@
-package scalus.ledger.api.v3
+package scalus.cardano.onchain.plutus.v3
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.prelude.{List, Option, SortedMap}
-import scalus.builtin.ByteString
-import scalus.builtin.Builtins.{constrData, mkNilData}
-import scalus.ledger.api.v2.OutputDatum
+import scalus.cardano.onchain.plutus.prelude.{List, Option, SortedMap}
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Builtins.{constrData, mkNilData}
+import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.testing.kit.EvalTestKit
 
 class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {

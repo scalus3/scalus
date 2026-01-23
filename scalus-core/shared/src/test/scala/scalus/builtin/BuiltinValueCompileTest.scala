@@ -2,9 +2,9 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.{BuiltinValue, Builtins, ByteString, Data}
+import scalus.uplc.builtin.{BuiltinValue, Builtins, ByteString, Data}
 import scalus.compiler.compile
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.eval.{BuiltinValueOps, PlutusVM, Result}
 import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
 

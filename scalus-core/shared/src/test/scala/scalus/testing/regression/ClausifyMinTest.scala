@@ -2,7 +2,7 @@ package scalus.testing.regression
 
 import scala.language.implicitConversions
 import scalus.*
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.eval.*
 import org.scalatest.funsuite.AnyFunSuite
 

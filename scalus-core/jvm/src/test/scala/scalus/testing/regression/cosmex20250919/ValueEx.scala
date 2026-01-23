@@ -1,7 +1,7 @@
 package scalus.testing.regression.cosmex20250919
 
-import scalus.prelude.*
-import scalus.ledger.api.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.*
 import scalus.*
 
 @Compile

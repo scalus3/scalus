@@ -5,7 +5,7 @@ import com.bloxbean.cardano.client.plutus.spec.{PlutusScript, PlutusV1Script, Pl
 import com.bloxbean.cardano.client.plutus.util.PlutusUtil
 import com.fasterxml.jackson.databind.{ObjectMapper, SerializationFeature}
 import io.bullet.borer.Cbor
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.BloxbeanToLedgerTranslation.*

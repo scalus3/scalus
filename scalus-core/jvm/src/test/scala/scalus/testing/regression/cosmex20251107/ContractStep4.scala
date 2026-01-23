@@ -1,11 +1,11 @@
 package scalus.testing.regression.cosmex20251107.step4
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.Data.toData
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.ledger.api.v2
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v2
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 type PubKey = ByteString
 type Signature = ByteString

@@ -4,9 +4,9 @@ import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.builtin
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.*
-import scalus.prelude.List as PList
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.*
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.test.ArbitraryInstances
 import scalus.utils.Hex.{hexToBytes, toHex}
 import scalus.utils.Utils

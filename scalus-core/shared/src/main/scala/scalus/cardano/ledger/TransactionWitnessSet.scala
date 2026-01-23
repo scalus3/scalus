@@ -3,7 +3,7 @@ package scalus.cardano.ledger
 import io.bullet.borer.*
 import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.utils.Pretty.ctr
 import scalus.utils.{Pretty, Style}
 
