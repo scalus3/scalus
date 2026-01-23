@@ -17,7 +17,7 @@ import scala.compiletime.asMatchable
   *
   * For onchain operations use the extension methods in the companion object
   */
-class ByteString private[builtin] (val bytes: Array[Byte]) {
+class ByteString private[builtin] (val bytes: Array[Byte]) extends Serializable {
 
     /** Gets byte by index
       *
