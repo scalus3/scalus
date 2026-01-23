@@ -125,7 +125,7 @@ trait IntegrationTest extends BeforeAndAfterAll with ScalusTest { self: Suite =>
         val parties = Party.values.toIndexedSeq.map(p =>
             TestParty(
               p,
-              p.address(Network.Testnet),
+              p.account.baseAddress(Network.Testnet),
               p.addrKeyHash,
               p.signer
             )
