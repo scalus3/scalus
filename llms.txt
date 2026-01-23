@@ -21,8 +21,10 @@
 ### Smart Contracts
 - /docs/smart-contracts - Writing Cardano validators
 - /docs/smart-contracts/developing-smart-contracts - First smart contract tutorial
+- /docs/smart-contracts/htlc-tutorial - Hash Time-Locked Contract tutorial
 - /docs/smart-contracts/validators - Validator types (spending, minting, staking)
-- /docs/smart-contracts/from-data - Data type conversion
+- /docs/smart-contracts/parameterized-validators - Reusable validators with parameters
+- /docs/smart-contracts/plutus-data - Data type conversion
 - /docs/smart-contracts/compiling - Compilation to Plutus Core
 - /docs/smart-contracts/optimisations - Advanced optimizations
 
@@ -49,6 +51,8 @@
 - /docs/design-patterns/merkelized-validator - Batch operations
 - /docs/design-patterns/utxo-indexer - O(1) input-output mapping
 - /docs/design-patterns/linked-list - On-chain data structures
+- /docs/design-patterns/parameter-validation - Verify parameterized script instances
+- /docs/design-patterns/validity-range - Time validation patterns
 
 ### Security
 - /docs/security - Security principles
