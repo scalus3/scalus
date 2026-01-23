@@ -105,29 +105,29 @@ final class SIRCompiler(
     private val DefaultFunSIRBuiltins: Map[Symbol, SIR.Builtin] = Macros.generateBuiltinsMap(ctx)
     private val BigIntSymbol = requiredModule("scala.math.BigInt")
     private val BigIntClassSymbol = requiredClass("scala.math.BigInt")
-    private val ByteStringClassSymbol = requiredClass("scalus.builtin.ByteString")
-    private val DataClassSymbol = requiredClass("scalus.builtin.Data")
-    private val DataModuleSymbol = requiredModule("scalus.builtin.Data")
+    private val ByteStringClassSymbol = requiredClass("scalus.uplc.builtin.ByteString")
+    private val DataClassSymbol = requiredClass("scalus.uplc.builtin.Data")
+    private val DataModuleSymbol = requiredModule("scalus.uplc.builtin.Data")
     // Data case class companion apply methods (for Data.I(x), Data.B(x))
     private val DataIApplySymbol =
-        requiredClass("scalus.builtin.Data.I").companionModule.requiredMethod("apply")
+        requiredClass("scalus.uplc.builtin.Data.I").companionModule.requiredMethod("apply")
     private val DataBApplySymbol =
-        requiredClass("scalus.builtin.Data.B").companionModule.requiredMethod("apply")
+        requiredClass("scalus.uplc.builtin.Data.B").companionModule.requiredMethod("apply")
     // Note: Data.Constr, Data.List, Data.Map are handled by default case class compilation
-    private val PairSymbol = requiredClass("scalus.builtin.BuiltinPair")
-    private val ScalusBuiltinListClassSymbol = requiredClass("scalus.builtin.BuiltinList")
-    private val ScalusBuiltinArrayClassSymbol = requiredClass("scalus.builtin.BuiltinArray")
+    private val PairSymbol = requiredClass("scalus.uplc.builtin.BuiltinPair")
+    private val ScalusBuiltinListClassSymbol = requiredClass("scalus.uplc.builtin.BuiltinList")
+    private val ScalusBuiltinArrayClassSymbol = requiredClass("scalus.uplc.builtin.BuiltinArray")
     private val StringContextSymbol = requiredModule("scala.StringContext")
     private val StringContextApplySymbol = StringContextSymbol.requiredMethod("apply")
     private val Tuple2Symbol = requiredClass("scala.Tuple2")
     private val NothingSymbol = defn.NothingClass
     private val NullSymbol = defn.NullClass
-    private val ByteStringModuleSymbol = requiredModule("scalus.builtin.ByteString")
+    private val ByteStringModuleSymbol = requiredModule("scalus.uplc.builtin.ByteString")
     private val ByteStringSymbolHex = ByteStringModuleSymbol.requiredMethod("hex")
     private val ByteStringSymbolUtf8 = ByteStringModuleSymbol.requiredMethod("utf8")
-    private val BuiltinValueModuleSymbol = requiredModule("scalus.builtin.BuiltinValue")
-    private val FromDataSymbol = requiredClass("scalus.builtin.FromData")
-    private val ToDataSymbol = requiredClass("scalus.builtin.ToData")
+    private val BuiltinValueModuleSymbol = requiredModule("scalus.uplc.builtin.BuiltinValue")
+    private val FromDataSymbol = requiredClass("scalus.uplc.builtin.FromData")
+    private val ToDataSymbol = requiredClass("scalus.uplc.builtin.ToData")
     private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
     private val sirBodyAnnotation = requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
     private val sirModuleWithDepsType = requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")
@@ -253,7 +253,7 @@ final class SIRCompiler(
     private val ScalusDebugAnnot = requiredClassRef("scalus.ScalusDebug").symbol.asClass
     private val IgnoreAnnot = requiredClassRef("scalus.Ignore").symbol.asClass
 
-    private val uplcIntrinsicAnnot = Symbols.requiredClass("scalus.builtin.uplcIntrinsic")
+    private val uplcIntrinsicAnnot = Symbols.requiredClass("scalus.uplc.builtin.uplcIntrinsic")
 
     private def builtinFun(s: Symbol): Option[SIR.Builtin] = {
         DefaultFunSIRBuiltins
@@ -263,10 +263,11 @@ final class SIRCompiler(
                     case Some(annot) =>
                         annot.argumentConstantString(0) match
                             case Some(name) =>
-                                val sym = Symbols.requiredMethod(s"scalus.builtin.Builtins.${name}")
+                                val sym =
+                                    Symbols.requiredMethod(s"scalus.uplc.builtin.Builtins.${name}")
                                 if !sym.exists then
                                     report.error(
-                                      s"Unknown builtin name in uplcAnnotation: ${name} (symbol scalus.builtin.Builtins.${name} not exists)",
+                                      s"Unknown builtin name in uplcAnnotation: ${name} (symbol scalus.uplc.builtin.Builtins.${name} not exists)",
                                       s.srcPos
                                     )
                                     None
@@ -330,7 +331,7 @@ final class SIRCompiler(
         val staticInheritanceParents = td.tpe.parents.flatMap { p =>
             val hasAnnotation = p.typeSymbol.hasAnnotation(CompileAnnot)
             if hasAnnotation then
-                if p.typeSymbol.fullName.toString.startsWith("scalus.prelude.") then Some(p)
+                if p.typeSymbol.fullName.toString.startsWith("scalus.cardano.onchain.plutus.prelude.") then Some(p)
                 else
                     throw new RuntimeException(
                       s"Unsopported parent: ${p.typeSymbol.fullName.toString}, we support only builtin prelude validators as base classes "
@@ -839,13 +840,28 @@ final class SIRCompiler(
                   origType
                 )
             case (false, false) =>
-                // println( s"external var: module ${e.symbol.owner.fullName.toString()}, ${e.symbol.fullName.toString()}" )
-                val origType = sirTypeInEnv(e.tpe.widen.dealias, e.srcPos, env.copy(debug = true))
+                val origType = sirTypeInEnv(e.tpe.widen.dealias, e.srcPos, env)
                 val valType =
                     if isNoArgsMethod(e.symbol) then SIRType.Fun(SIRType.Unit, origType)
                     else origType
-                val (moduleName, valName) =
-                    (e.symbol.owner.fullName.toString, e.symbol.fullName.toString)
+                // Resolve val aliases to their target objects.
+                // When accessing e.g. scalus.prelude.List (a val alias pointing to
+                // scalus.cardano.onchain.plutus.prelude.List), we need to use the
+                // target module name, not the package object where the alias is defined.
+                val widenedDealias = e.tpe.widen.dealias
+                val (moduleName, valName) = widenedDealias match
+                    case termRef: Types.TermRef if termRef.symbol.is(Flags.Module) =>
+                        // This is a reference to a module object - use its canonical path
+                        val targetSym = termRef.symbol
+                        (targetSym.owner.fullName.toString, targetSym.fullName.toString)
+                    case typeRef: Types.TypeRef if typeRef.symbol.is(Flags.ModuleClass) =>
+                        // This is a TypeRef to a module class (e.g., when referencing
+                        // a companion object through a val alias)
+                        // Use owner as moduleName and sourceModule fullName as valName
+                        val moduleSym = typeRef.symbol.sourceModule
+                        (moduleSym.owner.fullName.toString, moduleSym.fullName.toString)
+                    case _ =>
+                        (e.symbol.owner.fullName.toString, e.symbol.fullName.toString)
 
                 // Note: Data constructors (Data.I, Data.B, etc.) are now handled
                 // in compileExpr via Apply cases that emit the appropriate builtins
@@ -1549,17 +1565,17 @@ final class SIRCompiler(
                     )
 
         case expr if expr.symbol == ByteStringModuleSymbol.requiredMethod("empty") =>
-            scalus.uplc.Constant.ByteString(scalus.builtin.ByteString.empty)
+            scalus.uplc.Constant.ByteString(scalus.uplc.builtin.ByteString.empty)
         case expr if expr.symbol == DataModuleSymbol.requiredMethod("unit") =>
             scalus.uplc.Constant.Data(
-              scalus.builtin.Data.Constr(0, scalus.prelude.List.Nil)
+              scalus.uplc.builtin.Data.Constr(0, scalus.cardano.onchain.plutus.prelude.List.Nil)
             )
         case Apply(expr, List(SkipInline(literal)))
             if expr.symbol == ByteStringModuleSymbol.requiredMethod("fromHex") =>
             literal match
                 case Literal(c) if c.tag == Constants.StringTag =>
                     scalus.uplc.Constant.ByteString(
-                      scalus.builtin.ByteString.fromHex(c.stringValue)
+                      scalus.uplc.builtin.ByteString.fromHex(c.stringValue)
                     )
                 case _ =>
                     error(
@@ -1576,7 +1592,7 @@ final class SIRCompiler(
             literal match
                 case Literal(c) if c.tag == Constants.StringTag =>
                     scalus.uplc.Constant.ByteString(
-                      scalus.builtin.ByteString.fromString(c.stringValue)
+                      scalus.uplc.builtin.ByteString.fromString(c.stringValue)
                     )
                 case _ =>
                     error(
@@ -1598,7 +1614,10 @@ final class SIRCompiler(
             )
             if byteStringHex.symbol == ByteStringSymbolHex
                 && stringContextApply.symbol == StringContextApplySymbol =>
-            try scalus.uplc.Constant.ByteString(scalus.builtin.ByteString.fromHex(c.stringValue))
+            try
+                scalus.uplc.Constant.ByteString(
+                  scalus.uplc.builtin.ByteString.fromHex(c.stringValue)
+                )
             catch
                 case NonFatal(e) =>
                     error(
@@ -1621,7 +1640,10 @@ final class SIRCompiler(
             )
             if byteStringUtf8.symbol == ByteStringSymbolUtf8
                 && stringContextApply.symbol == StringContextApplySymbol =>
-            try scalus.uplc.Constant.ByteString(scalus.builtin.ByteString.fromString(c.stringValue))
+            try
+                scalus.uplc.Constant.ByteString(
+                  scalus.uplc.builtin.ByteString.fromString(c.stringValue)
+                )
             catch
                 case NonFatal(e) =>
                     error(
@@ -2495,7 +2517,9 @@ final class SIRCompiler(
             // BuiltinValue.empty - compile to unValueData(emptyDataMap)
             case expr if expr.symbol == BuiltinValueModuleSymbol.requiredMethod("empty") =>
                 val emptyDataMap = SIR.Const(
-                  scalus.uplc.Constant.Data(scalus.builtin.Data.Map(scalus.prelude.List.Nil)),
+                  scalus.uplc.Constant.Data(
+                    scalus.uplc.builtin.Data.Map(scalus.cardano.onchain.plutus.prelude.List.Nil)
+                  ),
                   SIRType.Data.tp,
                   AnnotationsDecl.fromSrcPos(tree.srcPos)
                 )
@@ -2549,8 +2573,8 @@ final class SIRCompiler(
             case Select(lst, fun) if lst.isList =>
                 compileBuiltinListMethods(env, lst, fun, Nil, tree)
             case tree @ TypeApply(Select(list, name), immutable.List(tpe))
-                if name == termName("empty") && list.tpe =:= requiredModule(
-                  "scalus.builtin.BuiltinList"
+                if name == termName("empty") && list.tpe.widen.dealias =:= requiredModule(
+                  "scalus.uplc.builtin.BuiltinList"
                 ).typeRef =>
                 val tpeE = typeReprToDefaultUni(tpe.tpe, tree)
                 SIR.Const(
@@ -2578,7 +2602,10 @@ final class SIRCompiler(
             case tree @ Apply(
                   TypeApply(Select(list, nme.apply), immutable.List(ltpe)),
                   immutable.List(ex)
-                ) if list.tpe =:= requiredModule("scalus.builtin.BuiltinList").typeRef =>
+                )
+                if list.tpe.widen.dealias =:= requiredModule(
+                  "scalus.uplc.builtin.BuiltinList"
+                ).typeRef =>
                 compileBuiltinListConstructor(env, ex, list, ltpe, tree)
             // Array BUILTINS
             // array.length, array(idx)
@@ -2590,7 +2617,10 @@ final class SIRCompiler(
             case tree @ Apply(
                   TypeApply(Select(array, nme.apply), immutable.List(atpe)),
                   immutable.List(ex)
-                ) if array.tpe =:= requiredModule("scalus.builtin.BuiltinArray").typeRef =>
+                )
+                if array.tpe.widen.dealias =:= requiredModule(
+                  "scalus.uplc.builtin.BuiltinArray"
+                ).typeRef =>
                 compileBuiltinArrayConstructor(env, ex, array, atpe, tree)
             // Pair BUILTINS
             // PAIR
@@ -2599,7 +2629,10 @@ final class SIRCompiler(
             case Apply(
                   TypeApply(Select(pair, nme.apply), immutable.List(tpe1, tpe2)),
                   immutable.List(a, b)
-                ) if pair.tpe =:= requiredModule("scalus.builtin.BuiltinPair").typeRef =>
+                )
+                if pair.tpe.widen.dealias =:= requiredModule(
+                  "scalus.uplc.builtin.BuiltinPair"
+                ).typeRef =>
                 compileBuiltinPairConstructor(env, a, b, tpe1, tpe2, tree)
             // new Constr(args)
             case Apply(TypeApply(con @ Select(f, nme.CONSTRUCTOR), targs), args) =>
@@ -2642,6 +2675,28 @@ final class SIRCompiler(
                   SIRType.List(sirElemType),
                   AnnotationsDecl.fromSrcPos(tree.srcPos)
                 )
+            // Handle Module[T](args) where Module is a module object with an apply method
+            // This handles cases like List[T](a, b) which desugars to List.apply[T](a, b)
+            // but the tree structure is Apply(TypeApply(List, [T]), args) not Apply(TypeApply(Select(List, apply), [T]), args)
+            case a @ Apply(TypeApply(moduleRef, targs), args)
+                if moduleRef.tpe.widen.dealias.typeSymbol.is(Flags.ModuleClass) &&
+                    !moduleRef.isInstanceOf[tpd.Select] =>
+                // Treat this as module.apply[T](args)
+                val moduleSym = moduleRef.tpe.widen.dealias.typeSymbol.sourceModule
+                val applySym = moduleSym.info.member(nme.apply).symbol
+                if applySym.exists then
+                    // Create a Select(module, apply) and compile that
+                    val applySelect = tpd.Select(moduleRef, nme.apply).withSpan(moduleRef.span)
+                    val typeApply = tpd.TypeApply(applySelect, targs).withSpan(a.span)
+                    compileApply(env, typeApply, targs, args, tree.tpe, a)
+                else
+                    error(
+                      GenericError(
+                        s"Module ${moduleSym.fullName} does not have an apply method",
+                        tree.srcPos
+                      ),
+                      SIR.Error("No apply method", AnnotationsDecl.fromSrcPos(tree.srcPos))
+                    )
             /* case class Test(a: Int)
              * val t = Test(42)
              * is translated to
@@ -2665,7 +2720,10 @@ final class SIRCompiler(
                 compileNewConstructor(env, classSymbol.typeRef, tree.tpe.widen, args, tree)
             // f.apply[A, B](arg) => Apply(f, arg)
             case a @ Apply(applied @ TypeApply(fun @ Select(f, nme.apply), targs), args) =>
-                if f.symbol.is(Flags.Module) then
+                // Check if f is a module - either directly or through a val alias
+                val isModule = f.symbol.is(Flags.Module) || f.tpe.widen.dealias.typeSymbol
+                    .is(Flags.ModuleClass)
+                if isModule then
                     // apply method in a companion object
                     compileApply(env, fun, targs, args, tree.tpe, a)
                 else if defn.isFunctionType(fun.tpe.widen) || applied.tpe.isMethodType then
@@ -3566,7 +3624,7 @@ final class SIRCompiler(
                             // we generate SIR for all backends,  so -- not produce error, this ExternalVars will be
                             // replacedf
                             val moduleSym = Symbols.requiredModule(
-                              "scalus.builtin.internal.UniversalDataConversion"
+                              "scalus.uplc.builtin.internal.UniversalDataConversion"
                             )
                             Module(
                               SIRVersion,

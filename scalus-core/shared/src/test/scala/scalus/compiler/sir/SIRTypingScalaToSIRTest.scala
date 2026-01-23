@@ -81,25 +81,25 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
 
     }
 
-    test("check that scalus.prelude.List is mapped to SumCaseClass") {
+    test("check that scalus.cardano.onchain.plutus.prelude.List is mapped to SumCaseClass") {
         val sir = compile {
-            scalus.prelude.List.single(BigInt(1))
+            scalus.cardano.onchain.plutus.prelude.List.single(BigInt(1))
         }
         sir.tp match
             case SIRType.SumCaseClass(dataDecl, typeArgs) =>
-                assert(dataDecl.name == "scalus.prelude.List")
+                assert(dataDecl.name == "scalus.cardano.onchain.plutus.prelude.List")
                 assert(typeArgs == List(SIRType.Integer))
             case _ => fail(s"unexpected type ${sir.tp}")
 
     }
 
-    test("check that scalus.prelude.List is mapped to SumCaseClass in fun") {
+    test("check that scalus.cardano.onchain.plutus.prelude.List is mapped to SumCaseClass in fun") {
         val sir = compile { (x: BigInt) =>
-            scalus.prelude.List.single(x)
+            scalus.cardano.onchain.plutus.prelude.List.single(x)
         }
         sir.tp match
             case SIRType.Fun(SIRType.Integer, SIRType.SumCaseClass(dataDecl, typeArgs)) =>
-                assert(dataDecl.name == "scalus.prelude.List")
+                assert(dataDecl.name == "scalus.cardano.onchain.plutus.prelude.List")
                 assert(typeArgs == List(SIRType.Integer))
             case _ => fail(s"unexpected type ${sir.tp}")
 
@@ -108,8 +108,9 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
     test("check that apply with implicit parameters is mapped to corret SIR.Apply") {
         import scalus.builtin.ByteString
         import scalus.prelude.*
-        val sir = compile { (l: scalus.prelude.List[ByteString], v: ByteString) =>
-            l.contains(v)
+        val sir = compile {
+            (l: scalus.cardano.onchain.plutus.prelude.List[ByteString], v: ByteString) =>
+                l.contains(v)
         }
         val lSir = findLastLetBody(sir)
         lSir match {
@@ -131,7 +132,7 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
                           tp3,
                           _
                         ) =>
-                        assert(name == "scalus.prelude.List$.contains")
+                        assert(name == "scalus.cardano.onchain.plutus.prelude.List$.contains")
                         val aTp = new SIRType.TypeVar("A", None, false)
                         val bTp = new SIRType.TypeVar("B", None, false)
                         val tpf1 = tpf match {
@@ -183,11 +184,11 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
     }
 
     test("List.empty[B] should be a List with type B") {
-        import scalus.prelude.List
+        import scalus.cardano.onchain.plutus.prelude.List
         val sir = compile { (x: BigInt) => List.empty[BigInt] }
         sir.tp match {
             case SIRType.Fun(SIRType.Integer, SIRType.SumCaseClass(dataDecl, typeArgs)) =>
-                assert(dataDecl.name == "scalus.prelude.List")
+                assert(dataDecl.name == "scalus.cardano.onchain.plutus.prelude.List")
                 assert(typeArgs.head ~=~ SIRType.Integer)
             case _ => fail(s"unexpected type ${sir.tp}")
         }

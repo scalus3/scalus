@@ -1,6 +1,6 @@
 package scalus.uplc
 
-import scalus.builtin
+import scalus.uplc.builtin
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.uplc.DefaultUni.{decodeUni, encodeUni, flatForUni}
 
@@ -43,7 +43,7 @@ object Constant {
         def lift(a: Unit): Constant = Unit
     }
 
-    given LiftValueData[A <: scalus.builtin.Data]: LiftValue[A] = new LiftValue[A] {
+    given LiftValueData[A <: scalus.uplc.builtin.Data]: LiftValue[A] = new LiftValue[A] {
         def lift(a: A): Constant = Data(a)
     }
 
@@ -86,7 +86,7 @@ object Constant {
     case class Bool(value: Boolean) extends Constant:
         def tpe = DefaultUni.Bool
 
-    case class Data(value: scalus.builtin.Data) extends Constant:
+    case class Data(value: scalus.uplc.builtin.Data) extends Constant:
         def tpe = DefaultUni.Data
 
     case class List(elemType: DefaultUni, value: immutable.List[Constant]) extends Constant:
@@ -124,7 +124,7 @@ object Constant {
           *   - [[java.lang.String]]
           *   - [[Boolean]]
           *   - [[Unit]]
-          *   - [[scalus.builtin.Data]] and its subtypes
+          *   - [[scalus.uplc.builtin.Data]] and its subtypes
           *   - Collections: [[Seq]] (requires element type to have LiftValue)
           *   - Tuples: pairs of values with LiftValue instances
           *
@@ -160,7 +160,7 @@ object Constant {
         case DefaultUni.Unit       => Unit
         case DefaultUni.Bool       => Bool(a.asInstanceOf[Boolean])
         case DefaultUni.Data =>
-            Data(a.asInstanceOf[scalus.builtin.Data])
+            Data(a.asInstanceOf[scalus.uplc.builtin.Data])
         case DefaultUni.Apply(DefaultUni.ProtoList, elemType) =>
             List(elemType, a.asInstanceOf[Seq[Any]].view.map(fromValue(elemType, _)).toList)
         case DefaultUni.Apply(DefaultUni.Apply(DefaultUni.ProtoPair, aType), bType) =>

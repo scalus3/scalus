@@ -1,9 +1,9 @@
 package scalus.uplc
 
-import scalus.builtin.*
-import scalus.builtin.Builtins.*
+import scalus.uplc.builtin.*
+import scalus.uplc.builtin.Builtins.*
 import scalus.cardano.ledger.ExUnits
-import scalus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.Constant.given
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.DefaultUni.{Bool, Integer, given}

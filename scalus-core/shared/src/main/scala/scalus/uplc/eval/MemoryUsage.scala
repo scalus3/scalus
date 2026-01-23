@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
-import scalus.builtin.ByteString
-import scalus.builtin.Data
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Data
 import scalus.uplc.Constant
 import scalus.uplc.eval.CekValue.*
 

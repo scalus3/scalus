@@ -2,7 +2,7 @@ package scalus.uplc
 package eval
 
 import cats.syntax.group.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 

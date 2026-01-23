@@ -40,7 +40,7 @@ import scalus.serialization.flat.{DecoderState, EncoderState, Flat}
   * @see
   *   [[https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf Plutus Core Specification]]
   * @see
-  *   [[scalus.builtin.Builtins]] for the Scala implementations
+  *   [[scalus.uplc.builtin.Builtins]] for the Scala implementations
   */
 enum DefaultFun extends Enum[DefaultFun]:
 

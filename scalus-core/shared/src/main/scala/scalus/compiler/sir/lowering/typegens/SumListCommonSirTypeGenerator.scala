@@ -7,7 +7,8 @@ import scalus.compiler.sir.*
 
 import scala.util.control.NonFatal
 
-/** handle next cases: scalus.prelude.List[A] scalus.builtin.BuiltinList[A]
+/** handle next cases: scalus.cardano.onchain.plutus.prelude.List[A]
+  * scalus.uplc.builtin.BuiltinList[A]
   */
 trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
@@ -290,7 +291,8 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
     override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
         constr.name match
-            case "scalus.prelude.List$.Nil" | "scalus.builtin.BuiltinList$.Nil" =>
+            case "scalus.cardano.onchain.plutus.prelude.List$.Nil" |
+                "scalus.uplc.builtin.BuiltinList$.Nil" =>
                 genNil(constr.tp, constr.anns.pos)
                 // lvBuiltinApply0(
                 //  SIRBuiltins.mkNilData,
@@ -298,7 +300,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 //  SumCaseClassRepresentation.SumDataList,
                 //  constr.anns.pos
                 // )
-            case "scalus.prelude.List$.Cons" =>
+            case "scalus.cardano.onchain.plutus.prelude.List$.Cons" =>
                 if constr.args.size != 2 then
                     throw LoweringException(
                       s"Constr construnctor with ${constr.args.size} args, should be 2",
@@ -362,7 +364,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         SIRType.retrieveConstrDecl(tp) match {
             case Left(r) => false
             case Right(constrDecl) =>
-                constrDecl.name == "scalus.prelude.List$.Nil"
+                constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
         }
     }
 
@@ -430,8 +432,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 typeArgs.head
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
-                if constrDecl.name == "scalus.prelude.List$.Nil" then SIRType.FreeUnificator
-                else if constrDecl.name == "scalus.prelude.List$.Cons" then typeArgs.head
+                if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" then
+                    SIRType.FreeUnificator
+                else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" then
+                    typeArgs.head
                 else
                     throw LoweringException(
                       s"Unknown case class ${constrDecl.name} for List",
@@ -476,10 +480,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         matchData.cases.foreach { cs =>
             cs.pattern match
                 case SIR.Pattern.Constr(constrDecl, _, _)
-                    if constrDecl.name == "scalus.prelude.List$.Nil" =>
+                    if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" =>
                     optNilCase = Some(cs)
                 case SIR.Pattern.Constr(constrDecl, _, _)
-                    if constrDecl.name == "scalus.prelude.List$.Cons" =>
+                    if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" =>
                     optConsCase = Some(cs)
                 case SIR.Pattern.Wildcard =>
                     optWildcardCase = Some(cs)
@@ -637,11 +641,11 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     matchData.anns.pos
                   )
                 )
-            if constrDecl.name == "scalus.prelude.List$.Nil" then {
+            if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" then {
                 // we can generate only Nil case.
                 println("warning: unused case Cons in List match will be removed")
                 loweredNilBody
-            } else if constrDecl.name == "scalus.prelude.List$.Cons" then {
+            } else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" then {
                 println("warning: unused case Nil in List match will be removed")
                 loweredConsBody
             } else

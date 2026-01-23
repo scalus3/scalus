@@ -174,7 +174,7 @@ object ProductCaseClassRepresentation {
             SIRType.retrieveConstrDecl(tp) match
                 case Left(_) => false
                 case Right(constrDecl) =>
-                    constrDecl.name == "scalus.prelude.AssocMap" || constrDecl.name == "scalus.prelude.SortedMap"
+                    constrDecl.name == "scalus.cardano.onchain.plutus.prelude.AssocMap" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.SortedMap"
         }
     }
 
@@ -210,7 +210,7 @@ object ProductCaseClassRepresentation {
         def isPairOrTuple2(tp: SIRType): Boolean =
             tp match
                 case SIRType.CaseClass(decl, typeArgs, _) =>
-                    decl.name == "scalus.builtin.BuiltinPair"
+                    decl.name == "scalus.uplc.builtin.BuiltinPair"
                     ||
                     decl.name == "scala.Tuple2"
                 case SIRType.TypeLambda(params, body) =>
@@ -561,7 +561,7 @@ object LoweredValueRepresentation {
                 if decl.name == SIRType.Data.name then SumCaseClassRepresentation.DataData
                 // scalus.prelude.List uses native UPLC list representation for Data-compatible elements
                 // TODO: add containsFun check like in SirTypeUplcGenerator.apply
-                else if decl.name == "scalus.prelude.List" || decl.name == SIRType.BuiltinList.name
+                else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" || decl.name == SIRType.BuiltinList.name
                 then
                     if typeArgs.nonEmpty && ProductCaseClassRepresentation.PairData
                             .isPairOrTuple2(typeArgs.head)

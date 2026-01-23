@@ -1,7 +1,7 @@
 package scalus.uplc
 
 import scalus.*
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 
 object TermDSL:
     given Conversion[DefaultFun, Term] with

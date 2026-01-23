@@ -373,8 +373,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
                   ),
                   Apply(
                     ExternalVar(
-                      "scalus.builtin.internal.UniversalDataConversion$",
-                      "scalus.builtin.internal.UniversalDataConversion$.toData",
+                      "scalus.uplc.builtin.internal.UniversalDataConversion$",
+                      "scalus.uplc.builtin.internal.UniversalDataConversion$.toData",
                       SIRType.Fun(sirInt, sirData),
                       AnE
                     ),
@@ -428,10 +428,10 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
     }
 
     private val pubKeyHashDataDecl = DataDecl(
-      "scalus.ledger.api.v1.PubKeyHash",
+      "scalus.cardano.onchain.plutus.v1.PubKeyHash",
       List(
         ConstrDecl(
-          "scalus.ledger.api.v1.PubKeyHash",
+          "scalus.cardano.onchain.plutus.v1.PubKeyHash",
           List(TypeBinding("hash", sirByteString)),
           List.empty,
           List.empty,
@@ -444,7 +444,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
     test("compile datatypes") {
         val compiled = compile {
-            val pkh = new scalus.ledger.api.v1.PubKeyHash(hex"deadbeef")
+            val pkh = new scalus.cardano.onchain.plutus.v1.PubKeyHash(hex"deadbeef")
             pkh.hash
         }
 
@@ -454,18 +454,22 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
             List(
               Binding(
                 "pkh",
-                pubKeyHashDataDecl.constrType("scalus.ledger.api.v1.PubKeyHash"),
+                pubKeyHashDataDecl.constrType("scalus.cardano.onchain.plutus.v1.PubKeyHash"),
                 Constr(
-                  "scalus.ledger.api.v1.PubKeyHash",
+                  "scalus.cardano.onchain.plutus.v1.PubKeyHash",
                   pubKeyHashDataDecl,
                   List(Const(uplc.Constant.ByteString(hex"DEADBEEF"), sirByteString, AnE)),
-                  pubKeyHashDataDecl.constrType("scalus.ledger.api.v1.PubKeyHash"),
+                  pubKeyHashDataDecl.constrType("scalus.cardano.onchain.plutus.v1.PubKeyHash"),
                   AnE
                 )
               )
             ),
             Select(
-              Var("pkh", pubKeyHashDataDecl.constrType("scalus.ledger.api.v1.PubKeyHash"), AnE),
+              Var(
+                "pkh",
+                pubKeyHashDataDecl.constrType("scalus.cardano.onchain.plutus.v1.PubKeyHash"),
+                AnE
+              ),
               "hash",
               sirByteString,
               AnE
@@ -490,7 +494,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
     test("compile companion object apply as a primary constructor") {
         val compiled = compile {
-            scalus.ledger.api.v1.PubKeyHash(hex"deadbeef")
+            scalus.cardano.onchain.plutus.v1.PubKeyHash(hex"deadbeef")
         }
 
         assert(
@@ -498,7 +502,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
               Decl(
                 pubKeyHashDataDecl,
                 Constr(
-                  "scalus.ledger.api.v1.PubKeyHash",
+                  "scalus.cardano.onchain.plutus.v1.PubKeyHash",
                   pubKeyHashDataDecl,
                   List(Const(Constant.ByteString(hex"deadbeef"), SIRType.ByteString, AnE)),
                   SIRType.CaseClass(pubKeyHashDataDecl.constructors.head, scala.Nil, None),
@@ -769,8 +773,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
               SIRType.FreeUnificator,
               Apply(
                 SIR.ExternalVar(
-                  "scalus.prelude.SortedMap$",
-                  "scalus.prelude.SortedMap$.empty",
+                  "scalus.cardano.onchain.plutus.prelude.SortedMap$",
+                  "scalus.cardano.onchain.plutus.prelude.SortedMap$.empty",
                   SIRType.FreeUnificator,
                   AnE
                 ),

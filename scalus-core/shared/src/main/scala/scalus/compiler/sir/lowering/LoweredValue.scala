@@ -307,7 +307,7 @@ class VariableLoweredValue(
         rhs.addDependent(this)
     }
 
-    // if id == "scalus.ledger.api.v1.Credential$.given_Eq_Credential252" then {
+    // if id == "scalus.cardano.onchain.plutus.v1.Credential$.given_Eq_Credential252" then {
     //    println(
     //      s"VariableLoweredValue created with id = $id,  representation = $representation, sirType=${sir.tp.show}"
     //    )

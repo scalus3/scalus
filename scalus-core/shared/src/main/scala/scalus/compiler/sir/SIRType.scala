@@ -76,10 +76,10 @@ object SIRType {
     // sealed trait MappedBuiltin[T] extends Lifted[T] with ULPCMapped
 
     object Data {
-        val name = "scalus.builtin.Data"
+        val name = "scalus.uplc.builtin.Data"
 
         object Constr {
-            val name = "scalus.builtin.Data$.Constr"
+            val name = "scalus.uplc.builtin.Data$.Constr"
 
             def buildConstrDecl(dataType: SIRType): ConstrDecl = {
                 ConstrDecl(
@@ -96,7 +96,7 @@ object SIRType {
         }
 
         object Map {
-            val name = "scalus.builtin.Data$.Map"
+            val name = "scalus.uplc.builtin.Data$.Map"
 
             def buildConstrDecl(dataType: SIRType): ConstrDecl = {
                 ConstrDecl(
@@ -112,7 +112,7 @@ object SIRType {
         }
 
         object List {
-            val name = "scalus.builtin.Data$.List"
+            val name = "scalus.uplc.builtin.Data$.List"
 
             def buildConstrDecl(dataType: SIRType): ConstrDecl = {
                 ConstrDecl(
@@ -126,7 +126,7 @@ object SIRType {
         }
 
         object I {
-            val name = "scalus.builtin.Data$.I"
+            val name = "scalus.uplc.builtin.Data$.I"
 
             val constrDecl: ConstrDecl = {
                 ConstrDecl(
@@ -140,7 +140,7 @@ object SIRType {
         }
 
         object B {
-            val name = "scalus.builtin.Data$.B"
+            val name = "scalus.uplc.builtin.Data$.B"
 
             val constrDecl: ConstrDecl = {
                 ConstrDecl(
@@ -459,7 +459,7 @@ object SIRType {
             val proxy = new TypeProxy(null)
             val aInCons = TypeVar("A", Some(1), false)
             val retval = DataDecl(
-              "scalus.prelude.List",
+              "scalus.cardano.onchain.plutus.prelude.List",
               scala.List(NilConstr, Cons.buildConstr(aInCons, proxy)),
               scala.List(TypeVar("A", Some(2), false)),
               AnnotationsDecl.empty
@@ -475,7 +475,7 @@ object SIRType {
 
         def unapply(l: SIRType): Option[SIRType] = l match {
             case SumCaseClass(dataDecl, scala.List(a)) =>
-                if dataDecl.name == "scalus.prelude.List" then Some(a)
+                if dataDecl.name == "scalus.cardano.onchain.plutus.prelude.List" then Some(a)
                 else None
             case this.Cons(a) => Some(a)
             case this.Nil     => Some(Unit)
@@ -484,7 +484,7 @@ object SIRType {
 
         object Cons {
 
-            val name = "scalus.prelude.List$.Cons"
+            val name = "scalus.cardano.onchain.plutus.prelude.List$.Cons"
 
             def buildConstr(a: TypeVar, listSum: SIRType): ConstrDecl = {
                 ConstrDecl(
@@ -499,7 +499,7 @@ object SIRType {
             // TODO:  remove duplication via cache
             lazy val constr = {
                 dataDecl.constructors
-                    .find(_.name == "scalus.prelude.List$.Cons")
+                    .find(_.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons")
                     .getOrElse(
                       throw new IllegalStateException("Cons constructor not found in List.dataDecl")
                     )
@@ -510,7 +510,8 @@ object SIRType {
 
             def unapply(x: SIRType): Option[SIRType] = x match {
                 case CaseClass(constr, scala.List(a), _) =>
-                    if constr.name == "scalus.prelude.List$.Cons" then Some(a)
+                    if constr.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" then
+                        Some(a)
                     else None
                 case _ => None
             }
@@ -520,7 +521,7 @@ object SIRType {
         // val NilConstr = ConstrDecl("Nil", SIRVarStorage.DEFAULT, scala.Nil, scala.Nil, scala.Nil)
         val NilConstr =
             ConstrDecl(
-              "scalus.prelude.List$.Nil",
+              "scalus.cardano.onchain.plutus.prelude.List$.Nil",
               scala.Nil,
               scala.Nil,
               scala.List(SIRType.TypeNothing),
@@ -533,7 +534,7 @@ object SIRType {
 
     object BuiltinPair {
 
-        val name = "scalus.builtin.BuiltinPair"
+        val name = "scalus.uplc.builtin.BuiltinPair"
 
         val constrDecl = {
             val A = TypeVar("A", None, true)
@@ -585,7 +586,7 @@ object SIRType {
     }
 
     object Varargs {
-        val name = "scalus.prelude.Varargs"
+        val name = "scalus.cardano.onchain.plutus.prelude.Varargs"
 
         val constrDecl = {
             val hash = name.hashCode
@@ -616,7 +617,7 @@ object SIRType {
     }
 
     object BuiltinArray {
-        val name = "scalus.builtin.BuiltinArray"
+        val name = "scalus.uplc.builtin.BuiltinArray"
 
         val constrDecl = {
             val A = TypeVar("A", None, true)
@@ -640,10 +641,10 @@ object SIRType {
     }
 
     object BuiltinList {
-        val name = "scalus.builtin.BuiltinList"
+        val name = "scalus.uplc.builtin.BuiltinList"
 
         object Nil {
-            val name = "scalus.builtin.BuiltinList$.Nil"
+            val name = "scalus.uplc.builtin.BuiltinList$.Nil"
             lazy val constrDecl: ConstrDecl = {
                 ConstrDecl(
                   name,
@@ -658,7 +659,7 @@ object SIRType {
         }
 
         object Cons {
-            val name = "scalus.builtin.BuiltinList$.Cons"
+            val name = "scalus.uplc.builtin.BuiltinList$.Cons"
 
             def buildConstrDecl(tv: TypeVar, listType: SIRType) = {
                 ConstrDecl(

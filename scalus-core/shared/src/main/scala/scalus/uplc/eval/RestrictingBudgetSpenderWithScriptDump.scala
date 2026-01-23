@@ -1,6 +1,6 @@
 package scalus.uplc.eval
 
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.ExUnits
 import scalus.uplc.eval.*
 

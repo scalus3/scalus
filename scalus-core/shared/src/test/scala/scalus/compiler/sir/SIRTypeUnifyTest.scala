@@ -97,7 +97,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         }
         val nilType = nilListType match {
             case SIRType.SumCaseClass(decl, typeArgs) =>
-                decl.constrType("scalus.prelude.List$.Nil")
+                decl.constrType("scalus.cardano.onchain.plutus.prelude.List$.Nil")
             case c @ SIRType.CaseClass(constrDecl, typeArgs, parent) => c
             case _ => fail("Expected a case class type")
         }

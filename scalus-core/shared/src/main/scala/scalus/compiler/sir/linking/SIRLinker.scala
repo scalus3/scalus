@@ -66,10 +66,6 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
             println(
               s"Linking SIR at ${pos.show}, options=$options, modules: ${moduleDefs.keys.mkString(", ")}"
             )
-            moduleDefs.get("scalus.prelude.List$") match
-                case Some(m) =>
-                    println(s"Prelude module found with defs: ${m.defs.map(_.name).mkString(", ")}")
-                case None => println("Prelude module not found")
         val processed = traverseAndLink(sir, pos)
         val full: SIR = globalDefs.values.foldRight(processed) { case (state, acc) =>
             state match
@@ -116,9 +112,9 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
 
     private def traverseAndLinkExpr(sir: AnnotatedSIR, pos: SIRPosition): AnnotatedSIR = sir match
         case v @ SIR.ExternalVar(moduleName, name, tp, ann) if !globalDefs.contains(name) =>
-            if moduleName == "scalus.builtin.internal.UniversalDataConversion$" then
-                if name != "scalus.builtin.internal.UniversalDataConversion$.fromData" &&
-                    name != "scalus.builtin.internal.UniversalDataConversion$.toData"
+            if moduleName == "scalus.uplc.builtin.internal.UniversalDataConversion$" then
+                if name != "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData" &&
+                    name != "scalus.uplc.builtin.internal.UniversalDataConversion$.toData"
                 then
                     val msg =
                         s"Unknown external variable in universal data conversion module: ${name}"
@@ -140,8 +136,8 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                     anns.data.get("fromData") match
                         case Some(v) =>
                             SIR.ExternalVar(
-                              "scalus.builtin.internal.UniversalDataConversion$",
-                              "scalus.builtin.internal.UniversalDataConversion$.fromData",
+                              "scalus.uplc.builtin.internal.UniversalDataConversion$",
+                              "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData",
                               SIRType.Fun(SIRType.Data.tp, tp),
                               AnnotationsDecl.empty.copy(pos = f.anns.pos)
                             )
@@ -149,8 +145,8 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                             anns.data.get("toData") match
                                 case Some(v) =>
                                     SIR.ExternalVar(
-                                      "scalus.builtin.internal.UniversalDataConversion$",
-                                      "scalus.builtin.internal.UniversalDataConversion$.toData",
+                                      "scalus.uplc.builtin.internal.UniversalDataConversion$",
+                                      "scalus.uplc.builtin.internal.UniversalDataConversion$.toData",
                                       SIRType.Fun(arg.tp, SIRType.Data.tp),
                                       AnnotationsDecl.empty.copy(pos = f.anns.pos)
                                     )

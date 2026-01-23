@@ -81,7 +81,7 @@ object SirTypeUplcGenerator {
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 val trace = new IdentityHashMap[SIRType, SIRType]()
                 if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
-                else if decl.name == "scalus.prelude.List" then
+                else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                     if !containsFun(tp, trace) then {
                         if isPair(typeArgs.head) // isPairOrTuple2(typeArgs.head)
                         then SumPairDataListSirTypeGenerator
@@ -103,12 +103,12 @@ object SirTypeUplcGenerator {
                 // BuiltinArray has its own generator for proper Data conversion
                 else if constrDecl.name == SIRType.BuiltinArray.name
                 then BuiltinArraySirTypeGenerator
-                else if constrDecl.name == "scalus.ledger.api.v1.PubKeyHash"
-                    || constrDecl.name == "scalus.ledger.api.v3.TxId"
+                else if constrDecl.name == "scalus.cardano.onchain.plutus.v1.PubKeyHash"
+                    || constrDecl.name == "scalus.cardano.onchain.plutus.v3.TxId"
                 then ProductCaseOneElementSirTypeGenerator(SIRTypeUplcByteStringGenerator)
-                else if constrDecl.name == "scalus.prelude.AssocMap" || constrDecl.name == "scalus.prelude.SortedMap"
+                else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.AssocMap" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.SortedMap"
                 then MapSirTypeGenerator
-                else if constrDecl.name == "scalus.prelude.Varargs" || constrDecl.name == "scalus.ledger.api.v1.Value"
+                else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.Varargs" || constrDecl.name == "scalus.cardano.onchain.plutus.v1.Value"
                 then {
                     val paramType =
                         SIRType.substitute(

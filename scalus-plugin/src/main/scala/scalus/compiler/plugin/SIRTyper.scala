@@ -273,9 +273,9 @@ class SIRTyper(using Context) {
         if !tpArgs.isEmpty then None
         else if symbol == defn.BooleanType.typeSymbol || symbol == defn.BoxedBooleanClass then
             Some(SIRType.Boolean)
-        else if symbol == Symbols.requiredClass("scalus.builtin.ByteString") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.ByteString") then
             Some(SIRType.ByteString)
-        else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinValue") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BuiltinValue") then
             Some(SIRType.BuiltinValue)
         else if symbol == Symbols.requiredClass("scala.math.BigInt") then Some(SIRType.Integer)
         else if symbol == defn.IntType.typeSymbol || symbol == defn.BoxedIntClass then
@@ -292,8 +292,8 @@ class SIRTyper(using Context) {
         tpArgs: List[SIRType],
         env: SIRTypeEnv
     ): Option[SIRType] = {
-        if symbol == Symbols.requiredClass("scalus.builtin.Data") then Some(SIRType.Data.tp)
-        else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinArray") then
+        if symbol == Symbols.requiredClass("scalus.uplc.builtin.Data") then Some(SIRType.Data.tp)
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BuiltinArray") then
             tpArgs match
                 case List(elemType) => Some(SIRType.BuiltinArray(elemType))
                 case _ =>
@@ -302,7 +302,7 @@ class SIRTyper(using Context) {
                       env.pos,
                       s"Array type should have one type argument, found ${tpArgs.length}"
                     )
-        else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinList") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BuiltinList") then
             tpArgs match
                 case List(elemType) => Some(SIRType.BuiltinList(elemType))
                 case _ =>
@@ -311,7 +311,7 @@ class SIRTyper(using Context) {
                       env.pos,
                       s"List type should have one type argument, found ${tpArgs.length}"
                     )
-        else if symbol == Symbols.requiredClass("scalus.builtin.BuiltinPair") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BuiltinPair") then
             tpArgs match
                 case List(a1, a2) => Some(SIRType.BuiltinPair(a1, a2))
                 case _ =>
@@ -320,11 +320,11 @@ class SIRTyper(using Context) {
                       env.pos,
                       s"Pair type should have two type arguments, found ${tpArgs.length}"
                     )
-        else if symbol == Symbols.requiredClass("scalus.builtin.BLS12_381_G1_Element") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_G1_Element") then
             Some(SIRType.BLS12_381_G1_Element)
-        else if symbol == Symbols.requiredClass("scalus.builtin.BLS12_381_G2_Element") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_G2_Element") then
             Some(SIRType.BLS12_381_G2_Element)
-        else if symbol == Symbols.requiredClass("scalus.builtin.BLS12_381_MlResult") then
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_MlResult") then
             Some(SIRType.BLS12_381_MlResult)
         else None
     }

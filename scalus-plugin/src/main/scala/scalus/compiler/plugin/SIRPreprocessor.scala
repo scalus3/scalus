@@ -109,10 +109,12 @@ class SIRPreprocessor(thisPhase: ScalusPreparePhase, debugLevel: Int)(using ctx:
         Context
     ): List[Tree] = {
         val validatorSymbols = List(
-          requiredClassRef("scalus.prelude.Validator").symbol,
-          requiredClassRef("scalus.prelude.ParametrizedValidator").symbol,
-          requiredClassRef("scalus.prelude.DataParameterizedValidator").symbol,
-          requiredClassRef("scalus.prelude.TypedValidator").symbol
+          requiredClassRef("scalus.cardano.onchain.plutus.prelude.Validator").symbol,
+          requiredClassRef("scalus.cardano.onchain.plutus.prelude.ParametrizedValidator").symbol,
+          requiredClassRef(
+            "scalus.cardano.onchain.plutus.prelude.DataParameterizedValidator"
+          ).symbol,
+          requiredClassRef("scalus.cardano.onchain.plutus.prelude.TypedValidator").symbol
         )
         validatorSymbols.find(s => tree.symbol.isSubClass(s)) match {
             case Some(validatorSym) =>

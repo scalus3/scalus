@@ -1,19 +1,34 @@
 package scalus.ledger
 
+/** Backward compatibility package for scalus.ledger.api.
+  *
+  * All types and values have been moved to [[scalus.cardano.onchain.plutus]]. This package provides
+  * deprecated aliases for migration.
+  */
 package object api {
+    private inline val version = "0.15.0"
+    private inline val pkg = "scalus.cardano.onchain.plutus"
 
-    type ScriptContext = v1.ScriptContext | v2.ScriptContext | v3.ScriptContext
+    // Union type for all script context versions
+    @deprecated(
+      s"Use versioned types: $pkg.v1.ScriptContext, $pkg.v2.ScriptContext, or $pkg.v3.ScriptContext instead",
+      version
+    )
+    type ScriptContext = scalus.cardano.onchain.plutus.v1.ScriptContext |
+        scalus.cardano.onchain.plutus.v2.ScriptContext |
+        scalus.cardano.onchain.plutus.v3.ScriptContext
 
-    object ScriptContext {
-        def foldMap[T](sc: ScriptContext)(
-            f1: v1.ScriptContext => T,
-            f2: v2.ScriptContext => T,
-            f3: v3.ScriptContext => T
-        ): T = sc match {
-            case sc1: v1.ScriptContext => f1(sc1)
-            case sc2: v2.ScriptContext => f2(sc2)
-            case sc3: v3.ScriptContext => f3(sc3)
-        }
-    }
+    // Re-export the ScriptContext types for each version
+    @deprecated(s"Use scalus.cardano.onchain.plutus.v1.ScriptContext instead", version)
+    type PlutusV1ScriptContext = scalus.cardano.onchain.plutus.v1.ScriptContext
 
+    @deprecated(s"Use scalus.cardano.onchain.plutus.v2.ScriptContext instead", version)
+    type PlutusV2ScriptContext = scalus.cardano.onchain.plutus.v2.ScriptContext
+
+    @deprecated(s"Use scalus.cardano.onchain.plutus.v3.ScriptContext instead", version)
+    type PlutusV3ScriptContext = scalus.cardano.onchain.plutus.v3.ScriptContext
+
+    // ScriptContext companion object with foldMap
+    @deprecated(s"Use $pkg.ScriptContext instead", version)
+    val ScriptContext = scalus.cardano.onchain.plutus.ScriptContext
 }

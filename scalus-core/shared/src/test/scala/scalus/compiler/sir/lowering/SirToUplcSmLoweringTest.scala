@@ -172,17 +172,17 @@ class SirToUplcSmLoweringTest
         val tailTypeProxy = new TypeProxy(null)
         val listData =
             DataDecl(
-              "scalus.prelude.List",
+              "scalus.cardano.onchain.plutus.prelude.List",
               List(
                 ConstrDecl(
-                  "scalus.prelude.List$.Nil",
+                  "scalus.cardano.onchain.plutus.prelude.List$.Nil",
                   List(),
                   List(),
                   List(SIRType.TypeNothing),
                   ae
                 ),
                 ConstrDecl(
-                  "scalus.prelude.List$.Cons",
+                  "scalus.cardano.onchain.plutus.prelude.List$.Cons",
                   List(TypeBinding("head", a2TypeVar), TypeBinding("tail", tailTypeProxy)),
                   List(a2TypeVar),
                   List(a2TypeVar),
@@ -206,10 +206,10 @@ class SirToUplcSmLoweringTest
         def withDecls(sir: SIR) = SIR.Decl(listData, SIR.Decl(txIdData, sir))
         val originSir1 = withDecls(
           SIR.Constr(
-            "scalus.prelude.List$.Nil",
+            "scalus.cardano.onchain.plutus.prelude.List$.Nil",
             listData,
             List(),
-            listData.constrType("scalus.prelude.List$.Nil"),
+            listData.constrType("scalus.cardano.onchain.plutus.prelude.List$.Nil"),
             ae
           )
         )
@@ -357,21 +357,26 @@ class SirToUplcSmLoweringTest
         val a1TypeVar = SIRType.TypeVar("A1", Some(1), false)
         val a2TypeVar = SIRType.TypeVar("A2", Some(2), false)
         val nilConstr = ConstrDecl(
-          "scalus.prelude.List$.Nil",
+          "scalus.cardano.onchain.plutus.prelude.List$.Nil",
           List(),
           List(),
           List(SIRType.TypeNothing),
           ae
         )
         val consConstr = ConstrDecl(
-          "scalus.prelude.List$.Cons",
+          "scalus.cardano.onchain.plutus.prelude.List$.Cons",
           List(TypeBinding("head", a2TypeVar), TypeBinding("tail", tailTypeProxy)),
           List(a2TypeVar),
           List(a2TypeVar),
           ae
         )
         val listData =
-            DataDecl("scalus.prelude.List", List(nilConstr, consConstr), List(a1TypeVar), ae)
+            DataDecl(
+              "scalus.cardano.onchain.plutus.prelude.List",
+              List(nilConstr, consConstr),
+              List(a1TypeVar),
+              ae
+            )
         tailTypeProxy.ref = SumCaseClass(listData, List(a2TypeVar))
 
         val txIdData = DataDecl(
@@ -396,10 +401,10 @@ class SirToUplcSmLoweringTest
         val sirMatch1 = withDecls(
           SIR.Match(
             SIR.Constr(
-              "scalus.prelude.List$.Nil",
+              "scalus.cardano.onchain.plutus.prelude.List$.Nil",
               listData,
               List(),
-              listData.constrType("scalus.prelude.List$.Nil"),
+              listData.constrType("scalus.cardano.onchain.plutus.prelude.List$.Nil"),
               ae
             ),
             List(
@@ -476,10 +481,10 @@ class SirToUplcSmLoweringTest
         )
 
         val matchArgumentSIR = SIR.Constr(
-          "scalus.prelude.List$.Nil",
+          "scalus.cardano.onchain.plutus.prelude.List$.Nil",
           listData,
           List(),
-          listData.constrType("scalus.prelude.List$.Nil"),
+          listData.constrType("scalus.cardano.onchain.plutus.prelude.List$.Nil"),
           ae
         )
 
@@ -504,31 +509,36 @@ class SirToUplcSmLoweringTest
         val aTypeVar = SIRType.TypeVar("A", Some(1), false)
         val bTypeVar = SIRType.TypeVar("B", Some(2), false)
         val noneConstr = ConstrDecl(
-          "scalus.prelude.Option$.None",
+          "scalus.cardano.onchain.plutus.prelude.Option$.None",
           List(),
           List(),
           List(SIRType.TypeNothing),
           ae
         )
         val someConstr = ConstrDecl(
-          "scalus.prelude.Option$.Some",
+          "scalus.cardano.onchain.plutus.prelude.Option$.Some",
           List(TypeBinding("value", aTypeVar)),
           List(aTypeVar),
           List(aTypeVar),
           ae
         )
         val optionDataDecl =
-            DataDecl("scalus.prelude.Option", List(noneConstr, someConstr), List(bTypeVar), ae)
+            DataDecl(
+              "scalus.cardano.onchain.plutus.prelude.Option",
+              List(noneConstr, someConstr),
+              List(bTypeVar),
+              ae
+            )
 
         def withOptionDecl(sir: SIR) = SIR.Decl(optionDataDecl, sir)
 
         val sirMatch1 = withOptionDecl(
           SIR.Match(
             SIR.Constr(
-              "scalus.prelude.Option$.Some",
+              "scalus.cardano.onchain.plutus.prelude.Option$.Some",
               optionDataDecl,
               List(SIR.Const(Constant.Integer(42), SIRType.Integer, ae)),
-              optionDataDecl.constrType("scalus.prelude.Option$.Some"),
+              optionDataDecl.constrType("scalus.cardano.onchain.plutus.prelude.Option$.Some"),
               ae
             ),
             List(
@@ -611,11 +621,11 @@ class SirToUplcSmLoweringTest
         // println("lowered match2: " + uplcMatch2.pretty.render(100))
 
         val arg1Sir = SIR.Constr(
-          "scalus.prelude.Option$.Some",
+          "scalus.cardano.onchain.plutus.prelude.Option$.Some",
           optionDataDecl,
           List(SIR.Const(Constant.Integer(42), SIRType.Integer, ae)),
           SIRType.typeApply(
-            optionDataDecl.constrType("scalus.prelude.Option$.Some"),
+            optionDataDecl.constrType("scalus.cardano.onchain.plutus.prelude.Option$.Some"),
             SIRType.Integer :: Nil
           ),
           ae

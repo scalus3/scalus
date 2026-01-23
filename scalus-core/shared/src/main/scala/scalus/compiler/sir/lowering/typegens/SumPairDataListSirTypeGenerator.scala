@@ -41,8 +41,8 @@ object SumPairDataListSirTypeGenerator extends SumListCommonSirTypeGenerator {
                 pos
               )
             )
-        if constrDecl.name == "scalus.builtin.BuiltinPair" || constrDecl.name == "scala.Tuple2" then
-            ProductCaseClassRepresentation.PairData
+        if constrDecl.name == "scalus.uplc.builtin.BuiltinPair" || constrDecl.name == "scala.Tuple2"
+        then ProductCaseClassRepresentation.PairData
         else
             throw LoweringException(
               s"SumPair shoul have a pair or tuple type representation, we have  ${tp.show}",

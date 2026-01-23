@@ -12,7 +12,7 @@ object Macros {
       *
       * {{{
       *   Map(
-      *      requiredModule("scalus.builtin.Builtins").requiredMethod("addInteger") -> SIRBuiltins.addInteger,
+      *      requiredModule("scalus.uplc.builtin.Builtins").requiredMethod("addInteger") -> SIRBuiltins.addInteger,
       *      // ...
       *      )
       * }}}
@@ -33,7 +33,7 @@ object Macros {
                     given Context = $ctx
                     (
                       Symbols
-                          .requiredClass("scalus.builtin.Builtins")
+                          .requiredClass("scalus.uplc.builtin.Builtins")
                           .requiredMethod(${
                               Expr(methodName)
                           }),

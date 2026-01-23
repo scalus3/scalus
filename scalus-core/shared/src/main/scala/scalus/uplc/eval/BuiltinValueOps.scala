@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
-import scalus.builtin.{BuiltinValue, ByteString, Data}
-import scalus.builtin.ByteString.given
+import scalus.uplc.builtin.{BuiltinValue, ByteString, Data}
+import scalus.uplc.builtin.ByteString.given
 
 import scala.collection.immutable.SortedMap
 

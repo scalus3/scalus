@@ -43,7 +43,7 @@ object Lowering {
             case constr @ SIR.Constr(name, decl, args, tp, anns) =>
                 val resolvedType = lctx.resolveTypeVarIfNeeded(tp)
                 val typeGenerator =
-                    if name == "scalus.prelude.List$.Nil" then
+                    if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" then
                         optTargetType match
                             case Some(targetType) =>
                                 lctx.typeGenerator(targetType)
@@ -126,7 +126,8 @@ object Lowering {
                         value
                     case None =>
                         // Check if this is a UniversalDataConversion function used outside Apply
-                        if moduleName == "scalus.builtin.internal.UniversalDataConversion$" then
+                        if moduleName == "scalus.uplc.builtin.internal.UniversalDataConversion$"
+                        then
                             throw LoweringException(
                               s"UniversalDataConversion function '$name' appears as a standalone variable at ${ev.anns.pos.file}:${ev.anns.pos.startLine + 1}. " +
                                   s"These functions must be applied to an argument and cannot be used as values " +
@@ -503,11 +504,11 @@ object Lowering {
     }
 
     private def isFromDataName(name: String): Boolean = {
-        name == "scalus.builtin.internal.UniversalDataConversion$.fromData"
+        name == "scalus.uplc.builtin.internal.UniversalDataConversion$.fromData"
     }
 
     private def isToDataName(name: String): Boolean = {
-        name == "scalus.builtin.internal.UniversalDataConversion$.toData"
+        name == "scalus.uplc.builtin.internal.UniversalDataConversion$.toData"
     }
 
     private def isFromDataApp(app: SIR.Apply): Boolean = {
@@ -526,7 +527,7 @@ object Lowering {
         app.f match
             case SIR.ExternalVar(moduleName, name, tp, _) =>
                 // extrapolation.  TODO: write annotation when compiling ToData tp and extract it here
-                name == "scalus.builtin.internal.UniversalDataConversion$.toData"
+                name == "scalus.uplc.builtin.internal.UniversalDataConversion$.toData"
             case SIR.Var(name, tp, _) =>
                 // Also check for Var nodes with fully qualified name
                 isToDataName(name)

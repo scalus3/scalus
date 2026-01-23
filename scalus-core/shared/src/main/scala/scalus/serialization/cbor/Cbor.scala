@@ -1,7 +1,7 @@
 package scalus.serialization.cbor
 
 import io.bullet.borer.{Cbor as Cborer, Decoder, Encoder, Input, Output, Receiver}
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 /** Utility object for CBOR (Concise Binary Object Representation) encoding and decoding operations.
   *

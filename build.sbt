@@ -237,10 +237,10 @@ lazy val scalusPlugin = project
        */
       copySharedFiles := {
           val sharedFiles = Seq(
-            "scalus/builtin/BuiltinList.scala",
-            "scalus/builtin/BuiltinValue.scala",
-            "scalus/builtin/ByteStringFlatInstance.scala",
-            "scalus/builtin/Data.scala",
+            "scalus/uplc/builtin/BuiltinList.scala",
+            "scalus/uplc/builtin/BuiltinValue.scala",
+            "scalus/uplc/builtin/ByteStringFlatInstance.scala",
+            "scalus/uplc/builtin/Data.scala",
             "scalus/compiler/sir/SIR.scala",
             "scalus/compiler/sir/SIRDefaultOptions.scala",
             "scalus/compiler/sir/SIRMacro.scala",
@@ -569,7 +569,11 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       mimaBinaryIssueFilters ++= Seq(
         // Removed deprecated SlotConfig type alias and value from package level (v0.12.0)
         ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package$")
+        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package$"),
+        // Package reorganization (v0.15.0): return types changed from old package names to new
+        // e.g., scalus.ledger.api.v2.TxInfo -> scalus.cardano.onchain.plutus.v2.TxInfo
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.Interop.*"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.*")
       ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",

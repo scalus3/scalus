@@ -1,7 +1,7 @@
 package scalus.uplc
 
-import scalus.builtin
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.serialization.flat.{listFlat, Flat, given}
 
 import scala.collection.immutable.List
@@ -62,7 +62,7 @@ object DefaultUni:
     given Lift[String] = String
     given Lift[Unit] = Unit
     given Lift[Boolean] = Bool
-    given Lift[scalus.builtin.Data] with
+    given Lift[scalus.uplc.builtin.Data] with
         def defaultUni: DefaultUni = DefaultUni.Data
 
     def Pair(a: DefaultUni, b: DefaultUni): DefaultUni = Apply(Apply(ProtoPair, a), b)

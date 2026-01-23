@@ -4,7 +4,7 @@ import io.bullet.borer.Cbor
 import org.typelevel.paiges.Doc
 import org.typelevel.paiges.Doc.*
 import scalus.*
-import scalus.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.Language
 import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, Natural, given}
@@ -66,7 +66,7 @@ case class Program(version: (Int, Int, Int), term: Term):
       */
     lazy val cborEncoded: Array[Byte] = Cbor.encode(flatEncoded).toByteArray
 
-    /** CBOR-encoded [[scalus.builtin.ByteString]] of the program.
+    /** CBOR-encoded [[scalus.uplc.builtin.ByteString]] of the program.
       *
       * The CBOR-encoded representation is a byte array that contains the program in a CBOR format.
       */
@@ -170,7 +170,7 @@ object Program:
     def fromCbor(cbor: Array[Byte]): Program =
         DeBruijnedProgram.fromCbor(cbor).toProgram
 
-    /** Deserializes a program from a CBOR-encoded [[scalus.builtin.ByteString]].
+    /** Deserializes a program from a CBOR-encoded [[scalus.uplc.builtin.ByteString]].
       * @param cbor
       *   the CBOR-encoded ByteString
       * @return
@@ -278,7 +278,7 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
 
     infix def $(arg: Term): DeBruijnedProgram = DeBruijnedProgram(version, Term.Apply(term, arg))
 
-    /** Applies a [[scalus.builtin.Data]] argument to the program.
+    /** Applies a [[scalus.uplc.builtin.Data]] argument to the program.
       *
       * @param arg
       *   the argument
@@ -297,7 +297,7 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
       */
     def applyArg(arg: Term): DeBruijnedProgram = this $ arg
 
-    /** Applies a [[scalus.builtin.Data]] argument to the program.
+    /** Applies a [[scalus.uplc.builtin.Data]] argument to the program.
       *
       * @param arg
       *   the argument

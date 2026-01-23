@@ -1,14 +1,15 @@
 package scalus.serialization.flat
 
-import scalus.builtin
-import scalus.builtin.Data
-import scalus.prelude.List as PList
+import scalus.uplc.builtin
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.prelude.List as PList
 
 /** Flat serialization instance for Data type.
   *
-  * This is kept separate from FlatInstances.scala because Data uses scalus.prelude.List, which is
-  * not available in the compiler plugin. The compiler plugin doesn't need to serialize Data values
-  * directly - it only needs the SIR/SIRType serialization from FlatInstances.
+  * This is kept separate from FlatInstances.scala because Data uses
+  * scalus.cardano.onchain.plutus.prelude.List, which is not available in the compiler plugin. The
+  * compiler plugin doesn't need to serialize Data values directly - it only needs the SIR/SIRType
+  * serialization from FlatInstances.
   */
 object DataFlatInstance:
 

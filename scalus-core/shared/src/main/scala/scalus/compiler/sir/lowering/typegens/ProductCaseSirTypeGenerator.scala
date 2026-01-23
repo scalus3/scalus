@@ -347,7 +347,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         pos
                       )
                     )
-                if constrDecl.name == "scalus.prelude.List$.Cons" || constrDecl.name == "scalus.prelude.List$.Nil"
+                if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                 then
                     val inputR = input.toRepresentation(ProdDataList, pos)
                     new TypeRepresentationProxyLoweredValue(

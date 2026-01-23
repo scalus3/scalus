@@ -93,7 +93,7 @@ case object AnnotationsDecl {
 }
 
 case class ConstrDecl(
-    /** Name (usually - full name of symbol, i.s. scalus.prelude.List$.Nit )
+    /** Name (usually - full name of symbol, i.s. scalus.cardano.onchain.plutus.prelude.List$.Nit )
       */
     name: String,
 
@@ -290,11 +290,6 @@ object SIR:
 
     case class ExternalVar(moduleName: String, name: String, tp: SIRType, anns: AnnotationsDecl)
         extends AnnotatedSIR {
-
-        if moduleName == "scalus.prelude" then
-            throw new RuntimeException(
-              s"ExternalVar: scalus.prelude, moduleName ${moduleName}, name=${name} at " + anns.pos.show
-            )
 
         override def toString: String = s"ExternalVar($moduleName, $name, ${tp.show})"
 

@@ -128,7 +128,7 @@ case class NotBuiltinTypeInBuiltinListConstruction(tpe: Type, list: Tree)(using 
            |
            |Builtin types are: Unit, Boolean, String, ByteString, BigInt, Data, List, and Pair
            |
-           |Try converting your values to Data or use 'scalus.prelude.List'
+           |Try converting your values to Data or use 'scalus.cardano.onchain.plutus.prelude.List'
            |""".stripMargin
 }
 

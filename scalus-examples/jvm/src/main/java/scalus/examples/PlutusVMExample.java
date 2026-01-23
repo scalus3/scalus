@@ -1,7 +1,7 @@
 package scalus.examples;
 
 import scala.math.BigInt;
-import scalus.builtin.Data;
+import scalus.uplc.builtin.Data;
 import scalus.cardano.ledger.Language;
 import scalus.cardano.ledger.ProtocolParams;
 import scalus.uplc.DeBruijnedProgram;

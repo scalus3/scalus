@@ -1,8 +1,8 @@
 package scalus.serialization.flat
 
-import scalus.builtin
-import scalus.builtin.Data
-import scalus.prelude.List as PList
+import scalus.uplc.builtin
+import scalus.uplc.builtin.Data
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.serialization.flat.HashConsed.CachedTaggedRef
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.compiler.sir.*

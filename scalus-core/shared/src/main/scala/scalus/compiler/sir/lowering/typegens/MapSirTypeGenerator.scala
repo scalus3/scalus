@@ -79,9 +79,9 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
     override def genConstr(constr: SIR.Constr)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        if constr.name == "scalus.prelude.AssocMap"
+        if constr.name == "scalus.cardano.onchain.plutus.prelude.AssocMap"
             ||
-            constr.name == "scalus.prelude.SortedMap"
+            constr.name == "scalus.cardano.onchain.plutus.prelude.SortedMap"
         then
             // TODO: add 'target type' to lower
             val loweredArg = lctx.lower(constr.args.head)
@@ -199,7 +199,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         tp match
             case SIRType.CaseClass(decl, typeArgs, optParent) =>
                 decl.name match
-                    case "scalus.prelude.AssocMap" =>
+                    case "scalus.cardano.onchain.plutus.prelude.AssocMap" =>
                         val (ta, tb) = typeArgs match
                             case List(ta, tb) => (ta, tb)
                             case _ =>
