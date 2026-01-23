@@ -855,11 +855,11 @@ object TransactionBuilder {
     // Transaction Modification Helpers
     // -------------------------------------------------------------------------
 
-    def modifyBody(tx: Transaction, f: TransactionBody => TransactionBody): Transaction = {
-        val newBody = f(tx.body.value)
-        tx.copy(body = KeepRaw(newBody))
-    }
+    @deprecated("Use Transaction.withBody instead", "0.8.0")
+    def modifyBody(tx: Transaction, f: TransactionBody => TransactionBody): Transaction =
+        tx.withBody(f)
 
+    @deprecated("Use Transaction.withWitness instead", "0.8.0")
     def modifyWs(
         tx: Transaction,
         f: TransactionWitnessSet => TransactionWitnessSet
@@ -953,8 +953,7 @@ object TransactionBuilder {
         val returnValue = Value(Coin(returnAda), totalCollateralVal.assets)
         val returnOutput = TransactionOutput(returnAddr, returnValue)
 
-        val newTx = modifyBody(
-          tx,
+        val newTx = tx.withBody(
           _.copy(
             collateralReturnOutput = Some(Sized(returnOutput)),
             totalCollateral = Some(actualTotalCollateral)
@@ -963,7 +962,8 @@ object TransactionBuilder {
         Right(newTx)
     }
 
-    def setFee(amount: Coin)(tx: Transaction): Transaction = modifyBody(tx, _.copy(fee = amount))
+    @deprecated("Use tx.withBody(_.copy(fee = amount)) instead", "0.8.0")
+    def setFee(amount: Coin)(tx: Transaction): Transaction = tx.withBody(_.copy(fee = amount))
 
     def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
         val produced = TxBalance.produced(tx, params)
@@ -1031,7 +1031,7 @@ object TransactionBuilder {
                     .map(TxBalancingError.Failed(_))
                 // Don't go below initial fee
                 fee = Coin(math.max(minFee.value, initial.body.value.fee.value))
-                txWithFees = setFee(fee)(txWithExUnits)
+                txWithFees = txWithExUnits.withBody(_.copy(fee = fee))
                 diff = calculateChangeValue(txWithFees, resolvedUtxo, protocolParams)
                 // try to balance it
                 balanced <- diffHandler(diff, txWithFees)

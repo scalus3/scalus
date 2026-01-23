@@ -3,7 +3,7 @@ package scalus.cardano.txbuilder
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
-import scalus.cardano.txbuilder.TransactionBuilder.{ensureMinAda, modifyBody}
+import scalus.cardano.txbuilder.TransactionBuilder.ensureMinAda
 
 /** Helper class that creates a diff handler function for an existing change output.
   *
@@ -74,10 +74,7 @@ object Change {
             if changeOutputIdx >= 0 && body.outputs(changeOutputIdx).value.value.isZero
             then {
                 Right(
-                  modifyBody(
-                    tx,
-                    b => b.copy(outputs = b.outputs.patch(changeOutputIdx, Nil, 1))
-                  )
+                  tx.withBody(b => b.copy(outputs = b.outputs.patch(changeOutputIdx, Nil, 1)))
                 )
             } else {
                 Right(tx)
@@ -160,8 +157,7 @@ object Change {
         }
 
         Right(
-          modifyBody(
-            tx,
+          tx.withBody(
             _.copy(outputs = tx.body.value.outputs.updated(changeOutputIdx, newChangeOut))
           )
         )
@@ -196,9 +192,7 @@ object Change {
         val updatedOutput = currentOutput.withValue(newValue)
         val finalOutput = Sized(ensureMinAda(updatedOutput, protocolParams))
 
-        Right(
-          modifyBody(tx, b => b.copy(outputs = b.outputs.updated(changeOutputIdx, finalOutput)))
-        )
+        Right(tx.withBody(b => b.copy(outputs = b.outputs.updated(changeOutputIdx, finalOutput))))
     }
 
     /** Creates a new change output with the specified value.
@@ -222,7 +216,7 @@ object Change {
     ): Either[TxBalancingError, Transaction] = {
         val changeOutput = TransactionOutput(changeAddress, value)
         val finalOutput = Sized(ensureMinAda(changeOutput, protocolParams))
-        Right(modifyBody(tx, b => b.copy(outputs = b.outputs.toSeq :+ finalOutput)))
+        Right(tx.withBody(b => b.copy(outputs = b.outputs.toSeq :+ finalOutput)))
     }
 
     /** Removes value from an existing change output.
@@ -282,9 +276,8 @@ object Change {
                 Left(TxBalancingError.InsufficientFunds(valueToRemove, minAdaNeeded))
             } else {
                 Right(
-                  modifyBody(
-                    tx,
-                    b => b.copy(outputs = b.outputs.updated(changeOutputIdx, Sized(finalOutput)))
+                  tx.withBody(b =>
+                      b.copy(outputs = b.outputs.updated(changeOutputIdx, Sized(finalOutput)))
                   )
                 )
             }

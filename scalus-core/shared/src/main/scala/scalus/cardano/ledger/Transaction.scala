@@ -59,6 +59,14 @@ case class Transaction(
     def toCborForFeeCalculation: Array[Byte] =
         Cbor.encode(this)(using Transaction.feeCalculationEncoder)
 
+    /** Returns a copy with the body replaced */
+    def withBody(b: TransactionBody): Transaction =
+        copy(body = KeepRaw(b))
+
+    /** Returns a copy with the body transformed by the given function */
+    def withBody(f: TransactionBody => TransactionBody): Transaction =
+        copy(body = KeepRaw(f(body.value)))
+
     /** Returns a copy with the witness set replaced */
     def withWitness(ws: TransactionWitnessSet): Transaction =
         copy(witnessSetRaw = KeepRaw(ws))

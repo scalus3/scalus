@@ -57,20 +57,20 @@ object LowLevelTxBuilder {
         )
 }
 
-@deprecated("Use TransactionBuilder.modifyBody instead", "scalus 0.13.0")
+@deprecated("Use Transaction.withBody instead", "0.13.0")
 def modifyBody(tx: Transaction, f: TransactionBody => TransactionBody): Transaction =
-    TransactionBuilder.modifyBody(tx, f)
+    tx.withBody(f)
 
-@deprecated("Use TransactionBuilder.modifyWs instead", "scalus 0.13.0")
+@deprecated("Use Transaction.withWitness instead", "0.13.0")
 def modifyWs(
     tx: Transaction,
     f: TransactionWitnessSet => TransactionWitnessSet
 ): Transaction =
-    TransactionBuilder.modifyWs(tx, f)
+    tx.withWitness(f)
 
-@deprecated("Use TransactionBuilder.setFee instead", "scalus 0.13.0")
+@deprecated("Use tx.withBody(_.copy(fee = amount)) instead", "0.13.0")
 def setFee(amount: Coin)(tx: Transaction): Transaction =
-    TransactionBuilder.setFee(amount)(tx)
+    tx.withBody(_.copy(fee = amount))
 
 @deprecated("Use TransactionBuilder.calculateChangeValue instead", "scalus 0.13.0")
 def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value =

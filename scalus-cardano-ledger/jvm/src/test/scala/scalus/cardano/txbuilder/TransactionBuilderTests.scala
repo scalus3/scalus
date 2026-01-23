@@ -984,8 +984,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
 
         // Set a fee that requires significant collateral
-        val txWithFee = TransactionBuilder.modifyBody(
-          ctx.transaction,
+        val txWithFee = ctx.transaction.withBody(
           _.copy(fee = Coin(500_000L)) // 0.5 ADA fee -> requires ~0.75 ADA collateral (150%)
         )
 
@@ -1031,8 +1030,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
 
         // Set fee that requires 3 ADA collateral (2 ADA * 150% = 3 ADA)
-        val txWithFee = TransactionBuilder.modifyBody(
-          ctx.transaction,
+        val txWithFee = ctx.transaction.withBody(
           _.copy(fee = Coin.ada(2))
         )
 
@@ -1071,8 +1069,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
 
         // Set fee that requires 6 ADA collateral (4 ADA * 150% = 6 ADA)
-        val txWithFee = TransactionBuilder.modifyBody(
-          ctx.transaction,
+        val txWithFee = ctx.transaction.withBody(
           _.copy(fee = Coin.ada(4))
         )
 
@@ -1118,8 +1115,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val ctx = fromRight(TransactionBuilder.build(Mainnet, steps))
 
         // Set fee that requires 1.5 ADA collateral (1 ADA * 150% = 1.5 ADA)
-        val txWithFee = TransactionBuilder.modifyBody(
-          ctx.transaction,
+        val txWithFee = ctx.transaction.withBody(
           _.copy(fee = Coin.ada(1))
         )
 
@@ -1162,8 +1158,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         // fee * collateralPercentage / 100 = 5_000_000 (with ceiling rounding)
         // fee * 150 / 100 = 5_000_000 → fee = 3_333_333.33...
         // With fee = 3_333_333 lovelace: 3_333_333 * 150 / 100 = 4_999_999.5 → rounds UP to 5_000_000
-        val txWithFee = TransactionBuilder.modifyBody(
-          ctx.transaction,
+        val txWithFee = ctx.transaction.withBody(
           _.copy(fee = Coin(3_333_333L)) // results in exactly 5 ADA required collateral
         )
 
@@ -1200,8 +1195,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         // To get 5_000_001 lovelace required collateral (just above threshold):
         // fee * 150 / 100 = 5_000_001 → fee = 3_333_334 lovelace
         // Verify: 3_333_334 * 150 / 100 = 5_000_001 (no rounding needed)
-        val txWithFee = TransactionBuilder.modifyBody(
-          ctx.transaction,
+        val txWithFee = ctx.transaction.withBody(
           _.copy(fee = Coin(3_333_334L)) // results in 5_000_001 lovelace required collateral
         )
 
