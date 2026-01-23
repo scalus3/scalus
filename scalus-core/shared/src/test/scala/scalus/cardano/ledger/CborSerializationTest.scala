@@ -216,6 +216,18 @@ class CborSerializationTest extends AnyFunSuite, ScalaCheckPropertyChecks, Arbit
     test(s"Transaction should serialize and deserialize correctly"):
         testSerializationRoundTrip[Transaction]
 
+    test("Transaction.toCborForFeeCalculation should produce 3-element array without isValid"):
+        forAll: (tx: Transaction) =>
+            val feeBytes = tx.toCborForFeeCalculation
+            val fullBytes = tx.toCbor
+            // Fee calculation encoding should start with 0x83 (3-element array header)
+            assert(feeBytes(0) == 0x83.toByte, "Should encode as 3-element array (0x83)")
+            // Fee calculation encoding should be 1 byte smaller (omits isValid field)
+            assert(
+              feeBytes.length == fullBytes.length - 1,
+              s"Expected ${fullBytes.length - 1} bytes but got ${feeBytes.length}"
+            )
+
     given ProtocolVersion = ProtocolVersion.conwayPV
     // Helper method to test serialization/deserialization for a given type
     private def testSerializationRoundTrip[A: Arbitrary: Encoder](using

@@ -706,7 +706,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
             header <- arbitrary[BlockHeader]
             transactionBodies <- genVectorOfSizeFromArbitrary[KeepRaw[TransactionBody]](1, 4)
             transactionBodiesSize = transactionBodies.size
-            transactionWitnessSets <- genVectorOfSizeFromArbitrary[TransactionWitnessSet](
+            transactionWitnessSets <- genVectorOfSizeFromArbitrary[KeepRaw[TransactionWitnessSet]](
               transactionBodiesSize,
               transactionBodiesSize
             )
@@ -746,6 +746,6 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
             witnessSet <- arbitrary[TransactionWitnessSet]
             isValid <- arbitrary[Boolean]
             auxiliaryData <- arbitrary[Option[KeepRaw[AuxiliaryData]]]
-        yield Transaction(body, witnessSet, isValid, auxiliaryData)
+        yield Transaction(body, KeepRaw(witnessSet), isValid, auxiliaryData)
     }
 }

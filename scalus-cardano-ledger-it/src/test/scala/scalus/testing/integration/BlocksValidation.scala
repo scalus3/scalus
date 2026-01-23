@@ -18,7 +18,7 @@ import scalus.bloxbean.Interop.??
 import scalus.bloxbean.TxEvaluator.ScriptHash
 import scalus.builtin.{platform, ByteString}
 import scalus.cardano.ledger
-import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig, ValidityInterval}
+import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig}
 import scalus.ledger.api.v1
 import scalus.ledger.api.v2
 import scalus.ledger.api.v3.ScriptInfo
@@ -514,22 +514,17 @@ class BlocksValidation extends AnyFunSuite {
         for path <- blocks do
             try
                 val blockBytes = Files.readAllBytes(path)
+                given OriginalCborByteArray = OriginalCborByteArray(blockBytes)
                 val block = BlockFile.fromCborArray(blockBytes).block
                 for
-                    case (txb, w) <- block.transactionBodies.view
-                        .map(_.value)
-                        .zip(block.transactionWitnessSets)
-                    case (scriptHash, native) <- w.nativeScripts.toMap
+                    tx <- block.transactions
+                    (scriptHash, native) <- tx.witnessSet.nativeScripts.toMap
                 do
-                    val keyHashes = w.vkeyWitnesses.toSet.map { w =>
-                        val key = w.vkey
-                        AddrKeyHash(platform.blake2b_224(key))
+                    val keyHashes = tx.witnessSet.vkeyWitnesses.toSet.map { w =>
+                        AddrKeyHash(platform.blake2b_224(w.vkey))
                     }
 
-                    if native.script.evaluate(
-                          keyHashes,
-                          ValidityInterval(txb.validityStartSlot, txb.ttl)
-                        )
+                    if native.script.evaluate(keyHashes, tx.validityInterval)
                     then stats.getOrElseUpdate(scriptHash, Res(0, 0)).succ += 1
                     else stats.getOrElseUpdate(scriptHash, Res(0, 0)).fail += 1
 
@@ -636,12 +631,12 @@ class BlocksValidation extends AnyFunSuite {
         val interestingBlocks = blocks.filter { path =>
             val blockBytes = Files.readAllBytes(path)
             val block = BlockFile.fromCborArray(blockBytes).block
-            block.transactionWitnessSets.exists { _.plutusV1Scripts.toMap.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV2Scripts.toMap.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusV3Scripts.toMap.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.nativeScripts.toMap.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.vkeyWitnesses.toSet.nonEmpty } &&
-            block.transactionWitnessSets.exists { _.plutusData.value.toMap.nonEmpty }
+            block.transactionWitnessSets.exists { _.value.plutusV1Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.value.plutusV2Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.value.plutusV3Scripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.value.nativeScripts.toMap.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.value.vkeyWitnesses.toSet.nonEmpty } &&
+            block.transactionWitnessSets.exists { _.value.plutusData.value.toMap.nonEmpty }
         }
         println(s"Interesting blocks ${interestingBlocks.size} of ${blocks.size}")
         interestingBlocks.foreach { p =>

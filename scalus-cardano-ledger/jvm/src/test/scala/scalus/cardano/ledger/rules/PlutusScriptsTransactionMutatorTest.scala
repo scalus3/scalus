@@ -128,16 +128,14 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet(input),
-              outputs = IndexedSeq(Sized(output)),
-              fee = Coin(1000L),
-              donation = Some(Coin(500L)),
-              currentTreasuryValue = Some(Coin(200000L))
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq(Sized(output)),
+            fee = Coin(1000L),
+            donation = Some(Coin(500L)),
+            currentTreasuryValue = Some(Coin(200000L))
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             scripts = Seq(script),
             redeemers = Some(
               Redeemers.Array(
@@ -153,9 +151,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
             ),
             vkeyWitnesses = Set.empty,
             plutusData = Seq(datum)
-          ),
-          isValid = true,
-          auxiliaryData = None
+          )
         )
 
         val state = State(
@@ -218,22 +214,24 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
               )
             )
           ),
-          witnessSet = TransactionWitnessSet(
-            scripts = Seq(script),
-            redeemers = Some(
-              Redeemers.Array(
-                IndexedSeq(
-                  Redeemer(
-                    tag = RedeemerTag.Spend,
-                    index = 0,
-                    data = scalus.builtin.Data.unit,
-                    exUnits = ExUnits(100000000, 100000000)
+          witnessSetRaw = KeepRaw(
+            TransactionWitnessSet(
+              scripts = Seq(script),
+              redeemers = Some(
+                Redeemers.Array(
+                  IndexedSeq(
+                    Redeemer(
+                      tag = RedeemerTag.Spend,
+                      index = 0,
+                      data = scalus.builtin.Data.unit,
+                      exUnits = ExUnits(100000000, 100000000)
+                    )
                   )
                 )
-              )
-            ),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(datum)
+              ),
+              vkeyWitnesses = Set.empty,
+              plutusData = Seq(datum)
+            )
           ),
           isValid = false,
           auxiliaryData = None
@@ -284,16 +282,11 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
 
     test("PlutusScriptsTransactionMutator success with isValid = true and empty scripts") {
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin(0),
-            )
-          ),
-          witnessSet = TransactionWitnessSet.empty,
-          isValid = true,
-          auxiliaryData = None
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin(0),
+          )
         )
 
         val result = PlutusScriptsTransactionMutator.transit(Context(), State(), transaction)
@@ -314,22 +307,24 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
               fee = Coin(0),
             )
           ),
-          witnessSet = TransactionWitnessSet(
-            scripts = Seq(script),
-            redeemers = Some(
-              Redeemers.Array(
-                IndexedSeq(
-                  Redeemer(
-                    tag = RedeemerTag.Spend,
-                    index = 0,
-                    data = scalus.builtin.Data.unit,
-                    exUnits = ExUnits(100000000, 100000000)
+          witnessSetRaw = KeepRaw(
+            TransactionWitnessSet(
+              scripts = Seq(script),
+              redeemers = Some(
+                Redeemers.Array(
+                  IndexedSeq(
+                    Redeemer(
+                      tag = RedeemerTag.Spend,
+                      index = 0,
+                      data = scalus.builtin.Data.unit,
+                      exUnits = ExUnits(100000000, 100000000)
+                    )
                   )
                 )
-              )
-            ),
-            vkeyWitnesses = Set.empty,
-            plutusData = Seq(datum)
+              ),
+              vkeyWitnesses = Set.empty,
+              plutusData = Seq(datum)
+            )
           ),
           isValid = false,
           auxiliaryData = None
@@ -356,14 +351,12 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         val datum = arbitrary[Data].sample.get
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet(input),
-              outputs = IndexedSeq.empty,
-              fee = Coin(0),
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet(input),
+            outputs = IndexedSeq.empty,
+            fee = Coin(0),
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             scripts = Seq(script),
             redeemers = Some(
               Redeemers.Array(
@@ -379,9 +372,7 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
             ),
             vkeyWitnesses = Set.empty,
             plutusData = Seq(datum)
-          ),
-          isValid = true,
-          auxiliaryData = None
+          )
         )
 
         val state = State(

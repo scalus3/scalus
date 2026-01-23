@@ -122,7 +122,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     test("should fail when output would become below minimum ADA") {
         val insufficientFunds: InsufficientFunds =
-            InsufficientFunds(Value.lovelace(-160617), 130367)
+            InsufficientFunds(Value.lovelace(-160573), 130323)
         check(
           in = 1_000_000,
           output = 1_000_000,
@@ -143,7 +143,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
 
     test("should handle single multi asset change") {
         val initialAda = Coin.ada(2)
-        val expectedFee = Coin(162289)
+        val expectedFee = Coin(162245)
         check(
           in = Value.asset(policyId, co2, 5, initialAda),
           output = Value.zero,
@@ -158,7 +158,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     test("should handle multiple token types in change") {
         val initialAda = Coin.ada(3)
         val assets = MultiAsset.asset(policyId, co2, 100) + MultiAsset.asset(policyId, h2so4, 50)
-        val expectedFee = Coin(162685)
+        val expectedFee = Coin(162641)
 
         check(
           in = Value(initialAda, assets),
@@ -175,7 +175,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
         val initialAda = Coin.ada(5)
         val inputTokens = MultiAsset.asset(policyId, co2, 1000)
         val outputAda = Coin.ada(2)
-        val expectedFee = Coin(162377)
+        val expectedFee = Coin(162333)
 
         check(
           in = Value(initialAda, inputTokens),
@@ -189,7 +189,7 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     }
 
     test("should silently remove when input doesn't have them") {
-        val expectedFee = Coin(160617)
+        val expectedFee = Coin(160573)
         check(
           in = Value.ada(3),
           output = Value.asset(policyId, co2, 100, Coin.ada(1)),
@@ -207,8 +207,8 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
           output = 2_000_000,
           fee = 0,
           expected = Expected.success(
-            outputLovelace = 2_839383,
-            fee = 160617
+            outputLovelace = 2_839427,
+            fee = 160573
           )
         )
     }

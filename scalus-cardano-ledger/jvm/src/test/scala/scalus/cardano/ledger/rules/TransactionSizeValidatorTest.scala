@@ -12,8 +12,8 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val transaction = {
             val tx = randomTransactionWithIsValidField
-            tx.copy(
-              witnessSet = tx.witnessSet.copy(
+            tx.withWitness(
+              _.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet.empty,
                 nativeScripts = TaggedSortedMap.empty,
@@ -22,7 +22,8 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 plutusV3Scripts = TaggedSortedStrictMap.empty,
                 plutusData = KeepRaw(TaggedSortedMap.empty),
                 redeemers = None
-              ),
+              )
+            ).copy(
               auxiliaryData = None,
               body = KeepRaw(
                 tx.body.value.copy(

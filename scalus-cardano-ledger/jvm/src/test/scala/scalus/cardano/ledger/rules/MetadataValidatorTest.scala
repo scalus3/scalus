@@ -9,16 +9,12 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val state = State()
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = None
-            )
-          ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = None
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = None
+          )
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -33,16 +29,12 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
-          ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = None
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
+          )
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -59,19 +51,16 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val state = State()
         val metadata = Map(Word64(0L) -> Metadatum.Int(42L))
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = None
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = None
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -102,23 +91,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -144,22 +129,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
         val wrongAuxiliaryDataHash = AuxiliaryDataHash.fromByteString(
           ByteString.fromArray(Array.fill(32)(0.toByte))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(wrongAuxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(wrongAuxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -177,23 +159,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val oversizedBytes = ByteString.fromArray(Array.fill(65)(1.toByte))
         val metadata = Map(Word64(0L) -> Metadatum.Bytes(oversizedBytes))
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -211,23 +189,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val oversizedText = "a" * 65
         val metadata = Map(Word64(0L) -> Metadatum.Text(oversizedText))
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -250,23 +224,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -288,23 +258,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -326,23 +292,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -377,23 +339,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val auxiliaryData = AuxiliaryData.Metadata(metadata)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)
@@ -404,23 +362,19 @@ class MetadataValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val state = State()
         val auxiliaryData = AuxiliaryData.Metadata(Map.empty)
-        val keepRawAuxiliaryData = KeepRaw(auxiliaryData)
-        val cborAuxiliaryData = keepRawAuxiliaryData.raw
         val auxiliaryDataHash = AuxiliaryDataHash.fromByteString(
-          platform.blake2b_256(ByteString.unsafeFromArray(cborAuxiliaryData))
+          platform.blake2b_256(ByteString.unsafeFromArray(KeepRaw(auxiliaryData).raw))
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              auxiliaryDataHash = Some(auxiliaryDataHash)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            auxiliaryDataHash = Some(auxiliaryDataHash)
           ),
-          witnessSet = TransactionWitnessSet(),
-          auxiliaryData = Some(keepRawAuxiliaryData)
+          TransactionWitnessSet.empty,
+          auxiliaryData
         )
 
         val result = MetadataValidator.validate(context, state, transaction)

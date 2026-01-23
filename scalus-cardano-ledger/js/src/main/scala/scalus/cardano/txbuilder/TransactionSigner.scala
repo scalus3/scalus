@@ -13,9 +13,7 @@ class TransactionSigner(keys: Set[KeyPair]) {
         val newWitnesses = keys.view.map(createWitness(_, transactionIdBS))
         val existingWitnesses = unsignedTransaction.witnessSet.vkeyWitnesses.toSeq
         val vkeyWitnesses = TaggedSortedSet.from(existingWitnesses ++ newWitnesses)
-        unsignedTransaction.copy(
-          witnessSet = unsignedTransaction.witnessSet.copy(vkeyWitnesses = vkeyWitnesses)
-        )
+        unsignedTransaction.withWitness(_.copy(vkeyWitnesses = vkeyWitnesses))
     }
 
     private def createWitness(keyPair: KeyPair, transactionId: ByteString): VKeyWitness = {

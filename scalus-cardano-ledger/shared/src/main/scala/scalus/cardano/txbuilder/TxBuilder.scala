@@ -1713,11 +1713,7 @@ case class TxBuilder(
         var updatedTx = ctx.transaction
         val currentData = updatedTx.witnessSet.plutusData.value.toSortedMap
         val allData = currentData ++ attachedData.view.map((k, v) => k -> KeepRaw(v))
-        updatedTx = updatedTx.copy(
-          witnessSet = updatedTx.witnessSet.copy(
-            plutusData = KeepRaw(TaggedSortedMap(allData))
-          )
-        )
+        updatedTx = updatedTx.withWitness(_.copy(plutusData = KeepRaw(TaggedSortedMap(allData))))
         ctx.copy(transaction = updatedTx)
     }
 

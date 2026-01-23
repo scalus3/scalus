@@ -653,13 +653,13 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               )
           |>
           // add script witness
-          transactionL
-              .refocus(_.witnessSet.plutusV1Scripts)
+          (transactionL >>> txWitnessSetL)
+              .refocus(_.plutusV1Scripts)
               .replace(TaggedSortedStrictMap(script1))
           |>
           // add redeemer
-          transactionL
-              .refocus(_.witnessSet.redeemers)
+          (transactionL >>> txWitnessSetL)
+              .refocus(_.redeemers)
               .replace(redeemers(unitRedeemer(RedeemerTag.Mint, 0)))
           |>
           ctxRedeemersL.replace(
@@ -702,7 +702,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           // we don't currently track the purposes associated with these objects.
           Context.empty(Mainnet).toTuple
               |> transactionL
-                  .refocus(_.witnessSet.plutusV1Scripts)
+                  .andThen(txWitnessSetL)
+                  .refocus(_.plutusV1Scripts)
                   .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
               |> (transactionL >>> txBodyL
                   .refocus(_.requiredSigners))
@@ -718,7 +719,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           // we don't currently track the purposes associated with these objects.
           Context.empty(Mainnet).toTuple
               |> transactionL
-                  .refocus(_.witnessSet.plutusV1Scripts)
+                  .andThen(txWitnessSetL)
+                  .refocus(_.plutusV1Scripts)
                   .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
               |> (transactionL >>> txBodyL
                   .refocus(_.requiredSigners))
@@ -732,15 +734,15 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       expected = Context.empty(Mainnet).toTuple
           |> (transactionL >>> txBodyL.refocus(_.mint))
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, 2L)))))
-          |> transactionL
-              .refocus(_.witnessSet.plutusV1Scripts)
+          |> (transactionL >>> txWitnessSetL)
+              .refocus(_.plutusV1Scripts)
               .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
           |> (transactionL >>> txBodyL
               .refocus(_.requiredSigners))
               .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
           |> expectedSignersL.replace(mintSigners)
-          |> transactionL
-              .refocus(_.witnessSet.redeemers)
+          |> (transactionL >>> txWitnessSetL)
+              .refocus(_.redeemers)
               .replace(
                 Some(
                   KeepRaw(
@@ -771,15 +773,15 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       expected = Context.empty(Mainnet).toTuple
           |> (transactionL >>> txBodyL.refocus(_.mint))
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, -3L)))))
-          |> transactionL
-              .refocus(_.witnessSet.plutusV1Scripts)
+          |> (transactionL >>> txWitnessSetL)
+              .refocus(_.plutusV1Scripts)
               .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
           |> (transactionL >>> txBodyL
               .refocus(_.requiredSigners))
               .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
           |> expectedSignersL.replace(mintSigners)
-          |> transactionL
-              .refocus(_.witnessSet.redeemers)
+          |> (transactionL >>> txWitnessSetL)
+              .refocus(_.redeemers)
               .replace(
                 Some(
                   KeepRaw(
@@ -1244,11 +1246,11 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         )
       ),
       expected = Context.empty(Mainnet).toTuple |>
-          transactionL
-              .refocus(_.witnessSet.plutusV1Scripts)
+          (transactionL >>> txWitnessSetL)
+              .refocus(_.plutusV1Scripts)
               .replace(TaggedSortedStrictMap(script1)) |>
-          transactionL
-              .refocus(_.witnessSet.redeemers)
+          (transactionL >>> txWitnessSetL)
+              .refocus(_.redeemers)
               .replace(redeemers(unitRedeemer(RedeemerTag.Cert, 0)))
           |>
           transactionL

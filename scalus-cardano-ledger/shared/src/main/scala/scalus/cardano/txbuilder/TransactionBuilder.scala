@@ -770,7 +770,7 @@ object TransactionBuilder {
     }
 
     val unsafeCtxWitnessL: Lens[Context, TransactionWitnessSet] =
-        Focus[Context](_.transaction).refocus(_.witnessSet)
+        Focus[Context](_.transaction) >>> txWitnessSetL
 
     /** Modifications of tx's outputs (so far) is relatively "safe" operation in terms that it can't
       * break the transaction validity as long as outputs are correct. Moreover, the DiffHandler to
@@ -863,10 +863,7 @@ object TransactionBuilder {
     def modifyWs(
         tx: Transaction,
         f: TransactionWitnessSet => TransactionWitnessSet
-    ): Transaction = {
-        val newWs = f(tx.witnessSet)
-        tx.copy(witnessSet = newWs)
-    }
+    ): Transaction = tx.withWitness(f)
 
     /** Ensure collateral return output is set when beneficial.
       *
@@ -1069,7 +1066,7 @@ object TransactionBuilder {
         val txWithRedeemers =
             if redeemers.nonEmpty then
                 val rawRedeemers = KeepRaw(Redeemers.from(redeemers))
-                tx.copy(witnessSet = tx.witnessSet.copy(redeemers = Some(rawRedeemers)))
+                tx.withWitness(_.copy(redeemers = Some(rawRedeemers)))
             else tx
 
         val scriptDataHash =
@@ -1288,29 +1285,31 @@ def txBodyL: Lens[Transaction, TransactionBody] = {
     Lens(get)(replace)
 }
 
+def txWitnessSetL: Lens[Transaction, TransactionWitnessSet] = {
+    val get: Transaction => TransactionWitnessSet = tx =>
+        tx.focus(_.witnessSetRaw).andThen(keepRawL[TransactionWitnessSet]()).get
+    val replace: TransactionWitnessSet => Transaction => Transaction = ws =>
+        tx => tx.focus(_.witnessSetRaw).andThen(keepRawL[TransactionWitnessSet]()).replace(ws)
+    Lens(get)(replace)
+}
+
 // ----
 
 /** add at most 256 keys */
-def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
-    TransactionBuilder.modifyWs(
-      tx,
-      ws =>
-          ws.copy(vkeyWitnesses =
-              TaggedSortedSet.from(ws.vkeyWitnesses.toSet ++ generateUniqueKeys(numberOfKeys))
-          )
+def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction =
+    tx.withWitness(ws =>
+        ws.copy(vkeyWitnesses =
+            TaggedSortedSet.from(ws.vkeyWitnesses.toSet ++ generateUniqueKeys(numberOfKeys))
+        )
     )
-}
 
 /** remove at most 256 keys, must be used in conjunction with addDummyVKeys */
-def removeDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction = {
-    TransactionBuilder.modifyWs(
-      tx,
-      ws =>
-          ws.copy(vkeyWitnesses =
-              TaggedSortedSet.from(ws.vkeyWitnesses.toSet -- generateUniqueKeys(numberOfKeys))
-          )
+def removeDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction =
+    tx.withWitness(ws =>
+        ws.copy(vkeyWitnesses =
+            TaggedSortedSet.from(ws.vkeyWitnesses.toSet -- generateUniqueKeys(numberOfKeys))
+        )
     )
-}
 
 private def generateVKeyWitness(counter: Int): VKeyWitness = {
     val value1 = ByteString.fromArray(Array.fill(32)(counter.toByte)) // 32 bytes
@@ -1339,7 +1338,7 @@ def txRequiredSignersL: Lens[Transaction, TaggedSortedSet[AddrKeyHash]] = {
 }
 
 def txRedeemersL: Lens[Transaction, Option[KeepRaw[Redeemers]]] = {
-    Focus[Transaction](_.witnessSet.redeemers)
+    txWitnessSetL.refocus(_.redeemers)
 }
 
 // ---

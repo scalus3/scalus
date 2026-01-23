@@ -17,14 +17,11 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
-          ),
-          witnessSet = TransactionWitnessSet()
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
+          )
         )
         val context = Context()
         val state = State(utxos = utxo)
@@ -47,14 +44,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusV3Scripts = TaggedSortedStrictMap(plutusScript),
             plutusData = KeepRaw(
               TaggedSortedMap.from(
@@ -82,14 +77,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusV1Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
@@ -110,14 +103,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusV1Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
@@ -138,14 +129,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusV3Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
@@ -167,22 +156,20 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq(
-                Sized(
-                  Output(
-                    Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                    Value(Coin(500000L)),
-                    datumHash
-                  )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq(
+              Sized(
+                Output(
+                  Arbitrary.arbitrary[ShelleyAddress].sample.get,
+                  Value(Coin(500000L)),
+                  datumHash
                 )
-              ),
-              fee = Coin.zero
-            )
+              )
+            ),
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusData = KeepRaw(
               TaggedSortedMap.from(
                 Set(KeepRaw(datum))
@@ -215,15 +202,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              referenceInputs = TaggedSortedSet.from(Set(referenceInput))
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            referenceInputs = TaggedSortedSet.from(Set(referenceInput))
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusData = KeepRaw(
               TaggedSortedMap.from(
                 Set(KeepRaw(datum))
@@ -259,15 +244,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              collateralReturnOutput = Some(collateralReturn)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            collateralReturnOutput = Some(collateralReturn)
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusData = KeepRaw(
               TaggedSortedMap.from(
                 Set(KeepRaw(datum))
@@ -309,24 +292,21 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq(
-                Sized(
-                  Output(
-                    Arbitrary.arbitrary[ShelleyAddress].sample.get,
-                    Value(Coin(500000L)),
-                    datumHash
-                  )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq(
+              Sized(
+                Output(
+                  Arbitrary.arbitrary[ShelleyAddress].sample.get,
+                  Value(Coin(500000L)),
+                  datumHash
                 )
-              ),
-              fee = Coin.zero,
-              referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
-              collateralReturnOutput = Some(collateralReturn)
-            )
-          ),
-          witnessSet = TransactionWitnessSet.empty
+              )
+            ),
+            fee = Coin.zero,
+            referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
+            collateralReturnOutput = Some(collateralReturn)
+          )
         )
         val context = Context()
         val state = State(utxos = utxo)
@@ -346,14 +326,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusData = KeepRaw(
               TaggedSortedMap.from(
                 Set(KeepRaw(datum))
@@ -379,14 +357,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -412,14 +388,12 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             plutusV3Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )

@@ -12,8 +12,8 @@ class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val exUnits = ExUnits(1, 1)
         val tx =
             randomTransactionWithIsValidField
-                .copy(
-                  witnessSet = TransactionWitnessSet(
+                .withWitness(
+                  TransactionWitnessSet(
                     redeemers = Some(KeepRaw(Redeemers(Redeemer(Spend, 0, Data.unit, exUnits))))
                   )
                 )
@@ -27,11 +27,7 @@ class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val exUnits = ExUnits(1, 1)
         val tx =
             randomTransactionWithIsValidField
-                .copy(
-                  witnessSet = TransactionWitnessSet(
-                    redeemers = None
-                  )
-                )
+                .withWitness(TransactionWitnessSet(redeemers = None))
         val result = ExUnitsTooBigValidator.validate(context, state, tx)
         assert(result.isRight)
     }
@@ -42,8 +38,8 @@ class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val exUnits = ExUnits(Long.MaxValue, Long.MaxValue)
         val tx =
             randomTransactionWithIsValidField
-                .copy(
-                  witnessSet = TransactionWitnessSet(
+                .withWitness(
+                  TransactionWitnessSet(
                     redeemers = Some(KeepRaw(Redeemers(Redeemer(Spend, 0, Data.unit, exUnits))))
                   )
                 )

@@ -3,7 +3,6 @@ package utils
 
 import monocle.{Focus, Lens}
 import monocle.Focus.refocus
-import scalus.serialization.cbor.Cbor
 
 import scala.annotation.tailrec
 
@@ -116,7 +115,7 @@ object MinTransactionFee {
     ): Coin = {
         val txFeeFixed = protocolParams.txFeeFixed
         val txFeePerByte = protocolParams.txFeePerByte
-        val transactionSize = Cbor.encode(transaction).length
+        val transactionSize = transaction.toCborForFeeCalculation.length
 
         Coin(transactionSize * txFeePerByte + txFeeFixed)
     }

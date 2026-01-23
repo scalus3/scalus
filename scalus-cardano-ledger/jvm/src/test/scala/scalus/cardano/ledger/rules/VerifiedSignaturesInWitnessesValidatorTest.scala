@@ -12,8 +12,8 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
             val tx = randomTransactionWithIsValidField
-            tx.copy(
-              witnessSet = tx.witnessSet.copy(
+            tx.withWitness(
+              _.copy(
                 vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
@@ -36,8 +36,8 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
             val tx = randomTransactionWithIsValidField
-            tx.copy(
-              witnessSet = tx.witnessSet.copy(
+            tx.withWitness(
+              _.copy(
                 vkeyWitnesses = TaggedSortedSet(
                   VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
                   VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
@@ -67,8 +67,8 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
             val tx = randomTransactionWithIsValidField
-            tx.copy(
-              witnessSet = tx.witnessSet.copy(
+            tx.withWitness(
+              _.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet(
                   BootstrapWitness(
@@ -106,8 +106,8 @@ class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorR
             val (privateKey2, publicKey2) = generateKeyPair()
             val (privateKey3, publicKey3) = generateKeyPair()
             val tx = randomTransactionWithIsValidField
-            tx.copy(
-              witnessSet = tx.witnessSet.copy(
+            tx.withWitness(
+              _.copy(
                 vkeyWitnesses = TaggedSortedSet.empty,
                 bootstrapWitnesses = TaggedSortedSet(
                   BootstrapWitness(

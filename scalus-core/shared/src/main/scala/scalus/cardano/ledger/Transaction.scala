@@ -14,18 +14,24 @@ case class Transaction(
     body: KeepRaw[TransactionBody],
 
     /** Witness set containing signatures and scripts */
-    witnessSet: TransactionWitnessSet,
+    witnessSetRaw: KeepRaw[TransactionWitnessSet],
 
     /** Is the transaction valid? */
-    isValid: Boolean = true,
+    isValid: Boolean,
 
     /** Optional auxiliary data */
-    auxiliaryData: Option[KeepRaw[AuxiliaryData]] = None
+    auxiliaryData: Option[KeepRaw[AuxiliaryData]]
 ) {
+
+    /** The transaction hash (blake2b-256 of the serialized body) */
     @transient lazy val id: TransactionHash = Hash(
       platform.blake2b_256(ByteString.unsafeFromArray(body.raw))
     )
 
+    /** The unwrapped witness set */
+    def witnessSet: TransactionWitnessSet = witnessSetRaw.value
+
+    /** The transaction's validity interval (start slot and TTL) */
     def validityInterval: ValidityInterval =
         ValidityInterval(body.value.validityStartSlot, body.value.ttl)
 
@@ -39,33 +45,52 @@ case class Transaction(
             TransactionInput(id, idx) -> output.value
         }.toMap
 
-    def toCbor: Array[Byte] = {
-        Cbor.encode(this)
-    }
+    /** Returns the CBOR encoding of this transaction */
+    def toCbor: Array[Byte] = Cbor.encode(this)
+
+    /** Returns CBOR encoding for transaction size/fee calculation.
+      *
+      * This encoding omits the `isValid` field for backward compatibility with Mary era, matching
+      * Cardano ledger's `toCBORForSizeComputation` function.
+      *
+      * @see
+      *   Cardano.Ledger.Alonzo.Tx.toCBORForSizeComputation
+      */
+    def toCborForFeeCalculation: Array[Byte] =
+        Cbor.encode(this)(using Transaction.feeCalculationEncoder)
+
+    /** Returns a copy with the witness set replaced */
+    def withWitness(ws: TransactionWitnessSet): Transaction =
+        copy(witnessSetRaw = KeepRaw(ws))
+
+    /** Returns a copy with the witness set transformed by the given function */
+    def withWitness(f: TransactionWitnessSet => TransactionWitnessSet): Transaction =
+        copy(witnessSetRaw = KeepRaw(f(witnessSet)))
 }
 
 object Transaction {
 
-    /** Create a transaction with the given body and witness set, assuming it is valid and has no
+    /** Create a transaction with the given body and empty witness set, assuming valid and no
       * auxiliary data
       */
-    def apply(
-        body: TransactionBody,
-        witnessSet: TransactionWitnessSet
-    ): Transaction =
-        new Transaction(KeepRaw(body), witnessSet, isValid = true, auxiliaryData = None)
+    def apply(body: TransactionBody): Transaction =
+        Transaction(KeepRaw(body), KeepRaw(TransactionWitnessSet.empty), true, None)
 
-    /** Create a transaction with the given body, witness set, and auxiliary data, assuming it is
-      * valid
+    /** Create a transaction with the given body and witness set, assuming valid and no auxiliary
+      * data
       */
+    def apply(body: TransactionBody, witnessSet: TransactionWitnessSet): Transaction =
+        Transaction(KeepRaw(body), KeepRaw(witnessSet), true, None)
+
+    /** Create a transaction with the given body, witness set, and auxiliary data, assuming valid */
     def apply(
         body: TransactionBody,
         witnessSet: TransactionWitnessSet,
         auxiliaryData: AuxiliaryData
     ): Transaction =
-        new Transaction(
+        Transaction(
           KeepRaw(body),
-          witnessSet,
+          KeepRaw(witnessSet),
           isValid = true,
           auxiliaryData = Some(KeepRaw(auxiliaryData))
         )
@@ -87,6 +112,17 @@ object Transaction {
     given Encoder[Transaction] = Encoder.derived
     given decoder(using OriginalCborByteArray, ProtocolVersion): Decoder[Transaction] =
         Decoder.derived[Transaction]
+
+    /** Encoder for fee calculation (omits isValid field for Mary-era compatibility) */
+    private def feeCalculationEncoder: Encoder[Transaction] = Encoder { (w, tx) =>
+        w.writeArrayHeader(3)
+        w.output.writeBytes(tx.body.raw)
+        w.output.writeBytes(tx.witnessSetRaw.raw)
+        tx.auxiliaryData match
+            case Some(auxData) => w.output.writeBytes(auxData.raw)
+            case None          => w.writeNull()
+        w
+    }
 
     import Doc.*
     import Pretty.{bulletList, lit}

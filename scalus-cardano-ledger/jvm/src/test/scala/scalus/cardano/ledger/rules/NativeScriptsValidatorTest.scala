@@ -18,15 +18,12 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           )
         )
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              referenceInputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
-          ),
-          witnessSet = TransactionWitnessSet()
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            referenceInputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
+          )
         )
         val state = State(utxos = utxo)
 
@@ -59,11 +56,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   fee = Coin.zero
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
-                ),
-                nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
+                  ),
+                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+                )
               )
             )
         }
@@ -89,15 +88,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              referenceInputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            referenceInputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -144,12 +141,14 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   fee = Coin.zero
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                ),
-                nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                  ),
+                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+                )
               )
             )
         }
@@ -195,11 +194,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   fee = Coin.zero
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                ),
-                nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+                  ),
+                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+                )
               )
             )
         }
@@ -246,11 +247,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   fee = Coin.zero
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                ),
-                nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+                  ),
+                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+                )
               )
             )
         }
@@ -286,15 +289,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              referenceInputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            referenceInputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -345,12 +346,14 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   fee = Coin.zero
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
-                ),
-                nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                  ),
+                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+                )
               )
             )
         }
@@ -398,11 +401,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   fee = Coin.zero
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
-                ),
-                nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+                  ),
+                  nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
+                )
               )
             )
         }
@@ -429,16 +434,14 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              referenceInputs = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              validityStartSlot = Some(150L)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            referenceInputs = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            validityStartSlot = Some(150L)
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -462,15 +465,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              validityStartSlot = Some(50L)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            validityStartSlot = Some(50L)
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -497,15 +498,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              ttl = Some(150L)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            ttl = Some(150L)
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -529,15 +528,13 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero,
-              ttl = Some(150L)
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero,
+            ttl = Some(150L)
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -564,14 +561,12 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -595,14 +590,12 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
@@ -631,14 +624,12 @@ class NativeScriptsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
 
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.from(Set(input)),
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
+          TransactionBody(
+            inputs = TaggedSortedSet.from(Set(input)),
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
           ),
-          witnessSet = TransactionWitnessSet(
+          TransactionWitnessSet(
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )

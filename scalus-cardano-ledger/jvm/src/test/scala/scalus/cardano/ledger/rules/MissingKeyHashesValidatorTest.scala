@@ -14,19 +14,16 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         val context = Context()
         val state = State()
         val transaction = Transaction(
-          body = KeepRaw(
-            TransactionBody(
-              inputs = TaggedSortedSet.empty,
-              collateralInputs = TaggedSortedSet.empty,
-              votingProcedures = None,
-              certificates = TaggedOrderedStrictSet.empty,
-              withdrawals = None,
-              requiredSigners = TaggedSortedSet.empty,
-              outputs = IndexedSeq.empty,
-              fee = Coin.zero
-            )
-          ),
-          witnessSet = TransactionWitnessSet()
+          TransactionBody(
+            inputs = TaggedSortedSet.empty,
+            collateralInputs = TaggedSortedSet.empty,
+            votingProcedures = None,
+            certificates = TaggedOrderedStrictSet.empty,
+            withdrawals = None,
+            requiredSigners = TaggedSortedSet.empty,
+            outputs = IndexedSeq.empty,
+            fee = Coin.zero
+          )
         )
 
         val result = MissingKeyHashesValidator.validate(context, state, transaction)
@@ -44,7 +41,14 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val transaction = {
             val tx = randomTransactionWithIsValidField
-            tx.copy(
+            tx.withWitness(
+              _.copy(
+                vkeyWitnesses = TaggedSortedSet(
+                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                )
+              )
+            ).copy(
               body = KeepRaw(
                 tx.body.value.copy(
                   inputs = TaggedSortedSet.from(Set(input1, input2)),
@@ -54,12 +58,6 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
               )
             )
@@ -105,7 +103,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val transaction = {
             val tx = randomTransactionWithIsValidField
-            tx.copy(
+            tx.withWitness(
+              _.copy(
+                vkeyWitnesses = TaggedSortedSet(
+                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+                )
+              )
+            ).copy(
               body = KeepRaw(
                 tx.body.value.copy(
                   inputs = TaggedSortedSet.from(Set(input1, input2)),
@@ -115,11 +119,6 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
                 )
               )
             )
@@ -169,7 +168,14 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
         val transaction = {
             val tx = randomTransactionWithIsValidField
-            tx.copy(
+            tx.withWitness(
+              _.copy(
+                vkeyWitnesses = TaggedSortedSet(
+                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                )
+              )
+            ).copy(
               body = KeepRaw(
                 tx.body.value.copy(
                   inputs = TaggedSortedSet.empty,
@@ -179,12 +185,6 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   certificates = TaggedOrderedStrictSet.empty,
                   withdrawals = None,
                   requiredSigners = TaggedSortedSet.empty
-                )
-              ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
                 )
               )
             )
@@ -246,9 +246,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                  )
                 )
               )
             )
@@ -324,11 +326,13 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
-                  VKeyWitness(publicKey3, platform.signEd25519(privateKey3, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id)),
+                    VKeyWitness(publicKey3, platform.signEd25519(privateKey3, tx.id))
+                  )
                 )
               )
             )
@@ -381,10 +385,12 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                  )
                 )
               )
             )
@@ -443,10 +449,12 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                  )
                 )
               )
             )
@@ -505,9 +513,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+                  )
                 )
               )
             )
@@ -599,9 +609,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey, platform.signEd25519(privateKey, tx.id))
+                  )
                 )
               )
             )
@@ -693,8 +705,10 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   requiredSigners = TaggedSortedSet.empty
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty
+                )
               )
             )
         }
@@ -730,10 +744,12 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   )
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
-                  VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id)),
+                    VKeyWitness(publicKey2, platform.signEd25519(privateKey2, tx.id))
+                  )
                 )
               )
             )
@@ -770,9 +786,11 @@ class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                   )
                 )
               ),
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet(
-                  VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet(
+                    VKeyWitness(publicKey1, platform.signEd25519(privateKey1, tx.id))
+                  )
                 )
               )
             )

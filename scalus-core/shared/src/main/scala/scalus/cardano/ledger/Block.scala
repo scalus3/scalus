@@ -17,7 +17,7 @@ case class Block(
     transactionBodies: IndexedSeq[KeepRaw[TransactionBody]],
 
     /** Transaction witness sets for each transaction */
-    transactionWitnessSets: IndexedSeq[TransactionWitnessSet],
+    transactionWitnessSets: IndexedSeq[KeepRaw[TransactionWitnessSet]],
 
     /** Auxiliary data associated with transactions by index */
     auxiliaryDataSet: Map[Int, KeepRaw[AuxiliaryData]],
@@ -64,11 +64,11 @@ case class Block(
     /** Reconstruct complete transactions from bodies, witness sets, and auxiliary data */
     def transactions(using OriginalCborByteArray): Seq[Transaction] =
         transactionBodies.zipWithIndex.map { case (body, idx) =>
-            val witnessSet = transactionWitnessSets(idx)
+            val witnessSetRaw = transactionWitnessSets(idx)
             val auxData = auxiliaryDataSet.get(idx)
             val isValid = !invalidTransactions.contains(idx)
 
-            Transaction(body, witnessSet, isValid, auxData)
+            Transaction(body, witnessSetRaw, isValid, auxData)
         }
 
 object Block:
@@ -83,7 +83,7 @@ object Block:
             Block(
               blockHeader,
               r.read[IndexedSeq[KeepRaw[TransactionBody]]](),
-              r.read[IndexedSeq[TransactionWitnessSet]](),
+              r.read[IndexedSeq[KeepRaw[TransactionWitnessSet]]](),
               r.read[Map[Int, KeepRaw[AuxiliaryData]]](),
               r.read[IndexedSeq[Int]]()
             )

@@ -34,7 +34,7 @@ class TransactionSignerTest extends AnyFunSuite with ArbitraryInstances {
 
     private def createUnsignedTransaction: Transaction = {
         val tx = Arbitrary.arbitrary[Transaction].sample.get.copy(isValid = true)
-        tx.copy(witnessSet = tx.witnessSet.copy(vkeyWitnesses = TaggedSortedSet.empty))
+        tx.withWitness(_.copy(vkeyWitnesses = TaggedSortedSet.empty))
     }
 
     test("sign with single key adds VKeyWitness to transaction") {

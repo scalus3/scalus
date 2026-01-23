@@ -50,23 +50,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -144,15 +146,17 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = None
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = None
+                )
               )
             )
         }
@@ -204,23 +208,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -297,23 +303,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -407,23 +415,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -511,23 +521,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -619,23 +631,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -719,23 +733,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )
@@ -806,23 +822,25 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                 )
               ),
               auxiliaryData = None,
-              witnessSet = tx.witnessSet.copy(
-                vkeyWitnesses = TaggedSortedSet.empty,
-                bootstrapWitnesses = TaggedSortedSet.empty,
-                nativeScripts = TaggedSortedMap.empty,
-                plutusV1Scripts = TaggedSortedStrictMap.empty,
-                plutusV2Scripts = TaggedSortedStrictMap.empty,
-                plutusV3Scripts = TaggedSortedStrictMap.empty,
-                plutusData = KeepRaw(TaggedSortedMap.empty),
-                redeemers = Some(
-                  KeepRaw(
-                    Redeemers.Array(
-                      IndexedSeq(
-                        Redeemer(
-                          tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
-                          index = Gen.choose(0, Int.MaxValue).sample.get,
-                          data = scalus.builtin.Data.unit,
-                          exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+              witnessSetRaw = KeepRaw(
+                tx.witnessSet.copy(
+                  vkeyWitnesses = TaggedSortedSet.empty,
+                  bootstrapWitnesses = TaggedSortedSet.empty,
+                  nativeScripts = TaggedSortedMap.empty,
+                  plutusV1Scripts = TaggedSortedStrictMap.empty,
+                  plutusV2Scripts = TaggedSortedStrictMap.empty,
+                  plutusV3Scripts = TaggedSortedStrictMap.empty,
+                  plutusData = KeepRaw(TaggedSortedMap.empty),
+                  redeemers = Some(
+                    KeepRaw(
+                      Redeemers.Array(
+                        IndexedSeq(
+                          Redeemer(
+                            tag = Arbitrary.arbitrary[RedeemerTag].sample.get,
+                            index = Gen.choose(0, Int.MaxValue).sample.get,
+                            data = scalus.builtin.Data.unit,
+                            exUnits = Arbitrary.arbitrary[ExUnits].sample.get
+                          )
                         )
                       )
                     )

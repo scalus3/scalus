@@ -28,7 +28,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val l1 = txBodyL
             .refocus(_.inputs)
             .replace(TaggedSortedSet(input1))
-        val l2 = Focus[Transaction](_.witnessSet.redeemers)
+        val l2 = txWitnessSetL
+            .refocus(_.redeemers)
             .replace(
               Some(
                 KeepRaw(
@@ -52,7 +53,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     test("attach one input to the end") {
         val tx1 = txBodyL.refocus(_.inputs).replace(TaggedSortedSet(input1, input2))(anyNetworkTx)
-        val expectedTx = tx1 |> Focus[Transaction](_.witnessSet.redeemers)
+        val expectedTx = tx1 |> txWitnessSetL
+            .refocus(_.redeemers)
             .replace(
               Some(
                 KeepRaw(
@@ -84,7 +86,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     test("remove two inputs, before and after") {
         val tx1 = {
             val l1 =
-                Focus[Transaction](_.witnessSet.redeemers)
+                txWitnessSetL
+                    .refocus(_.redeemers)
                     .replace(Some(KeepRaw(Redeemers(unitRedeemer.focus(_.index).replace(1)))))
             val l2 = txBodyL
                 .refocus(_.inputs)
@@ -92,7 +95,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             anyNetworkTx |> l1 |> l2
         }
         val tx2 = {
-            val l1 = Focus[Transaction](_.witnessSet.redeemers)
+            val l1 = txWitnessSetL
+                .refocus(_.redeemers)
                 .replace(Some(KeepRaw(Redeemers(unitRedeemer))))
             val l2 = txBodyL
                 .refocus(_.inputs)
@@ -109,7 +113,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     test("remove two inputs with redeemers, before and after") {
         val tx1 = {
-            val l1 = Focus[Transaction](_.witnessSet.redeemers)
+            val l1 = txWitnessSetL
+                .refocus(_.redeemers)
                 .replace(
                   Some(
                     KeepRaw(
@@ -137,7 +142,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             anyNetworkTx |> l1 |> l2
         }
         val tx2 = {
-            val l1 = Focus[Transaction](_.witnessSet.redeemers)
+            val l1 = txWitnessSetL
+                .refocus(_.redeemers)
                 .replace(
                   Some(
                     KeepRaw(
@@ -168,7 +174,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     test("remove input & redeemer, add another input & redeemer") {
         val tx1 = {
-            val l1 = Focus[Transaction](_.witnessSet.redeemers)
+            val l1 = txWitnessSetL
+                .refocus(_.redeemers)
                 .replace(
                   Some(
                     KeepRaw(
@@ -191,7 +198,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         }
 
         val tx2 = {
-            val l1 = Focus[Transaction](_.witnessSet.redeemers)
+            val l1 = txWitnessSetL
+                .refocus(_.redeemers)
                 .replace(
                   Some(
                     KeepRaw(
@@ -224,7 +232,8 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 .refocus(_.inputs)
                 .replace(TaggedSortedSet(input0, input2))
                 .compose(
-                  Focus[Transaction](_.witnessSet.redeemers)
+                  txWitnessSetL
+                      .refocus(_.redeemers)
                       .replace(
                         Some(
                           KeepRaw(
