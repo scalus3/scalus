@@ -1,8 +1,8 @@
 package scalus.uplc.jit
 
 import cats.syntax.semigroup.*
-import scalus.builtin.{Builtins, ByteString, Data}
-import scalus.prelude.List as PList
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.*
 import scalus.uplc.eval.ExBudgetCategory.{BuiltinApp, Step}
@@ -323,7 +323,7 @@ object BuiltinAppliedGenerator {
               ),
               Nil
             )
-            scalus.builtin.Builtins.equalsData(
+            scalus.uplc.builtin.Builtins.equalsData(
               ${ x }.asInstanceOf[Data],
               ${ y }.asInstanceOf[Data]
             )
@@ -723,7 +723,7 @@ object BuiltinAppliedGenerator {
         y: Expr[Any],
         budget: Expr[BudgetSpender],
         params: Expr[MachineParams]
-    )(using Quotes): Expr[scalus.builtin.BuiltinPair[Data, Data]] = {
+    )(using Quotes): Expr[scalus.uplc.builtin.BuiltinPair[Data, Data]] = {
         '{
             ${ budget }.spendBudget(
               Step(StepKind.Apply),
@@ -740,7 +740,7 @@ object BuiltinAppliedGenerator {
               ${ params }.builtinCostModel.mkPairData.constantCost,
               Nil
             )
-            scalus.builtin.BuiltinPair(
+            scalus.uplc.builtin.BuiltinPair(
               ${ x }.asInstanceOf[Data],
               ${ y }.asInstanceOf[Data]
             )
@@ -1055,7 +1055,7 @@ object BuiltinAppliedGenerator {
             Data.Map(
               PList.from(
                 ${ x }
-                    .asInstanceOf[List[scalus.builtin.BuiltinPair[Data, Data]]]
+                    .asInstanceOf[List[scalus.uplc.builtin.BuiltinPair[Data, Data]]]
                     .map(p => (p.fst, p.snd))
               )
             )
@@ -1116,7 +1116,7 @@ object BuiltinAppliedGenerator {
         x: Expr[Any],
         budget: Expr[BudgetSpender],
         params: Expr[MachineParams]
-    )(using Quotes): Expr[List[scalus.builtin.BuiltinPair[Data, Data]]] = {
+    )(using Quotes): Expr[List[scalus.uplc.builtin.BuiltinPair[Data, Data]]] = {
         '{
             ${ budget }.spendBudget(
               Step(StepKind.Apply),
@@ -1141,7 +1141,7 @@ object BuiltinAppliedGenerator {
         x: Expr[Any],
         budget: Expr[BudgetSpender],
         params: Expr[MachineParams]
-    )(using Quotes): Expr[List[scalus.builtin.BuiltinPair[Data, Data]]] = {
+    )(using Quotes): Expr[List[scalus.uplc.builtin.BuiltinPair[Data, Data]]] = {
         '{
             ${ budget }.spendBudget(
               Step(StepKind.Apply),

@@ -1,6 +1,6 @@
 package scalus.uplc.jit
 
-import scalus.builtin.*
+import scalus.uplc.builtin.*
 import scalus.uplc.eval.*
 
 object MemoryUsageJit {

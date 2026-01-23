@@ -1,7 +1,7 @@
 package scalus.uplc.jit
 
-import scalus.builtin.*
-import scalus.prelude.List.toScalaList
+import scalus.uplc.builtin.*
+import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 import scalus.uplc.*
 
 object RuntimeHelper {

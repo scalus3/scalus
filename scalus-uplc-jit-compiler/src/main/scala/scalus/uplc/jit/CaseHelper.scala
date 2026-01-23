@@ -1,6 +1,6 @@
 package scalus.uplc.jit
 
-import scalus.builtin.{BuiltinPair, Data}
+import scalus.uplc.builtin.{BuiltinPair, Data}
 import scalus.uplc.jit.mincont.ContinuationJitRepr
 import scalus.uplc.jit.mincont.ContinuationJitRepr.{Apply, Return}
 

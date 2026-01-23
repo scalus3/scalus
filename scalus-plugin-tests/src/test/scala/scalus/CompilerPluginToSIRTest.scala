@@ -2,9 +2,9 @@ package scalus
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin.ByteString.*
-import scalus.builtin.Data.toData
-import scalus.builtin.{Builtins, ByteString, Data, ToData}
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{Builtins, ByteString, Data, ToData}
 import scalus.compiler.compile
 import scalus.uplc.*
 

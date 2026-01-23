@@ -845,7 +845,7 @@ final class SIRCompiler(
                     if isNoArgsMethod(e.symbol) then SIRType.Fun(SIRType.Unit, origType)
                     else origType
                 // Resolve val aliases to their target objects.
-                // When accessing e.g. scalus.prelude.List (a val alias pointing to
+                // When accessing e.g. scalus.cardano.onchain.plutus.prelude.List (a val alias pointing to
                 // scalus.cardano.onchain.plutus.prelude.List), we need to use the
                 // target module name, not the package object where the alias is defined.
                 val widenedDealias = e.tpe.widen.dealias

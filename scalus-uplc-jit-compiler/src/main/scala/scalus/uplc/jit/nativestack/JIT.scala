@@ -1,9 +1,9 @@
 package scalus.uplc.jit.nativestack
 
 import scalus.*
-import scalus.builtin.*
-import scalus.prelude.List as PList
-import scalus.prelude.List.toScalaList
+import scalus.uplc.builtin.*
+import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 import scalus.uplc.eval.*
 import scalus.uplc.eval.ExBudgetCategory.{Startup, Step}
 import scalus.uplc.jit.*

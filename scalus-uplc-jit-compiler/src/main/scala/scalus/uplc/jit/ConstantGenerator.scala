@@ -1,8 +1,8 @@
 package scalus.uplc.jit
 
-import scalus.builtin.*
-import scalus.prelude.List as PList
-import scalus.prelude.List.toScalaList
+import scalus.uplc.builtin.*
+import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 import scalus.uplc.Constant
 
 import scala.quoted.*

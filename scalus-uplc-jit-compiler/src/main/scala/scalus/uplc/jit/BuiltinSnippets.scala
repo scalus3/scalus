@@ -1,8 +1,8 @@
 package scalus.uplc.jit
 
-import scalus.builtin.{BuiltinPair, Builtins, ByteString, Data}
-import scalus.prelude.List as PList
-import scalus.prelude.List.toScalaList
+import scalus.uplc.builtin.{BuiltinPair, Builtins, ByteString, Data}
+import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.ExBudgetCategory.BuiltinApp
 import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams}
