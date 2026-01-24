@@ -197,7 +197,7 @@ object VaultValidator extends Validator {
     }
 
     private def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
-        case ledger.api.v2.OutputDatum.OutputDatum(d) => d.to[State]
+        case scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum(d) => d.to[State]
         case _                                        => fail(NoDatumProvided)
     }
 
