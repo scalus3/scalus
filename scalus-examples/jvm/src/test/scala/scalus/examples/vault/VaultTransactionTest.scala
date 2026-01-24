@@ -90,10 +90,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val lockTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(defaultInitialAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -104,27 +103,30 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(lockTx).await().isRight)
 
-        val vaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val vaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == lockTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
-        assert(vaultUtxo._2.value.coin == defaultInitialAmount)
+        assert(vaultUtxo.output.value.coin == defaultInitialAmount)
 
         val currentSlot = 1000L
         val currentTime = env.slotConfig.slotToTime(currentSlot)
 
         val withdrawTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -133,22 +135,26 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .withdraw(utxos, utxos, vaultUtxo, ownerAddress, currentTime)
         }
 
-        val result = runValidator(provider, withdrawTx, vaultUtxo._1)
+        val result = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(result.isSuccess)
 
         provider.setSlot(currentSlot)
 
         assert(provider.submit(withdrawTx).await().isRight)
 
-        val newVaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(withdrawTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val newVaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == withdrawTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         newVaultUtxo.output match {
             case TransactionOutput.Babbage(_, _, Some(DatumOption.Inline(d)), _) =>
@@ -174,10 +180,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val lockTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(defaultInitialAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -188,24 +193,27 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(lockTx).await().isRight)
 
-        val vaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val vaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == lockTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val depositAmount = Value.lovelace(5_000_000L)
 
         val depositTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(depositAmount.coin + commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(depositAmount.coin + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -214,24 +222,28 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .deposit(utxos, utxos, vaultUtxo, depositAmount, ownerAddress)
         }
 
-        val result = runValidator(provider, depositTx, vaultUtxo._1)
+        val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
         assert(result.budget.steps <= 197_512436L)
         assert(result.budget.memory <= 744520)
 
         assert(provider.submit(depositTx).await().isRight)
 
-        val newVaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(depositTx.id),
-              minAmount = Some(defaultInitialAmount + depositAmount.coin)
-            )
-            .await()
-            .toOption
-            .get
+        val newVaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == depositTx.id &&
+                  u.output.value.coin >= defaultInitialAmount + depositAmount.coin
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
-        newVaultUtxo._2 match {
+        newVaultUtxo.output match {
             case TransactionOutput.Babbage(_, value, Some(DatumOption.Inline(d)), _) =>
                 val newDatum = d.to[State]
                 assert(
@@ -255,10 +267,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val lockTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(defaultInitialAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -269,24 +280,27 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(lockTx).await().isRight)
 
-        val vaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val vaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == lockTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val currentTime = env.slotConfig.slotToTime(1000L)
 
         val finalizeTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -295,7 +309,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .finalize(utxos, utxos, vaultUtxo, ownerAddress, ownerAddress, currentTime)
         }
 
-        val result = runValidator(provider, finalizeTx, vaultUtxo._1)
+        val result = runValidator(provider, finalizeTx, vaultUtxo.input)
 
         assert(result.isFailure, "Finalize on Idle vault should fail")
         assert(result.logs.last.contains(VaultValidator.ContractMustBePending))
@@ -306,10 +320,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val lockTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(defaultInitialAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -320,25 +333,28 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(lockTx).await().isRight)
 
-        val vaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val vaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == lockTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val withdrawSlot = 1000L
         val withdrawTime = env.slotConfig.slotToTime(withdrawSlot)
 
         val withdrawTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -347,21 +363,25 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .withdraw(utxos, utxos, vaultUtxo, ownerAddress, withdrawTime)
         }
 
-        val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo._1)
+        val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
 
         provider.setSlot(withdrawSlot)
         assert(provider.submit(withdrawTx).await().isRight)
 
-        val pendingVaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(withdrawTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val pendingVaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == withdrawTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         // Calculate finalization time (after wait time)
         val finalizeSlot = withdrawSlot + (defaultWaitTime / env.slotConfig.slotLength) + 1
@@ -369,10 +389,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val finalizeTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -388,7 +407,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo._1)
+        val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
 
         provider.setSlot(finalizeSlot)
@@ -414,10 +433,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val lockTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(defaultInitialAmount + commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(defaultInitialAmount + commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -428,25 +446,28 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(provider.submit(lockTx).await().isRight)
 
-        val vaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(lockTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val vaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == lockTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         val withdrawSlot = 1000L
         val withdrawTime = env.slotConfig.slotToTime(withdrawSlot)
 
         val withdrawTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -455,21 +476,25 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .withdraw(utxos, utxos, vaultUtxo, ownerAddress, withdrawTime)
         }
 
-        val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo._1)
+        val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
 
         provider.setSlot(withdrawSlot)
         assert(provider.submit(withdrawTx).await().isRight)
 
-        val pendingVaultUtxo = provider
-            .findUtxo(
-              address = scriptAddress,
-              transactionId = Some(withdrawTx.id),
-              minAmount = Some(defaultInitialAmount)
-            )
-            .await()
-            .toOption
-            .get
+        val pendingVaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress &&
+                  u.input.transactionId == withdrawTx.id &&
+                  u.output.value.coin >= defaultInitialAmount
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
 
         // Try to finalize just after withdrawal (before wait time)
         val earlySlot = withdrawSlot + 1
@@ -477,10 +502,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val finalizeTx = {
             val utxos = provider
-                .findUtxos(
-                  address = ownerAddress,
-                  minRequiredTotalAmount = Some(commissionAmount)
-                )
+                .queryUtxos { u => u.output.address == ownerAddress }
+                .minTotal(commissionAmount)
+                .execute()
                 .await()
                 .toOption
                 .get
@@ -496,7 +520,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 )
         }
 
-        val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo._1)
+        val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
 
         assert(finalizeResult.isFailure, "Finalize before wait time should fail")
         assert(finalizeResult.logs.last.contains(VaultValidator.DeadlineNotPassed))

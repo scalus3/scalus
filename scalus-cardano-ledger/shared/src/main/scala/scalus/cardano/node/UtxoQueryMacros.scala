@@ -26,6 +26,7 @@ object UtxoQueryMacros {
       * Supported expressions:
       *   - `u.output.address == addr` - query by address
       *   - `u.input.transactionId == txId` - query by transaction
+      *   - `inputs.contains(u.input)` - query by set of transaction inputs
       *   - `u.output.value.hasAsset(policyId, assetName)` - query/filter by asset
       *   - `u.output.value.coin >= amount` - filter by minimum lovelace
       *   - `u.output.hasDatumHash(hash)` - filter by datum hash
@@ -105,6 +106,14 @@ object UtxoQueryMacros {
                 ) if !referencesParam(txIdTerm, paramSym) =>
                 val txIdExpr = txIdTerm.asExprOf[TransactionHash]
                 QueryComponent.Source('{ UtxoSource.FromTransaction($txIdExpr) })
+
+            // inputs.contains(u.input) - query by set of transaction inputs
+            case Apply(
+                  Select(inputsTerm, "contains"),
+                  List(Select(Ident(_), "input"))
+                ) if !referencesParam(inputsTerm, paramSym) =>
+                val inputsExpr = inputsTerm.asExprOf[Set[TransactionInput]]
+                QueryComponent.Source('{ UtxoSource.FromInputs($inputsExpr) })
 
             // u.output.value.hasAsset(policyId, assetName)
             // Extension method compiles as: Value.hasAsset(u.output.value)(policyId, assetName)
@@ -220,6 +229,7 @@ object UtxoQueryMacros {
                       s"Supported patterns:\n" +
                       s"  - u.output.address == addr\n" +
                       s"  - u.input.transactionId == txId\n" +
+                      s"  - inputs.contains(u.input)\n" +
                       s"  - u.output.value.hasAsset(policyId, assetName)\n" +
                       s"  - u.output.value.coin >= amount\n" +
                       s"  - u.output.hasDatumHash(hash)\n" +

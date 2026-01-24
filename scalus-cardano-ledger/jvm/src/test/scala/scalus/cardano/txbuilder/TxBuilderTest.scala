@@ -560,8 +560,13 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         assert(tx2Result.isRight, s"tx2 should be submitted successfully: $tx2Result")
 
         // Verify Alice received the ADA back
-        val aliceUtxo =
-            provider.findUtxo(address = Alice.address, transactionId = Some(tx2.id)).await()
+        val aliceUtxo = provider
+            .queryUtxos { u =>
+                u.output.address == Alice.address && u.input.transactionId == tx2.id
+            }
+            .execute()
+            .await()
+            .map(utxos => Utxo(utxos.head))
         assert(aliceUtxo.isRight, "Alice should have received the UTXO from tx2")
     }
 

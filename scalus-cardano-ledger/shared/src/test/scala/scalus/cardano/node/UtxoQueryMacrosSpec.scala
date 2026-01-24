@@ -67,6 +67,21 @@ class UtxoQueryMacrosSpec extends AnyFunSuite {
             case _ => fail(s"Unexpected query structure: $query")
     }
 
+    test("buildQuery: inputs.contains(u.input) query") {
+        val inputs = Set(
+          TransactionInput(testTxHash, 0),
+          TransactionInput(testTxHash, 1)
+        )
+        val query = UtxoQueryMacros.buildQuery { u =>
+            inputs.contains(u.input)
+        }
+
+        query match
+            case UtxoQuery.Simple(UtxoSource.FromInputs(i), None, None, None, None) =>
+                assert(i == inputs)
+            case _ => fail(s"Unexpected query structure: $query")
+    }
+
     test("buildQuery: standalone asset query (becomes source)") {
         val policyId = testPolicyId
         val assetName = testAssetName
