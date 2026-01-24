@@ -20,7 +20,6 @@ package scalus.cardano.txbuilder
 import cats.implicits.*
 import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.TransactionBuilder.modifyWs
 
 // ============================================================================
 // DetachedRedeemer
@@ -304,7 +303,7 @@ object TransactionConversion {
             else Some(KeepRaw(Redeemers(invalidRedeemers*)))
         )
 
-        val updatedTx = modifyWs(tx, _ => updatedWitnessSet)
+        val updatedTx = tx.withWitness(updatedWitnessSet)
 
         EditableTransaction(updatedTx, redeemers)
     }
@@ -325,7 +324,7 @@ object TransactionConversion {
                         }
             }
 
-            updatedTx = modifyWs(tx, _ => TransactionWitnessSet.empty)
+            updatedTx = tx.withWitness(TransactionWitnessSet.empty)
         } yield EditableTransaction(updatedTx, redeemers.toVector)
     }
 
@@ -348,7 +347,7 @@ object TransactionConversion {
                         if allRedeemers.isEmpty then None
                         else Some(KeepRaw(Redeemers(allRedeemers*)))
                     )
-                val updatedTx = modifyWs(editable.transaction, _ => updatedWitnessSet)
+                val updatedTx = editable.transaction.withWitness(updatedWitnessSet)
                 Right(updatedTx)
         }
     }
@@ -369,7 +368,7 @@ object TransactionConversion {
                 if allRedeemers.isEmpty then None
                 else Some(KeepRaw(Redeemers(allRedeemers*)))
             )
-        modifyWs(editable.transaction, _ => updatedWitnessSet)
+        editable.transaction.withWitness(updatedWitnessSet)
     }
 }
 
