@@ -2,7 +2,7 @@ package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.uplc.builtin.{BuiltinArray, BuiltinList, Builtins, Data}
+import scalus.uplc.builtin.{BuiltinArray, BuiltinList, Builtins, ByteString, Data}
 import scalus.uplc.builtin.Builtins.*
 import scalus.compiler.compile
 import scalus.uplc.eval.{PlutusVM, Result}

@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
-import scalus.cardano.onchain.plutus.prelude.{`???`, identity}
+import scalus.cardano.onchain.plutus.prelude.{`???`, asScalus, fail, identity, Eq, List, Option, Ord, Order, SortedMap}
 import scalus.testing.kit.EvalTestKit
 
 class ListTest extends AnyFunSuite with EvalTestKit {
