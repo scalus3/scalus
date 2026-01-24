@@ -1,7 +1,7 @@
 package scalus.testing.integration
 
 import scalus.cardano.ledger.{CardanoInfo, SlotNo, Transaction, TransactionHash}
-import scalus.cardano.node.{Provider, SubmitError}
+import scalus.cardano.node.{BlockchainProvider, SubmitError}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -21,7 +21,7 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class BlockfrostTestContext(
     val cardanoInfo: CardanoInfo,
-    val provider: Provider,
+    val provider: BlockchainProvider,
     val parties: IndexedSeq[TestParty],
     val envName: String
 ) extends IntegrationTestContext {

@@ -198,7 +198,7 @@ object VaultValidator extends Validator {
 
     private def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
         case scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum(d) => d.to[State]
-        case _                                        => fail(NoDatumProvided)
+        case _                                                           => fail(NoDatumProvided)
     }
 
     private def requireSameOwner(out: TxOut, datum: State): Unit =

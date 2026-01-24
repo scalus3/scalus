@@ -2,7 +2,7 @@ package scalus.testing.integration
 
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.{CardanoInfo, SlotNo, Transaction, TransactionHash}
-import scalus.cardano.node.{Provider, SubmitError}
+import scalus.cardano.node.{BlockchainProvider, SubmitError}
 import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.ledger.AddrKeyHash
 import scalus.testing.kit.Party
@@ -38,7 +38,7 @@ trait IntegrationTestContext {
     def cardanoInfo: CardanoInfo
 
     /** Provider for blockchain queries and transaction submission. */
-    def provider: Provider
+    def provider: BlockchainProvider
 
     /** All available test parties. */
     def parties: IndexedSeq[TestParty]

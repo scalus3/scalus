@@ -1,7 +1,7 @@
 package scalus.testing.integration
 
 import scalus.cardano.ledger.{CardanoInfo, SlotNo, Transaction, TransactionHash}
-import scalus.cardano.node.{Provider, SubmitError}
+import scalus.cardano.node.{BlockchainProvider, SubmitError}
 import scalus.utils.await
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -25,7 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 class YaciTestContext(
     val cardanoInfo: CardanoInfo,
-    val provider: Provider,
+    val provider: BlockchainProvider,
     val parties: IndexedSeq[TestParty]
 ) extends IntegrationTestContext {
 

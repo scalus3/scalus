@@ -1,7 +1,7 @@
 package scalus.testing.integration
 
 import scalus.cardano.ledger.{CardanoInfo, SlotNo, Transaction, TransactionHash}
-import scalus.cardano.node.{Emulator, Provider, SubmitError}
+import scalus.cardano.node.{BlockchainProvider, Emulator, SubmitError}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -29,7 +29,7 @@ class EmulatorTestContext(
     private var _slot: SlotNo = initialSlot
     emulator.setSlot(initialSlot)
 
-    override def provider: Provider = emulator
+    override def provider: BlockchainProvider = emulator
 
     override def envName: String = "Emulator"
 
