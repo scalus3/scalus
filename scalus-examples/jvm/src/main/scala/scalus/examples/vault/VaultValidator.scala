@@ -3,7 +3,7 @@ package scalus.examples.vault
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
-import scalus.ledger.api
+import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
 import scalus.cardano.onchain.plutus.v1.{Credential, Interval, PosixTime, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
@@ -71,7 +71,7 @@ object Status {
 object VaultValidator extends Validator {
 
     inline override def spend(
-        d: prelude.Option[Data],
+        d: scalus.cardano.onchain.plutus.prelude.Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef

@@ -193,7 +193,7 @@ class UplcParserTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbi
           r == Right(
             Program(
               version = (1, 0, 0),
-              term = builtin.ByteString.fromHex(
+              term = scalus.uplc.builtin.ByteString.fromHex(
                 "001234ff"
               ) $ true $ false $ () $ "x ∈ ℝ ⇒ x² ≥ 0; z ∈ ℂ\\ℝ ⇒ z² ∉ {x ∈ ℝ: x ≥ 0}."
             )

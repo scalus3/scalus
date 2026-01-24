@@ -2,7 +2,7 @@ package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin
+import scalus.uplc.builtin
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.{Builtins, ByteString, Data, JVMPlatformSpecific}
 import scalus.compiler.sir.*
@@ -68,7 +68,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
         assert(
           compile(
-            Builtins.chooseList(builtin.BuiltinList[BigInt](1, 2, 3), true, false)
+            Builtins.chooseList(scalus.uplc.builtin.BuiltinList[BigInt](1, 2, 3), true, false)
           ) ~=~ (DefaultFun.ChooseList $ List(1, 2, 3) $ true $ false)
         )
     }
@@ -76,7 +76,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile mkCons builtins") {
         assert(
           compile(
-            Builtins.mkCons(BigInt(4), builtin.BuiltinList[BigInt](1, 2, 3))
+            Builtins.mkCons(BigInt(4), scalus.uplc.builtin.BuiltinList[BigInt](1, 2, 3))
           ) ~=~ (DefaultFun.MkCons $ 4 $ List(1, 2, 3))
         )
     }
@@ -84,7 +84,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile headList builtins") {
         assert(
           compile(
-            Builtins.headList(builtin.BuiltinList[BigInt](1, 2, 3))
+            Builtins.headList(scalus.uplc.builtin.BuiltinList[BigInt](1, 2, 3))
           ) ~=~ (DefaultFun.HeadList $ List(1, 2, 3))
         )
     }
@@ -92,7 +92,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile tailList builtins") {
         assert(
           compile(
-            Builtins.tailList(builtin.BuiltinList[BigInt](1, 2, 3))
+            Builtins.tailList(scalus.uplc.builtin.BuiltinList[BigInt](1, 2, 3))
           ) ~=~ (DefaultFun.TailList $ List(1, 2, 3))
         )
     }
@@ -100,7 +100,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile nullList builtins") {
         assert(
           compile(
-            Builtins.nullList(builtin.BuiltinList[BigInt](1, 2, 3))
+            Builtins.nullList(scalus.uplc.builtin.BuiltinList[BigInt](1, 2, 3))
           ) ~=~ (DefaultFun.NullList $ List(1, 2, 3))
         )
     }
@@ -108,7 +108,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile empty List") {
         assert(
           compile {
-              builtin.BuiltinList.empty[BigInt]
+              scalus.uplc.builtin.BuiltinList.empty[BigInt]
           } ~=~ Const(
             Constant.List(DefaultUni.Integer, List()),
             SIRType.List(SIRType.Integer),
@@ -120,7 +120,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile List literal") {
         assert(
           compile {
-              builtin.BuiltinList[BigInt](1, 2, 3)
+              scalus.uplc.builtin.BuiltinList[BigInt](1, 2, 3)
           } ~=~ Const(
             Constant.List(
               DefaultUni.Integer,
@@ -136,7 +136,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
         val compiled = compile {
             val a = "foo"
-            "bar" :: builtin.BuiltinList(a)
+            "bar" :: scalus.uplc.builtin.BuiltinList(a)
         }
 
         val expected = Let(
@@ -173,7 +173,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
     test("compile head function") {
         assert(
-          compile { (l: builtin.BuiltinList[BigInt]) => l.head }
+          compile { (l: scalus.uplc.builtin.BuiltinList[BigInt]) => l.head }
               ~=~ LamAbs(
                 Var("l", sirBuiltinList(sirInt), AnE),
                 Apply(SIRBuiltins.headList, Var("l", sirBuiltinList(sirInt), AnE), sirInt, AnE),
@@ -185,7 +185,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
     test("compile tail function") {
         assert(
-          compile { (l: builtin.BuiltinList[BigInt]) => l.tail }
+          compile { (l: scalus.uplc.builtin.BuiltinList[BigInt]) => l.tail }
               ~=~ LamAbs(
                 Var("l", sirBuiltinList(sirInt), AnE),
                 Apply(
@@ -202,7 +202,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
 
     test("compile isEmpty function") {
         assert(
-          compile { (l: builtin.BuiltinList[BigInt]) => l.isEmpty }
+          compile { (l: scalus.uplc.builtin.BuiltinList[BigInt]) => l.isEmpty }
               ~=~ LamAbs(
                 Var("l", sirBuiltinList(sirInt), AnE),
                 Apply(SIRBuiltins.nullList, Var("l", sirBuiltinList(sirInt), AnE), sirBool, AnE),
@@ -246,7 +246,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
           compile(
             Builtins.constrData(
               1,
-              builtin.BuiltinList(Builtins.iData(2))
+              scalus.uplc.builtin.BuiltinList(Builtins.iData(2))
             )
           ) ~=~ Apply(
             Apply(SIRBuiltins.constrData, sirConst(1), Fun(sirBuiltinList(sirData), sirData), AnE),
@@ -272,7 +272,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
             Const(Constant.List(DefaultUni.Data, immutable.Nil), SIRType.BuiltinList(sirData), AnE)
         assert(
           compile(
-            Builtins.listData(builtin.BuiltinList(Builtins.iData(1)))
+            Builtins.listData(scalus.uplc.builtin.BuiltinList(Builtins.iData(1)))
           )
               ~=~
                   Apply(
@@ -297,7 +297,9 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     test("compile mkPairData builtins") {
 
         val compiled =
-            compile(builtin.BuiltinPair(Builtins.bData(hex"deadbeef"), Builtins.iData(1)))
+            compile(
+              scalus.uplc.builtin.BuiltinPair(Builtins.bData(hex"deadbeef"), Builtins.iData(1))
+            )
 
         val expected =
             Apply(
@@ -323,8 +325,8 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         assert(
           compile(
             Builtins.mapData(
-              builtin.BuiltinList(
-                builtin.BuiltinPair(Builtins.bData(hex"deadbeef"), Builtins.iData(1))
+              scalus.uplc.builtin.BuiltinList(
+                scalus.uplc.builtin.BuiltinPair(Builtins.bData(hex"deadbeef"), Builtins.iData(1))
               )
             )
           ) ~=~ Apply(
@@ -961,12 +963,12 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
     }
 
     test("compile utf8 string interpolator") {
-        import builtin.ByteString.utf8
+        import scalus.uplc.builtin.ByteString.utf8
 
         // Test simple ASCII string
         assert(
           compile(utf8"hello") ~=~ Const(
-            Constant.ByteString(builtin.ByteString.fromString("hello")),
+            Constant.ByteString(scalus.uplc.builtin.ByteString.fromString("hello")),
             SIRType.ByteString,
             AnE
           )
@@ -975,7 +977,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         // Test with special characters
         assert(
           compile(utf8"Hello, World!") ~=~ Const(
-            Constant.ByteString(builtin.ByteString.fromString("Hello, World!")),
+            Constant.ByteString(scalus.uplc.builtin.ByteString.fromString("Hello, World!")),
             SIRType.ByteString,
             AnE
           )
@@ -984,7 +986,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         // Test with Unicode
         assert(
           compile(utf8"Hello, 世界") ~=~ Const(
-            Constant.ByteString(builtin.ByteString.fromString("Hello, 世界")),
+            Constant.ByteString(scalus.uplc.builtin.ByteString.fromString("Hello, 世界")),
             SIRType.ByteString,
             AnE
           )
@@ -993,7 +995,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         // Test empty string
         assert(
           compile(utf8"") ~=~ Const(
-            Constant.ByteString(builtin.ByteString.fromString("")),
+            Constant.ByteString(scalus.uplc.builtin.ByteString.fromString("")),
             SIRType.ByteString,
             AnE
           )
@@ -1048,8 +1050,8 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         )
 
         assert(
-          compile { (p: builtin.BuiltinPair[Data, Data]) =>
-              builtin.BuiltinPair(Builtins.sndPair(p), Builtins.fstPair(p))
+          compile { (p: scalus.uplc.builtin.BuiltinPair[Data, Data]) =>
+              scalus.uplc.builtin.BuiltinPair(Builtins.sndPair(p), Builtins.fstPair(p))
           } ~=~
               LamAbs(
                 pv,
@@ -1060,7 +1062,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         )
 
         assert(
-          compile { builtin.BuiltinPair(BigInt(1), hex"deadbeef") }
+          compile { scalus.uplc.builtin.BuiltinPair(BigInt(1), hex"deadbeef") }
               ~=~ Const(
                 Constant.Pair(Constant.Integer(1), deadbeef),
                 SIRType.BuiltinPair(sirInt, sirByteString),
@@ -1069,7 +1071,9 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         )
 
         assert(
-          compile { (p: builtin.BuiltinPair[Data, Data]) => builtin.BuiltinPair(p.snd, p.fst) }
+          compile { (p: scalus.uplc.builtin.BuiltinPair[Data, Data]) =>
+              scalus.uplc.builtin.BuiltinPair(p.snd, p.fst)
+          }
               ~=~ LamAbs(
                 pv,
                 Apply(

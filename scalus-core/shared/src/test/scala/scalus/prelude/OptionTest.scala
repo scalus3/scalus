@@ -1,5 +1,7 @@
 package scalus.prelude
 
+import scalus.cardano.onchain.plutus.prelude.{`???`, AssocMap, List, Option, Rational, SortedMap}
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data.{fromData, toData}
@@ -34,8 +36,8 @@ class OptionTest extends AnyFunSuite with EvalTestKit {
             import Ord.*
 
             val (left, right) = pair
-            val leftOpt = prelude.Option(BigInt(left))
-            val rightOpt = prelude.Option(BigInt(right))
+            val leftOpt = scalus.cardano.onchain.plutus.prelude.Option(BigInt(left))
+            val rightOpt = scalus.cardano.onchain.plutus.prelude.Option(BigInt(right))
             leftOpt > Option.empty &&
             rightOpt > Option.empty &&
             (if left > right then {

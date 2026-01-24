@@ -54,18 +54,29 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(encoder.bitSize(uplc) - unitSize - boolSize == 8)
     }
 
-    test("new prelude.List.Cons(true, prelude.List.Nil) size is 83") {
-        val uplc = compile(new prelude.List.Cons(true, prelude.List.Nil)).toUplcOptimized()
+    test(
+      "new scalus.cardano.onchain.plutus.prelude.List.Cons(true, scalus.cardano.onchain.plutus.prelude.List.Nil) size is 83"
+    ) {
+        val uplc = compile(
+          new scalus.cardano.onchain.plutus.prelude.List.Cons(
+            true,
+            scalus.cardano.onchain.plutus.prelude.List.Nil
+          )
+        ).toUplcOptimized()
         assert(encoder.bitSize(uplc) == 83)
     }
 
-    test("prelude.List.cons(true, prelude.List.Nil) size is 123") {
-        val uplc = compile(prelude.List.single(true)).toUplcOptimized()
+    test(
+      "scalus.cardano.onchain.plutus.prelude.List.cons(true, scalus.cardano.onchain.plutus.prelude.List.Nil) size is 123"
+    ) {
+        val uplc =
+            compile(scalus.cardano.onchain.plutus.prelude.List.single(true)).toUplcOptimized()
         assert(encoder.bitSize(uplc) == 123)
     }
 
-    test("prelude.List.single(true) size is 123") {
-        val uplc = compile(prelude.List.single(true)).toUplcOptimized()
+    test("scalus.cardano.onchain.plutus.prelude.List.single(true) size is 123") {
+        val uplc =
+            compile(scalus.cardano.onchain.plutus.prelude.List.single(true)).toUplcOptimized()
         assert(encoder.bitSize(uplc) == 123)
     }
 

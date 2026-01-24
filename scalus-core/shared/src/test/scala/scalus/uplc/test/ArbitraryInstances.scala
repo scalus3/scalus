@@ -33,11 +33,11 @@ trait ArbitraryInstances:
             .map(a => ByteString.unsafeFromArray(a))
     }
 
-    given byteStringArb: Arbitrary[builtin.ByteString] = Arbitrary(
+    given byteStringArb: Arbitrary[scalus.uplc.builtin.ByteString] = Arbitrary(
       for
           sz <- Gen.frequency((0, Gen.choose(1000, 10000)), (10, Gen.choose(0, 100)))
           bytes <- Gen.containerOfN[Array, Byte](sz, Arbitrary.arbitrary)
-      yield builtin.ByteString.unsafeFromArray(bytes)
+      yield scalus.uplc.builtin.ByteString.unsafeFromArray(bytes)
     )
 
     given Arbitrary[builtin.BLS12_381_G1_Element] = Arbitrary(
@@ -69,7 +69,7 @@ trait ArbitraryInstances:
       yield I(n)
     )
     given bArb: Arbitrary[B] = Arbitrary(
-      Arbitrary.arbitrary[builtin.ByteString].map(B.apply)
+      Arbitrary.arbitrary[scalus.uplc.builtin.ByteString].map(B.apply)
     )
 
     given Shrink[Data] =
@@ -81,7 +81,7 @@ trait ArbitraryInstances:
                 else
                     Stream(
                       B(
-                        builtin.ByteString.unsafeFromArray(
+                        scalus.uplc.builtin.ByteString.unsafeFromArray(
                           b.bytes.slice(0, b.size / 2)
                         )
                       )
@@ -163,7 +163,7 @@ trait ArbitraryInstances:
         t match
             case DefaultUni.Integer => Arbitrary.arbitrary[BigInt].map(Constant.Integer.apply)
             case DefaultUni.ByteString =>
-                Arbitrary.arbitrary[builtin.ByteString].map(Constant.ByteString.apply)
+                Arbitrary.arbitrary[scalus.uplc.builtin.ByteString].map(Constant.ByteString.apply)
             case DefaultUni.String => Arbitrary.arbitrary[String].map(Constant.String.apply)
             case DefaultUni.Data   => Arbitrary.arbitrary[Data].map(Constant.Data.apply)
             case DefaultUni.Unit   => Gen.const(Constant.Unit)

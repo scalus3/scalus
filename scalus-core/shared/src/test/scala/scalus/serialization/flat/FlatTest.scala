@@ -3,7 +3,7 @@ package scalus.serialization.flat
 import org.scalacheck.{Arbitrary, Gen, Shrink}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin
+import scalus.uplc.builtin
 import scalus.uplc.*
 import scalus.uplc.Constant.given
 import scalus.uplc.Term.asTerm
@@ -279,8 +279,8 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
         assert(fl.bitSize(Constant.Unit) == 6)
         assert(fl.bitSize(Constant.Bool(true)) == 7)
         assert(fl.bitSize(Constant.Integer(1)) == 14)
-        assert(fl.bitSize(Constant.ByteString(builtin.ByteString.empty)) == 22)
-        assert(fl.bitSize(Constant.ByteString(builtin.ByteString(11, 22, 33))) == 54)
+        assert(fl.bitSize(Constant.ByteString(scalus.uplc.builtin.ByteString.empty)) == 22)
+        assert(fl.bitSize(Constant.ByteString(scalus.uplc.builtin.ByteString(11, 22, 33))) == 54)
         assert(fl.bitSize(Constant.String("Ї")) == 46)
         assert(fl.bitSize(Constant.Data(1.toData)) == 38)
         forAll { (c: Constant) =>
@@ -306,8 +306,8 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
         // 10 bits as above + 8 bit for small integer
         assert(fl.bitSize(1.asTerm) == 18)
         // 10 bits as above + 16 bits for 0 length byte array (as in Flat implementation)
-        assert(fl.bitSize(builtin.ByteString.empty.asTerm) == 26)
-        assert(fl.bitSize(builtin.ByteString(11, 22, 33).asTerm) == 58)
+        assert(fl.bitSize(scalus.uplc.builtin.ByteString.empty.asTerm) == 26)
+        assert(fl.bitSize(scalus.uplc.builtin.ByteString(11, 22, 33).asTerm) == 58)
         assert(fl.bitSize("Ї".asTerm) == 50)
         assert(fl.bitSize(1.toData.asTerm) == 42)
         forAll { (t: Term) =>

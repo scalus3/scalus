@@ -90,15 +90,15 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         // ByteStrings
         assert(
-          compile(builtin.ByteString.empty) ~=~ Const(
-            Constant.ByteString(builtin.ByteString.empty),
+          compile(scalus.uplc.builtin.ByteString.empty) ~=~ Const(
+            Constant.ByteString(scalus.uplc.builtin.ByteString.empty),
             SIRType.ByteString,
             AnnotationsDecl.empty
           )
         )
 
         assert(
-          compile(builtin.ByteString.fromHex("deadbeef")) ~=~ Const(
+          compile(scalus.uplc.builtin.ByteString.fromHex("deadbeef")) ~=~ Const(
             deadbeef,
             SIRType.ByteString,
             AnnotationsDecl.empty
@@ -108,8 +108,8 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
           compile(hex"deadbeef") ~=~ Const(deadbeef, SIRType.ByteString, AnnotationsDecl.empty)
         )
         assert(
-          compile(builtin.ByteString.fromString("deadbeef")) ~=~ Const(
-            Constant.ByteString(builtin.ByteString.fromString("deadbeef")),
+          compile(scalus.uplc.builtin.ByteString.fromString("deadbeef")) ~=~ Const(
+            Constant.ByteString(scalus.uplc.builtin.ByteString.fromString("deadbeef")),
             SIRType.ByteString,
             AnnotationsDecl.empty
           )
@@ -229,8 +229,10 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         // tail has a MethodType, check if it compiles
         val sir = compile {
             (
-                tail: [A] => builtin.BuiltinList[A] => builtin.BuiltinList[A],
-                ctx: builtin.BuiltinList[Data]
+                tail: [A] => scalus.uplc.builtin.BuiltinList[A] => scalus.uplc.builtin.BuiltinList[
+                  A
+                ],
+                ctx: scalus.uplc.builtin.BuiltinList[Data]
             ) =>
                 tail[Data](ctx)
         }

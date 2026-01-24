@@ -71,8 +71,8 @@ object Ord:
             import scalus.uplc.builtin
 
             def compareBuiltinList(
-                xs: builtin.BuiltinList[Data],
-                ys: builtin.BuiltinList[Data]
+                xs: scalus.uplc.builtin.BuiltinList[Data],
+                ys: scalus.uplc.builtin.BuiltinList[Data]
             ): Order = {
                 if xs.isEmpty && ys.isEmpty then Order.Equal
                 else if xs.isEmpty then Order.Less
@@ -102,8 +102,8 @@ object Ord:
                         (px.fst <=> py.fst) ifEqualThen (px.snd <=> py.snd)
 
                     def go(
-                        xs: builtin.BuiltinList[BuiltinPair[Data, Data]],
-                        ys: builtin.BuiltinList[BuiltinPair[Data, Data]]
+                        xs: scalus.uplc.builtin.BuiltinList[BuiltinPair[Data, Data]],
+                        ys: scalus.uplc.builtin.BuiltinList[BuiltinPair[Data, Data]]
                     ): Order = {
                         if xs.isEmpty && ys.isEmpty then Order.Equal
                         else if xs.isEmpty then Order.Less

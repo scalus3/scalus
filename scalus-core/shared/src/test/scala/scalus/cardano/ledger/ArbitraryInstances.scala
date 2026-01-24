@@ -3,7 +3,7 @@ package scalus.cardano.ledger
 import io.bullet.borer.Encoder
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.builtin
+import scalus.uplc.builtin
 import scalus.uplc.builtin.Data.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.TransactionWitnessSet.given

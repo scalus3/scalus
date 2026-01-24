@@ -207,7 +207,7 @@ object Macros {
                         )
 
                 /* I tried to optimize the code below, but it's not worth it.
-                  1. Reuse val double = (d: builtin.BuiltinList[Data]) => d.tail.tail.tail.tail (2,3,4,5,6,7 tails)
+                  1. Reuse val double = (d: scalus.uplc.builtin.BuiltinList[Data]) => d.tail.tail.tail.tail (2,3,4,5,6,7 tails)
                   Expression: _.txInfo.id
                   Simple
                   tail 1 budget: { mem: 0.005780, cpu: 1.890490 }

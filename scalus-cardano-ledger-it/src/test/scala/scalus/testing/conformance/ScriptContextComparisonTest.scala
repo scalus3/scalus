@@ -3,13 +3,13 @@ package scalus.testing.conformance
 import io.bullet.borer.Cbor
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.*
-import scalus.builtin.Data.toData
+import scalus.uplc.builtin.Data.toData
 
 import java.io.File
-import scalus.builtin.platform
+import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
-import scalus.ledger.api
+import scalus.cardano.onchain.plutus
 import scalus.testing.conformance.CardanoLedgerVectors.*
 import scalus.uplc.eval.ExBudget
 import scalus.utils.Hex
@@ -98,7 +98,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
                     // Extract and show TxInfo fields for comparison
                     scriptContext match {
-                        case v1ctx: api.v1.ScriptContext =>
+                        case v1ctx: scalus.cardano.onchain.plutus.v1.ScriptContext =>
                             val ctxData = v1ctx.toData
                             val ctxCbor = Cbor.encode(ctxData).toByteArray
                             val ctxHex = Hex.bytesToHex(ctxCbor)
@@ -125,7 +125,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                                 )
                             }
 
-                        case v2ctx: api.v2.ScriptContext =>
+                        case v2ctx: scalus.cardano.onchain.plutus.v2.ScriptContext =>
                             val ctxData = v2ctx.toData
                             val ctxCbor = Cbor.encode(ctxData).toByteArray
                             val ctxHex = Hex.bytesToHex(ctxCbor)
@@ -144,7 +144,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                             println(s"    signatories count: ${txInfo.signatories.length}")
                             println(s"    txId: ${txInfo.id.hash.toHex}")
 
-                        case v3ctx: api.v3.ScriptContext =>
+                        case v3ctx: scalus.cardano.onchain.plutus.v3.ScriptContext =>
                             val ctxData = v3ctx.toData
                             val ctxCbor = Cbor.encode(ctxData).toByteArray
                             val ctxHex = Hex.bytesToHex(ctxCbor)
@@ -229,7 +229,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
                 // Dump ScriptContext
                 scriptContext match {
-                    case v1ctx: api.v1.ScriptContext =>
+                    case v1ctx: scalus.cardano.onchain.plutus.v1.ScriptContext =>
                         val ctxData = v1ctx.toData
                         val ctxCbor = Cbor.encode(ctxData).toByteArray
                         val ctxFilename =
@@ -238,7 +238,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                         println(s"Wrote ScriptContext CBOR to: $ctxFilename")
                         println(s"ScriptContext CBOR hex: ${Hex.bytesToHex(ctxCbor)}")
 
-                    case v2ctx: api.v2.ScriptContext =>
+                    case v2ctx: scalus.cardano.onchain.plutus.v2.ScriptContext =>
                         val ctxData = v2ctx.toData
                         val ctxCbor = Cbor.encode(ctxData).toByteArray
                         val ctxFilename =
@@ -246,7 +246,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                         platform.writeFile(ctxFilename, ctxCbor)
                         println(s"Wrote ScriptContext CBOR to: $ctxFilename")
 
-                    case v3ctx: api.v3.ScriptContext =>
+                    case v3ctx: scalus.cardano.onchain.plutus.v3.ScriptContext =>
                         val ctxData = v3ctx.toData
                         val ctxCbor = Cbor.encode(ctxData).toByteArray
                         val ctxFilename =

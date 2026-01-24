@@ -3,7 +3,8 @@ package scalus.builtin
 import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.builtin
+import scalus.uplc.builtin
+import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.*
 import scalus.cardano.onchain.plutus.prelude.List as PList
@@ -114,16 +115,20 @@ class DataCborCodecTest extends AnyFunSuite with ScalaCheckPropertyChecks with A
     test("ByteString <= 64") {
         val longBs = "1234567890"
         val expected = "4a31323334353637383930"
-        assert(encodeHex(B(builtin.ByteString.unsafeFromArray(longBs.getBytes))) == expected)
-        assert(decodeHex(expected) == B(builtin.ByteString.unsafeFromArray(longBs.getBytes)))
+        assert(
+          encodeHex(B(scalus.uplc.builtin.ByteString.unsafeFromArray(longBs.getBytes))) == expected
+        )
+        assert(
+          decodeHex(expected) == B(scalus.uplc.builtin.ByteString.unsafeFromArray(longBs.getBytes))
+        )
     }
 
     test("ByteString chunks") {
         val longBs = "1234567890" * 7
         val expected =
             "5f58403132333435363738393031323334353637383930313233343536373839303132333435363738393031323334353637383930313233343536373839303132333446353637383930ff"
-        assert(encodeHex(B(builtin.ByteString.fromArray(longBs.getBytes))) == expected)
-        assert(decodeHex(expected) == B(builtin.ByteString.fromArray(longBs.getBytes)))
+        assert(encodeHex(B(scalus.uplc.builtin.ByteString.fromArray(longBs.getBytes))) == expected)
+        assert(decodeHex(expected) == B(scalus.uplc.builtin.ByteString.fromArray(longBs.getBytes)))
     }
 
     test("All ByteString values are encoded/decoded correctly") {

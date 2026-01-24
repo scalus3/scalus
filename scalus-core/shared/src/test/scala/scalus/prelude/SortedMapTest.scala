@@ -2,6 +2,7 @@ package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.RequirementError
+import scalus.cardano.onchain.plutus.prelude.{`???`, identity}
 import scalus.uplc.builtin.Data.{fromData, toData, FromData}
 import scalus.testing.kit.EvalTestKit
 

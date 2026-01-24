@@ -42,7 +42,7 @@ object ShowByteString {
     given ShowByteString[Boolean] = (x: Boolean) => if x then utf8"True" else utf8"False"
     given ShowByteString[Data] = (x: Data) => {
         import scalus.uplc.builtin
-        def showBuiltinList(xs: builtin.BuiltinList[Data]): ByteString = {
+        def showBuiltinList(xs: scalus.uplc.builtin.BuiltinList[Data]): ByteString = {
             if xs.isEmpty then utf8""
             else
                 val head = xs.head.showByteString
@@ -77,7 +77,7 @@ object ShowByteString {
                 val sndShow = x.snd.showByteString
                 appendByteString(appendByteString(fstShow, utf8": "), sndShow)
             }
-            def go(xs: builtin.BuiltinList[BuiltinPair[Data, Data]]): ByteString = {
+            def go(xs: scalus.uplc.builtin.BuiltinList[BuiltinPair[Data, Data]]): ByteString = {
                 if xs.isEmpty then utf8""
                 else
                     val head = showDataPair(xs.head)

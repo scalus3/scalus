@@ -77,7 +77,7 @@ object Action
 object LotteryValidator extends Validator {
 
     inline def spend(
-        datum: prelude.Option[Data],
+        datum: scalus.cardano.onchain.plutus.prelude.Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef

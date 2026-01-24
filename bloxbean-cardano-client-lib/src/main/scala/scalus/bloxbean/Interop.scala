@@ -17,7 +17,7 @@ import scalus.uplc.builtin.{BuiltinPair, ByteString, Data, ToData}
 import scalus.cardano.ledger.{CostModels, DatumOption, Hash, Language, MajorProtocolVersion, Script, ScriptRef, SlotConfig, TransactionHash, TransactionInput as ScalusTransactionInput, TransactionOutput as ScalusTransactionOutput}
 import scalus.cardano.ledger.BloxbeanToLedgerTranslation.toLedgerValue
 import scalus.utils.Hex.hexToBytes
-import scalus.ledger.api
+import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.v1.{DCert, ScriptPurpose, StakingCredential}
 import scalus.cardano.onchain.plutus.v3.GovernanceActionId
 import scalus.cardano.onchain.plutus.{v1, v2, v3}
@@ -80,23 +80,23 @@ object Interop {
     given ToData[ProtocolParamUpdate] =
         given ToData[Rational] = (x: Rational) =>
             listData(
-              builtin.BuiltinList(
+              scalus.uplc.builtin.BuiltinList(
                 x.getNumerator.toData(using ToData.given_ToData_BigInteger),
                 x.getDenominator.toData(using ToData.given_ToData_BigInteger)
               )
             )
         given ToData[UnitInterval] = (x: UnitInterval) =>
             listData(
-              builtin.BuiltinList(
+              scalus.uplc.builtin.BuiltinList(
                 x.getNumerator.toData(using ToData.given_ToData_BigInteger),
                 x.getDenominator.toData(using ToData.given_ToData_BigInteger)
               )
             )
         given ToData[ExUnitPrices] = (x: ExUnitPrices) =>
-            listData(builtin.BuiltinList(x.getMemPrice.toData, x.getStepPrice.toData))
+            listData(scalus.uplc.builtin.BuiltinList(x.getMemPrice.toData, x.getStepPrice.toData))
         given ToData[ExUnits] = (x: ExUnits) =>
             listData(
-              builtin.BuiltinList(
+              scalus.uplc.builtin.BuiltinList(
                 x.getMem.toData(using ToData.given_ToData_BigInteger),
                 x.getSteps.toData(using ToData.given_ToData_BigInteger)
               )
@@ -132,7 +132,7 @@ object Interop {
             add(23, x.getCollateralPercent)(using ToData.given_ToData_Integer)
             add(24, x.getMaxCollateralInputs)(using ToData.given_ToData_Integer)
             // FIXME: add missing fields when they are implemented in the client lib
-            mapData(builtin.BuiltinList.from(params))
+            mapData(scalus.uplc.builtin.BuiltinList.from(params))
         }
 
     /// Helper for null check
@@ -354,8 +354,10 @@ object Interop {
     def getAddress(address: Address): v1.Address = {
         val cred = address.getPaymentCredential.map(getCredential).get
         val staking = address.getDelegationCredential
-            .map(cred => prelude.Option.Some(getStakingCredential(cred)))
-            .orElse(prelude.Option.None)
+            .map(cred =>
+                scalus.cardano.onchain.plutus.prelude.Option.Some(getStakingCredential(cred))
+            )
+            .orElse(scalus.cardano.onchain.plutus.prelude.Option.None)
         v1.Address(cred, staking)
     }
 
@@ -367,8 +369,9 @@ object Interop {
         val addr = Address(out.getAddress)
         val optionDatumHash =
             if out.getDatumHash != null then
-                prelude.Option.Some(ByteString.fromArray(out.getDatumHash))
-            else prelude.Option.None
+                scalus.cardano.onchain.plutus.prelude.Option
+                    .Some(ByteString.fromArray(out.getDatumHash))
+            else scalus.cardano.onchain.plutus.prelude.Option.None
         v1.TxInInfo(
           v1.TxOutRef(
             v1.TxId(ByteString.fromHex(input.getTransactionId)),
@@ -398,8 +401,10 @@ object Interop {
             getValue(out.getValue),
             getOutputDatum(out),
             if out.getScriptRef != null
-            then prelude.Option.Some(getScriptFromScriptRefBytes(out.getScriptRef).scriptHash)
-            else prelude.Option.None
+            then
+                scalus.cardano.onchain.plutus.prelude.Option
+                    .Some(getScriptFromScriptRefBytes(out.getScriptRef).scriptHash)
+            else scalus.cardano.onchain.plutus.prelude.Option.None
           )
         )
     }
@@ -422,9 +427,9 @@ object Interop {
             multi.put(ByteString.fromHex(m.getPolicyId), assets)
 
         v1.Value.fromList(
-          prelude.List.from(
+          scalus.cardano.onchain.plutus.prelude.List.from(
             for (policyId, assets) <- multi.iterator
-            yield policyId -> prelude.List.from(assets)
+            yield policyId -> scalus.cardano.onchain.plutus.prelude.List.from(assets)
           )
         )
     }
@@ -441,8 +446,9 @@ object Interop {
         val addr = Address(out.getAddress)
         val optionDatumHash =
             if out.getDatumHash != null then
-                prelude.Option.Some(ByteString.fromArray(out.getDatumHash))
-            else prelude.Option.None
+                scalus.cardano.onchain.plutus.prelude.Option
+                    .Some(ByteString.fromArray(out.getDatumHash))
+            else scalus.cardano.onchain.plutus.prelude.Option.None
         v1.TxOut(
           getAddress(addr),
           getValue(out.getValue),
@@ -457,8 +463,9 @@ object Interop {
           getValue(out.getValue),
           getOutputDatum(out),
           if out.getScriptRef != null then
-              prelude.Option.Some(getScriptFromScriptRefBytes(out.getScriptRef).scriptHash)
-          else prelude.Option.None
+              scalus.cardano.onchain.plutus.prelude.Option
+                  .Some(getScriptFromScriptRefBytes(out.getScriptRef).scriptHash)
+          else scalus.cardano.onchain.plutus.prelude.Option.None
         )
     }
 
@@ -501,14 +508,14 @@ object Interop {
 
     def getWithdrawals(
         withdrawals: util.List[Withdrawal]
-    ): prelude.List[(v1.StakingCredential, BigInt)] = {
+    ): scalus.cardano.onchain.plutus.prelude.List[(v1.StakingCredential, BigInt)] = {
         // get sorted withdrawals
         val wdwls = mutable.TreeMap.empty[v1.StakingCredential.StakingHash, BigInt]
         for w <- withdrawals.asScala do
             val addr = Address(w.getRewardAddress)
             val cred = addr.getDelegationCredential.map(getCredential).get
             wdwls.put(v1.StakingCredential.StakingHash(cred), BigInt(w.getCoin))
-        prelude.List.from(wdwls)
+        scalus.cardano.onchain.plutus.prelude.List.from(wdwls)
     }
 
     def getDCert(cert: Certificate): v1.DCert = {
@@ -558,7 +565,10 @@ object Interop {
                   BigInt(c.getEpoch)
                 )
             case c: RegCert =>
-                v3.TxCert.RegStaking(getCredential(c.getStakeCredential), prelude.Option.None)
+                v3.TxCert.RegStaking(
+                  getCredential(c.getStakeCredential),
+                  scalus.cardano.onchain.plutus.prelude.Option.None
+                )
             case c: RegDRepCert =>
                 v3.TxCert.RegDRep(getCredential(c.getDrepCredential), BigInt(c.getCoin))
             case c: ResignCommitteeColdCert =>
@@ -598,7 +608,10 @@ object Interop {
                   BigInt(c.getCoin)
                 )
             case c: UnregCert =>
-                v3.TxCert.UnRegStaking(getCredential(c.getStakeCredential), prelude.Option.None)
+                v3.TxCert.UnRegStaking(
+                  getCredential(c.getStakeCredential),
+                  scalus.cardano.onchain.plutus.prelude.Option.None
+                )
             case c: UnregDRepCert =>
                 v3.TxCert.UnRegDRep(getCredential(c.getDrepCredential), BigInt(c.getCoin))
             case c: UpdateDRepCert =>
@@ -663,24 +676,26 @@ object Interop {
         val certs = body.getCerts ?? util.List.of()
         v1.TxInfo(
           // sorted inputs
-          inputs = prelude.List.from(body.getInputs.asScala.sorted.map(getTxInInfoV1(_, utxos))),
+          inputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.getInputs.asScala.sorted.map(getTxInInfoV1(_, utxos))),
           // outputs as in the transaction
-          outputs = prelude.List.from(body.getOutputs.asScala.map(getTxOutV1)),
+          outputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.getOutputs.asScala.map(getTxOutV1)),
           fee = v1.Value.lovelace(body.getFee ?? BigInteger.ZERO),
           // sorted mint values
           mint = getMintValue(body.getMint ?? util.List.of()),
           // certificates as is
-          dcert = prelude.List.from(certs.asScala.map(getDCert)),
+          dcert = scalus.cardano.onchain.plutus.prelude.List.from(certs.asScala.map(getDCert)),
           withdrawals = getWithdrawals(body.getWithdrawals ?? util.List.of()),
           validRange = getInterval(tx, slotConfig, protocolVersion),
-          signatories = prelude.List.from(
+          signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getRequiredSigners.asScala
                 .map(ByteString.fromArray)
                 .sorted
                 .map(v1.PubKeyHash.apply)
                 .toSeq
           ),
-          data = prelude.List.from(datums.to(immutable.SortedMap)),
+          data = scalus.cardano.onchain.plutus.prelude.List.from(datums.to(immutable.SortedMap)),
           id = v1.TxId(ByteString.fromHex(txhash))
         )
     }
@@ -712,35 +727,38 @@ object Interop {
         val certs = body.getCerts ?? util.List.of()
         val rdmrs = tx.getWitnessSet.getRedeemers ?? util.List.of()
         v2.TxInfo(
-          inputs = prelude.List.from(body.getInputs.asScala.sorted.map(getTxInInfoV2(_, utxos))),
-          referenceInputs = prelude.List.from(
+          inputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.getInputs.asScala.sorted.map(getTxInInfoV2(_, utxos))),
+          referenceInputs = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getReferenceInputs.asScala.sorted.map(getTxInInfoV2(_, utxos))
           ),
-          outputs = prelude.List.from(body.getOutputs.asScala.map(getTxOutV2)),
+          outputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.getOutputs.asScala.map(getTxOutV2)),
           fee = v1.Value.lovelace(body.getFee ?? BigInteger.ZERO),
           mint = getMintValue(body.getMint ?? util.List.of()),
-          dcert = prelude.List.from(certs.asScala.map(getDCert)),
+          dcert = scalus.cardano.onchain.plutus.prelude.List.from(certs.asScala.map(getDCert)),
           withdrawals = SortedMap.fromList(getWithdrawals(body.getWithdrawals ?? util.List.of())),
           validRange = getInterval(tx, slotConfig, protocolVersion),
-          signatories = prelude.List.from(
+          signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getRequiredSigners.asScala
                 .map(ByteString.fromArray)
                 .sorted
                 .map(v1.PubKeyHash.apply)
                 .toSeq
           ),
-          redeemers =
-              SortedMap.unsafeFromList(prelude.List.from(rdmrs.asScala.sorted.map { redeemer =>
-                  val purpose = getScriptPurposeV2(
-                    redeemer,
-                    body.getInputs,
-                    body.getMint,
-                    body.getCerts,
-                    body.getWithdrawals
-                  )
-                  purpose -> toScalusData(redeemer.getData)
-              })),
-          data = SortedMap.fromList(prelude.List.from(datums)),
+          redeemers = SortedMap.unsafeFromList(
+            scalus.cardano.onchain.plutus.prelude.List.from(rdmrs.asScala.sorted.map { redeemer =>
+                val purpose = getScriptPurposeV2(
+                  redeemer,
+                  body.getInputs,
+                  body.getMint,
+                  body.getCerts,
+                  body.getWithdrawals
+                )
+                purpose -> toScalusData(redeemer.getData)
+            })
+          ),
+          data = SortedMap.fromList(scalus.cardano.onchain.plutus.prelude.List.from(datums)),
           id = v1.TxId(ByteString.fromHex(txhash))
         )
     }
@@ -958,62 +976,89 @@ object Interop {
             case a: ParameterChangeAction =>
                 v3.GovernanceAction.ParameterChange(
                   id =
-                      if a.getPrevGovActionId == null then prelude.Option.None
-                      else prelude.Option.Some(getGovActionId(a.getPrevGovActionId)),
+                      if a.getPrevGovActionId == null then
+                          scalus.cardano.onchain.plutus.prelude.Option.None
+                      else
+                          scalus.cardano.onchain.plutus.prelude.Option
+                              .Some(getGovActionId(a.getPrevGovActionId))
+                  ,
                   parameters = a.getProtocolParamUpdate.toData,
-                  constitutionScript = prelude.Option(a.getPolicyHash).map(ByteString.fromArray)
+                  constitutionScript = scalus.cardano.onchain.plutus.prelude
+                      .Option(a.getPolicyHash)
+                      .map(ByteString.fromArray)
                 )
             case a: TreasuryWithdrawalsAction =>
                 v3.GovernanceAction.TreasuryWithdrawals(
-                  withdrawals =
-                      SortedMap.fromList(prelude.List.from(a.getWithdrawals.asScala.map { w =>
-                          getCredential(
-                            Address(w.getRewardAddress).getPaymentCredential.get
-                          ) -> BigInt(
-                            w.getCoin
-                          )
+                  withdrawals = SortedMap.fromList(
+                    scalus.cardano.onchain.plutus.prelude.List.from(a.getWithdrawals.asScala.map {
+                        w =>
+                            getCredential(
+                              Address(w.getRewardAddress).getPaymentCredential.get
+                            ) -> BigInt(
+                              w.getCoin
+                            )
 
-                      }.toList)),
-                  constitutionScript = prelude.Option(ByteString.fromArray(a.getPolicyHash))
+                    }.toList)
+                  ),
+                  constitutionScript = scalus.cardano.onchain.plutus.prelude
+                      .Option(ByteString.fromArray(a.getPolicyHash))
                 )
             case a: HardForkInitiationAction =>
                 v3.GovernanceAction.HardForkInitiation(
                   id =
-                      if a.getPrevGovActionId == null then prelude.Option.None
-                      else prelude.Option.Some(getGovActionId(a.getPrevGovActionId)),
+                      if a.getPrevGovActionId == null then
+                          scalus.cardano.onchain.plutus.prelude.Option.None
+                      else
+                          scalus.cardano.onchain.plutus.prelude.Option
+                              .Some(getGovActionId(a.getPrevGovActionId))
+                  ,
                   protocolVersion = getProtocolVersion(a.getProtocolVersion)
                 )
             case _: InfoAction => v3.GovernanceAction.InfoAction
             case a: NewConstitution =>
                 v3.GovernanceAction.NewConstitution(
                   id =
-                      if a.getPrevGovActionId == null then prelude.Option.None
-                      else prelude.Option.Some(getGovActionId(a.getPrevGovActionId)),
+                      if a.getPrevGovActionId == null then
+                          scalus.cardano.onchain.plutus.prelude.Option.None
+                      else
+                          scalus.cardano.onchain.plutus.prelude.Option
+                              .Some(getGovActionId(a.getPrevGovActionId))
+                  ,
                   constitution =
                       if a.getConstitution.getScripthash != null then
-                          prelude.Option.Some(ByteString.fromHex(a.getConstitution.getScripthash))
-                      else prelude.Option.None
+                          scalus.cardano.onchain.plutus.prelude.Option
+                              .Some(ByteString.fromHex(a.getConstitution.getScripthash))
+                      else scalus.cardano.onchain.plutus.prelude.Option.None
                 )
             case a: NoConfidence =>
                 v3.GovernanceAction.NoConfidence(
                   id =
-                      if a.getPrevGovActionId == null then prelude.Option.None
-                      else prelude.Option.Some(getGovActionId(a.getPrevGovActionId))
+                      if a.getPrevGovActionId == null then
+                          scalus.cardano.onchain.plutus.prelude.Option.None
+                      else
+                          scalus.cardano.onchain.plutus.prelude.Option
+                              .Some(getGovActionId(a.getPrevGovActionId))
                 )
             case a: UpdateCommittee =>
                 v3.GovernanceAction.UpdateCommittee(
                   id =
-                      if a.getPrevGovActionId == null then prelude.Option.None
-                      else prelude.Option.Some(getGovActionId(a.getPrevGovActionId)),
-                  removedMembers = prelude.List.from(a.getMembersForRemoval.asScala.map { m =>
-                      getCredential(m)
-                  }),
+                      if a.getPrevGovActionId == null then
+                          scalus.cardano.onchain.plutus.prelude.Option.None
+                      else
+                          scalus.cardano.onchain.plutus.prelude.Option
+                              .Some(getGovActionId(a.getPrevGovActionId))
+                  ,
+                  removedMembers = scalus.cardano.onchain.plutus.prelude.List
+                      .from(a.getMembersForRemoval.asScala.map { m =>
+                          getCredential(m)
+                      }),
                   addedMembers = SortedMap.fromList(
-                    prelude.List.from(a.getNewMembersAndTerms.asScala.map { (c, t) =>
-                        getCredential(c) -> BigInt(t)
-                    })
+                    scalus.cardano.onchain.plutus.prelude.List
+                        .from(a.getNewMembersAndTerms.asScala.map { (c, t) =>
+                            getCredential(c) -> BigInt(t)
+                        })
                   ),
-                  newQuorum = prelude.Rational(
+                  newQuorum = scalus.cardano.onchain.plutus.prelude.Rational(
                     BigInt(a.getQuorumThreshold.getNumerator),
                     BigInt(a.getQuorumThreshold.getDenominator)
                   )
@@ -1050,12 +1095,12 @@ object Interop {
     ): SortedMap[v3.Voter, SortedMap[GovernanceActionId, v3.Vote]] = {
         if voting == null then return SortedMap.empty
         SortedMap.unsafeFromList(
-          prelude.List.from(
+          scalus.cardano.onchain.plutus.prelude.List.from(
             voting.getVoting.asScala.toSeq
                 .sortBy(_._1)
                 .map: (voter, procedures) =>
                     getVoterV3(voter) -> SortedMap.unsafeFromList(
-                      prelude.List.from(
+                      scalus.cardano.onchain.plutus.prelude.List.from(
                         procedures.asScala.toSeq
                             .sortBy(_._1)
                             .map: (govActionId, procedure) =>
@@ -1111,46 +1156,50 @@ object Interop {
                 case w => throw new IllegalStateException(s"Invalid withdrawal: $w")
             }
         v3.TxInfo(
-          inputs = prelude.List.from(body.getInputs.asScala.sorted.map(getTxInInfoV3(_, utxos))),
-          referenceInputs = prelude.List.from(
+          inputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.getInputs.asScala.sorted.map(getTxInInfoV3(_, utxos))),
+          referenceInputs = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getReferenceInputs.asScala.sorted.map(getTxInInfoV3(_, utxos))
           ),
-          outputs = prelude.List.from(body.getOutputs.asScala.map(getTxOutV2)),
+          outputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.getOutputs.asScala.map(getTxOutV2)),
           fee = body.getFee ?? BigInteger.ZERO,
           mint = getValue(body.getMint ?? util.List.of()),
-          certificates = prelude.List.from(certs.asScala.map(getTxCertV3)),
+          certificates =
+              scalus.cardano.onchain.plutus.prelude.List.from(certs.asScala.map(getTxCertV3)),
           withdrawals = SortedMap.fromList(withdrawals),
           validRange = getInterval(tx, slotConfig, protocolVersion),
-          signatories = prelude.List.from(
+          signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getRequiredSigners.asScala
                 .map(ByteString.fromArray)
                 .sorted
                 .map(v1.PubKeyHash.apply)
                 .toSeq
           ),
-          redeemers =
-              SortedMap.unsafeFromList(prelude.List.from(rdmrs.asScala.sorted.map { redeemer =>
-                  val purpose = getScriptPurposeV3(tx, redeemer)
-                  purpose -> toScalusData(redeemer.getData)
-              })),
-          data = SortedMap.fromList(prelude.List.from(datums)),
+          redeemers = SortedMap.unsafeFromList(
+            scalus.cardano.onchain.plutus.prelude.List.from(rdmrs.asScala.sorted.map { redeemer =>
+                val purpose = getScriptPurposeV3(tx, redeemer)
+                purpose -> toScalusData(redeemer.getData)
+            })
+          ),
+          data = SortedMap.fromList(scalus.cardano.onchain.plutus.prelude.List.from(datums)),
           id = v3.TxId(ByteString.fromHex(txhash)),
           votes = getVotingProcedures(body.getVotingProcedures),
-          proposalProcedures = prelude.List
+          proposalProcedures = scalus.cardano.onchain.plutus.prelude.List
               .from(
                 (body.getProposalProcedures ?? util.List.of()).asScala
                     .map(getProposalProcedureV3)
               ),
           currentTreasuryAmount =
               if tx.getBody.getCurrentTreasuryValue != null then
-                  prelude.Option.Some(
+                  scalus.cardano.onchain.plutus.prelude.Option.Some(
                     BigInt(tx.getBody.getCurrentTreasuryValue)
                   )
-              else prelude.Option.None,
+              else scalus.cardano.onchain.plutus.prelude.Option.None,
           treasuryDonation =
               if tx.getBody.getDonation != null then
-                  prelude.Option.Some(BigInt(tx.getBody.getDonation))
-              else prelude.Option.None
+                  scalus.cardano.onchain.plutus.prelude.Option.Some(BigInt(tx.getBody.getDonation))
+              else scalus.cardano.onchain.plutus.prelude.Option.None
         )
     }
 

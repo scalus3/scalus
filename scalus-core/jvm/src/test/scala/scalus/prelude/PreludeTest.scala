@@ -1,5 +1,7 @@
 package scalus.prelude
 
+import scalus.cardano.onchain.plutus.prelude.`???`
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.{ImpossibleLedgerStateError, OnchainError, RequirementError}
 import scalus.testing.kit.EvalTestKit

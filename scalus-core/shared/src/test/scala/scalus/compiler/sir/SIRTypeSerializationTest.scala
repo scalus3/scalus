@@ -44,23 +44,34 @@ class SIRTypeSerializationTest extends AnyFunSuite {
             val credential1 =
                 new Credential.PubKeyCredential(new PubKeyHash(ByteString.fromString("pkh1")))
             val addressIn =
-                new Address(credential = credential1, stakingCredential = prelude.Option.None)
+                new Address(
+                  credential = credential1,
+                  stakingCredential = scalus.cardano.onchain.plutus.prelude.Option.None
+                )
             val valueIn = Value(ByteString.empty, ByteString.empty, 4)
             val outRefResolved = new TxOut(
               address = addressIn,
               value = valueIn,
               datum = OutputDatum.NoOutputDatum,
-              referenceScript = prelude.Option.None
+              referenceScript = scalus.cardano.onchain.plutus.prelude.Option.None
             )
             val inputs = scalus.cardano.onchain.plutus.prelude.List
                 .single(new TxInInfo(outRef, outRefResolved))
             val credential2 =
                 new Credential.PubKeyCredential(new PubKeyHash(ByteString.fromString("5")))
             val addressOut =
-                new Address(credential = credential2, stakingCredential = prelude.Option.None)
+                new Address(
+                  credential = credential2,
+                  stakingCredential = scalus.cardano.onchain.plutus.prelude.Option.None
+                )
             val valueOut = Value(ByteString.empty, ByteString.empty, 2)
             val outputs = scalus.cardano.onchain.plutus.prelude.List.single(
-              new TxOut(addressOut, valueOut, OutputDatum.NoOutputDatum, prelude.Option.None)
+              new TxOut(
+                addressOut,
+                valueOut,
+                OutputDatum.NoOutputDatum,
+                scalus.cardano.onchain.plutus.prelude.Option.None
+              )
             )
             val txId = new TxId(ByteString.fromString("0x123456789"))
             val fee = BigInt(2)
@@ -80,8 +91,8 @@ class SIRTypeSerializationTest extends AnyFunSuite {
               id = txId,
               votes = SortedMap.empty,
               proposalProcedures = scalus.cardano.onchain.plutus.prelude.List.empty,
-              currentTreasuryAmount = prelude.Option.None,
-              treasuryDonation = prelude.Option.None
+              currentTreasuryAmount = scalus.cardano.onchain.plutus.prelude.Option.None,
+              treasuryDonation = scalus.cardano.onchain.plutus.prelude.Option.None
             )
             txInfo
         }

@@ -13,8 +13,7 @@ import org.slf4j.LoggerFactory
 import scalus.bloxbean.Interop.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.{Language, MajorProtocolVersion, Script}
-import scalus.ledger
-import scalus.ledger.api
+import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.eval
@@ -588,7 +587,7 @@ object TxEvaluator {
             val address = Address(withdrawal.getRewardAddress)
             if address.getAddressType == AddressType.Reward then
                 getCredential(address.getDelegationCredential.get) match
-                    case api.v1.Credential.ScriptCredential(hash) =>
+                    case scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential(hash) =>
                         needed += hash
                     case _ =>
 

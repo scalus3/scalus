@@ -18,7 +18,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
     )
 
     test("extract (force (builtin headList))") {
-        val sir = compile(headList(builtin.BuiltinList.empty[Boolean]))
+        val sir = compile(headList(scalus.uplc.builtin.BuiltinList.empty[Boolean]))
         val uplc = sir.toUplc()
         val logger = Log()
         val optimized =
@@ -34,7 +34,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
     }
 
     test("extract (force (force (builtin fstPair)))") {
-        val sir = compile(fstPair(builtin.BuiltinPair(true, false)))
+        val sir = compile(fstPair(scalus.uplc.builtin.BuiltinPair(true, false)))
         val uplc = sir.toUplc()
         val optimized = ForcedBuiltinsExtractor(uplc)
 
@@ -51,7 +51,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     test("extract multiple single-force builtins (headList + tailList)") {
         val sir = compile {
-            val lst = builtin.BuiltinList.empty[Boolean]
+            val lst = scalus.uplc.builtin.BuiltinList.empty[Boolean]
             (headList(lst), tailList(lst))
         }
         val uplc = sir.toUplc()
@@ -66,7 +66,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     test("extract multiple double-force builtins (fstPair + sndPair)") {
         val sir = compile {
-            val pair = builtin.BuiltinPair(true, false)
+            val pair = scalus.uplc.builtin.BuiltinPair(true, false)
             (fstPair(pair), sndPair(pair))
         }
         val uplc = sir.toUplc()
@@ -81,8 +81,8 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     test("extract same builtin used multiple times") {
         val sir = compile {
-            val lst1 = builtin.BuiltinList.empty[Boolean]
-            val lst2 = builtin.BuiltinList.empty[Boolean]
+            val lst1 = scalus.uplc.builtin.BuiltinList.empty[Boolean]
+            val lst2 = scalus.uplc.builtin.BuiltinList.empty[Boolean]
             (headList(lst1), headList(lst2))
         }
         val uplc = sir.toUplc()
@@ -97,8 +97,8 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     test("extract builtins in deterministic sorted order") {
         val sir = compile {
-            val lst = builtin.BuiltinList.empty[Boolean]
-            val pair = builtin.BuiltinPair(true, false)
+            val lst = scalus.uplc.builtin.BuiltinList.empty[Boolean]
+            val pair = scalus.uplc.builtin.BuiltinPair(true, false)
             // Use builtins in non-alphabetical order: tailList, sndPair, headList, fstPair
             // Expected sorted order: FstPair, HeadList, SndPair, TailList
             (tailList(lst), sndPair(pair), headList(lst), fstPair(pair))
@@ -132,7 +132,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     test("exceptBuiltins excludes specific builtins from extraction") {
         val sir = compile {
-            val lst = builtin.BuiltinList.empty[Boolean]
+            val lst = scalus.uplc.builtin.BuiltinList.empty[Boolean]
             (headList(lst), tailList(lst))
         }
         val uplc = sir.toUplc()

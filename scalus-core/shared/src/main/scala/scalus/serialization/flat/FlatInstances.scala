@@ -40,7 +40,8 @@ object FlatInstances:
                 width + summon[Flat[List[(Data, Data)]]].bitSize(values.toScalaList)
             case Data.List(values) => width + summon[Flat[List[Data]]].bitSize(values.toScalaList)
             case Data.I(value)     => width + summon[Flat[BigInt]].bitSize(value)
-            case Data.B(value)     => width + summon[Flat[builtin.ByteString]].bitSize(value)
+            case Data.B(value) =>
+                width + summon[Flat[scalus.uplc.builtin.ByteString]].bitSize(value)
 
         def encode(a: Data, enc: EncoderState): Unit =
             a match
@@ -63,7 +64,7 @@ object FlatInstances:
                     summon[Flat[BigInt]].encode(value, enc)
                 case Data.B(value) =>
                     enc.bits(width, 4)
-                    summon[Flat[builtin.ByteString]].encode(value, enc)
+                    summon[Flat[scalus.uplc.builtin.ByteString]].encode(value, enc)
 
         def decode(decode: DecoderState): Data =
             decode.bits8(width) match
@@ -81,7 +82,7 @@ object FlatInstances:
                     val value = summon[Flat[BigInt]].decode(decode)
                     Data.I(value)
                 case 4 =>
-                    val value = summon[Flat[builtin.ByteString]].decode(decode)
+                    val value = summon[Flat[scalus.uplc.builtin.ByteString]].decode(decode)
                     Data.B(value)
                 case c => throw new Exception(s"Invalid data code: $c")
 

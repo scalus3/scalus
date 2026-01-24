@@ -200,22 +200,22 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
 
         val ctx = ScriptContext(
           txInfo = TxInfo(
-            inputs = prelude.List.empty,
-            referenceInputs = prelude.List.empty,
-            outputs = prelude.List.empty,
+            inputs = scalus.cardano.onchain.plutus.prelude.List.empty,
+            referenceInputs = scalus.cardano.onchain.plutus.prelude.List.empty,
+            outputs = scalus.cardano.onchain.plutus.prelude.List.empty,
             fee = 0,
             mint = Value.zero,
-            certificates = prelude.List.empty,
+            certificates = scalus.cardano.onchain.plutus.prelude.List.empty,
             withdrawals = SortedMap.empty,
             validRange = Interval.always,
-            signatories = prelude.List.empty,
+            signatories = scalus.cardano.onchain.plutus.prelude.List.empty,
             redeemers = SortedMap.empty,
             data = SortedMap.empty,
             id = TxId(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6"),
             votes = SortedMap.empty,
-            proposalProcedures = prelude.List.empty,
-            currentTreasuryAmount = prelude.Option.None,
-            treasuryDonation = prelude.Option.None
+            proposalProcedures = scalus.cardano.onchain.plutus.prelude.List.empty,
+            currentTreasuryAmount = scalus.cardano.onchain.plutus.prelude.Option.None,
+            treasuryDonation = scalus.cardano.onchain.plutus.prelude.Option.None
           ),
           redeemer = Data.unit,
           scriptInfo = ScriptInfo.MintingScript(ByteString.empty)

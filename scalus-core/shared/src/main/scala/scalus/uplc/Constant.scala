@@ -26,8 +26,8 @@ object Constant {
         def lift(a: Long): Constant = Integer(a)
     }
 
-    given LiftValue[builtin.ByteString] with {
-        def lift(a: builtin.ByteString): Constant = ByteString(a)
+    given LiftValue[scalus.uplc.builtin.ByteString] with {
+        def lift(a: scalus.uplc.builtin.ByteString): Constant = ByteString(a)
     }
 
     given LiftValue[java.lang.String] with {
@@ -73,7 +73,7 @@ object Constant {
     case class Integer(value: BigInt) extends Constant:
         def tpe = DefaultUni.Integer
 
-    case class ByteString(value: builtin.ByteString) extends Constant:
+    case class ByteString(value: scalus.uplc.builtin.ByteString) extends Constant:
         def tpe = DefaultUni.ByteString
 
     case class String(value: java.lang.String) extends Constant:
@@ -119,7 +119,7 @@ object Constant {
           *
           * Supported types include:
           *   - Numeric types: [[BigInt]], [[Int]], [[Long]]
-          *   - [[builtin.ByteString]]
+          *   - [[scalus.uplc.builtin.ByteString]]
           *   - [[java.lang.String]]
           *   - [[Boolean]]
           *   - [[Unit]]
@@ -154,7 +154,7 @@ object Constant {
 
     def fromValue(tpe: DefaultUni, a: Any): Constant = tpe match {
         case DefaultUni.Integer    => Integer(a.asInstanceOf[BigInt])
-        case DefaultUni.ByteString => ByteString(a.asInstanceOf[builtin.ByteString])
+        case DefaultUni.ByteString => ByteString(a.asInstanceOf[scalus.uplc.builtin.ByteString])
         case DefaultUni.String     => String(a.asInstanceOf[java.lang.String])
         case DefaultUni.Unit       => Unit
         case DefaultUni.Bool       => Bool(a.asInstanceOf[Boolean])

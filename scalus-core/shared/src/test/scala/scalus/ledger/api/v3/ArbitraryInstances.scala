@@ -30,11 +30,11 @@ trait ArbitraryInstances extends v2.ArbitraryInstances {
 
     given Arbitrary[TxInfo] = Arbitrary {
         for
-            inputs <- arbitrary[prelude.List[TxInInfo]]
+            inputs <- arbitrary[scalus.cardano.onchain.plutus.prelude.List[TxInInfo]]
             fee <- Gen.choose(0L, 1000000_000000L)
-            signatories <- arbitrary[prelude.List[PubKeyHash]]
+            signatories <- arbitrary[scalus.cardano.onchain.plutus.prelude.List[PubKeyHash]]
             mint <- arbitrary[Value]
-            outputs <- arbitrary[prelude.List[TxOut]]
+            outputs <- arbitrary[scalus.cardano.onchain.plutus.prelude.List[TxOut]]
             interval <- arbitrary[Interval]
             id <- arbitrary[TxId]
         yield TxInfo(

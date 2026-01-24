@@ -1,5 +1,7 @@
 package scalus.prelude
 
+import scalus.cardano.onchain.plutus.prelude.{`???`, AssocMap, List, Option, Rational, SortedMap}
+
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop
 import org.scalatest.funsuite.AnyFunSuite

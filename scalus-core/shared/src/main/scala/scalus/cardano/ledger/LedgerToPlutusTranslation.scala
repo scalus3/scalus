@@ -85,22 +85,22 @@ object LedgerToPlutusTranslation {
 
                 val stakingCred = shelleyAddr.delegation match
                     case ShelleyDelegationPart.Key(hash) =>
-                        prelude.Option.Some(
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(
                           v1.StakingCredential.StakingHash(
                             v1.Credential.PubKeyCredential(v1.PubKeyHash(hash))
                           )
                         )
                     case ShelleyDelegationPart.Script(hash) =>
-                        prelude.Option.Some(
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(
                           v1.StakingCredential.StakingHash(
                             v1.Credential.ScriptCredential(hash)
                           )
                         )
                     case ShelleyDelegationPart.Pointer(pointer) =>
                         // For pointer addresses, we don't include staking credential in script context
-                        prelude.Option.None
+                        scalus.cardano.onchain.plutus.prelude.Option.None
                     case ShelleyDelegationPart.Null =>
-                        prelude.Option.None
+                        scalus.cardano.onchain.plutus.prelude.Option.None
 
                 v1.Address(paymentCred, stakingCred)
 
@@ -142,16 +142,17 @@ object LedgerToPlutusTranslation {
                 val addr = getAddress(address)
                 val val1 = getValue(value)
                 val optDatumHash = datumHash
-                    .map(hash => prelude.Option.Some(hash))
-                    .getOrElse(prelude.Option.None)
+                    .map(hash => scalus.cardano.onchain.plutus.prelude.Option.Some(hash))
+                    .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 v1.TxOut(addr, val1, optDatumHash)
 
             case TransactionOutput.Babbage(address, value, datumOption, _) =>
                 val addr = getAddress(address)
                 val val1 = getValue(value)
                 val optDatumHash = datumOption match
-                    case Some(DatumOption.Hash(hash)) => prelude.Option.Some(hash)
-                    case _                            => prelude.Option.None
+                    case Some(DatumOption.Hash(hash)) =>
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(hash)
+                    case _ => scalus.cardano.onchain.plutus.prelude.Option.None
                 v1.TxOut(addr, val1, optDatumHash)
 
         v1.TxInInfo(txOutRef, txOut)
@@ -181,7 +182,7 @@ object LedgerToPlutusTranslation {
                 val outputDatum = datumHash match
                     case Some(hash) => OutputDatum.OutputDatumHash(hash)
                     case None       => OutputDatum.NoOutputDatum
-                v2.TxOut(addr, val2, outputDatum, prelude.Option.None)
+                v2.TxOut(addr, val2, outputDatum, scalus.cardano.onchain.plutus.prelude.Option.None)
 
             case TransactionOutput.Babbage(address, value, datumOption, scriptRef) =>
                 val addr = getAddress(address)
@@ -191,8 +192,10 @@ object LedgerToPlutusTranslation {
                     case Some(DatumOption.Inline(data)) => OutputDatum.OutputDatum(data)
                     case None                           => OutputDatum.NoOutputDatum
                 val refScript = scriptRef
-                    .map(script => prelude.Option.Some(script.script.scriptHash))
-                    .getOrElse(prelude.Option.None)
+                    .map(script =>
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(script.script.scriptHash)
+                    )
+                    .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 v2.TxOut(addr, val2, outputDatum, refScript)
 
         v2.TxInInfo(txOutRef, txOut)
@@ -208,10 +211,11 @@ object LedgerToPlutusTranslation {
         val adaValue = v1.Value.lovelace(BigInt(value.coin.value))
 
         val assetsValue = v1.Value.fromList(
-          prelude.List.from(
+          scalus.cardano.onchain.plutus.prelude.List.from(
             value.assets.assets.view.map { case (policyId, assets) =>
-                val assetList = prelude.List.from(assets.view.map { (assetName, amount) =>
-                    assetName.bytes -> BigInt(amount)
+                val assetList = scalus.cardano.onchain.plutus.prelude.List.from(assets.view.map {
+                    (assetName, amount) =>
+                        assetName.bytes -> BigInt(amount)
                 })
                 policyId -> assetList
             }
@@ -230,14 +234,15 @@ object LedgerToPlutusTranslation {
         // Always include ADA entry with zero value for minting
         val assets = mint.getOrElse(MultiAsset.empty)
         val adaEntry = Seq(
-          ByteString.empty -> prelude.List.single(ByteString.empty, BigInt(0))
+          ByteString.empty -> scalus.cardano.onchain.plutus.prelude.List
+              .single(ByteString.empty, BigInt(0))
         )
         val allEntries = adaEntry ++ assets.assets.view.map { case (policyId, assets) =>
-            val assetMap = prelude.List.from(assets.view.map: (assetName, amount) =>
-                assetName.bytes -> BigInt(amount))
+            val assetMap = scalus.cardano.onchain.plutus.prelude.List.from(assets.view.map:
+                (assetName, amount) => assetName.bytes -> BigInt(amount))
             policyId -> assetMap
         }
-        v1.Value.unsafeFromList(prelude.List.from(allEntries))
+        v1.Value.unsafeFromList(scalus.cardano.onchain.plutus.prelude.List.from(allEntries))
     }
 
     /** Convert multi-asset values for minting context.
@@ -247,11 +252,11 @@ object LedgerToPlutusTranslation {
     def getMintValueV3(mint: Option[Mint]): v1.Value = {
         val assets = mint.getOrElse(MultiAsset.empty)
         val allEntries = assets.assets.view.map { case (policyId, assets) =>
-            val assetMap = prelude.List.from(assets.view.map: (assetName, amount) =>
-                assetName.bytes -> BigInt(amount))
+            val assetMap = scalus.cardano.onchain.plutus.prelude.List.from(assets.view.map:
+                (assetName, amount) => assetName.bytes -> BigInt(amount))
             policyId -> assetMap
         }
-        v1.Value.unsafeFromList(prelude.List.from(allEntries))
+        v1.Value.unsafeFromList(scalus.cardano.onchain.plutus.prelude.List.from(allEntries))
     }
 
     /** Create TxOut for Plutus V1 script contexts.
@@ -262,16 +267,17 @@ object LedgerToPlutusTranslation {
                 val addr = getAddress(address)
                 val val1 = getValue(value)
                 val optDatumHash = datumHash
-                    .map(hash => prelude.Option.Some(hash))
-                    .getOrElse(prelude.Option.None)
+                    .map(hash => scalus.cardano.onchain.plutus.prelude.Option.Some(hash))
+                    .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 v1.TxOut(addr, val1, optDatumHash)
 
             case TransactionOutput.Babbage(address, value, datumOption, _) =>
                 val addr = getAddress(address)
                 val val1 = getValue(value)
                 val optDatumHash = datumOption match
-                    case Some(DatumOption.Hash(hash)) => prelude.Option.Some(hash)
-                    case _                            => prelude.Option.None
+                    case Some(DatumOption.Hash(hash)) =>
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(hash)
+                    case _ => scalus.cardano.onchain.plutus.prelude.Option.None
                 v1.TxOut(addr, val1, optDatumHash)
     }
 
@@ -285,7 +291,7 @@ object LedgerToPlutusTranslation {
                 val outputDatum = datumHash match
                     case Some(hash) => OutputDatum.OutputDatumHash(hash)
                     case None       => OutputDatum.NoOutputDatum
-                v2.TxOut(addr, val2, outputDatum, prelude.Option.None)
+                v2.TxOut(addr, val2, outputDatum, scalus.cardano.onchain.plutus.prelude.Option.None)
 
             case TransactionOutput.Babbage(address, value, datumOption, scriptRef) =>
                 val addr = getAddress(address)
@@ -295,8 +301,10 @@ object LedgerToPlutusTranslation {
                     case Some(DatumOption.Inline(data)) => OutputDatum.OutputDatum(data)
                     case None                           => OutputDatum.NoOutputDatum
                 val refScript = scriptRef
-                    .map(script => prelude.Option.Some(script.script.scriptHash))
-                    .getOrElse(prelude.Option.None)
+                    .map(script =>
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(script.script.scriptHash)
+                    )
+                    .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 v2.TxOut(addr, val2, outputDatum, refScript)
     }
 
@@ -350,8 +358,8 @@ object LedgerToPlutusTranslation {
       */
     def getWithdrawals(
         withdrawals: Option[Withdrawals]
-    ): prelude.List[(v1.StakingCredential, BigInt)] = {
-        prelude.List.from(getOrderedWithdrawals(withdrawals))
+    ): scalus.cardano.onchain.plutus.prelude.List[(v1.StakingCredential, BigInt)] = {
+        scalus.cardano.onchain.plutus.prelude.List.from(getOrderedWithdrawals(withdrawals))
     }
 
     /** Process withdrawals for script context construction.
@@ -578,18 +586,21 @@ object LedgerToPlutusTranslation {
         val datums = tx.witnessSet.plutusData.value.toSortedMap.view.mapValues(_.value)
 
         v1.TxInfo(
-          inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV1(_, utxos))),
-          outputs = prelude.List.from(body.outputs.view.map(getTxOutV1)),
+          inputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.inputs.toSet.view.map(getTxInInfoV1(_, utxos))),
+          outputs =
+              scalus.cardano.onchain.plutus.prelude.List.from(body.outputs.view.map(getTxOutV1)),
           fee = v1.Value.lovelace(body.fee.value),
           mint = getMintValueV1V2(body.mint),
-          dcert = prelude.List.from(body.certificates.toSeq.view.map(getDCert)),
+          dcert = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.certificates.toSeq.view.map(getDCert)),
           withdrawals = getWithdrawals(body.withdrawals),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
-          signatories = prelude.List.from(
+          signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
-          data = prelude.List.from(datums),
+          data = scalus.cardano.onchain.plutus.prelude.List.from(datums),
           id = v1.TxId(tx.id)
         )
     }
@@ -628,24 +639,29 @@ object LedgerToPlutusTranslation {
             tx.witnessSet.redeemers.map(_.value.toIndexedSeq).getOrElse(IndexedSeq.empty)
 
         v2.TxInfo(
-          inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV2(_, utxos))),
-          referenceInputs =
-              prelude.List.from(body.referenceInputs.toSet.view.map(getTxInInfoV2(_, utxos))),
-          outputs = prelude.List.from(body.outputs.view.map(getTxOutV2)),
+          inputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.inputs.toSet.view.map(getTxInInfoV2(_, utxos))),
+          referenceInputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.referenceInputs.toSet.view.map(getTxInInfoV2(_, utxos))),
+          outputs =
+              scalus.cardano.onchain.plutus.prelude.List.from(body.outputs.view.map(getTxOutV2)),
           fee = v1.Value.lovelace(body.fee.value),
           mint = getMintValueV1V2(body.mint),
-          dcert = prelude.List.from(body.certificates.toSeq.view.map(getDCert)),
+          dcert = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.certificates.toSeq.view.map(getDCert)),
           withdrawals = SortedMap.fromList(getWithdrawals(body.withdrawals)),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
-          signatories = prelude.List.from(
+          signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
-          redeemers = SortedMap.unsafeFromList(prelude.List.from(redeemers.sorted.map { redeemer =>
-              val purpose = getScriptPurposeV2(tx, redeemer)
-              purpose -> redeemer.data
-          })),
-          data = SortedMap.fromList(prelude.List.from(datums)),
+          redeemers = SortedMap.unsafeFromList(
+            scalus.cardano.onchain.plutus.prelude.List.from(redeemers.sorted.map { redeemer =>
+                val purpose = getScriptPurposeV2(tx, redeemer)
+                purpose -> redeemer.data
+            })
+          ),
+          data = SortedMap.fromList(scalus.cardano.onchain.plutus.prelude.List.from(datums)),
           id = v1.TxId(tx.id)
         )
     }
@@ -701,35 +717,40 @@ object LedgerToPlutusTranslation {
         }
 
         v3.TxInfo(
-          inputs = prelude.List.from(body.inputs.toSet.view.map(getTxInInfoV3(_, utxos))),
-          referenceInputs =
-              prelude.List.from(body.referenceInputs.toSet.view.map(getTxInInfoV3(_, utxos))),
-          outputs = prelude.List.from(body.outputs.view.map(getTxOutV2)),
+          inputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.inputs.toSet.view.map(getTxInInfoV3(_, utxos))),
+          referenceInputs = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.referenceInputs.toSet.view.map(getTxInInfoV3(_, utxos))),
+          outputs =
+              scalus.cardano.onchain.plutus.prelude.List.from(body.outputs.view.map(getTxOutV2)),
           fee = body.fee.value,
           mint = getMintValueV3(body.mint),
-          certificates = prelude.List.from(body.certificates.toSeq.view.map(getTxCertV3)),
+          certificates = scalus.cardano.onchain.plutus.prelude.List
+              .from(body.certificates.toSeq.view.map(getTxCertV3)),
           withdrawals = SortedMap.fromList(withdrawals),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
-          signatories = prelude.List.from(
+          signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
-          redeemers = SortedMap.unsafeFromList(prelude.List.from(redeemers.sorted.map { redeemer =>
-              val purpose = getScriptPurposeV3(tx, redeemer)
-              purpose -> redeemer.data
-          })),
-          data = SortedMap.fromList(prelude.List.from(datums)),
+          redeemers = SortedMap.unsafeFromList(
+            scalus.cardano.onchain.plutus.prelude.List.from(redeemers.sorted.map { redeemer =>
+                val purpose = getScriptPurposeV3(tx, redeemer)
+                purpose -> redeemer.data
+            })
+          ),
+          data = SortedMap.fromList(scalus.cardano.onchain.plutus.prelude.List.from(datums)),
           id = v3.TxId(tx.id),
           votes = getVotingProcedures(body.votingProcedures),
-          proposalProcedures = prelude.List.from(
+          proposalProcedures = scalus.cardano.onchain.plutus.prelude.List.from(
             body.proposalProcedures.toSeq.view.map(getProposalProcedureV3)
           ),
           currentTreasuryAmount = body.currentTreasuryValue
-              .map(coin => prelude.Option.Some(BigInt(coin.value)))
-              .getOrElse(prelude.Option.None),
+              .map(coin => scalus.cardano.onchain.plutus.prelude.Option.Some(BigInt(coin.value)))
+              .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None),
           treasuryDonation = body.donation
-              .map(coin => prelude.Option.Some(BigInt(coin.value)))
-              .getOrElse(prelude.Option.None)
+              .map(coin => scalus.cardano.onchain.plutus.prelude.Option.Some(BigInt(coin.value)))
+              .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
         )
     }
 
@@ -887,18 +908,22 @@ object LedgerToPlutusTranslation {
             case GovAction.ParameterChange(previousActionId, changedParameters, policy) =>
                 v3.GovernanceAction.ParameterChange(
                   id = previousActionId
-                      .map(id => prelude.Option.Some(getGovActionId(id)))
-                      .getOrElse(prelude.Option.None),
+                      .map(id =>
+                          scalus.cardano.onchain.plutus.prelude.Option.Some(getGovActionId(id))
+                      )
+                      .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None),
                   parameters = changedParameters.toData,
                   constitutionScript = policy
-                      .map(p => prelude.Option.Some(p))
-                      .getOrElse(prelude.Option.None)
+                      .map(p => scalus.cardano.onchain.plutus.prelude.Option.Some(p))
+                      .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 )
             case GovAction.HardForkInitiation(previousActionId, protocolVersion) =>
                 v3.GovernanceAction.HardForkInitiation(
                   id = previousActionId
-                      .map(id => prelude.Option.Some(getGovActionId(id)))
-                      .getOrElse(prelude.Option.None),
+                      .map(id =>
+                          scalus.cardano.onchain.plutus.prelude.Option.Some(getGovActionId(id))
+                      )
+                      .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None),
                   protocolVersion = getProtocolVersion(protocolVersion)
                 )
             case GovAction.TreasuryWithdrawals(withdrawals, policy) =>
@@ -906,16 +931,19 @@ object LedgerToPlutusTranslation {
                     getRewardAccount(account) -> BigInt(coin.value)
                 }.toSeq
                 v3.GovernanceAction.TreasuryWithdrawals(
-                  withdrawals = SortedMap.fromList(prelude.List.from(wdwls)),
+                  withdrawals =
+                      SortedMap.fromList(scalus.cardano.onchain.plutus.prelude.List.from(wdwls)),
                   constitutionScript = policy
-                      .map(p => prelude.Option.Some(p))
-                      .getOrElse(prelude.Option.None)
+                      .map(p => scalus.cardano.onchain.plutus.prelude.Option.Some(p))
+                      .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 )
             case GovAction.NoConfidence(previousActionId) =>
                 v3.GovernanceAction.NoConfidence(
                   id = previousActionId
-                      .map(id => prelude.Option.Some(getGovActionId(id)))
-                      .getOrElse(prelude.Option.None)
+                      .map(id =>
+                          scalus.cardano.onchain.plutus.prelude.Option.Some(getGovActionId(id))
+                      )
+                      .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
                 )
             case GovAction.UpdateCommittee(
                   previousActionId,
@@ -925,15 +953,20 @@ object LedgerToPlutusTranslation {
                 ) =>
                 v3.GovernanceAction.UpdateCommittee(
                   id = previousActionId
-                      .map(id => prelude.Option.Some(getGovActionId(id)))
-                      .getOrElse(prelude.Option.None),
-                  removedMembers = prelude.List.from(membersToRemove.toSeq.map(getCredential)),
-                  addedMembers =
-                      SortedMap.fromList(prelude.List.from(membersToAdd.map { case (cred, epoch) =>
-                          getCredential(cred) -> BigInt(epoch)
-                      }.toSeq)),
-                  newQuorum =
-                      prelude.Rational(BigInt(newQuorum.numerator), BigInt(newQuorum.denominator))
+                      .map(id =>
+                          scalus.cardano.onchain.plutus.prelude.Option.Some(getGovActionId(id))
+                      )
+                      .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None),
+                  removedMembers = scalus.cardano.onchain.plutus.prelude.List
+                      .from(membersToRemove.toSeq.map(getCredential)),
+                  addedMembers = SortedMap.fromList(
+                    scalus.cardano.onchain.plutus.prelude.List.from(membersToAdd.map {
+                        case (cred, epoch) =>
+                            getCredential(cred) -> BigInt(epoch)
+                    }.toSeq)
+                  ),
+                  newQuorum = scalus.cardano.onchain.plutus.prelude
+                      .Rational(BigInt(newQuorum.numerator), BigInt(newQuorum.denominator))
                 )
             case GovAction.NewConstitution(previousActionId, constitution) =>
                 v3.GovernanceAction.NewConstitution(
@@ -985,10 +1018,10 @@ object LedgerToPlutusTranslation {
             case None => SortedMap.empty
             case Some(vp) =>
                 SortedMap.unsafeFromList(
-                  prelude.List.from(
+                  scalus.cardano.onchain.plutus.prelude.List.from(
                     vp.procedures.toArray.sortBy(_._1.toString).map { case (voter, procedures) =>
                         getVoterV3(voter) -> SortedMap.unsafeFromList(
-                          prelude.List.from(
+                          scalus.cardano.onchain.plutus.prelude.List.from(
                             procedures.toSeq.sortBy(_._1.toString).map {
                                 case (govActionId, procedure) =>
                                     getGovActionId(govActionId) -> getVoteV3(procedure)

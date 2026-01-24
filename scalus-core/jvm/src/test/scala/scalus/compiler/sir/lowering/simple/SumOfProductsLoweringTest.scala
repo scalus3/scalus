@@ -106,7 +106,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
     }
 
     test("lower Constr") {
-        val sir = compile { prelude.List.Nil: prelude.List[BigInt] }
+        val sir = compile {
+            scalus.cardano.onchain.plutus.prelude.List.Nil: scalus.cardano.onchain.plutus.prelude.List[
+              BigInt
+            ]
+        }
         val uplc = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
         // println("compiled:" + uplc.pretty.render(100))
         val expected = Term.Constr(Word64.Zero, List.empty)
@@ -144,9 +148,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
          */
 
         val sir = compile {
-            (prelude.List.Nil: prelude.List[BigInt]) match
-                case prelude.List.Nil         => BigInt(1)
-                case prelude.List.Cons(h, tl) => BigInt(2)
+            (scalus.cardano.onchain.plutus.prelude.List.Nil: scalus.cardano.onchain.plutus.prelude.List[
+              BigInt
+            ]) match
+                case scalus.cardano.onchain.plutus.prelude.List.Nil         => BigInt(1)
+                case scalus.cardano.onchain.plutus.prelude.List.Cons(h, tl) => BigInt(2)
         }
 
         // With LetFloating optimization, the scrutinee lazy let is floated into the case

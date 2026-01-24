@@ -70,12 +70,12 @@ object DefaultUni:
 
     def flatForUni(uni: DefaultUni)(using Flat[builtin.Data]): Flat[Any] =
         uni match
-            case Integer              => summon[Flat[BigInt]].asInstanceOf[Flat[Any]]
-            case ByteString           => summon[Flat[builtin.ByteString]].asInstanceOf[Flat[Any]]
-            case String               => summon[Flat[String]].asInstanceOf[Flat[Any]]
-            case Unit                 => summon[Flat[Unit]].asInstanceOf[Flat[Any]]
-            case Bool                 => summon[Flat[Boolean]].asInstanceOf[Flat[Any]]
-            case Data                 => summon[Flat[builtin.Data]].asInstanceOf[Flat[Any]]
+            case Integer    => summon[Flat[BigInt]].asInstanceOf[Flat[Any]]
+            case ByteString => summon[Flat[scalus.uplc.builtin.ByteString]].asInstanceOf[Flat[Any]]
+            case String     => summon[Flat[String]].asInstanceOf[Flat[Any]]
+            case Unit       => summon[Flat[Unit]].asInstanceOf[Flat[Any]]
+            case Bool       => summon[Flat[Boolean]].asInstanceOf[Flat[Any]]
+            case Data       => summon[Flat[builtin.Data]].asInstanceOf[Flat[Any]]
             case Apply(ProtoList, a)  => listFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
             case Apply(ProtoArray, a) =>
                 // Arrays use the same flat encoding as lists, converted to/from IndexedSeq
