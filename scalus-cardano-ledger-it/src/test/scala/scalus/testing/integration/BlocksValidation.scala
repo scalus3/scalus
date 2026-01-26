@@ -16,13 +16,11 @@ import scalus.*
 import scalus.bloxbean.*
 import scalus.bloxbean.Interop.??
 import scalus.bloxbean.TxEvaluator.ScriptHash
-import scalus.builtin.{platform, ByteString}
+import scalus.uplc.builtin.{platform, ByteString}
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{AddrKeyHash, BlockFile, CardanoInfo, ExUnits, OriginalCborByteArray, PlutusScriptEvaluationException, PlutusScriptEvaluator, ProtocolParams, RedeemerTag, Redeemers, Script, ScriptDataHashGenerator, SlotConfig}
-import scalus.ledger.api.v1
-import scalus.ledger.api.v2
-import scalus.ledger.api.v3.ScriptInfo
-import scalus.ledger.api.{v3, *}
+import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
+import scalus.cardano.onchain.plutus.v3.ScriptInfo
 import scalus.utils.Utils
 
 import java.math.BigInteger
@@ -91,6 +89,7 @@ class BlocksValidation extends AnyFunSuite {
         val protocolParams = protocolParamsSupplier.getProtocolParameters(epoch).getValue
         val utxoResolver = CclUtxoResolver(utxoSupplier, scriptSupplier)
         // Use LegacyScalusTransactionEvaluator for evaluateTxWithContexts method
+        @annotation.nowarn("cat=deprecation")
         val evaluator = LegacyScalusTransactionEvaluator(
           SlotConfig.mainnet,
           protocolParams,

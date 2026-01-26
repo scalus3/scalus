@@ -2,11 +2,11 @@ package scalus.regressions.hydrozoa20260126
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.builtin.Builtins.{bls12_381_G2_add, bls12_381_G2_uncompress}
-import scalus.builtin.{BLS12_381_G2_Element, ByteString, Data, FromData, ToData}
-import scalus.builtin.Data.toData
-import scalus.prelude.List
-import scalus.prelude.crypto.bls12_381.G2
+import scalus.uplc.builtin.Builtins.{bls12_381_G2_add, bls12_381_G2_uncompress}
+import scalus.uplc.builtin.{BLS12_381_G2_Element, ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.plutus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.PlutusVM
 

@@ -13,7 +13,7 @@ import com.bloxbean.cardano.yaci.core.util.CborSerializationUtil
 import scalus.*
 import scalus.bloxbean.*
 import scalus.bloxbean.Interop.??
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.ledger.SlotConfig
 import scalus.utils.Utils
 

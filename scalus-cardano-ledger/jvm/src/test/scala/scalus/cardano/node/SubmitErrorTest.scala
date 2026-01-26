@@ -216,7 +216,6 @@ class SubmitErrorTest extends AnyFunSuite {
     // Integration with Emulator
 
     test("Emulator returns UtxoNotAvailable for double spend") {
-        import scala.concurrent.ExecutionContext.Implicits.global
         import scalus.testing.kit.Party.{Alice, Bob}
         import scalus.cardano.txbuilder.TxBuilder
         import scalus.cardano.ledger.rules.AllInputsMustBeInUtxoValidator

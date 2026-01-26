@@ -33,7 +33,7 @@ class OptionTest extends AnyFunSuite with EvalTestKit {
 
     test("ord") {
         check { (pair: (Int, Int)) =>
-            import Ord.*
+            import scalus.cardano.onchain.plutus.prelude.Ord.*
 
             val (left, right) = pair
             val leftOpt = scalus.cardano.onchain.plutus.prelude.Option(BigInt(left))

@@ -1,7 +1,7 @@
 package scalus.testing.integration
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.{platform, ByteString, Data}
+import scalus.uplc.builtin.{platform, ByteString, Data}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*

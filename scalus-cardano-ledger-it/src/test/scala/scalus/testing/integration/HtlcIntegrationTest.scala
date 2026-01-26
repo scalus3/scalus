@@ -1,7 +1,7 @@
 package scalus.testing.integration
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Builtins.sha3_256
 import scalus.cardano.ledger.*
 import scalus.examples.htlc.*
 import scalus.utils.await
