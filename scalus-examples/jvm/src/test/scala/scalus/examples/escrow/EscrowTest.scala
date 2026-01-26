@@ -8,8 +8,6 @@ import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 /** Tests for the EscrowValidator contract.
   *
   * Flow:

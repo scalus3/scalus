@@ -11,8 +11,6 @@ import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
     import EditableNftValidatorTest.{*, given}
 

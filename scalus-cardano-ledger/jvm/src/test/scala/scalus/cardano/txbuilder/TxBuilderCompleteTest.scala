@@ -18,8 +18,6 @@ import scalus.toUplc
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet

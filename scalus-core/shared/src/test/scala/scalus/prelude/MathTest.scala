@@ -1,7 +1,5 @@
 package scalus.prelude
 
-import scalus.cardano.onchain.plutus.prelude.`???`
-
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.Math.*

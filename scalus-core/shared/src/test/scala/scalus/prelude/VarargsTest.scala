@@ -1,6 +1,6 @@
 package scalus.prelude
 
-import scalus.cardano.onchain.plutus.prelude.{`???`, AssocMap, List, Option, Rational, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.List
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*

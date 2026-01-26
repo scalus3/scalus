@@ -1,7 +1,7 @@
 package scalus.cardano.txbuilder
 
 import monocle.syntax.all.*
-import monocle.{Focus, Lens}
+import monocle.Lens
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.Data.toData

@@ -9,8 +9,6 @@ import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
     given testEnv: CardanoInfo = CardanoInfo.mainnet

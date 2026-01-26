@@ -12,8 +12,6 @@ import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class PaymentSplitterTxBuilderTest
     extends AnyFunSuite
     with ScalusTest

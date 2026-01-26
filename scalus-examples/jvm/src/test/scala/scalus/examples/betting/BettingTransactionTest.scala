@@ -15,8 +15,6 @@ import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = BettingContract.withErrorTraces

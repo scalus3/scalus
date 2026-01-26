@@ -13,7 +13,7 @@ import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.{builtin, pretty, toUplc, toUplcOptimized, uplc, Ignore}
+import scalus.{pretty, toUplc, toUplcOptimized, uplc, Ignore}
 
 import scala.annotation.{nowarn, tailrec}
 import scala.collection.immutable

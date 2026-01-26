@@ -1,6 +1,5 @@
 package scalus.prelude
 
-import scalus.cardano.onchain.plutus.prelude.`???`
 import org.scalacheck.util.Pretty
 import org.scalacheck.{Arbitrary, Prop}
 import org.scalactic.{source, Prettifier}

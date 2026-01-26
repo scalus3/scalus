@@ -14,8 +14,6 @@ import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.toUplc
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 /** Performance measurement tests for TxBuilder transaction balancing.
   *
   * These tests measure:

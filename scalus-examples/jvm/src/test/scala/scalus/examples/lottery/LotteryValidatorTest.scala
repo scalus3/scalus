@@ -14,7 +14,6 @@ import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
 
 import java.time.Instant
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 
 class LotteryValidatorTest extends AnyFunSuite, ScalusTest {

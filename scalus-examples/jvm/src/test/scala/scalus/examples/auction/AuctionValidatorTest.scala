@@ -15,8 +15,6 @@ import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.uplc.eval.Result
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
     import AuctionValidatorTest.*
 

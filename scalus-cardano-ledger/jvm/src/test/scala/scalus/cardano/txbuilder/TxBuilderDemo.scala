@@ -16,7 +16,7 @@ import scalus.uplc.transform.V3Optimizer
 import scalus.utils.await
 
 import java.time.{Duration, Instant}
-import scala.concurrent.ExecutionContext.Implicits.global
+
 given Options = Options.default
 
 class TxBuilderDemo extends AnyFunSuite {

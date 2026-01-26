@@ -21,7 +21,6 @@ import scalus.utils.await
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap
-import scala.concurrent.ExecutionContext.Implicits.global
 
 class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstances {
 
