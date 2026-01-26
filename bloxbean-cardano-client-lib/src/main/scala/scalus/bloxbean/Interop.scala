@@ -24,7 +24,6 @@ import scalus.cardano.onchain.plutus.{v1, v2, v3}
 import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 import scalus.cardano.onchain.plutus.prelude.{asScalus, List as PList, SortedMap}
 import scalus.uplc.eval.*
-import scalus.{builtin, ledger, prelude}
 
 import java.math.BigInteger
 import java.util

@@ -6,7 +6,6 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.Language.*
 import scalus.cardano.ledger.LedgerToPlutusTranslation.*
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
-import scalus.ledger
 import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.eval.*

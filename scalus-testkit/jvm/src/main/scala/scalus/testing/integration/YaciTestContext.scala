@@ -4,7 +4,6 @@ import scalus.cardano.ledger.{CardanoInfo, SlotNo, Transaction, TransactionHash}
 import scalus.cardano.node.{BlockchainProvider, SubmitError}
 import scalus.utils.await
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.*
 import scala.concurrent.{ExecutionContext, Future}
 

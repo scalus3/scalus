@@ -41,7 +41,6 @@ object ShowByteString {
     given ShowByteString[String] = (x: String) => encodeUtf8(x)
     given ShowByteString[Boolean] = (x: Boolean) => if x then utf8"True" else utf8"False"
     given ShowByteString[Data] = (x: Data) => {
-        import scalus.uplc.builtin
         def showBuiltinList(xs: scalus.uplc.builtin.BuiltinList[Data]): ByteString = {
             if xs.isEmpty then utf8""
             else
@@ -70,7 +69,6 @@ object ShowByteString {
         }
 
         val showMap = () => {
-            import scalus.uplc.builtin
             val lst = unMapData(x)
             def showDataPair(x: BuiltinPair[Data, Data]): ByteString = {
                 val fstShow = x.fst.showByteString

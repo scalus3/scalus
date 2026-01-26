@@ -4,7 +4,6 @@ import scalus.Compile
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
-import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Transaction, Utxo, Value as LedgerValue}
 import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}

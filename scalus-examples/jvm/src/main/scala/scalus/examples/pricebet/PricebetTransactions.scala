@@ -5,7 +5,6 @@ import scalus.cardano.address.Address as OffchainAddress
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
-import scalus.cardano.onchain.plutus.v3.TxOutRef
 import scalus.cardano.onchain.plutus.prelude.*
 
 import java.time.Instant
