@@ -721,7 +721,7 @@ object BLS12_381_G1_SirTypeGenerator extends PrimitiveSirTypeGenerator {
         )
         lvBuiltinApply(
           SIRBuiltins.bls12_381_G1_uncompress,
-          input,
+          bs,
           SIRType.BLS12_381_G1_Element,
           PrimitiveRepresentation.Constant,
           pos
@@ -763,7 +763,7 @@ object BLS12_381_G2_SirTypeGenerator extends PrimitiveSirTypeGenerator {
         )
         lvBuiltinApply(
           SIRBuiltins.bls12_381_G2_uncompress,
-          input,
+          bs,
           SIRType.BLS12_381_G2_Element,
           PrimitiveRepresentation.Constant,
           pos
