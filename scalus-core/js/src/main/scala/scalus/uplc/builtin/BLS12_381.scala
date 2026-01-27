@@ -36,7 +36,7 @@ class BLS12_381_G1_Element(private[builtin] val point: BLS.G1.Point):
     override def hashCode: Int = toCompressedByteString.hashCode
     override def toString: String = s"0x${point.toHex()}"
 
-object BLS12_381_G1_Element:
+object BLS12_381_G1_Element extends BLS12_381_G1_ElementOffchainApi:
     def fromCompressedByteString(byteString: ByteString): BLS12_381_G1_Element = {
         if byteString.size != 48 then
             throw js.JavaScriptException(
@@ -102,7 +102,7 @@ class BLS12_381_G2_Element(private[builtin] val point: BLS.G2.Point):
     override def hashCode: Int = toCompressedByteString.hashCode
     override def toString: String = s"0x${point.toHex()}"
 
-object BLS12_381_G2_Element:
+object BLS12_381_G2_Element extends BLS12_381_G2_ElementOffchainApi:
     def fromCompressedByteString(byteString: ByteString): BLS12_381_G2_Element = {
         if byteString.size != 96 then
             throw js.JavaScriptException(

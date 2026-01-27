@@ -7,6 +7,8 @@ import scalus.uplc.builtin.PlatformSpecific.bls12_381_G2_compressed_zero
 import scalus.uplc.builtin.PlatformSpecific.bls12_381_G1_compressed_generator
 import scalus.uplc.builtin.PlatformSpecific.bls12_381_G2_compressed_generator
 import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.BLS12_381_G1_Element.g1
+import scalus.uplc.builtin.BLS12_381_G2_Element.g2
 
 import scala.language.implicitConversions
 
@@ -85,5 +87,45 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
 
         assert(gtResult.value ne gt1.value)
         assert(gtResult.value ne gt2.value)
+    }
+
+    test("g1 string interpolator creates G1 element from hex") {
+        val g1Gen =
+            g1"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
+        val expected = bls12_381_G1_uncompress(bls12_381_G1_compressed_generator)
+        assert(bls12_381_G1_equal(g1Gen, expected))
+    }
+
+    test("g1 string interpolator supports spaces for readability") {
+        val g1Zero =
+            g1"c0000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000"
+        val expected = bls12_381_G1_uncompress(bls12_381_G1_compressed_zero)
+        assert(bls12_381_G1_equal(g1Zero, expected))
+    }
+
+    test("g1 string interpolator rejects wrong size") {
+        assertThrows[IllegalArgumentException] {
+            g1"deadbeef" // only 4 bytes, not 48
+        }
+    }
+
+    test("g2 string interpolator creates G2 element from hex") {
+        val g2Gen =
+            g2"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
+        val expected = bls12_381_G2_uncompress(bls12_381_G2_compressed_generator)
+        assert(bls12_381_G2_equal(g2Gen, expected))
+    }
+
+    test("g2 string interpolator supports spaces for readability") {
+        val g2Zero =
+            g2"c0000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000"
+        val expected = bls12_381_G2_uncompress(bls12_381_G2_compressed_zero)
+        assert(bls12_381_G2_equal(g2Zero, expected))
+    }
+
+    test("g2 string interpolator rejects wrong size") {
+        assertThrows[IllegalArgumentException] {
+            g2"deadbeef" // only 4 bytes, not 96
+        }
     }
 }

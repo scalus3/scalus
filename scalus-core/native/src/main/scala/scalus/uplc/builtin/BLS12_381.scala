@@ -22,7 +22,7 @@ class BLS12_381_G1_Element private[builtin] (private[builtin] val compressed: Ar
 
     override def toString: String = s"0x${Hex.bytesToHex(compressed)}"
 
-object BLS12_381_G1_Element:
+object BLS12_381_G1_Element extends BLS12_381_G1_ElementOffchainApi:
     def apply(compressed: Array[Byte]): BLS12_381_G1_Element =
         new BLS12_381_G1_Element(compressed)
 
@@ -47,7 +47,7 @@ class BLS12_381_G2_Element private[builtin] (private[builtin] val compressed: Ar
 
     override def toString: String = s"0x${Hex.bytesToHex(compressed)}"
 
-object BLS12_381_G2_Element:
+object BLS12_381_G2_Element extends BLS12_381_G2_ElementOffchainApi:
     def apply(compressed: Array[Byte]): BLS12_381_G2_Element =
         new BLS12_381_G2_Element(compressed)
 

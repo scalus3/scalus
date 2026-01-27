@@ -14,7 +14,7 @@ class BLS12_381_G1_Element(private[builtin] val value: P1):
     // TODO: check if this is correct
     override def toString: String = s"0x${Hex.bytesToHex(value.compress())}"
 
-object BLS12_381_G1_Element:
+object BLS12_381_G1_Element extends BLS12_381_G1_ElementOffchainApi:
     def apply(value: P1): BLS12_381_G1_Element = new BLS12_381_G1_Element(value)
     def apply(value: ByteString): BLS12_381_G1_Element = new BLS12_381_G1_Element(
       new P1(value.bytes)
@@ -29,7 +29,7 @@ class BLS12_381_G2_Element(private[builtin] val value: P2):
 
     override def toString: String = s"0x${Hex.bytesToHex(value.compress())}"
 
-object BLS12_381_G2_Element:
+object BLS12_381_G2_Element extends BLS12_381_G2_ElementOffchainApi:
     def apply(value: P2): BLS12_381_G2_Element = new BLS12_381_G2_Element(value)
     def apply(value: ByteString): BLS12_381_G2_Element = new BLS12_381_G2_Element(
       new P2(value.bytes)

@@ -125,6 +125,14 @@ final class SIRCompiler(
     private val ByteStringModuleSymbol = requiredModule("scalus.uplc.builtin.ByteString")
     private val ByteStringSymbolHex = ByteStringModuleSymbol.requiredMethod("hex")
     private val ByteStringSymbolUtf8 = ByteStringModuleSymbol.requiredMethod("utf8")
+    private val BLS12_381_G1_ElementModuleSymbol =
+        requiredModule("scalus.uplc.builtin.BLS12_381_G1_Element")
+    private val BLS12_381_G1_ElementSymbolG1 =
+        BLS12_381_G1_ElementModuleSymbol.requiredMethod("g1")
+    private val BLS12_381_G2_ElementModuleSymbol =
+        requiredModule("scalus.uplc.builtin.BLS12_381_G2_Element")
+    private val BLS12_381_G2_ElementSymbolG2 =
+        BLS12_381_G2_ElementModuleSymbol.requiredMethod("g2")
     private val BuiltinValueModuleSymbol = requiredModule("scalus.uplc.builtin.BuiltinValue")
     private val FromDataSymbol = requiredClass("scalus.uplc.builtin.FromData")
     private val ToDataSymbol = requiredClass("scalus.uplc.builtin.ToData")
@@ -2529,6 +2537,102 @@ final class SIRCompiler(
                   SIRType.BuiltinValue,
                   AnnotationsDecl.fromSrcPos(tree.srcPos)
                 )
+            // g1"hexstring" - compile to bls12_381_G1_uncompress(hex"...")
+            case expr @ Apply(
+                  Apply(
+                    g1Interp,
+                    List(Apply(stringContextApply, List(SeqLiteral(List(Literal(c)), _))))
+                  ),
+                  List(SeqLiteral(List(), _))
+                )
+                if g1Interp.symbol == BLS12_381_G1_ElementSymbolG1
+                    && stringContextApply.symbol == StringContextApplySymbol =>
+                val posAnns = AnnotationsDecl.fromSrcPos(expr.srcPos)
+                try
+                    val hexString = c.stringValue.replace(" ", "")
+                    val bs = scalus.uplc.builtin.ByteString.fromHex(hexString)
+                    if bs.bytes.length != 48 then
+                        error(
+                          GenericError(
+                            s"""G1 compressed element must be 48 bytes, got ${bs.bytes.length} bytes.
+                               |Hex string: `$hexString`
+                               |""".stripMargin,
+                            expr.srcPos
+                          ),
+                          SIR.Error("Invalid G1 element size", posAnns)
+                        )
+                    else
+                        val byteStringConst = SIR.Const(
+                          scalus.uplc.Constant.ByteString(bs),
+                          SIRType.ByteString,
+                          posAnns
+                        )
+                        SIR.Apply(
+                          SIRBuiltins.bls12_381_G1_uncompress,
+                          byteStringConst,
+                          SIRType.BLS12_381_G1_Element,
+                          posAnns
+                        )
+                catch
+                    case NonFatal(e) =>
+                        error(
+                          GenericError(
+                            s"""G1 element `${c.stringValue}` is not valid.
+                               |Make sure it contains only hexadecimal characters.
+                               |Error: ${e.getMessage}
+                               |""".stripMargin,
+                            expr.srcPos
+                          ),
+                          SIR.Error("Invalid G1 element", posAnns)
+                        )
+            // g2"hexstring" - compile to bls12_381_G2_uncompress(hex"...")
+            case expr @ Apply(
+                  Apply(
+                    g2Interp,
+                    List(Apply(stringContextApply, List(SeqLiteral(List(Literal(c)), _))))
+                  ),
+                  List(SeqLiteral(List(), _))
+                )
+                if g2Interp.symbol == BLS12_381_G2_ElementSymbolG2
+                    && stringContextApply.symbol == StringContextApplySymbol =>
+                val posAnns = AnnotationsDecl.fromSrcPos(expr.srcPos)
+                try
+                    val hexString = c.stringValue.replace(" ", "")
+                    val bs = scalus.uplc.builtin.ByteString.fromHex(hexString)
+                    if bs.bytes.length != 96 then
+                        error(
+                          GenericError(
+                            s"""G2 compressed element must be 96 bytes, got ${bs.bytes.length} bytes.
+                               |Hex string: `$hexString`
+                               |""".stripMargin,
+                            expr.srcPos
+                          ),
+                          SIR.Error("Invalid G2 element size", posAnns)
+                        )
+                    else
+                        val byteStringConst = SIR.Const(
+                          scalus.uplc.Constant.ByteString(bs),
+                          SIRType.ByteString,
+                          posAnns
+                        )
+                        SIR.Apply(
+                          SIRBuiltins.bls12_381_G2_uncompress,
+                          byteStringConst,
+                          SIRType.BLS12_381_G2_Element,
+                          posAnns
+                        )
+                catch
+                    case NonFatal(e) =>
+                        error(
+                          GenericError(
+                            s"""G2 element `${c.stringValue}` is not valid.
+                               |Make sure it contains only hexadecimal characters.
+                               |Error: ${e.getMessage}
+                               |""".stripMargin,
+                            expr.srcPos
+                          ),
+                          SIR.Error("Invalid G2 element", posAnns)
+                        )
             // BUILTINS
             case bi: Select if builtinFun(bi.symbol).isDefined =>
                 if env.debug then println(s"compileExpr: builtinFun: ${bi.symbol}")
