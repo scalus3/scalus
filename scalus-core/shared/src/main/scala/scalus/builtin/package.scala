@@ -6,7 +6,7 @@ package scalus
   * deprecated aliases for migration.
   */
 package object builtin {
-    private inline val version = "0.15.0"
+    private inline val version = "0.14.2"
     private inline val pkg = "scalus.uplc.builtin"
 
     // ============================================================================

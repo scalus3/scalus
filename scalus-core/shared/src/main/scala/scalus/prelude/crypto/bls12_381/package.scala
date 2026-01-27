@@ -7,7 +7,7 @@ package scalus.prelude.crypto
   * aliases for migration.
   */
 package object bls12_381 {
-    private inline val version = "0.15.0"
+    private inline val version = "0.14.2"
     private inline val pkg = "scalus.cardano.onchain.plutus.prelude.crypto.bls12_381"
 
     @deprecated(s"Use $pkg.G1 instead", version)

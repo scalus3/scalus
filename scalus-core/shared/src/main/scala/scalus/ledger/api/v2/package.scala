@@ -6,7 +6,7 @@ package scalus.ledger.api
   * provides deprecated aliases for migration.
   */
 package object v2 {
-    private inline val version = "0.15.0"
+    private inline val version = "0.14.2"
     private inline val v1pkg = "scalus.cardano.onchain.plutus.v1"
     private inline val v2pkg = "scalus.cardano.onchain.plutus.v2"
 

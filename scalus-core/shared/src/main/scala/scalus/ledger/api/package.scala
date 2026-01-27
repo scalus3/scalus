@@ -6,7 +6,7 @@ package scalus.ledger
   * deprecated aliases for migration.
   */
 package object api {
-    private inline val version = "0.15.0"
+    private inline val version = "0.14.2"
     private inline val pkg = "scalus.cardano.onchain.plutus"
 
     // Union type for all script context versions

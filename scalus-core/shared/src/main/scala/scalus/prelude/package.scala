@@ -6,7 +6,7 @@ package scalus
   * provides deprecated aliases for migration.
   */
 package object prelude {
-    private inline val version = "0.15.0"
+    private inline val version = "0.14.2"
     private inline val pkg = "scalus.cardano.onchain.plutus.prelude"
 
     // ============================================================================
