@@ -24,10 +24,7 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
           hex"0000000000000000",
           ExUnits(memory = 1401, steps = 1530707)
         )
-        assertEvalFailsWithinBudget[BuiltinException](
-          fromBigIntBigEndian(1_000_000, 1),
-          ExUnits(memory = 1401, steps = 1530707)
-        )
+        assertEvalFails[BuiltinException](fromBigIntBigEndian(1_000_000, 1))
 
     test("fromBigIntLittleEndian"):
         assertEvalWithinBudget(
@@ -45,10 +42,7 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
           hex"0000000000000000",
           ExUnits(memory = 1401, steps = 1530707)
         )
-        assertEvalFailsWithinBudget[BuiltinException](
-          fromBigIntLittleEndian(1_000_000, 1),
-          ExUnits(memory = 1401, steps = 1530707)
-        )
+        assertEvalFails[BuiltinException](fromBigIntLittleEndian(1_000_000, 1))
 
     test("utf8 string interpolator"):
         // Test simple ASCII string

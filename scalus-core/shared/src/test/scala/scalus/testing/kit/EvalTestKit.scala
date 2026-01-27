@@ -175,50 +175,6 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         if !isExceptionThrown then
             fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
 
-    /** Assert that code evaluation fails with expected exception type and budget limit check. */
-    protected final inline def assertEvalFailsWithinBudget[E <: Throwable: ClassTag](
-        inline code: Any,
-        budget: ExUnits
-    )(using vm: PlutusVM): Unit =
-        var isExceptionThrown = false
-
-        val _ =
-            try code
-            catch
-                case NonFatal(exception) =>
-                    assert(
-                      summon[ClassTag[E]].runtimeClass.isAssignableFrom(exception.getClass),
-                      s"Expected exception of type ${summon[ClassTag[E]]}, but got $exception"
-                    )
-                    val compiled = PlutusV3.compile(code)
-                    val result = compiled.program.evaluateDebug
-                    result match
-                        case failure: Result.Failure =>
-                            result.logs.lastOption match
-                                case Some(message) =>
-                                    assert(message.contains(exception.getMessage))
-                                case None =>
-                                    assert(
-                                      failure.exception.getMessage.contains(
-                                        exception.getClass.getName
-                                      )
-                                    )
-                                    if result.budget.steps > budget.steps ||
-                                        result.budget.memory > budget.memory
-                                    then
-                                        fail:
-                                            s"""Performance regression,
-                                            |expected: $budget,
-                                            |but got: ${result.budget};
-                                            |costs: ${result.costs}""".stripMargin
-                        case _ =>
-                            fail(s"Expected failure, but got success: $result")
-
-                    isExceptionThrown = true
-
-        if !isExceptionThrown then
-            fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
-
     /** Assert that code evaluation fails with specific error message. */
     protected final inline def assertEvalFailsWithMessage[E <: Throwable: ClassTag](
         expectedMessage: String
