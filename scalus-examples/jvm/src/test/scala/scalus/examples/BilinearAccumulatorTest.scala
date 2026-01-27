@@ -1,15 +1,73 @@
 package scalus
 package examples
 
-import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
-import scalus.uplc.builtin.ByteString.*
 import scalus.examples.BilinearAccumulator.checkMembership
 import scalus.examples.BilinearAccumulator.checkNonMembership
 import scalus.examples.BilinearAccumulator.getFinalPoly
 import scalus.cardano.onchain.plutus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
 import scalus.testing.kit.BaseValidatorTest
+import scalus.uplc.builtin.BLS12_381_G1_Element.g1
+import scalus.uplc.builtin.BLS12_381_G2_Element.g2
 
 import scala.language.implicitConversions
+
+/** Powers of tau CRS for BLS12-381 bilinear accumulator tests */
+@Compile
+object CRS {
+    /** G1 powers of tau: [g1, tau*g1, tau^2*g1, ...] */
+    val g1 = List(
+      g1"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
+      g1"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc",
+      g1"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269",
+      g1"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d",
+      g1"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06",
+      g1"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d",
+      g1"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d",
+      g1"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567",
+      g1"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca",
+      g1"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7",
+      g1"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b",
+      g1"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541",
+      g1"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc",
+      g1"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484",
+      g1"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138",
+      g1"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456",
+      g1"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9",
+      g1"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9",
+      g1"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718",
+      g1"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad",
+      g1"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c",
+      g1"b2d1200ac058abe7e08c0efaec3ef93daaddbff2bc3ceae4c40e6ff26858791e5a050f410d33f208bd74367229216e9f",
+      g1"aac124c5e0bc9701cb4e51bdaaae57b82af6fb53319cb458c55bb8fffa7315306f19d0e3347baef113f0926c9a86b067",
+      g1"846eb53ac2a1ff34c7b4a2e2453e9b6f7f521f4c669dd9536ffef3e74ab04a5215214b51903a514b9789d72537487654",
+      g1"98ca0a62a24f81a87e618769076f9b991a9659b1a2d7d66bb54adbca9317ac15a8ce20a4ccd056257854b0715f549f26",
+      g1"838bc31ab11d34711236106c83e68362c86610e1631a8f8b940ba63fd18ca343a4fa3f9d2f0f9ed8309efd798e536f93",
+      g1"844bf8551e3e4fc0174889355f556bfa5eecc083faebd1262744ad2c224e7f8720134b341c8ea4d534076bb1ef4c5f42",
+      g1"a343e4dc3629e8a58dbd1dd5bf1408efc78f9586b0d2ce0bbc8e6716daf4b9551f780ad958eba75ed3609122b9c8a9d9",
+      g1"8292754b0f7b4c9481e6b84adfec08e10e47d8146cf037e0c08aa290fc0ae5f631b32e5764862af793103337ef46e171",
+      g1"9773cb0a95ed7062f51a300e544d94e6d13430ce97583ddc195192b85beb0929ccc8917fb784e3aafd9da038378e83ca",
+      g1"98b61b0cdfd840df81766f02855f8a3fc31e119514b207557c497416b3fb7061895285ac2b3214ba75e37df7d4ae8ee0",
+      g1"965d47f577fb917dd4ba73ada45c467bf0d3759854b2a042dcfe10805ec83e3ca228577e3732c180f204c72f24da1ddd",
+      g1"a3b02b9d84224715df79bd79790311eed63e602e4463b93e512ad6988ff0212688e09f8d538e1de1a282b8d2c309636b",
+      g1"a9e8ae006488eef524a005e21281fd27098b2c0e37777d075333909aa11d92e53923e321622ce35f9f475d5dd8d10cfe",
+      g1"87b94efe473f152ea7eb80c2da9e261cd48b65dc43e0eb4b0bf881b609dd25da72b0741831aa3848b7cd3b316a9b212e",
+      g1"a448203b1608d867e70495370371742053ca4572e033b9cc2713a000d37fd6389205d2cd11c9bc2dc8e524ea9896c8a6",
+      g1"869ec09853df4d8dae8515fed9a9a444e32c1b4159f15b98b76fa4067ed2dbad6bfff7da576d6140a445629b0042fabc",
+      g1"90db92b89f9db8996a93616d48f7822dda162e50df0ca41a26045f8d4eee5523fea0d84738f7dbb65c0af76a8c0a2c1d",
+      g1"b9520f7a0fe0b96482db4328a3b79d6cb4cb74b1099af35eeb5288d15ef3593aac3f1a5da0d39805473f89f83b149479",
+      g1"9621df24094008cf78facc67f829e834af6a9662ccea6ad87f750e65f95d7d80e0d3244957d4816d78a2b75c16e561e9",
+      g1"963e17c933edf5903bbd6ba9d24e9c64672f62977db71ec14bb64400431e56f25913551bac8ad4ccef5f758626861981",
+      g1"b12eb811f95db9ac60a06c118047e592f45614fd8fa360b6665692efce1983a49b757a9c18379842ca2227f9591d21b9",
+      g1"9691b858faa5bf01ab18ea29fa81a3f0e91ba03e373d79090ca84f2354e8324260184837b15aefc41172207107305354",
+      g1"8782c0a93ad461e6a970bdba4faf451a48de7d9d2aa532eb8a76cf666db7b2729bcc88f5e445026ef0f77034e080cf72",
+      g1"8ceb289ef58efab33a167ffdd1f687689ccdb8cd7dfac5c17692d7329e4aeca2a2961647e4de2c2a12ab7cd8504540db",
+      g1"b9eb8e0d7f5b90033456f26b8b486da17d10cb724397e5c06a3276d33fc196b31d887de337f1b7ed0539eed360d229bf"
+    )
+
+    /** G2 generator point */
+    val g2 = G2.generator
+}
 
 class BilinearAccumulatorTest extends BaseValidatorTest {
 
@@ -22,73 +80,38 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership one element") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          )
-        )
-        val accumulator = G2Element(
-          hex"b0f15b32629d02514af939e5b660d27a4db9f84cde5eecfef7db87c056163a9f21925653519cf9972f4b6c115e195baf1439203af99d121fce39ec8eed3fa72a0a31dd537642ab7cb1da52dfbacab1a032c5579aa702a59f1991e9aefae1d9c5"
-        )
+        val crsG1 = CRS.g1.take(2)
+        val accumulator =
+            g2"b0f15b32629d02514af939e5b660d27a4db9f84cde5eecfef7db87c056163a9f21925653519cf9972f4b6c115e195baf1439203af99d121fce39ec8eed3fa72a0a31dd537642ab7cb1da52dfbacab1a032c5579aa702a59f1991e9aefae1d9c5"
+
         val subset =
             List(BigInt("22401154959170154123134540742828377934364533580409315286338474307961"))
-        val proof = G2Element(
-          hex"809875352e4cd02184ecd07429198ca87364ca0c4bf895482fb8364662bce1945d33c599b47b7d2b34724f45fa17fab8141afa380d192a9134d7f1238e17475af8f6c862c1eecf9666bb5e00b17461ad33112ef2f8dd9580c178b36300cb6dd8"
-        )
+        val proof =
+            g2"809875352e4cd02184ecd07429198ca87364ca0c4bf895482fb8364662bce1945d33c599b47b7d2b34724f45fa17fab8141afa380d192a9134d7f1238e17475af8f6c862c1eecf9666bb5e00b17461ad33112ef2f8dd9580c178b36300cb6dd8"
+
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership two elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"a9eaead40c09f1ebe1f91eae20828f43b91963058c7612697a97debd6112597dd48dda9760803579434953d5b0938d4819aa1cb23988d7b3ea0a4c71d64c7b4f2b2cf64641f3e7dbadb013b80ef561d3e46b0838b297c64867f173012913fc11"
-        )
+        val crsG1 = CRS.g1.take(3)
+        val accumulator =
+            g2"a9eaead40c09f1ebe1f91eae20828f43b91963058c7612697a97debd6112597dd48dda9760803579434953d5b0938d4819aa1cb23988d7b3ea0a4c71d64c7b4f2b2cf64641f3e7dbadb013b80ef561d3e46b0838b297c64867f173012913fc11"
 
         val subset = List(
           BigInt("24481988137337345979402196433721828975302737812188733501518683675289"),
           BigInt("11949016871617666658475847346960938230341254399552474158527962314611")
         )
 
-        val proof = G2Element(
-          hex"b76700b0abce4e02d6db4924de6456b75ef1b363eb500edf51cc5fe1d1b5d98f82c64addf79966d0987af855069bafb5019ea2ad533f77ebe01e2e80298284d6996cbdff304f1adac62011273be8863742162b3f73b2100ae4ec35d46941c6e6"
-        )
+        val proof =
+            g2"b76700b0abce4e02d6db4924de6456b75ef1b363eb500edf51cc5fe1d1b5d98f82c64addf79966d0987af855069bafb5019ea2ad533f77ebe01e2e80298284d6996cbdff304f1adac62011273be8863742162b3f73b2100ae4ec35d46941c6e6"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership three elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"9193c1887649287b712c2451975fddc7a5ff4902c1f6f267a45887fee49aff92d937e848c3620c52184b6439caa564210b1cf99a76d7566f1525c0dfce4164fcd0c627768c8d9c04bbddd23ab448cfa2c22587ebaf1a4832780e8e2d85b35832"
-        )
+        val crsG1 = CRS.g1.take(4)
+        val accumulator =
+            g2"9193c1887649287b712c2451975fddc7a5ff4902c1f6f267a45887fee49aff92d937e848c3620c52184b6439caa564210b1cf99a76d7566f1525c0dfce4164fcd0c627768c8d9c04bbddd23ab448cfa2c22587ebaf1a4832780e8e2d85b35832"
 
         val subset = List(
           BigInt("24038905256219783303175041908531901856535882621208602552448921926583"),
@@ -96,35 +119,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("11735491696012837666850221005405205504029708967889959716428146439525")
         )
 
-        val proof = G2Element(
-          hex"99bdb2c73ea6cd3daf1ec82ec2549fa080effb1d5b747106e349f342ab35b8134f62eab0b72a57075b4b4bfcf8e21df801d3b10210069523bde5a7bc8d6644d78a04d85fdbd2b2b810bf4c40b9b8e10e60f2128fb97b455bebcebead449dc899"
-        )
+        val proof =
+            g2"99bdb2c73ea6cd3daf1ec82ec2549fa080effb1d5b747106e349f342ab35b8134f62eab0b72a57075b4b4bfcf8e21df801d3b10210069523bde5a7bc8d6644d78a04d85fdbd2b2b810bf4c40b9b8e10e60f2128fb97b455bebcebead449dc899"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership four elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"b43d6e4464ae4a2744639e0075623be40d29ac1c7179d70b568b4f73316565428796dc6d9868f7a1ea72c41fa398e34a0525e4d473e685c4927fae0674dd2e55816df2910fedcf150f32ed59f9e9cc3c854072720bad5e051f617fb19e084dd9"
-        )
+        val crsG1 = CRS.g1.take(5)
+        val accumulator =
+            g2"b43d6e4464ae4a2744639e0075623be40d29ac1c7179d70b568b4f73316565428796dc6d9868f7a1ea72c41fa398e34a0525e4d473e685c4927fae0674dd2e55816df2910fedcf150f32ed59f9e9cc3c854072720bad5e051f617fb19e084dd9"
 
         val subset = List(
           BigInt("4888243493585897042658453245090192987322213237754748163108653398093"),
@@ -133,38 +137,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("11211425825301035128606405724032636899302645987407390339688530013048")
         )
 
-        val proof = G2Element(
-          hex"b50d19d0fb967aa4148d49019e6f2fb2ef8180d41c3f8db2be64f694ab05e82ed058e8a0807b1aa9bf88519e78505225009590cb36c2a2723ef4f8f3aa0802b10df2937cbc2390c621a1a59be6e503713f01361322aa314a893b823dd4321076"
-        )
+        val proof =
+            g2"b50d19d0fb967aa4148d49019e6f2fb2ef8180d41c3f8db2be64f694ab05e82ed058e8a0807b1aa9bf88519e78505225009590cb36c2a2723ef4f8f3aa0802b10df2937cbc2390c621a1a59be6e503713f01361322aa314a893b823dd4321076"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership five elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"a3f377ea89593955979c4de08eae3cb54512bd59ce0b554728f04eb4f951fb4f71e70a20186c50d67c5f20c330e10bf1075332abf365691521f25bc4d17e2a2ad3beea0534391648e38e90fc61c396494fab230efa10bd56e65448f1accb5bf0"
-        )
+        val crsG1 = CRS.g1.take(6)
+        val accumulator =
+            g2"a3f377ea89593955979c4de08eae3cb54512bd59ce0b554728f04eb4f951fb4f71e70a20186c50d67c5f20c330e10bf1075332abf365691521f25bc4d17e2a2ad3beea0534391648e38e90fc61c396494fab230efa10bd56e65448f1accb5bf0"
 
         val subset = List(
           BigInt("18807309260481819398738182499980976500640294208010185044243842436569"),
@@ -174,53 +156,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("11735083483361426446085719336533399590913350951085931765584664487011")
         )
 
-        val proof = G2Element(
-          hex"b5bd19004a0d0457e002699522f80d753f6bac6dc6bbea3c2cb8d7b514aeb1a5b263ad576fac8dc8c155fab84ca0922116d1084023cc9f42928003ca9ed6784dab341567ac42cfd5f3a8eae7daad58f89541bc60ba7d6f782c646e11cbaad0fd"
-        )
+        val proof =
+            g2"b5bd19004a0d0457e002699522f80d753f6bac6dc6bbea3c2cb8d7b514aeb1a5b263ad576fac8dc8c155fab84ca0922116d1084023cc9f42928003ca9ed6784dab341567ac42cfd5f3a8eae7daad58f89541bc60ba7d6f782c646e11cbaad0fd"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership ten elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"a55c73393a7d26cd7bbe60216f6b0278f7410a36abdd1fe3f43906892da183a853070e0311424f1b2290388cc76a58b10d2325e63279a8f7c65bd7e6114a86845d978bbc6aef85058d58bd54812830b4a6beb5513c0db5ff692c0f206b7947de"
-        )
+        val crsG1 = CRS.g1.take(11)
+        val accumulator =
+            g2"a55c73393a7d26cd7bbe60216f6b0278f7410a36abdd1fe3f43906892da183a853070e0311424f1b2290388cc76a58b10d2325e63279a8f7c65bd7e6114a86845d978bbc6aef85058d58bd54812830b4a6beb5513c0db5ff692c0f206b7947de"
 
         val subset = List(
           BigInt("11946896785643042387714380525317591252484691358306879453840779251080"),
@@ -235,68 +180,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("9079549529424336804565560798067646826650862908209324787878715299790")
         )
 
-        val proof = G2Element(
-          hex"9540c0e372b7eaf6df0a5d94f6782d411ea4a2f2ec21183a1469032ec4114a32ba80fcc0a0c8476f5f36fd993c55d80610145852ab611c70737fbce7e852cb8cce801f09643a65cc4597ce136cabe69d667747d0076485834af27c289bd4d60a"
-        )
+        val proof =
+            g2"9540c0e372b7eaf6df0a5d94f6782d411ea4a2f2ec21183a1469032ec4114a32ba80fcc0a0c8476f5f36fd993c55d80610145852ab611c70737fbce7e852cb8cce801f09643a65cc4597ce136cabe69d667747d0076485834af27c289bd4d60a"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership fifteen elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"a5a42c8a5544f438a71bf27a5f385493da8bf8f31487dc84c0666a3e80bc4cade54e15677550d6c9ddb3d29dee0e7957031da4e72ba4ed126aff42fc1d0a74413f8df3b2c6da45741881f002782aa5975d6a2f10b0a074d17933af0869f368b0"
-        )
+        val crsG1 = CRS.g1.take(16)
+        val accumulator =
+            g2"a5a42c8a5544f438a71bf27a5f385493da8bf8f31487dc84c0666a3e80bc4cade54e15677550d6c9ddb3d29dee0e7957031da4e72ba4ed126aff42fc1d0a74413f8df3b2c6da45741881f002782aa5975d6a2f10b0a074d17933af0869f368b0"
 
         val subset = List(
           BigInt("10797813253795321414726680704149577568953189084861502116549417609429"),
@@ -316,83 +209,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("6464968082666022014897914126876918343854684004093397517596629235068")
         )
 
-        val proof = G2Element(
-          hex"965e322e741f75f209c9ffa0a6d136b32da8fa63a558967af14b43301c245659d2853387fe222d0ad28fe84fa570c6370f64c6fc7f1dffea9ccdbb939e633950a0d2d3c830b0b0947b6a8a49eaa3ca4d451186f9be503ce4c0d0b380a19af778"
-        )
+        val proof =
+            g2"965e322e741f75f209c9ffa0a6d136b32da8fa63a558967af14b43301c245659d2853387fe222d0ad28fe84fa570c6370f64c6fc7f1dffea9ccdbb939e633950a0d2d3c830b0b0947b6a8a49eaa3ca4d451186f9be503ce4c0d0b380a19af778"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership twenty elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          ),
-          G1Element(
-            hex"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9"
-          ),
-          G1Element(
-            hex"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9"
-          ),
-          G1Element(
-            hex"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718"
-          ),
-          G1Element(
-            hex"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad"
-          ),
-          G1Element(
-            hex"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"aacaf4a4b069f384d8f35e346ada73799d2a685b6a33fe31c1f63e81d5fa4909544e34d8ab86f54303619eb24b0cd73516f1ae002d94a54a50b7fae3b299a5199713042427fa30c9804492b08363627189a3da10c8fc5b42e01e5ef87458a18d"
-        )
+        val crsG1 = CRS.g1.take(21)
+        val accumulator =
+            g2"aacaf4a4b069f384d8f35e346ada73799d2a685b6a33fe31c1f63e81d5fa4909544e34d8ab86f54303619eb24b0cd73516f1ae002d94a54a50b7fae3b299a5199713042427fa30c9804492b08363627189a3da10c8fc5b42e01e5ef87458a18d"
 
         val subset = List(
           BigInt("12369451257735321888664925577010736697506731052212927377477684653168"),
@@ -417,98 +243,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("19658823025580142234653540383888551300553793648739545141544407472226")
         )
 
-        val proof = G2Element(
-          hex"a758410847c88f32f8d1856821fb375f71dc9c12fd3f3b497f117f8bdc05c258d220de0d6be9a6943288766ac36e8fee067eb89018aa575cb76b61fa15ee2740e61d7cc42263a94c0102f6129a80e77d3dd9b06403a3f3900236e1e2300132a3"
-        )
+        val proof =
+            g2"a758410847c88f32f8d1856821fb375f71dc9c12fd3f3b497f117f8bdc05c258d220de0d6be9a6943288766ac36e8fee067eb89018aa575cb76b61fa15ee2740e61d7cc42263a94c0102f6129a80e77d3dd9b06403a3f3900236e1e2300132a3"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership twenty five elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          ),
-          G1Element(
-            hex"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9"
-          ),
-          G1Element(
-            hex"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9"
-          ),
-          G1Element(
-            hex"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718"
-          ),
-          G1Element(
-            hex"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad"
-          ),
-          G1Element(
-            hex"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c"
-          ),
-          G1Element(
-            hex"b2d1200ac058abe7e08c0efaec3ef93daaddbff2bc3ceae4c40e6ff26858791e5a050f410d33f208bd74367229216e9f"
-          ),
-          G1Element(
-            hex"aac124c5e0bc9701cb4e51bdaaae57b82af6fb53319cb458c55bb8fffa7315306f19d0e3347baef113f0926c9a86b067"
-          ),
-          G1Element(
-            hex"846eb53ac2a1ff34c7b4a2e2453e9b6f7f521f4c669dd9536ffef3e74ab04a5215214b51903a514b9789d72537487654"
-          ),
-          G1Element(
-            hex"98ca0a62a24f81a87e618769076f9b991a9659b1a2d7d66bb54adbca9317ac15a8ce20a4ccd056257854b0715f549f26"
-          ),
-          G1Element(
-            hex"838bc31ab11d34711236106c83e68362c86610e1631a8f8b940ba63fd18ca343a4fa3f9d2f0f9ed8309efd798e536f93"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"b2fccbc5938919e7193a3e0869df720c07048459dd873fd4cd0758f59900df48c0b2ca52bf0a7d9fc2f8faf6fa602d271309b138e7c6e548467042ba560061bc533584822f2ed4cd300e994adeaab919fca4cd578aa966fc13467f69edb9519e"
-        )
+        val crsG1 = CRS.g1.take(26)
+        val accumulator =
+            g2"b2fccbc5938919e7193a3e0869df720c07048459dd873fd4cd0758f59900df48c0b2ca52bf0a7d9fc2f8faf6fa602d271309b138e7c6e548467042ba560061bc533584822f2ed4cd300e994adeaab919fca4cd578aa966fc13467f69edb9519e"
 
         val subset = List(
           BigInt("11316731751915451249737888133626085005994029496387992241695828964979"),
@@ -538,113 +282,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("12790702069010878759465223330923128646810069761312067285364153478762")
         )
 
-        val proof = G2Element(
-          hex"b7416c4686627c2b526f0a3233426009389d78ded49d14032a4c5b0a82e1f2febaf83befc40855789e1e76c454b6b95f0964c0cdfd7e6316f14cd052e6a45bca572ef6e3acfd6bc22c92fda629ccb27335dc33b075a4ba32756dacf5e076ed7e"
-        )
+        val proof =
+            g2"b7416c4686627c2b526f0a3233426009389d78ded49d14032a4c5b0a82e1f2febaf83befc40855789e1e76c454b6b95f0964c0cdfd7e6316f14cd052e6a45bca572ef6e3acfd6bc22c92fda629ccb27335dc33b075a4ba32756dacf5e076ed7e"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership thirty elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          ),
-          G1Element(
-            hex"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9"
-          ),
-          G1Element(
-            hex"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9"
-          ),
-          G1Element(
-            hex"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718"
-          ),
-          G1Element(
-            hex"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad"
-          ),
-          G1Element(
-            hex"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c"
-          ),
-          G1Element(
-            hex"b2d1200ac058abe7e08c0efaec3ef93daaddbff2bc3ceae4c40e6ff26858791e5a050f410d33f208bd74367229216e9f"
-          ),
-          G1Element(
-            hex"aac124c5e0bc9701cb4e51bdaaae57b82af6fb53319cb458c55bb8fffa7315306f19d0e3347baef113f0926c9a86b067"
-          ),
-          G1Element(
-            hex"846eb53ac2a1ff34c7b4a2e2453e9b6f7f521f4c669dd9536ffef3e74ab04a5215214b51903a514b9789d72537487654"
-          ),
-          G1Element(
-            hex"98ca0a62a24f81a87e618769076f9b991a9659b1a2d7d66bb54adbca9317ac15a8ce20a4ccd056257854b0715f549f26"
-          ),
-          G1Element(
-            hex"838bc31ab11d34711236106c83e68362c86610e1631a8f8b940ba63fd18ca343a4fa3f9d2f0f9ed8309efd798e536f93"
-          ),
-          G1Element(
-            hex"844bf8551e3e4fc0174889355f556bfa5eecc083faebd1262744ad2c224e7f8720134b341c8ea4d534076bb1ef4c5f42"
-          ),
-          G1Element(
-            hex"a343e4dc3629e8a58dbd1dd5bf1408efc78f9586b0d2ce0bbc8e6716daf4b9551f780ad958eba75ed3609122b9c8a9d9"
-          ),
-          G1Element(
-            hex"8292754b0f7b4c9481e6b84adfec08e10e47d8146cf037e0c08aa290fc0ae5f631b32e5764862af793103337ef46e171"
-          ),
-          G1Element(
-            hex"9773cb0a95ed7062f51a300e544d94e6d13430ce97583ddc195192b85beb0929ccc8917fb784e3aafd9da038378e83ca"
-          ),
-          G1Element(
-            hex"98b61b0cdfd840df81766f02855f8a3fc31e119514b207557c497416b3fb7061895285ac2b3214ba75e37df7d4ae8ee0"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"a1bfa33c81c4e7af7c032fb2641c8a0e7a046d9eff85c5ec03c7a4055e5aa733e5bfec6e25aa54a04e6cc271b878e660063420eeeed07ab0b2f2938c622b43505b5a83bb11810910d66fb4b328e1dc806dda8a367fec211376f6e4d1e547d5df"
-        )
+        val crsG1 = CRS.g1.take(31)
+        val accumulator =
+            g2"a1bfa33c81c4e7af7c032fb2641c8a0e7a046d9eff85c5ec03c7a4055e5aa733e5bfec6e25aa54a04e6cc271b878e660063420eeeed07ab0b2f2938c622b43505b5a83bb11810910d66fb4b328e1dc806dda8a367fec211376f6e4d1e547d5df"
 
         val subset = List(
           BigInt("1366037330991189513118786480817974861879080653661196487547085541643"),
@@ -679,128 +326,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("8070222617075138813079635780364329247460376966393558596326011225211")
         )
 
-        val proof = G2Element(
-          hex"b07da3f414f0d7789b052ef7540ae89f4069b3b6e488b7746af476d2158498ed6ecabf9b393e7e6a71e47265aef9b29f19cd787071cc40ee467433c79b9cac708e3230c9148d2497ad30bf07b7c80d07b68ee8f93f9150eb1bf91c7e5c60dd9c"
-        )
+        val proof =
+            g2"b07da3f414f0d7789b052ef7540ae89f4069b3b6e488b7746af476d2158498ed6ecabf9b393e7e6a71e47265aef9b29f19cd787071cc40ee467433c79b9cac708e3230c9148d2497ad30bf07b7c80d07b68ee8f93f9150eb1bf91c7e5c60dd9c"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership thirty five elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          ),
-          G1Element(
-            hex"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9"
-          ),
-          G1Element(
-            hex"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9"
-          ),
-          G1Element(
-            hex"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718"
-          ),
-          G1Element(
-            hex"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad"
-          ),
-          G1Element(
-            hex"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c"
-          ),
-          G1Element(
-            hex"b2d1200ac058abe7e08c0efaec3ef93daaddbff2bc3ceae4c40e6ff26858791e5a050f410d33f208bd74367229216e9f"
-          ),
-          G1Element(
-            hex"aac124c5e0bc9701cb4e51bdaaae57b82af6fb53319cb458c55bb8fffa7315306f19d0e3347baef113f0926c9a86b067"
-          ),
-          G1Element(
-            hex"846eb53ac2a1ff34c7b4a2e2453e9b6f7f521f4c669dd9536ffef3e74ab04a5215214b51903a514b9789d72537487654"
-          ),
-          G1Element(
-            hex"98ca0a62a24f81a87e618769076f9b991a9659b1a2d7d66bb54adbca9317ac15a8ce20a4ccd056257854b0715f549f26"
-          ),
-          G1Element(
-            hex"838bc31ab11d34711236106c83e68362c86610e1631a8f8b940ba63fd18ca343a4fa3f9d2f0f9ed8309efd798e536f93"
-          ),
-          G1Element(
-            hex"844bf8551e3e4fc0174889355f556bfa5eecc083faebd1262744ad2c224e7f8720134b341c8ea4d534076bb1ef4c5f42"
-          ),
-          G1Element(
-            hex"a343e4dc3629e8a58dbd1dd5bf1408efc78f9586b0d2ce0bbc8e6716daf4b9551f780ad958eba75ed3609122b9c8a9d9"
-          ),
-          G1Element(
-            hex"8292754b0f7b4c9481e6b84adfec08e10e47d8146cf037e0c08aa290fc0ae5f631b32e5764862af793103337ef46e171"
-          ),
-          G1Element(
-            hex"9773cb0a95ed7062f51a300e544d94e6d13430ce97583ddc195192b85beb0929ccc8917fb784e3aafd9da038378e83ca"
-          ),
-          G1Element(
-            hex"98b61b0cdfd840df81766f02855f8a3fc31e119514b207557c497416b3fb7061895285ac2b3214ba75e37df7d4ae8ee0"
-          ),
-          G1Element(
-            hex"965d47f577fb917dd4ba73ada45c467bf0d3759854b2a042dcfe10805ec83e3ca228577e3732c180f204c72f24da1ddd"
-          ),
-          G1Element(
-            hex"a3b02b9d84224715df79bd79790311eed63e602e4463b93e512ad6988ff0212688e09f8d538e1de1a282b8d2c309636b"
-          ),
-          G1Element(
-            hex"a9e8ae006488eef524a005e21281fd27098b2c0e37777d075333909aa11d92e53923e321622ce35f9f475d5dd8d10cfe"
-          ),
-          G1Element(
-            hex"87b94efe473f152ea7eb80c2da9e261cd48b65dc43e0eb4b0bf881b609dd25da72b0741831aa3848b7cd3b316a9b212e"
-          ),
-          G1Element(
-            hex"a448203b1608d867e70495370371742053ca4572e033b9cc2713a000d37fd6389205d2cd11c9bc2dc8e524ea9896c8a6"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"a45b0e40af247fc52381af0fd89b1d749d4b0d305be5d7b2853e95b2f9108ed8fc3f020caf065bc6072cf0af96863b0c19cb652ff7095530d446420255cd0df08686c220f369d454974f2e2472357d172f36178005e8134e24a530d979d4b881"
-        )
+        val crsG1 = CRS.g1.take(36)
+        val accumulator =
+            g2"a45b0e40af247fc52381af0fd89b1d749d4b0d305be5d7b2853e95b2f9108ed8fc3f020caf065bc6072cf0af96863b0c19cb652ff7095530d446420255cd0df08686c220f369d454974f2e2472357d172f36178005e8134e24a530d979d4b881"
 
         val subset = List(
           BigInt("10996250336879529902907481553444115467161518045889979580883454749806"),
@@ -840,143 +375,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("26158675900828651972222144865863880812973791507664769110898387284396")
         )
 
-        val proof = G2Element(
-          hex"a345ab94deef37c0f9def82fc90514983d91742d958fa51474574c7d21821d9723f2cc720b4b89d2698327f2e1796ac611b50faed9958c80a9df5b6cb2778a4ae38e4b601f0caeb2910c2681ecad5767c58d761abc6dbfd85e0cf01fa871624f"
-        )
+        val proof =
+            g2"a345ab94deef37c0f9def82fc90514983d91742d958fa51474574c7d21821d9723f2cc720b4b89d2698327f2e1796ac611b50faed9958c80a9df5b6cb2778a4ae38e4b601f0caeb2910c2681ecad5767c58d761abc6dbfd85e0cf01fa871624f"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership forty elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          ),
-          G1Element(
-            hex"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9"
-          ),
-          G1Element(
-            hex"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9"
-          ),
-          G1Element(
-            hex"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718"
-          ),
-          G1Element(
-            hex"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad"
-          ),
-          G1Element(
-            hex"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c"
-          ),
-          G1Element(
-            hex"b2d1200ac058abe7e08c0efaec3ef93daaddbff2bc3ceae4c40e6ff26858791e5a050f410d33f208bd74367229216e9f"
-          ),
-          G1Element(
-            hex"aac124c5e0bc9701cb4e51bdaaae57b82af6fb53319cb458c55bb8fffa7315306f19d0e3347baef113f0926c9a86b067"
-          ),
-          G1Element(
-            hex"846eb53ac2a1ff34c7b4a2e2453e9b6f7f521f4c669dd9536ffef3e74ab04a5215214b51903a514b9789d72537487654"
-          ),
-          G1Element(
-            hex"98ca0a62a24f81a87e618769076f9b991a9659b1a2d7d66bb54adbca9317ac15a8ce20a4ccd056257854b0715f549f26"
-          ),
-          G1Element(
-            hex"838bc31ab11d34711236106c83e68362c86610e1631a8f8b940ba63fd18ca343a4fa3f9d2f0f9ed8309efd798e536f93"
-          ),
-          G1Element(
-            hex"844bf8551e3e4fc0174889355f556bfa5eecc083faebd1262744ad2c224e7f8720134b341c8ea4d534076bb1ef4c5f42"
-          ),
-          G1Element(
-            hex"a343e4dc3629e8a58dbd1dd5bf1408efc78f9586b0d2ce0bbc8e6716daf4b9551f780ad958eba75ed3609122b9c8a9d9"
-          ),
-          G1Element(
-            hex"8292754b0f7b4c9481e6b84adfec08e10e47d8146cf037e0c08aa290fc0ae5f631b32e5764862af793103337ef46e171"
-          ),
-          G1Element(
-            hex"9773cb0a95ed7062f51a300e544d94e6d13430ce97583ddc195192b85beb0929ccc8917fb784e3aafd9da038378e83ca"
-          ),
-          G1Element(
-            hex"98b61b0cdfd840df81766f02855f8a3fc31e119514b207557c497416b3fb7061895285ac2b3214ba75e37df7d4ae8ee0"
-          ),
-          G1Element(
-            hex"965d47f577fb917dd4ba73ada45c467bf0d3759854b2a042dcfe10805ec83e3ca228577e3732c180f204c72f24da1ddd"
-          ),
-          G1Element(
-            hex"a3b02b9d84224715df79bd79790311eed63e602e4463b93e512ad6988ff0212688e09f8d538e1de1a282b8d2c309636b"
-          ),
-          G1Element(
-            hex"a9e8ae006488eef524a005e21281fd27098b2c0e37777d075333909aa11d92e53923e321622ce35f9f475d5dd8d10cfe"
-          ),
-          G1Element(
-            hex"87b94efe473f152ea7eb80c2da9e261cd48b65dc43e0eb4b0bf881b609dd25da72b0741831aa3848b7cd3b316a9b212e"
-          ),
-          G1Element(
-            hex"a448203b1608d867e70495370371742053ca4572e033b9cc2713a000d37fd6389205d2cd11c9bc2dc8e524ea9896c8a6"
-          ),
-          G1Element(
-            hex"869ec09853df4d8dae8515fed9a9a444e32c1b4159f15b98b76fa4067ed2dbad6bfff7da576d6140a445629b0042fabc"
-          ),
-          G1Element(
-            hex"90db92b89f9db8996a93616d48f7822dda162e50df0ca41a26045f8d4eee5523fea0d84738f7dbb65c0af76a8c0a2c1d"
-          ),
-          G1Element(
-            hex"b9520f7a0fe0b96482db4328a3b79d6cb4cb74b1099af35eeb5288d15ef3593aac3f1a5da0d39805473f89f83b149479"
-          ),
-          G1Element(
-            hex"9621df24094008cf78facc67f829e834af6a9662ccea6ad87f750e65f95d7d80e0d3244957d4816d78a2b75c16e561e9"
-          ),
-          G1Element(
-            hex"963e17c933edf5903bbd6ba9d24e9c64672f62977db71ec14bb64400431e56f25913551bac8ad4ccef5f758626861981"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"911caff04695617a347f9aa51282e65e2b86e4e3ea81ebe0c89a03975b816241d5224d14916b8cf69a45c213abebfa680d072bb7709a30efb7b355e4702d596bc1ed1186393a283b07c8c2c30aaa3bc118380fea034a9a82fe9bb9dd3bda3b0d"
-        )
+        val crsG1 = CRS.g1.take(41)
+        val accumulator =
+            g2"911caff04695617a347f9aa51282e65e2b86e4e3ea81ebe0c89a03975b816241d5224d14916b8cf69a45c213abebfa680d072bb7709a30efb7b355e4702d596bc1ed1186393a283b07c8c2c30aaa3bc118380fea034a9a82fe9bb9dd3bda3b0d"
 
         val subset = List(
           BigInt("25551707905743716401203158265865935720537152466646858214240599715216"),
@@ -1021,158 +429,16 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("292691239610007422467085209297314071477219421149740641805762970135")
         )
 
-        val proof = G2Element(
-          hex"b317bcc30969c7b11eca341786af3b91e80e40895d74c24f171014dd29a1b8d91208d4344f02c36d27abb14d2a2a40b7029d07900e6e07a7396ea7f29f6ceae04fa3e0cf6688408d31154ae32e66d6ba53b278acf7989122862c2846f4e5f1f5"
-        )
+        val proof =
+            g2"b317bcc30969c7b11eca341786af3b91e80e40895d74c24f171014dd29a1b8d91208d4344f02c36d27abb14d2a2a40b7029d07900e6e07a7396ea7f29f6ceae04fa3e0cf6688408d31154ae32e66d6ba53b278acf7989122862c2846f4e5f1f5"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership forty five elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          ),
-          G1Element(
-            hex"829a601a644878b0ac6d06ed7f000c163200909eedbbd32a956485b3c7ae398877c6a3625de36cb44a7e3b1b9f63234d"
-          ),
-          G1Element(
-            hex"8245ceb0cb176dfae3ef880a936cc8afc5772dc79ade0e25d08aef0ea067c1d355732658daf6e72646c459fafc48f567"
-          ),
-          G1Element(
-            hex"96903ac25c513f9559a3769678b84169b02ae04706a5f47440995b41c6350dcf18f3f26db06a16184f1b7cba70cb9cca"
-          ),
-          G1Element(
-            hex"ae095cae1961131f64ea7fc962c9f2a6c1891d6d26c9e7f6d59d8c93aded2e4acdb6290361d2d99bef5f2de4fc9cabc7"
-          ),
-          G1Element(
-            hex"92e4f628c663ac0e56057cf0758d7b588994f068ebb2d6c371a2b1dde93a3cb59f15725c5a8eb2629b56aa8f5a063c5b"
-          ),
-          G1Element(
-            hex"8561e4f4b1ae08a470a781debdd1bcf99ff03f05030b74519dd7c38744d20d7304e8444af273bfa34bfaa26a1f878541"
-          ),
-          G1Element(
-            hex"8cb1cdd886e892bc4a094f776962f237f6d7b7b2c311f54ab76c6c951632bfb7dc31289c1600957c672c98e9383d07fc"
-          ),
-          G1Element(
-            hex"99ddfd8ee22ab516c6aaaf35eda5c19c942316e37e29ee0baa9b2262bb37d98974b45cd461c811d0ae5a401c0b91a484"
-          ),
-          G1Element(
-            hex"ab43e5a08c84ce1808c76f46a2ff2d8bcdd8e87f6ebc40854085b10e73745f30e08ced2ed813428ea20818e5a5381138"
-          ),
-          G1Element(
-            hex"8a07fdfc5041e47cdb84657c00110e4fed3c695a72c87f290457a8b3fd47052b22d043e64cdbe250cef9d6d37cbe4456"
-          ),
-          G1Element(
-            hex"a6c146801a20d0d7250ebec4b555ca8907eb5397bbf0b0871c39e0f4f411bd5f5a9cc4fcfe3c5d8a8c8b64e3a93514f9"
-          ),
-          G1Element(
-            hex"b050cba2b8f63114289db8cacb7133b36bba5b21e42528be715f98cf0dd6504741de291b44d42c4368255ffb63ab4bf9"
-          ),
-          G1Element(
-            hex"a8664a1c55f4d7aebe62f2c043bdb9dd0c9a20725c1dfe8f67824d54f7a2b61af2a8639335c2345abf6cc3f79ddf3718"
-          ),
-          G1Element(
-            hex"af431ea59e116b70109f7adb4d260f1d05d72973fca24081df4093ad3307867c45fa9f312ab464fa5f2f0c59683c7dad"
-          ),
-          G1Element(
-            hex"82074b5d969dcc1e852e5100888330f79ae4455eb4520f28bd8321a8869325adf3f527a1e170a2062e459c8b4a81679c"
-          ),
-          G1Element(
-            hex"b2d1200ac058abe7e08c0efaec3ef93daaddbff2bc3ceae4c40e6ff26858791e5a050f410d33f208bd74367229216e9f"
-          ),
-          G1Element(
-            hex"aac124c5e0bc9701cb4e51bdaaae57b82af6fb53319cb458c55bb8fffa7315306f19d0e3347baef113f0926c9a86b067"
-          ),
-          G1Element(
-            hex"846eb53ac2a1ff34c7b4a2e2453e9b6f7f521f4c669dd9536ffef3e74ab04a5215214b51903a514b9789d72537487654"
-          ),
-          G1Element(
-            hex"98ca0a62a24f81a87e618769076f9b991a9659b1a2d7d66bb54adbca9317ac15a8ce20a4ccd056257854b0715f549f26"
-          ),
-          G1Element(
-            hex"838bc31ab11d34711236106c83e68362c86610e1631a8f8b940ba63fd18ca343a4fa3f9d2f0f9ed8309efd798e536f93"
-          ),
-          G1Element(
-            hex"844bf8551e3e4fc0174889355f556bfa5eecc083faebd1262744ad2c224e7f8720134b341c8ea4d534076bb1ef4c5f42"
-          ),
-          G1Element(
-            hex"a343e4dc3629e8a58dbd1dd5bf1408efc78f9586b0d2ce0bbc8e6716daf4b9551f780ad958eba75ed3609122b9c8a9d9"
-          ),
-          G1Element(
-            hex"8292754b0f7b4c9481e6b84adfec08e10e47d8146cf037e0c08aa290fc0ae5f631b32e5764862af793103337ef46e171"
-          ),
-          G1Element(
-            hex"9773cb0a95ed7062f51a300e544d94e6d13430ce97583ddc195192b85beb0929ccc8917fb784e3aafd9da038378e83ca"
-          ),
-          G1Element(
-            hex"98b61b0cdfd840df81766f02855f8a3fc31e119514b207557c497416b3fb7061895285ac2b3214ba75e37df7d4ae8ee0"
-          ),
-          G1Element(
-            hex"965d47f577fb917dd4ba73ada45c467bf0d3759854b2a042dcfe10805ec83e3ca228577e3732c180f204c72f24da1ddd"
-          ),
-          G1Element(
-            hex"a3b02b9d84224715df79bd79790311eed63e602e4463b93e512ad6988ff0212688e09f8d538e1de1a282b8d2c309636b"
-          ),
-          G1Element(
-            hex"a9e8ae006488eef524a005e21281fd27098b2c0e37777d075333909aa11d92e53923e321622ce35f9f475d5dd8d10cfe"
-          ),
-          G1Element(
-            hex"87b94efe473f152ea7eb80c2da9e261cd48b65dc43e0eb4b0bf881b609dd25da72b0741831aa3848b7cd3b316a9b212e"
-          ),
-          G1Element(
-            hex"a448203b1608d867e70495370371742053ca4572e033b9cc2713a000d37fd6389205d2cd11c9bc2dc8e524ea9896c8a6"
-          ),
-          G1Element(
-            hex"869ec09853df4d8dae8515fed9a9a444e32c1b4159f15b98b76fa4067ed2dbad6bfff7da576d6140a445629b0042fabc"
-          ),
-          G1Element(
-            hex"90db92b89f9db8996a93616d48f7822dda162e50df0ca41a26045f8d4eee5523fea0d84738f7dbb65c0af76a8c0a2c1d"
-          ),
-          G1Element(
-            hex"b9520f7a0fe0b96482db4328a3b79d6cb4cb74b1099af35eeb5288d15ef3593aac3f1a5da0d39805473f89f83b149479"
-          ),
-          G1Element(
-            hex"9621df24094008cf78facc67f829e834af6a9662ccea6ad87f750e65f95d7d80e0d3244957d4816d78a2b75c16e561e9"
-          ),
-          G1Element(
-            hex"963e17c933edf5903bbd6ba9d24e9c64672f62977db71ec14bb64400431e56f25913551bac8ad4ccef5f758626861981"
-          ),
-          G1Element(
-            hex"b12eb811f95db9ac60a06c118047e592f45614fd8fa360b6665692efce1983a49b757a9c18379842ca2227f9591d21b9"
-          ),
-          G1Element(
-            hex"9691b858faa5bf01ab18ea29fa81a3f0e91ba03e373d79090ca84f2354e8324260184837b15aefc41172207107305354"
-          ),
-          G1Element(
-            hex"8782c0a93ad461e6a970bdba4faf451a48de7d9d2aa532eb8a76cf666db7b2729bcc88f5e445026ef0f77034e080cf72"
-          ),
-          G1Element(
-            hex"8ceb289ef58efab33a167ffdd1f687689ccdb8cd7dfac5c17692d7329e4aeca2a2961647e4de2c2a12ab7cd8504540db"
-          ),
-          G1Element(
-            hex"b9eb8e0d7f5b90033456f26b8b486da17d10cb724397e5c06a3276d33fc196b31d887de337f1b7ed0539eed360d229bf"
-          )
-        )
-
-        val accumulator = G2Element(
-          hex"b185fcaa4d0b2b3b7c250aeac3a98bf7d967600058f7ec96fc06f4b8caeee37051f1c5fa5c09106d56fd9a9c5970bae01898b5bfb9a661e1f9f1544bcd29bce20be499fc091e502ce38057780a0455e8bbc5b2b9ed0e9130d7b5c3edfaaf1a04"
-        )
+        val crsG1 = CRS.g1
+        val accumulator =
+            g2"b185fcaa4d0b2b3b7c250aeac3a98bf7d967600058f7ec96fc06f4b8caeee37051f1c5fa5c09106d56fd9a9c5970bae01898b5bfb9a661e1f9f1544bcd29bce20be499fc091e502ce38057780a0455e8bbc5b2b9ed0e9130d7b5c3edfaaf1a04"
 
         val subset = List(
           BigInt("11413806816543515413261885955626304746962545259869908284006978514041"),
@@ -1222,200 +488,89 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
           BigInt("15414948375613490854553976578984648433126684982971588684191685446556")
         )
 
-        val proof = G2Element(
-          hex"b0c2ead18e582d3b4a39e06afaf32615d356215c4d80743920adbaefddf7bef00c3507e78743d43a600c9eac833fdf470c75456a845da33996237866b3e274c70650bcfb85270ca415f64123f6da13eaed668e9b0f51b45617fc5833d0337475"
-        )
+        val proof =
+            g2"b0c2ead18e582d3b4a39e06afaf32615d356215c4d80743920adbaefddf7bef00c3507e78743d43a600c9eac833fdf470c75456a845da33996237866b3e274c70650bcfb85270ca415f64123f6da13eaed668e9b0f51b45617fc5833d0337475"
 
         assert(checkMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check non membership one elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          )
-        )
-
-        val g2 = G2Element(
-          hex"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
-        )
-
-        val accumulator = G2Element(
-          hex"a82b83da0a22649c8228cb7fa581813f6b110ab422e4876d57cb074c952ef95efe5c929a8c6c0a87c33c47d58797f65e06a024473d2271d7205d0b5bd85ce2b6ed152150a1575f5b18d60e3e01762ea1d18374cceac551c622bac144f85f66e4"
-        )
+        val crsG1 = CRS.g1.take(2)
+        val crsG2 = CRS.g2
+        val accumulator =
+            g2"a82b83da0a22649c8228cb7fa581813f6b110ab422e4876d57cb074c952ef95efe5c929a8c6c0a87c33c47d58797f65e06a024473d2271d7205d0b5bd85ce2b6ed152150a1575f5b18d60e3e01762ea1d18374cceac551c622bac144f85f66e4"
 
         val disjointSet = List(BigInt("55"))
 
         val proof = (
-          G1Element(
-            hex"89f56e5654cfc32a30085d18f4c1a64bdf397b80369ce0b27d98f1431a82a1f625cb2595c737dd0885ddbe8ea0839458"
-          ),
-          G2Element(
-            hex"87fa45b2f91ceb469308014c86941e1ab4112cd3658544b828e89d5254d0e396148543add5966146b8b39dafe321ba0705a311ed9d4209807339759a53aa2a8367820c41ee009a5a94707f7ea30e516aac804fa314d9854af83f1c73f0f64650"
-          )
+          g1"89f56e5654cfc32a30085d18f4c1a64bdf397b80369ce0b27d98f1431a82a1f625cb2595c737dd0885ddbe8ea0839458",
+          g2"87fa45b2f91ceb469308014c86941e1ab4112cd3658544b828e89d5254d0e396148543add5966146b8b39dafe321ba0705a311ed9d4209807339759a53aa2a8367820c41ee009a5a94707f7ea30e516aac804fa314d9854af83f1c73f0f64650"
         )
 
-        assert(checkNonMembership(crsG1, g2, accumulator, disjointSet, proof))
+        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("check non membership two elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          )
-        )
-
-        val g2 = G2Element(
-          hex"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
-        )
-
-        val accumulator = G2Element(
-          hex"a4f0f0c53862bd3390f2b8f884b254c9f3054a7532008f30de6503be1d1ffb80cd8a84a72117d84d6c228ef57fa822b2103af464d82f78776c5082a4eab445c508109a9e9f42d179a4eb1d63cac1eff08f2572757a29dc6efc2725c43135aa93"
-        )
+        val crsG1 = CRS.g1.take(3)
+        val crsG2 = CRS.g2
+        val accumulator =
+            g2"a4f0f0c53862bd3390f2b8f884b254c9f3054a7532008f30de6503be1d1ffb80cd8a84a72117d84d6c228ef57fa822b2103af464d82f78776c5082a4eab445c508109a9e9f42d179a4eb1d63cac1eff08f2572757a29dc6efc2725c43135aa93"
 
         val disjointSet = List(BigInt("55"), BigInt("55"))
 
         val proof = (
-          G1Element(
-            hex"860abee963d950790d6da1c191cc9d7b1134e7c1d018e8e79e251526775ffb7d55d81aee599fc884da0268a59d15c4c4"
-          ),
-          G2Element(
-            hex"acf2c27242993f12c33fff772327a67c96af3828a27f41c3b6fdbabd3388702efc2523b6d9a46042e1127d8a8d2151f90304a0ea5f6a8fd5fad8f10e0a8e9ab56d431ac8344e0156bef41a21a1465e694db521effdce193d40c65aadc2967b62"
-          )
+          g1"860abee963d950790d6da1c191cc9d7b1134e7c1d018e8e79e251526775ffb7d55d81aee599fc884da0268a59d15c4c4",
+          g2"acf2c27242993f12c33fff772327a67c96af3828a27f41c3b6fdbabd3388702efc2523b6d9a46042e1127d8a8d2151f90304a0ea5f6a8fd5fad8f10e0a8e9ab56d431ac8344e0156bef41a21a1465e694db521effdce193d40c65aadc2967b62"
         )
 
-        assert(checkNonMembership(crsG1, g2, accumulator, disjointSet, proof))
+        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("check non membership three elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          )
-        )
-
-        val g2 = G2Element(
-          hex"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
-        )
-
-        val accumulator = G2Element(
-          hex"909b52c4c6c3c7f052524a9f6b5d72d6358159ad6ee7bb4fc083c03305abbc35b89685b14a0c6c531c262ce69b583ca90e0c20e66ae74a079828a446cb9ebc0644901ed5886fdb495628d22a7866bd98061381707f543bdd5b4004d2e977d541"
-        )
+        val crsG1 = CRS.g1.take(4)
+        val crsG2 = CRS.g2
+        val accumulator =
+            g2"909b52c4c6c3c7f052524a9f6b5d72d6358159ad6ee7bb4fc083c03305abbc35b89685b14a0c6c531c262ce69b583ca90e0c20e66ae74a079828a446cb9ebc0644901ed5886fdb495628d22a7866bd98061381707f543bdd5b4004d2e977d541"
 
         val disjointSet = List(BigInt("55"), BigInt("55"), BigInt("55"))
 
         val proof = (
-          G1Element(
-            hex"8b4a020d04fd9a2fd3effb0a63c914d8b14b7e28574549511c621e5166d39093433601bd06de7b165044b20329b00276"
-          ),
-          G2Element(
-            hex"8f7982b01230da7b7dfe9019b0878068ef6187b7cf4cb44fabf4a658f73ac809adf0a4f0ca2c73a87f498e3122e95c8701b0f43892d5d7b2cd947c1d0c0350126957e358505dbaf268306f2a550483e2ae98a2216c38025cf6d0f1accbb16b46"
-          )
+          g1"8b4a020d04fd9a2fd3effb0a63c914d8b14b7e28574549511c621e5166d39093433601bd06de7b165044b20329b00276",
+          g2"8f7982b01230da7b7dfe9019b0878068ef6187b7cf4cb44fabf4a658f73ac809adf0a4f0ca2c73a87f498e3122e95c8701b0f43892d5d7b2cd947c1d0c0350126957e358505dbaf268306f2a550483e2ae98a2216c38025cf6d0f1accbb16b46"
         )
 
-        assert(checkNonMembership(crsG1, g2, accumulator, disjointSet, proof))
+        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("check non membership four elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          )
-        )
-
-        val g2 = G2Element(
-          hex"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
-        )
-
-        val accumulator = G2Element(
-          hex"99a8eac96b495c6df605765ac8cfd05d44a826b4d9f391cda609b14190b7ba7635e210551e36e2268384666a55d8c22d19d435dd6e391e5bdef4cd859b48305542f0c97a4442b5e40b924df488aad64f353ce362e1f77ab4fa3556e4b8d54118"
-        )
+        val crsG1 = CRS.g1.take(5)
+        val crsG2 = CRS.g2
+        val accumulator =
+            g2"99a8eac96b495c6df605765ac8cfd05d44a826b4d9f391cda609b14190b7ba7635e210551e36e2268384666a55d8c22d19d435dd6e391e5bdef4cd859b48305542f0c97a4442b5e40b924df488aad64f353ce362e1f77ab4fa3556e4b8d54118"
 
         val disjointSet = List(BigInt("55"), BigInt("55"), BigInt("55"), BigInt("55"))
 
         val proof = (
-          G1Element(
-            hex"941315a6bb4be44d1bde7afb9060f78553cb4862b67d39ab9df6df0d0887c9fb4a5becf08d04c68ea55f0309adf699ed"
-          ),
-          G2Element(
-            hex"93916f6abfd7b9ce4874e44907eaed9b93010ab749c777bfb872a42996feae0b932921b6eecf839ac269ca66c4d8431b01cca9ff34dde2b15c71be4b8a09972e88d1b5663577556b2f1737193476568b4ab661daa67ac749bd1f34ee8738f6a9"
-          )
+          g1"941315a6bb4be44d1bde7afb9060f78553cb4862b67d39ab9df6df0d0887c9fb4a5becf08d04c68ea55f0309adf699ed",
+          g2"93916f6abfd7b9ce4874e44907eaed9b93010ab749c777bfb872a42996feae0b932921b6eecf839ac269ca66c4d8431b01cca9ff34dde2b15c71be4b8a09972e88d1b5663577556b2f1737193476568b4ab661daa67ac749bd1f34ee8738f6a9"
         )
 
-        assert(checkNonMembership(crsG1, g2, accumulator, disjointSet, proof))
+        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("check non membership five elements") {
-        val crsG1 = List(
-          G1Element(
-            hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb"
-          ),
-          G1Element(
-            hex"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc"
-          ),
-          G1Element(
-            hex"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269"
-          ),
-          G1Element(
-            hex"82681717d96c5d63a931c4ee8447ca0201c5951f516a876e78dcbc1689b9c4cf57a00a61c6fd0d92361a4b723c307e2d"
-          ),
-          G1Element(
-            hex"adb357468d28f2c222024e3745e6197336f10de2e53ee2376bc79e2f0f2313e4509e7512b221d6050364d1df338d1f06"
-          ),
-          G1Element(
-            hex"a91d6c2d1007eb2def5f8657f831167a98e5969c8f14b628e0ddbab7cfc53601c81df6e969aca7061344d5e8323ad90d"
-          )
-        )
-
-        val g2 = G2Element(
-          hex"93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8"
-        )
-
-        val accumulator = G2Element(
-          hex"a4e24a3741d3f6d22d62e896d80d5eaaaf6820109c868903377de1a75268c7b3e6d08aa4dab2d3d81ebac22b05f054b00005885c9f4516ca78c33bf158e401d44acc363eba20ab2b6c6c5125e7c50914d1497321f217ef125782ad43c2ef93f0"
-        )
+        val crsG1 = CRS.g1.take(6)
+        val crsG2 = CRS.g2
+        val accumulator =
+            g2"a4e24a3741d3f6d22d62e896d80d5eaaaf6820109c868903377de1a75268c7b3e6d08aa4dab2d3d81ebac22b05f054b00005885c9f4516ca78c33bf158e401d44acc363eba20ab2b6c6c5125e7c50914d1497321f217ef125782ad43c2ef93f0"
 
         val disjointSet = List(BigInt("55"), BigInt("55"), BigInt("55"), BigInt("55"), BigInt("55"))
 
         val proof = (
-          G1Element(
-            hex"800c702b3ff19f393b705dec27b6a728576c7358a4295e545156b26358d2a9cf27b8ef7ab8335ea535aaa8d2d53e0724"
-          ),
-          G2Element(
-            hex"b421e762c8ea34b4725f78adb88acf34812661291a16b76fb705aa7407318e3d50bb0717c0daf104180c60e1bbede6471727bd91ccdf90db30ba1e67abaf27f9043bee44293f41e909dd327d0582484e5b0db8c05b597f8c4792894fb5ff7b31"
-          )
+          g1"800c702b3ff19f393b705dec27b6a728576c7358a4295e545156b26358d2a9cf27b8ef7ab8335ea535aaa8d2d53e0724",
+          g2"b421e762c8ea34b4725f78adb88acf34812661291a16b76fb705aa7407318e3d50bb0717c0daf104180c60e1bbede6471727bd91ccdf90db30ba1e67abaf27f9043bee44293f41e909dd327d0582484e5b0db8c05b597f8c4792894fb5ff7b31"
         )
 
-        assert(checkNonMembership(crsG1, g2, accumulator, disjointSet, proof))
+        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 }
