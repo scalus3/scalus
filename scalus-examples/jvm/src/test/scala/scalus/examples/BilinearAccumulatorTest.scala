@@ -1,12 +1,15 @@
 package scalus
 package examples
 
-import scalus.examples.BilinearAccumulator.checkMembership
-import scalus.examples.BilinearAccumulator.checkNonMembership
-import scalus.examples.BilinearAccumulator.getFinalPoly
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
-import scalus.testing.kit.BaseValidatorTest
+import scalus.examples.BilinearAccumulator.{checkMembership, checkNonMembership, getFinalPoly}
+import scalus.testing.kit.EvalTestKit
+import scalus.uplc.{PlutusV3, UplcCli}
+import scalus.uplc.Term.asTerm
+import scalus.uplc.builtin.BLS12_381_G1_Element
 import scalus.uplc.builtin.BLS12_381_G1_Element.g1
 import scalus.uplc.builtin.BLS12_381_G2_Element.g2
 
@@ -15,8 +18,9 @@ import scala.language.implicitConversions
 /** Powers of tau CRS for BLS12-381 bilinear accumulator tests */
 @Compile
 object CRS {
+
     /** G1 powers of tau: [g1, tau*g1, tau^2*g1, ...] */
-    val g1 = List(
+    val powersOfTau: List[BLS12_381_G1_Element] = List(
       g1"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
       g1"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc",
       g1"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269",
@@ -69,7 +73,7 @@ object CRS {
     val g2 = G2.generator
 }
 
-class BilinearAccumulatorTest extends BaseValidatorTest {
+class BilinearAccumulatorTest extends AnyFunSuite, EvalTestKit {
 
     test("get final poly") {
         assert(getFinalPoly(List(2, 3)) == List(BigInt(6), 5, 1))
@@ -80,20 +84,28 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership one element") {
-        val crsG1 = CRS.g1.take(2)
-        val accumulator =
-            g2"b0f15b32629d02514af939e5b660d27a4db9f84cde5eecfef7db87c056163a9f21925653519cf9972f4b6c115e195baf1439203af99d121fce39ec8eed3fa72a0a31dd537642ab7cb1da52dfbacab1a032c5579aa702a59f1991e9aefae1d9c5"
+        val compiled = PlutusV3.compile:
+            val crsG1 = CRS.powersOfTau.take(2)
+            val accumulator =
+                g2"b0f15b32629d02514af939e5b660d27a4db9f84cde5eecfef7db87c056163a9f21925653519cf9972f4b6c115e195baf1439203af99d121fce39ec8eed3fa72a0a31dd537642ab7cb1da52dfbacab1a032c5579aa702a59f1991e9aefae1d9c5"
 
-        val subset =
-            List(BigInt("22401154959170154123134540742828377934364533580409315286338474307961"))
-        val proof =
-            g2"809875352e4cd02184ecd07429198ca87364ca0c4bf895482fb8364662bce1945d33c599b47b7d2b34724f45fa17fab8141afa380d192a9134d7f1238e17475af8f6c862c1eecf9666bb5e00b17461ad33112ef2f8dd9580c178b36300cb6dd8"
+            val subset =
+                List(
+                  BigInt("22401154959170154123134540742828377934364533580409315286338474307961")
+                )
+            val proof =
+                g2"809875352e4cd02184ecd07429198ca87364ca0c4bf895482fb8364662bce1945d33c599b47b7d2b34724f45fa17fab8141afa380d192a9134d7f1238e17475af8f6c862c1eecf9666bb5e00b17461ad33112ef2f8dd9580c178b36300cb6dd8"
 
-        assert(checkMembership(crsG1, accumulator, subset, proof))
+            checkMembership(crsG1, accumulator, subset, proof)
+
+        assert(compiled.code)
+        val result = compiled.program.term.evaluateDebug
+        assert(result.success.term α_== true.asTerm)
+        assert(result.budget == ExUnits(218730, 4246_939672L))
     }
 
     test("check membership two elements") {
-        val crsG1 = CRS.g1.take(3)
+        val crsG1 = CRS.powersOfTau.take(3)
         val accumulator =
             g2"a9eaead40c09f1ebe1f91eae20828f43b91963058c7612697a97debd6112597dd48dda9760803579434953d5b0938d4819aa1cb23988d7b3ea0a4c71d64c7b4f2b2cf64641f3e7dbadb013b80ef561d3e46b0838b297c64867f173012913fc11"
 
@@ -109,7 +121,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership three elements") {
-        val crsG1 = CRS.g1.take(4)
+        val crsG1 = CRS.powersOfTau.take(4)
         val accumulator =
             g2"9193c1887649287b712c2451975fddc7a5ff4902c1f6f267a45887fee49aff92d937e848c3620c52184b6439caa564210b1cf99a76d7566f1525c0dfce4164fcd0c627768c8d9c04bbddd23ab448cfa2c22587ebaf1a4832780e8e2d85b35832"
 
@@ -126,7 +138,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership four elements") {
-        val crsG1 = CRS.g1.take(5)
+        val crsG1 = CRS.powersOfTau.take(5)
         val accumulator =
             g2"b43d6e4464ae4a2744639e0075623be40d29ac1c7179d70b568b4f73316565428796dc6d9868f7a1ea72c41fa398e34a0525e4d473e685c4927fae0674dd2e55816df2910fedcf150f32ed59f9e9cc3c854072720bad5e051f617fb19e084dd9"
 
@@ -144,7 +156,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership five elements") {
-        val crsG1 = CRS.g1.take(6)
+        val crsG1 = CRS.powersOfTau.take(6)
         val accumulator =
             g2"a3f377ea89593955979c4de08eae3cb54512bd59ce0b554728f04eb4f951fb4f71e70a20186c50d67c5f20c330e10bf1075332abf365691521f25bc4d17e2a2ad3beea0534391648e38e90fc61c396494fab230efa10bd56e65448f1accb5bf0"
 
@@ -163,7 +175,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership ten elements") {
-        val crsG1 = CRS.g1.take(11)
+        val crsG1 = CRS.powersOfTau.take(11)
         val accumulator =
             g2"a55c73393a7d26cd7bbe60216f6b0278f7410a36abdd1fe3f43906892da183a853070e0311424f1b2290388cc76a58b10d2325e63279a8f7c65bd7e6114a86845d978bbc6aef85058d58bd54812830b4a6beb5513c0db5ff692c0f206b7947de"
 
@@ -187,7 +199,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership fifteen elements") {
-        val crsG1 = CRS.g1.take(16)
+        val crsG1 = CRS.powersOfTau.take(16)
         val accumulator =
             g2"a5a42c8a5544f438a71bf27a5f385493da8bf8f31487dc84c0666a3e80bc4cade54e15677550d6c9ddb3d29dee0e7957031da4e72ba4ed126aff42fc1d0a74413f8df3b2c6da45741881f002782aa5975d6a2f10b0a074d17933af0869f368b0"
 
@@ -216,7 +228,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership twenty elements") {
-        val crsG1 = CRS.g1.take(21)
+        val crsG1 = CRS.powersOfTau.take(21)
         val accumulator =
             g2"aacaf4a4b069f384d8f35e346ada73799d2a685b6a33fe31c1f63e81d5fa4909544e34d8ab86f54303619eb24b0cd73516f1ae002d94a54a50b7fae3b299a5199713042427fa30c9804492b08363627189a3da10c8fc5b42e01e5ef87458a18d"
 
@@ -250,7 +262,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership twenty five elements") {
-        val crsG1 = CRS.g1.take(26)
+        val crsG1 = CRS.powersOfTau.take(26)
         val accumulator =
             g2"b2fccbc5938919e7193a3e0869df720c07048459dd873fd4cd0758f59900df48c0b2ca52bf0a7d9fc2f8faf6fa602d271309b138e7c6e548467042ba560061bc533584822f2ed4cd300e994adeaab919fca4cd578aa966fc13467f69edb9519e"
 
@@ -289,7 +301,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership thirty elements") {
-        val crsG1 = CRS.g1.take(31)
+        val crsG1 = CRS.powersOfTau.take(31)
         val accumulator =
             g2"a1bfa33c81c4e7af7c032fb2641c8a0e7a046d9eff85c5ec03c7a4055e5aa733e5bfec6e25aa54a04e6cc271b878e660063420eeeed07ab0b2f2938c622b43505b5a83bb11810910d66fb4b328e1dc806dda8a367fec211376f6e4d1e547d5df"
 
@@ -333,7 +345,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership thirty five elements") {
-        val crsG1 = CRS.g1.take(36)
+        val crsG1 = CRS.powersOfTau.take(36)
         val accumulator =
             g2"a45b0e40af247fc52381af0fd89b1d749d4b0d305be5d7b2853e95b2f9108ed8fc3f020caf065bc6072cf0af96863b0c19cb652ff7095530d446420255cd0df08686c220f369d454974f2e2472357d172f36178005e8134e24a530d979d4b881"
 
@@ -382,7 +394,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership forty elements") {
-        val crsG1 = CRS.g1.take(41)
+        val crsG1 = CRS.powersOfTau.take(41)
         val accumulator =
             g2"911caff04695617a347f9aa51282e65e2b86e4e3ea81ebe0c89a03975b816241d5224d14916b8cf69a45c213abebfa680d072bb7709a30efb7b355e4702d596bc1ed1186393a283b07c8c2c30aaa3bc118380fea034a9a82fe9bb9dd3bda3b0d"
 
@@ -436,7 +448,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check membership forty five elements") {
-        val crsG1 = CRS.g1
+        val crsG1 = CRS.powersOfTau
         val accumulator =
             g2"b185fcaa4d0b2b3b7c250aeac3a98bf7d967600058f7ec96fc06f4b8caeee37051f1c5fa5c09106d56fd9a9c5970bae01898b5bfb9a661e1f9f1544bcd29bce20be499fc091e502ce38057780a0455e8bbc5b2b9ed0e9130d7b5c3edfaaf1a04"
 
@@ -495,7 +507,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check non membership one elements") {
-        val crsG1 = CRS.g1.take(2)
+        val crsG1 = CRS.powersOfTau.take(2)
         val crsG2 = CRS.g2
         val accumulator =
             g2"a82b83da0a22649c8228cb7fa581813f6b110ab422e4876d57cb074c952ef95efe5c929a8c6c0a87c33c47d58797f65e06a024473d2271d7205d0b5bd85ce2b6ed152150a1575f5b18d60e3e01762ea1d18374cceac551c622bac144f85f66e4"
@@ -511,7 +523,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check non membership two elements") {
-        val crsG1 = CRS.g1.take(3)
+        val crsG1 = CRS.powersOfTau.take(3)
         val crsG2 = CRS.g2
         val accumulator =
             g2"a4f0f0c53862bd3390f2b8f884b254c9f3054a7532008f30de6503be1d1ffb80cd8a84a72117d84d6c228ef57fa822b2103af464d82f78776c5082a4eab445c508109a9e9f42d179a4eb1d63cac1eff08f2572757a29dc6efc2725c43135aa93"
@@ -527,7 +539,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check non membership three elements") {
-        val crsG1 = CRS.g1.take(4)
+        val crsG1 = CRS.powersOfTau.take(4)
         val crsG2 = CRS.g2
         val accumulator =
             g2"909b52c4c6c3c7f052524a9f6b5d72d6358159ad6ee7bb4fc083c03305abbc35b89685b14a0c6c531c262ce69b583ca90e0c20e66ae74a079828a446cb9ebc0644901ed5886fdb495628d22a7866bd98061381707f543bdd5b4004d2e977d541"
@@ -543,7 +555,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check non membership four elements") {
-        val crsG1 = CRS.g1.take(5)
+        val crsG1 = CRS.powersOfTau.take(5)
         val crsG2 = CRS.g2
         val accumulator =
             g2"99a8eac96b495c6df605765ac8cfd05d44a826b4d9f391cda609b14190b7ba7635e210551e36e2268384666a55d8c22d19d435dd6e391e5bdef4cd859b48305542f0c97a4442b5e40b924df488aad64f353ce362e1f77ab4fa3556e4b8d54118"
@@ -559,7 +571,7 @@ class BilinearAccumulatorTest extends BaseValidatorTest {
     }
 
     test("check non membership five elements") {
-        val crsG1 = CRS.g1.take(6)
+        val crsG1 = CRS.powersOfTau.take(6)
         val crsG2 = CRS.g2
         val accumulator =
             g2"a4e24a3741d3f6d22d62e896d80d5eaaaf6820109c868903377de1a75268c7b3e6d08aa4dab2d3d81ebac22b05f054b00005885c9f4516ca78c33bf158e401d44acc363eba20ab2b6c6c5125e7c50914d1497321f217ef125782ad43c2ef93f0"
