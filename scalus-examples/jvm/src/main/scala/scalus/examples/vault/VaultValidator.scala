@@ -9,7 +9,8 @@ import scalus.cardano.onchain.plutus.v1.{Credential, Interval, PosixTime, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.v1
-import scalus.cardano.onchain.plutus.prelude.{===, fail, require, Validator}
+import scalus.cardano.onchain.plutus.prelude.{===, fail, require}
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.*
 
 // Datum

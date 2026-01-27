@@ -7,7 +7,7 @@ import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
 import scalus.patterns.UtxoIndexer
-import scalus.cardano.onchain.plutus.prelude.Validator
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
 
 /** Example validator using the UTxO Indexer pattern. */

@@ -5,6 +5,7 @@ import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.{show as _, *}
 

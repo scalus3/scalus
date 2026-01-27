@@ -25,7 +25,8 @@ import scalus.cardano.onchain.plutus.v1.Value.+
 import scalus.cardano.onchain.plutus.v1.{PosixTime, Value}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
-import scalus.cardano.onchain.plutus.prelude.{!==, ===, fail, log, require, Eq, List, Option, SortedMap, Validator}
+import scalus.cardano.onchain.plutus.prelude.{!==, ===, fail, log, require, Eq, List, Option, SortedMap}
+import scalus.cardano.onchain.plutus.v3.Validator
 
 @Compile
 object DisputeResolutionValidator extends Validator:

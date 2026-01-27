@@ -7,6 +7,7 @@ import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.TransactionLevelMinterValidator
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
 
 @Compile

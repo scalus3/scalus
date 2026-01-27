@@ -11,6 +11,7 @@ import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.v2.Value.*
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
 import scalus.uplc.Program
 
 type DiffMilliSeconds = BigInt

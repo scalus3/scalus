@@ -2,7 +2,7 @@ package scalus.examples
 
 import scalus.*
 import scalus.uplc.builtin.Data
-import scalus.cardano.onchain.plutus.v3.{PubKeyHash, TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{PubKeyHash, TxInfo, TxOutRef, Validator}
 import scalus.cardano.onchain.plutus.prelude.*
 
 /** A simple validator that checks if the redeemer is "Hello, World!" and if the transaction is

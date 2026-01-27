@@ -16,6 +16,7 @@ import scalus.cardano.onchain.plutus.v1.Value.+
 import scalus.cardano.onchain.plutus.v1.{PosixTime, Value}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.cardano.onchain.plutus.prelude.List.Nil
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1

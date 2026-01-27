@@ -6,6 +6,7 @@ import scalus.*
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 
 @Compile
 object SumDatumValidator extends Validator:

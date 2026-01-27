@@ -10,6 +10,7 @@ import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
 import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.{show as _, *}
 
 // Datum

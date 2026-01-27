@@ -8,6 +8,7 @@ import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
 
 case class ReferenceNftParam(seed: TxOutRef) derives FromData, ToData
 

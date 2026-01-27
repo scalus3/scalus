@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
 import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2
-import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.prelude.*
 
 // Parameter

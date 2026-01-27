@@ -6,7 +6,7 @@ import scalus.cardano.onchain.plutus.v1
 import scalus.cardano.onchain.plutus.v1.Value.*
 import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.TxOut
-import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, *}
 import scalus.cardano.onchain.plutus.prelude.List.*
 import scalus.cardano.onchain.plutus.prelude.Option.*

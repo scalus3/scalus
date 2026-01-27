@@ -9,6 +9,7 @@ import scalus.compiler.sir.{SIR, TargetLoweringBackend}
 import scalus.compiler.compile
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.*
 
 @Compile

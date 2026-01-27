@@ -9,6 +9,7 @@ import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.OrderedLinkedList.*
 import scalus.patterns.{Config, Cons}
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
 import scalus.uplc.PlutusV3
 import scalus.utils.Hex.toHex
 import scalus.{show as _, *}

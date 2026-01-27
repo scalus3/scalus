@@ -8,6 +8,7 @@ import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.MerkelizedValidator
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
 import scalus.uplc.PlutusV3
 
 /** Batch Auction Example - demonstrates when MerkelizedValidator is useful.

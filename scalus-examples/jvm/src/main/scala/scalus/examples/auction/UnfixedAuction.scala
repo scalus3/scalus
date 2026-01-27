@@ -6,6 +6,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.{Datum as _, *}
 import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.v3.Validator
 
 /** VULNERABLE Auction Validator - DO NOT USE IN PRODUCTION
   *
