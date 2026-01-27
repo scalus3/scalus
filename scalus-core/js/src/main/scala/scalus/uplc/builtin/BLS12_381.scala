@@ -71,9 +71,6 @@ object BLS12_381_G1_Element extends BLS12_381_G1_ElementOffchainApi:
         )
     }
 
-    val zero: BLS12_381_G1_Element =
-        BLS12_381_G1_Element.fromCompressedByteString(PlatformSpecific.bls12_381_G1_compressed_zero)
-
 class BLS12_381_G2_Element(private[builtin] val point: BLS.G2.Point):
     def toCompressedByteString: ByteString = point.toRawBytes().toByteString
 
@@ -136,9 +133,6 @@ object BLS12_381_G2_Element extends BLS12_381_G2_ElementOffchainApi:
               .hashToGroup(byteString.toUint8Array, BLS.HtfBasicOpts(dst.toUint8Array))
         )
     }
-
-    val zero: BLS12_381_G2_Element =
-        BLS12_381_G2_Element.fromCompressedByteString(PlatformSpecific.bls12_381_G2_compressed_zero)
 
 class BLS12_381_MlResult(private val gt: BLS.GT):
     @targetName("multiply")
