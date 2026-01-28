@@ -2,9 +2,9 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.{Arbitrary, Gen}
+import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import scalus.uplc.builtin.platform
-import org.scalatest.funsuite.AnyFunSuite
 
 class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("FeesOkValidator rule success") {

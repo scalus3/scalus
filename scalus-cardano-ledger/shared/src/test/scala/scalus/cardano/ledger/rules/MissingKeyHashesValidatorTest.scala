@@ -2,9 +2,10 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.Arbitrary
-import scalus.uplc.builtin.platform
-import scalus.cardano.address.{StakeAddress, StakePayload}
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.{StakeAddress, StakePayload}
+import scalus.uplc.builtin.platform
+
 import scala.collection.immutable.SortedMap
 
 class MissingKeyHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {

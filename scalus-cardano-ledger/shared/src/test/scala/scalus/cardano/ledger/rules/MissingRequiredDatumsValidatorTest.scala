@@ -3,8 +3,8 @@ package rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
+import scalus.uplc.builtin.Data
 import TransactionWitnessSet.given
 
 class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {

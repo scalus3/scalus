@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.RedeemerTag.Spend
+import scalus.uplc.builtin.Data
 
 class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("ExUnitsTooBigValidator success") {

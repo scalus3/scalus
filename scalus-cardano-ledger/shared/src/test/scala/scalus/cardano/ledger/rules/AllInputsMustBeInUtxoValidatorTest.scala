@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.Arbitrary
+import scalus.cardano.ledger.*
 import org.scalatest.funsuite.AnyFunSuite
 
 class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {

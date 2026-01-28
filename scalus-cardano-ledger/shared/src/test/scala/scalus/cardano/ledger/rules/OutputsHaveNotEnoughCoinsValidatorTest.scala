@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.Arbitrary
-import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 
 class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs success") {

@@ -3,8 +3,9 @@ package rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.*
 import scalus.uplc.builtin.Data
-import scalus.cardano.address.{Address, Network, ShelleyAddress, StakeAddress, StakePayload}
+
 import TransactionWitnessSet.given
 import scala.collection.immutable.SortedMap
 

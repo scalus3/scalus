@@ -22,10 +22,6 @@ import scalus.compiler.Options
 import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
-import org.bouncycastle.crypto.AsymmetricCipherKeyPair
-import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
-import org.bouncycastle.crypto.params.{Ed25519KeyGenerationParameters, Ed25519PrivateKeyParameters, Ed25519PublicKeyParameters}
-import java.security.SecureRandom
 
 @deprecated("Use TestUtil instead", "0.14.2")
 object Mock:
@@ -240,22 +236,8 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
             )
     }
 
-    protected def generateKeyPair(): (ByteString, ByteString) = {
-        val asymmetricCipherKeyPair: AsymmetricCipherKeyPair = keyPairGenerator.generateKeyPair()
-        val privateKeyParams: Ed25519PrivateKeyParameters =
-            asymmetricCipherKeyPair.getPrivate.asInstanceOf[Ed25519PrivateKeyParameters]
-        val publicKeyParams: Ed25519PublicKeyParameters =
-            asymmetricCipherKeyPair.getPublic.asInstanceOf[Ed25519PublicKeyParameters]
-        val privateKey: ByteString = ByteString.fromArray(privateKeyParams.getEncoded)
-        val publicKey: ByteString = ByteString.fromArray(publicKeyParams.getEncoded)
-        (privateKey, publicKey)
-    }
-
-    private val keyPairGenerator = {
-        val keyPairGenerator = new Ed25519KeyPairGenerator()
-        keyPairGenerator.init(new Ed25519KeyGenerationParameters(new SecureRandom()))
-        keyPairGenerator
-    }
+    protected def generateKeyPair(): (ByteString, ByteString) =
+        KeyPairGenerator.generateKeyPair()
 }
 
 object ScalusTest {

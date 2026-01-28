@@ -4,6 +4,7 @@ package rules
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, StakeAddress, StakePayload}
+
 import scala.collection.immutable.SortedMap
 
 class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {

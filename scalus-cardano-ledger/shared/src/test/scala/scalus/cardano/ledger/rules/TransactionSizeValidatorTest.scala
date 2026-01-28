@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.Arbitrary
-import scalus.cardano.address.ByronAddress
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.ByronAddress
 
 import scala.collection.immutable.SortedSet
 

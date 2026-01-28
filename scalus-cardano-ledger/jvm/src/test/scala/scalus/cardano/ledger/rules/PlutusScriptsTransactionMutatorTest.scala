@@ -10,6 +10,8 @@ import scalus.cardano.address.Network.Testnet
 
 import scala.collection.immutable.SortedMap
 
+// TODO: shared
+//  not immediately possible because of a dependency on `compile`
 class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test(

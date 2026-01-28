@@ -1,8 +1,8 @@
 package scalus.cardano.ledger
 package rules
 
-import scalus.uplc.builtin.platform
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.uplc.builtin.platform
 
 class VerifiedSignaturesInWitnessesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("VerifiedSignaturesInWitnessesValidator VkeyWitnesses rule success") {

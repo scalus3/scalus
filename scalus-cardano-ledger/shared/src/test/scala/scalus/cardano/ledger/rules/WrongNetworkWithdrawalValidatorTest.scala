@@ -3,8 +3,9 @@ package rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.Network.{Mainnet, Testnet}
 import scalus.cardano.address.*
+import scalus.cardano.address.Network.{Mainnet, Testnet}
+
 import scala.collection.immutable.SortedMap
 
 class WrongNetworkWithdrawalValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {

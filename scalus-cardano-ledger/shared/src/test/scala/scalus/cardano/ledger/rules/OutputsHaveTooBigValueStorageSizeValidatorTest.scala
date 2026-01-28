@@ -2,8 +2,8 @@ package scalus.cardano.ledger
 package rules
 
 import org.scalacheck.Arbitrary
-import scalus.cardano.address.ShelleyAddress
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.ShelleyAddress
 
 class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
     test("OutputsHaveTooBigValueStorageSizeValidator TransactionOutputs success") {
