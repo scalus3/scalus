@@ -1,6 +1,7 @@
 package scalus.uplc.jit
 
 import scalus.uplc.builtin.*
+import scalus.uplc.builtin.bls12_381.*
 import scalus.uplc.eval.*
 
 object MemoryUsageJit {
@@ -29,9 +30,9 @@ object MemoryUsageJit {
             CostingInteger(1L) + memoryUsage(p._1) + memoryUsage(p._2)
         // TODO: Create common constants file for BLS memory usage values (18, 36, 72)
         // These values come from Plutus specification
-        case _: BLS12_381_G1_Element => CostingInteger(18L)
-        case _: BLS12_381_G2_Element => CostingInteger(36L)
-        case _: BLS12_381_MlResult   => CostingInteger(72L)
-        case _                       => CostingInteger(1L) // Functions, builtins, etc.
+        case _: G1Element => CostingInteger(18L)
+        case _: G2Element => CostingInteger(36L)
+        case _: MLResult  => CostingInteger(72L)
+        case _            => CostingInteger(1L) // Functions, builtins, etc.
 
 }

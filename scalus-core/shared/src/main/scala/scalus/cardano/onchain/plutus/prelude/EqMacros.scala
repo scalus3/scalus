@@ -213,7 +213,14 @@ private object EqMacros {
         '{ (lhs: A, rhs: A) =>
             ${
                 val cases = children.map(child => genCaseForChild('rhs, child))
-                Match('lhs.asTerm, cases).asExprOf[Boolean]
+                // Use @unchecked to suppress exhaustivity warning - all children are covered
+                val uncheckedAnnotation = New(TypeTree.of[unchecked])
+                    .select(
+                      TypeRepr.of[unchecked].typeSymbol.primaryConstructor
+                    )
+                    .appliedToNone
+                val annotatedType = Annotated(TypeTree.of[A], uncheckedAnnotation)
+                Match(Typed('lhs.asTerm, annotatedType), cases).asExprOf[Boolean]
             }
         }
     }

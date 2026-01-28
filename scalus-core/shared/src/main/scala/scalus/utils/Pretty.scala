@@ -83,28 +83,41 @@ trait LowPriorityPrettyInstances {
                     .tightBracketBy(Doc.char('('), Doc.char(')'))
     }
 
+    /** Named Pretty implementation for product types to avoid anonymous class duplication at inline
+      * sites. The cast to Product is safe because this is only instantiated via derivePrettyProduct
+      * which requires Mirror.ProductOf[A], guaranteeing A is a product type at runtime.
+      */
+    private[utils] class ProductPretty[A](
+        typeName: String,
+        labels: List[String],
+        instances: () => List[Pretty[Any]]
+    ) extends Pretty[A]:
+        def pretty(a: A, style: Style): Doc =
+            prettyProduct(a.asInstanceOf[Product], typeName, labels, instances(), style)
+
     /** Create a Pretty instance for a product type */
     inline def derivePrettyProduct[A](using p: Mirror.ProductOf[A]): Pretty[A] = {
         val typeName = constValue[p.MirroredLabel]
         val labels = getElemLabels[p.MirroredElemLabels]
         lazy val instances = summonPrettyInstances[p.MirroredElemTypes]
-
-        new Pretty[A] {
-            def pretty(a: A, style: Style): Doc =
-                prettyProduct(a.asInstanceOf[Product], typeName, labels, instances, style)
-        }
+        ProductPretty[A](typeName, labels, () => instances)
     }
+
+    /** Named Pretty implementation for sum types to avoid anonymous class duplication at inline
+      * sites
+      */
+    private[utils] class SumPretty[A](
+        ordinalFn: A => Int,
+        instances: () => List[Pretty[Any]]
+    ) extends Pretty[A]:
+        def pretty(a: A, style: Style): Doc =
+            val ordinal = ordinalFn(a)
+            instances()(ordinal).pretty(a, style)
 
     /** Create a Pretty instance for a sum type */
     inline def derivePrettySum[A](using s: Mirror.SumOf[A]): Pretty[A] = {
         lazy val instances = summonPrettyInstances[s.MirroredElemTypes]
-
-        new Pretty[A] {
-            def pretty(a: A, style: Style): Doc = {
-                val ordinal = s.ordinal(a)
-                instances(ordinal).pretty(a, style)
-            }
-        }
+        SumPretty[A](s.ordinal, () => instances)
     }
 
     /** Main derivation entry point - lower priority than explicit instances */

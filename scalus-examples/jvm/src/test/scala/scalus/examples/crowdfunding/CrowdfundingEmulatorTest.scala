@@ -11,7 +11,7 @@ import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.testing.kit.TestUtil.genesisHash
-import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.testing.kit.ScalusTest
 import scalus.utils.await
 
 import scala.concurrent.{ExecutionContext, Future}

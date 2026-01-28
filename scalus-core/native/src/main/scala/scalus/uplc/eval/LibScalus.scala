@@ -1,7 +1,7 @@
 package scalus.uplc
 package eval
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.{Language, MajorProtocolVersion, ProtocolParams}
 import scalus.uplc
 

@@ -104,8 +104,8 @@ object EqBudgetStatus:
         lhs match
             case EqBudgetStatus.Pending =>
                 rhs match
-                    case _: EqBudgetStatus.Pending.type => true
-                    case _                              => false
+                    case EqBudgetStatus.Pending => true
+                    case _                      => false
             case lhsDone: EqBudgetStatus.Done =>
                 rhs match
                     case rhsDone: EqBudgetStatus.Done => lhsDone.result === rhsDone.result
