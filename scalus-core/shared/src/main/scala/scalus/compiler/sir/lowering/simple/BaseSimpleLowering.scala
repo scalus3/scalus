@@ -40,7 +40,7 @@ abstract class BaseSimpleLowering(
         val transformed = LetFloating(sir)
         val term = lowerInner(transformed)
         if zCombinatorNeeded then
-            Term.Apply(Term.LamAbs("__z_combinator__", term), ExprBuilder.ZTerm)
+            Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
         else term
 
     /** Find all constructors for a given SIR type. Used in Match expressions to determine the
@@ -590,7 +590,7 @@ abstract class BaseSimpleLowering(
                 zCombinatorNeeded = true
                 val fixed =
                     Term.Apply(
-                      Term.Var(NamedDeBruijn("__z_combinator__")),
+                      Term.Var(NamedDeBruijn("__Z")),
                       Term.LamAbs(name, lowerInner(rhs))
                     )
                 Term.Apply(Term.LamAbs(name, lowerInner(body)), fixed)

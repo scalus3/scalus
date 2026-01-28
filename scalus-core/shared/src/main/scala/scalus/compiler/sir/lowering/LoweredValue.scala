@@ -9,7 +9,6 @@ import scalus.utils.{Pretty, Style}
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
 
 import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
-//import scala.util.control.NonFatal
 
 /** SEA of nodes - like representation. E.e. each value is node, which manage dependencies.
   * LoweredValue:
@@ -33,7 +32,7 @@ import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
   */
 trait LoweredValue {
 
-    val createdEx = new RuntimeException("Lovered value created here")
+    val createdEx = new RuntimeException("Lowered value created here")
     var debugMark = "i"
 
     def sirType: SIRType
@@ -908,7 +907,7 @@ case class LetRecLoweredValue(
         )
         val fixed =
             Term.Apply(
-              Term.Var(NamedDeBruijn("__z_combinator__")),
+              Term.Var(NamedDeBruijn("__Z")),
               Term.LamAbs(
                 newVar.id,
                 rhs.termWithNeededVars(nGctx)
