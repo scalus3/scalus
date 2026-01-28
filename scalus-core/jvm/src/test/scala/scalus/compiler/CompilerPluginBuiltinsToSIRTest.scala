@@ -1167,7 +1167,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
               List.empty,
               AnE
             ),
-            SIR.LetFlags.Recursivity,
+            SIR.LetFlags.None,
             AnE
           )
         )
@@ -1198,7 +1198,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
               List.empty,
               AnE
             ),
-            SIR.LetFlags.Recursivity,
+            SIR.LetFlags.None,
             AnE
           )
         )
@@ -1264,7 +1264,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
             List.empty,
             AnE
           ),
-          SIR.LetFlags.Recursivity,
+          SIR.LetFlags.None,
           AnE
         )
 
@@ -1329,7 +1329,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
               List.empty,
               AnE
             ),
-            SIR.LetFlags.Recursivity,
+            SIR.LetFlags.None,
             AnE
           )
         )
@@ -1411,7 +1411,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
               List.empty,
               AnE
             ),
-            SIR.LetFlags.Recursivity,
+            SIR.LetFlags.None,
             AnE
           )
         )
@@ -1467,7 +1467,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
             List.empty,
             AnE
           ),
-          SIR.LetFlags.Recursivity,
+          SIR.LetFlags.None,
           AnE
         )
 
