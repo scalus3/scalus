@@ -172,12 +172,7 @@ object ScalusRuntime {
         )
 
         val whenNil = {
-            lvBuiltinApply0(
-              SIRBuiltins.mkNilData,
-              tpOutTupleList,
-              SumCaseClassRepresentation.SumDataList,
-              AnnotationsDecl.empty.pos
-            )
+            lvDataNil(AnnotationsDecl.empty.pos, tpOutTupleList)
         }
 
         def pairDataToTupleAsData(
@@ -684,11 +679,9 @@ object ScalusRuntime {
                                   PrimitiveRepresentation.Constant,
                                   AnnotationsDecl.empty.pos
                                 )
-                                val nilCase = lvBuiltinApply0(
-                                  SIRBuiltins.mkNilData,
-                                  SIRType.BuiltinList(SIRType.Data.tp),
-                                  SumCaseClassRepresentation.SumDataList,
-                                  AnnotationsDecl.empty.pos
+                                val nilCase = lvDataNil(
+                                  AnnotationsDecl.empty.pos,
+                                  SIRType.BuiltinList(SIRType.Data.tp)
                                 )
                                 // arr[i]
                                 val elem = lvBuiltinApply2(

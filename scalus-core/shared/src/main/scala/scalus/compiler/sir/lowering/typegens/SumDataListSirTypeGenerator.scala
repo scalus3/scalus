@@ -36,12 +36,7 @@ object SumDataListSirTypeGenerator extends SumListCommonSirTypeGenerator {
     }
 
     override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue = {
-        lvBuiltinApply0(
-          SIRBuiltins.mkNilData,
-          SIRType.List.Nil,
-          SumCaseClassRepresentation.SumDataList,
-          pos
-        )
+        lvDataNil(pos, SIRType.List.Nil)
     }
 
     // def uplcToData(input: Term): Term = {

@@ -376,7 +376,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         if input.representation == targetRepr then input
         else
             input match
-                case st: StaticLoweredValue =>
+                case _: StaticLoweredValue | _: ConstantLoweredValue =>
                     genNil(targetListType, input.pos)
                 case _ =>
                     throw LoweringException(

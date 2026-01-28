@@ -16,7 +16,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
     private val contract = HelloCardanoContract.withErrorTraces
 
     test(s"Hello Cardano script size is ${contract.script.script.size} bytes") {
-        assert(contract.script.script.size == 626)
+        assert(contract.script.script.size == 625)
     }
 
     test("Hello Cardano") {
@@ -29,7 +29,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
         )
 
         // Using HelloCardanoContract.withErrorTraces (Options.release with generateErrorTraces=true)
-        val scalusBudget = ExUnits(memory = 31394L, steps = 10_253903)
+        val scalusBudget = ExUnits(memory = 31162L, steps = 10_214660)
 
         val applied = contract.program $ context.toData
         val result = applied.evaluateDebug

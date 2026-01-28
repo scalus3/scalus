@@ -2206,14 +2206,20 @@ object LoweredValue {
             )
         }
 
-        def lvDataNil(inPos: SIRPosition)(using
+        def lvDataNil(
+            inPos: SIRPosition,
+            tp: SIRType = SIRType.List(SIRType.Data.tp),
+            repr: LoweredValueRepresentation = SumDataList
+        )(using
             lctx: LoweringContext
         ): LoweredValue = {
-            lvBuiltinApply0(
-              SIRBuiltins.mkNilData,
-              SIRType.List(SIRType.Data.tp),
-              SumDataList,
-              inPos
+            ConstantLoweredValue(
+              SIR.Const(
+                Constant.List(DefaultUni.Data, Nil),
+                tp,
+                AnnotationsDecl(inPos)
+              ),
+              repr
             )
         }
 

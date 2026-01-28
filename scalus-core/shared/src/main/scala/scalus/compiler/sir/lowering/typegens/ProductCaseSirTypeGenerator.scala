@@ -775,12 +775,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     throw e
         }
         // TODO: check UplcConstrOnData, it can be more efficient
-        val s0 = lvBuiltinApply0(
-          SIRBuiltins.mkNilData,
-          SIRType.List(SIRType.Data.tp),
-          SumDataList,
-          constr.anns.pos
-        )
+        val s0 = lvDataNil(constr.anns.pos)
         val dataList = dataRepresentations.foldRight(s0) { (arg, acc) =>
             lvBuiltinApply2(
               SIRBuiltins.mkCons,

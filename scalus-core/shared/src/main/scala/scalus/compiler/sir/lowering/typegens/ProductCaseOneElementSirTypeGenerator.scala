@@ -62,12 +62,7 @@ case class ProductCaseOneElementSirTypeGenerator(
                 lvBuiltinApply2(
                   SIRBuiltins.mkCons,
                   argInData,
-                  lvBuiltinApply0(
-                    SIRBuiltins.mkNilData,
-                    SIRType.List(SIRType.Data.tp),
-                    SumCaseClassRepresentation.SumDataList,
-                    pos
-                  ),
+                  lvDataNil(pos),
                   input.sirType,
                   ProdDataList,
                   pos
@@ -159,12 +154,7 @@ case class ProductCaseOneElementSirTypeGenerator(
         val prodArgs = lvBuiltinApply2(
           SIRBuiltins.mkCons,
           argValue,
-          lvBuiltinApply0(
-            SIRBuiltins.mkNilData,
-            SIRType.List(SIRType.Data.tp),
-            SumCaseClassRepresentation.SumDataList,
-            pos
-          ),
+          lvDataNil(pos),
           SIRType.List(SIRType.Data.tp),
           SumCaseClassRepresentation.SumDataList,
           pos

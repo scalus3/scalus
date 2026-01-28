@@ -223,7 +223,7 @@ class SirToUplcSmLoweringTest
         val genDataList = SirTypeUplcGenerator(SIRType.List(SIRType.Data.tp))
 
         val origin1 = lower(originSir1)
-        val expected1 = Term.Builtin(DefaultFun.MkNilData) $ ().asTerm
+        val expected1 = Term.Const(Constant.List(DefaultUni.Data, Nil))
         // println(s"Lowered SIR: ${origin1.pretty.render(100)}")
         // println(s"Expected UPLC: ${expected1.pretty.render(100)}")
 

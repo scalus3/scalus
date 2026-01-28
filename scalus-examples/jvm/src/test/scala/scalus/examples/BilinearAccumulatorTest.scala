@@ -106,7 +106,7 @@ class BilinearAccumulatorTest extends AnyFunSuite, EvalTestKit {
         assert(compiled.code)
         val result = compiled.program.term.evaluateDebug
         assert(result.success.term α_== true.asTerm)
-        assert(result.budget == ExUnits(181702, 4240_974476L))
+        assert(result.budget == ExUnits(179614, 4240_621289L))
     }
 
     test("check membership two elements") {
