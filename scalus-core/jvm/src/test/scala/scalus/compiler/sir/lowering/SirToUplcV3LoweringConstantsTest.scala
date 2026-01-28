@@ -7,6 +7,7 @@ import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.Term.asTerm
+import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.{toData, ToData}
 import scalus.uplc.eval.PlutusVM
 
@@ -58,5 +59,15 @@ class SirToUplcV3LoweringConstantsTest extends AnyFunSuite {
     test("lower toData[BigInt]") {
         val compiled = PlutusV3.compile(summon[ToData[BigInt]](BigInt(123)))
         assert(compiled.program.term α_== BigInt(123).toData.asTerm)
+    }
+
+    test("lower toData[ByteString]") {
+        val compiled = PlutusV3.compile(ByteString.empty.toData)
+        assert(compiled.program.term α_== ByteString.empty.toData.asTerm)
+    }
+
+    test("lower toData[String]") {
+        val compiled = PlutusV3.compile("hello".toData)
+        assert(compiled.program.term α_== "hello".toData.asTerm)
     }
 }

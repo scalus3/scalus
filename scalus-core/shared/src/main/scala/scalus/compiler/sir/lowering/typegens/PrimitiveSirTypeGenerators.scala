@@ -524,13 +524,21 @@ object SIRTypeUplcByteStringGenerator extends PrimitiveSirTypeGenerator {
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue =
-        lvBuiltinApply(
-          SIRBuiltins.bData,
-          input,
-          SIRType.ByteString,
-          PrimitiveRepresentation.PackedData,
-          pos
-        )
+        input match {
+            case ConstantLoweredValue(SIR.Const(Constant.ByteString(bs), tp, _), _) =>
+                ConstantLoweredValue(
+                  SIR.Const(Constant.Data(bs.toData), tp, AnnotationsDecl(pos)),
+                  PrimitiveRepresentation.PackedData
+                )
+            case _ =>
+                lvBuiltinApply(
+                  SIRBuiltins.bData,
+                  input,
+                  SIRType.ByteString,
+                  PrimitiveRepresentation.PackedData,
+                  pos
+                )
+        }
 
     override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
@@ -610,21 +618,28 @@ object SIRTypeUplcStringGenerator extends PrimitiveSirTypeGenerator {
 
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
-    ): LoweredValue = {
-        lvBuiltinApply(
-          SIRBuiltins.bData,
-          lvBuiltinApply(
-            SIRBuiltins.encodeUtf8,
-            input,
-            SIRType.ByteString,
-            PrimitiveRepresentation.Constant,
-            pos
-          ),
-          SIRType.String,
-          PrimitiveRepresentation.PackedData,
-          pos
-        )
-    }
+    ): LoweredValue =
+        input match {
+            case ConstantLoweredValue(SIR.Const(Constant.String(s), tp, _), _) =>
+                ConstantLoweredValue(
+                  SIR.Const(Constant.Data(s.toData), tp, AnnotationsDecl(pos)),
+                  PrimitiveRepresentation.PackedData
+                )
+            case _ =>
+                lvBuiltinApply(
+                  SIRBuiltins.bData,
+                  lvBuiltinApply(
+                    SIRBuiltins.encodeUtf8,
+                    input,
+                    SIRType.ByteString,
+                    PrimitiveRepresentation.Constant,
+                    pos
+                  ),
+                  SIRType.String,
+                  PrimitiveRepresentation.PackedData,
+                  pos
+                )
+        }
 
     override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
