@@ -9,11 +9,11 @@ import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.BilinearAccumulator.{checkMembership, checkNonMembership, getFinalPoly}
 import scalus.testing.kit.EvalTestKit
+import scalus.uplc.PlutusV3
 import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.bls12_381.G1Element.g1
 import scalus.uplc.builtin.bls12_381.G2Element.g2
-import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
-import scalus.uplc.{PlutusV3, UplcCli}
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 
 import scala.language.implicitConversions
 
