@@ -443,27 +443,50 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             )
         val scopeVars0: Set[IdentifiableLoweredValue] =
             if addList0ToScope then Set(list0) else Set.empty
-        val (selHeadList, scopeVars) = (0 until fieldIndex).foldLeft((list0, scopeVars0)) {
-            (acc, idx) =>
-                val tailId = list0id + s"_tail_${idx + 1}"
-                val tailLazyVar = lctx.scope.getById(tailId) match
+        val (selHeadList, scopeVars) =
+            if lctx.targetLanguage == Language.PlutusV4 && fieldIndex >= 2 then
+                // dropList(fieldIndex, list) is more efficient for n >= 2
+                val droppedId = list0id + s"_drop_$fieldIndex"
+                val droppedList = lctx.scope.getById(droppedId) match
                     case Some(v) => v
                     case None =>
                         lvNewLazyIdVar(
-                          tailId,
+                          droppedId,
                           SIRType.List(SIRType.Data.tp),
                           SumDataList,
-                          lvBuiltinApply(
-                            SIRBuiltins.tailList,
-                            acc._1,
+                          lvBuiltinApply2(
+                            SIRBuiltins.dropList,
+                            lvIntConstant(fieldIndex, sel.anns.pos),
+                            list0,
                             SIRType.List(SIRType.Data.tp),
                             SumDataList,
                             sel.anns.pos
                           ),
                           sel.anns.pos
                         )
-                (tailLazyVar, acc._2 + tailLazyVar)
-        }
+                (droppedList, scopeVars0 + droppedList)
+            else
+                // Original tail-chaining for V1-V3 or small indices (0, 1)
+                (0 until fieldIndex).foldLeft((list0, scopeVars0)) { (acc, idx) =>
+                    val tailId = list0id + s"_tail_${idx + 1}"
+                    val tailLazyVar = lctx.scope.getById(tailId) match
+                        case Some(v) => v
+                        case None =>
+                            lvNewLazyIdVar(
+                              tailId,
+                              SIRType.List(SIRType.Data.tp),
+                              SumDataList,
+                              lvBuiltinApply(
+                                SIRBuiltins.tailList,
+                                acc._1,
+                                SIRType.List(SIRType.Data.tp),
+                                SumDataList,
+                                sel.anns.pos
+                              ),
+                              sel.anns.pos
+                            )
+                    (tailLazyVar, acc._2 + tailLazyVar)
+                }
         val body = lvBuiltinApply(
           SIRBuiltins.headList,
           selHeadList,
