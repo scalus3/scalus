@@ -1,14 +1,14 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
-import scalus.cardano.address.ShelleyAddress
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.ShelleyAddress
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
-class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("OutputsHaveTooBigValueStorageSizeValidator TransactionOutputs success") {
-        val context = Context()
+class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite with ArbitraryInstances {
 
+    test("OutputsHaveTooBigValueStorageSize - TransactionOutputs success") {
         val output = Arbitrary.arbitrary[TransactionOutput].sample.get
 
         val transaction = {
@@ -23,16 +23,15 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
             )
         }
 
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveTooBigValueStorageSizeValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
-    test("OutputsHaveTooBigValueStorageSizeValidator TransactionOutputs failure") {
-        val context = Context()
-
+    test("OutputsHaveTooBigValueStorageSize - TransactionOutputs failure") {
         val output = Output(
           Arbitrary.arbitrary[ShelleyAddress].sample.get,
           Value(
@@ -58,16 +57,15 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
             )
         }
 
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveTooBigValueStorageSizeValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
-    test("OutputsHaveTooBigValueStorageSizeValidator CollateralReturnOutput success") {
-        val context = Context()
-
+    test("OutputsHaveTooBigValueStorageSize - CollateralReturnOutput success") {
         val collateralReturnOutput = Arbitrary.arbitrary[TransactionOutput].sample.get
 
         val transaction = {
@@ -82,16 +80,15 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
             )
         }
 
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveTooBigValueStorageSizeValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
-    test("OutputsHaveTooBigValueStorageSizeValidator CollateralReturnOutput failure") {
-        val context = Context()
-
+    test("OutputsHaveTooBigValueStorageSize - CollateralReturnOutput failure") {
         val collateralReturnOutput = Output(
           Arbitrary.arbitrary[ShelleyAddress].sample.get,
           Value(
@@ -117,10 +114,11 @@ class OutputsHaveTooBigValueStorageSizeValidatorTest extends AnyFunSuite, Valida
             )
         }
 
-        val state = State()
-
-        val result =
-            OutputsHaveTooBigValueStorageSizeValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveTooBigValueStorageSizeValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 }

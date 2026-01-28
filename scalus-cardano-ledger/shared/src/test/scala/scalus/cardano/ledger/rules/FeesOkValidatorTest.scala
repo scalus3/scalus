@@ -1,21 +1,20 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.{Arbitrary, Gen}
-import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
-import scalus.uplc.builtin.platform
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
+import scalus.uplc.builtin.platform
 
-class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+class FeesOkValidatorTest extends AnyFunSuite with ArbitraryInstances {
     test("FeesOkValidator rule success") {
         given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
+        val (_, publicKey2) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -78,41 +77,44 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(
-                Coin(30000000L),
-                transaction.body.value.collateralReturnOutput
-                    .map { _.value.value.assets }
-                    .getOrElse(MultiAsset.empty)
-              )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(30000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey2))
+                    )
+                ),
+            Value(
+              Coin(30000000L),
+              transaction.body.value.collateralReturnOutput
+                  .map { _.value.value.assets }
+                  .getOrElse(MultiAsset.empty)
             )
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -122,8 +124,6 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
-
-        val context = Context()
 
         val transaction = {
             val tx = randomTransactionWithIsValidField
@@ -161,9 +161,11 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State()
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -172,10 +174,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
+        val (_, publicKey2) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -236,36 +236,39 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(30000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey2))
+                    )
+                ),
+            Value(Coin(30000000L))
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -274,10 +277,7 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -331,36 +331,39 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(20000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Script(
-                        Arbitrary.arbitrary[ScriptHash].sample.get
-                      )
-                  ),
-              Value(Coin(20000000L))
-            )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(20000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Script(
+                      Arbitrary.arbitrary[ScriptHash].sample.get
+                    )
+                ),
+            Value(Coin(20000000L))
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -371,10 +374,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
+        val (_, publicKey2) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -443,36 +444,39 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(30000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey2))
+                    )
+                ),
+            Value(Coin(30000000L))
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -483,10 +487,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
+        val (_, publicKey2) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -549,44 +551,47 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(
-                Coin(30000000L),
-                genMultiAsset(
-                  minPolicies = 1,
-                  maxPolicies = 4,
-                  minAssets = 1,
-                  maxAssets = 4
-                ).sample.get
-              )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(30000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey2))
+                    )
+                ),
+            Value(
+              Coin(30000000L),
+              genMultiAsset(
+                minPolicies = 1,
+                maxPolicies = 4,
+                minAssets = 1,
+                maxAssets = 4
+              ).sample.get
             )
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -595,10 +600,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
+        val (_, publicKey2) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -659,36 +662,39 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(30000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey2))
+                    )
+                ),
+            Value(Coin(30000000L))
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -697,10 +703,8 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
 
-        val context = Context()
-
-        val (privateKey1, publicKey1) = generateKeyPair()
-        val (privateKey2, publicKey2) = generateKeyPair()
+        val (_, publicKey1) = TestEmulatorFactory.generateKeyPair()
+        val (_, publicKey2) = TestEmulatorFactory.generateKeyPair()
 
         val collateralInput1 = Arbitrary.arbitrary[TransactionInput].sample.get
         val collateralInput2 = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -761,36 +765,39 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State(
-          utxos = Map(
-            collateralInput1 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey1))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            ),
-            collateralInput2 -> Output(
-              Arbitrary
-                  .arbitrary[ShelleyAddress]
-                  .sample
-                  .get
-                  .copy(payment =
-                      ShelleyPaymentPart.Key(
-                        Hash(platform.blake2b_224(publicKey2))
-                      )
-                  ),
-              Value(Coin(30000000L))
-            )
+        val utxos = Map(
+          collateralInput1 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey1))
+                    )
+                ),
+            Value(Coin(30000000L))
+          ),
+          collateralInput2 -> Output(
+            Arbitrary
+                .arbitrary[ShelleyAddress]
+                .sample
+                .get
+                .copy(payment =
+                    ShelleyPaymentPart.Key(
+                      Hash(platform.blake2b_224(publicKey2))
+                    )
+                ),
+            Value(Coin(30000000L))
           )
         )
 
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -798,8 +805,6 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
         given Arbitrary[scalus.uplc.builtin.Data] = Arbitrary(
           Gen.const(scalus.uplc.builtin.Data.unit) // Simplified for testing
         )
-
-        val context = Context()
 
         val transaction = {
             val tx = randomTransactionWithIsValidField
@@ -850,9 +855,11 @@ class FeesOkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val state = State()
-
-        val result = FeesOkValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(FeesOkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 }

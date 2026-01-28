@@ -1,21 +1,19 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
 import scala.collection.immutable.SortedMap
 
-class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances {
+class ValueNotConservedUTxOValidatorTest extends AnyFunSuite with ArbitraryInstances {
 
     private def createInput(): TransactionInput = arbitrary[TransactionInput].sample.get
     private def createAddress(): Address = arbitrary[Address].sample.get
     private def createPolicyId(): PolicyId = arbitrary[PolicyId].sample.get
     private def createAssetName(): AssetName = arbitrary[AssetName].sample.get
-
-    private val defaultContext = Context()
-    private val defaultState = State()
 
     // ============ Basic Value Conservation Tests ============
 
@@ -29,7 +27,11 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, defaultState, tx)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -45,7 +47,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(900_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -55,7 +56,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -71,7 +77,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(600_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -81,7 +86,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isLeft)
     }
 
@@ -110,13 +120,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(900_000))
         )
 
-        val state = State(utxos =
-            Map(
-              input1 -> resolvedOutput1,
-              input2 -> resolvedOutput2,
-              input3 -> resolvedOutput3
-            )
-        )
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input1, input2, input3)),
@@ -126,7 +129,16 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(
+            input1 -> resolvedOutput1,
+            input2 -> resolvedOutput2,
+            input3 -> resolvedOutput3
+          ),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -152,7 +164,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(250_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -162,7 +173,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -188,12 +204,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(500_000))
         )
 
-        val state = State(utxos =
-            Map(
-              input1 -> resolvedOutput1,
-              input2 -> resolvedOutput2
-            )
-        )
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input1, input2)),
@@ -203,7 +213,15 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(
+            input1 -> resolvedOutput1,
+            input2 -> resolvedOutput2
+          ),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -221,7 +239,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(1_000_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -231,7 +248,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -242,7 +264,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(1_000_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -252,7 +273,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -277,7 +303,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -288,7 +313,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -315,7 +345,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -335,7 +364,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -360,7 +394,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(1_900_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -371,7 +404,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -398,7 +436,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -409,7 +446,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -437,7 +479,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -459,7 +500,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -479,7 +525,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(1_400_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -490,7 +535,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -509,7 +559,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(1_600_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -527,7 +576,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -545,7 +599,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(900_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -556,7 +609,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -574,7 +632,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(400_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -586,7 +643,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -602,7 +664,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(900_000))
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -614,7 +675,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -645,7 +711,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           )
         )
 
-        val state = State(utxos = Map(input -> resolvedOutput))
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
@@ -670,7 +735,12 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(input -> resolvedOutput),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
@@ -704,12 +774,6 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           value = Value(coin = Coin(1_500_000))
         )
 
-        val state = State(utxos =
-            Map(
-              input1 -> resolvedOutput1,
-              input2 -> resolvedOutput2
-            )
-        )
         val tx = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.from(Set(input1, input2)),
@@ -730,7 +794,15 @@ class ValueNotConservedUTxOValidatorTest extends AnyFunSuite, ArbitraryInstances
           witnessSet = TransactionWitnessSet.empty
         )
 
-        val result = ValueNotConservedUTxOValidator.validate(defaultContext, state, tx)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map(
+            input1 -> resolvedOutput1,
+            input2 -> resolvedOutput2
+          ),
+          validators = Seq(ValueNotConservedUTxOValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 }

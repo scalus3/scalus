@@ -1,183 +1,163 @@
 package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
-import org.scalatest.compatible.Assertion
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
-// Duplicates most of the `AllInputsMustBeInUtxoValidatorTest` in JVM ledger tests for now
-object AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite, ArbitraryInstances {
-    def allTests = Seq(
-      allInputsMustBeInUtxoValidatorFailureOnInputs,
-      allInputsMustBeInUtxoValidatorSuccessOnCollateralInputs,
-      allInputsMustBeInUtxoValidatorFailureOnCollateralInputs,
-      allInputsMustBeInUtxoValidatorSuccessOnReferenceInputs,
-      allInputsMustBeInUtxoValidatorFailureOnReferenceInputs,
-      allInputsMustBeInUtxoValidatorSuccessOnAlLKindsOfInputs
-    )
+class AllInputsMustBeInUtxoValidatorTest extends AnyFunSuite with ArbitraryInstances {
 
-    def allInputsMustBeInUtxoValidatorSuccessOnInputs: TestCase = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - success on inputs") {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State(
-          utxos = transaction.body.value.inputs.toSet.view
-              .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
-              .toMap
+        val utxos = transaction.body.value.inputs.toSet.view
+            .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
+            .toMap
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isLeft)
-        )
+        val result = emulator.submitSync(transaction)
+        assert(result.isRight)
     }
 
-    def allInputsMustBeInUtxoValidatorFailureOnInputs = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - failure on inputs") {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State()
 
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isLeft)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map.empty,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
+        val result = emulator.submitSync(transaction)
+        assert(result.isLeft)
     }
 
-    def allInputsMustBeInUtxoValidatorSuccessOnCollateralInputs = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - success on collateral inputs") {
         val collateralInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.empty,
             collateralInputs = TaggedSortedSet.from(Set(collateralInput)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State(
-          utxos = transaction.body.value.collateralInputs.toSet.view
-              .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
-              .toMap
-        )
+        val utxos = transaction.body.value.collateralInputs.toSet.view
+            .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
+            .toMap
 
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isRight)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
+        val result = emulator.submitSync(transaction)
+        assert(result.isRight)
     }
 
-    def allInputsMustBeInUtxoValidatorFailureOnCollateralInputs = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - failure on collateral inputs") {
         val collateralInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.empty,
             collateralInputs = TaggedSortedSet.from(Set(collateralInput)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State()
 
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isLeft)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map.empty,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
+        val result = emulator.submitSync(transaction)
+        assert(result.isLeft)
     }
 
-    def allInputsMustBeInUtxoValidatorSuccessOnReferenceInputs = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - success on reference inputs") {
         val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.empty,
             referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State(
-          utxos = transaction.body.value.referenceInputs.toSet.view
-              .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
-              .toMap
-        )
+        val utxos = transaction.body.value.referenceInputs.toSet.view
+            .map(_ -> Arbitrary.arbitrary[TransactionOutput].sample.get)
+            .toMap
 
-        val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isRight)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxos,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
+        val result = emulator.submitSync(transaction)
+        assert(result.isRight)
     }
 
-    def allInputsMustBeInUtxoValidatorFailureOnReferenceInputs = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - failure on reference inputs") {
         val referenceInput = Arbitrary.arbitrary[TransactionInput].sample.get
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.empty,
             referenceInputs = TaggedSortedSet.from(Set(referenceInput)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State()
 
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isLeft)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map.empty,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
+        val result = emulator.submitSync(transaction)
+        assert(result.isLeft)
     }
 
-    def allInputsMustBeInUtxoValidatorSuccessOnAlLKindsOfInputs = {
-        val context = Context()
+    test("AllInputsMustBeInUtxo - success on empty inputs") {
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.empty,
             collateralInputs = TaggedSortedSet.empty,
             referenceInputs = TaggedSortedSet.empty,
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet.empty
         )
-        val state = State()
 
-        val result = AllInputsMustBeInUtxoValidator.validate(context, state, transaction)
-        TestCase(
-          state,
-          context,
-          transaction,
-          x => assert(x.isRight)
+        val emulator = TestEmulatorFactory.create(
+          utxos = Map.empty,
+          validators = Seq(AllInputsMustBeInUtxoValidator),
+          mutators = Seq.empty
         )
+        val result = emulator.submitSync(transaction)
+        assert(result.isRight)
     }
 }

@@ -1,15 +1,16 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
-import scalus.cardano.address.ByronAddress
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.ByronAddress
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
 import scala.collection.immutable.SortedSet
 
-class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("TransactionSizeValidator rule success") {
-        val context = Context()
+class TransactionSizeValidatorTest extends AnyFunSuite with ArbitraryInstances {
+
+    test("TransactionSize - success with small transaction") {
         val transaction = {
             val tx = randomTransactionWithIsValidField
             tx.withWitness(
@@ -51,12 +52,15 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val result = TransactionSizeValidator.validate(context, State(), transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(TransactionSizeValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
-    test("TransactionSizeValidator rule failure") {
-        val context = Context()
+    test("TransactionSize - failure with too large transaction") {
         val inputs = SortedSet.fill(1000) { // Arbitrary large number of inputs
             Arbitrary.arbitrary[TransactionInput].sample.get
         }
@@ -72,7 +76,11 @@ class TransactionSizeValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val result = TransactionSizeValidator.validate(context, State(), transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(TransactionSizeValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 }

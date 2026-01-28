@@ -1,13 +1,14 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress}
-import TransactionWitnessSet.given
+import scalus.cardano.ledger.*
+import scalus.cardano.ledger.TransactionWitnessSet.given
+import scalus.cardano.node.TestEmulatorFactory
+import scalus.uplc.builtin.Data
 
-class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+class MissingRequiredDatumsValidatorTest extends AnyFunSuite with ArbitraryInstances {
     test("MissingRequiredDatumsValidator success with no scripts") {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
         val utxo = Map(
@@ -23,11 +24,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             fee = Coin.zero
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -58,10 +61,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -86,10 +92,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             plutusV1Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -112,10 +121,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             plutusV1Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -138,10 +150,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             plutusV3Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -177,11 +192,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -216,11 +233,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -258,11 +277,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -308,11 +329,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             collateralReturnOutput = Some(collateralReturn)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -339,15 +362,18 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             )
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
     test("MissingRequiredDatumsValidator success with native script") {
-        val (privateKey, publicKey) = generateKeyPair()
+        val (_, publicKey) = TestEmulatorFactory.generateKeyPair()
         val nativeScript =
             Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -367,11 +393,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             nativeScripts = TaggedSortedMap(Script.Native(nativeScript))
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
-
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -398,10 +426,13 @@ class MissingRequiredDatumsValidatorTest extends AnyFunSuite, ValidatorRulesTest
             plutusV3Scripts = TaggedSortedStrictMap(plutusScript)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = MissingRequiredDatumsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingRequiredDatumsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 }

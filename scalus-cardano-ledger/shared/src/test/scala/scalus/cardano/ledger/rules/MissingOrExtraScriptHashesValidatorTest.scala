@@ -1,18 +1,20 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.{Address, Network, StakeAddress, StakePayload}
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
+
 import scala.collection.immutable.SortedMap
 
-class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite with ArbitraryInstances {
     test("MissingOrExtraScriptHashesValidator success with no scripts") {
         val transaction = Transaction(
           TransactionBody(
             inputs = TaggedSortedSet.empty,
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet(
             scripts = Seq.empty,
@@ -21,9 +23,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -41,7 +46,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet(
             scripts = Seq(plutusScript),
@@ -50,9 +55,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -70,7 +79,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet(
             scripts = Seq.empty,
@@ -79,9 +88,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -110,9 +123,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -141,9 +157,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -170,9 +189,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -199,9 +221,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -233,9 +258,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -267,9 +295,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -286,7 +317,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 deposit = Arbitrary.arbitrary[Coin].sample.get,
                 rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
                 govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
+                anchor = Arbitrary.arbitrary[Anchor].sample.get
               )
             )
           ),
@@ -297,9 +328,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -318,7 +352,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 deposit = Arbitrary.arbitrary[Coin].sample.get,
                 rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
                 govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
+                anchor = Arbitrary.arbitrary[Anchor].sample.get
               )
             )
           ),
@@ -329,9 +363,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -357,9 +394,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -385,9 +425,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -408,9 +451,12 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State()
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -430,7 +476,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet(
             scripts = Seq.empty,
@@ -439,9 +485,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -480,9 +530,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -523,9 +577,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -569,9 +627,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -610,9 +672,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -654,9 +720,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -702,9 +772,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -751,9 +825,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -784,7 +862,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 deposit = Arbitrary.arbitrary[Coin].sample.get,
                 rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
                 govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
+                anchor = Arbitrary.arbitrary[Anchor].sample.get
               )
             )
           ),
@@ -795,9 +873,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -829,7 +911,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 deposit = Arbitrary.arbitrary[Coin].sample.get,
                 rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
                 govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
+                anchor = Arbitrary.arbitrary[Anchor].sample.get
               )
             )
           ),
@@ -840,9 +922,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -882,9 +968,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -925,9 +1015,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -949,7 +1043,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
           TransactionBody(
             inputs = TaggedSortedSet.from(Set(input)),
             outputs = IndexedSeq.empty,
-            fee = Coin.zero,
+            fee = Coin.zero
           ),
           TransactionWitnessSet(
             scripts = Seq.empty,
@@ -958,9 +1052,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -999,9 +1097,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1044,9 +1146,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1090,9 +1196,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1133,9 +1243,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1177,9 +1291,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1225,9 +1343,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1274,9 +1396,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1307,7 +1433,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 deposit = Arbitrary.arbitrary[Coin].sample.get,
                 rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
                 govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
+                anchor = Arbitrary.arbitrary[Anchor].sample.get
               )
             )
           ),
@@ -1318,9 +1444,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1352,7 +1482,7 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
                 deposit = Arbitrary.arbitrary[Coin].sample.get,
                 rewardAccount = Arbitrary.arbitrary[RewardAccount].sample.get,
                 govAction = GovAction.TreasuryWithdrawals(Map.empty, Some(plutusScript.scriptHash)),
-                anchor = Arbitrary.arbitrary[Anchor].sample.get,
+                anchor = Arbitrary.arbitrary[Anchor].sample.get
               )
             )
           ),
@@ -1363,9 +1493,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1405,9 +1539,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -1448,9 +1586,13 @@ class MissingOrExtraScriptHashesValidatorTest extends AnyFunSuite, ValidatorRule
             plutusData = Seq.empty
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = MissingOrExtraScriptHashesValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(MissingOrExtraScriptHashesValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 }
