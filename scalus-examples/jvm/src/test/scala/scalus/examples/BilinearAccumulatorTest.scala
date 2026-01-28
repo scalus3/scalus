@@ -5,13 +5,15 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.examples.BilinearAccumulator.{checkMembership, checkNonMembership, getFinalPoly}
 import scalus.testing.kit.EvalTestKit
-import scalus.uplc.{PlutusV3, UplcCli}
 import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.BLS12_381_G1_Element
-import scalus.uplc.builtin.BLS12_381_G1_Element.g1
-import scalus.uplc.builtin.BLS12_381_G2_Element.g2
+import scalus.uplc.builtin.bls12_381.G1Element.g1
+import scalus.uplc.builtin.bls12_381.G2Element.g2
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
+import scalus.uplc.{PlutusV3, UplcCli}
 
 import scala.language.implicitConversions
 
@@ -20,7 +22,7 @@ import scala.language.implicitConversions
 object CRS {
 
     /** G1 powers of tau: [g1, tau*g1, tau^2*g1, ...] */
-    val powersOfTau: List[BLS12_381_G1_Element] = List(
+    val powersOfTau: List[G1Element] = List(
       g1"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
       g1"b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc",
       g1"acb58c81ae0cae2e9d4d446b730922239923c345744eee58efaadb36e9a0925545b18a987acf0bad469035b291e37269",
@@ -70,7 +72,7 @@ object CRS {
     )
 
     /** G2 generator point */
-    val g2 = G2.generator
+    val g2: G2Element = G2.generator
 }
 
 class BilinearAccumulatorTest extends AnyFunSuite, EvalTestKit {
@@ -84,15 +86,18 @@ class BilinearAccumulatorTest extends AnyFunSuite, EvalTestKit {
     }
 
     test("check membership one element") {
+        given compilerOptions: Options = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = true,
+          optimizeUplc = true
+        )
         val compiled = PlutusV3.compile:
             val crsG1 = CRS.powersOfTau.take(2)
             val accumulator =
                 g2"b0f15b32629d02514af939e5b660d27a4db9f84cde5eecfef7db87c056163a9f21925653519cf9972f4b6c115e195baf1439203af99d121fce39ec8eed3fa72a0a31dd537642ab7cb1da52dfbacab1a032c5579aa702a59f1991e9aefae1d9c5"
 
             val subset =
-                List(
-                  BigInt("22401154959170154123134540742828377934364533580409315286338474307961")
-                )
+                List(BigInt("22401154959170154123134540742828377934364533580409315286338474307961"))
             val proof =
                 g2"809875352e4cd02184ecd07429198ca87364ca0c4bf895482fb8364662bce1945d33c599b47b7d2b34724f45fa17fab8141afa380d192a9134d7f1238e17475af8f6c862c1eecf9666bb5e00b17461ad33112ef2f8dd9580c178b36300cb6dd8"
 
@@ -101,7 +106,7 @@ class BilinearAccumulatorTest extends AnyFunSuite, EvalTestKit {
         assert(compiled.code)
         val result = compiled.program.term.evaluateDebug
         assert(result.success.term α_== true.asTerm)
-        assert(result.budget == ExUnits(218730, 4246_939672L))
+        assert(result.budget == ExUnits(182630, 4241_163672L))
     }
 
     test("check membership two elements") {
