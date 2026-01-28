@@ -1,6 +1,6 @@
 package scalus.uplc.builtin
 
-import scalus.uplc.builtin.bls12_381.{BLS, G1Element, G2Element, MLResult}
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 /** @deprecated Use scalus.uplc.builtin.bls12_381.G1Element instead */
 @deprecated("Use scalus.uplc.builtin.bls12_381.G1Element instead", "0.15.0")

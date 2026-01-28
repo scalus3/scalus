@@ -5,8 +5,6 @@ import scalus.uplc.builtin.NodeJsPlatformSpecific.{toByteString, toJsBigInt, toU
 import scalus.uplc.builtin.PlatformSpecific
 
 import scala.scalajs.js
-import scala.scalajs.js.annotation.*
-import scala.scalajs.js.typedarray.Uint8Array
 import scala.compiletime.asMatchable
 import scala.annotation.targetName
 

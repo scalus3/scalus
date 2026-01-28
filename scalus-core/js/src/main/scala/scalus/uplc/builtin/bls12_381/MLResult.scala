@@ -1,7 +1,5 @@
 package scalus.uplc.builtin.bls12_381
 
-import scala.scalajs.js
-import scala.scalajs.js.annotation.*
 import scala.compiletime.asMatchable
 import scala.annotation.targetName
 
