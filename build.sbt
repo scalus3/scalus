@@ -363,6 +363,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
       Compile / npmDependencies += "@noble/curves" -> "1.9.1",
+      Test / npmDependencies += "@noble/curves" -> "1.9.1",
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
           // Use .mjs extension.
@@ -424,7 +425,7 @@ lazy val scalusUplcJitCompiler = project
 // Scalus Testkit library for testing Scalus applications
 lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-testkit"))
-    .dependsOn(scalus, scalusCardanoLedger)
+    .dependsOn(scalus % "compile->compile;compile->test", scalusCardanoLedger)
     .settings(
       name := "scalus-testkit",
       scalaVersion := scalaVersion.value,
