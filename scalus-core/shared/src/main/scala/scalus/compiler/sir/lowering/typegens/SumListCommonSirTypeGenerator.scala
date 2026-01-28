@@ -643,10 +643,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" then {
                 // we can generate only Nil case.
-                println("warning: unused case Cons in List match will be removed")
+                println("info: unused case Cons in List match will be removed")
                 loweredNilBody
             } else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" then {
-                println("warning: unused case Nil in List match will be removed")
+                println("info: unused case Nil in List match will be removed")
                 loweredConsBody
             } else
                 throw LoweringException(
