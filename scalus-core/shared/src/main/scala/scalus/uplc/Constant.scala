@@ -2,6 +2,7 @@ package scalus.uplc
 
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.uplc.DefaultUni.{decodeUni, encodeUni, flatForUni}
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 import scala.collection.immutable
 
@@ -97,13 +98,13 @@ object Constant {
     case class Array(elemType: DefaultUni, value: IndexedSeq[Constant]) extends Constant:
         def tpe = DefaultUni.Apply(DefaultUni.ProtoArray, elemType)
 
-    case class BLS12_381_G1_Element(value: builtin.BLS12_381_G1_Element) extends Constant:
+    case class BLS12_381_G1_Element(value: G1Element) extends Constant:
         def tpe = DefaultUni.BLS12_381_G1_Element
 
-    case class BLS12_381_G2_Element(value: builtin.BLS12_381_G2_Element) extends Constant:
+    case class BLS12_381_G2_Element(value: G2Element) extends Constant:
         def tpe = DefaultUni.BLS12_381_G2_Element
 
-    case class BLS12_381_MlResult(value: builtin.BLS12_381_MlResult) extends Constant:
+    case class BLS12_381_MlResult(value: MLResult) extends Constant:
         def tpe = DefaultUni.BLS12_381_MlResult
 
     case class BuiltinValue(value: builtin.BuiltinValue) extends Constant:
@@ -173,9 +174,9 @@ object Constant {
               a.asInstanceOf[IndexedSeq[Any]].view.map(fromValue(elemType, _)).toIndexedSeq
             )
         case DefaultUni.BLS12_381_G1_Element =>
-            BLS12_381_G1_Element(a.asInstanceOf[builtin.BLS12_381_G1_Element])
+            BLS12_381_G1_Element(a.asInstanceOf[G1Element])
         case DefaultUni.BLS12_381_G2_Element =>
-            BLS12_381_G2_Element(a.asInstanceOf[builtin.BLS12_381_G2_Element])
+            BLS12_381_G2_Element(a.asInstanceOf[G2Element])
         case DefaultUni.BLS12_381_MlResult =>
             throw new IllegalArgumentException("Cannot convert to BLS12_381_MlResult")
         case DefaultUni.BuiltinValue =>

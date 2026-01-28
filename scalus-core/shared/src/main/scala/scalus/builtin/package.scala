@@ -8,6 +8,7 @@ package scalus
 package object builtin {
     private inline val version = "0.14.2"
     private inline val pkg = "scalus.uplc.builtin"
+    private inline val blsPkg = "scalus.uplc.builtin.bls12_381"
 
     // ============================================================================
     // Deprecated type aliases for classes/traits/enums
@@ -46,15 +47,20 @@ package object builtin {
     @deprecated(s"Use $pkg.Builtins instead", version)
     type Builtins = scalus.uplc.builtin.Builtins
 
-    // BLS12-381 types (these are opaque types, but we alias them for completeness)
-    @deprecated(s"Use $pkg.BLS12_381_G1_Element instead", version)
-    type BLS12_381_G1_Element = scalus.uplc.builtin.BLS12_381_G1_Element
+    // BLS12-381 types - new short names (canonical)
+    type G1Element = scalus.uplc.builtin.bls12_381.G1Element
+    type G2Element = scalus.uplc.builtin.bls12_381.G2Element
+    type MLResult = scalus.uplc.builtin.bls12_381.MLResult
 
-    @deprecated(s"Use $pkg.BLS12_381_G2_Element instead", version)
-    type BLS12_381_G2_Element = scalus.uplc.builtin.BLS12_381_G2_Element
+    // BLS12-381 types - old long names (deprecated, point to new package)
+    @deprecated(s"Use $blsPkg.G1Element instead", "0.15.0")
+    type BLS12_381_G1_Element = scalus.uplc.builtin.bls12_381.G1Element
 
-    @deprecated(s"Use $pkg.BLS12_381_MlResult instead", version)
-    type BLS12_381_MlResult = scalus.uplc.builtin.BLS12_381_MlResult
+    @deprecated(s"Use $blsPkg.G2Element instead", "0.15.0")
+    type BLS12_381_G2_Element = scalus.uplc.builtin.bls12_381.G2Element
+
+    @deprecated(s"Use $blsPkg.MLResult instead", "0.15.0")
+    type BLS12_381_MlResult = scalus.uplc.builtin.bls12_381.MLResult
 
     // ============================================================================
     // Deprecated val definitions for companion objects
@@ -90,12 +96,17 @@ package object builtin {
     @deprecated(s"Use $pkg.PlatformSpecific instead", version)
     val PlatformSpecific = scalus.uplc.builtin.PlatformSpecific
 
-    // BLS12-381 companion objects
-    @deprecated(s"Use $pkg.BLS12_381_G1_Element instead", version)
-    val BLS12_381_G1_Element = scalus.uplc.builtin.BLS12_381_G1_Element
+    // BLS12-381 companion objects - new short names (canonical)
+    val G1Element = scalus.uplc.builtin.bls12_381.G1Element
+    val G2Element = scalus.uplc.builtin.bls12_381.G2Element
+    // Note: MLResult doesn't have a usable companion object from this package
 
-    @deprecated(s"Use $pkg.BLS12_381_G2_Element instead", version)
-    val BLS12_381_G2_Element = scalus.uplc.builtin.BLS12_381_G2_Element
+    // BLS12-381 companion objects - old long names (deprecated, point to new package)
+    @deprecated(s"Use $blsPkg.G1Element instead", "0.15.0")
+    val BLS12_381_G1_Element = scalus.uplc.builtin.bls12_381.G1Element
+
+    @deprecated(s"Use $blsPkg.G2Element instead", "0.15.0")
+    val BLS12_381_G2_Element = scalus.uplc.builtin.bls12_381.G2Element
 
     // Note: BLS12_381_MlResult doesn't have a usable companion object
 

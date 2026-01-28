@@ -1,5 +1,7 @@
 package scalus.uplc.builtin
 
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
+
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
 import scala.scalajs.js.annotation.*
@@ -171,94 +173,94 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
 
     // BLS12_381 operations
     override def bls12_381_G1_equal(
-        elem1: BLS12_381_G1_Element,
-        elem2: BLS12_381_G1_Element
+        elem1: G1Element,
+        elem2: G1Element
     ): Boolean = elem1 == elem2
 
     override def bls12_381_G1_add(
-        elem1: BLS12_381_G1_Element,
-        elem2: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = elem1 + elem2
+        elem1: G1Element,
+        elem2: G1Element
+    ): G1Element = elem1 + elem2
 
     override def bls12_381_G1_scalarMul(
         scalar: BigInt,
-        elem: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = elem * scalar
+        elem: G1Element
+    ): G1Element = elem * scalar
 
-    override def bls12_381_G1_neg(elem: BLS12_381_G1_Element): BLS12_381_G1_Element = -elem
+    override def bls12_381_G1_neg(elem: G1Element): G1Element = -elem
 
-    override def bls12_381_G1_compress(elem: BLS12_381_G1_Element): ByteString =
+    override def bls12_381_G1_compress(elem: G1Element): ByteString =
         elem.toCompressedByteString
 
-    override def bls12_381_G1_uncompress(byteString: ByteString): BLS12_381_G1_Element =
-        BLS12_381_G1_Element.fromCompressedByteString(byteString)
+    override def bls12_381_G1_uncompress(byteString: ByteString): G1Element =
+        G1Element.fromCompressedByteString(byteString)
 
     override def bls12_381_G1_hashToGroup(
         byteString: ByteString,
         dst: ByteString
-    ): BLS12_381_G1_Element = BLS12_381_G1_Element.hashToGroup(byteString, dst)
+    ): G1Element = G1Element.hashToGroup(byteString, dst)
 
     override def bls12_381_G2_equal(
-        elem1: BLS12_381_G2_Element,
-        elem2: BLS12_381_G2_Element
+        elem1: G2Element,
+        elem2: G2Element
     ): Boolean = elem1 == elem2
 
     override def bls12_381_G2_add(
-        elem1: BLS12_381_G2_Element,
-        elem2: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = elem1 + elem2
+        elem1: G2Element,
+        elem2: G2Element
+    ): G2Element = elem1 + elem2
 
     override def bls12_381_G2_scalarMul(
         scalar: BigInt,
-        elem: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = elem * scalar
+        elem: G2Element
+    ): G2Element = elem * scalar
 
     override def bls12_381_G2_neg(
-        elem: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = -elem
+        elem: G2Element
+    ): G2Element = -elem
 
-    override def bls12_381_G2_compress(elem: BLS12_381_G2_Element): ByteString =
+    override def bls12_381_G2_compress(elem: G2Element): ByteString =
         elem.toCompressedByteString
 
-    override def bls12_381_G2_uncompress(byteString: ByteString): BLS12_381_G2_Element =
-        BLS12_381_G2_Element.fromCompressedByteString(byteString)
+    override def bls12_381_G2_uncompress(byteString: ByteString): G2Element =
+        G2Element.fromCompressedByteString(byteString)
 
     override def bls12_381_G2_hashToGroup(
         byteString: ByteString,
         dst: ByteString
-    ): BLS12_381_G2_Element = BLS12_381_G2_Element.hashToGroup(byteString, dst)
+    ): G2Element = G2Element.hashToGroup(byteString, dst)
 
     override def bls12_381_millerLoop(
-        elemG1: BLS12_381_G1_Element,
-        elemG2: BLS12_381_G2_Element
-    ): BLS12_381_MlResult =
-        BLS12_381_MlResult(elemG1, elemG2)
+        elemG1: G1Element,
+        elemG2: G2Element
+    ): MLResult =
+        MLResult(elemG1, elemG2)
 
     override def bls12_381_mulMlResult(
-        lhs: BLS12_381_MlResult,
-        rhs: BLS12_381_MlResult
-    ): BLS12_381_MlResult =
+        lhs: MLResult,
+        rhs: MLResult
+    ): MLResult =
         lhs * rhs
 
-    override def bls12_381_finalVerify(lhs: BLS12_381_MlResult, rhs: BLS12_381_MlResult): Boolean =
+    override def bls12_381_finalVerify(lhs: MLResult, rhs: MLResult): Boolean =
         lhs == rhs
 
     override def bls12_381_G1_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G1_Element]
-    ): BLS12_381_G1_Element = {
+        points: Seq[G1Element]
+    ): G1Element = {
         // Use zip behavior: take minimum length, return identity for empty
-        scalars.zip(points).foldLeft(BLS12_381_G1_Element.zero) { case (acc, (scalar, point)) =>
+        scalars.zip(points).foldLeft(G1Element.zero) { case (acc, (scalar, point)) =>
             acc + (point * scalar)
         }
     }
 
     override def bls12_381_G2_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G2_Element]
-    ): BLS12_381_G2_Element = {
+        points: Seq[G2Element]
+    ): G2Element = {
         // Use zip behavior: take minimum length, return identity for empty
-        scalars.zip(points).foldLeft(BLS12_381_G2_Element.zero) { case (acc, (scalar, point)) =>
+        scalars.zip(points).foldLeft(G2Element.zero) { case (acc, (scalar, point)) =>
             acc + (point * scalar)
         }
     }

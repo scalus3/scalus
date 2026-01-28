@@ -2,6 +2,7 @@ package scalus.uplc.builtin
 
 import scalus.crypto.ed25519.{NativeEd25519Signer, SigningKey}
 import scalus.crypto.{Keccak, Ripemd160}
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 import java.nio.file.{Files, Paths}
 import scala.scalanative.unsafe.*
@@ -368,10 +369,10 @@ object Blst:
 
     // G1 operations
 
-    def g1Equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
+    def g1Equal(p1: G1Element, p2: G1Element): Boolean =
         java.util.Arrays.equals(p1.compressed, p2.compressed)
 
-    def g1Add(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    def g1Add(p1: G1Element, p2: G1Element): G1Element =
         val affine1 = stackalloc[Byte](P1_AFFINE_SIZE)
         val affine2 = stackalloc[Byte](P1_AFFINE_SIZE)
         val jac1 = stackalloc[Byte](P1_SIZE)
@@ -393,9 +394,9 @@ object Blst:
         // Compress result
         blst_p1_compress(compressed, result)
 
-        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+        G1Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
 
-    def g1ScalarMul(scalar: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    def g1ScalarMul(scalar: BigInt, p: G1Element): G1Element =
         val affine = stackalloc[Byte](P1_AFFINE_SIZE)
         val jac = stackalloc[Byte](P1_SIZE)
         val result = stackalloc[Byte](P1_SIZE)
@@ -429,9 +430,9 @@ object Blst:
         // Compress result
         blst_p1_compress(compressed, result)
 
-        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+        G1Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
 
-    def g1Neg(p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    def g1Neg(p: G1Element): G1Element =
         val affine = stackalloc[Byte](P1_AFFINE_SIZE)
         val jac = stackalloc[Byte](P1_SIZE)
         val compressed = stackalloc[Byte](G1_COMPRESSED_SIZE)
@@ -446,12 +447,12 @@ object Blst:
         // Compress result
         blst_p1_compress(compressed, jac)
 
-        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+        G1Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
 
-    def g1Compress(p: BLS12_381_G1_Element): ByteString =
+    def g1Compress(p: G1Element): ByteString =
         p.toCompressedByteString
 
-    def g1Uncompress(bs: ByteString): BLS12_381_G1_Element =
+    def g1Uncompress(bs: ByteString): G1Element =
         require(
           bs.size == G1_COMPRESSED_SIZE,
           s"Invalid length for G1 compressed point: expected $G1_COMPRESSED_SIZE, got ${bs.size}"
@@ -473,9 +474,9 @@ object Blst:
         if !blst_p1_in_g1(jac) then
             throw new IllegalArgumentException("Point is not in G1 subgroup")
 
-        BLS12_381_G1_Element(bs.bytes.clone())
+        G1Element(bs.bytes.clone())
 
-    def g1HashToGroup(msg: ByteString, dst: ByteString): BLS12_381_G1_Element =
+    def g1HashToGroup(msg: ByteString, dst: ByteString): G1Element =
         require(
           dst.size <= 255,
           s"DST must be <= 255 bytes, got ${dst.size}"
@@ -496,14 +497,14 @@ object Blst:
 
         blst_p1_compress(compressed, jac)
 
-        BLS12_381_G1_Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
+        G1Element(copyToArray(compressed, G1_COMPRESSED_SIZE))
 
     // G2 operations
 
-    def g2Equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
+    def g2Equal(p1: G2Element, p2: G2Element): Boolean =
         java.util.Arrays.equals(p1.compressed, p2.compressed)
 
-    def g2Add(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    def g2Add(p1: G2Element, p2: G2Element): G2Element =
         val affine1 = stackalloc[Byte](P2_AFFINE_SIZE)
         val affine2 = stackalloc[Byte](P2_AFFINE_SIZE)
         val jac1 = stackalloc[Byte](P2_SIZE)
@@ -521,9 +522,9 @@ object Blst:
 
         blst_p2_compress(compressed, result)
 
-        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+        G2Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
 
-    def g2ScalarMul(scalar: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    def g2ScalarMul(scalar: BigInt, p: G2Element): G2Element =
         val affine = stackalloc[Byte](P2_AFFINE_SIZE)
         val jac = stackalloc[Byte](P2_SIZE)
         val result = stackalloc[Byte](P2_SIZE)
@@ -551,9 +552,9 @@ object Blst:
 
         blst_p2_compress(compressed, result)
 
-        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+        G2Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
 
-    def g2Neg(p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    def g2Neg(p: G2Element): G2Element =
         val affine = stackalloc[Byte](P2_AFFINE_SIZE)
         val jac = stackalloc[Byte](P2_SIZE)
         val compressed = stackalloc[Byte](G2_COMPRESSED_SIZE)
@@ -565,12 +566,12 @@ object Blst:
 
         blst_p2_compress(compressed, jac)
 
-        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+        G2Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
 
-    def g2Compress(p: BLS12_381_G2_Element): ByteString =
+    def g2Compress(p: G2Element): ByteString =
         p.toCompressedByteString
 
-    def g2Uncompress(bs: ByteString): BLS12_381_G2_Element =
+    def g2Uncompress(bs: ByteString): G2Element =
         require(
           bs.size == G2_COMPRESSED_SIZE,
           s"Invalid length for G2 compressed point: expected $G2_COMPRESSED_SIZE, got ${bs.size}"
@@ -591,9 +592,9 @@ object Blst:
         if !blst_p2_in_g2(jac) then
             throw new IllegalArgumentException("Point is not in G2 subgroup")
 
-        BLS12_381_G2_Element(bs.bytes.clone())
+        G2Element(bs.bytes.clone())
 
-    def g2HashToGroup(msg: ByteString, dst: ByteString): BLS12_381_G2_Element =
+    def g2HashToGroup(msg: ByteString, dst: ByteString): G2Element =
         require(
           dst.size <= 255,
           s"DST must be <= 255 bytes, got ${dst.size}"
@@ -614,11 +615,11 @@ object Blst:
 
         blst_p2_compress(compressed, jac)
 
-        BLS12_381_G2_Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
+        G2Element(copyToArray(compressed, G2_COMPRESSED_SIZE))
 
     // Pairing operations
 
-    def millerLoop(g1: BLS12_381_G1_Element, g2: BLS12_381_G2_Element): BLS12_381_MlResult =
+    def millerLoop(g1: G1Element, g2: G2Element): MLResult =
         val g1Affine = stackalloc[Byte](P1_AFFINE_SIZE)
         val g2Affine = stackalloc[Byte](P2_AFFINE_SIZE)
         val fp12 = stackalloc[Byte](FP12_SIZE)
@@ -628,9 +629,9 @@ object Blst:
 
         blst_miller_loop(fp12, g2Affine, g1Affine)
 
-        BLS12_381_MlResult(copyToArray(fp12, FP12_SIZE))
+        MLResult(copyToArray(fp12, FP12_SIZE))
 
-    def mulMlResult(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): BLS12_381_MlResult =
+    def mulMlResult(r1: MLResult, r2: MLResult): MLResult =
         val fp12_1 = stackalloc[Byte](FP12_SIZE)
         val fp12_2 = stackalloc[Byte](FP12_SIZE)
         val result = stackalloc[Byte](FP12_SIZE)
@@ -640,9 +641,9 @@ object Blst:
 
         blst_fp12_mul(result, fp12_1, fp12_2)
 
-        BLS12_381_MlResult(copyToArray(result, FP12_SIZE))
+        MLResult(copyToArray(result, FP12_SIZE))
 
-    def finalVerify(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): Boolean =
+    def finalVerify(r1: MLResult, r2: MLResult): Boolean =
         val fp12_1 = stackalloc[Byte](FP12_SIZE)
         val fp12_2 = stackalloc[Byte](FP12_SIZE)
 
@@ -653,8 +654,8 @@ object Blst:
 
     def g1MultiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G1_Element]
-    ): BLS12_381_G1_Element = {
+        points: Seq[G1Element]
+    ): G1Element = {
         // Use zip behavior: take minimum length, return identity for empty
         // Start with zero element
         var result = g1Uncompress(
@@ -672,8 +673,8 @@ object Blst:
 
     def g2MultiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G2_Element]
-    ): BLS12_381_G2_Element = {
+        points: Seq[G2Element]
+    ): G2Element = {
         // Use zip behavior: take minimum length, return identity for empty
         // Start with zero element
         var result = g2Uncompress(
@@ -733,79 +734,79 @@ trait NativePlatformSpecific extends PlatformSpecific {
         Secp256k1Builtins.verifySchnorrSecp256k1Signature(msg.bytes, sig.bytes, pk.bytes)
 
     // BLS12_381 operations
-    override def bls12_381_G1_equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
+    override def bls12_381_G1_equal(p1: G1Element, p2: G1Element): Boolean =
         Blst.g1Equal(p1, p2)
 
     override def bls12_381_G1_add(
-        p1: BLS12_381_G1_Element,
-        p2: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element =
+        p1: G1Element,
+        p2: G1Element
+    ): G1Element =
         Blst.g1Add(p1, p2)
 
-    override def bls12_381_G1_scalarMul(s: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    override def bls12_381_G1_scalarMul(s: BigInt, p: G1Element): G1Element =
         Blst.g1ScalarMul(s, p)
 
-    override def bls12_381_G1_neg(p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    override def bls12_381_G1_neg(p: G1Element): G1Element =
         Blst.g1Neg(p)
 
-    override def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString =
+    override def bls12_381_G1_compress(p: G1Element): ByteString =
         Blst.g1Compress(p)
 
-    override def bls12_381_G1_uncompress(bs: ByteString): BLS12_381_G1_Element =
+    override def bls12_381_G1_uncompress(bs: ByteString): G1Element =
         Blst.g1Uncompress(bs)
 
-    override def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G1_Element =
+    override def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): G1Element =
         Blst.g1HashToGroup(bs, dst)
 
-    override def bls12_381_G2_equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
+    override def bls12_381_G2_equal(p1: G2Element, p2: G2Element): Boolean =
         Blst.g2Equal(p1, p2)
 
     override def bls12_381_G2_add(
-        p1: BLS12_381_G2_Element,
-        p2: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element =
+        p1: G2Element,
+        p2: G2Element
+    ): G2Element =
         Blst.g2Add(p1, p2)
 
-    override def bls12_381_G2_scalarMul(s: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    override def bls12_381_G2_scalarMul(s: BigInt, p: G2Element): G2Element =
         Blst.g2ScalarMul(s, p)
 
-    override def bls12_381_G2_neg(p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    override def bls12_381_G2_neg(p: G2Element): G2Element =
         Blst.g2Neg(p)
 
-    override def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString =
+    override def bls12_381_G2_compress(p: G2Element): ByteString =
         Blst.g2Compress(p)
 
-    override def bls12_381_G2_uncompress(bs: ByteString): BLS12_381_G2_Element =
+    override def bls12_381_G2_uncompress(bs: ByteString): G2Element =
         Blst.g2Uncompress(bs)
 
-    override def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element =
+    override def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): G2Element =
         Blst.g2HashToGroup(bs, dst)
 
     override def bls12_381_millerLoop(
-        p1: BLS12_381_G1_Element,
-        p2: BLS12_381_G2_Element
-    ): BLS12_381_MlResult =
+        p1: G1Element,
+        p2: G2Element
+    ): MLResult =
         Blst.millerLoop(p1, p2)
 
     override def bls12_381_mulMlResult(
-        r1: BLS12_381_MlResult,
-        r2: BLS12_381_MlResult
-    ): BLS12_381_MlResult =
+        r1: MLResult,
+        r2: MLResult
+    ): MLResult =
         Blst.mulMlResult(r1, r2)
 
-    override def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
+    override def bls12_381_finalVerify(p1: MLResult, p2: MLResult): Boolean =
         Blst.finalVerify(p1, p2)
 
     override def bls12_381_G1_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G1_Element]
-    ): BLS12_381_G1_Element =
+        points: Seq[G1Element]
+    ): G1Element =
         Blst.g1MultiScalarMul(scalars, points)
 
     override def bls12_381_G2_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G2_Element]
-    ): BLS12_381_G2_Element =
+        points: Seq[G2Element]
+    ): G2Element =
         Blst.g2MultiScalarMul(scalars, points)
 
     override def keccak_256(bs: ByteString): ByteString =

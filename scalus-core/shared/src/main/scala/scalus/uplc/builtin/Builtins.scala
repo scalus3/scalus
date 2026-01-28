@@ -1,6 +1,7 @@
 package scalus.uplc.builtin
 import io.bullet.borer.Cbor
 import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
@@ -1087,7 +1088,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
+    def bls12_381_G1_equal(p1: G1Element, p2: G1Element): Boolean =
         ps.bls12_381_G1_equal(p1, p2)
 
     /** Add two points in the G1 group.
@@ -1097,7 +1098,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_add(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    def bls12_381_G1_add(p1: G1Element, p2: G1Element): G1Element =
         ps.bls12_381_G1_add(p1, p2)
 
     /** Scalar multiplication of a G1 point.
@@ -1113,7 +1114,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_scalarMul(s: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element =
+    def bls12_381_G1_scalarMul(s: BigInt, p: G1Element): G1Element =
         ps.bls12_381_G1_scalarMul(s, p)
 
     /** Negate a G1 point.
@@ -1123,7 +1124,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_neg(p: BLS12_381_G1_Element): BLS12_381_G1_Element = ps.bls12_381_G1_neg(p)
+    def bls12_381_G1_neg(p: G1Element): G1Element = ps.bls12_381_G1_neg(p)
 
     /** Compress a G1 point to its 48-byte compressed form.
       *
@@ -1132,7 +1133,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString =
+    def bls12_381_G1_compress(p: G1Element): ByteString =
         ps.bls12_381_G1_compress(p)
 
     /** Uncompress a 48-byte compressed G1 point.
@@ -1144,7 +1145,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_uncompress(bs: ByteString): BLS12_381_G1_Element =
+    def bls12_381_G1_uncompress(bs: ByteString): G1Element =
         ps.bls12_381_G1_uncompress(bs)
 
     /** Hash a bytestring to a G1 point using the specified domain separation tag.
@@ -1158,7 +1159,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G1_Element =
+    def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): G1Element =
         ps.bls12_381_G1_hashToGroup(bs, dst)
 
     /** Check if two G2 points are equal.
@@ -1168,7 +1169,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
+    def bls12_381_G2_equal(p1: G2Element, p2: G2Element): Boolean =
         ps.bls12_381_G2_equal(p1, p2)
 
     /** Add two points in the G2 group.
@@ -1178,7 +1179,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_add(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    def bls12_381_G2_add(p1: G2Element, p2: G2Element): G2Element =
         ps.bls12_381_G2_add(p1, p2)
 
     /** Scalar multiplication of a G2 point.
@@ -1194,7 +1195,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_scalarMul(s: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element =
+    def bls12_381_G2_scalarMul(s: BigInt, p: G2Element): G2Element =
         ps.bls12_381_G2_scalarMul(s, p)
 
     /** Negate a G2 point.
@@ -1204,7 +1205,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_neg(p: BLS12_381_G2_Element): BLS12_381_G2_Element = ps.bls12_381_G2_neg(p)
+    def bls12_381_G2_neg(p: G2Element): G2Element = ps.bls12_381_G2_neg(p)
 
     /** Compress a G2 point to its 96-byte compressed form.
       *
@@ -1213,7 +1214,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString =
+    def bls12_381_G2_compress(p: G2Element): ByteString =
         ps.bls12_381_G2_compress(p)
 
     /** Uncompress a 96-byte compressed G2 point.
@@ -1225,7 +1226,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_uncompress(bs: ByteString): BLS12_381_G2_Element =
+    def bls12_381_G2_uncompress(bs: ByteString): G2Element =
         ps.bls12_381_G2_uncompress(bs)
 
     /** Hash a bytestring to a G2 point using the specified domain separation tag.
@@ -1239,7 +1240,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element =
+    def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): G2Element =
         ps.bls12_381_G2_hashToGroup(bs, dst)
 
     /** The compressed form of the point at infinity (zero) in G2, 96 bytes long.
@@ -1278,9 +1279,9 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *   V3
       */
     def bls12_381_millerLoop(
-        p1: BLS12_381_G1_Element,
-        p2: BLS12_381_G2_Element
-    ): BLS12_381_MlResult =
+        p1: G1Element,
+        p2: G2Element
+    ): MLResult =
         ps.bls12_381_millerLoop(p1, p2)
 
     /** Multiply two Miller loop results.
@@ -1293,7 +1294,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_mulMlResult(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): BLS12_381_MlResult =
+    def bls12_381_mulMlResult(r1: MLResult, r2: MLResult): MLResult =
         ps.bls12_381_mulMlResult(r1, r2)
 
     /** Final verification step for pairing equality check.
@@ -1306,7 +1307,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V3
       */
-    def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean =
+    def bls12_381_finalVerify(p1: MLResult, p2: MLResult): Boolean =
         ps.bls12_381_finalVerify(p1, p2)
 
     /** Multi-scalar multiplication on G1.
@@ -1327,8 +1328,8 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       */
     def bls12_381_G1_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G1_Element]
-    ): BLS12_381_G1_Element =
+        points: Seq[G1Element]
+    ): G1Element =
         ps.bls12_381_G1_multiScalarMul(scalars, points)
 
     /** Multi-scalar multiplication on G2.
@@ -1349,8 +1350,8 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       */
     def bls12_381_G2_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G2_Element]
-    ): BLS12_381_G2_Element =
+        points: Seq[G2Element]
+    ): G2Element =
         ps.bls12_381_G2_multiScalarMul(scalars, points)
 
     /** Compute Keccak-256 hash.

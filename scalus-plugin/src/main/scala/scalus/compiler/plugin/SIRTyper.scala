@@ -320,12 +320,16 @@ class SIRTyper(using Context) {
                       env.pos,
                       s"Pair type should have two type arguments, found ${tpArgs.length}"
                     )
-        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_G1_Element") then
-            Some(SIRType.BLS12_381_G1_Element)
-        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_G2_Element") then
-            Some(SIRType.BLS12_381_G2_Element)
-        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_MlResult") then
-            Some(SIRType.BLS12_381_MlResult)
+        // BLS12-381 types - support both old and new package locations
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.bls12_381.G1Element")
+            || symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_G1_Element")
+        then Some(SIRType.BLS12_381_G1_Element)
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.bls12_381.G2Element")
+            || symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_G2_Element")
+        then Some(SIRType.BLS12_381_G2_Element)
+        else if symbol == Symbols.requiredClass("scalus.uplc.builtin.bls12_381.MLResult")
+            || symbol == Symbols.requiredClass("scalus.uplc.builtin.BLS12_381_MlResult")
+        then Some(SIRType.BLS12_381_MlResult)
         else None
     }
 

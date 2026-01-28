@@ -6,6 +6,7 @@ import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.bouncycastle.jcajce.provider.digest.{Keccak, RIPEMD160, SHA3}
 import scalus.crypto.ed25519.{JvmEd25519Signer, SigningKey}
 import scalus.crypto.{NativeSecp256k1, Secp256k1Context}
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 import scalus.utils.Utils
 import supranational.blst.{P1, P2, PT}
 
@@ -101,32 +102,32 @@ trait JVMPlatformSpecific extends PlatformSpecific {
     }
 
     // BLS12_381 operations
-    override def bls12_381_G1_equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean =
+    override def bls12_381_G1_equal(p1: G1Element, p2: G1Element): Boolean =
         p1 == p2
 
     override def bls12_381_G1_add(
-        p1: BLS12_381_G1_Element,
-        p2: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = BLS12_381_G1_Element(p1.value.dup.add(p2.value))
+        p1: G1Element,
+        p2: G1Element
+    ): G1Element = G1Element(p1.value.dup.add(p2.value))
 
     override def bls12_381_G1_scalarMul(
         s: BigInt,
-        p: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = {
+        p: G1Element
+    ): G1Element = {
         val scalar = s.bigInteger.mod(PlatformSpecific.bls12_381_scalar_period.bigInteger)
-        BLS12_381_G1_Element(p.value.dup.mult(scalar))
+        G1Element(p.value.dup.mult(scalar))
     }
 
     override def bls12_381_G1_neg(
-        p: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = {
-        BLS12_381_G1_Element(p.value.dup.neg())
+        p: G1Element
+    ): G1Element = {
+        G1Element(p.value.dup.neg())
     }
 
-    override def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString =
+    override def bls12_381_G1_compress(p: G1Element): ByteString =
         p.toCompressedByteString
 
-    override def bls12_381_G1_uncompress(bs: ByteString): BLS12_381_G1_Element = {
+    override def bls12_381_G1_uncompress(bs: ByteString): G1Element = {
         require(
           bs.size == 48,
           s"Invalid length of bytes for compressed point of G1: expected 48, actual: ${bs.size}, byteString: $bs"
@@ -139,10 +140,10 @@ trait JVMPlatformSpecific extends PlatformSpecific {
 
         val p = new P1(bs.bytes)
         if !p.in_group() then throw new IllegalArgumentException("Invalid point")
-        BLS12_381_G1_Element(p)
+        G1Element(p)
     }
 
-    override def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G1_Element = {
+    override def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): G1Element = {
         require(
           dst.size <= 255,
           s"Invalid length of bytes for dst parameter of hashToGroup of G1, expected: <= 255, actual: ${dst.size}"
@@ -150,35 +151,35 @@ trait JVMPlatformSpecific extends PlatformSpecific {
 
         val p = new P1()
         p.hash_to(bs.bytes, new String(dst.bytes, "Latin1"))
-        BLS12_381_G1_Element(p)
+        G1Element(p)
     }
 
-    override def bls12_381_G2_equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean =
+    override def bls12_381_G2_equal(p1: G2Element, p2: G2Element): Boolean =
         p1 == p2
 
     override def bls12_381_G2_add(
-        p1: BLS12_381_G2_Element,
-        p2: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = BLS12_381_G2_Element(p1.value.dup.add(p2.value))
+        p1: G2Element,
+        p2: G2Element
+    ): G2Element = G2Element(p1.value.dup.add(p2.value))
 
     override def bls12_381_G2_scalarMul(
         s: BigInt,
-        p: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = {
+        p: G2Element
+    ): G2Element = {
         val scalar = s.bigInteger.mod(PlatformSpecific.bls12_381_scalar_period.bigInteger)
-        BLS12_381_G2_Element(p.value.dup.mult(scalar))
+        G2Element(p.value.dup.mult(scalar))
     }
 
     override def bls12_381_G2_neg(
-        p: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element = {
-        BLS12_381_G2_Element(p.value.dup.neg())
+        p: G2Element
+    ): G2Element = {
+        G2Element(p.value.dup.neg())
     }
 
-    override def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString =
+    override def bls12_381_G2_compress(p: G2Element): ByteString =
         p.toCompressedByteString
 
-    override def bls12_381_G2_uncompress(bs: ByteString): BLS12_381_G2_Element = {
+    override def bls12_381_G2_uncompress(bs: ByteString): G2Element = {
         require(
           bs.size == 96,
           s"Invalid length of bytes for compressed point of G2: expected 96, actual: ${bs.size}, byteString: $bs"
@@ -191,10 +192,10 @@ trait JVMPlatformSpecific extends PlatformSpecific {
 
         val p = new P2(bs.bytes)
         if !p.in_group() then throw new IllegalArgumentException("Invalid point")
-        BLS12_381_G2_Element(p)
+        G2Element(p)
     }
 
-    override def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element = {
+    override def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): G2Element = {
         require(
           dst.size <= 255,
           s"Invalid length of bytes for dst parameter of hashToGroup of G2, expected: <= 255, actual: ${dst.size}"
@@ -202,33 +203,33 @@ trait JVMPlatformSpecific extends PlatformSpecific {
 
         val p = new P2()
         p.hash_to(bs.bytes, new String(dst.bytes, "Latin1"))
-        BLS12_381_G2_Element(p)
+        G2Element(p)
     }
 
     override def bls12_381_millerLoop(
-        p1: BLS12_381_G1_Element,
-        p2: BLS12_381_G2_Element
-    ): BLS12_381_MlResult = {
+        p1: G1Element,
+        p2: G2Element
+    ): MLResult = {
         val pt = new PT(p1.value, p2.value)
-        BLS12_381_MlResult(pt)
+        MLResult(pt)
     }
 
     override def bls12_381_mulMlResult(
-        r1: BLS12_381_MlResult,
-        r2: BLS12_381_MlResult
-    ): BLS12_381_MlResult = {
+        r1: MLResult,
+        r2: MLResult
+    ): MLResult = {
         val pt = r1.value.dup.mul(r2.value)
-        BLS12_381_MlResult(pt)
+        MLResult(pt)
     }
 
-    override def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean = {
+    override def bls12_381_finalVerify(p1: MLResult, p2: MLResult): Boolean = {
         PT.finalverify(p1.value, p2.value)
     }
 
     override def bls12_381_G1_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G1_Element]
-    ): BLS12_381_G1_Element = {
+        points: Seq[G1Element]
+    ): G1Element = {
         // Use zip behavior: take minimum length, return identity for empty
         val period = PlatformSpecific.bls12_381_scalar_period.bigInteger
         val result = new P1(PlatformSpecific.bls12_381_G1_compressed_zero.bytes)
@@ -237,13 +238,13 @@ trait JVMPlatformSpecific extends PlatformSpecific {
             val product = point.value.dup.mult(reducedScalar)
             result.add(product)
         }
-        BLS12_381_G1_Element(result)
+        G1Element(result)
     }
 
     override def bls12_381_G2_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G2_Element]
-    ): BLS12_381_G2_Element = {
+        points: Seq[G2Element]
+    ): G2Element = {
         // Use zip behavior: take minimum length, return identity for empty
         val period = PlatformSpecific.bls12_381_scalar_period.bigInteger
         val result = new P2(PlatformSpecific.bls12_381_G2_compressed_zero.bytes)
@@ -252,7 +253,7 @@ trait JVMPlatformSpecific extends PlatformSpecific {
             val product = point.value.dup.mult(reducedScalar)
             result.add(product)
         }
-        BLS12_381_G2_Element(result)
+        G2Element(result)
     }
 
     override def keccak_256(bs: ByteString): ByteString = {

@@ -1,6 +1,7 @@
 package scalus.uplc.builtin
 
 import scalus.Compile
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 /** Provides access to platform-specific built-in functions.
   *
@@ -78,7 +79,7 @@ trait PlatformSpecific:
 
     // BLS12_381 operations
 
-    def bls12_381_G1_equal(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): Boolean
+    def bls12_381_G1_equal(p1: G1Element, p2: G1Element): Boolean
 
     /** Adds two G1 group elements
       * @param p1
@@ -88,7 +89,7 @@ trait PlatformSpecific:
       * @return
       *   p1 + p2
       */
-    def bls12_381_G1_add(p1: BLS12_381_G1_Element, p2: BLS12_381_G1_Element): BLS12_381_G1_Element
+    def bls12_381_G1_add(p1: G1Element, p2: G1Element): G1Element
 
     /** Multiplication of group elements by scalars. In the blst library the arguments are the other
       * way round, but scalars acting on the left is more consistent with standard mathematical
@@ -101,7 +102,7 @@ trait PlatformSpecific:
       * @return
       *   s * p
       */
-    def bls12_381_G1_scalarMul(s: BigInt, p: BLS12_381_G1_Element): BLS12_381_G1_Element
+    def bls12_381_G1_scalarMul(s: BigInt, p: G1Element): G1Element
 
     /** Negates a G1 group element
       *
@@ -111,8 +112,8 @@ trait PlatformSpecific:
       *   -p
       */
     def bls12_381_G1_neg(
-        p: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element
+        p: G1Element
+    ): G1Element
 
     /** Compress a G1 element to a bytestring. This serialises a curve point to its x coordinate
       * only. The compressed bytestring is 48 bytes long, with three spare bits used to convey extra
@@ -126,7 +127,7 @@ trait PlatformSpecific:
       * @return
       *   Compressed bytestring
       */
-    def bls12_381_G1_compress(p: BLS12_381_G1_Element): ByteString
+    def bls12_381_G1_compress(p: G1Element): ByteString
 
     /** Uncompress a bytestring to get a G1 point. This will fail if any of the following are true.
       *   - The bytestring is not exactly 48 bytes long.
@@ -136,34 +137,34 @@ trait PlatformSpecific:
       *   - The bytestring does represent a point on the E1 curve, but the point is not in the G1
       *     subgroup.
       */
-    def bls12_381_G1_uncompress(bs: ByteString): BLS12_381_G1_Element
+    def bls12_381_G1_uncompress(bs: ByteString): G1Element
 
-    def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G1_Element
+    def bls12_381_G1_hashToGroup(bs: ByteString, dst: ByteString): G1Element
 
-    def bls12_381_G2_equal(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): Boolean
+    def bls12_381_G2_equal(p1: G2Element, p2: G2Element): Boolean
 
-    def bls12_381_G2_add(p1: BLS12_381_G2_Element, p2: BLS12_381_G2_Element): BLS12_381_G2_Element
+    def bls12_381_G2_add(p1: G2Element, p2: G2Element): G2Element
 
-    def bls12_381_G2_scalarMul(s: BigInt, p: BLS12_381_G2_Element): BLS12_381_G2_Element
+    def bls12_381_G2_scalarMul(s: BigInt, p: G2Element): G2Element
 
     def bls12_381_G2_neg(
-        p: BLS12_381_G2_Element
-    ): BLS12_381_G2_Element
+        p: G2Element
+    ): G2Element
 
-    def bls12_381_G2_compress(p: BLS12_381_G2_Element): ByteString
+    def bls12_381_G2_compress(p: G2Element): ByteString
 
-    def bls12_381_G2_uncompress(bs: ByteString): BLS12_381_G2_Element
+    def bls12_381_G2_uncompress(bs: ByteString): G2Element
 
-    def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element
+    def bls12_381_G2_hashToGroup(bs: ByteString, dst: ByteString): G2Element
 
     def bls12_381_millerLoop(
-        p1: BLS12_381_G1_Element,
-        p2: BLS12_381_G2_Element
-    ): BLS12_381_MlResult
+        p1: G1Element,
+        p2: G2Element
+    ): MLResult
 
-    def bls12_381_mulMlResult(r1: BLS12_381_MlResult, r2: BLS12_381_MlResult): BLS12_381_MlResult
+    def bls12_381_mulMlResult(r1: MLResult, r2: MLResult): MLResult
 
-    def bls12_381_finalVerify(p1: BLS12_381_MlResult, p2: BLS12_381_MlResult): Boolean
+    def bls12_381_finalVerify(p1: MLResult, p2: MLResult): Boolean
 
     /** Multi-scalar multiplication on G1.
       *
@@ -181,8 +182,8 @@ trait PlatformSpecific:
       */
     def bls12_381_G1_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G1_Element]
-    ): BLS12_381_G1_Element
+        points: Seq[G1Element]
+    ): G1Element
 
     /** Multi-scalar multiplication on G2.
       *
@@ -200,8 +201,8 @@ trait PlatformSpecific:
       */
     def bls12_381_G2_multiScalarMul(
         scalars: Seq[BigInt],
-        points: Seq[BLS12_381_G2_Element]
-    ): BLS12_381_G2_Element
+        points: Seq[G2Element]
+    ): G2Element
 
     def keccak_256(bs: ByteString): ByteString
 
