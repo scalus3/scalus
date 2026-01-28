@@ -63,53 +63,15 @@ class BlockfrostProvider(
     /** Wrap an HTTP request with rate limiting */
     private def rateLimited[T](request: => Future[T]): Future[T] = limiter(request)
 
-    def fetchLatestParams: Future[ProtocolParams] = {
-        val url = s"$baseUrl/epochs/latest/parameters"
-        rateLimited(
-          basicRequest
-              .get(uri"$url")
-              .headers(headers)
-              .send(backend)
-        ).map { response =>
-            if response.code == StatusCode.Ok then {
-                response.body match {
-                    case Right(body) => ProtocolParams.fromBlockfrostJson(body)
-                    case Left(error) =>
-                        throw RuntimeException(
-                          s"Failed to fetch protocol parameters. Status: ${response.code}, Body: $error"
-                        )
-                }
-            } else {
-                throw RuntimeException(
-                  s"Failed to fetch protocol parameters. Status: ${response.code}, Body: ${response.body}"
-                )
-            }
-        }
-    }
+    def fetchLatestParams: Future[ProtocolParams] =
+        fetchProtocolParamsFromUrl(s"$baseUrl/epochs/latest/parameters")
 
-    def fetchParamsOfEpoch(epoch: Long): Future[ProtocolParams] = {
-        val url = s"$baseUrl/epochs/$epoch/parameters"
-        rateLimited(
-          basicRequest
-              .get(uri"$url")
-              .headers(headers)
-              .send(backend)
-        ).map { response =>
-            if response.code == StatusCode.Ok then {
-                response.body match {
-                    case Right(body) => ProtocolParams.fromBlockfrostJson(body)
-                    case Left(error) =>
-                        throw RuntimeException(
-                          s"Failed to fetch protocol parameters for epoch $epoch. Status: ${response.code}, Body: $error"
-                        )
-                }
-            } else {
-                throw RuntimeException(
-                  s"Failed to fetch protocol parameters for epoch $epoch. Status: ${response.code}, Body: ${response.body}"
-                )
-            }
-        }
-    }
+    def fetchParamsOfEpoch(epoch: Long): Future[ProtocolParams] =
+        fetchProtocolParamsFromUrl(s"$baseUrl/epochs/$epoch/parameters")
+
+    private def fetchProtocolParamsFromUrl(url: String): Future[ProtocolParams] =
+        rateLimited(basicRequest.get(uri"$url").headers(headers).send(backend))
+            .map(BlockfrostProvider.parseProtocolParamsResponse)
 
     override def submit(
         tx: Transaction
@@ -400,155 +362,6 @@ class BlockfrostProvider(
                     case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
         }
     }
-
-    /** Fetch a script by its hash from Blockfrost
-      * @param scriptHash
-      *   the hex-encoded script hash
-      * @return
-      *   the Script or an error
-      */
-    def fetchScript(scriptHash: String): Future[Either[RuntimeException, Script]] = {
-        // First, get the script type
-        val typeUrl = s"$baseUrl/scripts/$scriptHash"
-        rateLimited(
-          basicRequest
-              .get(uri"$typeUrl")
-              .headers(headers)
-              .send(backend)
-        ).flatMap { response =>
-            if response.code.isSuccess then {
-                response.body match {
-                    case Right(body) =>
-                        val json = ujson.read(body, trace = false)
-                        val scriptType = json("type").str
-                        if scriptType == "timelock" then {
-                            // Fetch JSON for timelock scripts
-                            val jsonUrl = s"$baseUrl/scripts/$scriptHash/json"
-                            rateLimited(
-                              basicRequest
-                                  .get(uri"$jsonUrl")
-                                  .headers(headers)
-                                  .send(backend)
-                            ).map { jsonResponse =>
-                                if jsonResponse.code.isSuccess then {
-                                    jsonResponse.body match {
-                                        case Right(jsonBody) =>
-                                            import Timelock.blockfrostReadWriter
-                                            val jsonData =
-                                                ujson.read(jsonBody, trace = false)
-                                            val timelock =
-                                                upickle.default.read[Timelock](
-                                                  jsonData("json")
-                                                )
-                                            Right(Script.Native(timelock))
-                                        case Left(error) =>
-                                            Left(
-                                              new RuntimeException(
-                                                s"Failed to fetch script JSON: $error"
-                                              )
-                                            )
-                                    }
-                                } else {
-                                    Left(
-                                      new RuntimeException(
-                                        s"Failed to fetch script JSON: ${jsonResponse.body}"
-                                      )
-                                    )
-                                }
-                            }
-                        } else {
-                            // Fetch CBOR for Plutus scripts
-                            val cborUrl = s"$baseUrl/scripts/$scriptHash/cbor"
-                            rateLimited(
-                              basicRequest
-                                  .get(uri"$cborUrl")
-                                  .headers(headers)
-                                  .send(backend)
-                            ).map { cborResponse =>
-                                if cborResponse.code.isSuccess then {
-                                    cborResponse.body match {
-                                        case Right(cborBody) =>
-                                            val cborJson =
-                                                ujson.read(cborBody, trace = false)
-                                            val cborHex = cborJson("cbor").str
-                                            val scriptBytes =
-                                                ByteString.fromHex(cborHex)
-                                            val script = scriptType match {
-                                                case "plutusV1" =>
-                                                    Script.PlutusV1(scriptBytes)
-                                                case "plutusV2" =>
-                                                    Script.PlutusV2(scriptBytes)
-                                                case "plutusV3" =>
-                                                    Script.PlutusV3(scriptBytes)
-                                                case other =>
-                                                    throw new RuntimeException(
-                                                      s"Unknown Plutus script type: $other"
-                                                    )
-                                            }
-                                            Right(script)
-                                        case Left(error) =>
-                                            Left(
-                                              new RuntimeException(
-                                                s"Failed to fetch script CBOR: $error"
-                                              )
-                                            )
-                                    }
-                                } else {
-                                    Left(
-                                      new RuntimeException(
-                                        s"Failed to fetch script CBOR: ${cborResponse.body}"
-                                      )
-                                    )
-                                }
-                            }
-                        }
-                    case Left(error) =>
-                        Future.successful(
-                          Left(new RuntimeException(s"Failed to fetch script type: $error"))
-                        )
-                }
-            } else if response.code == StatusCode.NotFound then {
-                Future.successful(
-                  Left(new RuntimeException(s"Script $scriptHash not found"))
-                )
-            } else {
-                Future.successful(
-                  Left(new RuntimeException(s"Failed to fetch script: ${response.body}"))
-                )
-            }
-        }.recover { case e: Throwable =>
-            Left(new RuntimeException(s"Failed to fetch script: ${e.getMessage}", e))
-        }
-    }
-
-    /** Check if a transaction has been confirmed on-chain */
-    def isTransactionConfirmed(txHash: String): Future[Either[RuntimeException, Boolean]] = {
-        val url = s"$baseUrl/txs/$txHash"
-        rateLimited(
-          basicRequest
-              .get(uri"$url")
-              .headers(headers)
-              .send(backend)
-        ).map { response =>
-            if response.code.isSuccess then {
-                response.body match {
-                    case Right(body) =>
-                        val json = ujson.read(body, trace = false)
-                        val blockHeight = json.obj.get("block_height")
-                        Right(blockHeight.exists(_.num > 0))
-                    case Left(_) => Right(false)
-                }
-            } else if response.code == StatusCode.NotFound then {
-                Right(false)
-            } else {
-                Left(
-                  new RuntimeException(
-                    s"Failed to check transaction status: ${response.body}"
-                  )
-                )
-            }
-        }
-    }
 }
 
 /** Companion object for BlockfrostProvider with factory methods and utilities. */
@@ -611,6 +424,25 @@ object BlockfrostProvider {
             case (Some(dataHashJson), _) if !dataHashJson.isNull =>
                 Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHashJson.str))))
             case _ => None
+        }
+    }
+
+    /** Parse protocol parameters from HTTP response, throwing on error. */
+    private[node] def parseProtocolParamsResponse(
+        response: Response[Either[String, String]]
+    ): ProtocolParams = {
+        if response.code == StatusCode.Ok then {
+            response.body match {
+                case Right(body) => ProtocolParams.fromBlockfrostJson(body)
+                case Left(error) =>
+                    throw RuntimeException(
+                      s"Failed to fetch protocol parameters. Status: ${response.code}, Body: $error"
+                    )
+            }
+        } else {
+            throw RuntimeException(
+              s"Failed to fetch protocol parameters. Status: ${response.code}, Body: ${response.body}"
+            )
         }
     }
 
@@ -771,24 +603,6 @@ object BlockfrostProvider {
     ): Future[ProtocolParams] = {
         val url = s"$baseUrl/epochs/latest/parameters"
         val headers = Map("project_id" -> apiKey)
-        basicRequest
-            .get(uri"$url")
-            .headers(headers)
-            .send(backend)
-            .map { response =>
-                if response.code == StatusCode.Ok then {
-                    response.body match {
-                        case Right(body) => ProtocolParams.fromBlockfrostJson(body)
-                        case Left(error) =>
-                            throw RuntimeException(
-                              s"Failed to fetch protocol parameters. Status: ${response.code}, Body: $error"
-                            )
-                    }
-                } else {
-                    throw RuntimeException(
-                      s"Failed to fetch protocol parameters. Status: ${response.code}, Body: ${response.body}"
-                    )
-                }
-            }
+        basicRequest.get(uri"$url").headers(headers).send(backend).map(parseProtocolParamsResponse)
     }
 }
