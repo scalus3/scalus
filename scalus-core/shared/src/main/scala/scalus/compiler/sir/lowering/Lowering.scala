@@ -268,12 +268,7 @@ object Lowering {
                     case _ =>
                         (const, LoweredValueRepresentation.constRepresentation(tp))
                 }
-                StaticLoweredValue(
-                  SIR.Const(transformedConst, tp, anns),
-                  Term.Const(transformedConst),
-                  repr,
-                  true
-                )
+                ConstantLoweredValue(SIR.Const(transformedConst, tp, anns), repr)
             case SIR.And(lhs, rhs, anns) =>
                 lowerSIR(
                   SIR.IfThenElse(
