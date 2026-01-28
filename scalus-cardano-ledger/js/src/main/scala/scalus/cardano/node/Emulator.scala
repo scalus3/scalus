@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State}
+import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, PlutusScriptsTransactionMutator, STS, State}
 import scalus.cardano.ledger.*
 
 /** An in-memory bare-bones node implementation (JS version with single-threaded state).
@@ -53,10 +53,8 @@ class Emulator(
 }
 
 object Emulator {
-    // JS cannot use CardanoMutator (requires JVM-only reflection/JAR scanning)
-    // Default to PlutusScriptsTransactionMutator which handles script evaluation
-    val defaultValidators: Set[STS.Validator] = Set.empty
-    val defaultMutators: Set[STS.Mutator] = Set(PlutusScriptsTransactionMutator)
+    val defaultValidators: Set[STS.Validator] = DefaultValidators.all
+    val defaultMutators: Set[STS.Mutator] = DefaultMutators.all
 
     /** Creates an Emulator with the specified addresses, each with the given initial value.
       *
