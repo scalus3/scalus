@@ -17,10 +17,6 @@ object TestEmulatorFactory {
         mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
     ): EmulatorBase = new Emulator(utxos, context, validators, mutators)
 
-    /** Generate an Ed25519 key pair for testing.
-      * @return
-      *   (privateKey, publicKey) both as 32-byte ByteStrings
-      */
     def generateKeyPair(): (ByteString, ByteString) = {
         val asymmetricCipherKeyPair: AsymmetricCipherKeyPair = keyPairGenerator.generateKeyPair()
         val privateKeyParams: Ed25519PrivateKeyParameters =
