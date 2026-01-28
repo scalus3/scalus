@@ -86,6 +86,10 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 Run `sbtn quick` to ensure formatting, compilation, and tests pass.
 If issues occur, try `sbtn clean` first.
 
+### Version control
+
+When creating files, make sure to run `git add` to add them to the version control system. 
+
 ### Multi-Platform Architecture
 
 - Shared code goes in `shared/src/main/scala/`
