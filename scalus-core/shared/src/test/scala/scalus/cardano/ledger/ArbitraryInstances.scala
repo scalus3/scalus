@@ -6,6 +6,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.uplc.builtin
 import scalus.uplc.builtin.Data.*
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.address.{Network, ShelleyAddress, StakeAddress}
 import scalus.cardano.ledger.TransactionWitnessSet.given
 import scalus.testing.ArbitraryDerivation.autoDerived
 
@@ -15,6 +16,63 @@ import scala.math.pow
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
+
+    /** Generates a random transaction with isValid set to true. Useful for testing validators that
+      * require valid transactions.
+      */
+    def randomTransactionWithIsValidField: Transaction =
+        Arbitrary.arbitrary[Transaction].sample.get.copy(isValid = true)
+
+    extension (tx: Transaction)
+        /** Creates a copy of the transaction with all network-related fields set to the given
+          * network.
+          */
+        def withNetwork(network: Network): Transaction = tx.copy(
+          body = KeepRaw(
+            tx.body.value.copy(
+              networkId = Some(network.networkId),
+              outputs = tx.body.value.outputs
+                  .map(x =>
+                      Sized(
+                        Output(
+                          Arbitrary.arbitrary[ShelleyAddress].sample.get.copy(network = network),
+                          x.value.value
+                        )
+                      )
+                  )
+                  .appended(
+                    Sized(
+                      Output(
+                        Arbitrary.arbitrary[ShelleyAddress].sample.get.copy(network = network),
+                        Arbitrary.arbitrary[Value].sample.get
+                      )
+                    )
+                  ),
+              withdrawals = tx.body.value.withdrawals
+                  .map(w =>
+                      w.copy(withdrawals =
+                          w.withdrawals.map((k, v) =>
+                              (k.copy(address = k.address.copy(network = network)), v)
+                          )
+                      )
+                  )
+                  .orElse(
+                    Some(
+                      Withdrawals(
+                        immutable.SortedMap(
+                          (
+                            RewardAccount(
+                              Arbitrary.arbitrary[StakeAddress].sample.get.copy(network = network)
+                            ),
+                            Arbitrary.arbitrary[Coin].sample.get
+                          )
+                        )
+                      )
+                    )
+                  )
+            )
+          )
+        )
     def genMapOfSizeFromArbitrary[A: Arbitrary, B: Arbitrary](
         from: Int,
         to: Int

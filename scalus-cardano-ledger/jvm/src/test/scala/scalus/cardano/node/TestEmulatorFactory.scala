@@ -1,20 +1,23 @@
-package scalus.cardano.ledger.rules
+package scalus.cardano.node
 
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair
 import org.bouncycastle.crypto.generators.Ed25519KeyPairGenerator
 import org.bouncycastle.crypto.params.{Ed25519KeyGenerationParameters, Ed25519PrivateKeyParameters, Ed25519PublicKeyParameters}
+import scalus.cardano.ledger.Utxos
+import scalus.cardano.ledger.rules.{Context, STS}
 import scalus.uplc.builtin.ByteString
-import scalus.cardano.ledger.*
 
 import java.security.SecureRandom
 
-/** JVM-specific test utilities that extend cross-platform ArbitraryInstances.
-  *
-  * Provides JVM-only functionality like Ed25519 key generation using BouncyCastle.
-  */
-trait ValidatorRulesTestKit extends ArbitraryInstances {
+object TestEmulatorFactory {
+    def create(
+        utxos: Utxos = Map.empty,
+        context: Context = Context(),
+        validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+        mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
+    ): EmulatorBase = new Emulator(utxos, context, validators, mutators)
 
-    protected def generateKeyPair(): (ByteString, ByteString) = {
+    def generateKeyPair(): (ByteString, ByteString) = {
         val asymmetricCipherKeyPair: AsymmetricCipherKeyPair = keyPairGenerator.generateKeyPair()
         val privateKeyParams: Ed25519PrivateKeyParameters =
             asymmetricCipherKeyPair.getPrivate.asInstanceOf[Ed25519PrivateKeyParameters]

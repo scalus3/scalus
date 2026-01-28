@@ -25,7 +25,7 @@ trait EmulatorBase extends BlockchainProvider {
     protected def currentContext: Context
 
     // Abstract - platform-specific state modification
-    protected def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash]
+    def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash]
     def setSlot(slot: SlotNo): Unit
     def snapshot(): Emulator
 

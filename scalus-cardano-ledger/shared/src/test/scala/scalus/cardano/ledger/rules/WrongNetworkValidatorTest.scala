@@ -1,16 +1,16 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.address.*
+import scalus.cardano.address.{ByronAddress, Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.address.Network.{Mainnet, Testnet}
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 import scalus.uplc.builtin.ByteString
 
-class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test(
-      "WrongNetworkValidator rule success for outputs for ShelleyAddress with matching network"
-    ) {
+class WrongNetworkValidatorTest extends AnyFunSuite with ArbitraryInstances {
+
+    test("WrongNetwork - success for outputs for ShelleyAddress with matching network") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -30,13 +30,16 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight, result)
     }
 
-    test(
-      "WrongNetworkValidator rule failure for outputs for ShelleyAddress with non-matching network"
-    ) {
+    test("WrongNetwork - failure for outputs for ShelleyAddress with non-matching network") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -56,11 +59,16 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 
-    test("WrongNetworkValidator rule success for outputs for StakeAddress with matching network") {
+    test("WrongNetwork - success for outputs for StakeAddress with matching network") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -79,13 +87,16 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight, result)
     }
 
-    test(
-      "WrongNetworkValidator rule failure for outputs for StakeAddress with non-matching network"
-    ) {
+    test("WrongNetwork - failure for outputs for StakeAddress with non-matching network") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -104,11 +115,16 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 
-    test("WrongNetworkValidator rule failure for outputs for ByronAddress") {
+    test("WrongNetwork - failure for outputs for ByronAddress") {
         // Create a mainnet Byron address (no network magic = mainnet)
         // Context uses Network.Testnet by default, so this address should fail validation
         val mainnetByronAddress = ByronAddress.create(
@@ -131,12 +147,17 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 
     test(
-      "WrongNetworkValidator rule success for collateralReturnOutput for ShelleyAddress with matching network"
+      "WrongNetwork - success for collateralReturnOutput for ShelleyAddress with matching network"
     ) {
         val transaction = Transaction(
           body = TransactionBody(
@@ -158,12 +179,17 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight, result)
     }
 
     test(
-      "WrongNetworkValidator rule failure for collateralReturnOutput for ShelleyAddress with non-matching network"
+      "WrongNetwork - failure for collateralReturnOutput for ShelleyAddress with non-matching network"
     ) {
         val transaction = Transaction(
           body = TransactionBody(
@@ -185,12 +211,17 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 
     test(
-      "WrongNetworkValidator rule success for collateralReturnOutput for StakeAddress with matching network"
+      "WrongNetwork - success for collateralReturnOutput for StakeAddress with matching network"
     ) {
         val transaction = Transaction(
           body = TransactionBody(
@@ -211,12 +242,17 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight, result)
     }
 
     test(
-      "WrongNetworkValidator rule failure for collateralReturnOutput for StakeAddress with non-matching network"
+      "WrongNetwork - failure for collateralReturnOutput for StakeAddress with non-matching network"
     ) {
         val transaction = Transaction(
           body = TransactionBody(
@@ -237,11 +273,16 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 
-    test("WrongNetworkValidator rule failure for collateralReturnOutput for ByronAddress") {
+    test("WrongNetwork - failure for collateralReturnOutput for ByronAddress") {
         // Create a mainnet Byron address (no network magic = mainnet)
         // Context uses Network.Testnet by default, so this address should fail validation
         val mainnetByronAddress = ByronAddress.create(
@@ -265,7 +306,12 @@ class WrongNetworkValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 }

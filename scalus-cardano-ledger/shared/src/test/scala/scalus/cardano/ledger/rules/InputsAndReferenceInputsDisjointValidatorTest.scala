@@ -1,12 +1,12 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
-class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("InputsAndReferenceInputsDisjointValidator rule success") {
-        val context = Context()
-        val state = State()
+class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite with ArbitraryInstances {
+
+    test("InputsAndReferenceInputsDisjoint - success with disjoint inputs") {
         val transaction = {
             val tx = randomTransactionWithIsValidField
             tx.copy(
@@ -21,16 +21,18 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
             )
         }
 
-        val result = InputsAndReferenceInputsDisjointValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(InputsAndReferenceInputsDisjointValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
         assert(
           transaction.body.value.inputs.toSet.nonEmpty && transaction.body.value.referenceInputs.toSet.isEmpty
         )
     }
 
-    test("InputsAndReferenceInputsDisjointValidator rule failure") {
-        val context = Context()
-        val state = State()
+    test("InputsAndReferenceInputsDisjoint - failure with overlapping inputs") {
         val transaction = {
             val inputs = genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
             val tx = randomTransactionWithIsValidField
@@ -44,7 +46,11 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
             )
         }
 
-        val result = InputsAndReferenceInputsDisjointValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(InputsAndReferenceInputsDisjointValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
         assert(
           transaction.body.value.inputs.toSet.nonEmpty && transaction.body.value.referenceInputs.toSet.nonEmpty

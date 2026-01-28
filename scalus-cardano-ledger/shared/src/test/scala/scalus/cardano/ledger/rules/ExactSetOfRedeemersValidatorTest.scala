@@ -1,14 +1,16 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.Data
 import scalus.cardano.address.{Address, Network, ShelleyAddress, StakeAddress, StakePayload}
-import TransactionWitnessSet.given
+import scalus.cardano.ledger.*
+import scalus.cardano.ledger.TransactionWitnessSet.given
+import scalus.cardano.node.TestEmulatorFactory
+import scalus.uplc.builtin.Data
+
 import scala.collection.immutable.SortedMap
 
-class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
+class ExactSetOfRedeemersValidatorTest extends AnyFunSuite with ArbitraryInstances {
 
     test("ExactSetOfRedeemersValidator success with no scripts") {
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -26,9 +28,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -56,9 +62,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -93,9 +103,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -123,9 +137,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -162,10 +180,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -201,10 +222,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -233,10 +257,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -267,9 +294,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -299,9 +330,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -330,9 +365,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -372,9 +411,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -413,9 +456,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -444,9 +491,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -481,9 +532,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -517,9 +572,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -548,9 +607,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -587,9 +650,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
@@ -624,9 +691,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
@@ -656,14 +727,18 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
     test("ExactSetOfRedeemersValidator success with native scripts (no redeemers needed)") {
-        val (privateKey, publicKey) = generateKeyPair()
+        val (_, publicKey) = TestEmulatorFactory.generateKeyPair()
         val nativeScript =
             Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
         val input = Arbitrary.arbitrary[TransactionInput].sample.get
@@ -693,15 +768,18 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             redeemers = None
           ),
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
     test("ExactSetOfRedeemersValidator success with mixed native and Plutus scripts") {
-        val (privateKey, publicKey) = generateKeyPair()
+        val (_, publicKey) = TestEmulatorFactory.generateKeyPair()
         val nativeScript =
             Timelock.Signature(Hash(scalus.uplc.builtin.platform.blake2b_224(publicKey)))
         val plutusScript = Arbitrary.arbitrary[Script.PlutusV2].sample.get
@@ -761,10 +839,13 @@ class ExactSetOfRedeemersValidatorTest extends AnyFunSuite, ValidatorRulesTestKi
             plutusData = Seq(dummyData)
           )
         )
-        val context = Context()
-        val state = State(utxos = utxo)
 
-        val result = ExactSetOfRedeemersValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          utxos = utxo,
+          validators = Seq(ExactSetOfRedeemersValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 }

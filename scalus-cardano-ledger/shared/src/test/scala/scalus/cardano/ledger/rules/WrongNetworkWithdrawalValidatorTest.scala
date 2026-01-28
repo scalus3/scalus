@@ -1,14 +1,17 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network.{Mainnet, Testnet}
-import scalus.cardano.address.*
+import scalus.cardano.address.{StakeAddress, StakePayload}
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
+
 import scala.collection.immutable.SortedMap
 
-class WrongNetworkWithdrawalValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("WrongNetworkWithdrawalValidator rule success with matching network") {
+class WrongNetworkWithdrawalValidatorTest extends AnyFunSuite with ArbitraryInstances {
+
+    test("WrongNetworkWithdrawal - success with matching network") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -29,11 +32,16 @@ class WrongNetworkWithdrawalValidatorTest extends AnyFunSuite, ValidatorRulesTes
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkWithdrawalValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkWithdrawalValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight, result)
     }
 
-    test("WrongNetworkWithdrawalValidator rule failure with non-matching network") {
+    test("WrongNetworkWithdrawal - failure with non-matching network") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -54,11 +62,16 @@ class WrongNetworkWithdrawalValidatorTest extends AnyFunSuite, ValidatorRulesTes
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkWithdrawalValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkWithdrawalValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft, result)
     }
 
-    test("WrongNetworkWithdrawalValidator rule success with no withdrawals") {
+    test("WrongNetworkWithdrawal - success with no withdrawals") {
         val transaction = Transaction(
           body = TransactionBody(
             inputs = TaggedSortedSet.empty,
@@ -68,7 +81,12 @@ class WrongNetworkWithdrawalValidatorTest extends AnyFunSuite, ValidatorRulesTes
           ),
           witnessSet = TransactionWitnessSet.empty
         )
-        val result = WrongNetworkWithdrawalValidator.validate(Context(), State(), transaction)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(WrongNetworkWithdrawalValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight, result)
     }
 }

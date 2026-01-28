@@ -1,14 +1,14 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.Data
+import scalus.cardano.ledger.*
 import scalus.cardano.ledger.RedeemerTag.Spend
+import scalus.cardano.node.TestEmulatorFactory
+import scalus.uplc.builtin.Data
 
-class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("ExUnitsTooBigValidator success") {
-        val context = Context()
-        val state = State()
+class ExUnitsTooBigValidatorTest extends AnyFunSuite with ArbitraryInstances {
+
+    test("ExUnitsTooBig - success with small exUnits") {
         val exUnits = ExUnits(1, 1)
         val tx =
             randomTransactionWithIsValidField
@@ -17,24 +17,29 @@ class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                     redeemers = Some(KeepRaw(Redeemers(Redeemer(Spend, 0, Data.unit, exUnits))))
                   )
                 )
-        val result = ExUnitsTooBigValidator.validate(context, state, tx)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(ExUnitsTooBigValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
-    test("ExUnitsTooBigValidator success with no redeemers") {
-        val context = Context()
-        val state = State()
-        val exUnits = ExUnits(1, 1)
+    test("ExUnitsTooBig - success with no redeemers") {
         val tx =
             randomTransactionWithIsValidField
                 .withWitness(TransactionWitnessSet(redeemers = None))
-        val result = ExUnitsTooBigValidator.validate(context, state, tx)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(ExUnitsTooBigValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isRight)
     }
 
-    test("ExUnitsTooBigValidator failure") {
-        val context = Context()
-        val state = State()
+    test("ExUnitsTooBig - failure with too large exUnits") {
         val exUnits = ExUnits(Long.MaxValue, Long.MaxValue)
         val tx =
             randomTransactionWithIsValidField
@@ -43,7 +48,12 @@ class ExUnitsTooBigValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
                     redeemers = Some(KeepRaw(Redeemers(Redeemer(Spend, 0, Data.unit, exUnits))))
                   )
                 )
-        val result = ExUnitsTooBigValidator.validate(context, state, tx)
+
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(ExUnitsTooBigValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(tx)
         assert(result.isLeft)
     }
 }

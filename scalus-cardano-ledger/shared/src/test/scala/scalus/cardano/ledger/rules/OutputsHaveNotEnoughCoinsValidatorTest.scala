@@ -1,14 +1,14 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalacheck.Arbitrary
-import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.{ShelleyAddress, ShelleyPaymentPart}
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
-class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs success") {
-        val context = Context()
+class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite with ArbitraryInstances {
 
+    test("OutputsHaveNotEnoughCoins - TransactionOutputs success") {
         val output = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
@@ -42,15 +42,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
             )
         }
 
-        val state = State()
-
-        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveNotEnoughCoinsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure for minimum ada") {
-        val context = Context()
-
+    test("OutputsHaveNotEnoughCoins - TransactionOutputs failure for minimum ada") {
         val output = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
@@ -76,15 +76,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
             )
         }
 
-        val state = State()
-
-        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveNotEnoughCoinsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator TransactionOutputs failure for negative assets") {
-        val context = Context()
-
+    test("OutputsHaveNotEnoughCoins - TransactionOutputs failure for negative assets") {
         val output = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
@@ -117,15 +117,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
             )
         }
 
-        val state = State()
-
-        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveNotEnoughCoinsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput success") {
-        val context = Context()
-
+    test("OutputsHaveNotEnoughCoins - CollateralReturnOutput success") {
         val collateralReturnOutput = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
@@ -159,15 +159,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
             )
         }
 
-        val state = State()
-
-        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveNotEnoughCoinsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure for minimum ada") {
-        val context = Context()
-
+    test("OutputsHaveNotEnoughCoins - CollateralReturnOutput failure for minimum ada") {
         val collateralReturnOutput = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
@@ -193,15 +193,15 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
             )
         }
 
-        val state = State()
-
-        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveNotEnoughCoinsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 
-    test("OutputsHaveNotEnoughCoinsValidator CollateralReturnOutput failure for negative assets") {
-        val context = Context()
-
+    test("OutputsHaveNotEnoughCoins - CollateralReturnOutput failure for negative assets") {
         val collateralReturnOutput = Output(
           Arbitrary
               .arbitrary[ShelleyAddress]
@@ -234,9 +234,11 @@ class OutputsHaveNotEnoughCoinsValidatorTest extends AnyFunSuite, ValidatorRules
             )
         }
 
-        val state = State()
-
-        val result = OutputsHaveNotEnoughCoinsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(OutputsHaveNotEnoughCoinsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
     }
 }

@@ -1,12 +1,12 @@
-package scalus.cardano.ledger
-package rules
+package scalus.cardano.ledger.rules
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.ledger.*
+import scalus.cardano.node.TestEmulatorFactory
 
-class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
-    test("EmptyInputsValidator rule success") {
-        val context = Context()
-        val state = State()
+class EmptyInputsValidatorTest extends AnyFunSuite with ArbitraryInstances {
+
+    test("EmptyInputs - success with non-empty inputs") {
         val transaction = {
             val tx = randomTransactionWithIsValidField
             tx.copy(
@@ -20,14 +20,16 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val result = EmptyInputsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(EmptyInputsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isRight)
         assert(transaction.body.value.inputs.toSet.nonEmpty)
     }
 
-    test("EmptyInputsValidator rule failure on empty inputs") {
-        val context = Context()
-        val state = State()
+    test("EmptyInputs - failure on empty inputs") {
         val transaction = {
             val tx = randomTransactionWithIsValidField
             tx.copy(
@@ -39,7 +41,11 @@ class EmptyInputsValidatorTest extends AnyFunSuite, ValidatorRulesTestKit {
             )
         }
 
-        val result = EmptyInputsValidator.validate(context, state, transaction)
+        val emulator = TestEmulatorFactory.create(
+          validators = Seq(EmptyInputsValidator),
+          mutators = Seq.empty
+        )
+        val result = emulator.submitSync(transaction)
         assert(result.isLeft)
         assert(transaction.body.value.inputs.toSet.isEmpty)
     }
