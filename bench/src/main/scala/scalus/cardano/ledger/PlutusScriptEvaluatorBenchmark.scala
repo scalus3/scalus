@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import org.openjdk.jmh.annotations.*
 import scalus.bloxbean.ResourcesUtxoResolver
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.*
 import scalus.uplc.eval.ExBudget
 

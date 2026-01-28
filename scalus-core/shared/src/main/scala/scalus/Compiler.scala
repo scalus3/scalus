@@ -1,6 +1,6 @@
 package scalus
 
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.compiler.sir.{SIR, SIRType}
 
 import scala.annotation.Annotation
