@@ -3,8 +3,7 @@ package scalus.examples
 import scalus.Compile
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
-import scalus.uplc.builtin.BLS12_381_G1_Element
-import scalus.uplc.builtin.BLS12_381_MlResult
+import scalus.uplc.builtin.bls12_381.{G1Element, MLResult}
 import scalus.uplc.builtin.Data.FromData
 import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.FromData
@@ -88,7 +87,7 @@ object Groth16:
       * @return
       *   Result of Miller loop pairing
       */
-    def pairing(g1: ByteString, g2: ByteString): BLS12_381_MlResult =
+    def pairing(g1: ByteString, g2: ByteString): MLResult =
         bls12_381_millerLoop(G1.uncompress(g1), G2.uncompress(g2))
 
     /** Recursively derives the linear combination of IC elements with public inputs
@@ -109,8 +108,8 @@ object Groth16:
     def derive(
         vk_ic: List[ByteString],
         public: List[BigInt],
-        result: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = vk_ic match
+        result: G1Element
+    ): G1Element = vk_ic match
         case List.Nil => result
         case List.Cons(i, rest) =>
             public match

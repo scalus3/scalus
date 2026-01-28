@@ -3,7 +3,8 @@ package scalus.regressions.hydrozoa20260126
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{bls12_381_G2_add, bls12_381_G2_uncompress}
-import scalus.uplc.builtin.{BLS12_381_G2_Element, ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.bls12_381.G2Element
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
@@ -32,7 +33,7 @@ object Setup {
     given FromData[Setup] = FromData.derived
     given ToData[Setup] = ToData.derived
 
-    def process(data: Data): BLS12_381_G2_Element = {
+    def process(data: Data): G2Element = {
         val setup = data.to[Setup]
         // Bug: items.take(1) returns Data elements instead of ByteString
         val g2Elements = setup.items.take(1).map(bs => bls12_381_G2_uncompress(bs))

@@ -8,7 +8,8 @@ import cats.parse.Parser0
 import cats.parse.Rfc5234.alpha
 import cats.parse.Rfc5234.digit
 import cats.parse.Rfc5234.hexdig
-import scalus.uplc.builtin.{platform, BLS12_381_G1_Element, BLS12_381_G2_Element, ByteString, Data, given}
+import scalus.uplc.builtin.{platform, ByteString, Data, given}
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.cardano.ledger.Word64
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.DefaultUni.ProtoList
@@ -239,13 +240,13 @@ object UplcParser:
 
     val con0xBS: P[ByteString] = P.string("0x") *> hexByte.rep0.map(bs => ByteString(bs*))
 
-    val conBLS12_381_G1_Element: P[BLS12_381_G1_Element] =
+    val conG1Element: P[G1Element] =
         con0xBS.flatMap { s =>
             try P.pure(platform.bls12_381_G1_uncompress(s))
             catch case e: Exception => P.failWith(e.getMessage)
         }
 
-    val conBLS12_381_G2_Element: P[BLS12_381_G2_Element] =
+    val conG2Element: P[G2Element] =
         con0xBS.flatMap { s =>
             try P.pure(platform.bls12_381_G2_uncompress(s))
             catch case e: Exception => P.failWith(e.getMessage)
@@ -271,9 +272,9 @@ object UplcParser:
         case DefaultUni.Apply(DefaultUni.ProtoArray, t)          => conArrayOf(t)
         case DefaultUni.Apply(DefaultUni.Apply(ProtoPair, a), b) => conPairOf(a, b)
         case DefaultUni.BLS12_381_G1_Element =>
-            lexeme(conBLS12_381_G1_Element.map(bs => Constant.BLS12_381_G1_Element(bs)))
+            lexeme(conG1Element.map(bs => Constant.BLS12_381_G1_Element(bs)))
         case DefaultUni.BLS12_381_G2_Element =>
-            lexeme(conBLS12_381_G2_Element.map(bs => Constant.BLS12_381_G2_Element(bs)))
+            lexeme(conG2Element.map(bs => Constant.BLS12_381_G2_Element(bs)))
         case DefaultUni.BLS12_381_MlResult =>
             sys.error("Constants of type bls12_381_mlresult are not supported")
         case _ => sys.error("not implemented")

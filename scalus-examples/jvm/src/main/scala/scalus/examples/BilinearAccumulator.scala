@@ -1,7 +1,6 @@
 package scalus.examples
 import scalus.Compile
-import scalus.uplc.builtin.BLS12_381_G1_Element
-import scalus.uplc.builtin.BLS12_381_G2_Element
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.uplc.builtin.Builtins.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.*
@@ -23,9 +22,9 @@ object BilinearAccumulator {
     }
 
     def getG1Commitment(
-        setup: List[BLS12_381_G1_Element],
+        setup: List[G1Element],
         subset: List[BigInt]
-    ): BLS12_381_G1_Element = {
+    ): G1Element = {
         val subsetInG1 =
             List.map2(getFinalPoly(subset), setup): (sb, st) =>
                 st.scale(sb)
@@ -45,10 +44,10 @@ object BilinearAccumulator {
       *   True if the accumulator is valid, false otherwise.
       */
     def checkMembership(
-        setup: List[BLS12_381_G1_Element],
-        acc: BLS12_381_G2_Element,
+        setup: List[G1Element],
+        acc: G2Element,
         subset: List[BigInt],
-        proof: BLS12_381_G2_Element
+        proof: G2Element
     ): Boolean = {
         val g1 = setup !! 0
         val lhs = bls12_381_millerLoop(g1, acc)
@@ -68,11 +67,11 @@ object BilinearAccumulator {
       *   True if the accumulator is valid, false otherwise.
       */
     def checkNonMembership(
-        setup: List[BLS12_381_G1_Element],
-        g2: BLS12_381_G2_Element,
-        acc: BLS12_381_G2_Element,
+        setup: List[G1Element],
+        g2: G2Element,
+        acc: G2Element,
         disjointSet: List[BigInt],
-        proof: (BLS12_381_G1_Element, BLS12_381_G2_Element)
+        proof: (G1Element, G2Element)
     ): Boolean = {
         val g1 = setup !! 0
 

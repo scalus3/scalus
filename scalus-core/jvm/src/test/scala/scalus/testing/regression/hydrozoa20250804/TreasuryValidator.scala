@@ -11,6 +11,7 @@ import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.*
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.compiler.compile
 import scalus.cardano.onchain.plutus.v1.Value.+
 import scalus.cardano.onchain.plutus.v1.{PosixTime, Value}
@@ -34,7 +35,7 @@ type L2ConsensusParamsH32 = ByteString
 @Compile
 object TreasuryValidator extends Validator:
 
-    val setup: List[BLS12_381_G1_Element] =
+    val setup: List[G1Element] =
         List.Cons(
           hex"97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
           List.Cons(
@@ -400,9 +401,9 @@ object TreasuryValidator extends Validator:
     }
 
     def getG1Commitment(
-        setup: List[BLS12_381_G1_Element],
+        setup: List[G1Element],
         subset: List[ScalusScalar]
-    ): BLS12_381_G1_Element = {
+    ): G1Element = {
         val subsetInG1 =
             List.map2(getFinalPolyScalus(subset), setup): (sb, st) =>
                 st.scale(sb.toInt)
@@ -424,10 +425,10 @@ object TreasuryValidator extends Validator:
       *   True if the accumulator is valid, false otherwise.
       */
     def checkMembership(
-        setup: List[BLS12_381_G1_Element],
-        acc: BLS12_381_G2_Element,
+        setup: List[G1Element],
+        acc: G2Element,
         subset: List[ScalusScalar],
-        proof: BLS12_381_G2_Element
+        proof: G2Element
     ): Boolean = {
         val g1 = setup !! 0
         val lhs = bls12_381_millerLoop(g1, acc)

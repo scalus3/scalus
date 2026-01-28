@@ -2,7 +2,8 @@ package scalus.cardano.onchain.plutus.prelude.crypto.bls12_381
 
 import scalus.Compile
 import scalus.uplc.builtin.Builtins.*
-import scalus.uplc.builtin.{BLS12_381_G2_Element, ByteString, PlatformSpecific}
+import scalus.uplc.builtin.{ByteString, PlatformSpecific}
+import scalus.uplc.builtin.bls12_381.G2Element
 import scalus.cardano.onchain.plutus.prelude.Eq
 
 import scala.annotation.nowarn
@@ -10,7 +11,7 @@ import scala.annotation.nowarn
 @Compile
 object G2 {
 
-    given Eq[BLS12_381_G2_Element] = bls12_381_G2_equal
+    given Eq[G2Element] = bls12_381_G2_equal
 
     /** BLS12 G2 zero element.
       *
@@ -25,7 +26,7 @@ object G2 {
       *     val zeroG2 = G2.zero
       *   }}}
       */
-    def zero: BLS12_381_G2_Element = uncompress(zeroCompressed)
+    def zero: G2Element = uncompress(zeroCompressed)
 
     val zeroCompressed: ByteString = PlatformSpecific.bls12_381_G2_compressed_zero
 
@@ -40,12 +41,12 @@ object G2 {
       *     val genG2 = G2.generator
       *   }}}
       */
-    def generator: BLS12_381_G2_Element = uncompress(generatorCompressed)
+    def generator: G2Element = uncompress(generatorCompressed)
 
     val generatorCompressed: ByteString = PlatformSpecific.bls12_381_G2_compressed_generator
 
     /** Uncompresses a point in the G2 group from its compressed form. */
-    inline def uncompress(bs: ByteString): BLS12_381_G2_Element = {
+    inline def uncompress(bs: ByteString): G2Element = {
         bls12_381_G2_uncompress(bs)
     }
 
@@ -58,22 +59,22 @@ object G2 {
       * @return
       *   A point in the G2 group.
       */
-    inline def hashToGroup(bs: ByteString, dst: ByteString): BLS12_381_G2_Element = {
+    inline def hashToGroup(bs: ByteString, dst: ByteString): G2Element = {
         bls12_381_G2_hashToGroup(bs, dst)
     }
 
     // The `+` and `unary_-` extensions must stay in shared code (not platform-specific)
     // because Scalus compiler plugin compiles this @Compile-annotated object to Plutus.
     // The plugin recognizes builtin calls like bls12_381_G2_add but not class methods.
-    // On JS platform, BLS12_381_G2_Element class already has these methods, causing warnings.
-    extension (self: BLS12_381_G2_Element) {
+    // On JS platform, G2Element class already has these methods, causing warnings.
+    extension (self: G2Element) {
 
         /** Checks if two points in the G2 group are equal */
-        inline def equal(rhs: BLS12_381_G2_Element): Boolean = bls12_381_G2_equal(self, rhs)
+        inline def equal(rhs: G2Element): Boolean = bls12_381_G2_equal(self, rhs)
 
         /** Adds two points in the G2 group */
         @nowarn("msg=Extension method .* will never be selected")
-        infix inline def +(rhs: BLS12_381_G2_Element): BLS12_381_G2_Element =
+        infix inline def +(rhs: G2Element): G2Element =
             bls12_381_G2_add(self, rhs)
 
         /** Exponentiates a point in the G2 group with a `scalar`. This operation is equivalent to
@@ -85,13 +86,13 @@ object G2 {
           *   A new point in the G2 group, which is the result of multiplying the original point by
           *   the scalar.
           */
-        inline def scale(scalar: BigInt): BLS12_381_G2_Element = {
+        inline def scale(scalar: BigInt): G2Element = {
             bls12_381_G2_scalarMul(scalar, self)
         }
 
         /** Negates the point in the G2 group */
         @nowarn("msg=Extension method .* will never be selected")
-        inline def unary_- : BLS12_381_G2_Element = {
+        inline def unary_- : G2Element = {
             bls12_381_G2_neg(self)
         }
 

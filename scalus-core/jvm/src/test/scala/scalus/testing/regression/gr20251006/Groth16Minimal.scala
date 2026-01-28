@@ -2,7 +2,7 @@ package scalus.testing.regression.gr20251006
 
 import scalus.Compile
 import scalus.uplc.builtin.ByteString
-import scalus.uplc.builtin.BLS12_381_G1_Element
+import scalus.uplc.builtin.bls12_381.G1Element
 import scalus.uplc.builtin.Data.FromData
 import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.FromData
@@ -22,8 +22,8 @@ import scala.annotation.tailrec
   *   4. The recursive call is inside the inner match
   *   5. The function is called through Data.to[] conversion
   *
-  * Error: "Cannot unify Proxy(X) -> BLS12_381_G1_Element -> BLS12_381_G1_Element and
-  * scalus.cardano.onchain.plutus.prelude.List[Int] -> BLS12_381_G1_Element -> BLS12_381_G1_Element"
+  * Error: "Cannot unify Proxy(X) -> G1Element -> G1Element and
+  * scalus.cardano.onchain.plutus.prelude.List[Int] -> G1Element -> G1Element"
   */
 @Compile
 //@ScalusDebug(20)
@@ -41,8 +41,8 @@ object Groth16Minimal:
     def minimalDerive(
         vk_ic: List[ByteString],
         public: List[BigInt],
-        result: BLS12_381_G1_Element
-    ): BLS12_381_G1_Element = vk_ic match
+        result: G1Element
+    ): G1Element = vk_ic match
         case List.Nil => result
         case List.Cons(i, rest) =>
             public match
@@ -51,7 +51,7 @@ object Groth16Minimal:
                 case _ => fail("Invalid input")
 
     /** This wrapper is called with Data conversion - this triggers the bug */
-    def minimalWrapper(data: MinimalData): BLS12_381_G1_Element =
+    def minimalWrapper(data: MinimalData): G1Element =
         val vk_ic = List.Nil: List[ByteString]
         val public = List.Nil: List[BigInt]
         val result = G1.uncompress(ByteString.empty)

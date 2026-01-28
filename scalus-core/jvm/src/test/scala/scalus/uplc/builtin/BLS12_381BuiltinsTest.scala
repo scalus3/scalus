@@ -7,8 +7,9 @@ import scalus.uplc.builtin.PlatformSpecific.bls12_381_G2_compressed_zero
 import scalus.uplc.builtin.PlatformSpecific.bls12_381_G1_compressed_generator
 import scalus.uplc.builtin.PlatformSpecific.bls12_381_G2_compressed_generator
 import scalus.uplc.builtin.ByteString.*
-import scalus.uplc.builtin.BLS12_381_G1_Element.g1
-import scalus.uplc.builtin.BLS12_381_G2_Element.g2
+import scalus.uplc.builtin.bls12_381.G1Element.g1
+import scalus.uplc.builtin.bls12_381.G2Element.g2
+import scalus.uplc.builtin.bls12_381.MLResult
 
 import scala.language.implicitConversions
 
@@ -75,7 +76,7 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
     }
 
     test("pairing primitive behaves as value type") {
-        def gt(): BLS12_381_MlResult = {
+        def gt(): MLResult = {
             val gG1 = bls12_381_G1_uncompress(bls12_381_G1_compressed_generator)
             val gG2 = bls12_381_G2_uncompress(bls12_381_G2_compressed_generator)
             bls12_381_millerLoop(gG1, gG2)

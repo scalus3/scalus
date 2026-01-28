@@ -3,6 +3,7 @@ package scalus.compiler.sir.lowering
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.*
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.uplc.builtin.ByteString.hex
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
@@ -32,8 +33,8 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
         c: Boolean,
         d: String,
         // u: Unit,  // have np data represemtatom.  TODO: enble
-        e1: BLS12_381_G1_Element,
-        e2: BLS12_381_G2_Element,
+        e1: G1Element,
+        e2: G2Element,
         bb: AA
     )
     enum AA:
