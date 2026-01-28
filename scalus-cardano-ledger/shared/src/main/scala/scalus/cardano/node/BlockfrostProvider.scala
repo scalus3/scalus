@@ -266,33 +266,61 @@ class BlockfrostProvider(
         evalQuery(query)
     }
 
-    /** Fetch UTxOs from an address using Blockfrost API */
-    private def fetchUtxosFromAddress(address: Address): Future[Either[UtxoQueryError, Utxos]] = {
+    /** Convert address to Bech32 for API requests, returning an error for unsupported addresses */
+    private def addressToBech32(address: Address): Either[UtxoQueryError, String] = {
         import scala.util.{Success, Failure}
-        val bech32 = address match {
+        address match {
             case sh @ ShelleyAddress(_, _, _) =>
                 sh.toBech32 match
-                    case Success(b) => b
+                    case Success(b) => Right(b)
                     case Failure(_) =>
-                        return Future.successful(
-                          Left(
-                            UtxoQueryError.NotSupported(
-                              UtxoQuery(UtxoSource.FromAddress(address)),
-                              "Invalid address"
-                            )
+                        Left(
+                          UtxoQueryError.NotSupported(
+                            UtxoQuery(UtxoSource.FromAddress(address)),
+                            "Invalid address"
                           )
                         )
             case _ =>
-                return Future.successful(
-                  Left(
-                    UtxoQueryError.NotSupported(
-                      UtxoQuery(UtxoSource.FromAddress(address)),
-                      "Shelley addresses only"
-                    )
+                Left(
+                  UtxoQueryError.NotSupported(
+                    UtxoQuery(UtxoSource.FromAddress(address)),
+                    "Shelley addresses only"
                   )
                 )
         }
-        val url = s"$baseUrl/addresses/$bech32/utxos"
+    }
+
+    /** Fetch UTxOs from an address using Blockfrost API */
+    private def fetchUtxosFromAddress(address: Address): Future[Either[UtxoQueryError, Utxos]] = {
+        addressToBech32(address) match
+            case Left(error)   => Future.successful(Left(error))
+            case Right(bech32) => fetchUtxosFromBech32Address(bech32)
+    }
+
+    /** Fetch UTxOs from an address filtered by asset using Blockfrost API. Uses the optimized
+      * /addresses/{addr}/utxos/{asset} endpoint.
+      */
+    private def fetchUtxosFromAddressWithAsset(
+        address: Address,
+        policyId: PolicyId,
+        assetName: AssetName
+    ): Future[Either[UtxoQueryError, Utxos]] = {
+        addressToBech32(address) match
+            case Left(error)   => Future.successful(Left(error))
+            case Right(bech32) =>
+                // Asset is policyId + assetName hex concatenated
+                val asset = policyId.toHex + assetName.bytes.toHex
+                fetchUtxosFromBech32Address(bech32, Some(asset))
+    }
+
+    /** Internal helper to fetch UTxOs from a Bech32 address, optionally filtered by asset */
+    private def fetchUtxosFromBech32Address(
+        bech32: String,
+        asset: Option[String] = None
+    ): Future[Either[UtxoQueryError, Utxos]] = {
+        val url = asset match
+            case Some(a) => s"$baseUrl/addresses/$bech32/utxos/$a"
+            case None    => s"$baseUrl/addresses/$bech32/utxos"
         rateLimited(
           basicRequest
               .get(uri"$url")
@@ -307,63 +335,6 @@ class BlockfrostProvider(
                 }
             } else if response.code == StatusCode.NotFound then {
                 Right(Map.empty) // No UTxOs at this address
-            } else {
-                Left(UtxoQueryError.NetworkError(s"Failed to fetch UTxOs: ${response.body}"))
-            }
-        }.recover { case e: Throwable =>
-            Left(UtxoQueryError.NetworkError(e.getMessage, Some(e)))
-        }
-    }
-
-    /** Fetch UTxOs from an address filtered by asset using Blockfrost API. Uses the optimized
-      * /addresses/{addr}/utxos/{asset} endpoint.
-      */
-    private def fetchUtxosFromAddressWithAsset(
-        address: Address,
-        policyId: PolicyId,
-        assetName: AssetName
-    ): Future[Either[UtxoQueryError, Utxos]] = {
-        import scala.util.{Success, Failure}
-        val bech32 = address match {
-            case sh @ ShelleyAddress(_, _, _) =>
-                sh.toBech32 match
-                    case Success(b) => b
-                    case Failure(_) =>
-                        return Future.successful(
-                          Left(
-                            UtxoQueryError.NotSupported(
-                              UtxoQuery(UtxoSource.FromAddress(address)),
-                              "Invalid address"
-                            )
-                          )
-                        )
-            case _ =>
-                return Future.successful(
-                  Left(
-                    UtxoQueryError.NotSupported(
-                      UtxoQuery(UtxoSource.FromAddress(address)),
-                      "Shelley addresses only"
-                    )
-                  )
-                )
-        }
-        // Asset is policyId + assetName hex concatenated
-        val asset = policyId.toHex + assetName.bytes.toHex
-        val url = s"$baseUrl/addresses/$bech32/utxos/$asset"
-        rateLimited(
-          basicRequest
-              .get(uri"$url")
-              .headers(headers)
-              .send(backend)
-        ).map { response =>
-            if response.code.isSuccess then {
-                response.body match {
-                    case Right(body) => Right(BlockfrostProvider.parseUtxos(body))
-                    case Left(error) =>
-                        Left(UtxoQueryError.NetworkError(s"Failed to fetch UTxOs: $error"))
-                }
-            } else if response.code == StatusCode.NotFound then {
-                Right(Map.empty) // No UTxOs with this asset at this address
             } else {
                 Left(UtxoQueryError.NetworkError(s"Failed to fetch UTxOs: ${response.body}"))
             }
@@ -391,72 +362,8 @@ class BlockfrostProvider(
                         val utxos = outputs.zipWithIndex.map { case (outputJson, index) =>
                             val input = TransactionInput(txId, index)
                             val address = Address.fromBech32(outputJson("address").str)
-
-                            // Parse value
-                            val amountArray = outputJson("amount").arr
-                            var lovelace = 0L
-                            val multiAssetBuilder = scala.collection.mutable
-                                .Map[ScriptHash, scala.collection.mutable.Map[
-                                  AssetName,
-                                  Long
-                                ]]()
-
-                            amountArray.foreach { item =>
-                                val unit = item("unit").str
-                                // Handle both string (Blockfrost) and number (Yaci) formats
-                                val quantity = item("quantity") match
-                                    case s: ujson.Str => s.str.toLong
-                                    case n: ujson.Num => n.num.toLong
-                                    case other        => other.toString.toLong
-
-                                if unit == "lovelace" then {
-                                    lovelace = quantity
-                                } else {
-                                    val policyId = ScriptHash.fromHex(unit.take(56))
-                                    val assetNameHex = unit.drop(56)
-                                    val assetName = AssetName(ByteString.fromHex(assetNameHex))
-
-                                    multiAssetBuilder
-                                        .getOrElseUpdate(
-                                          policyId,
-                                          scala.collection.mutable.Map()
-                                        )
-                                        .update(assetName, quantity)
-                                }
-                            }
-
-                            val value = if multiAssetBuilder.isEmpty then {
-                                Value.lovelace(lovelace)
-                            } else {
-                                val immutableAssets
-                                    : SortedMap[ScriptHash, SortedMap[AssetName, Long]] =
-                                    SortedMap.from(
-                                      multiAssetBuilder.view.mapValues(m => SortedMap.from(m))
-                                    )
-                                Value(Coin(lovelace), MultiAsset(immutableAssets))
-                            }
-
-                            // Parse datum if present
-                            val datumOption: Option[DatumOption] = {
-                                val dataHash = outputJson.obj.get("data_hash")
-                                val inlineDatum = outputJson.obj.get("inline_datum")
-
-                                (dataHash, inlineDatum) match {
-                                    case (_, Some(inlineDatumJson)) if !inlineDatumJson.isNull =>
-                                        Some(
-                                          DatumOption.Inline(
-                                            Data.fromCbor(hexToBytes(inlineDatumJson.str))
-                                          )
-                                        )
-                                    case (Some(dataHashJson), _) if !dataHashJson.isNull =>
-                                        Some(
-                                          DatumOption.Hash(
-                                            Hash(ByteString.fromHex(dataHashJson.str))
-                                          )
-                                        )
-                                    case _ => None
-                                }
-                            }
+                            val value = BlockfrostProvider.parseValue(outputJson("amount").arr)
+                            val datumOption = BlockfrostProvider.parseDatumOption(outputJson.obj)
 
                             val txOutput = TransactionOutput(
                               address = address,
@@ -650,6 +557,63 @@ object BlockfrostProvider {
     /** Blockfrost API URL for Cardano mainnet */
     val mainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
 
+    /** Parse a Blockfrost/Yaci `amount[]` array into a Value.
+      *
+      * Handles both Blockfrost (string quantity) and Yaci (number quantity) formats.
+      */
+    private def parseValue(amountArray: ujson.Arr): Value = {
+        var lovelace = 0L
+        val multiAssetBuilder =
+            scala.collection.mutable
+                .Map[ScriptHash, scala.collection.mutable.Map[AssetName, Long]]()
+
+        amountArray.value.foreach { item =>
+            val unit = item("unit").str
+            // Handle both string (Blockfrost) and number (Yaci) formats
+            val quantity = item("quantity") match
+                case s: ujson.Str => s.str.toLong
+                case n: ujson.Num => n.num.toLong
+                case other        => other.toString.toLong
+
+            if unit == "lovelace" then {
+                lovelace = quantity
+            } else {
+                // Parse multi-asset: first 56 chars = policy ID (28 bytes hex), rest = asset name
+                val policyId = ScriptHash.fromHex(unit.take(56))
+                val assetNameHex = unit.drop(56)
+                val assetName = AssetName(ByteString.fromHex(assetNameHex))
+
+                multiAssetBuilder
+                    .getOrElseUpdate(policyId, scala.collection.mutable.Map())
+                    .update(assetName, quantity)
+            }
+        }
+
+        if multiAssetBuilder.isEmpty then Value.lovelace(lovelace)
+        else {
+            val immutableAssets: SortedMap[ScriptHash, SortedMap[AssetName, Long]] =
+                SortedMap.from(multiAssetBuilder.view.mapValues(m => SortedMap.from(m)))
+            Value(Coin(lovelace), MultiAsset(immutableAssets))
+        }
+    }
+
+    /** Parse datum fields from a Blockfrost UTxO JSON object.
+      *
+      * Handles `data_hash` and `inline_datum` fields.
+      */
+    private def parseDatumOption(json: ujson.Obj): Option[DatumOption] = {
+        val dataHash = json.value.get("data_hash")
+        val inlineDatum = json.value.get("inline_datum")
+
+        (dataHash, inlineDatum) match {
+            case (_, Some(inlineDatumJson)) if !inlineDatumJson.isNull =>
+                Some(DatumOption.Inline(Data.fromCbor(hexToBytes(inlineDatumJson.str))))
+            case (Some(dataHashJson), _) if !dataHashJson.isNull =>
+                Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHashJson.str))))
+            case _ => None
+        }
+    }
+
     /** Blockfrost API URL for Cardano preview testnet */
     val previewUrl = "https://cardano-preview.blockfrost.io/api/v0"
 
@@ -683,55 +647,8 @@ object BlockfrostProvider {
               utxoJson("output_index").num.toInt
             )
             val address = Address.fromBech32(utxoJson("address").str)
-
-            // Parse value
-            val amountArray = utxoJson("amount").arr
-            var lovelace = 0L
-            val multiAssetBuilder = scala.collection.mutable
-                .Map[ScriptHash, scala.collection.mutable.Map[AssetName, Long]]()
-
-            amountArray.foreach { item =>
-                val unit = item("unit").str
-                val quantity = item("quantity").str.toLong
-
-                if unit == "lovelace" then {
-                    lovelace = quantity
-                } else {
-                    // Parse multi-asset: first 56 chars = policy ID (28 bytes hex), rest = asset name
-                    val policyId = ScriptHash.fromHex(unit.take(56))
-                    val assetNameHex = unit.drop(56)
-                    val assetName = AssetName(ByteString.fromHex(assetNameHex))
-
-                    multiAssetBuilder
-                        .getOrElseUpdate(policyId, scala.collection.mutable.Map())
-                        .update(assetName, quantity)
-                }
-            }
-
-            val value = if multiAssetBuilder.isEmpty then {
-                Value.lovelace(lovelace)
-            } else {
-                // Convert mutable maps to immutable SortedMaps
-                val immutableAssets: SortedMap[ScriptHash, SortedMap[AssetName, Long]] =
-                    SortedMap.from(
-                      multiAssetBuilder.view.mapValues(m => SortedMap.from(m))
-                    )
-                Value(Coin(lovelace), MultiAsset(immutableAssets))
-            }
-
-            // Parse datum if present
-            val datumOption: Option[DatumOption] = {
-                val dataHash = utxoJson.obj.get("data_hash")
-                val inlineDatum = utxoJson.obj.get("inline_datum")
-
-                (dataHash, inlineDatum) match {
-                    case (_, Some(inlineDatumJson)) if !inlineDatumJson.isNull =>
-                        Some(DatumOption.Inline(Data.fromCbor(hexToBytes(inlineDatumJson.str))))
-                    case (Some(dataHashJson), _) if !dataHashJson.isNull =>
-                        Some(DatumOption.Hash(Hash(ByteString.fromHex(dataHashJson.str))))
-                    case _ => None
-                }
-            }
+            val value = parseValue(utxoJson("amount").arr)
+            val datumOption = parseDatumOption(utxoJson.obj)
 
             val txOutput = TransactionOutput(
               address = address,
