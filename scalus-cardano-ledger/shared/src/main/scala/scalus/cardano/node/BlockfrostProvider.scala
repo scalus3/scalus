@@ -467,10 +467,6 @@ object BlockfrostProvider {
     @deprecated("Use localUrl instead", "0.14.1")
     val LocalUrl: String = localUrl
 
-    enum BlockfrostError:
-        case NetworkError(underlying: Throwable)
-        case LedgerError(description: String)
-
     def parseUtxos(json: String): Utxos = {
         val utxosArray = ujson.read(json, trace = false).arr
         utxosArray.map { utxoJson =>
