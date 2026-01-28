@@ -158,7 +158,9 @@ object SIRUnify {
                         ) match
                             case UnificationSuccess(env2, body) =>
                                 if v1.flags != v2.flags then
-                                    println(s"warning: let flags are different during unification: ${v1.flags} vs ${v2.flags} at ${v1.anns.pos}")
+                                    println(
+                                      s"warning: let flags are different during unification: ${v1.flags} vs ${v2.flags} at ${v1.anns.pos}"
+                                    )
                                 val flags = v1.flags & v2.flags
                                 UnificationSuccess(
                                   env2,

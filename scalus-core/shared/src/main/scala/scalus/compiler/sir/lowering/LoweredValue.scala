@@ -2306,8 +2306,21 @@ object LoweredValue {
                             )
                         }
                     else
+                        // Check if this is a type test: casting from sum type to one of its variants
+                        // e.g., EqBudgetStatus -> EqBudgetStatus.Done
+                        val isTypeTest = targetType match
+                            case cc: SIRType.CaseClass =>
+                                cc.parent match
+                                    case Some(parent) =>
+                                        SIRUnify
+                                            .subtypeSeq(expr.sirType, parent, SIRUnify.Env.empty)
+                                            .nonEmpty
+                                    case None => false
+                            case _ => false
                         val printWarning =
-                            targetType != SIRType.FreeUnificator && expr.sirType != SIRType.TypeNothing
+                            !isTypeTest &&
+                                targetType != SIRType.FreeUnificator &&
+                                expr.sirType != SIRType.TypeNothing
                         castedValue(printWarning = printWarning)
             }
 

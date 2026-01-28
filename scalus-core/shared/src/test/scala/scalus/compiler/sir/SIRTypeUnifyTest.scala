@@ -278,4 +278,57 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         }
     }
 
+    test("subtypeSeq from enum variant to enum (child to parent - upcasting)") {
+        // EqBudgetStatus.Done -> EqBudgetStatus should find subtype relationship
+        val doneFun = compile { (x: scalus.prelude.EqBudgetStatus.Done) => x }
+        val statusFun = compile { (x: scalus.prelude.EqBudgetStatus) => x }
+
+        val doneType = doneFun.tp match {
+            case SIRType.Fun(_, tp) => tp
+            case _                  => fail("Expected a function type")
+        }
+
+        val statusType = statusFun.tp match {
+            case SIRType.Fun(_, tp) => tp
+            case _                  => fail("Expected a function type")
+        }
+
+        println(s"doneType = ${doneType.show}")
+        println(s"statusType = ${statusType.show}")
+
+        val parentsSeq = SIRUnify.subtypeSeq(doneType, statusType, SIRUnify.Env.empty)
+
+        println(s"subtypeSeq(Done, Status) = $parentsSeq")
+
+        assert(parentsSeq.nonEmpty, "Done should be subtype of EqBudgetStatus")
+    }
+
+    test("subtypeSeq from enum to enum variant (parent to child - for type test)") {
+        // EqBudgetStatus -> EqBudgetStatus.Done - this is what happens in type tests
+        // The current code checks this direction which is wrong for type tests
+        val doneFun = compile { (x: scalus.prelude.EqBudgetStatus.Done) => x }
+        val statusFun = compile { (x: scalus.prelude.EqBudgetStatus) => x }
+
+        val doneType = doneFun.tp match {
+            case SIRType.Fun(_, tp) => tp
+            case _                  => fail("Expected a function type")
+        }
+
+        val statusType = statusFun.tp match {
+            case SIRType.Fun(_, tp) => tp
+            case _                  => fail("Expected a function type")
+        }
+
+        println(s"statusType = ${statusType.show}")
+        println(s"doneType = ${doneType.show}")
+
+        // This is what lvCast checks - but for type tests this is the wrong direction
+        val parentsSeq = SIRUnify.subtypeSeq(statusType, doneType, SIRUnify.Env.empty)
+
+        println(s"subtypeSeq(Status, Done) = $parentsSeq")
+
+        // This will likely be empty because Status is NOT a subtype of Done
+        // But for type tests we need to check if Done is a variant OF Status
+    }
+
 }
