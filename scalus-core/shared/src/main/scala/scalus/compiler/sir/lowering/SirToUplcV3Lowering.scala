@@ -66,8 +66,7 @@ class SirToUplcV3Lowering(
                           retV.pos,
                           e
                         )
-            if lctx.zCombinatorNeeded then
-                Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
+            if lctx.zCombinatorNeeded then Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
             else term
         catch
             case e: LoweringException =>

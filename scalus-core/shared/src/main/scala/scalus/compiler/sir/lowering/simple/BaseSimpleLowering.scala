@@ -39,8 +39,7 @@ abstract class BaseSimpleLowering(
         // Apply let floating to optimize lazy let bindings
         val transformed = LetFloating(sir)
         val term = lowerInner(transformed)
-        if zCombinatorNeeded then
-            Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
+        if zCombinatorNeeded then Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
         else term
 
     /** Find all constructors for a given SIR type. Used in Match expressions to determine the
