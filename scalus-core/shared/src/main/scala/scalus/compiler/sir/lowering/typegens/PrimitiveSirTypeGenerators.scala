@@ -2,8 +2,11 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import scalus.cardano.ledger.Language
-import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
+import scalus.compiler.sir.lowering.LoweredValue.Builder.*
+import scalus.compiler.sir.lowering.PrimitiveRepresentation
+import scalus.uplc.Constant
+import scalus.uplc.builtin.Data.toData
 
 trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
@@ -111,26 +114,33 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue =
-
-        val asInt = lvIfThenElse(
-          input,
-          lvIntConstant(1, pos),
-          lvIntConstant(0, pos),
-          pos
-        )
-        lvBuiltinApply2(
-          SIRBuiltins.constrData,
-          asInt,
-          lvBuiltinApply0(
-            SIRBuiltins.mkNilData,
-            SIRType.BuiltinList(SIRType.Data.tp),
-            PrimitiveRepresentation.Constant,
-            pos
-          ),
-          SIRType.Boolean,
-          PrimitiveRepresentation.PackedData,
-          pos
-        )
+        input match {
+            case ConstantLoweredValue(SIR.Const(Constant.Bool(b), _, _), repr) =>
+                ConstantLoweredValue(
+                  SIR.Const(Constant.Data(b.toData), SIRType.Boolean, AnnotationsDecl(pos)),
+                  PrimitiveRepresentation.PackedData
+                )
+            case _ =>
+                val asInt = lvIfThenElse(
+                  input,
+                  lvIntConstant(1, pos),
+                  lvIntConstant(0, pos),
+                  pos
+                )
+                lvBuiltinApply2(
+                  SIRBuiltins.constrData,
+                  asInt,
+                  lvBuiltinApply0(
+                    SIRBuiltins.mkNilData,
+                    SIRType.BuiltinList(SIRType.Data.tp),
+                    PrimitiveRepresentation.Constant,
+                    pos
+                  ),
+                  SIRType.Boolean,
+                  PrimitiveRepresentation.PackedData,
+                  pos
+                )
+        }
 
     override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -359,13 +369,22 @@ object SIRTypeUplcIntegerGenerator extends PrimitiveSirTypeGenerator {
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue = {
-        lvBuiltinApply(
-          SIRBuiltins.iData,
-          input,
-          SIRType.Integer,
-          PrimitiveRepresentation.PackedData,
-          pos
-        )
+        input match {
+            case ConstantLoweredValue(SIR.Const(Constant.Integer(i), tp, _), repr) =>
+                ConstantLoweredValue(
+                  SIR.Const(Constant.Data(i.toData), tp, AnnotationsDecl(pos)),
+                  PrimitiveRepresentation.PackedData
+                )
+
+            case _ =>
+                lvBuiltinApply(
+                  SIRBuiltins.iData,
+                  input,
+                  SIRType.Integer,
+                  PrimitiveRepresentation.PackedData,
+                  pos
+                )
+        }
     }
 
     override def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using
