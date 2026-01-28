@@ -498,7 +498,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.14",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.15",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % Test
     )
     .jsSettings(
@@ -664,7 +664,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.14",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.15",
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
