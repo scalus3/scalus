@@ -8,7 +8,7 @@ import scalus.compiler.sir.*
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.{Constant, Term}
 
-object SIRUplcV3LoweringRandomSpec {
+object SIRUplcV3LoweringRandomTest {
 
     case class AA(flag: Boolean, a: BigInt) derives FromData, ToData
 
@@ -19,7 +19,7 @@ object SIRUplcV3LoweringRandomSpec {
 
 }
 
-class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
+class SIRUplcV3LoweringRandomTest extends AnyFunSuite {
 
     given scalus.compiler.Options = scalus.compiler.Options(
       targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
@@ -28,7 +28,7 @@ class SIRUplcV3LoweringRandomSpec extends AnyFunSuite {
       debug = false
     )
 
-    import SIRUplcV3LoweringRandomSpec.*
+    import SIRUplcV3LoweringRandomTest.*
 
     given PlutusVM = PlutusVM.makePlutusV3VM()
 
