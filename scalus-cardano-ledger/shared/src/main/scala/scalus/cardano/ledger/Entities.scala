@@ -349,6 +349,19 @@ object TransactionException {
               s"outputs with oversized attrs: $outputsWithOversizedAttrs, max allowed size: $maxAllowedSize"
         )
 
+    /** Plutus script validation failure with execution logs.
+      *
+      * This exception is thrown when a Plutus script fails validation and the transaction has
+      * `isValid = true`.
+      */
+    final case class PlutusScriptValidationException(
+        transactionId: TransactionHash,
+        message: String,
+        logs: Seq[String]
+    ) extends TransactionException(
+          s"Plutus script validation failed for transactionId $transactionId: $message"
+        )
+
     // TODO: placeholder for general exception, remove after finishing development
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 }

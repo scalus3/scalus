@@ -24,9 +24,9 @@ class Emulator(
     private var context: Context = initialContext
 
     def utxos: Utxos = state.utxos
-    protected def currentContext: Context = context
+    def currentContext: Context = context
 
-    protected def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
+    def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         processTransaction(context, state, transaction) match {
             case Right(newState) =>
                 state = newState

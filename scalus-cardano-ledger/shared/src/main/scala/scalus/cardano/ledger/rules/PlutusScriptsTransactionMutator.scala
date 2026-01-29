@@ -10,7 +10,8 @@ import scala.util.control.NonFatal
 // It's conwayEvalScriptsTxValid and babbageEvalScriptsTxInvalid in cardano-ledger
 object PlutusScriptsTransactionMutator extends STS.Mutator {
     override final type Error = TransactionException.BadCollateralInputsUTxOException |
-        TransactionException.IllegalArgumentException
+        TransactionException.IllegalArgumentException |
+        TransactionException.PlutusScriptValidationException
 
     override def transit(context: Context, state: State, event: Event): Result = boundary {
         val body = event.body.value
@@ -28,9 +29,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                   ExBudget.fromCpuAndMemory(maxTxExecutionUnits.steps, maxTxExecutionUnits.memory),
               protocolMajorVersion = protocolVersion.toMajor,
               costModels = protocolParameters.costModels,
-              mode = context.evaluatorMode,
-              debugDumpFilesForTesting = false
-            ).evalPlutusScripts(event, utxo)
+              mode = context.evaluatorMode).evalPlutusScripts(event, utxo)
 
             if event.isValid then
                 val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
@@ -56,10 +55,11 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
         } catch {
             case e: PlutusScriptEvaluationException =>
                 if event.isValid then
-                    // TODO: refine exception handling
                     failure(
-                      TransactionException.IllegalArgumentException(
-                        s"Transaction with invalid flag passed script validation, transactionId: ${event.id}, flag: ${event.isValid}, errorMsg: ${e.getMessage} , logs: ${e.logs.mkString(", ")}"
+                      TransactionException.PlutusScriptValidationException(
+                        event.id,
+                        e.getMessage,
+                        e.logs.toSeq
                       )
                     )
                 else

@@ -306,8 +306,11 @@ object NodeSubmitError {
     case class ValueNotConserved(message: String) extends NodeSubmitError
 
     /** Script execution failures */
-    case class ScriptFailure(message: String, scriptHash: Option[ScriptHash] = None)
-        extends NodeSubmitError
+    case class ScriptFailure(
+        message: String,
+        scriptHash: Option[ScriptHash] = None,
+        logs: Seq[String] = Seq.empty
+    ) extends NodeSubmitError
 
     /** Other node validation errors (catch-all for unrecognized validation errors) */
     case class ValidationError(message: String, errorCode: Option[String] = None)
@@ -448,6 +451,8 @@ object SubmitError {
             ValueNotConserved(e.explain)
         case e: TransactionException.NativeScriptsException =>
             ScriptFailure(e.explain)
+        case e: TransactionException.PlutusScriptValidationException =>
+            ScriptFailure(e.explain, logs = e.logs)
         case e =>
             ValidationError(e.explain)
 }

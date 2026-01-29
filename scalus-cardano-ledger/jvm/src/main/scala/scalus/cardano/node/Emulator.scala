@@ -29,7 +29,7 @@ class Emulator(
     protected def currentContext: Context = contextRef.get()
 
     @tailrec
-    protected final def submitSync(
+    final def submitSync(
         transaction: Transaction
     ): Either[SubmitError, TransactionHash] = {
         val currentState = stateRef.get()

@@ -3,11 +3,17 @@ package scalus.cardano.node
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.rules.Context
+import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
+import scalus.cardano.txbuilder.ScriptSource.PlutusScriptValue
+import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
-import scalus.cardano.txbuilder.TxBuilder
 import scalus.utils.await
+
+import scala.concurrent.duration.DurationInt
 
 class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
@@ -104,6 +110,49 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 }
             }
         }
+    }
+
+    test(
+      "Withdraw zero trick - register stake and withdraw 0 ADA from script-based stake address"
+    ) {
+        given Options = Options.release
+
+        val alwaysOkScript = scalus.uplc.PlutusV3.compile((sc: Data) => ())
+
+        val withdrawZeroStakeAddress =
+            StakeAddress(Network.Mainnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
+
+        val scriptWitness = TwoArgumentPlutusScriptWitness(
+          PlutusScriptValue(alwaysOkScript.script),
+          Data.unit,
+          Set.empty
+        )
+
+        // Create a simple provider with just one UTxO for Alice (5000 ADA)
+        val genesisInput = TransactionInput(genesisHash, 0)
+        val aliceOutput = TransactionOutput.Babbage(Alice.address(Network.Mainnet), Value.ada(5000))
+        val initialUtxos: Utxos = Map(genesisInput -> aliceOutput)
+
+        val provider = Emulator(
+          initialUtxos = initialUtxos,
+          initialContext = Context.testMainnet()
+        )
+
+        val tx: Transaction = TxBuilder(testEnv)
+            .registerStake(withdrawZeroStakeAddress, scriptWitness)
+            .withdrawRewards(
+              withdrawZeroStakeAddress,
+              Coin.zero,
+              scriptWitness
+            )
+            .complete(provider, Alice.address(Network.Mainnet))
+            .await(30.seconds)
+            .sign(Alice.signer)
+            .transaction
+
+        // Verify the staking script is executed successfully
+        val result = provider.submitSync(tx)
+        assert(result.isRight, s"Transaction should succeed: $result")
     }
 
     test("Property: invalid transaction (double spend) is rejected") {

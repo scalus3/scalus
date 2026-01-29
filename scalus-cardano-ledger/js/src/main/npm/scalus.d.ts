@@ -92,3 +92,72 @@ export class SlotConfig {
   /** Preprod testnet slot configuration. */
   static preprod: SlotConfig;
 }
+
+/** Transaction submission result. */
+export interface SubmitResult {
+  isSuccess: boolean;
+  txHash?: string;
+  error?: string;
+  logs?: string[];
+}
+
+/** Cardano emulator for testing transactions. */
+export class Emulator {
+  /**
+   * Create an emulator with initial UTxOs.
+   * @param initialUtxosCbor CBOR-encoded UTxO map (Map[TransactionInput, TransactionOutput]).
+   * @param slotConfig Slot configuration for time conversions.
+   */
+  constructor(initialUtxosCbor: Uint8Array, slotConfig: SlotConfig);
+
+  /**
+   * Submit a transaction to the emulator.
+   * @param txCborBytes CBOR-encoded transaction bytes.
+   * @returns Result with isSuccess, txHash (on success), or error and logs (on failure).
+   */
+  submitTx(txCborBytes: Uint8Array): SubmitResult;
+
+  /**
+   * Get all UTxOs as a single CBOR-encoded map.
+   * @returns CBOR-encoded UTxO map.
+   */
+  getUtxosCbor(): Uint8Array;
+
+  /**
+   * Get UTxOs for a specific address.
+   * @param addressBech32 Address in bech32 format.
+   * @returns Array of CBOR-encoded UTxO entries.
+   */
+  getUtxosForAddress(addressBech32: string): Uint8Array[];
+
+  /**
+   * Get all UTxOs as CBOR-encoded entries.
+   * @returns Array of CBOR-encoded UTxO entries.
+   */
+  getAllUtxos(): Uint8Array[];
+
+  /**
+   * Set the current slot.
+   * @param slot The slot number.
+   */
+  setSlot(slot: number): void;
+
+  /**
+   * Create a snapshot of the current emulator state.
+   * @returns A new Emulator with the same state.
+   */
+  snapshot(): Emulator;
+
+  /**
+   * Create an emulator with funded addresses.
+   * @param addressesBech32 Array of addresses in bech32 format.
+   * @param slotConfig Slot configuration.
+   * @param lovelacePerAddress Amount of lovelace per address (default: 10,000 ADA).
+   * @returns A new Emulator with funded addresses.
+   */
+  static withAddresses(
+    addressesBech32: string[],
+    slotConfig: SlotConfig,
+    lovelacePerAddress?: bigint
+  ): Emulator;
+}

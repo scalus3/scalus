@@ -752,7 +752,7 @@ object LotteryValidatorTest extends ScalusTest {
           playerTwoSigner = Bob.signer
         )
         provider.submit(initiateTx).await() match {
-            case Left(value) => fail(s"Couldn't submit initiate tx, error: ${value}")
+            case Left(value) => fail(s"Couldn't submit initiate tx, error: $value")
             case Right(_)    => ()
         }
         val lotteryUtxo = initiateTx.utxos.find { case (_, txOut) =>
@@ -786,7 +786,7 @@ object LotteryValidatorTest extends ScalusTest {
 
         assert(directResult.isFailure, "Direct validator call should have failed but succeeded")
         submissionResult match {
-            case Left(SubmitError.ScriptFailure(message, _)) =>
+            case Left(SubmitError.ScriptFailure(message, _, _)) =>
                 assert(
                   message.contains(expectedError),
                   s"Expected error '$expectedError' but got '$message'"
