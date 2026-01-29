@@ -317,17 +317,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       },
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        // Moved to scalus.compiler package, old names kept as deprecated type aliases
-        ProblemFilters.exclude[MissingClassProblem]("scalus.Compile"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.Ignore"),
-        // scalus.Compiler.Options was a type alias to scalus.compiler.Options; inner class removed
-        ProblemFilters.exclude[MissingClassProblem]("scalus.Compiler$Options"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.Compiler$Options$"),
-        ProblemFilters.exclude[MissingFieldProblem]("scalus.Compiler.Options"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.Compiler.*"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.Compiler.*"),
-      ),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",
