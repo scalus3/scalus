@@ -257,9 +257,9 @@ final class SIRCompiler(
 
     }
 
-    private val CompileAnnot = requiredClassRef("scalus.Compile").symbol.asClass
+    private val CompileAnnot = requiredClassRef("scalus.compiler.Compile").symbol.asClass
     private val ScalusDebugAnnot = requiredClassRef("scalus.ScalusDebug").symbol.asClass
-    private val IgnoreAnnot = requiredClassRef("scalus.Ignore").symbol.asClass
+    private val IgnoreAnnot = requiredClassRef("scalus.compiler.Ignore").symbol.asClass
 
     private val uplcIntrinsicAnnot = Symbols.requiredClass("scalus.uplc.builtin.uplcIntrinsic")
 

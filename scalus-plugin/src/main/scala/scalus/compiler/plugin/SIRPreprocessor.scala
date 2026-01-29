@@ -42,7 +42,7 @@ import scalus.compiler.sir.{Module as SIRModule, *}
   */
 class SIRPreprocessor(thisPhase: ScalusPreparePhase, debugLevel: Int)(using ctx: Context) {
 
-    private val ignoreAnnotRef = requiredClassRef("scalus.Ignore")
+    private val ignoreAnnotRef = requiredClassRef("scalus.compiler.Ignore")
     private val ignoreAnnot = ignoreAnnotRef.symbol.asClass
     private val sirModuleType = requiredClassRef("scalus.compiler.sir.Module")
     private val sirModuleWithDepsType = requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")

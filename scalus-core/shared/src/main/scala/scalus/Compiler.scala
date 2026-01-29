@@ -5,9 +5,13 @@ import scalus.compiler.sir.{SIR, SIRType}
 
 import scala.annotation.Annotation
 
-final class Compile extends Annotation
+@deprecated("Use scalus.compiler.Compile instead", "0.14.2")
+type Compile = scalus.compiler.Compile
+
 final class ScalusDebug(val debugLevel: Int) extends Annotation
-final class Ignore extends Annotation
+
+@deprecated("Use scalus.compiler.Ignore instead", "0.14.2")
+type Ignore = scalus.compiler.Ignore
 
 /** This is a marker trait for the compiler plugin to compile derivations of the instances of the
   * type classes.

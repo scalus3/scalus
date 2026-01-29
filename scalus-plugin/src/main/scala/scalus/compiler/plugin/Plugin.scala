@@ -127,7 +127,7 @@ class ScalusPreparePhase(debugLevel: Int) extends PluginPhase with IdentityDenot
     }
 
     override def transformTypeDef(tree: tpd.TypeDef)(using Context): tpd.Tree = {
-        val compileAnnot = requiredClassRef("scalus.Compile").symbol.asClass
+        val compileAnnot = requiredClassRef("scalus.compiler.Compile").symbol.asClass
         if tree.symbol.hasAnnotation(compileAnnot) && tree.symbol.is(Flags.Module) then
             val preprocessor = new SIRPreprocessor(this, debugLevel)
             preprocessor.transformTypeDef(tree)
@@ -413,7 +413,7 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
 
     override def transformTypeDef(tree: tpd.TypeDef)(using Context): tpd.Tree =
         // If the template has a compile annotation, we need to add a variable for SIR
-        val compileAnnot = requiredClassRef("scalus.Compile").symbol.asClass
+        val compileAnnot = requiredClassRef("scalus.compiler.Compile").symbol.asClass
         if tree.symbol.hasAnnotation(compileAnnot) && tree.symbol.is(Flags.Module) then {
             val sirBodyAnnotation =
                 requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
