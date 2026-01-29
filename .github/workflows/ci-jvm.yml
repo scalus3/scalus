@@ -27,7 +27,7 @@ jobs:
         run: |
           nix develop .#ci --accept-flake-config --command bash -c "sbt ci-jvm" 2>&1 | tee build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          WARNINGS=$(grep -ci "warning:" build.log || echo "0")
+          WARNINGS=$(grep -ci "warning:" build.log) || WARNINGS=0
           echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
           exit $BUILD_EXIT_CODE
       - name: Report test results
