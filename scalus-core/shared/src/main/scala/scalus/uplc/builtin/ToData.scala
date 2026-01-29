@@ -25,8 +25,7 @@ object ToData extends ToDataOffchainApi {
       */
     inline def derived[A]: ToData[A] = ${ ToDataMacros.toDataImpl[A] }
 
-    given ToData[Boolean] = (a: Boolean) =>
-        if a then constrData(1, mkNilData()) else constrData(0, mkNilData())
+    given ToData[Boolean] = (a: Boolean) => constrData(if a then 1 else 0, mkNilData())
 
     @uplcIntrinsic("iData")
     given bigIntToData: ToData[BigInt] = (a: BigInt) => iData(a)
