@@ -318,11 +318,10 @@ object Lowering {
                         // lvCast(loweredExpr, tp, anns.pos)
                         throw ex
             case sirBuiltin @ SIR.Builtin(bn, tp, anns) =>
-                StaticLoweredValue(
+                BuiltinRefLoweredValue(
                   sirBuiltin,
                   builtinTerms(bn),
-                  SirTypeUplcGenerator(tp).defaultRepresentation(tp),
-                  true
+                  SirTypeUplcGenerator(tp).defaultRepresentation(tp)
                 )
             case sirError @ SIR.Error(msg, anns, cause) =>
                 if lctx.generateErrorTraces then
@@ -333,7 +332,7 @@ object Lowering {
                         )
                     val loweredMsg = lowerSIR(msg, Some(SIRType.String))
                     val errorTerm =
-                        StaticLoweredValue(sirError, ~Term.Error, ErrorRepresentation, false)
+                        ErrorLoweredValue(sirError, ~Term.Error)
                     lvForce(
                       lvBuiltinApply2(
                         SIRBuiltins.trace,
@@ -345,7 +344,7 @@ object Lowering {
                       ),
                       anns.pos
                     )
-                else StaticLoweredValue(sirError, Term.Error, ErrorRepresentation, false)
+                else ErrorLoweredValue(sirError, Term.Error)
         lctx.nestingLevel -= 1
         retval
     }

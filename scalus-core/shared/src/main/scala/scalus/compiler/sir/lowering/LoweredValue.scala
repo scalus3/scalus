@@ -129,6 +129,11 @@ trait LoweredValue {
       */
     def isEffortLess: Boolean
 
+    /** Whether this value is (or wraps) a compile-time constant. Propagates through proxies and
+      * variable bindings.
+      */
+    def isConstant: Boolean = false
+
     /** add identifiable variable to be updated from this variable */
     def addDependent(
         value: IdentifiableLoweredValue
@@ -163,22 +168,29 @@ trait LoweredValue {
 
 }
 
-case class ConstantLoweredValue(
-    sir: SIR.Const,
-    representation: LoweredValueRepresentation
-) extends LoweredValue {
-    override def sirType: SIRType = sir.tp
-    override def pos: SIRPosition = sir.anns.pos
+/** Leaf values have no subvalues and no uplevel variable dependencies. Constants, errors, and
+  * builtin refs are all leaves.
+  */
+trait LeafLoweredValue extends LoweredValue {
     override def dominatingUplevelVars: Set[IdentifiableLoweredValue] = Set.empty
     override def usedUplevelVars: Set[IdentifiableLoweredValue] = Set.empty
     override def ownVars: Set[IdentifiableLoweredValue] = Set.empty
     override def internalVars: Set[IdentifiableLoweredValue] = Set.empty
+    override def addDependent(value: IdentifiableLoweredValue): Unit = {}
+    override def findSelfOrSubtems(p: LoweredValue => Boolean): Option[LoweredValue] =
+        Some(this).filter(p)
+}
+
+case class ConstantLoweredValue(
+    sir: SIR.Const,
+    representation: LoweredValueRepresentation
+) extends LeafLoweredValue {
+    override def sirType: SIRType = sir.tp
+    override def pos: SIRPosition = sir.anns.pos
     override def isEffortLess: Boolean = true
+    override def isConstant: Boolean = true
     override def termInternal(gctx: TermGenerationContext): Term =
         Term.Const(sir.uplcConst)
-    override def addDependent(value: IdentifiableLoweredValue): Unit = {
-        // constants are not depended on any variables
-    }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         (Pretty[Term].pretty(Term.Const(sir.uplcConst), ctx.style) + Doc.text(":") + Doc.text(
@@ -190,45 +202,54 @@ case class ConstantLoweredValue(
     override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
         Pretty[Term].pretty(Term.Const(sir.uplcConst), ctx.style)
 
-    override def findSelfOrSubtems(p: LoweredValue => Boolean): Option[LoweredValue] = {
-        Some(this).filter(p)
-    }
-
 }
 
-case class StaticLoweredValue(
-    sir: AnnotatedSIR,
-    term: Term,
-    representation: LoweredValueRepresentation,
-    override val isEffortLess: Boolean
-) extends LoweredValue {
+case class ErrorLoweredValue(
+    sir: SIR.Error,
+    term: Term
+) extends LeafLoweredValue {
+    override def sirType: SIRType = sir.tp
+    override def pos: SIRPosition = sir.anns.pos
+    override def representation: LoweredValueRepresentation = ErrorRepresentation
+    override def isEffortLess: Boolean = false
+    override def termInternal(gctx: TermGenerationContext): Term = term
 
-    def sirType: SIRType = sir.tp
-    def pos: SIRPosition = sir.anns.pos
-    def dominatingUplevelVars: Set[IdentifiableLoweredValue] = Set.empty
-    def usedUplevelVars: Set[IdentifiableLoweredValue] = Set.empty
-    def ownVars: Set[IdentifiableLoweredValue] = Set.empty
-    def internalVars: Set[IdentifiableLoweredValue] = Set.empty
-    def termInternal(gctx: TermGenerationContext): Term = term
-    def addDependent(value: IdentifiableLoweredValue): Unit = {}
-
-    def findSelfOrSubtems(p: LoweredValue => Boolean): Option[LoweredValue] = {
-        Some(this).filter(p)
-    }
-
-    def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         import PrettyPrinter.*
-        Doc.text("static") + inParens(
+        Doc.text("error") + inParens(
           Pretty[Term].pretty(term, ctx.style) + Doc.text(":") + Doc.text(
             sir.tp.show
           ) + inBrackets(representation.doc)
         )
     }
 
-    def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+    override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         Pretty[Term].pretty(term, ctx.style)
     }
+}
 
+case class BuiltinRefLoweredValue(
+    sir: SIR.Builtin,
+    term: Term,
+    representation: LoweredValueRepresentation
+) extends LeafLoweredValue {
+    override def sirType: SIRType = sir.tp
+    override def pos: SIRPosition = sir.anns.pos
+    override def isEffortLess: Boolean = true
+    override def termInternal(gctx: TermGenerationContext): Term = term
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import PrettyPrinter.*
+        Doc.text("builtin") + inParens(
+          Pretty[Term].pretty(term, ctx.style) + Doc.text(":") + Doc.text(
+            sir.tp.show
+          ) + inBrackets(representation.doc)
+        )
+    }
+
+    override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        Pretty[Term].pretty(term, ctx.style)
+    }
 }
 
 /** Values with id which can be represented by variables (if needed).
@@ -285,6 +306,8 @@ sealed trait IdentifiableLoweredValue extends LoweredValue {
     override def internalVars: Set[IdentifiableLoweredValue] = Set.empty
 
     override def isEffortLess: Boolean = true
+
+    override def isConstant: Boolean = optRhs.exists(_.isConstant)
 
 }
 
@@ -457,6 +480,8 @@ case class DependendVariableLoweredValue(
         }
     }
 
+    override def isConstant: Boolean = parent.isConstant
+
     override def dominatingUplevelVars: Set[IdentifiableLoweredValue] =
         rhs.dominatingUplevelVars
 
@@ -515,6 +540,8 @@ trait ProxyLoweredValue(val origin: LoweredValue) extends LoweredValue {
         origin.addDependent(value)
 
     override def isEffortLess: Boolean = origin.isEffortLess
+
+    override def isConstant: Boolean = origin.isConstant
 
     /*
     override def docDef(style: PrettyPrinter.Style = PrettyPrinter.Style.Normal): Doc = {
@@ -2190,22 +2217,6 @@ object LoweredValue {
             )
         }
 
-        def lvBuiltinApply0(
-            fun: SIR.Builtin,
-            tp: SIRType,
-            lvr: LoweredValueRepresentation,
-            inPos: SIRPosition
-        )(using
-            lctx: LoweringContext
-        ): LoweredValue = {
-            StaticLoweredValue(
-              SIR.Builtin(fun.bn, tp, AnnotationsDecl(inPos)),
-              Lowering.forcedBuiltin(fun.bn) $ Term.Const(Constant.Unit),
-              lvr,
-              false
-            )
-        }
-
         def lvDataNil(
             inPos: SIRPosition,
             tp: SIRType = SIRType.List(SIRType.Data.tp),
@@ -2216,6 +2227,23 @@ object LoweredValue {
             ConstantLoweredValue(
               SIR.Const(
                 Constant.List(DefaultUni.Data, Nil),
+                tp,
+                AnnotationsDecl(inPos)
+              ),
+              repr
+            )
+        }
+
+        def lvPairDataNil(
+            inPos: SIRPosition,
+            tp: SIRType,
+            repr: LoweredValueRepresentation = SumCaseClassRepresentation.SumDataPairList
+        )(using
+            lctx: LoweringContext
+        ): LoweredValue = {
+            ConstantLoweredValue(
+              SIR.Const(
+                Constant.List(DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data), Nil),
                 tp,
                 AnnotationsDecl(inPos)
               ),

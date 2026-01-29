@@ -55,13 +55,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       pos
                     )
                 // Special case: Nil list can be converted directly to empty pair list
-                if isNilType(input.sirType) then
-                    lvBuiltinApply0(
-                      SIRBuiltins.mkNilPairData,
-                      input.sirType,
-                      SumCaseClassRepresentation.SumDataPairList,
-                      pos
-                    )
+                if isNilType(input.sirType) then lvPairDataNil(pos, input.sirType)
                 else
                     val elementType = retrieveElementType(
                       input.sirType,
@@ -374,15 +368,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         targetRepr: LoweredValueRepresentation
     )(using lctx: LoweringContext): LoweredValue = {
         if input.representation == targetRepr then input
+        else if input.isConstant then genNil(targetListType, input.pos)
         else
-            input match
-                case _: StaticLoweredValue | _: ConstantLoweredValue =>
-                    genNil(targetListType, input.pos)
-                case _ =>
-                    throw LoweringException(
-                      s"Implementation restriction: can't use non-standard expression of type Nil",
-                      input.pos
-                    )
+            throw LoweringException(
+              s"Implementation restriction: can't use non-standard expression of type Nil",
+              input.pos
+            )
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using

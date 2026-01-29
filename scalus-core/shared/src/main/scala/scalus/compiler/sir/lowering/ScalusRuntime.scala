@@ -317,12 +317,7 @@ object ScalusRuntime {
           )
         )
 
-        val whenNil = lvBuiltinApply0(
-          SIRBuiltins.mkNilPairData,
-          tpOutPairList,
-          SumCaseClassRepresentation.SumDataPairList,
-          AnnotationsDecl.empty.pos
-        )
+        val whenNil = lvPairDataNil(AnnotationsDecl.empty.pos, tpOutPairList)
 
         def mapTupleToPair(
             head: IdentifiableLoweredValue,

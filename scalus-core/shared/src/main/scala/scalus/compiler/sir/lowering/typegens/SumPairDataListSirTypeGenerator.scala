@@ -51,13 +51,7 @@ object SumPairDataListSirTypeGenerator extends SumListCommonSirTypeGenerator {
     }
 
     override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue = {
-        lvBuiltinApply0(
-          SIRBuiltins.mkNilPairData,
-          resType,
-          SumCaseClassRepresentation.SumDataPairList,
-          pos
-        )
-
+        lvPairDataNil(pos, resType)
     }
 
 }
