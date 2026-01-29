@@ -29,7 +29,8 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                   ExBudget.fromCpuAndMemory(maxTxExecutionUnits.steps, maxTxExecutionUnits.memory),
               protocolMajorVersion = protocolVersion.toMajor,
               costModels = protocolParameters.costModels,
-              mode = context.evaluatorMode).evalPlutusScripts(event, utxo)
+              mode = context.evaluatorMode
+            ).evalPlutusScripts(event, utxo)
 
             if event.isValid then
                 val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
