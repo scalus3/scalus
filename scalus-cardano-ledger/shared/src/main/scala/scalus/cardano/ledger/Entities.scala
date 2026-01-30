@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.Dom.Element
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.utils.CollateralSufficient
 
 // TODO: maybe replace on enum
@@ -240,6 +240,21 @@ object TransactionException {
              |invalid refunds (expected -> provided): $invalidRefunds.""".stripMargin
         )
 
+    // It's Shelley/Conway poolRule failures (PoolDisallowed operation) in cardano-ledger
+    final case class StakePoolException(
+        transactionId: TransactionHash,
+        notRegistered: Set[PoolKeyHash],
+        rewardAccountNetworkMismatch: Set[(PoolKeyHash, Network, Network)],
+        costBelowMinimum: Map[PoolKeyHash, (Coin, Coin)],
+        invalidRetirementEpochs: Map[PoolKeyHash, (Long, Long, Long)]
+    ) extends TransactionException(
+          s"""Pool certificate validation failed for transactionId $transactionId.
+             |not registered: $notRegistered,
+             |reward account network mismatches (pool, rewardNetwork, expectedNetwork): $rewardAccountNetworkMismatch,
+             |costs below minimum (pool -> (min, provided)): $costBelowMinimum,
+             |invalid retirement epochs (pool -> (epoch, current, maxAllowed)): $invalidRetirementEpochs.""".stripMargin
+        )
+
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
@@ -475,10 +490,9 @@ data PState era = PState
  */
 
 case class PoolsState(
-//    psStakePoolParams: Map[AddrKeyHash, PoolParams],
-//    psFutureStakePoolParams: Map[AddrKeyHash, PoolParams],
-//    psRetiring: Map[AddrKeyHash, EpochNo],
-//    psDeposits: Map[AddrKeyHash, Coin]
+    stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
+    retiring: Map[PoolKeyHash, EpochNo] = Map.empty,
+    deposits: Map[PoolKeyHash, Coin] = Map.empty
 )
 
 /*-- | The state used by the DELEG rule, which roughly tracks stake

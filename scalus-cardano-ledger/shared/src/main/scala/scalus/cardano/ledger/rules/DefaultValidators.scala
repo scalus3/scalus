@@ -29,6 +29,7 @@ object DefaultValidators {
       ValueNotConservedUTxOValidator,
       VerifiedSignaturesInWitnessesValidator,
       StakeCertificatesValidator,
+      StakePoolCertificatesValidator,
       WrongNetworkInTxBodyValidator,
       WrongNetworkValidator,
       WrongNetworkWithdrawalValidator
