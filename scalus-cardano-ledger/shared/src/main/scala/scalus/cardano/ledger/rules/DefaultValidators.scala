@@ -28,6 +28,7 @@ object DefaultValidators {
       TransactionSizeValidator,
       ValueNotConservedUTxOValidator,
       VerifiedSignaturesInWitnessesValidator,
+      StakeCertificatesValidator,
       WrongNetworkInTxBodyValidator,
       WrongNetworkValidator,
       WrongNetworkWithdrawalValidator
@@ -39,6 +40,7 @@ object DefaultMutators {
 
     /** All built-in mutators for Cardano ledger rules. */
     val all: Set[STS.Mutator] = Set(
-      PlutusScriptsTransactionMutator
+      PlutusScriptsTransactionMutator,
+      StakeCertificatesMutator
     )
 }

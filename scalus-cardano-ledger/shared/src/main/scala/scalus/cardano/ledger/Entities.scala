@@ -223,6 +223,23 @@ object TransactionException {
         def areCollateralInputsMissing: Boolean = !areTotalExUnitsZero && !hasCollateralInputs
     }
 
+    // It's Conway StakeKeyRegistered/StakeKeyNotRegistered/etc. DELEG failures in cardano-ledger
+    final case class StakeCertificatesException(
+        transactionId: TransactionHash,
+        alreadyRegistered: Set[Credential],
+        missingRegistrations: Set[Credential],
+        nonZeroRewardAccounts: Map[Credential, Coin],
+        invalidDeposits: Map[Credential, (Coin, Coin)],
+        invalidRefunds: Map[Credential, (Coin, Coin)]
+    ) extends TransactionException(
+          s"""Stake certificates validation failed for transactionId $transactionId.
+             |already registered credentials: $alreadyRegistered,
+             |missing registrations: $missingRegistrations,
+             |non-zero reward accounts: $nonZeroRewardAccounts,
+             |invalid deposits (expected -> provided): $invalidDeposits,
+             |invalid refunds (expected -> provided): $invalidRefunds.""".stripMargin
+        )
+
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,
