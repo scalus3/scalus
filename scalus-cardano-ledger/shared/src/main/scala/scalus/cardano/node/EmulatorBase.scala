@@ -34,6 +34,8 @@ trait EmulatorBase extends BlockchainProvider {
         CardanoInfo(ctx.env.params, ctx.env.network, ctx.slotConfig)
     }
 
+    def currentSlot: Future[SlotNo] = Future.successful(currentContext.env.slot)
+
     def fetchLatestParams: Future[ProtocolParams] = {
         val params = currentContext.env.params
         Future.successful(params)

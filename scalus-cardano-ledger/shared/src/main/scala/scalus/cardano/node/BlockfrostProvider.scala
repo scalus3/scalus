@@ -63,6 +63,11 @@ class BlockfrostProvider(
     /** Wrap an HTTP request with rate limiting */
     private def rateLimited[T](request: => Future[T]): Future[T] = limiter(request)
 
+    def currentSlot: Future[SlotNo] =
+        Future.successful(
+          cardanoInfo.slotConfig.instantToSlot(java.time.Instant.now()).toLong
+        )
+
     def fetchLatestParams: Future[ProtocolParams] =
         fetchProtocolParamsFromUrl(s"$baseUrl/epochs/latest/parameters")
 

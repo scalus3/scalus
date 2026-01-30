@@ -29,6 +29,10 @@ trait BlockchainProviderTF[F[_]] {
       */
     def findUtxos(query: UtxoQuery): F[Either[UtxoQueryError, Utxos]]
 
+    /** Returns the current slot number.
+      */
+    def currentSlot: F[SlotNo]
+
 }
 
 /** Provider for Cardano blockchain operations.
@@ -162,6 +166,10 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] {
 
         findUtxos(query)
     }
+
+    /** Returns the current slot number.
+      */
+    def currentSlot: Future[SlotNo]
 
     /** Find UTxOs using a type-safe query.
       *
