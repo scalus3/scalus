@@ -34,12 +34,13 @@ private object FromDataMacros {
 
     private def deriveFromDataCaseClassApply[A: Type](using Quotes): Expr[FromData[A]] = {
         '{ (d: Data) =>
-            val args = scalus.uplc.builtin.Builtins.unConstrData(d).snd
-
-            // generate f = (args) => new Constructor(args.head, args.tail.head, ...)
-            // then apply to args: f(args)
-            // and finally beta reduce it in compile time
-            ${ Expr.betaReduce('{ ${ deriveFromDataCaseClassConstructor[A] }(args) }) }
+            d match
+                case Data.Constr(_, args) =>
+                    // generate f = (args) => new Constructor(args.head, args.tail.head, ...)
+                    // then apply to args: f(args)
+                    // and finally beta reduce it in compile time
+                    ${ Expr.betaReduce('{ ${ deriveFromDataCaseClassConstructor[A] }(args) }) }
+                case _ => throw new Exception("Expected Constr")
         }
     }
 
@@ -62,26 +63,39 @@ private object FromDataMacros {
                         case Some(value) => value
         }
 
-        def genGetter(init: Expr[scalus.uplc.builtin.BuiltinList[Data]], idx: Int)(using
-            Quotes
-        ): Expr[Data] =
-            var expr = init
-            var i = 0
-            while i < idx do
-                val exp = expr // save the current expr, otherwise it will loop forever
-                expr = '{ $exp.tail }
-                i += 1
-            '{ $expr.head }
-
         def genConstructorCall(
             a: Expr[scalus.uplc.builtin.BuiltinList[scalus.uplc.builtin.Data]]
         )(using Quotes): Expr[T] = {
-            val args = fromDataOfArgs.zipWithIndex.map { case (appl, idx) =>
-                val arg = genGetter(a, idx)
-                '{ $appl($arg) }.asTerm
+            import quotes.reflect.*
+
+            def rec(
+                lst: Expr[scalus.uplc.builtin.BuiltinList[Data]],
+                fromDatas: List[Expr[Any]],
+                ps: List[Symbol],
+                args: List[Term]
+            ): Expr[T] = {
+                ps match
+                    case Nil =>
+                        New(TypeTree.of[T]).select(constr).appliedToArgs(args.reverse).asExprOf[T]
+                    case p :: ptails =>
+                        val appl = fromDatas.head
+                        val tpe = p.termRef.widen.dealias
+                        tpe.asType match
+                            case '[t] =>
+                                '{
+                                    val h = $lst.head
+                                    val t = $lst.tail
+                                    ${
+                                        rec(
+                                          '{ t },
+                                          fromDatas.tail,
+                                          ptails,
+                                          '{ ${ appl.asExprOf[FromData[t]] }(h) }.asTerm :: args
+                                        )
+                                    }
+                                }
             }
-            // Couldn't find a way to do this using quotes, so just construct the tree manually
-            New(TypeTree.of[T]).select(constr).appliedToArgs(args).asExprOf[T]
+            rec(a, fromDataOfArgs, params, Nil)
         }
 
         '{ (args: scalus.uplc.builtin.BuiltinList[scalus.uplc.builtin.Data]) =>
@@ -122,19 +136,22 @@ private object FromDataMacros {
         // stage programming is cool, but it's hard to comprehend what's going on
         val typeA: String = Type.show[A]
         '{ (d: Data) =>
-            val pair = Builtins.unConstrData(d)
-            val tag = pair.fst
-            val args = pair.snd
-            ${
-                mappingRhs.zipWithIndex.foldRight('{
-                    throw new Exception("Invalid tag")
-                }.asExprOf[A]) { case ((code, t), acc) =>
-                    '{
-                        if Builtins.equalsInteger(tag, BigInt(${ Expr(t) })) then $code(args)
-                        else $acc
+            d match
+                case Data.Constr(tag, args) =>
+                    ${
+                        import quotes.reflect.*
+                        val matchCases = mappingRhs.zipWithIndex.map { case (code, t) =>
+                            CaseDef(Literal(IntConstant(t)), None, '{ $code(args) }.asTerm)
+                        }
+                        val defaultCase =
+                            CaseDef(
+                              Wildcard(),
+                              None,
+                              '{ throw new Exception("Invalid tag") }.asTerm
+                            )
+                        Match('{ tag }.asTerm, matchCases :+ defaultCase).asExprOf[A]
                     }
-                }
-            }
+                case _ => throw new Exception("Expected Constr")
         }
 
     }
