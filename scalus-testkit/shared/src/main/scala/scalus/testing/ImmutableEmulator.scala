@@ -70,7 +70,9 @@ case class ImmutableEmulator(
         override def cardanoInfo: CardanoInfo = ImmutableEmulator.this.cardanoInfo
         override def fetchLatestParams: Future[ProtocolParams] =
             Future.successful(env.params)
-        override def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
+        override def submit(
+            transaction: Transaction
+        ): Future[Either[SubmitError, TransactionHash]] =
             Future.successful(ImmutableEmulator.this.submit(transaction).map(_._1))
         override def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
             Future.successful(ImmutableEmulator.this.findUtxos(query))
@@ -98,7 +100,8 @@ object ImmutableEmulator {
       */
     def fromEmulator(emulator: EmulatorBase): ImmutableEmulator = {
         val info = emulator.cardanoInfo
-        val slot = emulator.currentSlot.value.get.get // EmulatorBase always returns completed Future
+        val slot =
+            emulator.currentSlot.value.get.get // EmulatorBase always returns completed Future
         val env = UtxoEnv(
           slot = slot,
           params = info.protocolParams,

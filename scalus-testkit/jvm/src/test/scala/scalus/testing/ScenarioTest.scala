@@ -151,7 +151,8 @@ class ScenarioTest extends AnyFunSuite {
         import Scenario.scenarioLogicMonad
         val initial = mkState(Alice)
         // Bind choices to the initial state via Leaf
-        val scenario: Scenario[Int] = Scenario.Leaf(initial,
+        val scenario: Scenario[Int] = Scenario.Leaf(
+          initial,
           s => {
               val c1: Scenario[Int] = Scenario.Done(s, 1)
               val c2: Scenario[Int] = Scenario.Done(s, 2)
@@ -201,12 +202,13 @@ class ScenarioTest extends AnyFunSuite {
     test("error produces error in stream") {
         val initial = mkState(Alice)
         val scenario = Scenario.error[Int](new RuntimeException("boom"))
-        val caught = try {
-            awaitResult(Scenario.runFirst(initial)(scenario))
-            false
-        } catch {
-            case e: RuntimeException if e.getMessage == "boom" => true
-        }
+        val caught =
+            try {
+                awaitResult(Scenario.runFirst(initial)(scenario))
+                false
+            } catch {
+                case e: RuntimeException if e.getMessage == "boom" => true
+            }
         assert(caught, "error should propagate as exception")
     }
 
@@ -305,12 +307,15 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = {
             import Scenario.scenarioLogicMonad
             scenarioLogicMonad.flatMap(Scenario.snapshotProvider) { provider =>
-                val tx = Await.result(
-                  TxBuilder(provider.cardanoInfo)
-                      .payTo(Bob.address, Value.ada(10))
-                      .complete(provider, Alice.address),
-                  Duration.Inf
-                ).sign(Alice.signer).transaction
+                val tx = Await
+                    .result(
+                      TxBuilder(provider.cardanoInfo)
+                          .payTo(Bob.address, Value.ada(10))
+                          .complete(provider, Alice.address),
+                      Duration.Inf
+                    )
+                    .sign(Alice.signer)
+                    .transaction
                 scenarioLogicMonad.flatMap(Scenario.submit(tx)) { result =>
                     scenarioLogicMonad.pure(result)
                 }

@@ -102,32 +102,31 @@ object Scenario {
     /** Evaluate a Scenario tree to a LogicStreamT of (state, value) pairs. */
     def eval[A](scenario: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)] =
         scenario match
-            case Done(s, a)        => LogicStreamT.Pure((s, a))
-            case Leaf(s, run)      => eval(run(s))
-            case Branches(streams) => streams.flatMap(branch => eval(branch))
-            case WaitFuture(fut)   => LogicStreamT.WaitF(fut.map(sc => eval(sc)))
+            case Done(s, a)          => LogicStreamT.Pure((s, a))
+            case Leaf(s, run)        => eval(run(s))
+            case Branches(streams)   => streams.flatMap(branch => eval(branch))
+            case WaitFuture(fut)     => LogicStreamT.WaitF(fut.map(sc => eval(sc)))
             case ScenarioError(_, e) => LogicStreamT.Error(e)
             case FromStream(stream)  => stream
 
     // =========================================================================
-    // CpsLogicMonad instance
+    // CpsConcurrentLogicMonad instance
     // =========================================================================
 
-    given scenarioLogicMonad: CpsLogicMonad[Scenario] with CpsLogicMonadInstanceContext[Scenario]
+    given scenarioLogicMonad: CpsConcurrentLogicMonad[Scenario, Future]
+        with CpsConcurrentLogicMonadInstanceContext[Scenario, Future]
         with {
 
-        override type Observer[A] = Future[A]
-
-        override val observerCpsMonad: CpsTryMonad[Future] = futureMonad
+        override val observerCpsMonad: CpsConcurrentMonad[Future] = futureMonad
 
         override def pure[A](a: A): Scenario[A] =
             Done(ScenarioState.empty, a)
 
         override def map[A, B](fa: Scenario[A])(f: A => B): Scenario[B] = fa match
-            case Done(s, a)        => Done(s, f(a))
-            case Leaf(s, run)      => Leaf(s, state => map(run(state))(f))
-            case Branches(streams) => Branches(streams.map(branch => map(branch)(f)))
-            case WaitFuture(fut)   => WaitFuture(fut.map(sc => map(sc)(f)))
+            case Done(s, a)          => Done(s, f(a))
+            case Leaf(s, run)        => Leaf(s, state => map(run(state))(f))
+            case Branches(streams)   => Branches(streams.map(branch => map(branch)(f)))
+            case WaitFuture(fut)     => WaitFuture(fut.map(sc => map(sc)(f)))
             case ScenarioError(s, e) => ScenarioError(s, e)
             case FromStream(stream)  => FromStream(stream.map { case (s, a) => (s, f(a)) })
 
@@ -136,16 +135,16 @@ object Scenario {
             case Leaf(s, run) => Leaf(s, state => flatMap(run(state))(f))
             case Branches(streams) =>
                 Branches(streams.map(branch => flatMap(branch)(f)))
-            case WaitFuture(fut)   => WaitFuture(fut.map(sc => flatMap(sc)(f)))
+            case WaitFuture(fut)     => WaitFuture(fut.map(sc => flatMap(sc)(f)))
             case ScenarioError(s, e) => ScenarioError(s, e)
             case FromStream(stream) =>
                 FromStream(stream.flatMap { case (s, a) => eval(injectState(s, f(a))) })
 
         override def flatMapTry[A, B](fa: Scenario[A])(f: Try[A] => Scenario[B]): Scenario[B] =
             fa match
-                case Done(s, a) => injectState(s, f(Success(a)))
+                case Done(s, a)          => injectState(s, f(Success(a)))
                 case ScenarioError(s, e) => injectState(s, f(Failure(e)))
-                case Leaf(s, run) => Leaf(s, state => flatMapTry(run(state))(f))
+                case Leaf(s, run)        => Leaf(s, state => flatMapTry(run(state))(f))
                 case Branches(streams) =>
                     Branches(streams.map(branch => flatMapTry(branch)(f)))
                 case WaitFuture(fut) =>
@@ -165,7 +164,7 @@ object Scenario {
         override def mplus[A](a: Scenario[A], b: => Scenario[A]): Scenario[A] =
             val aStream = a match
                 case Branches(streams) => streams
-                case other => LogicStreamT.Pure[Future, Scenario[A]](other)
+                case other             => LogicStreamT.Pure[Future, Scenario[A]](other)
             Branches(aStream.mplus(LogicStreamT.Pure[Future, Scenario[A]](b)))
 
         override def msplit[A](
