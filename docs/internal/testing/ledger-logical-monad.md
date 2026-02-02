@@ -62,47 +62,11 @@ case class ScenarioState(
 
 No separate `slot` field - the emulator already tracks the current slot internally via `env.slot`.
 
-### State Threading: injectState
-
-The key mechanism for state threading in flatMap:
+### Typeclass: CpsConcurrentLogicMonad
 
 ```scala
-private def injectState[A](s: ScenarioState, scenario: Scenario[A]): Scenario[A] =
-    scenario match
-        case Done(existing, a) =>
-            if existing eq ScenarioState.empty then Done(s, a) else scenario
-        case Leaf(existing, run) =>
-            if existing eq ScenarioState.empty then Leaf(s, run) else scenario
-        case Branches(streams) =>
-            Branches(streams.map(branch => injectState(s, branch)))
-        case WaitFuture(fut) =>
-            WaitFuture(fut.map(sc => injectState(s, sc)))
-        case ScenarioError(existing, e) =>
-            if existing eq ScenarioState.empty then ScenarioError(s, e) else scenario
-        case FromStream(_) => scenario // stream states are already bound
-```
-
-Uses `eq` (reference equality) against `ScenarioState.empty` to distinguish unbound nodes (created by DSL methods like `pure`, `choices`) from nodes already bound to a real state (from independent mplus branches). Only unbound nodes get the injected state.
-
-### Evaluation: eval
-
-`eval` interprets a Scenario ADT tree into `LogicStreamT[Future, (ScenarioState, A)]` for observation:
-
-```scala
-def eval[A](scenario: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)] =
-    scenario match
-        case Done(s, a)          => LogicStreamT.Pure((s, a))
-        case Leaf(s, run)        => eval(run(s))
-        case Branches(streams)   => streams.flatMap(branch => eval(branch))
-        case WaitFuture(fut)     => LogicStreamT.WaitF(fut.map(sc => eval(sc)))
-        case ScenarioError(_, e) => LogicStreamT.Error(e)
-        case FromStream(stream)  => stream
-```
-
-### Typeclass: CpsLogicMonad
-
-```scala
-given scenarioLogicMonad: CpsLogicMonad[Scenario] with CpsLogicMonadInstanceContext[Scenario]
+given scenarioLogicMonad: CpsConcurrentLogicMonad[Scenario, Future]
+    with CpsConcurrentLogicMonadInstanceContext[Scenario, Future]
 ```
 
 Hierarchy:
@@ -112,71 +76,18 @@ CpsMonad
 CpsTryMonad (fromTry, restore, flatMapTry)
     ↓
 CpsLogicMonad (mzero, mplus, msplit, fsplit, guard, once, interleave, ...)
+    ↓
+CpsConcurrentLogicMonad (toAsyncList, toStream, parOr)
 ```
 
-Since `CpsLogicMonad` extends `CpsTryMonad`, we get exception handling (`try`/`catch` in direct style) automatically.
-
-### Sequential Branching
-
-Branching is sequential (depth-first via `mplus`). Since we have `adoptCallbackStyle`, `parOr`/`interleave` can be built, but we choose not to expose them - sequential exploration is sufficient for scenario testing and simpler to reason about.
-
-### Error Handling via flatMapTry
-
-`flatMapTry` handles state rollback on failure:
-
-```scala
-override def flatMapTry[A, B](fa: Scenario[A])(f: Try[A] => Scenario[B]): Scenario[B] =
-    fa match
-        case Done(s, a)          => injectState(s, f(Success(a)))
-        case ScenarioError(s, e) => injectState(s, f(Failure(e)))
-        case Leaf(s, run)        => Leaf(s, state => flatMapTry(run(state))(f))
-        case Branches(streams)   => Branches(streams.map(branch => flatMapTry(branch)(f)))
-        case WaitFuture(fut)     => WaitFuture(fut.map(sc => flatMapTry(sc)(f)))
-        case FromStream(stream)  =>
-            FromStream(stream.flatMapTry {
-                case Success((s, a)) => eval(injectState(s, f(Success(a))))
-                case Failure(e)      => eval(f(Failure(e)))
-            })
-```
-
-On `ScenarioError(s, e)`, the error's state `s` is preserved and injected into `f(Failure(e))`, enabling rollback to the state before the error occurred.
+Since `CpsLogicMonad` extends `CpsTryMonad`, we get exception handling (`try`/`catch` in direct style) automatically. `CpsConcurrentLogicMonad` adds streaming and parallel operations.
 
 ### Two Kinds of Failure
 
 | Failure Type | Meaning | Handling |
 |--------------|---------|----------|
 | Logical (`mzero`) | No solutions, try next branch | `guard`, `choices`, backtracking |
-| Exception (`Throwable`) | Real error | `try`/`catch`, `restore`, `flatMapTry` |
-
-### mplus Optimization
-
-When the first argument is already a `Branches`, its underlying `LogicStreamT` is flattened into the combined stream rather than double-wrapping:
-
-```scala
-override def mplus[A](a: Scenario[A], b: => Scenario[A]): Scenario[A] =
-    val aStream = a match
-        case Branches(streams) => streams
-        case other => LogicStreamT.Pure[Future, Scenario[A]](other)
-    Branches(aStream.mplus(LogicStreamT.Pure[Future, Scenario[A]](b)))
-```
-
-### fsplit and msplit
-
-`fsplit` evaluates the scenario to a LogicStreamT stream, then delegates to `logicStreamMonad.fsplit`. The tail is wrapped as `FromStream`:
-
-```scala
-override def fsplit[A](sa: Scenario[A]): Future[Option[(Try[A], Scenario[A])]] =
-    logicStreamMonad.fsplit(eval(sa)).map {
-        case None => None
-        case Some((tryPair, restStream)) =>
-            val tail: Scenario[A] = FromStream(restStream)
-            tryPair match
-                case Success((s2, a)) => Some((Success(a), tail))
-                case Failure(e)       => Some((Failure(e), tail))
-    }
-```
-
-`msplit` works similarly but operates within the Scenario monad (returns `Scenario[Option[(Try[A], Scenario[A])]]`), using a `Leaf` to capture state and `FromStream` for the tail.
+| Exception (`Throwable`) | Real error | `try`/`catch`, `restore`, `flatMapTry` with state rollback |
 
 ## Implementation
 
@@ -222,27 +133,7 @@ Query evaluation is shared with the mutable Emulator via static `EmulatorBase.ev
 
 File: `scalus-testkit/shared/src/main/scala/scalus/testing/Scenario.scala`
 
-CpsLogicMonad instance with all required operations:
-
-```scala
-given scenarioLogicMonad: CpsLogicMonad[Scenario] with CpsLogicMonadInstanceContext[Scenario] with {
-
-    override type Observer[A] = Future[A]
-    override val observerCpsMonad: CpsTryMonad[Future] = futureMonad
-
-    override def pure[A](a: A): Scenario[A] = Done(ScenarioState.empty, a)
-    override def map[A, B](fa: Scenario[A])(f: A => B): Scenario[B]
-    override def flatMap[A, B](fa: Scenario[A])(f: A => Scenario[B]): Scenario[B]
-    override def flatMapTry[A, B](fa: Scenario[A])(f: Try[A] => Scenario[B]): Scenario[B]
-    override def error[A](e: Throwable): Scenario[A]
-    override def mzero[A]: Scenario[A]
-    override def mplus[A](a: Scenario[A], b: => Scenario[A]): Scenario[A]
-    override def msplit[A](sa: Scenario[A]): Scenario[Option[(Try[A], Scenario[A])]]
-    override def fsplit[A](sa: Scenario[A]): Future[Option[(Try[A], Scenario[A])]]
-    override def withMsplit[A, B](c: Scenario[A])(f: ...): Scenario[B]
-    override def flattenObserver[A](fsa: Future[Scenario[A]]): Scenario[A]
-}
-```
+Implements `CpsConcurrentLogicMonad[Scenario, Future]` with all required operations: `pure`, `map`, `flatMap`, `flatMapTry`, `error`, `mzero`, `mplus`, `msplit`, `fsplit`, `withMsplit`, `flattenObserver`.
 
 ### Scenario DSL (✅ Implemented)
 
@@ -297,21 +188,6 @@ object Scenario {
 - `Scenario.provider` returning `BlockchainProviderTF[Scenario]`
 - `Scenario.snapshotProvider` returning `BlockchainProvider`
 
-### Tests (✅ Implemented)
-
-File: `scalus-testkit/jvm/src/test/scala/scalus/testing/ScenarioTest.scala`
-
-26 tests covering:
-- Pure/map/flatMap monad operations
-- Non-deterministic branching: choices, fromCollection, guard, mzero
-- State operations: sleep, per-branch state independence, currentEmulator
-- mplus of independent branches (with different initial states)
-- fsplit and msplit
-- Error handling: error propagation, flatMapTry rollback
-- Runners: runAll, runFirst, maxResults
-- ImmutableEmulator: empty, withAddresses, advanceSlot, fromEmulator, toEmulator
-- Integration: TxBuilder + submit valid transaction
-
 ## Endpoint Pattern
 
 Endpoints use `BlockchainProviderTF[F]` directly:
@@ -359,22 +235,6 @@ async[Future] {
     endpoints.bid(..., 100, currentSlot, ...).await
 }
 ```
-
-### Time Operations
-
-Time operations (`now`, `sleep`) are Scenario-specific DSL that delegate to the emulator's internal slot:
-
-```scala
-object Scenario {
-    def now: Scenario[SlotNo] =
-        leaf(state => Done(state, state.emulator.currentSlot))
-
-    def sleep(slots: Long): Scenario[Unit] =
-        modify(s => s.copy(emulator = s.emulator.advanceSlot(slots)))
-}
-```
-
-In production, current slot comes from external source (chain tip query).
 
 ## Examples
 
@@ -589,12 +449,11 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | ImmutableEmulator | ✅ Done | `scalus-testkit/shared/.../testing/ImmutableEmulator.scala` |
 | Scenario monad (sealed trait ADT) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | ScenarioState | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| CpsLogicMonad[Scenario] instance | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| CpsConcurrentLogicMonad[Scenario, Future] instance | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario DSL (choices, guard, sleep, submit, etc.) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.provider (BlockchainProviderTF[Scenario]) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.snapshotProvider (BlockchainProvider) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Runners (run, runAll, runFirst) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| ScenarioTest (26 tests) | ✅ Done | `scalus-testkit/jvm/.../testing/ScenarioTest.scala` |
 | BlockchainProviderTF[F] | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProviderTF.scala` |
 | dotty-cps-async deps in build.sbt | ✅ Done | `build.sbt` |
 | TxBuilder sponsor/signer as builder steps | ⬚ Planned | — |
