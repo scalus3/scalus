@@ -2,7 +2,7 @@ package scalus.cardano.node
 
 import io.bullet.borer.Cbor
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.Context
+import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
 
 import scala.scalajs.js
@@ -21,7 +21,10 @@ class JEmulator(
 
     private val emulator: Emulator = {
         val utxos: Utxos = Cbor.decode(initialUtxosCbor.toArray.map(_.toByte)).to[Utxos].value
-        val context = Context(slotConfig = slotConfig)
+        val env =
+            if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
+            else UtxoEnv.default
+        val context = new Context(env = env, slotConfig = slotConfig)
         new Emulator(
           initialUtxos = utxos,
           initialContext = context,
