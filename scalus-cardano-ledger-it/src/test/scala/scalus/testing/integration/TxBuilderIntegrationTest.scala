@@ -13,6 +13,9 @@ import scalus.utils.await
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.*
+import scalus.cardano.address.StakePayload
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
 
 /** Integration tests for TxBuilder with Yaci DevKit
   *
@@ -296,6 +299,51 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
                   )
                 )
                 .payTo(ctx.alice.address, mintedValue)
+                .complete(ctx.provider, ctx.alice.address)
+                .await(30.seconds)
+                .sign(ctx.alice.signer)
+                .transaction
+        }
+    }
+
+    // =========================================================================
+    // Test 10: Withdraw Zero Trick
+    // =========================================================================
+    // The withdraw zero trick requires two transactions:
+    // 1. Register the script-based stake address
+    // 2. Withdraw zero to trigger the stake validator script
+    private lazy val (withdrawZeroStakeAddress, withdrawZeroScriptWitness) = {
+        given Options = Options.release
+        val alwaysOkScript = PlutusV3.compile((sc: Data) => ())
+        val stakeAddress =
+            StakeAddress(Network.Testnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
+        val witness = TwoArgumentPlutusScriptWitness(
+          ScriptSource.PlutusScriptValue(alwaysOkScript.script),
+          Data.unit,
+          Set.empty
+        )
+        (stakeAddress, witness)
+    }
+
+    test("10a. withdraw zero trick - register stake") {
+        runTxTest("WithdrawZeroRegister") { ctx =>
+            TxBuilder(ctx.cardanoInfo)
+                .registerStake(withdrawZeroStakeAddress, withdrawZeroScriptWitness)
+                .complete(ctx.provider, ctx.alice.address)
+                .await(30.seconds)
+                .sign(ctx.alice.signer)
+                .transaction
+        }
+    }
+
+    test("10b. withdraw zero trick - withdraw zero") {
+        runTxTest("WithdrawZero") { ctx =>
+            TxBuilder(ctx.cardanoInfo)
+                .withdrawRewards(
+                  withdrawZeroStakeAddress,
+                  Coin.zero,
+                  withdrawZeroScriptWitness
+                )
                 .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
                 .sign(ctx.alice.signer)
