@@ -472,6 +472,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0",
       libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.0",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.0",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =

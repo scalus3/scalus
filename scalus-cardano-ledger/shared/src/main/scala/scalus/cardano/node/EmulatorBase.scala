@@ -44,7 +44,26 @@ trait EmulatorBase extends BlockchainProvider {
     def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
         Future.successful(submitSync(transaction))
 
-    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] = {
+    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
+        Future.successful(Right(EmulatorBase.evalQuery(utxos, query)))
+
+    protected def processTransaction(
+        context: Context,
+        state: State,
+        transaction: Transaction
+    ): Either[TransactionException, State] = {
+        STS.Mutator.transit(validators, mutators, context, state, transaction)
+    }
+}
+
+object EmulatorBase {
+
+    /** Evaluate a UTxO query against a UTxO set.
+      *
+      * This is the pure, static query evaluation logic shared by both the mutable [[Emulator]] and
+      * the immutable [[scalus.testing.ImmutableEmulator]].
+      */
+    def evalQuery(utxos: Utxos, query: UtxoQuery): Utxos = {
         // Evaluate source to get candidate UTxOs
         def evalSource(source: UtxoSource): Utxos = source match
             case UtxoSource.FromAddress(addr) =>
@@ -76,27 +95,16 @@ trait EmulatorBase extends BlockchainProvider {
         }
 
         // Evaluate query recursively
-        def evalQuery(q: UtxoQuery): Utxos = q match
+        def evalQueryRec(q: UtxoQuery): Utxos = q match
             case simple: UtxoQuery.Simple => evalSimple(simple)
             case UtxoQuery.Or(left, right, limit, offset, minTotal) =>
-                val leftResult = evalQuery(UtxoQuery.propagate(left, limit, minTotal))
-                val rightResult = evalQuery(UtxoQuery.propagate(right, limit, minTotal))
+                val leftResult = evalQueryRec(UtxoQuery.propagate(left, limit, minTotal))
+                val rightResult = evalQueryRec(UtxoQuery.propagate(right, limit, minTotal))
                 val combined = leftResult ++ rightResult
                 UtxoQuery.applyPagination(combined, limit, offset, minTotal)
 
-        Future.successful(Right(evalQuery(query)))
+        evalQueryRec(query)
     }
-
-    protected def processTransaction(
-        context: Context,
-        state: State,
-        transaction: Transaction
-    ): Either[TransactionException, State] = {
-        STS.Mutator.transit(validators, mutators, context, state, transaction)
-    }
-}
-
-object EmulatorBase {
 
     /** Creates initial UTxOs for the given addresses.
       *
