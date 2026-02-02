@@ -32,6 +32,7 @@ object DefaultValidators {
       //   Consider order independency and validator idempotency
 //      StakeCertificatesValidator,
 //      StakePoolCertificatesValidator,
+//      CertsValidator,
       WrongNetworkInTxBodyValidator,
       WrongNetworkValidator,
       WrongNetworkWithdrawalValidator

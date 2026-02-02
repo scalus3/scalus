@@ -255,6 +255,17 @@ object TransactionException {
              |invalid retirement epochs (pool -> (epoch, current, maxAllowed)): $invalidRetirementEpochs.""".stripMargin
         )
 
+    // It's Conway.WithdrawalsNotInRewards in cardano-ledger
+    final case class WithdrawalsNotInRewardsException(
+        transactionId: TransactionHash,
+        missingRewardAccounts: Map[RewardAccount, Coin],
+        nonDrainingWithdrawals: Map[RewardAccount, (Coin, Coin)]
+    ) extends TransactionException(
+          s"""Withdrawals validation failed for transactionId $transactionId.
+             |missing reward accounts: $missingRewardAccounts,
+             |withdrawals that do not drain accounts (expected -> provided): $nonDrainingWithdrawals.""".stripMargin
+        )
+
     // It's Alonzo.ExUnitsTooBigUTxO in cardano-ledger
     final case class ExUnitsExceedMaxException(
         transactionId: TransactionHash,

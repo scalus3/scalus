@@ -8,11 +8,13 @@ object CardanoMutator extends STS.Mutator {
     override final type Error = TransactionException
 
     override def transit(context: Context, state: State, event: Event): Result = {
-        STS.Mutator.transit[Error](allValidators.values, allMutators.values, context, state, event)
+        STS.Mutator
+            .transit[Error](DefaultValidators.all, DefaultMutators.all, context, state, event)
     }
 
     private val packageName = getClass.getPackage.getName
 
+    @deprecated("Use `DefaultValidators.all` instead", "0.14")
     val allValidators: Map[String, STS.Validator] =
         TraitObjectScanner
             .findImplementors[STS.Validator](packageName)
@@ -20,6 +22,7 @@ object CardanoMutator extends STS.Mutator {
             .map(v => v.name -> v)
             .toMap
 
+    @deprecated("Use `DefaultMutators.all` instead.", "0.14")
     val allMutators: Map[String, STS.Mutator] =
         TraitObjectScanner
             .findImplementors[STS.Mutator](packageName)
