@@ -348,75 +348,137 @@ async[Scenario] {
 
 ## Planned: TxVariations + Contract Testing Framework
 
-### Design Principle: Seq[TxBuilder] as Universal Currency
+### Design Principle: Future[Seq[Transaction]] as Universal Currency
 
-All TxBuilder methods except `complete` are synchronous. With sponsor and signer as builder steps, the entire transaction *construction* is synchronous and can live inside `Seq[TxBuilder]` (via `enumerate`) or `Gen[TxBuilder]` (derived). Only `signAndComplete(provider)` requires the provider.
+`TxVariations.enumerate` returns `Future[Seq[Transaction]]` — fully completed and signed transactions, ready to submit.
 
-`Seq[TxBuilder]` (from `TxVariations.enumerate`) is the universal intermediate form:
-- Scenario uses it directly via `allVariationsEnum` → `choices(...)` (exhaustive branching)
-- ScalaCheck uses `Gen.oneOf(seq)` via `allVariationsGen` (random sampling with shrinking)
-- `TxSamplingVariations` inverts this for fuzz testing: `gen` is primary, `enumerate` samples from it
-
-### TxBuilder: Sponsor as Builder Step (⬚ Not yet implemented)
-
-`TxBuilder.complete(provider, sponsor)` currently takes both provider and sponsor address. We split this: sponsor becomes a builder step, so `complete` only needs the provider.
-
-```scala
-def sponsor(address: Address): TxBuilder = copy(sponsorAddress = Some(address))
-def signer(s: TransactionSigner): TxBuilder = copy(txSigner = Some(s))
-
-def complete(provider: BlockchainProvider): Future[TxBuilder]
-def signAndComplete(provider: BlockchainProvider): Future[Transaction]
-```
+- **Scenario**: uses it directly — `txs.await` then `choices(txs*).await` (exhaustive branching)
+- **ScalaCheck**: `ContractScalaCheckCommands` handles `Await.result` internally (JVM-only detail, hidden from user)
 
 ### Core Abstractions (⬚ Not yet implemented)
 
-#### TxVariations[S]: Transaction Variation Generator
+#### TxVariations[S]: Transaction Variations (shared source)
 
-Two flavors — differing in which method is primary:
+The main trait is async, returning `Future[Seq[Transaction]]`:
 
 ```scala
-/** Enumerable variations (boundary testing). Primary method: enumerate. */
+/** Transaction variations generator. */
 trait TxVariations[S] {
-    def enumerate(provider: BlockchainProvider, state: S, base: TxBuilder): Seq[TxBuilder]
-    def gen(provider: BlockchainProvider, state: S, base: TxBuilder): Gen[TxBuilder] =
-        Gen.oneOf(enumerate(provider, state, base))
+    /**
+     * Generate all transaction variations for the given state.
+     * Sponsor/signer are passed explicitly — they're orthogonal to contract state.
+     */
+    def enumerate(
+        provider: BlockchainProvider,
+        state: S,
+        sponsor: Address,
+        signer: TransactionSigner
+    )(using ExecutionContext): Future[Seq[Transaction]]
+
     def ++(other: TxVariations[S]): TxVariations[S]
 }
 
-/** Sampling-based variations (fuzz testing). Primary method: gen. */
+/** Sampling-based variations (fuzz testing). */
 trait TxSamplingVariations[S] extends TxVariations[S] {
-    override def gen(provider: BlockchainProvider, state: S, base: TxBuilder): Gen[TxBuilder]
-    override def enumerate(provider: BlockchainProvider, state: S, base: TxBuilder): Seq[TxBuilder] =
-        List.fill(sampleSize)(gen(provider, state, base).sample).flatten
+    def gen(
+        provider: BlockchainProvider,
+        state: S,
+        sponsor: Address,
+        signer: TransactionSigner
+    ): Gen[Future[Transaction]]
+
+    override def enumerate(
+        provider: BlockchainProvider,
+        state: S,
+        sponsor: Address,
+        signer: TransactionSigner
+    )(using ExecutionContext): Future[Seq[Transaction]] = {
+        val futures = List.fill(sampleSize)(gen(provider, state, sponsor, signer).sample).flatten
+        Future.sequence(futures)
+    }
+
     def sampleSize: Int = 20
 }
 ```
 
-#### ContractStepVariations[S]: Bundled Step Description
+**Implementation pattern** for `enumerate`:
 
 ```scala
-trait ContractStepVariations[S] {
-    def extractState(provider: BlockchainProvider): Future[S]
-    def baseTx(info: CardanoInfo, state: S): TxBuilder
-    def variations(state: S): TxVariations[S]
-    def allVariationsEnum(provider: BlockchainProvider, state: S): Seq[TxBuilder]
-    def allVariationsGen(provider: BlockchainProvider, state: S): Gen[TxBuilder]
+def enumerate(
+    provider: BlockchainProvider,
+    state: S,
+    sponsor: Address,
+    signer: TransactionSigner
+)(using ExecutionContext): Future[Seq[Transaction]] = {
+    val baseTx = buildBaseTx(state)
+    val variations: Seq[TxBuilder] = generateBuilderVariations(baseTx)
+
+    Future.sequence(variations.map { builder =>
+        builder.complete(provider, sponsor).map { completed =>
+            signer.sign(completed.buildTx())
+        }
+    })
 }
 ```
 
-### Consuming ContractStepVariations: Three Modes (⬚ Not yet implemented)
+The sync conversion for ScalaCheck is handled internally by `ContractScalaCheckCommands` — no sync wrapper exposed to users.
+
+#### ContractStepVariations[S]: Bundled Step Description (shared source)
 
 ```scala
-// Mode 1: ScalaCheck forAll — random sampling with shrinking
-given Arbitrary[TxBuilder] = Arbitrary(AuctionStep.allVariationsGen(provider, state))
-forAll { (incompleteTx: TxBuilder) => ... }
+trait ContractStepVariations[S] {
+    def extractState(provider: BlockchainProvider)(using ExecutionContext): Future[S]
+    def baseTx(provider: BlockchainProvider, state: S)(using ExecutionContext): Future[TxBuilder]
+    def variations: TxVariations[S]
 
-// Mode 2: ScalaCheck Commands — random per-command, stateful
+    def allVariations(
+        provider: BlockchainProvider,
+        state: S,
+        sponsor: Address,
+        signer: TransactionSigner
+    )(using ExecutionContext): Future[Seq[Transaction]] =
+        variations.enumerate(provider, state, sponsor, signer)
+}
+```
+
+`BlockchainProvider` gives access to `cardanoInfo` (protocol params, network, slot config), so no need to pass it separately.
+
+For ScalaCheck, `ContractScalaCheckCommands` handles `Await.result` internally — users don't see sync wrappers.
+
+### Consuming ContractStepVariations: Two Modes (⬚ Not yet implemented)
+
+```scala
+// Mode 1: ScalaCheck Commands — JVM-only, stateful property testing
+// Await.result handled internally
 ContractScalaCheckCommands(initialEmulator, AuctionStep).property()
 
-// Mode 3: Scenario — exhaustive branching over domain
-ScenarioExplorer.explore(maxDepth = 4, AuctionStep)
+// Mode 2: Scenario — cross-platform, exhaustive branching
+async[Scenario] {
+    val provider = Scenario.snapshotProvider.await
+    val state = step.extractState(provider).await
+    val txs = step.allVariations(provider, state, Alice.address, Alice.signer).await
+    val tx = choices(txs*).await
+    Scenario.submit(tx).await
+}
+```
+
+### Multi-Actor Variations
+
+Since sponsor is orthogonal to contract state, test multiple actors via cartesian product:
+
+```scala
+val actors = Seq(
+    (Alice.address, Alice.signer),
+    (Bob.address, Bob.signer),
+    (Attacker.address, Attacker.signer)
+)
+
+val allTxs: Seq[Transaction] = for {
+    (sponsor, signer) <- actors
+    tx <- step.allVariations(provider, state, sponsor, signer)
+} yield tx
+
+forAll(Gen.oneOf(allTxs)) { tx => ... }
 ```
 
 ### Gen in Scenario (⬚ Not yet implemented)
@@ -456,11 +518,10 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | Runners (run, runAll, runFirst) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | BlockchainProviderTF[F] | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProviderTF.scala` |
 | dotty-cps-async deps in build.sbt | ✅ Done | `build.sbt` |
-| TxBuilder sponsor/signer as builder steps | ⬚ Planned | — |
 | Scenario.sample(gen) | ⬚ Planned | — |
-| TxVariations[S] | ⬚ Planned | — |
-| TxSamplingVariations[S] | ⬚ Planned | — |
-| ContractStepVariations[S] | ⬚ Planned | — |
+| TxVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
+| TxSamplingVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
+| ContractStepVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | BoundaryValues helpers | ⬚ Planned | — |
 | ContractScalaCheckCommands adapter | ⬚ Planned | — |
 | ScenarioExplorer.explore adapter | ⬚ Planned | — |
@@ -475,3 +536,5 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 3. ~~**Gen.domain for exhaustive enumeration**~~ - ✅ Resolved: `TxVariations` uses `enumerate` (returns `Seq`) as primary method, `gen` is derived. `TxSamplingVariations` inverts this for large/continuous domains (gen-first, enumerate samples N values). No need to extract domain from `Gen`.
 
 4. ~~**Monad encoding**~~ - ✅ Resolved: Sealed trait ADT chosen over function-based encoding. Supports independent mplus branches, working fsplit, and state injection via sentinel pattern.
+
+5. ~~**TxVariations output type**~~ - ✅ Resolved: `TxVariations` returns `Future[Seq[Transaction]]` (async, cross-platform). ScalaCheck sync conversion is internal to `ContractScalaCheckCommands` — no sync wrapper exposed. Sponsor/signer passed as parameters (orthogonal to contract state `S`).
