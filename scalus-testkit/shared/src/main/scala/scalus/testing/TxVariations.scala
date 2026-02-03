@@ -53,6 +53,27 @@ trait TxVariations[S] {
 
 object TxVariations {
 
+    /** Access standard transaction variation patterns.
+      *
+      * Returns `StandardTxVariations` object which provides factory methods for common attack
+      * patterns like stealing funds, corrupting datums, wrong addresses, etc.
+      *
+      * ==Example Usage==
+      * {{{
+      * val variations = TxVariations.standard.default[MyState](
+      *   extractUtxo = _.utxo,
+      *   extractDatum = _.datum,
+      *   redeemer = _ => myRedeemer,
+      *   scriptAddress = myAddress,
+      *   script = myScript
+      * )
+      * }}}
+      *
+      * @see
+      *   [[StandardTxVariations]] for available variation patterns
+      */
+    def standard: StandardTxVariations.type = StandardTxVariations
+
     /** Combined variations from two sources. */
     private case class Combined[S](left: TxVariations[S], right: TxVariations[S])
         extends TxVariations[S] {

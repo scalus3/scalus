@@ -1,7 +1,7 @@
 # Logical Monad for Blockchain Scenario Testing
 
 
-Status: **partially implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), and core DSL are implemented with tests passing. TxVariations, ContractStepVariations, and ScenarioExplorer are planned but not yet implemented.
+Status: **mostly implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, TxVariations, TxSamplingVariations, ContractStepVariations, and StandardTxVariations are implemented with tests passing. ScenarioExplorer and ContractScalaCheckCommands adapter are planned but not yet implemented.
 
 ## Overview
 
@@ -355,7 +355,7 @@ async[Scenario] {
 - **Scenario**: uses it directly — `txs.await` then `choices(txs*).await` (exhaustive branching)
 - **ScalaCheck**: `ContractScalaCheckCommands` handles `Await.result` internally (JVM-only detail, hidden from user)
 
-### Core Abstractions (⬚ Not yet implemented)
+### Core Abstractions (✅ Implemented)
 
 #### TxVariations[S]: Transaction Variations (shared source)
 
@@ -422,6 +422,86 @@ def enumerate(
 ```
 
 The sync conversion for ScalaCheck is handled internally by `ContractScalaCheckCommands` — no sync wrapper exposed to users.
+
+#### StandardTxVariations: Common Attack Patterns (✅ Implemented)
+
+`StandardTxVariations` provides factory methods for common attack patterns. Each method returns a `TxVariations[S]` or `TxSamplingVariations[S]`.
+
+```scala
+object StandardTxVariations {
+
+    // Default combined variations (most critical attacks)
+    def default[S](
+        extractUtxo: S => Utxo,
+        extractDatum: S => Data,
+        redeemer: S => Data,
+        script: PlutusScript
+    ): TxVariations[S]
+
+    // Extended with datum/address corruption
+    def defaultExtended[S](
+        extractUtxo: S => Utxo,
+        extractDatum: S => Data,
+        redeemer: S => Data,
+        script: PlutusScript,
+        corruptedDatums: S => Gen[Data],
+        alternativeAddresses: S => Gen[Address]
+    ): TxVariations[S]
+
+    // Individual variations
+    def removeContractOutput[S](...)   // Steal attack
+    def stealPartialValue[S](...)      // Partial theft (sampling)
+    def corruptDatum[S](...)           // Wrong datum (sampling)
+    def wrongOutputAddress[S](...)     // Wrong recipient (sampling)
+    def duplicateOutput[S](...)        // Double output attack
+    def unauthorizedMint[S](...)       // Unauthorized minting (sampling)
+    def mintExtra[S](...)              // Over-minting (sampling)
+    def aroundDeadline[S](...)         // Timing boundary (sampling)
+    def noValidityRange[S](...)        // Missing time constraints
+    def wideValidityRange[S](...)      // Overly permissive time
+    def wrongRedeemer[S](...)          // Incorrect redeemer (sampling)
+    def aroundThreshold[S](...)        // Value boundary (sampling)
+    def removeReferenceInput[S](...)   // Missing reference
+    def wrongReferenceInput[S](...)    // Stale reference (sampling)
+    def doubleSatisfaction[S](...)     // Double satisfaction attack
+
+    // Boundary generators (helpers)
+    def valuesAround(threshold: Coin): Gen[Coin]
+    def slotsAround(deadline: Long): Gen[Long]
+}
+```
+
+**Design notes:**
+- Output address is automatically taken from the UTXO being spent (`utxo.output.address`)
+- No need to pass `scriptAddress` separately — it's derived from the spent UTXO
+- Accessible via `TxVariations.standard` for discoverability
+
+**Usage:**
+```scala
+case class AuctionState(utxo: Utxo)
+
+// Simple usage with default attacks
+val variations = TxVariations.standard.default[AuctionState](
+    extractUtxo = _.utxo,
+    extractDatum = s => s.utxo.output.requireInlineDatum,
+    redeemer = _ => BidRedeemer.toData,
+    script = auctionScript
+)
+
+// Extended with custom generators
+val extended = TxVariations.standard.defaultExtended[AuctionState](
+    extractUtxo = _.utxo,
+    extractDatum = s => s.utxo.output.requireInlineDatum,
+    redeemer = _ => BidRedeemer.toData,
+    script = auctionScript,
+    corruptedDatums = _ => Gen.const(Data.I(0)),
+    alternativeAddresses = _ => Gen.const(attackerAddress)
+)
+
+// Combine individual variations
+val custom = TxVariations.standard.removeContractOutput(...) ++
+    TxVariations.standard.duplicateOutput(...)
+```
 
 #### ContractStepVariations[S]: Bundled Step Description (shared source)
 
@@ -522,7 +602,8 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | TxVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | TxSamplingVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | ContractStepVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
-| BoundaryValues helpers | ⬚ Planned | — |
+| StandardTxVariations | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
+| Boundary generators (valuesAround, slotsAround) | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
 | ContractScalaCheckCommands adapter | ⬚ Planned | — |
 | ScenarioExplorer.explore adapter | ⬚ Planned | — |
 | FutureInScenario convenience layer | ⬚ Planned (optional) | — |
