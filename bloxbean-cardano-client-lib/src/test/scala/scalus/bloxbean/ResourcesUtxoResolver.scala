@@ -58,7 +58,7 @@ private[scalus] class ResourcesUtxoResolver {
                 val output = mapper.readValue(stream, classOf[Utxo])
                 val scriptRef = Option(output.getReferenceScriptHash).map { scriptHash =>
                     // FIXME: add support for native reference scripts
-                    val stream = getClass.getResourceAsStream(s"/scripts/${scriptHash}")
+                    val stream = getClass.getResourceAsStream(s"/scripts/$scriptHash")
                     if stream == null then {
                         throw new IllegalStateException(
                           s"Reference script not found for hash $scriptHash in resources"
@@ -112,12 +112,12 @@ private[scalus] class ResourcesUtxoResolver {
             val stream = Files.readAllBytes(file)
             val output = mapper.readValue(stream, classOf[Utxo])
             Option(output.getReferenceScriptHash).foreach { scriptHash =>
-                val file = Path.of(s"scripts/${scriptHash}")
+                val file = Path.of(s"scripts/$scriptHash")
                 println(s"Copying script for UTXO $input to resources")
                 Files.copy(
                   file,
                   Path.of(
-                    s"src/test/resources/scripts/${scriptHash}"
+                    s"src/test/resources/scripts/$scriptHash"
                   ),
                   java.nio.file.StandardCopyOption.REPLACE_EXISTING
                 )
@@ -129,7 +129,7 @@ private[scalus] class ResourcesUtxoResolver {
         output: Utxo,
         scriptRef: Option[ScriptRef]
     ): TransactionOutput = {
-        val address = Address.fromBech32(output.getAddress)
+        val address = Address.fromString(output.getAddress)
         val datumOption: Option[DatumOption] =
             Option(output.getDataHash) -> Option(output.getInlineDatum) match
                 case (_, Some(inlineDatum)) =>

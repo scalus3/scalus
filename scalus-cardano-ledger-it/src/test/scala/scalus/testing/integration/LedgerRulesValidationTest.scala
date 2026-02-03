@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.testing.integration.BlocksTestUtils.*
+import scalus.bloxbean.StakeStateResolver
 
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
@@ -11,6 +12,9 @@ import scala.util.Try
 import scala.util.chaining.*
 
 class LedgerRulesValidationTest extends AnyFunSuite {
+
+    private lazy val stakeStateResolver =
+        StakeStateResolver(apiKey, resourcesPath.resolve("stake"))
 
     test("validate transactions") {
         val transactionsCount = AtomicInteger()
@@ -28,7 +32,8 @@ class LedgerRulesValidationTest extends AnyFunSuite {
             _ = transactionsCount.incrementAndGet()
             utxos <- Try(scalusUtxoResolver.resolveUtxos(transaction)).toOption
             _ = utxosResolvedCount.incrementAndGet()
-            state = State(utxos = utxos)
+            certState = stakeStateResolver.resolveForTx(transaction, epochMagic)
+            state = State(utxos = utxos, certState = certState)
             result <- CardanoMutator
                 .transit(Context.testMainnet(block.slot), state, transaction)
                 .swap
@@ -52,6 +57,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         }
         // TODO: Investigate and fix remaining validation failures
         // Current failures are due to incomplete ledger rule implementation
-        assert(failed.size == 45, s"Expected 45 failures, got ${failed.size}")
+        val expectedErrorCount = 5
+        assert(failed.size == expectedErrorCount, s"Expected $expectedErrorCount failures, got ${failed.size}")
     }
 }
