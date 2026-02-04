@@ -143,18 +143,23 @@ object Certificate {
                     // Need to track new delegations in case that the same key is later deregistered in the same transaction.
                     regCreds += cred
                 case None =>
-                    cert.lookupUnRegStakeTxCert match
-                        case Some(cred) =>
-                            // If the credential is already registered, we can refund the deposit
+                    cert match
+                        case Certificate.UnregCert(cred, maybeRefund) =>
+                            // If the credential was registered in this same tx, refund that deposit
                             if regCreds.contains(cred) then
                                 totalRefunds += keyDeposit
                                 regCreds -= cred // Remove to avoid double refund
                             else
-                                lookupStakingDeposit(cred) match
-                                    case Some(deposit) => totalRefunds += deposit.value
-                                    case None          =>
+                                // Use explicit refund from certificate if available,
+                                // otherwise look up the original deposit from ledger state
+                                maybeRefund match
+                                    case Some(refund) => totalRefunds += refund.value
+                                    case None =>
+                                        lookupStakingDeposit(cred) match
+                                            case Some(deposit) => totalRefunds += deposit.value
+                                            case None          =>
 
-                        case None =>
+                        case _ =>
         }
         Coin(totalRefunds)
     }

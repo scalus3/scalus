@@ -5,9 +5,10 @@ import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
 
 /** Encapsulates UTXO selection state during transaction balancing.
   *
-  * Separates available pool from already-selected UTXOs, enabling: - Greedy selection from
-  * remaining UTXOs - Reusing input UTXOs for collateral (without double-counting) - Clear tracking
-  * of what's selected for inputs vs collateral
+  * Separates available pool from already-selected UTXOs, enabling:
+  *   - Greedy selection from remaining UTXOs
+  *   - Reusing input UTXOs for collateral (without double-counting)
+  *   - Clear tracking of what's selected for inputs vs collateral
   *
   * @param available
   *   all UTXOs available for selection (never changes)

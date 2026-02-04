@@ -933,4 +933,65 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         val builder = txBuilder
         assert(builder.env == testEnv)
     }
+
+    ignore("Certificate-only transaction must have at least one input") {
+        import scalus.cardano.address.{StakeAddress, StakePayload}
+        import scalus.cardano.ledger.rules.{Context, UtxoEnv}
+
+        // Bug: When a transaction only contains certificate operations with refunds
+        // (like deregisterStake), the TxBuilder can produce a transaction with zero inputs.
+        // This happens because certificate refunds are added to the "consumed" side of
+        // the balance equation. If the refund exceeds the fee, the balance is satisfied
+        // without needing any input UTxOs. However, Cardano requires every transaction
+        // to have at least one input anyway.
+
+        // This only reproduces when a provider is involved, since txbuilder cannot access the account-based
+        // stake funds otherwise.
+
+        val alice = Alice.address(Mainnet)
+        val stakeAddress =
+            StakeAddress(Mainnet, StakePayload.Stake(Alice.account.stakeKeyHash))
+        val keyDeposit = Coin(testEnv.protocolParams.stakeAddressDeposit)
+
+        val initialUtxos = Map(
+          Input(genesisHash, 0) -> Output(alice, Value.ada(100))
+        )
+
+        val context = Context
+            .testMainnet()
+            .copy(
+              env = UtxoEnv
+                  .testMainnet()
+                  .copy(
+                    certState = CertState(
+                      dstate = scalus.cardano.ledger.DelegationState(
+                        deposits = Map(
+                          stakeAddress.credential -> keyDeposit
+                        )
+                      )
+                    )
+                  )
+            )
+
+        // Emulator starts off with some ADA deposit, enough to cover a fee.
+        val emulator = Emulator(
+          initialUtxos,
+          context
+        )
+
+        // deregister, returning the deposit
+        val tx = TxBuilder(testEnv)
+            .deregisterStake(stakeAddress, keyDeposit)
+            .complete(emulator, alice)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+
+        // every transaction MUST have at least one input
+        assert(
+          tx.body.value.inputs.toSeq.nonEmpty,
+          s"Transaction must have at least one input, but has none. " +
+              s"Outputs: ${tx.body.value.outputs.size}, Fee: ${tx.body.value.fee}"
+        )
+    }
 }

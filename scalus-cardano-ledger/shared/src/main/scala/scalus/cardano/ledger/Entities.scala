@@ -433,15 +433,15 @@ data ConwayCertState era = ConwayCertState
  */
 
 case class CertState(
-    vstate: VotingState,
-    pstate: PoolsState,
-    dstate: DelegationState
+    vstate: VotingState = VotingState(),
+    pstate: PoolsState = PoolsState(),
+    dstate: DelegationState = DelegationState()
 )
 object CertState {
     def empty: CertState = CertState(
-      VotingState(Map.empty),
+      VotingState(),
       PoolsState(),
-      DelegationState(Map.empty, Map.empty, Map.empty, Map.empty)
+      DelegationState()
     )
 }
 
@@ -462,7 +462,7 @@ data VState era = VState
   }*/
 
 case class VotingState(
-    dreps: Map[Credential, DRepState],
+    dreps: Map[Credential, DRepState] = Map.empty,
     //    vsCommitteeState: CommitteeState,
     //    vsNumDormantEpochs: EpochNo
 )
@@ -526,10 +526,10 @@ case class FutureGenDeleg(slot: Slot, genesisKeyHash: AddrKeyHash)
 
 /** Delegation State */
 case class DelegationState(
-    rewards: Map[Credential, Coin], // Rewards map
-    deposits: Map[Credential, Coin], // Deposits map
-    stakePools: Map[Credential, PoolKeyHash], // Delegation map
-    dreps: Map[Credential, DRep],
+    rewards: Map[Credential, Coin] = Map.empty, // Rewards map
+    deposits: Map[Credential, Coin] = Map.empty, // Deposits map
+    stakePools: Map[Credential, PoolKeyHash] = Map.empty, // Delegation map
+    dreps: Map[Credential, DRep] = Map.empty,
 //    futureGenDelegs: Map[FutureGenDeleg, GenDelegPair],
 //    genDelegs: GenDelegs,
 //    instantaneousRewards: InstantaneousRewards

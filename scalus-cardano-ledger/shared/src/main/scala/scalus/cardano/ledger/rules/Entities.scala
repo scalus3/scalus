@@ -6,15 +6,15 @@ import scalus.cardano.address.Network
 import scala.annotation.threadUnsafe
 
 // It's mutable state for transient calculation
-class Context(
+case class Context(
     var fee: Coin = Coin.zero,
-    val env: UtxoEnv = UtxoEnv.default,
-    val slotConfig: SlotConfig = SlotConfig.mainnet,
+    env: UtxoEnv = UtxoEnv.default,
+    slotConfig: SlotConfig = SlotConfig.mainnet,
     /** Evaluator mode for Plutus script execution.
       *   - `Validate`: Enforce budget limits (default, production mode)
       *   - `EvaluateAndComputeCost`: Ignore budget limits, just compute costs (for testing)
       */
-    val evaluatorMode: EvaluatorMode = EvaluatorMode.Validate
+    evaluatorMode: EvaluatorMode = EvaluatorMode.Validate
 )
 
 object Context {
