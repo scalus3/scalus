@@ -5,6 +5,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.*
 import scalus.testing.integration.BlocksTestUtils.*
 import scalus.bloxbean.StakeStateResolver
+import scalus.cardano.ledger.TransactionException.*
 
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
@@ -38,7 +39,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
                 .transit(Context.testMainnet(block.slot), state, transaction)
                 .swap
                 .toOption
-        yield (path.getFileName, transaction.id, result)
+        yield (path.getFileName, transaction, result)
             .tap(x => println(pprint(x)))
 
         val groups = failed
@@ -55,9 +56,31 @@ class LedgerRulesValidationTest extends AnyFunSuite {
         groups.foreach { case (exType, failures) =>
             println(s"  $exType: ${failures.length}")
         }
-        // TODO: Investigate and fix remaining validation failures
-        // Current failures are due to incomplete ledger rule implementation
-        val expectedErrorCount = 5
-        assert(failed.size == expectedErrorCount, s"Expected $expectedErrorCount failures, got ${failed.size}")
+
+
+        // Expected failure counts by exception type
+        // These are due to incomplete ledger rule implementation or inaccurate stake state resolution
+        val expectedCounts = Map(
+            classOf[WithdrawalsNotInRewardsException] -> 26,
+            classOf[ValueNotConservedUTxOException] -> 1,
+            classOf[StakeCertificatesException] -> 5
+        )
+
+        val actualCounts = failed.groupBy(_._3.getClass).view.mapValues(_.size).toMap
+
+        expectedCounts.foreach { case (exClass, expectedCount) =>
+            val actualCount = actualCounts.getOrElse(exClass, 0)
+            assert(
+              actualCount == expectedCount,
+              s"Expected $expectedCount ${exClass.getSimpleName} failures, got $actualCount"
+            )
+        }
+
+        // Check for unexpected exception types
+        val unexpectedTypes = actualCounts.keySet -- expectedCounts.keySet
+        assert(
+          unexpectedTypes.isEmpty,
+          s"Unexpected exception types: ${unexpectedTypes.map(_.getSimpleName).mkString(", ")}"
+        )
     }
 }

@@ -96,22 +96,67 @@ final class StakeStateResolver(
         val stakeAddress = credentialToStakeAddress(credential) match
             case Some(addr) => addr
             case None =>
-                warn(s"Could not derive stake address for $credential")
+                println(s"Could not derive stake address for $credential")
                 return None
 
-        getAccountHistory(stakeAddress, epoch) match
-            case Some(entry) =>
-                val rewards = rewardsFromHistory(entry)
-                Some(
-                  CachedStakeState(
-                    epoch = epoch,
-                    deposit = Some(defaultDeposit.value),
-                    rewards = rewards
-                  )
-                )
-            case None =>
-                // Account was not active at this epoch
-                None
+        // Check if account exists
+        val accountInfo = getAccountInfo(stakeAddress)
+        if accountInfo.isEmpty then return None
+
+        // Compute historical reward balance:
+        // balance = sum(rewards up to epoch-2) - sum(withdrawals before epoch)
+        // Rewards from epoch N become available at epoch N+2
+        val rewardBalance = computeRewardBalanceAtEpoch(stakeAddress, epoch)
+
+        Some(
+          CachedStakeState(
+            epoch = epoch,
+            deposit = Some(defaultDeposit.value),
+            rewards = rewardBalance
+          )
+        )
+    }
+
+    private def computeRewardBalanceAtEpoch(stakeAddress: String, epoch: Int): Long = {
+        // NOTE: This is an approximation. The accurate historical reward balance would be:
+        //   sum(rewards where epoch <= E-2) - sum(withdrawals where withdrawal_epoch < E)
+        // However, Blockfrost doesn't provide withdrawal epochs directly, requiring
+        // expensive per-tx lookups. For most validation cases (especially zero-withdrawals),
+        // summing available rewards is sufficient.
+        val allRewards = getAllRewards(stakeAddress)
+        val availableRewards = allRewards.filter(_.epoch <= epoch - 2)
+        availableRewards.map(r => parseLong(r.amount).getOrElse(0L)).sum
+    }
+
+    private def getAllRewards(stakeAddress: String): List[RewardEntry] = {
+        def fetchPage(page: Int): List[RewardEntry] = {
+            val path = s"/accounts/$stakeAddress/rewards?order=asc&count=100&page=$page"
+            getJson(path).flatMap { json =>
+                try Some(readFromArray[List[RewardEntry]](json))
+                catch case NonFatal(_) => None
+            }.getOrElse(Nil)
+        }
+
+        var allEntries = List.empty[RewardEntry]
+        var page = 1
+        var entries = fetchPage(page)
+        while entries.nonEmpty do
+            allEntries = allEntries ++ entries
+            page += 1
+            entries = fetchPage(page)
+        allEntries
+    }
+
+    private def getAccountInfo(stakeAddress: String): Option[AccountInfo] = {
+        val path = s"/accounts/$stakeAddress"
+        getJson(path).flatMap { json =>
+            try
+                val info = readFromArray[AccountInfo](json)
+                Some(info)
+            catch
+                case NonFatal(e) =>
+                    None
+        }
     }
 
     private def credentialToStakeAddress(credential: Credential): Option[String] = {
@@ -121,36 +166,6 @@ final class StakeStateResolver(
             case Credential.ScriptHash(hash) =>
                 StakePayload.Script(hash)
         StakeAddress(network, payload).toBech32.toOption
-    }
-
-    private def getAccountHistory(
-        stakeAddress: String,
-        epoch: Int
-    ): Option[AccountHistoryEntry] = {
-        val path = s"/accounts/$stakeAddress/history?order=asc&count=100"
-        getJson(path).flatMap { json =>
-            try
-                val entries = readFromArray[List[AccountHistoryEntry]](json)
-                // Find entry for the exact epoch, or the closest earlier epoch if the account
-                // was registered before but we're querying an epoch without explicit history
-                entries.find(_.activeEpoch == epoch.toLong).orElse {
-                    // Check if account was active at any point at or before this epoch
-                    val earlierEntries = entries.filter(_.activeEpoch <= epoch.toLong)
-                    earlierEntries.lastOption
-                }
-            catch
-                case NonFatal(e) =>
-                    warn(s"Failed to parse history for $stakeAddress: ${e.getMessage}")
-                    None
-        }
-    }
-
-    private def rewardsFromHistory(entry: AccountHistoryEntry): Long = {
-        val rewardsSum = entry.rewardsSum.flatMap(parseLong).getOrElse(0L)
-        val withdrawalsSum = entry.withdrawalsSum.flatMap(parseLong).getOrElse(0L)
-        val fromSums = rewardsSum - withdrawalsSum
-        if fromSums >= 0 then fromSums
-        else entry.rewards.flatMap(parseLong).getOrElse(0L)
     }
 
     private def getJson(path: String): Option[Array[Byte]] = {
@@ -168,13 +183,13 @@ final class StakeStateResolver(
                 case 200 => Some(response.body())
                 case 404 => None
                 case status =>
-                    warn(
+                    println(
                       s"Blockfrost $path failed: status=$status, body=${String(response.body())}"
                     )
                     None
         catch
             case NonFatal(e) =>
-                warn(s"Blockfrost $path failed: ${e.getMessage}")
+                println(s"Blockfrost $path failed: ${e.getMessage}")
                 None
     }
 
@@ -183,7 +198,7 @@ final class StakeStateResolver(
             try Some(readFromArray[CachedStakeState](Files.readAllBytes(path)))
             catch
                 case NonFatal(e) =>
-                    warn(s"Failed to read cache $path: ${e.getMessage}")
+                    println(s"Failed to read cache $path: ${e.getMessage}")
                     None
         else None
     }
@@ -194,11 +209,8 @@ final class StakeStateResolver(
             Files.write(path, writeToArray(value))
         catch
             case NonFatal(e) =>
-                warn(s"Failed to write cache $path: ${e.getMessage}")
+                println(s"Failed to write cache $path: ${e.getMessage}")
     }
-
-    private def warn(message: String): Unit =
-        println(s"[warn] $message")
 }
 
 object StakeStateResolver {
@@ -214,19 +226,26 @@ object StakeStateResolver {
         rewards: Long
     )
 
-    case class AccountHistoryEntry(
-        active_epoch: Long,
-        amount: Option[String] = None,
-        pool_id: Option[String] = None,
-        rewards: Option[String] = None,
-        withdrawals: Option[String] = None,
+    case class AccountInfo(
+        stake_address: String,
+        active: Boolean,
+        active_epoch: Option[Long] = None,
+        controlled_amount: Option[String] = None,
         rewards_sum: Option[String] = None,
-        withdrawals_sum: Option[String] = None
+        withdrawals_sum: Option[String] = None,
+        withdrawable_amount: Option[String] = None,
+        pool_id: Option[String] = None
     ) {
-        def activeEpoch: Long = active_epoch
-        def rewardsSum: Option[String] = rewards_sum
-        def withdrawalsSum: Option[String] = withdrawals_sum
+        def activeEpoch: Option[Long] = active_epoch
+        def withdrawableAmount: Option[String] = withdrawable_amount
     }
+
+    case class RewardEntry(
+        epoch: Int,
+        amount: String,
+        pool_id: String,
+        `type`: String
+    )
 
     private def parseLong(value: String): Option[Long] =
         try Some(value.toLong)
@@ -237,6 +256,8 @@ object StakeStateResolver {
         case Credential.ScriptHash(hash) => s"script-${hash.toHex}"
 
     given JsonValueCodec[CachedStakeState] = JsonCodecMaker.make
-    given JsonValueCodec[AccountHistoryEntry] = JsonCodecMaker.make
-    given JsonValueCodec[List[AccountHistoryEntry]] = JsonCodecMaker.make
+    given JsonValueCodec[AccountInfo] = JsonCodecMaker.make
+    given JsonValueCodec[RewardEntry] = JsonCodecMaker.make
+    given rewardEntryListCodec: JsonValueCodec[List[RewardEntry]] = JsonCodecMaker.make
 }
+

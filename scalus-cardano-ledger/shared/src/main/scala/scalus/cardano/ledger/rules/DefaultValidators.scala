@@ -28,11 +28,9 @@ object DefaultValidators {
       TransactionSizeValidator,
       ValueNotConservedUTxOValidator,
       VerifiedSignaturesInWitnessesValidator,
-      // TODO: enable the stake validators and state transitions.
-      //   Consider order independency and validator idempotency
-//      StakeCertificatesValidator,
-//      StakePoolCertificatesValidator,
-//      CertsValidator,
+      StakeCertificatesValidator,
+      StakePoolCertificatesValidator,
+      CertsValidator,
       WrongNetworkInTxBodyValidator,
       WrongNetworkValidator,
       WrongNetworkWithdrawalValidator
