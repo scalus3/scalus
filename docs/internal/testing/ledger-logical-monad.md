@@ -1,7 +1,7 @@
 # Logical Monad for Blockchain Scenario Testing
 
 
-Status: **mostly implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, Scenario.sample/sampleN, Scenario.check (macro), ScenarioExplorer, TxTemplate, TxVariations, TxSamplingVariations, ContractStepVariations, and StandardTxVariations are implemented with tests passing. ContractScalaCheckCommands adapter is planned. TxVariations API refactoring to use TxTemplate (removing sponsor/signer parameters) is in progress.
+Status: **mostly implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, Scenario.sample/sampleN, Scenario.check (macro), ScenarioExplorer, TxTemplate, TxVariations, TxSamplingVariations, ContractStepVariations, StandardTxVariations, and BlockchainReader are implemented with tests passing. ContractScalaCheckCommands adapter is planned.
 
 ## Overview
 
@@ -116,7 +116,8 @@ case class ImmutableEmulator(
     def setSlot(slot: SlotNo): ImmutableEmulator
     def findUtxos(query: UtxoQuery): Either[UtxoQueryError, Utxos]
 
-    def asProvider: BlockchainProvider   // read-only snapshot provider
+    def asReader: BlockchainReader       // read-only snapshot (preferred)
+    @deprecated def asProvider: BlockchainProvider  // deprecated, use asReader
     def toEmulator: Emulator             // convert to mutable Emulator
 }
 
@@ -164,8 +165,9 @@ object Scenario {
     // Provider — BlockchainProviderTF[Scenario] for endpoint code (reads latest state per call)
     def provider: Scenario[BlockchainProviderTF[Scenario]]
 
-    // Provider — BlockchainProvider snapshot for Gen construction (reads state once)
-    def snapshotProvider: Scenario[BlockchainProvider]
+    // Reader — BlockchainReader snapshot for TxBuilder and Gen construction (reads state once)
+    def snapshotReader: Scenario[BlockchainReader]
+    @deprecated def snapshotProvider: Scenario[BlockchainProvider]  // use snapshotReader
 
     // Runners
     def run[A](initial: ScenarioState)(s: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)]
@@ -179,14 +181,17 @@ object Scenario {
 **Two provider flavors:**
 
 - `provider` returns `BlockchainProviderTF[Scenario]` — each call (findUtxos, submit, etc.) reads/writes the *latest* Scenario state. Used by endpoint code (`AuctionEndpoints[Scenario](provider)`).
-- `snapshotProvider` returns `BlockchainProvider` (Future-based) — a read-only snapshot of the current emulator state. Used for `TxBuilder.complete` and Gen construction.
+- `snapshotReader` returns `BlockchainReader` (Future-based) — a read-only snapshot of the current emulator state. Used for `TxBuilder.complete` and Gen construction. (`snapshotProvider` is deprecated.)
 
 ### BlockchainProvider Integration (✅ Implemented)
 
-- `BlockchainProviderTF[F[_]]` tagless-final trait
-- `BlockchainProvider extends BlockchainProviderTF[Future]` with captured EC
+- `BlockchainReaderTF[F[_]]` tagless-final trait for read-only operations
+- `BlockchainProviderTF[F[_]] extends BlockchainReaderTF[F[_]]` adds `submit`
+- `BlockchainReader extends BlockchainReaderTF[Future]` with captured EC
+- `BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainReader`
 - `Scenario.provider` returning `BlockchainProviderTF[Scenario]`
-- `Scenario.snapshotProvider` returning `BlockchainProvider`
+- `Scenario.snapshotReader` returning `BlockchainReader` (preferred)
+- `Scenario.snapshotProvider` returning `BlockchainProvider` (deprecated)
 
 ## Endpoint Pattern
 
@@ -359,20 +364,19 @@ async[Scenario] {
 
 #### TxVariations[S]: Transaction Variations (shared source)
 
-The main trait is async, returning `Future[Seq[Transaction]]`:
+The main trait is async, returning `Future[Seq[Transaction]]`. Uses `TxTemplate` which bundles builder with sponsor and signer:
 
 ```scala
 /** Transaction variations generator. */
 trait TxVariations[S] {
     /**
      * Generate all transaction variations for the given state.
-     * Sponsor/signer are passed explicitly — they're orthogonal to contract state.
+     * TxTemplate provides sponsor and signer.
      */
     def enumerate(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     )(using ExecutionContext): Future[Seq[Transaction]]
 
     def ++(other: TxVariations[S]): TxVariations[S]
@@ -381,19 +385,17 @@ trait TxVariations[S] {
 /** Sampling-based variations (fuzz testing). */
 trait TxSamplingVariations[S] extends TxVariations[S] {
     def gen(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     ): Gen[Future[Transaction]]
 
     override def enumerate(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     )(using ExecutionContext): Future[Seq[Transaction]] = {
-        val futures = List.fill(sampleSize)(gen(provider, state, sponsor, signer).sample).flatten
+        val futures = List.fill(sampleSize)(gen(reader, state, txTemplate).sample).flatten
         Future.sequence(futures)
     }
 
@@ -405,19 +407,16 @@ trait TxSamplingVariations[S] extends TxVariations[S] {
 
 ```scala
 def enumerate(
-    provider: BlockchainProvider,
+    reader: BlockchainReader,
     state: S,
-    sponsor: Address,
-    signer: TransactionSigner
+    txTemplate: TxTemplate
 )(using ExecutionContext): Future[Seq[Transaction]] = {
-    val baseTx = buildBaseTx(state)
-    val variations: Seq[TxBuilder] = generateBuilderVariations(baseTx)
-
-    Future.sequence(variations.map { builder =>
-        builder.complete(provider, sponsor).map { completed =>
-            signer.sign(completed.buildTx())
-        }
-    })
+    val env = reader.cardanoInfo
+    TxBuilder(env)
+        .spend(utxo, redeemer, script)
+        .payTo(...)
+        .complete(reader, txTemplate.sponsor)
+        .map(b => Seq(b.sign(txTemplate.signer).transaction))
 }
 ```
 
@@ -507,25 +506,25 @@ val custom = TxVariations.standard.removeContractOutput(...) ++
 
 ```scala
 trait ContractStepVariations[S] {
-    def extractState(provider: BlockchainProvider)(using ExecutionContext): Future[S]
-    def baseTx(provider: BlockchainProvider, state: S)(using ExecutionContext): Future[TxBuilder]
+    def extractState(reader: BlockchainReader)(using ExecutionContext): Future[S]
+    def makeBaseTx(reader: BlockchainReader, state: S)(using ExecutionContext): Future[TxTemplate]
     def variations: TxVariations[S]
 
     def allVariations(
-        provider: BlockchainProvider,
-        state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        reader: BlockchainReader,
+        state: S
     )(using ExecutionContext): Future[Seq[Transaction]] =
-        variations.enumerate(provider, state, sponsor, signer)
+        makeBaseTx(reader, state).flatMap { txTemplate =>
+            variations.enumerate(reader, state, txTemplate)
+        }
 }
 ```
 
-`BlockchainProvider` gives access to `cardanoInfo` (protocol params, network, slot config), so no need to pass it separately.
+`BlockchainReader` gives access to `cardanoInfo` (protocol params, network, slot config), so no need to pass it separately. The `TxTemplate` returned by `makeBaseTx` bundles sponsor and signer.
 
 For ScalaCheck, `ContractScalaCheckCommands` handles `Await.result` internally — users don't see sync wrappers.
 
-### Consuming ContractStepVariations: Two Modes (⬚ Not yet implemented)
+### Consuming ContractStepVariations: Two Modes (⬚ ScalaCheck adapter not yet implemented)
 
 ```scala
 // Mode 1: ScalaCheck Commands — JVM-only, stateful property testing
@@ -534,9 +533,9 @@ ContractScalaCheckCommands(initialEmulator, AuctionStep).property()
 
 // Mode 2: Scenario — cross-platform, exhaustive branching
 async[Scenario] {
-    val provider = Scenario.snapshotProvider.await
-    val state = step.extractState(provider).await
-    val txs = step.allVariations(provider, state, Alice.address, Alice.signer).await
+    val reader = Scenario.snapshotReader.await
+    val state = step.extractState(reader).await
+    val txs = step.allVariations(reader, state).await
     val tx = choices(txs*).await
     Scenario.submit(tx).await
 }
@@ -544,21 +543,20 @@ async[Scenario] {
 
 ### Multi-Actor Variations
 
-Since sponsor is orthogonal to contract state, test multiple actors via cartesian product:
+Since sponsor/signer are bundled in `TxTemplate`, test multiple actors by creating templates for each:
 
 ```scala
 val actors = Seq(
-    (Alice.address, Alice.signer),
-    (Bob.address, Bob.signer),
-    (Attacker.address, Attacker.signer)
+    TxTemplate(baseBuilder, Alice.address, Alice.signer),
+    TxTemplate(baseBuilder, Bob.address, Bob.signer),
+    TxTemplate(baseBuilder, Attacker.address, Attacker.signer)
 )
 
-val allTxs: Seq[Transaction] = for {
-    (sponsor, signer) <- actors
-    tx <- step.allVariations(provider, state, sponsor, signer)
-} yield tx
+val allTxs: Future[Seq[Transaction]] = Future.sequence(
+    actors.map(template => variations.enumerate(reader, state, template))
+).map(_.flatten)
 
-forAll(Gen.oneOf(allTxs)) { tx => ... }
+forAll(Gen.oneOf(allTxs.await)) { tx => ... }
 ```
 
 ### Gen in Scenario (✅ Implemented)
@@ -615,7 +613,7 @@ case class Violation(
 
 object ScenarioExplorer {
     def explore(maxDepth: Int)(
-        genTransactions: BlockchainProvider => Scenario[Seq[Transaction]]
+        genTransactions: BlockchainReader => Scenario[Seq[Transaction]]
     ): Scenario[Option[Violation]]
 }
 ```
@@ -623,11 +621,11 @@ object ScenarioExplorer {
 Usage:
 ```scala
 val results = Scenario.runAll(initial)(
-    ScenarioExplorer.explore(maxDepth = 3) { provider =>
+    ScenarioExplorer.explore(maxDepth = 3) { reader =>
         async[Scenario] {
-            val state = extractState(provider).await
+            val state = extractState(reader).await
             Scenario.check(state.balance >= 0).await  // invariant
-            buildTransactionVariations(provider, state)
+            buildTransactionVariations(reader, state)
         }
     }
 )
@@ -644,8 +642,10 @@ case class TxTemplate(
     sponsor: Address,
     signer: TransactionSigner
 ) {
-    def complete(provider: BlockchainProvider)(using ExecutionContext): Future[Transaction]
+    def complete(reader: BlockchainReader)(using ExecutionContext): Future[Transaction]
     def mapBuilder(f: TxBuilder => TxBuilder): TxTemplate
+    def withSponsor(newSponsor: Address): TxTemplate
+    def withSigner(newSigner: TransactionSigner): TxTemplate
 }
 ```
 
@@ -668,9 +668,11 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | CpsConcurrentLogicMonad[Scenario, Future] instance | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario DSL (choices, guard, sleep, submit, etc.) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.provider (BlockchainProviderTF[Scenario]) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| Scenario.snapshotProvider (BlockchainProvider) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| Scenario.snapshotReader (BlockchainReader) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| Scenario.snapshotProvider (deprecated) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Runners (run, runAll, runFirst) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| BlockchainProviderTF[F] | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProviderTF.scala` |
+| BlockchainReaderTF[F], BlockchainReader | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProvider.scala` |
+| BlockchainProviderTF[F], BlockchainProvider | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProvider.scala` |
 | dotty-cps-async deps in build.sbt | ✅ Done | `build.sbt` |
 | Scenario.sample(gen) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.sampleN(gen, n) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
@@ -697,4 +699,4 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 
 4. ~~**Monad encoding**~~ - ✅ Resolved: Sealed trait ADT chosen over function-based encoding. Supports independent mplus branches, working fsplit, and state injection via sentinel pattern.
 
-5. **TxVariations API refactoring** - In progress: Current API passes `sponsor`/`signer` to `enumerate`. Planned refactoring will use `TxTemplate` so variations are self-contained (each knows its actor). This simplifies `ScenarioExplorer` and makes the API cleaner.
+5. ~~**TxVariations API refactoring**~~ - ✅ Resolved: API now uses `TxTemplate` which bundles sponsor and signer. `enumerate` takes `(reader, state, txTemplate)` instead of separate sponsor/signer parameters. `BlockchainReader` introduced for read-only operations (preferred over `BlockchainProvider` for APIs that don't need `submit`).
