@@ -1,7 +1,7 @@
 package scalus.testing
 
 import cps.*
-import cps.monads.{FutureAsyncMonad, given}
+import cps.monads.FutureAsyncMonad
 import cps.monads.logic.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*
@@ -304,9 +304,74 @@ object Scenario {
         scenarioLogicMonad.pure(p)
     }
 
-    /** Get a read-only [[BlockchainProvider]] snapshot from the current state. */
+    /** Get a read-only [[BlockchainReader]] snapshot from the current state. */
+    def snapshotReader: Scenario[BlockchainReader] =
+        leaf(s => Done(s, s.emulator.asReader))
+
+    /** Get a read-only [[BlockchainProvider]] snapshot from the current state.
+      *
+      * @deprecated
+      *   Use [[snapshotReader]] instead. The `submit` method on this provider discards state
+      *   changes which is misleading.
+      */
+    @deprecated("Use snapshotReader instead", "0.14.2")
     def snapshotProvider: Scenario[BlockchainProvider] =
         leaf(s => Done(s, s.emulator.asProvider))
+
+    /** Sample a value from a ScalaCheck generator using the scenario's RNG.
+      *
+      * The RNG state is advanced deterministically, ensuring reproducible execution across
+      * branches. If the generator fails to produce a value, this branch is pruned (returns mzero).
+      */
+    def sample[A](gen: org.scalacheck.Gen[A]): Scenario[A] =
+        leaf { state =>
+            val params = org.scalacheck.Gen.Parameters.default.withInitialSeed(state.rng)
+            gen(params, state.rng) match
+                case Some(value) =>
+                    val nextRng = state.rng.next
+                    Done(state.copy(rng = nextRng), value)
+                case None =>
+                    scenarioLogicMonad.mzero
+        }
+
+    /** Sample N values from a generator, creating N branches.
+      *
+      * Each branch receives a different sampled value and its own RNG state. Failed samples are
+      * filtered out.
+      */
+    def sampleN[A](gen: org.scalacheck.Gen[A], n: Int = 10): Scenario[A] =
+        leaf { state =>
+            val params = org.scalacheck.Gen.Parameters.default
+            val (_, result) = (0 until n).foldLeft((state.rng, scenarioLogicMonad.mzero[A])) {
+                case ((rng, acc), _) =>
+                    val nextRng = rng.next
+                    gen(params.withInitialSeed(rng), rng) match
+                        case Some(value) =>
+                            (
+                              nextRng,
+                              scenarioLogicMonad.mplus(acc, Done(state.copy(rng = nextRng), value))
+                            )
+                        case None =>
+                            (nextRng, acc)
+            }
+            result
+        }
+
+    /** Check a condition, failing the scenario with [[CheckFailure]] if false.
+      *
+      * This is an inline macro that captures the predicate expression, optional message, and source
+      * location at compile time.
+      *
+      * Usage:
+      * {{{
+      * async[Scenario] {
+      *     Scenario.check(balance >= 0).await
+      *     Scenario.check(owner != null, "owner must be set").await
+      * }
+      * }}}
+      */
+    inline def check(inline condition: Boolean, inline message: String = ""): Scenario[Unit] =
+        ScenarioCheck.check(condition, message)
 
     // =========================================================================
     // Runners
@@ -329,4 +394,22 @@ object Scenario {
         s: Scenario[A]
     ): Future[Option[(ScenarioState, A)]] =
         logicStreamMonad.mObserveOne(eval(injectState(initial, s)))
+
+    // =========================================================================
+    // CpsMonadConversion for Gen[A] => Scenario[A]
+    // =========================================================================
+
+    /** Enables implicit conversion from ScalaCheck Gen to Scenario.
+      *
+      * Allows writing:
+      * {{{
+      *   async[Scenario] {
+      *     val x = Gen.choose(1, 10).await // implicitly converted via sample
+      *     ...
+      *   }
+      * }}}
+      */
+    given genToScenarioConversion: CpsMonadConversion[org.scalacheck.Gen, Scenario] with {
+        def apply[A](ga: org.scalacheck.Gen[A]): Scenario[A] = sample(ga)
+    }
 }

@@ -1,7 +1,7 @@
 # Logical Monad for Blockchain Scenario Testing
 
 
-Status: **mostly implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, TxVariations, TxSamplingVariations, ContractStepVariations, and StandardTxVariations are implemented with tests passing. ScenarioExplorer and ContractScalaCheckCommands adapter are planned but not yet implemented.
+Status: **mostly implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, Scenario.sample/sampleN, Scenario.check (macro), ScenarioExplorer, TxTemplate, TxVariations, TxSamplingVariations, ContractStepVariations, and StandardTxVariations are implemented with tests passing. ContractScalaCheckCommands adapter is planned. TxVariations API refactoring to use TxTemplate (removing sponsor/signer parameters) is in progress.
 
 ## Overview
 
@@ -561,17 +561,91 @@ val allTxs: Seq[Transaction] = for {
 forAll(Gen.oneOf(allTxs)) { tx => ... }
 ```
 
-### Gen in Scenario (⬚ Not yet implemented)
+### Gen in Scenario (✅ Implemented)
 
 ScenarioState carries an RNG for deterministic replay across branches:
 
 ```scala
 object Scenario {
+    // Sample single value, mzero if generator fails
     def sample[A](gen: Gen[A]): Scenario[A]
+
+    // Sample N values, creating N branches (each with different RNG state)
+    def sampleN[A](gen: Gen[A], n: Int = 10): Scenario[A]
 }
 
 given CpsMonadConversion[Gen, Scenario] with {
     def apply[A](ga: Gen[A]): Scenario[A] = Scenario.sample(ga)
+}
+```
+
+### Scenario.check (✅ Implemented)
+
+Inline macro for invariant checking that captures predicate expression and source location:
+
+```scala
+// In Scenario object
+inline def check(inline condition: Boolean, inline message: String = ""): Scenario[Unit]
+
+// Throws CheckFailure with predicate, message, and SourceLocation on failure
+case class CheckFailure(predicate: String, message: String, location: SourceLocation) extends Exception
+case class SourceLocation(file: String, line: Int)
+```
+
+Usage:
+```scala
+async[Scenario] {
+    val state = extractState(provider).await
+    Scenario.check(state.balance >= 0, "balance must be non-negative").await
+    Scenario.check(state.owner != Address.empty).await  // message optional
+}
+```
+
+### ScenarioExplorer (✅ Implemented)
+
+Explores contract state space by applying transaction variations at each step:
+
+```scala
+case class Violation(
+    predicate: String,      // failed check expression
+    message: String,        // check message
+    location: SourceLocation,
+    path: Seq[Transaction]  // transactions that led to this state
+)
+
+object ScenarioExplorer {
+    def explore(maxDepth: Int)(
+        genTransactions: BlockchainProvider => Scenario[Seq[Transaction]]
+    ): Scenario[Option[Violation]]
+}
+```
+
+Usage:
+```scala
+val results = Scenario.runAll(initial)(
+    ScenarioExplorer.explore(maxDepth = 3) { provider =>
+        async[Scenario] {
+            val state = extractState(provider).await
+            Scenario.check(state.balance >= 0).await  // invariant
+            buildTransactionVariations(provider, state)
+        }
+    }
+)
+val violations = results.flatMap(_._2)  // collect all check failures
+```
+
+### TxTemplate (✅ Implemented)
+
+Bundles transaction builder with sponsor and signer:
+
+```scala
+case class TxTemplate(
+    builder: TxBuilder,
+    sponsor: Address,
+    signer: TransactionSigner
+) {
+    def complete(provider: BlockchainProvider)(using ExecutionContext): Future[Transaction]
+    def mapBuilder(f: TxBuilder => TxBuilder): TxTemplate
 }
 ```
 
@@ -598,14 +672,19 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | Runners (run, runAll, runFirst) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | BlockchainProviderTF[F] | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProviderTF.scala` |
 | dotty-cps-async deps in build.sbt | ✅ Done | `build.sbt` |
-| Scenario.sample(gen) | ⬚ Planned | — |
+| Scenario.sample(gen) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| Scenario.sampleN(gen, n) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| Scenario.check (macro) | ✅ Done | `scalus-testkit/shared/.../testing/ScenarioCheck.scala` |
+| CheckFailure, SourceLocation | ✅ Done | `scalus-testkit/shared/.../testing/ScenarioCheck.scala` |
+| ScenarioExplorer.explore | ✅ Done | `scalus-testkit/shared/.../testing/ScenarioExplorer.scala` |
+| Violation | ✅ Done | `scalus-testkit/shared/.../testing/ScenarioExplorer.scala` |
+| TxTemplate | ✅ Done | `scalus-testkit/shared/.../testing/TxTemplate.scala` |
 | TxVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | TxSamplingVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | ContractStepVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | StandardTxVariations | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
 | Boundary generators (valuesAround, slotsAround) | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
 | ContractScalaCheckCommands adapter | ⬚ Planned | — |
-| ScenarioExplorer.explore adapter | ⬚ Planned | — |
 | FutureInScenario convenience layer | ⬚ Planned (optional) | — |
 
 ## Open Questions
@@ -618,4 +697,4 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 
 4. ~~**Monad encoding**~~ - ✅ Resolved: Sealed trait ADT chosen over function-based encoding. Supports independent mplus branches, working fsplit, and state injection via sentinel pattern.
 
-5. ~~**TxVariations output type**~~ - ✅ Resolved: `TxVariations` returns `Future[Seq[Transaction]]` (async, cross-platform). ScalaCheck sync conversion is internal to `ContractScalaCheckCommands` — no sync wrapper exposed. Sponsor/signer passed as parameters (orthogonal to contract state `S`).
+5. **TxVariations API refactoring** - In progress: Current API passes `sponsor`/`signer` to `enumerate`. Planned refactoring will use `TxTemplate` so variations are self-contained (each knows its actor). This simplifies `ScenarioExplorer` and makes the API cleaner.

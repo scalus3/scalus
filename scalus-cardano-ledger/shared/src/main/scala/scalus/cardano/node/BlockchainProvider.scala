@@ -8,10 +8,13 @@ import scala.concurrent.Future
 @deprecated("Use BlockchainProvider instead", "0.14.2")
 type Provider = BlockchainProvider
 
-/** Trait for blockchain providers with generic effect type. (TF is for "tagless final" style, often
-  * term used in FP literature).
+/** Read-only blockchain operations with generic effect type. (TF is for "tagless final" style,
+  * often term used in FP literature).
+  *
+  * This trait provides read-only access to blockchain state. Use [[BlockchainProviderTF]] when you
+  * also need to submit transactions.
   */
-trait BlockchainProviderTF[F[_]] {
+trait BlockchainReaderTF[F[_]] {
 
     /** Returns CardanoInfo for this provider.
       */
@@ -21,10 +24,6 @@ trait BlockchainProviderTF[F[_]] {
       */
     def fetchLatestParams: F[ProtocolParams]
 
-    /** Submits a transaction to the network.
-      */
-    def submit(transaction: Transaction): F[Either[SubmitError, TransactionHash]]
-
     /** Find UTxOs using a type-safe query.
       */
     def findUtxos(query: UtxoQuery): F[Either[UtxoQueryError, Utxos]]
@@ -32,39 +31,52 @@ trait BlockchainProviderTF[F[_]] {
     /** Returns the current slot number.
       */
     def currentSlot: F[SlotNo]
+}
+
+/** Trait for blockchain providers with generic effect type. (TF is for "tagless final" style, often
+  * term used in FP literature).
+  *
+  * Extends [[BlockchainReaderTF]] with transaction submission capability.
+  */
+trait BlockchainProviderTF[F[_]] extends BlockchainReaderTF[F] {
+
+    /** Submits a transaction to the network.
+      */
+    def submit(transaction: Transaction): F[Either[SubmitError, TransactionHash]]
 
 }
 
-/** Provider for Cardano blockchain operations.
+/** Read-only provider for Cardano blockchain operations.
   *
-  * Provider is the cross-platform interface for interacting with Cardano nodes. All methods return
-  * `Future` values and work on both JVM and JavaScript platforms.
+  * BlockchainReader provides read-only access to blockchain state without the ability to submit
+  * transactions. This is useful for:
+  *   - Snapshot-based testing where state should not be modified
+  *   - Transaction building that only needs to query UTxOs
+  *   - APIs that should not have submit capability
+  *
+  * Use [[BlockchainProvider]] when you also need to submit transactions.
   *
   * Implementations capture their ExecutionContext at construction time, so callers don't need to
   * provide it for each method call.
-  *
-  * Use `scalus.utils.await` extension for blocking operations on JVM when needed.
   */
-trait BlockchainProvider extends BlockchainProviderTF[Future] {
+trait BlockchainReader extends BlockchainReaderTF[Future] {
 
-    /** Returns the ExecutionContext captured by this provider.
+    /** Returns the ExecutionContext captured by this reader.
       *
       * This is used internally by default method implementations. External code can use this when
-      * working with Futures returned by provider methods, or provide their own.
+      * working with Futures returned by reader methods, or provide their own.
       */
     def executionContext: scala.concurrent.ExecutionContext
 
-    /** Returns CardanoInfo for this provider.
+    /** Returns CardanoInfo for this reader.
       *
-      * This is always available synchronously after the provider is constructed. For emulators,
-      * this returns the current context. For remote providers like BlockfrostProvider, the
-      * CardanoInfo is fetched during async construction.
+      * This is always available synchronously after the reader is constructed. For emulators, this
+      * returns the current context. For remote providers like BlockfrostProvider, the CardanoInfo
+      * is fetched during async construction.
       */
     def cardanoInfo: CardanoInfo
 
     def fetchLatestParams: Future[ProtocolParams]
-
-    def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]]
 
     /** Find a single UTxO by its transaction input.
       *
@@ -109,6 +121,110 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] {
     def findUtxos(address: Address): Future[Either[UtxoQueryError, Utxos]] = {
         findUtxos(UtxoQuery(UtxoSource.FromAddress(address)))
     }
+
+    /** Returns the current slot number.
+      */
+    def currentSlot: Future[SlotNo]
+
+    /** Find UTxOs using a type-safe query.
+      *
+      * @param query
+      *   The query specifying source, filters, and pagination
+      * @return
+      *   Either a UtxoQueryError or the matching UTxOs
+      */
+    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]]
+
+    /** Query UTxOs using lambda DSL.
+      *
+      * This method translates a lambda expression to a UtxoQuery at compile time and returns a
+      * builder that can be further configured before execution.
+      *
+      * Example:
+      * {{{
+      * // Simple query - execute immediately
+      * reader.queryUtxos { u =>
+      *   u.output.address == myAddress
+      * }.execute()
+      *
+      * // With pagination and minimum total
+      * reader.queryUtxos { u =>
+      *   u.output.address == myAddress && u.output.value.hasAsset(policyId, assetName)
+      * }.minTotal(Coin.ada(100)).limit(10).execute()
+      * }}}
+      *
+      * Supported expressions:
+      *   - `u.output.address == addr` - query by address
+      *   - `u.input.transactionId == txId` - query by transaction
+      *   - `u.output.value.hasAsset(policyId, assetName)` - query/filter by asset
+      *   - `u.output.value.coin >= amount` - filter by minimum lovelace
+      *   - `u.output.hasDatumHash(hash)` - filter by datum hash
+      *   - `&&` - AND combination
+      *   - `||` - OR combination
+      *
+      * @param f
+      *   Lambda expression from Utxo to Boolean
+      * @return
+      *   A UtxoQueryWithReader builder that can be configured and executed
+      */
+    inline def queryUtxos(inline f: Utxo => Boolean): UtxoQueryWithReader =
+        UtxoQueryWithReader(this, UtxoQueryMacros.buildQuery(f))
+}
+
+/** A query builder that combines a BlockchainReader with a UtxoQuery.
+  *
+  * Allows chaining configuration methods before executing the query.
+  *
+  * @param reader
+  *   The reader to execute the query against
+  * @param query
+  *   The query to execute
+  */
+case class UtxoQueryWithReader(reader: BlockchainReader, query: UtxoQuery) {
+
+    /** Limit the number of results */
+    def limit(n: Int): UtxoQueryWithReader = copy(query = query.limit(n))
+
+    /** Skip the first n results */
+    def skip(n: Int): UtxoQueryWithReader = copy(query = query.skip(n))
+
+    /** Set minimum required total lovelace amount (early termination optimization).
+      *
+      * The query will stop fetching UTxOs once the accumulated lovelace reaches this amount.
+      */
+    def minTotal(amount: Coin): UtxoQueryWithReader = copy(query = query.minTotal(amount))
+
+    /** Execute the query and return the results */
+    def execute(): Future[Either[UtxoQueryError, Utxos]] =
+        reader.findUtxos(query)
+}
+
+/** Provider for Cardano blockchain operations.
+  *
+  * Provider is the cross-platform interface for interacting with Cardano nodes. All methods return
+  * `Future` values and work on both JVM and JavaScript platforms.
+  *
+  * Extends [[BlockchainReader]] with transaction submission capability.
+  *
+  * Implementations capture their ExecutionContext at construction time, so callers don't need to
+  * provide it for each method call.
+  *
+  * Use `scalus.utils.await` extension for blocking operations on JVM when needed.
+  */
+trait BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainReader {
+
+    // Inherits from BlockchainReader:
+    // - executionContext
+    // - cardanoInfo
+    // - fetchLatestParams
+    // - currentSlot
+    // - findUtxos(query: UtxoQuery)
+    // - findUtxo(input: TransactionInput) (default impl)
+    // - findUtxos(inputs: Set[TransactionInput]) (default impl)
+    // - findUtxos(address: Address) (default impl)
+    // - queryUtxos (returns UtxoQueryWithReader)
+
+    def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]]
 
     /** Find a single UTxO by address and optional filters.
       *
@@ -167,82 +283,15 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] {
         findUtxos(query)
     }
 
-    /** Returns the current slot number.
-      */
-    def currentSlot: Future[SlotNo]
-
-    /** Find UTxOs using a type-safe query.
-      *
-      * @param query
-      *   The query specifying source, filters, and pagination
-      * @return
-      *   Either a UtxoQueryError or the matching UTxOs
-      */
-    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]]
-
-    /** Query UTxOs using lambda DSL.
-      *
-      * This method translates a lambda expression to a UtxoQuery at compile time and returns a
-      * builder that can be further configured before execution.
-      *
-      * Example:
-      * {{{
-      * // Simple query - execute immediately
-      * provider.queryUtxos { u =>
-      *   u.output.address == myAddress
-      * }.execute()
-      *
-      * // With pagination and minimum total
-      * provider.queryUtxos { u =>
-      *   u.output.address == myAddress && u.output.value.hasAsset(policyId, assetName)
-      * }.minTotal(Coin.ada(100)).limit(10).execute()
-      * }}}
-      *
-      * Supported expressions:
-      *   - `u.output.address == addr` - query by address
-      *   - `u.input.transactionId == txId` - query by transaction
-      *   - `u.output.value.hasAsset(policyId, assetName)` - query/filter by asset
-      *   - `u.output.value.coin >= amount` - filter by minimum lovelace
-      *   - `u.output.hasDatumHash(hash)` - filter by datum hash
-      *   - `&&` - AND combination
-      *   - `||` - OR combination
-      *
-      * @param f
-      *   Lambda expression from Utxo to Boolean
-      * @return
-      *   A UtxoQueryWithProvider builder that can be configured and executed
-      */
-    inline def queryUtxos(inline f: Utxo => Boolean): UtxoQueryWithProvider =
-        UtxoQueryWithProvider(this, UtxoQueryMacros.buildQuery(f))
 }
 
-/** A query builder that combines a Provider with a UtxoQuery.
-  *
-  * Allows chaining configuration methods before executing the query.
-  *
-  * @param provider
-  *   The provider to execute the query against
-  * @param query
-  *   The query to execute
-  */
-case class UtxoQueryWithProvider(provider: BlockchainProvider, query: UtxoQuery) {
+/** @deprecated Use [[UtxoQueryWithReader]] instead */
+@deprecated("Use UtxoQueryWithReader instead", "0.14.2")
+type UtxoQueryWithProvider = UtxoQueryWithReader
 
-    /** Limit the number of results */
-    def limit(n: Int): UtxoQueryWithProvider = copy(query = query.limit(n))
-
-    /** Skip the first n results */
-    def skip(n: Int): UtxoQueryWithProvider = copy(query = query.skip(n))
-
-    /** Set minimum required total lovelace amount (early termination optimization).
-      *
-      * The query will stop fetching UTxOs once the accumulated lovelace reaches this amount.
-      */
-    def minTotal(amount: Coin): UtxoQueryWithProvider = copy(query = query.minTotal(amount))
-
-    /** Execute the query and return the results */
-    def execute(): Future[Either[UtxoQueryError, Utxos]] =
-        provider.findUtxos(query)
-}
+/** @deprecated Use [[UtxoQueryWithReader]] instead */
+@deprecated("Use UtxoQueryWithReader instead", "0.14.2")
+val UtxoQueryWithProvider = UtxoQueryWithReader
 
 /** Error returned when submitting a transaction fails.
   *

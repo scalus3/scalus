@@ -214,7 +214,7 @@ object BuidlerFest {
             // Set validity interval (10 minutes from now)
             .validTo(now.plusSeconds(600))
             // Complete the transaction (fetch buyer UTxOs for funding)
-            .complete(provider = provider, sponsor = buyerAddress)
+            .complete(reader = provider, sponsor = buyerAddress)
             .await()
             .transaction
 

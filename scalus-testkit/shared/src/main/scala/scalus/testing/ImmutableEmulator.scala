@@ -60,11 +60,31 @@ case class ImmutableEmulator(
     def findUtxos(query: UtxoQuery): Either[UtxoQueryError, Utxos] =
         Right(EmulatorBase.evalQuery(utxos, query))
 
-    /** Create a read-only [[BlockchainProvider]] snapshot.
+    /** Create a read-only [[BlockchainReader]] snapshot.
+      *
+      * This provides read-only access to the emulator's state without submit capability.
+      */
+    def asReader: BlockchainReader = new BlockchainReader {
+        override def executionContext: ExecutionContext = ExecutionContext.parasitic
+        override def cardanoInfo: CardanoInfo = ImmutableEmulator.this.cardanoInfo
+        override def fetchLatestParams: Future[ProtocolParams] =
+            Future.successful(env.params)
+        override def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
+            Future.successful(ImmutableEmulator.this.findUtxos(query))
+        override def currentSlot: Future[SlotNo] =
+            Future.successful(env.slot)
+    }
+
+    /** Create a [[BlockchainProvider]] snapshot.
       *
       * Submit through this provider works but discards the resulting state changes (the provider
       * cannot update the immutable emulator).
+      *
+      * @deprecated
+      *   Use [[asReader]] instead for read-only access. The `submit` method on this provider
+      *   discards state changes which is misleading.
       */
+    @deprecated("Use asReader instead", "0.14.2")
     def asProvider: BlockchainProvider = new BlockchainProvider {
         override def executionContext: ExecutionContext = ExecutionContext.parasitic
         override def cardanoInfo: CardanoInfo = ImmutableEmulator.this.cardanoInfo

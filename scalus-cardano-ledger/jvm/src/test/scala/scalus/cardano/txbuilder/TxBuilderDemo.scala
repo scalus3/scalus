@@ -50,7 +50,7 @@ class TxBuilderDemo extends AnyFunSuite {
             .payTo(Bob.address, Value.ada(10))
             // Magic: sets inputs, collateral input/output, execution budgets,
             // fee, handle change, etc.
-            .complete(provider = emulator, sponsor = Alice.address)
+            .complete(reader = emulator, sponsor = Alice.address)
             .await()
             .sign(Alice.signer)
             .transaction
@@ -184,7 +184,7 @@ class TxBuilderDemo extends AnyFunSuite {
               Bob.address,
               Value.fromPolicy(alwaysOkScript.scriptHash, assets) + Value.ada(2)
             )
-            .complete(provider = emulator, sponsor = Alice.address)
+            .complete(reader = emulator, sponsor = Alice.address)
             .await()
             .sign(Alice.signer)
             .transaction
@@ -243,7 +243,7 @@ class TxBuilderDemo extends AnyFunSuite {
                 scriptRef = Some(ScriptRef(script))
               )
             )
-            .complete(provider = emulator, sponsor = Alice.address)
+            .complete(reader = emulator, sponsor = Alice.address)
             .await()
             .sign(Alice.signer)
             .transaction

@@ -1,21 +1,19 @@
 package scalus.testing
 
 import org.scalacheck.Gen
-import scalus.cardano.address.Address
 import scalus.cardano.ledger.Transaction
-import scalus.cardano.node.BlockchainProvider
-import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
+import scalus.cardano.node.BlockchainReader
 
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Transaction variations generator for property-based and exhaustive testing.
   *
-  * `TxVariations` generates multiple transaction variations from a given contract state. Each
-  * variation represents a different way to construct a transaction (e.g., different input
-  * selection, datum values, redeemer arguments).
+  * `TxVariations` generates multiple transaction variations from a given contract state and base
+  * template. Each variation represents a different way to construct a transaction (e.g., different
+  * input selection, datum values, redeemer arguments).
   *
-  * Sponsor and signer are passed as parameters because they are orthogonal to contract state — the
-  * same contract state can be interacted with by different parties (Alice, Bob, an attacker).
+  * The `TxTemplate` provides the sponsor (who pays fees) and signer, while variations build the
+  * transaction body.
   *
   * @tparam S
   *   the contract state type, typically extracted from blockchain UTxOs
@@ -26,22 +24,19 @@ trait TxVariations[S] {
       *
       * Returns completed, signed transactions ready to submit.
       *
-      * @param provider
-      *   blockchain provider for UTxO queries and tx completion
+      * @param reader
+      *   blockchain reader for UTxO queries and tx completion
       * @param state
       *   contract state extracted from blockchain
-      * @param sponsor
-      *   address that pays for the transaction (provides UTxOs for fees/collateral)
-      * @param signer
-      *   signs the completed transaction
+      * @param template
+      *   base template providing sponsor and signer
       * @return
       *   future containing all transaction variations
       */
     def enumerate(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     )(using ExecutionContext): Future[Seq[Transaction]]
 
     /** Combine two variation generators.
@@ -58,34 +53,22 @@ object TxVariations {
       * Returns `StandardTxVariations` object which provides factory methods for common attack
       * patterns like stealing funds, corrupting datums, wrong addresses, etc.
       *
-      * ==Example Usage==
-      * {{{
-      * val variations = TxVariations.standard.default[MyState](
-      *   extractUtxo = _.utxo,
-      *   extractDatum = _.datum,
-      *   redeemer = _ => myRedeemer,
-      *   scriptAddress = myAddress,
-      *   script = myScript
-      * )
-      * }}}
-      *
       * @see
       *   [[StandardTxVariations]] for available variation patterns
       */
     def standard: StandardTxVariations.type = StandardTxVariations
 
     /** Combined variations from two sources. */
-    private case class Combined[S](left: TxVariations[S], right: TxVariations[S])
+    private[testing] case class Combined[S](left: TxVariations[S], right: TxVariations[S])
         extends TxVariations[S] {
         override def enumerate(
-            provider: BlockchainProvider,
+            reader: BlockchainReader,
             state: S,
-            sponsor: Address,
-            signer: TransactionSigner
+            txTemplate: TxTemplate
         )(using ExecutionContext): Future[Seq[Transaction]] =
             for
-                leftTxs <- left.enumerate(provider, state, sponsor, signer)
-                rightTxs <- right.enumerate(provider, state, sponsor, signer)
+                leftTxs <- left.enumerate(reader, state, txTemplate)
+                rightTxs <- right.enumerate(reader, state, txTemplate)
             yield leftTxs ++ rightTxs
     }
 
@@ -93,10 +76,9 @@ object TxVariations {
     def fromTransactions[S](txs: Seq[Transaction]): TxVariations[S] =
         new TxVariations[S] {
             override def enumerate(
-                provider: BlockchainProvider,
+                reader: BlockchainReader,
                 state: S,
-                sponsor: Address,
-                signer: TransactionSigner
+                txTemplate: TxTemplate
             )(using ExecutionContext): Future[Seq[Transaction]] =
                 Future.successful(txs)
         }
@@ -123,36 +105,33 @@ trait TxSamplingVariations[S] extends TxVariations[S] {
       * asynchronously.
       */
     def gen(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     ): Gen[Future[Transaction]]
 
     /** Number of samples to take when enumerating. */
     def sampleSize: Int = 20
 
     override def enumerate(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     )(using ExecutionContext): Future[Seq[Transaction]] = {
-        val futures = List.fill(sampleSize)(gen(provider, state, sponsor, signer).sample).flatten
+        val futures = List.fill(sampleSize)(gen(reader, state, txTemplate).sample).flatten
         Future.sequence(futures)
     }
 }
 
-/** Bundles contract step state extraction, base transaction building, and variations.
+/** Bundles contract step state extraction, base template building, and variations.
   *
   * `ContractStepVariations` represents a single step in a contract interaction (e.g., "bid on
   * auction", "claim HTLC"). It combines:
   *   - State extraction from blockchain UTxOs
-  *   - Base transaction construction
+  *   - Base template construction (builder + sponsor + signer)
   *   - Transaction variations for testing
   *
-  * Use with Scenario for exhaustive testing or with ContractScalaCheckCommands for property-based
-  * testing.
+  * Use with ScenarioExplorer for exhaustive testing.
   *
   * @tparam S
   *   the contract state type
@@ -163,31 +142,33 @@ trait ContractStepVariations[S] {
       *
       * Typically queries UTxOs at the contract address and parses datums.
       */
-    def extractState(provider: BlockchainProvider)(using ExecutionContext): Future[S]
+    def extractState(reader: BlockchainReader)(using ExecutionContext): Future[S]
 
-    /** Build the base transaction for this step.
+    /** Build the base transaction template for this step.
       *
-      * The base transaction is the "correct" transaction that variations modify. Provider gives
-      * access to `cardanoInfo` for protocol params, network, etc.
+      * The template includes the base TxBuilder (the "correct" transaction), sponsor (who pays
+      * fees), and signer. Variations will modify or replace the builder while using the same
+      * sponsor/signer.
       */
-    def baseTx(provider: BlockchainProvider, state: S)(using ExecutionContext): Future[TxBuilder]
+    def makeBaseTx(reader: BlockchainReader, state: S)(using
+        ExecutionContext
+    ): Future[TxTemplate]
 
     /** Transaction variations to test.
       *
-      * Variations modify the base transaction in different ways (boundary values, invalid inputs,
-      * etc.) to test contract behavior.
+      * Variations receive the base template from `makeBaseTx` and produce transaction variations.
       */
     def variations: TxVariations[S]
 
     /** Generate all transaction variations for the given state.
       *
-      * Convenience method that delegates to `variations.enumerate`.
+      * Convenience method that builds the template and delegates to `variations.enumerate`.
       */
     def allVariations(
-        provider: BlockchainProvider,
-        state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        reader: BlockchainReader,
+        state: S
     )(using ExecutionContext): Future[Seq[Transaction]] =
-        variations.enumerate(provider, state, sponsor, signer)
+        makeBaseTx(reader, state).flatMap { txTemplate =>
+            variations.enumerate(reader, state, txTemplate)
+        }
 }

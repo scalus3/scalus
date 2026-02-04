@@ -5,7 +5,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
-import scalus.cardano.node.BlockchainProvider
+import scalus.cardano.node.BlockchainReader
 import scalus.cardano.txbuilder.SomeBuildError
 
 import java.time.Instant
@@ -1432,9 +1432,9 @@ case class TxBuilder(
 
     /** Completes the transaction by selecting UTXOs, adding collateral, and balancing.
       *
-      * This method queries the provider for available UTXOs at the sponsor address, selects inputs
-      * to cover all outputs and fees, selects collateral if needed (for script transactions), and
-      * sets up change handling to the sponsor address.
+      * This method queries the reader for available UTXOs at the sponsor address, selects inputs to
+      * cover all outputs and fees, selects collateral if needed (for script transactions), and sets
+      * up change handling to the sponsor address.
       *
       * This is the primary cross-platform method available on both JVM and JavaScript platforms.
       *
@@ -1442,17 +1442,17 @@ case class TxBuilder(
       * extension method:
       * {{{
       * import scalus.cardano.txbuilder.await
-      * builder.complete(provider, sponsor).await(30.seconds)
+      * builder.complete(reader, sponsor).await(30.seconds)
       * }}}
       *
-      * @param provider
-      *   the async provider to query for UTXOs
+      * @param reader
+      *   the async reader to query for UTXOs
       * @param sponsor
       *   the address to use for input selection, collateral, and change
       * @return
       *   a Future containing a new TxBuilder with the transaction completed
       */
-    def complete(provider: BlockchainProvider, sponsor: Address): Future[TxBuilder] = {
+    def complete(reader: BlockchainReader, sponsor: Address): Future[TxBuilder] = {
         // Build initial context FIRST (fail-fast before async call)
         val initialBuildResult = TransactionBuilder.build(env.network, steps)
 
@@ -1462,9 +1462,9 @@ case class TxBuilder(
 
             case Right(initialCtx) =>
                 // Only fetch UTXOs if initial build succeeds
-                // Use provider's ExecutionContext for the map operation
-                given scala.concurrent.ExecutionContext = provider.executionContext
-                provider.findUtxos(address = sponsor).map { utxosResult =>
+                // Use reader's ExecutionContext for the map operation
+                given scala.concurrent.ExecutionContext = reader.executionContext
+                reader.findUtxos(address = sponsor).map { utxosResult =>
                     val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
                     completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)
                 }
