@@ -5,7 +5,7 @@
 The Scalus testkit provides a framework for testing Cardano smart contracts by exploring transaction variations around boundary values. You implement a `ContractStepVariations[S]` trait:
 
 1. **`extractState`** — what to read from the blockchain
-2. **`baseTx`** — the "happy path" transaction
+2. **`makeBaseTx`** — the "happy path" transaction template (builder + sponsor + signer)
 3. **`variations`** — boundary mutations to explore, depends on current state (see [tx-variations.md](tx-variations.md))
 
 Then run with ScalaCheck (`forAll`, `Commands`) or Scenario (exhaustive exploration), adding consumer-specific assertions.
@@ -45,15 +45,16 @@ For custom variations, implement the trait directly:
 
 ```scala
 val customVariation: TxVariations[AuctionState] = new TxVariations[AuctionState] {
-    override def enumerate(provider, state, sponsor, signer)(using ExecutionContext) = {
+    override def enumerate(reader, state, txTemplate)(using ExecutionContext) = {
         val txs = for amount <- TxVariations.standard.valuesAround(state.currentBid) yield
-            TxBuilder(provider.cardanoInfo)
+            TxBuilder(reader.cardanoInfo)
                 .spend(state.auctionUtxo, BidRedeemer(amount).toData, auctionScript)
                 .payToScript(auctionScriptAddress, updatedDatum(amount), auctionValue)
                 .payTo(previousBidder(state), refundValue(state))
                 .validFrom(state.deadline - 10)
 
-        Future.sequence(txs.map(_.complete(provider, sponsor).map(signer.sign)))
+        Future.sequence(txs.map(_.complete(reader, txTemplate.sponsor)
+            .map(_.sign(txTemplate.signer).transaction)))
     }
 }
 ```
@@ -66,13 +67,13 @@ val allVariations = bidVariations ++ claimVariations ++ customVariation
 
 ### 3. Implement ContractStepVariations
 
-Bundle state extraction, base transaction, and variations into one trait:
+Bundle state extraction, base transaction template, and variations into one trait:
 
 ```scala
 object AuctionStep extends ContractStepVariations[AuctionState] {
 
-    def extractState(provider: BlockchainProvider)(using ExecutionContext): Future[AuctionState] =
-        provider.findUtxos(auctionScriptAddress).map { result =>
+    def extractState(reader: BlockchainReader)(using ExecutionContext): Future[AuctionState] =
+        reader.findUtxos(auctionScriptAddress).map { result =>
             val utxo = result.getOrThrow.head
             val datum = AuctionDatum.fromData(utxo.output.requireInlineDatum)
             AuctionState(
@@ -83,13 +84,17 @@ object AuctionStep extends ContractStepVariations[AuctionState] {
             )
         }
 
-    def baseTx(provider: BlockchainProvider, state: AuctionState)(using ExecutionContext): Future[TxBuilder] =
+    def makeBaseTx(reader: BlockchainReader, state: AuctionState)(using ExecutionContext): Future[TxTemplate] =
         Future.successful(
-            TxBuilder(provider.cardanoInfo)
-                .spend(state.auctionUtxo, BidRedeemer(state.currentBid + 1).toData, auctionScript)
-                .payToScript(auctionScriptAddress, updatedDatum(state.currentBid + 1, Alice), auctionValue)
-                .payTo(previousBidder(state), refundValue(state))
-                .validFrom(state.deadline - 10)
+            TxTemplate(
+                builder = TxBuilder(reader.cardanoInfo)
+                    .spend(state.auctionUtxo, BidRedeemer(state.currentBid + 1).toData, auctionScript)
+                    .payToScript(auctionScriptAddress, updatedDatum(state.currentBid + 1, Alice), auctionValue)
+                    .payTo(previousBidder(state), refundValue(state))
+                    .validFrom(state.deadline - 10),
+                sponsor = Alice.address,
+                signer = Alice.signer
+            )
         )
 
     def variations: TxVariations[AuctionState] =
@@ -102,7 +107,7 @@ object AuctionStep extends ContractStepVariations[AuctionState] {
 }
 ```
 
-Note: `baseTx` returns `Future[TxBuilder]` to allow async operations if needed. `variations` returns a value (not a method taking state) — state is passed to individual variation methods at enumerate time.
+Note: `makeBaseTx` returns `Future[TxTemplate]` which bundles the builder with sponsor and signer. `variations` returns a value (not a method taking state) — state is passed to individual variation methods at enumerate time.
 
 ### 4. Run Tests
 
@@ -170,20 +175,18 @@ The primary method is `enumerate` returning `Future[Seq[Transaction]]` — fully
 ```scala
 trait TxVariations[S] {
     def enumerate(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     )(using ExecutionContext): Future[Seq[Transaction]]
 
     def ++(other: TxVariations[S]): TxVariations[S]  // compose
 }
 ```
 
-- **provider** — query blockchain state (UTxOs, slot, params)
+- **reader** — query blockchain state (UTxOs, slot, params) — read-only, no submit
 - **state** — contract-specific state `S` extracted by `extractState`
-- **sponsor** — address that pays fees and provides collateral
-- **signer** — signs the completed transactions
+- **txTemplate** — bundles sponsor (pays fees/collateral) and signer
 
 ### TxSamplingVariations — Gen-First (Fuzz Testing)
 
@@ -192,10 +195,9 @@ For large/continuous domains that can't be enumerated (e.g., arbitrary `Value` w
 ```scala
 trait TxSamplingVariations[S] extends TxVariations[S] {
     def gen(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     ): Gen[Future[Transaction]]
 
     def sampleSize: Int = 20  // samples for enumerate
@@ -208,17 +210,17 @@ Example implementation:
 val valueFuzz: TxSamplingVariations[AuctionState] = new TxSamplingVariations[AuctionState] {
     override def sampleSize = 30
 
-    def gen(provider, state, sponsor, signer) = for
+    def gen(reader, state, txTemplate) = for
         adaAmount <- Gen.oneOf(Coin(0), minUtxo, state.currentBid - 1, state.currentBid + 1)
         extraTokens <- Gen.someOf(knownPolicies)
         tokenAmount <- Gen.choose(0L, 1_000_000L)
     yield {
-        given ExecutionContext = ExecutionContext.global
-        TxBuilder(provider.cardanoInfo)
+        given ExecutionContext = reader.executionContext
+        TxBuilder(reader.cardanoInfo)
             .spend(state.auctionUtxo, BidRedeemer(adaAmount), auctionScript)
             .payToScript(auctionScriptAddress, updatedDatum, Value(adaAmount, ...))
-            .complete(provider, sponsor)
-            .map(signer.sign)
+            .complete(reader, txTemplate.sponsor)
+            .map(_.sign(txTemplate.signer).transaction)
     }
 }
 ```
@@ -243,19 +245,20 @@ Use for-comprehension to compose boundary values across multiple dimensions:
 
 ```scala
 val variations: TxVariations[MyState] = new TxVariations[MyState] {
-    override def enumerate(provider, state, sponsor, signer)(using ExecutionContext) = {
+    override def enumerate(reader, state, txTemplate)(using ExecutionContext) = {
         val amounts = TxVariations.standard.valuesAround(state.threshold).sample.toSeq
         val timings = TxVariations.standard.slotsAround(state.deadline).sample.toSeq
 
         val txBuilders = for
             amount <- amounts
             timing <- timings
-        yield TxBuilder(provider.cardanoInfo)
+        yield TxBuilder(reader.cardanoInfo)
             .spend(state.scriptUtxo, MyRedeemer(amount).toData, myScript)
             .payToScript(scriptAddress, updatedDatum(amount), outputValue)
             .validFrom(timing)
 
-        Future.sequence(txBuilders.map(_.complete(provider, sponsor).map(signer.sign)))
+        Future.sequence(txBuilders.map(_.complete(reader, txTemplate.sponsor)
+            .map(_.sign(txTemplate.signer).transaction)))
     }
 }
 ```
@@ -324,16 +327,14 @@ A trait that bundles the three things that travel together:
 
 ```scala
 trait ContractStepVariations[S] {
-    def extractState(provider: BlockchainProvider)(using ExecutionContext): Future[S]
-    def baseTx(provider: BlockchainProvider, state: S)(using ExecutionContext): Future[TxBuilder]
+    def extractState(reader: BlockchainReader)(using ExecutionContext): Future[S]
+    def makeBaseTx(reader: BlockchainReader, state: S)(using ExecutionContext): Future[TxTemplate]
     def variations: TxVariations[S]
 
-    // convenience method
+    // convenience method — builds template and enumerates variations
     def allVariations(
-        provider: BlockchainProvider,
-        state: S,
-        sponsor: Address,
-        signer: TransactionSigner
+        reader: BlockchainReader,
+        state: S
     )(using ExecutionContext): Future[Seq[Transaction]]
 }
 ```
@@ -342,8 +343,8 @@ Implement as an `object` for your contract:
 
 ```scala
 object HtlcStep extends ContractStepVariations[HtlcState] {
-    def extractState(provider: BlockchainProvider)(using ExecutionContext) = ...
-    def baseTx(provider: BlockchainProvider, state: HtlcState)(using ExecutionContext) = ...
+    def extractState(reader: BlockchainReader)(using ExecutionContext) = ...
+    def makeBaseTx(reader: BlockchainReader, state: HtlcState)(using ExecutionContext) = ...
     def variations = TxVariations.standard.default[HtlcState](
         extractUtxo = _.utxo,
         extractDatum = s => s.utxo.output.requireInlineDatum,
@@ -414,12 +415,12 @@ val standardAttacks = TxVariations.standard.default[MyState](
 
 // Or create custom attack
 val customAttack: TxVariations[MyState] = new TxVariations[MyState] {
-    override def enumerate(provider, state, sponsor, signer)(using ExecutionContext) = {
-        TxBuilder(provider.cardanoInfo)
+    override def enumerate(reader, state, txTemplate)(using ExecutionContext) = {
+        TxBuilder(reader.cardanoInfo)
             .spend(state.scriptUtxo, MyRedeemer.claim.toData, myScript)
             .payTo(attackerAddress, state.scriptUtxo.output.value)  // steal to attacker
-            .complete(provider, sponsor)
-            .map(tx => Seq(signer.sign(tx)))
+            .complete(reader, txTemplate.sponsor)
+            .map(b => Seq(b.sign(txTemplate.signer).transaction))
     }
 }
 
@@ -440,20 +441,24 @@ case class MultiUtxoState(
 
 object MultiUtxoStep extends ContractStepVariations[MultiUtxoState] {
 
-    def extractState(provider: BlockchainProvider)(using ExecutionContext): Future[MultiUtxoState] =
-        provider.findUtxos(scriptAddress).map { result =>
+    def extractState(reader: BlockchainReader)(using ExecutionContext): Future[MultiUtxoState] =
+        reader.findUtxos(scriptAddress).map { result =>
             val utxos = result.getOrThrow
             val datums = utxos.map(u => MyDatum.fromData(u.output.requireInlineDatum))
             MultiUtxoState(utxos, datums)
         }
 
-    def baseTx(provider: BlockchainProvider, state: MultiUtxoState)(using ExecutionContext) = {
+    def makeBaseTx(reader: BlockchainReader, state: MultiUtxoState)(using ExecutionContext) = {
         // Normal case: spend first UTXO only
         val utxo = state.openUtxos.head
         Future.successful(
-            TxBuilder(provider.cardanoInfo)
-                .spend(utxo, myRedeemer, script)
-                .payToScript(scriptAddress, state.datums.head.toData, utxo.output.value)
+            TxTemplate(
+                builder = TxBuilder(reader.cardanoInfo)
+                    .spend(utxo, myRedeemer, script)
+                    .payToScript(scriptAddress, state.datums.head.toData, utxo.output.value),
+                sponsor = Alice.address,
+                signer = Alice.signer
+            )
         )
     }
 
@@ -469,10 +474,9 @@ object MultiUtxoStep extends ContractStepVariations[MultiUtxoState] {
 // Test spending multiple UTXOs in one transaction
 val doubleSatisfactionVariation: TxVariations[MultiUtxoState] = new TxVariations[MultiUtxoState] {
     override def enumerate(
-        provider: BlockchainProvider,
+        reader: BlockchainReader,
         state: MultiUtxoState,
-        sponsor: Address,
-        signer: TransactionSigner
+        txTemplate: TxTemplate
     )(using ExecutionContext): Future[Seq[Transaction]] = {
         if state.openUtxos.size < 2 then Future.successful(Seq.empty)
         else {
@@ -480,15 +484,15 @@ val doubleSatisfactionVariation: TxVariations[MultiUtxoState] = new TxVariations
             val (utxo1, utxo2) = (state.openUtxos(0), state.openUtxos(1))
             val totalValue = utxo1.output.value + utxo2.output.value
 
-            val tx = TxBuilder(provider.cardanoInfo)
+            val tx = TxBuilder(reader.cardanoInfo)
                 .spend(utxo1, myRedeemer, script)
                 .spend(utxo2, myRedeemer, script)
                 // Only one output - steals from second UTXO
                 .payToScript(scriptAddress, state.datums.head.toData, utxo1.output.value)
                 .payTo(attackerAddress, utxo2.output.value)  // steal second
 
-            tx.complete(provider, sponsor).map { completedTx =>
-                Seq(signer.sign(completedTx))
+            tx.complete(reader, txTemplate.sponsor).map { completedTx =>
+                Seq(completedTx.sign(txTemplate.signer).transaction)
             }
         }
     }
@@ -508,10 +512,10 @@ val scenario = async[Scenario] {
     // Try claiming before timeout — should fail
     Scenario.sleep(1).await
     val earlyResult = Try {
-        val provider = Scenario.snapshotProvider.await
-        val state = HtlcStep.extractState(provider).await
-        val tx = HtlcStep.baseTx(provider.cardanoInfo, state)
-            .signAndComplete(provider).value.get.get
+        val reader = Scenario.snapshotReader.await
+        val state = HtlcStep.extractState(reader).await
+        val txTemplate = HtlcStep.makeBaseTx(reader, state).await
+        val tx = txTemplate.complete(reader).await
         Scenario.submit(tx).await
     }
     assert(earlyResult.isFailure)
