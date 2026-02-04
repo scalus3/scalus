@@ -1,7 +1,7 @@
 # Logical Monad for Blockchain Scenario Testing
 
 
-Status: **mostly implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, Scenario.sample/sampleN, Scenario.check (macro), ScenarioExplorer, TxTemplate, TxVariations, TxSamplingVariations, ContractStepVariations, StandardTxVariations, and BlockchainReader are implemented with tests passing. ContractScalaCheckCommands adapter is planned.
+Status: **implemented** — ImmutableEmulator, Scenario monad (sealed trait ADT), core DSL, Scenario.sample/sampleN, Scenario.check (macro), ScenarioExplorer, TxTemplate, TxVariations, TxSamplingVariations, ContractStepVariations, StandardTxVariations, BlockchainReader, and ContractScalaCheckCommands adapter are all implemented with tests passing.
 
 ## Overview
 
@@ -524,7 +524,7 @@ trait ContractStepVariations[S] {
 
 For ScalaCheck, `ContractScalaCheckCommands` handles `Await.result` internally — users don't see sync wrappers.
 
-### Consuming ContractStepVariations: Two Modes (⬚ ScalaCheck adapter not yet implemented)
+### Consuming ContractStepVariations: Two Modes (✅ Implemented)
 
 ```scala
 // Mode 1: ScalaCheck Commands — JVM-only, stateful property testing
@@ -686,7 +686,7 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | ContractStepVariations[S] | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | StandardTxVariations | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
 | Boundary generators (valuesAround, slotsAround) | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
-| ContractScalaCheckCommands adapter | ⬚ Planned | — |
+| ContractScalaCheckCommands adapter | ✅ Done | `scalus-testkit/jvm/.../testing/ContractScalaCheckCommands.scala` |
 | FutureInScenario convenience layer | ⬚ Planned (optional) | — |
 
 ## Open Questions
