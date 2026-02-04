@@ -7,10 +7,11 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
-import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
+import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.cardano.txbuilder.ScriptSource.PlutusScriptValue
 import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.uplc.PlutusV3
 import scalus.utils.await
 
 import scala.concurrent.duration.DurationInt
@@ -53,6 +54,46 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           utxosAfterTx1.keys.exists(_.transactionId == tx1.id),
           "UTXOs should include outputs from tx1"
         )
+    }
+
+    test("Emulator doesn't allow stake registration and withdrawal in the same tx") {
+        val alice = Alice.address(Network.Mainnet)
+        val initialUtxos = Map(
+          Input(genesisHash, 0) -> Output(alice, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(alice, Value.ada(200)),
+        )
+        val emulator = Emulator(initialUtxos)
+
+        val (withdrawZeroStakeAddress, withdrawZeroScript, withdrawZeroScriptWitness) = {
+            given Options = Options.release
+
+            val alwaysOkScript = PlutusV3.compile((sc: Data) => ())
+            val stakeAddress =
+                StakeAddress(Network.Testnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
+            val witness = TwoArgumentPlutusScriptWitness(
+              ScriptSource.PlutusScriptValue(alwaysOkScript.script),
+              Data.unit,
+              Set.empty
+            )
+            (stakeAddress, alwaysOkScript, witness)
+        }
+        val tx = TxBuilder(testEnv)
+            .registerStake(
+              withdrawZeroStakeAddress,
+              TwoArgumentPlutusScriptWitness.attached(
+                withdrawZeroScript.script,
+                Data.unit,
+                Set.empty
+              )
+            )
+            .withdrawRewards(withdrawZeroStakeAddress, Coin.zero, withdrawZeroScriptWitness)
+            .complete(initialUtxos, alice)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = emulator.submitSync(tx)
+        assert(result.isLeft)
+        assert(result.left.get.message.contains("missing reward accounts"))
     }
 
     test("Property: submitted valid transaction UTXOs become available") {
@@ -110,49 +151,6 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 }
             }
         }
-    }
-
-    test(
-      "Withdraw zero trick - register stake and withdraw 0 ADA from script-based stake address"
-    ) {
-        given Options = Options.release
-
-        val alwaysOkScript = scalus.uplc.PlutusV3.compile((sc: Data) => ())
-
-        val withdrawZeroStakeAddress =
-            StakeAddress(Network.Mainnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
-
-        val scriptWitness = TwoArgumentPlutusScriptWitness(
-          PlutusScriptValue(alwaysOkScript.script),
-          Data.unit,
-          Set.empty
-        )
-
-        // Create a simple provider with just one UTxO for Alice (5000 ADA)
-        val genesisInput = TransactionInput(genesisHash, 0)
-        val aliceOutput = TransactionOutput.Babbage(Alice.address(Network.Mainnet), Value.ada(5000))
-        val initialUtxos: Utxos = Map(genesisInput -> aliceOutput)
-
-        val provider = Emulator(
-          initialUtxos = initialUtxos,
-          initialContext = Context.testMainnet()
-        )
-
-        val tx: Transaction = TxBuilder(testEnv)
-            .registerStake(withdrawZeroStakeAddress, scriptWitness)
-            .withdrawRewards(
-              withdrawZeroStakeAddress,
-              Coin.zero,
-              scriptWitness
-            )
-            .complete(provider, Alice.address(Network.Mainnet))
-            .await(30.seconds)
-            .sign(Alice.signer)
-            .transaction
-
-        // Verify the staking script is executed successfully
-        val result = provider.submitSync(tx)
-        assert(result.isRight, s"Transaction should succeed: $result")
     }
 
     test("Property: invalid transaction (double spend) is rejected") {

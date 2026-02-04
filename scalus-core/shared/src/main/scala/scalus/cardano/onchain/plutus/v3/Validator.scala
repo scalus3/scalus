@@ -86,7 +86,7 @@ trait Validator {
 
 }
 
-// erased [not availanle uet]
+// erased [not available yet]
 @Compile
 trait ParameterizedValidator[A] {
 

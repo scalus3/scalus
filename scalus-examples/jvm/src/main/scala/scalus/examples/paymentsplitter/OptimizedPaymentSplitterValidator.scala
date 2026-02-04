@@ -100,6 +100,24 @@ object OptimizedPaymentSplitterValidator extends DataParameterizedValidator {
         StakeValidator.spendMinimal(ownScriptHash, tx)
     }
 
+    /** Certifying endpoint - allows stake registration and de-registration.
+      *
+      * This enables the zero-withdraw trick by allowing the stake credential to be registered. The
+      * stake address must be registered before it can be used for withdrawals.
+      */
+    inline override def certify(
+        payeesData: Data,
+        redeemer: Data,
+        cert: TxCert,
+        tx: TxInfo
+    ): Unit = {
+        // Allow registration and de-registration for the stake validator pattern
+        cert match
+            case TxCert.RegStaking(_, _)   => () // Allow registration
+            case TxCert.UnRegStaking(_, _) => () // Allow de-registration
+            case _ => fail("Only stake registration/de-registration allowed")
+    }
+
     /** Reward endpoint - heavy computation.
       *
       * Verifies that the pre-computed values in the redeemer match the actual transaction. This

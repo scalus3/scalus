@@ -317,9 +317,9 @@ object LedgerState {
                 case (cred, accountState) if accountState.deposit.value > 0 =>
                     cred -> accountState.deposit
             }
-            val rewards = dstate.accounts.collect {
-                case (cred, accountState) if accountState.balance.value > 0 =>
-                    cred -> accountState.balance
+
+            val rewards = dstate.accounts.map { case (cred, accountState) =>
+                cred -> accountState.balance
             }
             val stakePools = dstate.accounts.collect {
                 case (cred, accountState) if accountState.stakePoolDelegation.isDefined =>

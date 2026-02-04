@@ -6,6 +6,7 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.cardano.onchain.plutus.v1.PubKeyHash
@@ -158,7 +159,11 @@ class PaymentSplitterTxBuilderTest
             tc.payees.map(p => payeeParty(p).addrKeyHash)
         val paramScript = applyParam(OptimizedPaymentSplitterContract, payeePkhs.toData)
         val (contractUtxos, feePayerUtxo, collateralUtxo) = buildUtxos(tc, paramScript.scriptHash)
-        val emulator = Emulator((contractUtxos :+ feePayerUtxo :+ collateralUtxo).toMap)
+        // Extra UTxO for stake registration transaction
+        val stakeRegUtxo = TransactionInput(genesisHash, 300) ->
+            TransactionOutput(payeeParty(tc.feePayerInput._1).address, Value.lovelace(10_000_000L))
+        val emulator =
+            Emulator((contractUtxos :+ feePayerUtxo :+ collateralUtxo :+ stakeRegUtxo).toMap)
 
         val feePayerParty = payeeParty(tc.feePayerInput._1)
         val feePayerPayee = tc.feePayerInput._1
@@ -179,6 +184,18 @@ class PaymentSplitterTxBuilderTest
         val scriptStakeAddress =
             StakeAddress(summon[CardanoInfo].network, StakePayload.Script(paramScript.scriptHash))
 
+        // Step 1: Register stake credential in a separate transaction
+        // The zero-withdraw trick requires the stake address to be registered first
+        val regTx = TxBuilder(summon[CardanoInfo])
+            .registerStake(scriptStakeAddress, attached(paramScript, Data.unit))
+            .complete(emulator, feePayerParty.address)
+            .await()
+            .sign(feePayerParty.signer)
+            .transaction
+        val regResult = emulator.submit(regTx).await()
+        assert(regResult.isRight, s"Registration tx should succeed: $regResult")
+
+        // Step 2: Now do the payment split with zero-withdraw trick
         var builder = TxBuilder(summon[CardanoInfo])
         // Use dynamic redeemer builder to compute correct input index from final transaction
         contractUtxos.foreach { case (input, output) =>

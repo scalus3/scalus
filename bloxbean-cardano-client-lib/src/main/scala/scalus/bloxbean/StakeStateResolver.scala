@@ -131,10 +131,12 @@ final class StakeStateResolver(
     private def getAllRewards(stakeAddress: String): List[RewardEntry] = {
         def fetchPage(page: Int): List[RewardEntry] = {
             val path = s"/accounts/$stakeAddress/rewards?order=asc&count=100&page=$page"
-            getJson(path).flatMap { json =>
-                try Some(readFromArray[List[RewardEntry]](json))
-                catch case NonFatal(_) => None
-            }.getOrElse(Nil)
+            getJson(path)
+                .flatMap { json =>
+                    try Some(readFromArray[List[RewardEntry]](json))
+                    catch case NonFatal(_) => None
+                }
+                .getOrElse(Nil)
         }
 
         var allEntries = List.empty[RewardEntry]
@@ -260,4 +262,3 @@ object StakeStateResolver {
     given JsonValueCodec[RewardEntry] = JsonCodecMaker.make
     given rewardEntryListCodec: JsonValueCodec[List[RewardEntry]] = JsonCodecMaker.make
 }
-
