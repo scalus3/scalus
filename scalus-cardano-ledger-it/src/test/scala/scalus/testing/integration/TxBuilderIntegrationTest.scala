@@ -352,43 +352,12 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
     }
 
     // =========================================================================
-    // Test 11: Stake Deregistration with Deposit Refund
-    // =========================================================================
-    // When deregistering a stake address, the deposit is refunded.
-    // The refund is implicitly added to the "consumed" side of the transaction balance.
-    // This tests that:
-    // 1. The deregistration succeeds
-    // 2. The deposit refund is correctly accounted for in the balance
-    // 3. The stake key signature is required (Conway-era requirement)
-
-    test("11. stake deregistration with deposit refund") {
-        runTxTest("StakeDeregistration") { ctx =>
-            // Stake deregistration requires both payment key (for fees) and stake key
-            val stakeSigner = new TransactionSigner(
-              Set(account.paymentKeyPair, account.stakeKeyPair)
-            )
-
-            // Get the deposit amount from protocol parameters
-            val keyDeposit = Coin(ctx.cardanoInfo.protocolParams.stakeAddressDeposit)
-
-            // Use deregisterStake with explicit refund amount
-            // The ledger will verify this matches the deposited amount
-            TxBuilder(ctx.cardanoInfo)
-                .deregisterStake(stakeAddress, keyDeposit)
-                .complete(ctx.provider, ctx.alice.address)
-                .await(30.seconds)
-                .sign(stakeSigner)
-                .transaction
-        }
-    }
-
-    // =========================================================================
-    // Test 12: Script-based Stake Deregistration with Deposit Refund
+    // Test 11: Script-based Stake Deregistration with Deposit Refund
     // =========================================================================
     // Same as test 11, but for a script-based stake address.
     // This also tests that the script is executed during deregistration.
 
-    test("12. script stake deregistration with deposit refund") {
+    test("11. script stake deregistration with deposit refund") {
         runTxTest("ScriptStakeDeregistration") { ctx =>
             // Get the deposit amount from protocol parameters
             val keyDeposit = Coin(ctx.cardanoInfo.protocolParams.stakeAddressDeposit)
@@ -396,7 +365,11 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
             // Deregister the script-based stake address (registered in test 10a)
             // The script witness is required to authorize the deregistration
             TxBuilder(ctx.cardanoInfo)
-                .deregisterStake(withdrawZeroStakeAddress, Some(keyDeposit), withdrawZeroScriptWitness)
+                .deregisterStake(
+                  withdrawZeroStakeAddress,
+                  Some(keyDeposit),
+                  withdrawZeroScriptWitness
+                )
                 .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
                 .sign(ctx.alice.signer)

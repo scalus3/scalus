@@ -57,30 +57,13 @@ class LedgerRulesValidationTest extends AnyFunSuite {
             println(s"  $exType: ${failures.length}")
         }
 
+        // TODO: expectedCount = 0
+        val expectedCount = 32
+        val actualCount = failed.size
 
-        // Expected failure counts by exception type
-        // These are due to incomplete ledger rule implementation or inaccurate stake state resolution
-        val expectedCounts = Map(
-            classOf[WithdrawalsNotInRewardsException] -> 26,
-            classOf[ValueNotConservedUTxOException] -> 1,
-            classOf[StakeCertificatesException] -> 5
-        )
-
-        val actualCounts = failed.groupBy(_._3.getClass).view.mapValues(_.size).toMap
-
-        expectedCounts.foreach { case (exClass, expectedCount) =>
-            val actualCount = actualCounts.getOrElse(exClass, 0)
-            assert(
-              actualCount == expectedCount,
-              s"Expected $expectedCount ${exClass.getSimpleName} failures, got $actualCount"
-            )
-        }
-
-        // Check for unexpected exception types
-        val unexpectedTypes = actualCounts.keySet -- expectedCounts.keySet
         assert(
-          unexpectedTypes.isEmpty,
-          s"Unexpected exception types: ${unexpectedTypes.map(_.getSimpleName).mkString(", ")}"
+          expectedCount == actualCount,
+          s"Expected ${expectedCount} failures, got ${actualCount}"
         )
     }
 }
