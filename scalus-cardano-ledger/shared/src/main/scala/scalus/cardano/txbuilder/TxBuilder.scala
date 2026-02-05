@@ -1580,12 +1580,19 @@ case class TxBuilder(
                   evaluator
                 ) match {
                     case Right(balancedCtx) =>
-                        // Success! Add sponsor to expected signers
-                        val sponsorSigner = extractSponsorSigner(sponsor)
-                        val ctxWithSigner = balancedCtx.copy(
-                          expectedSigners = balancedCtx.expectedSigners ++ sponsorSigner.toSet
-                        )
-                        copy(context = ctxWithSigner)
+                        if txInputs.toSeq.isEmpty && pool.remainingForInputs.nonEmpty then {
+                            // Force selection of at least one input and retry
+                            // This is necessary because every tx must have at least 1 input.
+                            val minimalInput = pool.selectForValue(Value.lovelace(1))
+                            completeLoop(pool.withInputs(minimalInput), sponsor, maxIterations - 1)
+                        } else {
+                            // Success! Add sponsor to expected signers
+                            val sponsorSigner = extractSponsorSigner(sponsor)
+                            val ctxWithSigner = balancedCtx.copy(
+                              expectedSigners = balancedCtx.expectedSigners ++ sponsorSigner.toSet
+                            )
+                            copy(context = ctxWithSigner)
+                        }
 
                     case Left(SomeBuildError.BalancingError(balancingError, errorCtx)) =>
                         // Handle balancing errors by adding more UTXOs

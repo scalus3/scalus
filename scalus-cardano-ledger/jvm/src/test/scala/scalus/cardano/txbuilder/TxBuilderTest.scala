@@ -934,7 +934,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         assert(builder.env == testEnv)
     }
 
-    ignore("Certificate-only transaction must have at least one input") {
+    test("Certificate-only transaction must have at least one input") {
         import scalus.cardano.address.{StakeAddress, StakePayload}
         import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 
