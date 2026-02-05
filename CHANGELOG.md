@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.15.0 (2026-02-05)
+
+### Added
+
+- all new builtins for protocol version 11 hard fork
+- JavaScript Emulator support for cross-platform testing
+- HD wallet implementation with BIP-39 mnemonic, BIP32-Ed25519 key derivation, and CIP-1852 account
+- Conway era ledger state rules: `DELEG` and `POOL` transitions for stake delegation and pool
+  registration management
+- `TxBuilder.draft` method for unbalanced transaction assembly
+- `txBuilder` function with `CardanoInfo` context parameter
+- type-safe `UtxoQuery` DSL with parallel execution and rate limiting for UTxO queries
+- `Transaction.scriptContexts` extension method for easier script context access
+- `MaryEraValue` support (CIP-0153)
+- `expModInteger` builtin (CIP-109) for modular exponentiation
+- `bls12_381_G1_multiScalarMul` and `bls12_381_G2_multiScalarMul` builtins (CIP-0109)
+- `g1` and `g2` string interpolators for BLS12-381 elements
+- use `dropList` for case class field selection at index >= 2 on PlutusV4
+- `Pretty` typeclass with automatic derivation for ADTs and Cardano ledger types
+- `Eq.derived` for automatic equality typeclass derivation
+- design patterns documentation: Merkelized Validators, Parameter Validation, OptimizedPaymentSplitter
+- Crowdfunding, English Auction, Lottery, and PriceBet smart contract examples
+- multi-environment integration testing infrastructure with Yaci DevKit consolidation
+- comprehensive `scalus-testkit` API with `EvalTestKit` and `ScalusTest` base classes
+- `Output` type alias for `TransactionOutput`
+- `fetchScript` method to retrieve scripts from Blockfrost
+- 5 ADA threshold for collateral return optimization
+
+### Changed
+
+- reorganized package structure - `scalus.builtin` types and `scalus.prelude` moved to new locations
+- `Compile` and `Ignore` annotations moved to `scalus.compiler` package
+- `Validator` traits moved from `prelude` to `v3` package
+- `Provider` deprecated in favor of `BlockchainProvider`
+- simplified `BlockfrostProvider` API with platform-specific backends
+- BLS12-381 classes moved to `scalus.uplc.builtin.bls12_381` package with shorter names
+- optimized `toData` for constant `ByteString`, `String`, `Boolean`, and `Integer` values
+- optimized `mkNilData` builtin to constant
+- optimized `Eq.derived` to use direct field access
+- improved PlutusV3 match lowering to reduce script size
+- renamed `__z_combinator` to `__Z`
+- deprecated `Contract` trait
+- removed deprecated code from 0.12.x
+
+### Fixed
+
+- suppress false warnings for type tests on enum variants
+- handle inline accessors in compiler plugin
+- ensure error messages appear in UPLC traces
+- `ByteString` now extends `Serializable`
+- security improvements for example validators: AuctionValidator, BettingValidator, Crowdfunding,
+  VaultValidator, VestingValidator
+- use Conway-style certificates for script-based stake registration
+- platform-specific `modPow` for Scala.js and Scala Native compatibility
+
 ## 0.14.2 (2025-12-31)
 
 ### Added
