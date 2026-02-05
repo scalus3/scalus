@@ -1,7 +1,6 @@
 package scalus.testing
 
 import cps.*
-import scalus.cardano.ledger.Transaction
 import scalus.cardano.node.BlockchainReader
 
 import scala.concurrent.ExecutionContext
@@ -14,82 +13,69 @@ case class Violation(
     message: String,
     /** Source location of the failed check. */
     location: SourceLocation,
-    /** Transaction path that led to this violation. */
-    path: Seq[Transaction]
+    /** Action path that led to this violation. */
+    path: Seq[StepAction]
 )
 
-/** Explores contract state space by applying transaction variations at each step.
+/** Explores contract state space by applying actions at each step.
   *
   * ScenarioExplorer performs bounded exploration of contract interactions. At each depth it:
   *   1. Gets a snapshot reader
-  *   2. Calls the transaction generator to get transactions to try
-  *   3. Branches over all transactions
-  *   4. Submits each transaction
-  *   5. On success, recurses to next depth
-  *   6. On transaction rejection, prunes branch
-  *   7. On check failure, captures violation with path
+  *   2. Calls the step function which performs one interaction using normal Scenario operations
+  *   3. Actions ([[Scenario.submit]], [[Scenario.sleep]]) are automatically logged
+  *   4. On successful step, recurses to next depth
+  *   5. On check failure, captures violation with the full action path
+  *   6. On other errors, propagates
   *
-  * Use `Scenario.check` within the transaction generator to verify invariants.
+  * The step function can use [[Scenario.choices]]/[[Scenario.fromCollection]] for branching,
+  * [[Scenario.submit]] for transactions, [[Scenario.sleep]] for time advancement, and
+  * [[Scenario.check]] for invariant verification.
   */
 object ScenarioExplorer {
 
     /** Explore contract interactions up to a maximum depth.
       *
       * @param maxDepth
-      *   maximum number of sequential transactions to explore
-      * @param genTransactions
-      *   function that takes a reader and returns transactions to try; use `Scenario.check` inside
-      *   to verify invariants
+      *   maximum number of steps to explore
+      * @param step
+      *   function that performs one interaction step using normal Scenario operations
       * @return
-      *   Scenario returning None if path succeeded, Some(Violation) if a check failed
+      *   Scenario returning None if all paths succeeded, Some(Violation) if a check failed
       */
     def explore(maxDepth: Int)(
-        genTransactions: BlockchainReader => Scenario[Seq[Transaction]]
+        step: BlockchainReader => Scenario[Unit]
     ): Scenario[Option[Violation]] = {
         given ExecutionContext = ExecutionContext.parasitic
-        exploreRec(maxDepth, genTransactions, path = Seq.empty, depth = 1)
+        exploreRec(maxDepth, step, depth = 1)
     }
 
     private def exploreRec(
         maxDepth: Int,
-        genTransactions: BlockchainReader => Scenario[Seq[Transaction]],
-        path: Seq[Transaction],
+        step: BlockchainReader => Scenario[Unit],
         depth: Int
     )(using ExecutionContext): Scenario[Option[Violation]] = {
-        if depth > maxDepth then
-            // Reached max depth successfully
-            Scenario.scenarioLogicMonad.pure(None)
+        if depth > maxDepth then Scenario.scenarioLogicMonad.pure(None)
         else
-            Scenario.scenarioLogicMonad.flatMapTry(exploreStep(genTransactions, path)) {
-                case scala.util.Success(newPath) =>
-                    // Transaction succeeded, recurse
-                    exploreRec(maxDepth, genTransactions, newPath, depth + 1)
+            Scenario.scenarioLogicMonad.flatMapTry(exploreStep(step)) {
+                case scala.util.Success(_) =>
+                    exploreRec(maxDepth, step, depth + 1)
                 case scala.util.Failure(e: CheckFailure) =>
-                    // Check failed - return violation with path
-                    Scenario.scenarioLogicMonad.pure(
-                      Some(Violation(e.predicate, e.message, e.location, path))
-                    )
+                    // Check failed - capture violation with the full action path
+                    async[Scenario] {
+                        val path = Scenario.actionLog.await
+                        Some(Violation(e.predicate, e.message, e.location, path))
+                    }
                 case scala.util.Failure(e) =>
-                    // Other error - propagate
                     Scenario.error(e)
             }
     }
 
     private def exploreStep(
-        genTransactions: BlockchainReader => Scenario[Seq[Transaction]],
-        path: Seq[Transaction]
-    )(using ExecutionContext): Scenario[Seq[Transaction]] = {
+        step: BlockchainReader => Scenario[Unit]
+    )(using ExecutionContext): Scenario[Unit] = {
         async[Scenario] {
             val reader = Scenario.snapshotReader.await
-            val txs = genTransactions(reader).await
-            val tx = Scenario.fromCollection(txs).await
-            val result = Scenario.submit(tx).await
-            result match
-                case Right(_) =>
-                    path :+ tx
-                case Left(_) =>
-                    // Transaction rejected - prune this branch
-                    Scenario.fail[Seq[Transaction]].await
+            step(reader).await
         }
     }
 }

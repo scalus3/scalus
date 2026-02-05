@@ -551,4 +551,161 @@ class ScenarioTest extends AnyFunSuite {
         assert(caught.isDefined)
         assert(caught.get.message == "x too small")
     }
+
+    // =========================================================================
+    // Action logging
+    // =========================================================================
+
+    test("submit logs StepAction.Submit") {
+        val initial = mkState(Alice, Bob)
+        val scenario = async[Scenario] {
+            val reader = Scenario.snapshotReader.await
+            val tx = Await
+                .result(
+                  TxBuilder(reader.cardanoInfo)
+                      .payTo(Bob.address, Value.ada(10))
+                      .complete(reader, Alice.address),
+                  Duration.Inf
+                )
+                .sign(Alice.signer)
+                .transaction
+            val result = Scenario.submit(tx).await
+            assert(result.isRight)
+            val log = Scenario.actionLog.await
+            log
+        }
+        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        assert(result.isDefined)
+        val log = result.get._2
+        assert(log.size == 1)
+        assert(log.head.isInstanceOf[StepAction.Submit])
+    }
+
+    test("sleep logs StepAction.Wait") {
+        val initial = mkState(Alice)
+        val scenario = async[Scenario] {
+            Scenario.sleep(42).await
+            Scenario.actionLog.await
+        }
+        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        assert(result.isDefined)
+        val log = result.get._2
+        assert(log == Seq(StepAction.Wait(42)))
+    }
+
+    test("action log accumulates in order") {
+        val initial = mkState(Alice, Bob)
+        val scenario = async[Scenario] {
+            Scenario.sleep(5).await
+            val reader = Scenario.snapshotReader.await
+            val tx = Await
+                .result(
+                  TxBuilder(reader.cardanoInfo)
+                      .payTo(Bob.address, Value.ada(10))
+                      .complete(reader, Alice.address),
+                  Duration.Inf
+                )
+                .sign(Alice.signer)
+                .transaction
+            Scenario.submit(tx).await
+            Scenario.sleep(10).await
+            Scenario.actionLog.await
+        }
+        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        assert(result.isDefined)
+        val log = result.get._2
+        assert(log.size == 3)
+        assert(log(0) == StepAction.Wait(5))
+        assert(log(1).isInstanceOf[StepAction.Submit])
+        assert(log(2) == StepAction.Wait(10))
+    }
+
+    // =========================================================================
+    // ScenarioExplorer with step: BlockchainReader => Scenario[Unit]
+    // =========================================================================
+
+    test("ScenarioExplorer.explore with step function") {
+        val initial = mkState(Alice, Bob)
+
+        val scenario = ScenarioExplorer.explore(maxDepth = 2) { reader =>
+            async[Scenario] {
+                val tx = Await
+                    .result(
+                      TxBuilder(reader.cardanoInfo)
+                          .payTo(Bob.address, Value.ada(10))
+                          .complete(reader, Alice.address),
+                      Duration.Inf
+                    )
+                    .sign(Alice.signer)
+                    .transaction
+                val result = Scenario.submit(tx).await
+                result match
+                    case Right(_) => ()
+                    case Left(_)  => Scenario.fail[Unit].await
+            }
+        }
+
+        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        // Should complete without violations
+        assert(results.forall(_._2.isEmpty), "No violations expected")
+    }
+
+    test("ScenarioExplorer.explore captures violation with action path") {
+        val initial = mkState(Alice, Bob)
+
+        val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
+            async[Scenario] {
+                val tx = Await
+                    .result(
+                      TxBuilder(reader.cardanoInfo)
+                          .payTo(Bob.address, Value.ada(10))
+                          .complete(reader, Alice.address),
+                      Duration.Inf
+                    )
+                    .sign(Alice.signer)
+                    .transaction
+                val result = Scenario.submit(tx).await
+                result match
+                    case Right(_) =>
+                        // After 2nd transaction, check fails
+                        val log = Scenario.actionLog.await
+                        Scenario.check(log.size < 2, "too many actions").await
+                    case Left(_) => Scenario.fail[Unit].await
+            }
+        }
+
+        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val violations = results.flatMap(_._2)
+        assert(violations.nonEmpty, "Should find violations")
+        val v = violations.head
+        assert(v.message == "too many actions")
+        assert(v.path.nonEmpty, "Violation should include action path")
+        assert(v.path.forall(_.isInstanceOf[StepAction.Submit]))
+    }
+
+    test("ScenarioExplorer.explore with sleep actions in path") {
+        val initial = mkState(Alice, Bob)
+
+        val scenario = ScenarioExplorer.explore(maxDepth = 2) { reader =>
+            async[Scenario] {
+                Scenario.sleep(10).await
+                val tx = Await
+                    .result(
+                      TxBuilder(reader.cardanoInfo)
+                          .payTo(Bob.address, Value.ada(10))
+                          .complete(reader, Alice.address),
+                      Duration.Inf
+                    )
+                    .sign(Alice.signer)
+                    .transaction
+                val result = Scenario.submit(tx).await
+                result match
+                    case Right(_) => ()
+                    case Left(_)  => Scenario.fail[Unit].await
+            }
+        }
+
+        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        assert(results.forall(_._2.isEmpty), "No violations expected")
+    }
 }

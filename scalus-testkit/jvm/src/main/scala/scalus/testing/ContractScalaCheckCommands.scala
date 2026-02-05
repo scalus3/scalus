@@ -36,7 +36,7 @@ case class CommandsState[S](
   * This adapter enables property-based testing of smart contract interactions by:
   *   - Using [[ImmutableEmulator]] as the abstract model (State)
   *   - Using mutable [[scalus.cardano.node.Emulator]] as the system under test (Sut)
-  *   - Generating commands from [[ContractStepVariations.allVariations]]
+  *   - Generating commands from [[ContractStepVariations.allActions]]
   *   - Checking invariants after successful transactions
   *
   * ==Two Emulators Pattern==
@@ -49,6 +49,12 @@ case class CommandsState[S](
   *
   * This separation allows ScalaCheck to detect discrepancies between model and implementation.
   *
+  * ==Slot Advancement==
+  *
+  * Slot advancement is controlled by overriding [[ContractStepVariations.slotDelays]] in the step.
+  * This returns slot delays that are included as [[StepAction.Wait]] actions alongside transaction
+  * submissions.
+  *
   * ==JVM-Only==
   *
   * This class uses `Await.result` for synchronous execution and is JVM-only. For cross-platform
@@ -60,6 +66,7 @@ case class CommandsState[S](
   *   def extractState(reader: BlockchainReader)(using EC) = ???
   *   def makeBaseTx(reader: BlockchainReader, state: AuctionState)(using EC) = ???
   *   def variations = TxVariations.standard.default(...)
+  *   override def slotDelays(state: AuctionState) = Seq(10L, 100L)
   * }
   *
   * // Without invariant checking
@@ -81,8 +88,6 @@ case class CommandsState[S](
   *   the contract step variations to test
   * @param timeout
   *   timeout for async operations (default: 30 seconds)
-  * @param slotAdvancement
-  *   optional generator for slot advancement between commands
   * @param checkInvariants
   *   async function to check invariants after successful transactions
   * @param ec
@@ -93,8 +98,7 @@ case class CommandsState[S](
 class ContractScalaCheckCommands[S](
     initialEmulator: ImmutableEmulator,
     step: ContractStepVariations[S],
-    timeout: FiniteDuration = Duration(30, "seconds"),
-    slotAdvancement: Option[Gen[Long]] = None
+    timeout: FiniteDuration = Duration(30, "seconds")
 )(
     checkInvariants: (BlockchainReader, S) => scala.concurrent.Future[Prop] =
         (_: BlockchainReader, _: S) => scala.concurrent.Future.successful(Prop.passed)
@@ -118,26 +122,21 @@ class ContractScalaCheckCommands[S](
 
     /** Generate a command based on current abstract state.
       *
-      * Uses [[ContractStepVariations.allVariations]] to generate transaction variations, then
-      * randomly selects one. Optionally includes slot advancement commands.
+      * Uses [[ContractStepVariations.allActions]] to generate actions (transactions + slot delays),
+      * then randomly selects one.
       */
     override def genCommand(state: State): Gen[Command] = {
         val reader = state.emulator.asReader
-        val txsFuture = step.allVariations(reader, state.contractState)
-        val txs = Await.result(txsFuture, timeout)
+        val actionsFuture = step.allActions(reader, state.contractState)
+        val actions = Await.result(actionsFuture, timeout)
 
-        val txCommands: Gen[Command] =
-            if txs.isEmpty then Gen.fail
-            else Gen.oneOf(txs).map(tx => SubmitTxCommand(tx))
-
-        slotAdvancement match {
-            case Some(slotGen) =>
-                Gen.frequency(
-                  (4, txCommands),
-                  (1, slotGen.map(slots => AdvanceSlotCommand(slots)))
-                )
-            case None => txCommands
+        val commands = actions.map {
+            case StepAction.Submit(tx)  => SubmitTxCommand(tx)
+            case StepAction.Wait(slots) => AdvanceSlotCommand(slots)
         }
+
+        if commands.isEmpty then Gen.fail
+        else Gen.oneOf(commands)
     }
 
     /** Create a new system under test from abstract state.
@@ -271,8 +270,6 @@ object ContractScalaCheckCommands {
       *   the contract step variations to test
       * @param timeout
       *   timeout for async operations (default: 30 seconds)
-      * @param slotAdvancement
-      *   optional generator for slot advancement between commands
       * @param checkInvariants
       *   async function to check invariants after successful transactions
       * @return
@@ -281,13 +278,12 @@ object ContractScalaCheckCommands {
     def apply[S](
         initialEmulator: ImmutableEmulator,
         step: ContractStepVariations[S],
-        timeout: FiniteDuration = Duration(30, "seconds"),
-        slotAdvancement: Option[Gen[Long]] = None
+        timeout: FiniteDuration = Duration(30, "seconds")
     )(
         checkInvariants: (BlockchainReader, S) => scala.concurrent.Future[Prop] =
             (_: BlockchainReader, _: S) => scala.concurrent.Future.successful(Prop.passed)
     )(using ExecutionContext): ContractScalaCheckCommands[S] =
-        new ContractScalaCheckCommands[S](initialEmulator, step, timeout, slotAdvancement)(
+        new ContractScalaCheckCommands[S](initialEmulator, step, timeout)(
           checkInvariants
         )
 }

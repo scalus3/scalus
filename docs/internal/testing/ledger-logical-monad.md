@@ -517,6 +517,28 @@ trait ContractStepVariations[S] {
         makeBaseTx(reader, state).flatMap { txTemplate =>
             variations.enumerate(reader, state, txTemplate)
         }
+
+    /** Slot delays to explore at this step. Default: none. */
+    def slotDelays(state: S): Seq[Long] = Seq.empty
+
+    /** All actions (submits + waits) for this step. */
+    def allActions(
+        reader: BlockchainReader,
+        state: S
+    )(using ExecutionContext): Future[Seq[StepAction]] =
+        allVariations(reader, state).map { txs =>
+            txs.map(StepAction.Submit(_)) ++ slotDelays(state).map(StepAction.Wait(_))
+        }
+}
+```
+
+**StepAction** is the universal step currency for both ScenarioExplorer and ContractScalaCheckCommands:
+
+```scala
+sealed trait StepAction
+object StepAction {
+    case class Submit(tx: Transaction) extends StepAction
+    case class Wait(slots: Long) extends StepAction
 }
 ```
 
@@ -601,22 +623,30 @@ async[Scenario] {
 
 ### ScenarioExplorer (✅ Implemented)
 
-Explores contract state space by applying transaction variations at each step:
+Explores contract state space by applying actions at each step. The step function is `BlockchainReader => Scenario[Unit]` — it uses normal Scenario operations (`submit`, `sleep`, `choices`, `check`, etc.) and actions are automatically logged in `ScenarioState.actionLog`.
 
 ```scala
 case class Violation(
     predicate: String,      // failed check expression
     message: String,        // check message
     location: SourceLocation,
-    path: Seq[Transaction]  // transactions that led to this state
+    path: Seq[StepAction]   // actions that led to this state
 )
 
 object ScenarioExplorer {
     def explore(maxDepth: Int)(
-        genTransactions: BlockchainReader => Scenario[Seq[Transaction]]
+        step: BlockchainReader => Scenario[Unit]
     ): Scenario[Option[Violation]]
 }
 ```
+
+**Design rationale:** The step function returns `Scenario[Unit]` instead of returning transactions/actions because:
+- Actions (`submit`, `sleep`) are automatically logged in `ScenarioState.actionLog`
+- The step can use all Scenario primitives naturally: `choices`, `guard`, `check`, `sample`, etc.
+- Invariant checking via `Scenario.check` works inline — no separate callback needed
+- Branching via `Scenario.fromCollection` or `Scenario.choices` works naturally
+
+**Action logging:** `Scenario.submit` and `Scenario.sleep` automatically append to `ScenarioState.actionLog`. The log can be read with `Scenario.actionLog`.
 
 Usage:
 ```scala
@@ -625,7 +655,12 @@ val results = Scenario.runAll(initial)(
         async[Scenario] {
             val state = extractState(reader).await
             Scenario.check(state.balance >= 0).await  // invariant
-            buildTransactionVariations(reader, state)
+            val txs = buildTransactionVariations(reader, state).await
+            val tx = Scenario.fromCollection(txs).await
+            val result = Scenario.submit(tx).await
+            result match
+                case Right(_) => ()
+                case Left(_) => Scenario.fail[Unit].await
         }
     }
 )
@@ -687,6 +722,10 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | StandardTxVariations | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
 | Boundary generators (valuesAround, slotsAround) | ✅ Done | `scalus-testkit/shared/.../testing/StandardTxVariations.scala` |
 | ContractScalaCheckCommands adapter | ✅ Done | `scalus-testkit/jvm/.../testing/ContractScalaCheckCommands.scala` |
+| StepAction (Submit, Wait) | ✅ Done | `scalus-testkit/shared/.../testing/StepAction.scala` |
+| ContractStepVariations.slotDelays/allActions | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
+| ScenarioState.actionLog | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| Scenario.actionLog | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | FutureInScenario convenience layer | ⬚ Planned (optional) | — |
 
 ## Open Questions

@@ -9,10 +9,19 @@ import scalus.cardano.node.*
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
-/** State threaded through Scenario computations. */
+/** State threaded through Scenario computations.
+  *
+  * @param emulator
+  *   the immutable emulator state
+  * @param rng
+  *   ScalaCheck RNG seed for deterministic generation
+  * @param actionLog
+  *   log of actions taken during exploration (newest first for O(1) append)
+  */
 case class ScenarioState(
     emulator: ImmutableEmulator,
-    rng: org.scalacheck.rng.Seed
+    rng: org.scalacheck.rng.Seed,
+    actionLog: List[StepAction] = Nil
 )
 
 object ScenarioState {
@@ -251,24 +260,48 @@ object Scenario {
     /** Raise an error in the current branch. */
     def error[A](e: Throwable): Scenario[A] = scenarioLogicMonad.error(e)
 
+    /** Get the current action log (in chronological order). */
+    def actionLog: Scenario[Seq[StepAction]] =
+        leaf(state => Done(state, state.actionLog.reverse))
+
+    /** Clear the action log and return the cleared entries (in chronological order). */
+    private[testing] def clearActionLog: Scenario[Seq[StepAction]] =
+        modifyAndReturn { s =>
+            (s.copy(actionLog = Nil), s.actionLog.reverse)
+        }
+
     /** Get the current slot number. */
     def now: Scenario[SlotNo] =
         leaf(state => Done(state, state.emulator.currentSlot))
 
     /** Advance the slot by the given number of slots. */
     def sleep(slots: Long): Scenario[Unit] =
-        modify(s => s.copy(emulator = s.emulator.advanceSlot(slots)))
+        modify(s =>
+            s.copy(
+              emulator = s.emulator.advanceSlot(slots),
+              actionLog = StepAction.Wait(slots) :: s.actionLog
+            )
+        )
 
     /** Get the current emulator state (read-only snapshot). */
     def currentEmulator: Scenario[ImmutableEmulator] =
         leaf(state => Done(state, state.emulator))
 
-    /** Submit a transaction, updating the emulator state if successful. */
+    /** Submit a transaction, updating the emulator state if successful.
+      *
+      * On success, the transaction is logged to the action log.
+      */
     def submit(tx: Transaction): Scenario[Either[SubmitError, TransactionHash]] =
         modifyAndReturn { s =>
             s.emulator.submit(tx) match {
                 case Right((txHash, newEmulator)) =>
-                    (s.copy(emulator = newEmulator), Right(txHash))
+                    (
+                      s.copy(
+                        emulator = newEmulator,
+                        actionLog = StepAction.Submit(tx) :: s.actionLog
+                      ),
+                      Right(txHash)
+                    )
                 case Left(err) =>
                     (s, Left(err))
             }
@@ -372,6 +405,27 @@ object Scenario {
       */
     inline def check(inline condition: Boolean, inline message: String = ""): Scenario[Unit] =
         ScenarioCheck.check(condition, message)
+
+    /** Explore contract interactions up to a maximum depth.
+      *
+      * Convenience method that delegates to [[ScenarioExplorer.explore]].
+      *
+      * The step function receives a [[BlockchainReader]] and should perform one step of the
+      * contract interaction using normal Scenario operations ([[submit]], [[sleep]], etc.). Actions
+      * are automatically logged and included in [[Violation.path]] if a check fails.
+      *
+      * @param maxDepth
+      *   maximum number of steps to explore
+      * @param step
+      *   function that performs one interaction step; use [[Scenario.check]] for invariants,
+      *   [[Scenario.choices]]/[[Scenario.fromCollection]] for branching
+      * @return
+      *   Scenario returning None if all paths succeeded, Some(Violation) if a check failed
+      */
+    def explore(maxDepth: Int)(
+        step: BlockchainReader => Scenario[Unit]
+    ): Scenario[Option[Violation]] =
+        ScenarioExplorer.explore(maxDepth)(step)
 
     // =========================================================================
     // Runners

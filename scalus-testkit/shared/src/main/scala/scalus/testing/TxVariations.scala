@@ -171,4 +171,24 @@ trait ContractStepVariations[S] {
         makeBaseTx(reader, state).flatMap { txTemplate =>
             variations.enumerate(reader, state, txTemplate)
         }
+
+    /** Slot delays to explore at this step. Default: none.
+      *
+      * Override to include [[StepAction.Wait]] actions in [[allActions]]. Each delay creates a
+      * separate branch that advances the slot before the next step.
+      */
+    def slotDelays(state: S): Seq[Long] = Seq.empty
+
+    /** All actions (submits + waits) for this step.
+      *
+      * Combines transaction variations (as [[StepAction.Submit]]) with slot delays (as
+      * [[StepAction.Wait]]).
+      */
+    def allActions(
+        reader: BlockchainReader,
+        state: S
+    )(using ExecutionContext): Future[Seq[StepAction]] =
+        allVariations(reader, state).map { txs =>
+            txs.map(StepAction.Submit(_)) ++ slotDelays(state).map(StepAction.Wait(_))
+        }
 }

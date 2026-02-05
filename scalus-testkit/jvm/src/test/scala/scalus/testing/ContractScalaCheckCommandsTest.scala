@@ -1,6 +1,6 @@
 package scalus.testing
 
-import org.scalacheck.{Gen, Prop}
+import org.scalacheck.Prop
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.node.{BlockchainReader, NodeSubmitError, SubmitError}
@@ -49,6 +49,11 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
                 }
             }
         }
+    }
+
+    /** A simple contract step with slot delays for testing Wait actions. */
+    class TransferStepWithDelays extends SimpleTransferStep {
+        override def slotDelays(state: TransferState): Seq[Long] = Seq(10L, 50L, 100L)
     }
 
     /** A contract step that generates multiple transaction variations. */
@@ -112,13 +117,11 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
         assert(commands != null)
     }
 
-    test("ContractScalaCheckCommands with slot advancement") {
+    test("ContractScalaCheckCommands with slot delays") {
         val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
-        val step = new SimpleTransferStep
-        val slotGen = Gen.choose(1L, 100L)
+        val step = new TransferStepWithDelays
 
-        val commands =
-            ContractScalaCheckCommands(emulator, step, slotAdvancement = Some(slotGen))()
+        val commands = ContractScalaCheckCommands(emulator, step)()
 
         assert(commands != null)
     }
@@ -160,12 +163,10 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
         )
     }
 
-    test("genCommand with slot advancement generates both command types") {
+    test("genCommand with slot delays generates both command types") {
         val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
-        val step = new SimpleTransferStep
-        val slotGen = Gen.choose(1L, 10L)
-        val commands =
-            ContractScalaCheckCommands(emulator, step, slotAdvancement = Some(slotGen))()
+        val step = new TransferStepWithDelays
+        val commands = ContractScalaCheckCommands(emulator, step)()
 
         val stateOpt = commands.genInitialState.sample
         assert(stateOpt.isDefined)
@@ -318,10 +319,8 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
 
     test("AdvanceSlotCommand advances slot in sut") {
         val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
-        val step = new SimpleTransferStep
-        val slotGen = Gen.const(100L)
-        val commands =
-            ContractScalaCheckCommands(emulator, step, slotAdvancement = Some(slotGen))()
+        val step = new TransferStepWithDelays
+        val commands = ContractScalaCheckCommands(emulator, step)()
 
         val stateOpt = commands.genInitialState.sample
         assert(stateOpt.isDefined)
@@ -426,5 +425,35 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
         )
 
         assert(!result.passed, "Property test should fail with failing invariant")
+    }
+
+    // =========================================================================
+    // allActions tests
+    // =========================================================================
+
+    test("allActions returns Submit actions without slot delays") {
+        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val step = new SimpleTransferStep
+        val reader = emulator.asReader
+        val state = Await.result(step.extractState(reader), Duration.Inf)
+        val actions = Await.result(step.allActions(reader, state), Duration.Inf)
+
+        assert(actions.nonEmpty, "Should have actions")
+        assert(actions.forall(_.isInstanceOf[StepAction.Submit]), "All actions should be Submit")
+    }
+
+    test("allActions returns both Submit and Wait actions with slot delays") {
+        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val step = new TransferStepWithDelays
+        val reader = emulator.asReader
+        val state = Await.result(step.extractState(reader), Duration.Inf)
+        val actions = Await.result(step.allActions(reader, state), Duration.Inf)
+
+        val submits = actions.collect { case s: StepAction.Submit => s }
+        val waits = actions.collect { case w: StepAction.Wait => w }
+
+        assert(submits.nonEmpty, "Should have Submit actions")
+        assert(waits.size == 3, "Should have 3 Wait actions (10, 50, 100)")
+        assert(waits.map(_.slots).toSet == Set(10L, 50L, 100L))
     }
 }
