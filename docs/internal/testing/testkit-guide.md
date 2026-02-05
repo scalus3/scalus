@@ -10,6 +10,9 @@ The Scalus testkit provides a framework for testing Cardano smart contracts by e
 
 Then run with ScalaCheck (`forAll`, `Commands`) or Scenario (exhaustive exploration), adding consumer-specific assertions.
 
+Optionally:
+4. **`slotDelays`** — slot delays to explore (e.g., `Seq(10L, 100L)`) for time-dependent testing
+
 ## Quick Start
 
 ### 1. Define Contract State
@@ -134,37 +137,48 @@ test("bid boundary values") {
 
 #### ScalaCheck Commands
 
-Stateful property testing — generates sequences of commands, with shrinking.
+Stateful property testing — generates sequences of commands, with shrinking. Uses `step.allActions` to generate both transaction submissions and slot advancements.
 
 ```scala
 test("auction command sequence") {
-    ContractScalaCheckCommands(initialEmulator, AuctionStep,
-        postcondition = (state, result) => {
-            val s = AuctionStep.extractState(state.asProvider).value.get.get
-            Prop(s.currentBid >= 0)
-        }
-    ).property(threadCount = 2).check()
+    val commands = ContractScalaCheckCommands(initialEmulator, AuctionStep) {
+        (reader, state) => Future.successful(Prop(state.currentBid >= 0))
+    }
+    commands.property().check()
 }
 ```
 
+Slot advancement is controlled by overriding `slotDelays` on the step — no need to pass a slot generator to `ContractScalaCheckCommands`.
+
 #### Scenario — Exhaustive Exploration
 
-Explores all combinations of boundary values at bounded depth using a logic monad.
+Explores all combinations of boundary values at bounded depth using a logic monad. The step function receives a `BlockchainReader` and performs one interaction using normal Scenario operations. Actions (`submit`, `sleep`) are automatically logged.
 
 ```scala
 test("auction exhaustive boundaries") {
     val scenario = async[Scenario] {
         setupAuction(Alice, minBid = 100, deadline = 200).await
 
-        ScenarioExplorer.explore(maxDepth = 4, AuctionStep,
-            check = (_, state, depth) =>
-                assert(state.currentBid >= 0, s"negative bid at depth $depth")
-        ).await
+        val violation = Scenario.explore(maxDepth = 4) { reader =>
+            async[Scenario] {
+                val state = AuctionStep.extractState(reader).await
+                Scenario.check(state.currentBid >= 0, "negative bid").await
+                val txs = AuctionStep.allVariations(reader, state).await
+                val tx = Scenario.fromCollection(txs).await
+                val result = Scenario.submit(tx).await
+                result match
+                    case Right(_) => ()
+                    case Left(_) => Scenario.fail[Unit].await
+            }
+        }.await
+        violation.foreach(v => fail(s"Violation: ${v.message} at ${v.location}, path: ${v.path}"))
     }
 
     Scenario.runAll(initialState)(scenario)
 }
 ```
+
+If a `Scenario.check` fails, `ScenarioExplorer` returns a `Violation` containing the action path (all `StepAction.Submit` and `StepAction.Wait` entries) that led to the failure.
 
 ## Defining Variations
 
@@ -323,7 +337,7 @@ See [tx-variations.md](tx-variations.md) for detailed documentation of each vari
 
 ## ContractStepVariations
 
-A trait that bundles the three things that travel together:
+A trait that bundles the things that travel together:
 
 ```scala
 trait ContractStepVariations[S] {
@@ -331,15 +345,32 @@ trait ContractStepVariations[S] {
     def makeBaseTx(reader: BlockchainReader, state: S)(using ExecutionContext): Future[TxTemplate]
     def variations: TxVariations[S]
 
-    // convenience method — builds template and enumerates variations
-    def allVariations(
-        reader: BlockchainReader,
-        state: S
-    )(using ExecutionContext): Future[Seq[Transaction]]
+    // convenience — builds template and enumerates variations
+    def allVariations(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[Transaction]]
+
+    // slot delays to explore at this step (default: empty)
+    def slotDelays(state: S): Seq[Long] = Seq.empty
+
+    // all actions — combines Submit(tx) for each variation + Wait(slots) for each delay
+    def allActions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
 }
 ```
 
-Implement as an `object` for your contract:
+### StepAction
+
+`StepAction` is the universal step currency consumed by both `ScenarioExplorer` and `ContractScalaCheckCommands`:
+
+```scala
+sealed trait StepAction
+object StepAction {
+    case class Submit(tx: Transaction) extends StepAction
+    case class Wait(slots: Long) extends StepAction
+}
+```
+
+`allActions` returns `Submit` for each transaction variation plus `Wait` for each slot delay. This means time-dependent testing is configured on the step, not on the consumer.
+
+### Implementing a Step
 
 ```scala
 object HtlcStep extends ContractStepVariations[HtlcState] {
@@ -351,6 +382,9 @@ object HtlcStep extends ContractStepVariations[HtlcState] {
         redeemer = _ => HtlcRedeemer.Unlock.toData,
         script = htlcScript
     )
+
+    // Time-dependent: explore advancing 10 and 100 slots
+    override def slotDelays(state: HtlcState) = Seq(10L, 100L)
 }
 ```
 
@@ -394,9 +428,18 @@ Test sequences of actions where each step changes the state:
 ```scala
 val scenario = async[Scenario] {
     setupContract(...).await
-    ScenarioExplorer.explore(maxDepth = 3, MyStep,
-        check = (_, state, _) => assert(invariant(state)))
-    .await
+    Scenario.explore(maxDepth = 3) { reader =>
+        async[Scenario] {
+            val state = MyStep.extractState(reader).await
+            Scenario.check(invariant(state)).await
+            val txs = MyStep.allVariations(reader, state).await
+            val tx = Scenario.fromCollection(txs).await
+            val result = Scenario.submit(tx).await
+            result match
+                case Right(_) => ()
+                case Left(_) => Scenario.fail[Unit].await
+        }
+    }.await
 }
 ```
 
