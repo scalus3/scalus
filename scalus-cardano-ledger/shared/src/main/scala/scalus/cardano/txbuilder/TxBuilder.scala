@@ -1580,7 +1580,8 @@ case class TxBuilder(
                   evaluator
                 ) match {
                     case Right(balancedCtx) =>
-                        if txInputs.toSeq.isEmpty && pool.remainingForInputs.nonEmpty then {
+                        if balancedCtx.transaction.body.value.inputs.toSeq.isEmpty && pool.remainingForInputs.nonEmpty
+                        then {
                             // Force selection of at least one input and retry
                             // This is necessary because every tx must have at least 1 input.
                             val minimalInput = pool.selectForValue(Value.lovelace(1))
