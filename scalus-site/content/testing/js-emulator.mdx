@@ -1,0 +1,242 @@
+---
+title: JavaScript/TypeScript Emulator
+sidebarTitle: JS/TS Emulator
+description: Use the Scalus Emulator in JavaScript or TypeScript for fast Cardano smart contract testing. Submit transactions, validate scripts, and manage UTxO state without a real node.
+---
+
+import { Callout } from 'nextra/components'
+
+# JavaScript/TypeScript Emulator
+
+The `Emulator` class provides an in-memory Cardano node for JavaScript/TypeScript. Submit transactions, execute Plutus scripts, and validate against ledger rules — all without a real node.
+
+## What It Validates
+
+Scalus implements a ledger framework that emulates an in-memory node without consensus. Transactions are validated as if submitted to a real node:
+
+| Validation | Description |
+|------------|-------------|
+| **UTxO Rules** | Input existence, double-spend prevention, value conservation |
+| **Plutus Scripts** | V1, V2, V3 script execution with cost model evaluation |
+| **Staking** | Stake registration, delegation, reward withdrawals |
+| **Native Scripts** | Multisig and timelock validation |
+| **Fees & Collateral** | Fee calculation, collateral handling on script failure |
+| **Signatures** | Witness verification for required signers |
+
+<Callout type="info">
+  The emulator runs the same [ledger rules](/docs/ledger/ledger-rules) as the JVM version — Phase 1 (transaction structure) and Phase 2 (script execution) validation.
+</Callout>
+
+## Installation
+
+```bash
+npm install scalus
+```
+
+## Quick Start
+
+```typescript
+import { Emulator, SlotConfig } from "scalus";
+
+/*
+`withAddresses` creates an emulator where every specified address has
+a UTxO with the specified lovelace amount.
+*/
+const emulator = Emulator.withAddresses(
+  ["addr_test1qr...", "addr_test1qp..."],
+  SlotConfig.preview,
+  10_000_000
+);
+
+// Encode your transaction to CBOR with your favorite encoder and submit the result to the Scalus emulator.
+const result = emulator.submitTx(txCborBytes);
+
+if (result.isSuccess) {
+  console.log(`Transaction submitted: ${result.txHash}`);
+} else {
+  console.log(`Failed: ${result.error}`);
+  if (result.logs) {
+    console.log(`Script logs: ${result.logs.join("\n")}`);
+  }
+}
+```
+
+## Creating an Emulator
+
+### With Funded Addresses
+
+```typescript
+const emulator = Emulator.withAddresses(
+  [aliceAddress, bobAddress],
+  SlotConfig.mainnet,
+  BigInt(50_000_000_000) // 50 000 ADA
+);
+```
+
+### With Custom UTxOs
+
+For more control, provide CBOR-encoded UTxOs directly:
+
+```typescript
+// UTxOs as CBOR-encoded Map<TransactionInput, TransactionOutput>
+const emulator = new Emulator(initialUtxosCbor, SlotConfig.preview);
+```
+
+## Slot Configuration
+
+Use the built-in configurations for time conversion:
+
+```typescript
+SlotConfig.mainnet  // Mainnet (Shelley era start)
+SlotConfig.preview  // Preview testnet
+SlotConfig.preprod  // Preprod testnet
+
+// Or custom configuration
+const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
+```
+
+## API Reference
+
+### `submitTx(txCborBytes: Uint8Array): SubmitResult`
+
+Submit a CBOR-encoded transaction. Returns:
+
+```typescript
+interface SubmitResult {
+  isSuccess: boolean;
+  txHash?: string;      // On success
+  error?: string;       // On failure
+  logs?: string[];      // Script trace logs on failure
+}
+```
+
+### `getUtxosForAddress(addressBech32: string): Uint8Array[]`
+
+Get UTxOs for an address. Each entry is a CBOR-encoded `Map<Input, Output>`:
+
+```typescript
+const utxos = emulator.getUtxosForAddress(aliceAddress);
+// Decode with cbor-x or similar
+```
+
+### `getAllUtxos(): Uint8Array[]`
+
+Get all UTxOs in the emulator state.
+
+### `getUtxosCbor(): Uint8Array`
+
+Get the entire UTxO set as a single CBOR-encoded map.
+
+### `setSlot(slot: number): void`
+
+Advance the current slot for time-based validation:
+
+```typescript
+emulator.setSlot(1000);
+```
+
+### `snapshot(): Emulator`
+
+Create a point-in-time copy:
+
+```typescript
+const checkpoint = emulator.snapshot();
+// ... submit transactions ...
+// checkpoint still has original state
+```
+
+## Example: Simple Payment
+
+```typescript
+import { Emulator, SlotConfig } from "scalus";
+import { Decoder } from "cbor-x";
+
+const decoder = new Decoder({ mapsAsObjects: false });
+
+function hexToBytes(hex: string): Uint8Array {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+// Alice has 100 ADA, sends 25 ADA to Bob
+const initialUtxosCborHex = "a282582000000000000000000000000000000000000000000000000000000000000000000082581d60c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81a05f5e10082582000000000000000000000000000000000000000000000000000000000000000000182581d60c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81a00989680";
+
+const emulator = new Emulator(
+  hexToBytes(initialUtxosCborHex),
+  SlotConfig.preview
+);
+
+// Build transaction with your preferred library, get CBOR bytes
+const txCborBytes = buildTransaction(); // Your transaction builder
+
+const result = emulator.submitTx(txCborBytes);
+console.log(result.isSuccess ? `Success: ${result.txHash}` : `Error: ${result.error}`);
+```
+
+## Working with UTxOs
+
+The emulator returns UTxOs as CBOR-encoded data. Decode with `cbor-x`:
+
+```typescript
+import { Decoder } from "cbor-x";
+
+const decoder = new Decoder({ mapsAsObjects: false });
+
+const utxos = emulator.getUtxosForAddress(address);
+for (const utxoCbor of utxos) {
+  const decoded = decoder.decode(utxoCbor);
+  // decoded is Map<TransactionInput, TransactionOutput>
+  for (const [input, output] of decoded) {
+    console.log("Input:", input);
+    console.log("Output:", output);
+  }
+}
+```
+
+## Integration with Lucid
+
+Use the emulator's UTxO state with Lucid Evolution for transaction building:
+
+```typescript
+// Get UTxOs from emulator
+const utxosCbor = emulator.getUtxosCbor();
+
+// Build transaction with Lucid
+const tx = await lucid.newTx()
+  .pay.ToAddress(bobAddress, { lovelace: 25_000_000n })
+  .complete();
+
+const signedTx = await tx.sign.withWallet().complete();
+const txCbor = signedTx.toCBOR();
+
+// Submit to emulator instead of network
+const result = emulator.submitTx(hexToBytes(txCbor));
+```
+
+## Script Evaluation
+
+For evaluating Plutus scripts without submitting transactions, use `evalPlutusScripts`:
+
+```typescript
+import { Scalus, SlotConfig } from "scalus";
+
+const redeemers = Scalus.evalPlutusScripts(
+  txCborBytes,
+  utxoCborBytes,
+  SlotConfig.preview,
+  costModels // [v1CostModel, v2CostModel, v3CostModel]
+);
+
+for (const redeemer of redeemers) {
+  console.log(`${redeemer.tag}[${redeemer.index}]: ${redeemer.budget.memory} mem, ${redeemer.budget.steps} steps`);
+}
+```
+
+## See Also
+
+- [Emulator (JVM)](/docs/testing/emulator) — Full Scala API documentation
+- [Multiplatform](/docs/multiplatform) — Platform support overview
+- [`scalus` npm package](https://www.npmjs.com/package/scalus) — Full JavaScript/TypeScript API

@@ -3,5 +3,6 @@ export default {
   'unit-testing': 'Unit Testing',
   debugging: 'Debugging',
   emulator: 'Emulator',
+  'js-emulator': 'JS/TS Emulator',
   'local-devnet': 'Local Devnet',
 }
