@@ -12,7 +12,7 @@ on:
   workflow_dispatch: # Manual trigger as fallback
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 40
     permissions:
       contents: read
