@@ -4,7 +4,7 @@ import org.scalacheck.commands.Commands
 import org.scalacheck.rng.Seed
 import org.scalacheck.{Gen, Prop}
 import scalus.cardano.ledger.{Transaction, TransactionHash}
-import scalus.cardano.node.{BlockchainReader, SubmitError}
+import scalus.cardano.node.{BlockchainReader, EmulatorBase, SubmitError}
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext}
@@ -264,8 +264,8 @@ object ContractScalaCheckCommands {
 
     /** Create a ContractScalaCheckCommands adapter.
       *
-      * @param initialEmulator
-      *   the starting emulator state with funded addresses
+      * @param emulator
+      *   the starting emulator state with funded addresses (will be converted to ImmutableEmulator)
       * @param step
       *   the contract step variations to test
       * @param timeout
@@ -276,14 +276,14 @@ object ContractScalaCheckCommands {
       *   a Commands instance ready for property testing
       */
     def apply[S](
-        initialEmulator: ImmutableEmulator,
+        emulator: EmulatorBase,
         step: ContractStepVariations[S],
         timeout: FiniteDuration = Duration(30, "seconds")
     )(
         checkInvariants: (BlockchainReader, S) => scala.concurrent.Future[Prop] =
             (_: BlockchainReader, _: S) => scala.concurrent.Future.successful(Prop.passed)
     )(using ExecutionContext): ContractScalaCheckCommands[S] =
-        new ContractScalaCheckCommands[S](initialEmulator, step, timeout)(
+        new ContractScalaCheckCommands[S](ImmutableEmulator.fromEmulator(emulator), step, timeout)(
           checkInvariants
         )
 }

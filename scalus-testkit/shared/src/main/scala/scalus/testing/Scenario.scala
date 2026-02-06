@@ -31,6 +31,16 @@ object ScenarioState {
       emulator = ImmutableEmulator.empty,
       rng = org.scalacheck.rng.Seed(0L)
     )
+
+    /** Create a ScenarioState from an EmulatorBase.
+      *
+      * @param emulator
+      *   the emulator to convert (will be snapshotted as ImmutableEmulator)
+      * @param rng
+      *   ScalaCheck RNG seed for deterministic generation
+      */
+    def apply(emulator: EmulatorBase, rng: org.scalacheck.rng.Seed): ScenarioState =
+        ScenarioState(ImmutableEmulator.fromEmulator(emulator), rng)
 }
 
 /** A non-deterministic, state-threading monad for testing Cardano transaction scenarios.
@@ -450,8 +460,23 @@ object Scenario {
         logicStreamMonad.mObserveOne(eval(injectState(initial, s)))
 
     // =========================================================================
-    // CpsMonadConversion for Gen[A] => Scenario[A]
+    // CpsMonadConversion instances
     // =========================================================================
+
+    /** Enables implicit conversion from Future to Scenario via WaitFuture.
+      *
+      * Allows writing:
+      * {{{
+      *   async[Scenario] {
+      *     val slot = reader.currentSlot.await // Future[SlotNo] -> Scenario[SlotNo]
+      *     ...
+      *   }
+      * }}}
+      */
+    given futureToScenarioConversion: CpsMonadConversion[Future, Scenario] with {
+        def apply[A](fa: Future[A]): Scenario[A] =
+            leaf(state => WaitFuture(fa.map(a => Done(state, a))(ExecutionContext.parasitic)))
+    }
 
     /** Enables implicit conversion from ScalaCheck Gen to Scenario.
       *

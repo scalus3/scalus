@@ -45,8 +45,17 @@ object Scenario {
 
 case class ScenarioState(
     emulator: ImmutableEmulator,
-    rng: Seed
+    rng: Seed,
+    actionLog: List[StepAction] = Nil
 )
+
+object ScenarioState {
+    val empty: ScenarioState = ScenarioState(ImmutableEmulator.empty, Seed(0L))
+
+    // Create from mutable Emulator — conversion happens internally
+    def apply(emulator: EmulatorBase, rng: Seed): ScenarioState =
+        ScenarioState(ImmutableEmulator.fromEmulator(emulator), rng)
+}
 ```
 
 **ADT cases:**
@@ -550,8 +559,8 @@ For ScalaCheck, `ContractScalaCheckCommands` handles `Await.result` internally �
 
 ```scala
 // Mode 1: ScalaCheck Commands — JVM-only, stateful property testing
-// Await.result handled internally
-ContractScalaCheckCommands(initialEmulator, AuctionStep).property()
+// Pass Emulator directly — conversion to ImmutableEmulator happens internally
+ContractScalaCheckCommands(emulator, AuctionStep).property()
 
 // Mode 2: Scenario — cross-platform, exhaustive branching
 async[Scenario] {
@@ -596,6 +605,12 @@ object Scenario {
 
 given CpsMonadConversion[Gen, Scenario] with {
     def apply[A](ga: Gen[A]): Scenario[A] = Scenario.sample(ga)
+}
+
+// Also Future can be awaited inside async[Scenario]
+given CpsMonadConversion[Future, Scenario] with {
+    def apply[A](fa: Future[A]): Scenario[A] =
+        leaf(state => WaitFuture(fa.map(a => Done(state, a))))
 }
 ```
 
@@ -726,13 +741,15 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | ContractStepVariations.slotDelays/allActions | ✅ Done | `scalus-testkit/shared/.../testing/TxVariations.scala` |
 | ScenarioState.actionLog | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.actionLog | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| FutureInScenario convenience layer | ⬚ Planned (optional) | — |
+| CpsMonadConversion[Future, Scenario] | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| ScenarioState.apply(EmulatorBase, Seed) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| ContractScalaCheckCommands accepts EmulatorBase | ✅ Done | `scalus-testkit/jvm/.../testing/ContractScalaCheckCommands.scala` |
 
 ## Open Questions
 
 1. ~~**Provider approach**~~ - ✅ Resolved: Tagless-final chosen, `BlockchainProviderTF[F[_]]` trait created as first step
 
-2. **FutureInScenario convenience layer** - Should we add a convenience layer that allows existing `Future`-based endpoint code to work in Scenario tests without modification? This would use runtime type detection but provide a smoother migration path for existing code.
+2. ~~**FutureInScenario convenience layer**~~ - ✅ Resolved: `CpsMonadConversion[Future, Scenario]` allows `Future.await` inside `async[Scenario]` blocks. Uses `leaf` + `WaitFuture` to properly thread state.
 
 3. ~~**Gen.domain for exhaustive enumeration**~~ - ✅ Resolved: `TxVariations` uses `enumerate` (returns `Seq`) as primary method, `gen` is derived. `TxSamplingVariations` inverts this for large/continuous domains (gen-first, enumerate samples N values). No need to extract domain from `Gen`.
 

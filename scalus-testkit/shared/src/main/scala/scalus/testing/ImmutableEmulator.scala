@@ -62,10 +62,12 @@ case class ImmutableEmulator(
 
     /** Create a read-only [[BlockchainReader]] snapshot.
       *
-      * This provides read-only access to the emulator's state without submit capability.
+      * This provides read-only access to the emulator's state without submit capability. Uses
+      * `ExecutionContext.global` to avoid deadlocks when callers use `Await.result` on the returned
+      * futures.
       */
     def asReader: BlockchainReader = new BlockchainReader {
-        override def executionContext: ExecutionContext = ExecutionContext.parasitic
+        override def executionContext: ExecutionContext = ExecutionContext.global
         override def cardanoInfo: CardanoInfo = ImmutableEmulator.this.cardanoInfo
         override def fetchLatestParams: Future[ProtocolParams] =
             Future.successful(env.params)
@@ -86,7 +88,7 @@ case class ImmutableEmulator(
       */
     @deprecated("Use asReader instead", "0.14.2")
     def asProvider: BlockchainProvider = new BlockchainProvider {
-        override def executionContext: ExecutionContext = ExecutionContext.parasitic
+        override def executionContext: ExecutionContext = ExecutionContext.global
         override def cardanoInfo: CardanoInfo = ImmutableEmulator.this.cardanoInfo
         override def fetchLatestParams: Future[ProtocolParams] =
             Future.successful(env.params)

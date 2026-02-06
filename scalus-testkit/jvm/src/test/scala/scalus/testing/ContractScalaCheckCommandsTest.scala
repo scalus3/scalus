@@ -3,7 +3,7 @@ package scalus.testing
 import org.scalacheck.Prop
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
-import scalus.cardano.node.{BlockchainReader, NodeSubmitError, SubmitError}
+import scalus.cardano.node.{BlockchainReader, Emulator, NodeSubmitError, SubmitError}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 
@@ -99,7 +99,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("ContractScalaCheckCommands can be constructed") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -107,7 +107,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("ContractScalaCheckCommands with invariant checker") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
 
         val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
@@ -118,7 +118,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("ContractScalaCheckCommands with slot delays") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new TransferStepWithDelays
 
         val commands = ContractScalaCheckCommands(emulator, step)()
@@ -131,7 +131,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("genInitialState produces valid state") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -148,7 +148,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("genCommand generates commands from variations") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -164,7 +164,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("genCommand with slot delays generates both command types") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new TransferStepWithDelays
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -181,7 +181,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("genCommand with multiple variations selects from all") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new MultiVariationStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -203,7 +203,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("newSut creates mutable emulator from state") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -216,7 +216,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("destroySut is a no-op") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -233,7 +233,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("SubmitTxCommand.run executes transaction on sut") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -252,7 +252,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("SubmitTxCommand.nextState updates emulator on success") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -272,7 +272,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("SubmitTxCommand.postCondition passes on success without invariants") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -293,7 +293,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("SubmitTxCommand.postCondition passes on transaction rejection") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -318,7 +318,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("AdvanceSlotCommand advances slot in sut") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new TransferStepWithDelays
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -336,7 +336,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("AdvanceSlotCommand.nextState advances slot in state") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -351,7 +351,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("AdvanceSlotCommand.preCondition rejects non-positive slots") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -373,7 +373,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("property().check() runs without errors") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
         val commands = ContractScalaCheckCommands(emulator, step)()
 
@@ -389,7 +389,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("property with invariant checking") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
 
         var invariantCheckCount = 0
@@ -410,7 +410,7 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     }
 
     test("property with failing invariant") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
 
         val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
@@ -432,22 +432,20 @@ class ContractScalaCheckCommandsTest extends AnyFunSuite {
     // =========================================================================
 
     test("allActions returns Submit actions without slot delays") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new SimpleTransferStep
-        val reader = emulator.asReader
-        val state = Await.result(step.extractState(reader), Duration.Inf)
-        val actions = Await.result(step.allActions(reader, state), Duration.Inf)
+        val state = Await.result(step.extractState(emulator), Duration.Inf)
+        val actions = Await.result(step.allActions(emulator, state), Duration.Inf)
 
         assert(actions.nonEmpty, "Should have actions")
         assert(actions.forall(_.isInstanceOf[StepAction.Submit]), "All actions should be Submit")
     }
 
     test("allActions returns both Submit and Wait actions with slot delays") {
-        val emulator = ImmutableEmulator.withAddresses(Seq(Alice.address, Bob.address))
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
         val step = new TransferStepWithDelays
-        val reader = emulator.asReader
-        val state = Await.result(step.extractState(reader), Duration.Inf)
-        val actions = Await.result(step.allActions(reader, state), Duration.Inf)
+        val state = Await.result(step.extractState(emulator), Duration.Inf)
+        val actions = Await.result(step.allActions(emulator, state), Duration.Inf)
 
         val submits = actions.collect { case s: StepAction.Submit => s }
         val waits = actions.collect { case w: StepAction.Wait => w }

@@ -141,7 +141,16 @@ Stateful property testing — generates sequences of commands, with shrinking. U
 
 ```scala
 test("auction command sequence") {
-    val commands = ContractScalaCheckCommands(initialEmulator, AuctionStep) {
+    val emulator = Emulator(
+        initialUtxos = Map(
+            Input(genesisHash, 0) -> Output(Alice.address, Value.ada(1000)),
+            Input(genesisHash, 1) -> Output(Bob.address, Value.ada(1000))
+        )
+    )
+    // Setup auction...
+
+    // Pass Emulator directly — conversion to ImmutableEmulator happens internally
+    val commands = ContractScalaCheckCommands(emulator, AuctionStep) {
         (reader, state) => Future.successful(Prop(state.currentBid >= 0))
     }
     commands.property().check()
@@ -156,25 +165,31 @@ Explores all combinations of boundary values at bounded depth using a logic mona
 
 ```scala
 test("auction exhaustive boundaries") {
-    val scenario = async[Scenario] {
-        setupAuction(Alice, minBid = 100, deadline = 200).await
+    val emulator = Emulator(...)
+    // Setup auction...
 
-        val violation = Scenario.explore(maxDepth = 4) { reader =>
-            async[Scenario] {
-                val state = AuctionStep.extractState(reader).await
-                Scenario.check(state.currentBid >= 0, "negative bid").await
-                val txs = AuctionStep.allVariations(reader, state).await
-                val tx = Scenario.fromCollection(txs).await
-                val result = Scenario.submit(tx).await
-                result match
-                    case Right(_) => ()
-                    case Left(_) => Scenario.fail[Unit].await
-            }
-        }.await
-        violation.foreach(v => fail(s"Violation: ${v.message} at ${v.location}, path: ${v.path}"))
+    // Create ScenarioState directly from Emulator
+    val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
+
+    val scenario = ScenarioExplorer.explore(maxDepth = 4) { reader =>
+        async[Scenario] {
+            // Future.await works inside async[Scenario] via futureToScenarioConversion
+            val currentSlot = reader.currentSlot.await
+            val state = AuctionStep.extractState(reader).await
+
+            Scenario.check(state.currentBid >= 0, "negative bid").await
+            val txs = AuctionStep.allVariations(reader, state).await
+            val tx = Scenario.fromCollection(txs).await
+            val result = Scenario.submit(tx).await
+            result match
+                case Right(_) => ()
+                case Left(_) => Scenario.fail[Unit].await
+        }
     }
 
-    Scenario.runAll(initialState)(scenario)
+    val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+    val violations = results.flatMap(_._2)
+    assert(violations.isEmpty, s"Found violations: ${violations.mkString("\n")}")
 }
 ```
 
@@ -426,21 +441,28 @@ test("bid boundaries") {
 Test sequences of actions where each step changes the state:
 
 ```scala
-val scenario = async[Scenario] {
-    setupContract(...).await
-    Scenario.explore(maxDepth = 3) { reader =>
-        async[Scenario] {
-            val state = MyStep.extractState(reader).await
-            Scenario.check(invariant(state)).await
-            val txs = MyStep.allVariations(reader, state).await
-            val tx = Scenario.fromCollection(txs).await
-            val result = Scenario.submit(tx).await
-            result match
-                case Right(_) => ()
-                case Left(_) => Scenario.fail[Unit].await
-        }
-    }.await
+val emulator = Emulator(...)
+// Setup contract...
+
+val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
+
+val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
+    async[Scenario] {
+        // Future.await works inside async[Scenario]
+        val state = MyStep.extractState(reader).await
+        Scenario.check(invariant(state)).await
+        val txs = MyStep.allVariations(reader, state).await
+        val tx = Scenario.fromCollection(txs).await
+        val result = Scenario.submit(tx).await
+        result match
+            case Right(_) => ()
+            case Left(_) => Scenario.fail[Unit].await
+    }
 }
+
+val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+val violations = results.flatMap(_._2)
+assert(violations.isEmpty)
 ```
 
 ### Pattern: Attack Simulation
@@ -569,3 +591,57 @@ val scenario = async[Scenario] {
     assert(lateResult.isSuccess)
 }
 ```
+
+## API Reference
+
+### ScenarioState
+
+Create a `ScenarioState` to run scenarios:
+
+```scala
+// From Emulator (mutable) — recommended
+val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
+
+// From ImmutableEmulator (explicit)
+val initial = ScenarioState(immutableEmulator, org.scalacheck.rng.Seed(42L))
+```
+
+### ContractScalaCheckCommands
+
+Create a Commands instance for ScalaCheck stateful testing:
+
+```scala
+// Pass Emulator directly — conversion happens internally
+val commands = ContractScalaCheckCommands(emulator, step) {
+    (reader, state) => Future.successful(Prop.passed)
+}
+
+val result = org.scalacheck.Test.check(
+    org.scalacheck.Test.Parameters.default.withMinSuccessfulTests(10),
+    commands.property()
+)
+assert(result.passed)
+```
+
+### Future.await in Scenario
+
+Inside `async[Scenario]` blocks, you can `.await` on `Future` values directly:
+
+```scala
+val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
+    async[Scenario] {
+        // Future[SlotNo] -> Scenario[SlotNo] via futureToScenarioConversion
+        val currentSlot = reader.currentSlot.await
+
+        // Future[S] -> Scenario[S]
+        val state = step.extractState(reader).await
+
+        // Future[Seq[Transaction]] -> Scenario[Seq[Transaction]]
+        val txs = step.allVariations(reader, state).await
+
+        // ... use values
+    }
+}
+```
+
+This works via `CpsMonadConversion[Future, Scenario]` which wraps the `Future` in a `Scenario.WaitFuture` node, preserving state correctly.
