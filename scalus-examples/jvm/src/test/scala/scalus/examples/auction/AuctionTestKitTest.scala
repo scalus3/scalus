@@ -193,7 +193,6 @@ class AuctionTestKitTest extends AnyFunSuite {
 
         val (_, script, scriptHash, scriptAddress) = startAuction(emulator, oneShotUtxo)
 
-        val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
         val auctionEnd = getAuctionEndTime(emulator.cardanoInfo)
 
         val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
@@ -207,7 +206,7 @@ class AuctionTestKitTest extends AnyFunSuite {
             }
         }
 
-        val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+        val results = Await.result(Scenario.runAll(emulator)(scenario), Duration.Inf)
         System.err.println(
           s"  paths: ${results.size}, txBuilds: ${txBuildCount.get()}, time: ${System.currentTimeMillis() - t0}ms"
         )
@@ -230,7 +229,6 @@ class AuctionTestKitTest extends AnyFunSuite {
         val (_, script2, scriptHash2, scriptAddress2) =
             startAuction(emulator, oneShotUtxo2, utf8"item-2")
 
-        val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(123L))
         val auctionEnd = getAuctionEndTime(emulator.cardanoInfo)
 
         val scenario = ScenarioExplorer.explore(maxDepth = 2) { reader =>
@@ -253,7 +251,7 @@ class AuctionTestKitTest extends AnyFunSuite {
             }
         }
 
-        val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+        val results = Await.result(Scenario.runAll(emulator)(scenario), Duration.Inf)
         System.err.println(
           s"  paths: ${results.size}, txBuilds: ${txBuildCount.get()}, time: ${System.currentTimeMillis() - t0}ms"
         )
@@ -489,8 +487,6 @@ class AuctionTestKitTest extends AnyFunSuite {
             case _ =>
                 System.err.println(s"    pre-check: batch tx failed to build")
 
-        val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
-
         val scenario = ScenarioExplorer.explore(maxDepth = 2) { reader =>
             async[Scenario] {
                 val utxosResult = Await.result(
@@ -566,7 +562,7 @@ class AuctionTestKitTest extends AnyFunSuite {
             }
         }
 
-        val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+        val results = Await.result(Scenario.runAll(emulator)(scenario), Duration.Inf)
         System.err.println(
           s"  paths: ${results.size}, time: ${System.currentTimeMillis() - t0}ms"
         )

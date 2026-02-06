@@ -32,15 +32,6 @@ object ScenarioState {
       rng = org.scalacheck.rng.Seed(0L)
     )
 
-    /** Create a ScenarioState from an EmulatorBase.
-      *
-      * @param emulator
-      *   the emulator to convert (will be snapshotted as ImmutableEmulator)
-      * @param rng
-      *   ScalaCheck RNG seed for deterministic generation
-      */
-    def apply(emulator: EmulatorBase, rng: org.scalacheck.rng.Seed): ScenarioState =
-        ScenarioState(ImmutableEmulator.fromEmulator(emulator), rng)
 }
 
 /** A non-deterministic, state-threading monad for testing Cardano transaction scenarios.
@@ -441,23 +432,41 @@ object Scenario {
     // Runners
     // =========================================================================
 
-    /** Evaluate and run a scenario, returning the raw LogicStreamT. */
-    def run[A](initial: ScenarioState)(
-        s: Scenario[A]
-    ): LogicStreamT[Future, (ScenarioState, A)] =
-        eval(injectState(initial, s))
-
-    /** Run a scenario and collect all successful results (up to n, default 1000). */
-    def runAll[A](initial: ScenarioState, maxResults: Int = 1000)(
+    /** Run a scenario from an Emulator, collecting all successful results (up to maxResults). */
+    def runAll[A](emulator: Emulator, maxResults: Int = 1000)(
         s: Scenario[A]
     ): Future[IndexedSeq[(ScenarioState, A)]] =
-        logicStreamMonad.mObserveN(eval(injectState(initial, s)), maxResults)
+        continueAll(
+          ScenarioState(ImmutableEmulator.fromEmulator(emulator), org.scalacheck.rng.Seed(0L)),
+          maxResults
+        )(s)
 
-    /** Run a scenario and return the first successful result. */
-    def runFirst[A](initial: ScenarioState)(
+    /** Run a scenario from an Emulator, returning the first successful result. */
+    def runFirst[A](emulator: Emulator)(
         s: Scenario[A]
     ): Future[Option[(ScenarioState, A)]] =
-        logicStreamMonad.mObserveOne(eval(injectState(initial, s)))
+        continueFirst(
+          ScenarioState(ImmutableEmulator.fromEmulator(emulator), org.scalacheck.rng.Seed(0L))
+        )(s)
+
+    /** Continue a scenario from an existing ScenarioState, returning the raw LogicStreamT. */
+    def continue[A](state: ScenarioState)(
+        s: Scenario[A]
+    ): LogicStreamT[Future, (ScenarioState, A)] =
+        eval(injectState(state, s))
+
+    /** Continue a scenario from an existing ScenarioState, collecting all successful results. */
+    def continueAll[A](state: ScenarioState, maxResults: Int = 1000)(
+        s: Scenario[A]
+    ): Future[IndexedSeq[(ScenarioState, A)]] =
+        logicStreamMonad.mObserveN(eval(injectState(state, s)), maxResults)
+
+    /** Continue a scenario from an existing ScenarioState, returning the first successful result.
+      */
+    def continueFirst[A](state: ScenarioState)(
+        s: Scenario[A]
+    ): Future[Option[(ScenarioState, A)]] =
+        logicStreamMonad.mObserveOne(eval(injectState(state, s)))
 
     // =========================================================================
     // CpsMonadConversion instances

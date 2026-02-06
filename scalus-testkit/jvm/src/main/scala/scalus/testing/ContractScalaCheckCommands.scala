@@ -4,7 +4,7 @@ import org.scalacheck.commands.Commands
 import org.scalacheck.rng.Seed
 import org.scalacheck.{Gen, Prop}
 import scalus.cardano.ledger.{Transaction, TransactionHash}
-import scalus.cardano.node.{BlockchainReader, EmulatorBase, SubmitError}
+import scalus.cardano.node.{BlockchainReader, Emulator, SubmitError}
 
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext}
@@ -276,7 +276,7 @@ object ContractScalaCheckCommands {
       *   a Commands instance ready for property testing
       */
     def apply[S](
-        emulator: EmulatorBase,
+        emulator: Emulator,
         step: ContractStepVariations[S],
         timeout: FiniteDuration = Duration(30, "seconds")
     )(

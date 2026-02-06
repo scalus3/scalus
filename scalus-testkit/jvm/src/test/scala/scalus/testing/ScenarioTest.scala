@@ -31,7 +31,7 @@ class ScenarioTest extends AnyFunSuite {
     test("pure returns value with state") {
         val initial = mkState(Alice)
         val scenario = Scenario.scenarioLogicMonad.pure(42)
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         assert(result.get._2 == 42)
     }
@@ -41,7 +41,7 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = Scenario.scenarioLogicMonad.map(
           Scenario.scenarioLogicMonad.pure(21)
         )(_ * 2)
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.get._2 == 42)
     }
 
@@ -50,7 +50,7 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = Scenario.scenarioLogicMonad.flatMap(
           Scenario.sleep(5)
         )(_ => Scenario.now)
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         assert(result.get._2 == initial.emulator.currentSlot + 5)
     }
@@ -62,14 +62,14 @@ class ScenarioTest extends AnyFunSuite {
     test("choices produces all alternatives") {
         val initial = mkState(Alice)
         val scenario = Scenario.choices(1, 2, 3)
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.map(_._2).toSet == Set(1, 2, 3))
     }
 
     test("fromCollection with empty produces no results") {
         val initial = mkState(Alice)
         val scenario = Scenario.fromCollection(Seq.empty[Int])
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.isEmpty)
     }
 
@@ -79,14 +79,14 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = scenarioLogicMonad.flatMap(Scenario.choices(1, 2, 3, 4, 5)) { n =>
             scenarioLogicMonad.flatMap(Scenario.guard(n % 2 == 0))(_ => scenarioLogicMonad.pure(n))
         }
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.map(_._2).toSet == Set(2, 4))
     }
 
     test("mzero produces no results") {
         val initial = mkState(Alice)
         val scenario = Scenario.fail[Int]
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.isEmpty)
     }
 
@@ -97,7 +97,7 @@ class ScenarioTest extends AnyFunSuite {
     test("sleep advances slot") {
         val initial = mkState(Alice)
         val scenario = Scenario.scenarioLogicMonad.flatMap(Scenario.sleep(10))(_ => Scenario.now)
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.get._2 == initial.emulator.currentSlot + 10)
     }
 
@@ -107,7 +107,7 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = scenarioLogicMonad.flatMap(Scenario.choices(5L, 10L, 20L)) { slots =>
             scenarioLogicMonad.flatMap(Scenario.sleep(slots))(_ => Scenario.now)
         }
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         val slots = results.map(_._2).toSet
         val base = initial.emulator.currentSlot
         assert(slots == Set(base + 5, base + 10, base + 20))
@@ -116,7 +116,7 @@ class ScenarioTest extends AnyFunSuite {
     test("currentEmulator returns emulator snapshot") {
         val initial = mkState(Alice)
         val scenario = Scenario.currentEmulator
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.get._2.utxos == initial.emulator.utxos)
     }
 
@@ -136,7 +136,7 @@ class ScenarioTest extends AnyFunSuite {
         val combined = scenarioLogicMonad.mplus(branchA, branchB)
         // Use ScenarioState.empty since branches have their own states
         val results = awaitResult(
-          Scenario.runAll(ScenarioState.empty)(combined)
+          Scenario.continueAll(ScenarioState.empty)(combined)
         )
         assert(results.map(_._2).toSet == Set("alice", "bob"))
     }
@@ -166,7 +166,7 @@ class ScenarioTest extends AnyFunSuite {
         assert(tryHead.get == 1)
 
         // tail should have remaining elements
-        val restResults = awaitResult(Scenario.runAll(initial)(tail))
+        val restResults = awaitResult(Scenario.continueAll(initial)(tail))
         assert(restResults.map(_._2).toSet == Set(2, 3))
     }
 
@@ -189,7 +189,7 @@ class ScenarioTest extends AnyFunSuite {
             case Some((tryVal, _)) => scenarioLogicMonad.pure(tryVal.get)
             case None              => scenarioLogicMonad.pure(-1)
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.get._2 == 10)
     }
 
@@ -202,7 +202,7 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = Scenario.error[Int](new RuntimeException("boom"))
         val caught =
             try {
-                awaitResult(Scenario.runFirst(initial)(scenario))
+                awaitResult(Scenario.continueFirst(initial)(scenario))
                 false
             } catch {
                 case e: RuntimeException if e.getMessage == "boom" => true
@@ -219,7 +219,7 @@ class ScenarioTest extends AnyFunSuite {
             case scala.util.Success(n) => scenarioLogicMonad.pure(n)
             case scala.util.Failure(e) => scenarioLogicMonad.pure(-1)
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.get._2 == -1)
     }
 
@@ -230,7 +230,7 @@ class ScenarioTest extends AnyFunSuite {
     test("runAll collects all branches") {
         val initial = mkState(Alice)
         val scenario = Scenario.choices("a", "b", "c")
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.size == 3)
         assert(results.map(_._2).toSet == Set("a", "b", "c"))
     }
@@ -238,21 +238,21 @@ class ScenarioTest extends AnyFunSuite {
     test("runAll respects maxResults") {
         val initial = mkState(Alice)
         val scenario = Scenario.choices(1, 2, 3, 4, 5)
-        val results = awaitResult(Scenario.runAll(initial, maxResults = 2)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial, maxResults = 2)(scenario))
         assert(results.size == 2)
     }
 
     test("runFirst returns first result") {
         val initial = mkState(Alice)
         val scenario = Scenario.choices("first", "second")
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         assert(result.get._2 == "first")
     }
 
     test("runFirst on empty returns None") {
         val initial = mkState(Alice)
-        val result = awaitResult(Scenario.runFirst(initial)(Scenario.fail[Int]))
+        val result = awaitResult(Scenario.continueFirst(initial)(Scenario.fail[Int]))
         assert(result.isEmpty)
     }
 
@@ -319,7 +319,7 @@ class ScenarioTest extends AnyFunSuite {
                 }
             }
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         assert(result.get._2.isRight, s"Submit failed: ${result.get._2}")
     }
@@ -332,7 +332,7 @@ class ScenarioTest extends AnyFunSuite {
         import org.scalacheck.Gen
         val initial = mkState(Alice)
         val scenario = Scenario.sample(Gen.choose(1, 10))
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val value = result.get._2
         assert(value >= 1 && value <= 10)
@@ -349,8 +349,8 @@ class ScenarioTest extends AnyFunSuite {
                 }
             }
         }
-        val result1 = awaitResult(Scenario.runFirst(initial)(scenario))
-        val result2 = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result1 = awaitResult(Scenario.continueFirst(initial)(scenario))
+        val result2 = awaitResult(Scenario.continueFirst(initial)(scenario))
         // Same seed should produce same sequence
         assert(result1.get._2 == result2.get._2)
     }
@@ -363,7 +363,7 @@ class ScenarioTest extends AnyFunSuite {
             val y = Scenario.sample(Gen.choose(1, 10)).await
             x + y
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val sum = result.get._2
         assert(sum >= 2 && sum <= 20)
@@ -378,7 +378,7 @@ class ScenarioTest extends AnyFunSuite {
             val y = Gen.choose(1, 10).await
             x + y
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val sum = result.get._2
         assert(sum >= 2 && sum <= 20)
@@ -392,7 +392,7 @@ class ScenarioTest extends AnyFunSuite {
             val x = Scenario.sample(Gen.choose(1, 100)).await
             (branch, x)
         }
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.size == 2)
         // Both branches should have sampled values
         assert(results.forall { case (_, (branch, x)) => x >= 1 && x <= 100 })
@@ -403,7 +403,7 @@ class ScenarioTest extends AnyFunSuite {
         val initial = mkState(Alice)
         // Gen.fail always fails to produce a value, should prune branch
         val scenario = Scenario.sample(Gen.fail)
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isEmpty, "Failed generator should return mzero (no results)")
     }
 
@@ -416,7 +416,7 @@ class ScenarioTest extends AnyFunSuite {
             }
             values.toList
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val values = result.get._2
         assert(values.size == 10)
@@ -434,7 +434,7 @@ class ScenarioTest extends AnyFunSuite {
             val x = Scenario.sample(Gen.choose(1, 1000)).await
             (branch, x)
         }
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.size == 10)
         // All branches should have valid sampled values
         assert(results.forall { case (_, (_, x)) => x >= 1 && x <= 1000 })
@@ -450,7 +450,7 @@ class ScenarioTest extends AnyFunSuite {
         import org.scalacheck.Gen
         val initial = mkState(Alice)
         val scenario = Scenario.sampleN(Gen.choose(1, 1000), 10)
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.size == 10, s"Expected 10 branches, got ${results.size}")
         // All values should be in range
         assert(results.forall { case (_, v) => v >= 1 && v <= 1000 })
@@ -462,7 +462,7 @@ class ScenarioTest extends AnyFunSuite {
         import org.scalacheck.Gen
         val initial = mkState(Alice)
         val scenario = Scenario.sampleN(Gen.choose(1, 100))
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.size == 10)
     }
 
@@ -472,7 +472,7 @@ class ScenarioTest extends AnyFunSuite {
         // Gen that fails 50% of the time
         val gen = Gen.choose(1, 100).suchThat(_ > 50)
         val scenario = Scenario.sampleN(gen, 20)
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         // Should have some results but likely fewer than 20
         assert(results.nonEmpty)
         assert(results.forall { case (_, v) => v > 50 })
@@ -489,7 +489,7 @@ class ScenarioTest extends AnyFunSuite {
             Scenario.check(true, "should pass").await
             42
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         assert(result.get._2 == 42)
     }
@@ -501,7 +501,7 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = Scenario.check(x + 1 == y, "math is broken")
         val caught =
             try {
-                awaitResult(Scenario.runFirst(initial)(scenario))
+                awaitResult(Scenario.continueFirst(initial)(scenario))
                 false
             } catch {
                 case e: CheckFailure =>
@@ -523,7 +523,7 @@ class ScenarioTest extends AnyFunSuite {
         val scenario = Scenario.check(false, "test location")
         val caught =
             try {
-                awaitResult(Scenario.runFirst(initial)(scenario))
+                awaitResult(Scenario.continueFirst(initial)(scenario))
                 None
             } catch {
                 case e: CheckFailure => Some(e)
@@ -543,7 +543,7 @@ class ScenarioTest extends AnyFunSuite {
         }
         val caught =
             try {
-                awaitResult(Scenario.runFirst(initial)(scenario))
+                awaitResult(Scenario.continueFirst(initial)(scenario))
                 None
             } catch {
                 case e: CheckFailure => Some(e)
@@ -574,7 +574,7 @@ class ScenarioTest extends AnyFunSuite {
             val log = Scenario.actionLog.await
             log
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val log = result.get._2
         assert(log.size == 1)
@@ -587,7 +587,7 @@ class ScenarioTest extends AnyFunSuite {
             Scenario.sleep(42).await
             Scenario.actionLog.await
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val log = result.get._2
         assert(log == Seq(StepAction.Wait(42)))
@@ -611,7 +611,7 @@ class ScenarioTest extends AnyFunSuite {
             Scenario.sleep(10).await
             Scenario.actionLog.await
         }
-        val result = awaitResult(Scenario.runFirst(initial)(scenario))
+        val result = awaitResult(Scenario.continueFirst(initial)(scenario))
         assert(result.isDefined)
         val log = result.get._2
         assert(log.size == 3)
@@ -645,7 +645,7 @@ class ScenarioTest extends AnyFunSuite {
             }
         }
 
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         // Should complete without violations
         assert(results.forall(_._2.isEmpty), "No violations expected")
     }
@@ -674,7 +674,7 @@ class ScenarioTest extends AnyFunSuite {
             }
         }
 
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         val violations = results.flatMap(_._2)
         assert(violations.nonEmpty, "Should find violations")
         val v = violations.head
@@ -705,7 +705,7 @@ class ScenarioTest extends AnyFunSuite {
             }
         }
 
-        val results = awaitResult(Scenario.runAll(initial)(scenario))
+        val results = awaitResult(Scenario.continueAll(initial)(scenario))
         assert(results.forall(_._2.isEmpty), "No violations expected")
     }
 }
