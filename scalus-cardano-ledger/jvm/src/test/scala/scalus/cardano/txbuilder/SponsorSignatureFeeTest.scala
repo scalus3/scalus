@@ -25,7 +25,7 @@ class SponsorSignatureFeeTest extends AnyFunSuite {
     private val genesisHash: TransactionHash =
         TransactionHash.fromByteString(scalus.uplc.builtin.ByteString.fromHex("0" * 64))
 
-    ignore("BUG: Fee calculation does not account for sponsor signature") {
+    test("BUG: Fee calculation does not account for sponsor signature") {
         val sender = Alice
         val recipient = Bob
 
@@ -87,7 +87,7 @@ class SponsorSignatureFeeTest extends AnyFunSuite {
         else info("Fee calculation is correct (bug may have been fixed)")
     }
 
-    ignore("Sponsor signature fee shortfall causes submission failure") {
+    test("Sponsor signature fee shortfall causes submission failure") {
         val sender = Alice
         val recipient = Bob
 

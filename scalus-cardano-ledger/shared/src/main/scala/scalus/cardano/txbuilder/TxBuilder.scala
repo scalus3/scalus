@@ -1571,10 +1571,16 @@ case class TxBuilder(
 
             case Right(ctx) =>
                 val ctxWithAttachments = addAttachmentsToContext(ctx)
+                // Add sponsor to expected signers BEFORE balancing so fee estimation
+                // accounts for the sponsor's VKey witness. Safe if already present (Set).
+                val sponsorSigner = extractSponsorSigner(sponsor)
+                val ctxWithSponsor = ctxWithAttachments.copy(
+                  expectedSigners = ctxWithAttachments.expectedSigners ++ sponsorSigner.toSet
+                )
                 val diffHandler: DiffHandler = (diff, tx) =>
                     Change.changeOutputDiffHandler(diff, tx, env.protocolParams, changeIdx)
 
-                ctxWithAttachments.balanceContext(
+                ctxWithSponsor.balanceContext(
                   env.protocolParams,
                   diffHandler,
                   evaluator
@@ -1587,12 +1593,7 @@ case class TxBuilder(
                             val minimalInput = pool.selectForValue(Value.lovelace(1))
                             completeLoop(pool.withInputs(minimalInput), sponsor, maxIterations - 1)
                         } else {
-                            // Success! Add sponsor to expected signers
-                            val sponsorSigner = extractSponsorSigner(sponsor)
-                            val ctxWithSigner = balancedCtx.copy(
-                              expectedSigners = balancedCtx.expectedSigners ++ sponsorSigner.toSet
-                            )
-                            copy(context = ctxWithSigner)
+                            copy(context = balancedCtx)
                         }
 
                     case Left(SomeBuildError.BalancingError(balancingError, errorCtx)) =>

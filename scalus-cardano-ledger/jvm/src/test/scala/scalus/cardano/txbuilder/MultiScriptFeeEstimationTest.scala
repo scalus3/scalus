@@ -53,7 +53,7 @@ class MultiScriptFeeEstimationTest extends AnyFunSuite {
 
     private val datum42: Data = Data.I(42)
 
-    ignore("complete should produce sufficient fee for multi-script tx submitted to emulator") {
+    test("complete should produce sufficient fee for multi-script tx submitted to emulator") {
         // Spend 2 script UTxOs with delayed redeemers that compute output indices,
         // mimicking a batch auction end transaction. Submit to emulator to verify
         // the fee is accepted by FeesOkValidator.
@@ -111,7 +111,7 @@ class MultiScriptFeeEstimationTest extends AnyFunSuite {
         )
     }
 
-    ignore("complete fee should match MinTransactionFee for signed multi-script tx") {
+    test("complete fee should match MinTransactionFee for signed multi-script tx") {
         // Verify that the fee computed by TxBuilder.complete is at least the min fee
         // required for the signed transaction, as computed by MinTransactionFee.
         val scriptUtxo1 =
