@@ -51,10 +51,6 @@ case class ScenarioState(
 
 object ScenarioState {
     val empty: ScenarioState = ScenarioState(ImmutableEmulator.empty, Seed(0L))
-
-    // Create from mutable Emulator — conversion happens internally
-    def apply(emulator: EmulatorBase, rng: Seed): ScenarioState =
-        ScenarioState(ImmutableEmulator.fromEmulator(emulator), rng)
 }
 ```
 
@@ -178,10 +174,14 @@ object Scenario {
     def snapshotReader: Scenario[BlockchainReader]
     @deprecated def snapshotProvider: Scenario[BlockchainProvider]  // use snapshotReader
 
-    // Runners
-    def run[A](initial: ScenarioState)(s: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)]
-    def runAll[A](initial: ScenarioState, maxResults: Int = 1000)(s: Scenario[A]): Future[IndexedSeq[(ScenarioState, A)]]
-    def runFirst[A](initial: ScenarioState)(s: Scenario[A]): Future[Option[(ScenarioState, A)]]
+    // Simple runners — accept Emulator directly
+    def runAll[A](emulator: Emulator, maxResults: Int = 1000)(s: Scenario[A]): Future[IndexedSeq[(ScenarioState, A)]]
+    def runFirst[A](emulator: Emulator)(s: Scenario[A]): Future[Option[(ScenarioState, A)]]
+
+    // Advanced runners — continue from existing ScenarioState
+    def continue[A](state: ScenarioState)(s: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)]
+    def continueAll[A](state: ScenarioState, maxResults: Int = 1000)(s: Scenario[A]): Future[IndexedSeq[(ScenarioState, A)]]
+    def continueFirst[A](state: ScenarioState)(s: Scenario[A]): Future[Option[(ScenarioState, A)]]
 }
 ```
 
@@ -288,7 +288,7 @@ val scenario = async[Scenario] {
     endpoints.endAuction("myItem", winner, Alice.signer).await
 }
 
-Scenario.runAll(initialState)(scenario)
+Scenario.runAll(emulator)(scenario)
 ```
 
 ### HTLC Time-Dependent Behavior
@@ -559,17 +559,20 @@ For ScalaCheck, `ContractScalaCheckCommands` handles `Await.result` internally �
 
 ```scala
 // Mode 1: ScalaCheck Commands — JVM-only, stateful property testing
-// Pass Emulator directly — conversion to ImmutableEmulator happens internally
+// Pass Emulator directly
 ContractScalaCheckCommands(emulator, AuctionStep).property()
 
 // Mode 2: Scenario — cross-platform, exhaustive branching
-async[Scenario] {
-    val reader = Scenario.snapshotReader.await
-    val state = step.extractState(reader).await
-    val txs = step.allVariations(reader, state).await
-    val tx = choices(txs*).await
-    Scenario.submit(tx).await
+val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
+    async[Scenario] {
+        val state = step.extractState(reader).await
+        val txs = step.allVariations(reader, state).await
+        val tx = Scenario.fromCollection(txs).await
+        Scenario.submit(tx).await
+    }
 }
+// Pass Emulator directly
+Scenario.runAll(emulator)(scenario)
 ```
 
 ### Multi-Actor Variations
@@ -665,7 +668,7 @@ object ScenarioExplorer {
 
 Usage:
 ```scala
-val results = Scenario.runAll(initial)(
+val results = Scenario.runAll(emulator)(
     ScenarioExplorer.explore(maxDepth = 3) { reader =>
         async[Scenario] {
             val state = extractState(reader).await
@@ -720,7 +723,7 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | Scenario.provider (BlockchainProviderTF[Scenario]) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.snapshotReader (BlockchainReader) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.snapshotProvider (deprecated) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| Runners (run, runAll, runFirst) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| Runners (runAll, runFirst, continueAll, continueFirst) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | BlockchainReaderTF[F], BlockchainReader | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProvider.scala` |
 | BlockchainProviderTF[F], BlockchainProvider | ✅ Done | `scalus-cardano-ledger/shared/.../node/BlockchainProvider.scala` |
 | dotty-cps-async deps in build.sbt | ✅ Done | `build.sbt` |
@@ -742,8 +745,8 @@ Mitigation: keep categories at 2-4 per dimension, use `guard` to prune impossibl
 | ScenarioState.actionLog | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | Scenario.actionLog | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
 | CpsMonadConversion[Future, Scenario] | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| ScenarioState.apply(EmulatorBase, Seed) | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
-| ContractScalaCheckCommands accepts EmulatorBase | ✅ Done | `scalus-testkit/jvm/.../testing/ContractScalaCheckCommands.scala` |
+| Scenario.runAll/runFirst accept Emulator | ✅ Done | `scalus-testkit/shared/.../testing/Scenario.scala` |
+| ContractScalaCheckCommands accepts Emulator | ✅ Done | `scalus-testkit/jvm/.../testing/ContractScalaCheckCommands.scala` |
 
 ## Open Questions
 

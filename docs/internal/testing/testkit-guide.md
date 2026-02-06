@@ -168,9 +168,6 @@ test("auction exhaustive boundaries") {
     val emulator = Emulator(...)
     // Setup auction...
 
-    // Create ScenarioState directly from Emulator
-    val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
-
     val scenario = ScenarioExplorer.explore(maxDepth = 4) { reader =>
         async[Scenario] {
             // Future.await works inside async[Scenario] via futureToScenarioConversion
@@ -187,7 +184,8 @@ test("auction exhaustive boundaries") {
         }
     }
 
-    val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+    // Pass Emulator directly — conversion to ImmutableEmulator happens internally
+    val results = Await.result(Scenario.runAll(emulator)(scenario), Duration.Inf)
     val violations = results.flatMap(_._2)
     assert(violations.isEmpty, s"Found violations: ${violations.mkString("\n")}")
 }
@@ -444,8 +442,6 @@ Test sequences of actions where each step changes the state:
 val emulator = Emulator(...)
 // Setup contract...
 
-val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
-
 val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
     async[Scenario] {
         // Future.await works inside async[Scenario]
@@ -460,7 +456,8 @@ val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
     }
 }
 
-val results = Await.result(Scenario.runAll(initial)(scenario), Duration.Inf)
+// Pass Emulator directly
+val results = Await.result(Scenario.runAll(emulator)(scenario), Duration.Inf)
 val violations = results.flatMap(_._2)
 assert(violations.isEmpty)
 ```
@@ -594,16 +591,17 @@ val scenario = async[Scenario] {
 
 ## API Reference
 
-### ScenarioState
-
-Create a `ScenarioState` to run scenarios:
+### Scenario Runners
 
 ```scala
-// From Emulator (mutable) — recommended
-val initial = ScenarioState(emulator, org.scalacheck.rng.Seed(42L))
+// Simple entry point — pass Emulator directly
+val results = Scenario.runAll(emulator)(scenario)       // all results (up to 1000)
+val first = Scenario.runFirst(emulator)(scenario)       // first result
 
-// From ImmutableEmulator (explicit)
-val initial = ScenarioState(immutableEmulator, org.scalacheck.rng.Seed(42L))
+// Advanced — continue from existing ScenarioState
+val state = ScenarioState(immutableEmulator, org.scalacheck.rng.Seed(42L))
+val results = Scenario.continueAll(state)(scenario)     // all results
+val first = Scenario.continueFirst(state)(scenario)     // first result
 ```
 
 ### ContractScalaCheckCommands
