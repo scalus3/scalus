@@ -12,11 +12,21 @@ Scalus compiles to **JVM**, **JavaScript**/**Typescript**, and **Native** from t
 
 ## Platform Support Matrix
 
-| Module | JVM | JS/TS | Native | Description |
-|--------|:---:|:----------:|:------:|-------------|
-| **scalus-core** | ✓ | ✓ | ✓ | Plutus VM, UPLC, SIR compiler, standard library |
-| **scalus-cardano-ledger** | ✓ | ✓ | — | Transaction builder, ledger rules, Emulator |
-| **scalus-testkit** | ✓ | ✓ | — | Testing utilities |
+| Feature | JVM | JS/TS | Native |
+|---------|:---:|:-----:|:------:|
+| Plutus VM | ✓ | ✓ | ✓ |
+| UPLC | ✓ | — | — |
+| [SIR compiler](/docs/smart-contracts/optimisations/sir) | ✓ | — | — |
+| [Standard library](/docs/language-guide) | ✓ | ✓ | ✓ |
+| [Transaction builder](/docs/transactions) | ✓ | ✓ | — |
+| [Ledger Framework](/docs/ledger/ledger-rules) | ✓ | ✓ | — |
+| [Emulator](/docs/testing/emulator) | ✓ | [✓](/docs/testing/js-emulator) | — |
+| [Yaci DevKit](/docs/testing/local-devnet) | ✓ | — | — |
+| Testing utilities | ✓ | ✓ | — |
+| Ed25519 signatures | ✓ | ✓ | ✓ |
+| ECDSA secp256k1 | ✓ | ✓ | ✓ |
+| Schnorr signatures | ✓ | ✓ | ✓ |
+| BLS12-381 | ✓ | ✓ | ✓ |
 
 ## When to Use Which Platform
 
@@ -62,25 +72,10 @@ Scala Native compiles to native binaries:
   **Building a JavaScript/TypeScript or Native integration?** We're actively looking for feedback and early adopters. [Open an issue](https://github.com/scalus3/scalus/issues) or reach out — we'd love to help with your integration.
 </Callout>
 
-## Feature Availability
-
-| Feature | JVM | JS/TS | Native |
-|---------|:---:|:--:|:------:|
-| Plutus script execution | ✓ | ✓ | ✓ |
-| SIR compilation | ✓ | ✓ | ✓ |
-| Transaction building | ✓ | ✓ | — |
-| Emulator | ✓ | ✓ | — |
-| Ledger rules validation | ✓ | ✓ | — |
-| Yaci DevKit integration | ✓ | — | — |
-| Compiler plugin | ✓ | — | — |
-| Ed25519 signatures | ✓ | ✓ | ✓ |
-| ECDSA secp256k1 | ✓ | ✓ | ✓ |
-| Schnorr signatures | ✓ | ✓ | ✓ |
-| BLS12-381 | ✓ | ✓ | ✓ |
-
 ## See Also
 
 - [Getting Started](/docs/get-started) — Set up JVM development environment
-- [Emulator](/docs/testing/emulator) — In-memory testing (JVM/JS)
+- [Emulator](/docs/testing/emulator) — In-memory testing (JVM)
+- [JS/TS Emulator](/docs/testing/js-emulator) — In-memory testing (JavaScript/TypeScript)
 - [Transaction Builder](/docs/transactions) — Build transactions (JVM/JS)
 - [Local Devnet](/docs/testing/local-devnet) — Integration testing (JVM only)
