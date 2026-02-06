@@ -151,7 +151,7 @@ This requires libsecp256k1 development headers installed on your system.
 ## Publishing Scalus JS library to NPM
 
 ```sbt
-scalusCardanoLedgerJS / prepareNpmPackag
+scalusCardanoLedgerJS / prepareNpmPackage
 ```
 
 This will create a `scalus-opt-bundle.js` package in the `scalus-cardano-ledger/js/src/main/npm`
