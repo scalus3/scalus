@@ -117,7 +117,7 @@ class ByronAddressInScriptContextTest extends AnyFunSuite {
         val result = emulator.submitSync(tx)
 
         assert(result.isLeft, s"Transaction should fail with Byron output: $result")
-        val message = result.left.get.message
+        val message = result.swap.getOrElse(fail("Expected Left")).message
         assert(
           message == "Error during Plutus script evaluation: Byron addresses not supported in script contexts"
         )

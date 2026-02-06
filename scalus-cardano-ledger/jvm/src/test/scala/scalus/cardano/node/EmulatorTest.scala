@@ -6,15 +6,11 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.Context
 import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
-import scalus.cardano.txbuilder.ScriptSource.PlutusScriptValue
 import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.utils.await
-
-import scala.concurrent.duration.DurationInt
 
 class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
@@ -93,7 +89,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
 
         val result = emulator.submitSync(tx)
         assert(result.isLeft)
-        assert(result.left.get.message.contains("missing reward accounts"))
+        assert(result.swap.getOrElse(fail()).message.contains("missing reward accounts"))
     }
 
     test("Property: submitted valid transaction UTXOs become available") {

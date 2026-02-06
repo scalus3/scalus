@@ -31,5 +31,9 @@ object CardanoMutator extends STS.Mutator {
             .map(v => v.name -> v)
             .toMap
 
-    val allSTSs: Map[String, STS] = allValidators ++ allMutators
+    val defaultSTSs: Map[String, STS] =
+        (DefaultValidators.all.toSeq ++ DefaultMutators.all.toSeq).map(v => v.name -> v).toMap
+
+    @deprecated("Use `defaultSTSs` instead", "0.14")
+    def allSTSs: Map[String, STS] = defaultSTSs
 }

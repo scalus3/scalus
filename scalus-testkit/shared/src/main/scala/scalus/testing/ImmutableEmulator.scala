@@ -2,7 +2,7 @@ package scalus.testing
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
+import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
 
 import scala.concurrent.{ExecutionContext, Future}
