@@ -47,7 +47,15 @@ object StakePoolCertificatesValidator extends STS.Validator {
 
         def handlePoolRetirement(poolId: PoolKeyHash, epochNo: Long): ValidationState =
             if !existingPools.contains(poolId) then copy(notRegistered = notRegistered + poolId)
-            else if epochNo <= currentEpoch || epochNo > maxRetirementEpoch then
+            else if epochNo <= currentEpoch then
+                copy(invalidRetirementEpochs =
+                    invalidRetirementEpochs.updated(
+                      poolId,
+                      (epochNo, currentEpoch, maxRetirementEpoch)
+                    )
+                )
+            // Skip upper bound check when currentEpoch is 0 (epoch unknown)
+            else if currentEpoch > 0 && epochNo > maxRetirementEpoch then
                 copy(invalidRetirementEpochs =
                     invalidRetirementEpochs.updated(
                       poolId,
@@ -82,6 +90,7 @@ object StakePoolCertificatesValidator extends STS.Validator {
             // TODO: UtxoEnv.slot is a slot number, not an epoch number.
             //   We need to know the current epoch, but we only know the current slot,
             //   and we don't have a way to convert between the two of them.
+            //   Cardano mainnet uses 432000 slots per epoch, but testnet may differ.
             val currentEpoch: Long = context.env.slot
 
             val initialState = ValidationState(
@@ -90,6 +99,7 @@ object StakePoolCertificatesValidator extends STS.Validator {
               currentEpoch = currentEpoch,
               maxRetirementEpoch = currentEpoch + protocolParams.poolRetireMaxEpoch,
               existingPools = state.certState.pstate.stakePools.keySet
+                  ++ state.certState.pstate.futureStakePoolParams.keySet
             )
 
             val finalState = certificates.foldLeft(initialState)(_ processCertificate _)

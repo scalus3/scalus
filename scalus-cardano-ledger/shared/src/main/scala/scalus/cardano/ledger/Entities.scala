@@ -502,6 +502,7 @@ data PState era = PState
 
 case class PoolsState(
     stakePools: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
+    futureStakePoolParams: Map[PoolKeyHash, Certificate.PoolRegistration] = Map.empty,
     retiring: Map[PoolKeyHash, EpochNo] = Map.empty,
     deposits: Map[PoolKeyHash, Coin] = Map.empty
 )
