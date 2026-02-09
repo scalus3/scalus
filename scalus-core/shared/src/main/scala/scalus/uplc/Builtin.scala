@@ -1263,7 +1263,7 @@ class CardanoBuiltins(
                 Constant.BuiltinValue(BuiltinValueOps.insertCoin(currency, token, amount, value))
               )
           ,
-          builtinCostModel.insertCoin
+          ValueMaxDepthCostingFun(builtinCostModel.insertCoin, valueArgIndex = 3)
         )
 
     // ByteString -> ByteString -> BuiltinValue -> Integer
@@ -1279,7 +1279,7 @@ class CardanoBuiltins(
               }
               VCon(asConstant(BuiltinValueOps.lookupCoin(currency, token, value)))
           ,
-          builtinCostModel.lookupCoin
+          ValueMaxDepthCostingFun(builtinCostModel.lookupCoin, valueArgIndex = 2)
         )
 
     // BuiltinValue -> BuiltinValue -> BuiltinValue

@@ -182,7 +182,11 @@ case class BuiltinCostModel(
     ),
     unValueData: DefaultCostingFun[OneArgument] = DefaultCostingFun(
       OneArgument.QuadraticInX(
-        OneVariableQuadraticFunction(CostingInteger(1000L), CostingInteger(95933L), CostingInteger(1L))
+        OneVariableQuadraticFunction(
+          CostingInteger(1000L),
+          CostingInteger(95933L),
+          CostingInteger(1L)
+        )
       ),
       OneArgument.LinearInX(
         OneVariableLinearFunction(CostingInteger(11L), CostingInteger(1L))
@@ -621,7 +625,8 @@ object BuiltinCostModel {
                       FourArguments.LinearInU(
                         OneVariableLinearFunction(CostingInteger(45L), CostingInteger(21L))
                       )
-                    ),
+                    )
+            ,
             lookupCoin =
                 if json.obj.keySet.contains("lookupCoin") then
                     read[DefaultCostingFun[ThreeArguments]](json("lookupCoin"))
@@ -631,7 +636,8 @@ object BuiltinCostModel {
                         OneVariableLinearFunction(CostingInteger(219951L), CostingInteger(9444L))
                       ),
                       ThreeArguments.ConstantCost(CostingInteger(1L))
-                    ),
+                    )
+            ,
             unionValue =
                 if json.obj.keySet.contains("unionValue") then
                     read[DefaultCostingFun[TwoArguments]](json("unionValue"))
@@ -648,7 +654,8 @@ object BuiltinCostModel {
                       TwoArguments.AddedSizes(
                         OneVariableLinearFunction(CostingInteger(24L), CostingInteger(21L))
                       )
-                    ),
+                    )
+            ,
             valueContains =
                 if json.obj.keySet.contains("valueContains") then
                     read[DefaultCostingFun[TwoArguments]](json("valueContains"))
@@ -667,7 +674,8 @@ object BuiltinCostModel {
                         )
                       ),
                       TwoArguments.ConstantCost(CostingInteger(1L))
-                    ),
+                    )
+            ,
             valueData =
                 if json.obj.keySet.contains("valueData") then
                     read[DefaultCostingFun[OneArgument]](json("valueData"))
@@ -679,7 +687,8 @@ object BuiltinCostModel {
                       OneArgument.LinearInX(
                         OneVariableLinearFunction(CostingInteger(2L), CostingInteger(22L))
                       )
-                    ),
+                    )
+            ,
             unValueData =
                 if json.obj.keySet.contains("unValueData") then
                     read[DefaultCostingFun[OneArgument]](json("unValueData"))
@@ -695,7 +704,8 @@ object BuiltinCostModel {
                       OneArgument.LinearInX(
                         OneVariableLinearFunction(CostingInteger(11L), CostingInteger(1L))
                       )
-                    ),
+                    )
+            ,
             scaleValue =
                 if json.obj.keySet.contains("scaleValue") then
                     read[DefaultCostingFun[TwoArguments]](json("scaleValue"))

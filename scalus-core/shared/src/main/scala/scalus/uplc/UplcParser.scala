@@ -19,6 +19,7 @@ import scalus.uplc.Term.*
 import scalus.utils.Utils
 
 import scala.collection.immutable
+import scala.collection.immutable.SortedMap
 
 /** UPLC parsers.
   *
@@ -143,6 +144,7 @@ object UplcParser:
               "unit",
               "bool",
               "data",
+              "value",
               "bls12_381_G1_element",
               "bls12_381_G2_element"
             )
@@ -154,6 +156,7 @@ object UplcParser:
             case "unit"                 => DefaultUni.Unit
             case "bool"                 => DefaultUni.Bool
             case "data"                 => DefaultUni.Data
+            case "value"                => DefaultUni.BuiltinValue
             case "bls12_381_G1_element" => DefaultUni.BLS12_381_G1_Element
             case "bls12_381_G2_element" => DefaultUni.BLS12_381_G2_Element
             case _                      => sys.error("unexpected default uni")
@@ -233,6 +236,61 @@ object UplcParser:
             Constant.Array(t, ls.toVector)
         }
 
+    lazy val conValue: P[Constant] = {
+        val maxKeyLen = 32
+        val quantityMin = -BigInt(2).pow(127)
+        val quantityMax = BigInt(2).pow(127) - 1
+
+        val innerPair: P[(builtin.ByteString, BigInt)] =
+            inParens((lexeme(bytestring) <* symbol(",")) ~ lexeme(integer))
+
+        val innerMap: P[List[(builtin.ByteString, BigInt)]] =
+            symbol("[") *> innerPair.repSep0(symbol(",")) <* symbol("]")
+
+        val outerPair: P[(builtin.ByteString, List[(builtin.ByteString, BigInt)])] =
+            inParens((lexeme(bytestring) <* symbol(",")) ~ innerMap)
+
+        val outerList: P[List[(builtin.ByteString, List[(builtin.ByteString, BigInt)])]] =
+            symbol("[") *> outerPair.repSep0(symbol(",")) <* symbol("]")
+
+        outerList.flatMap { entries =>
+            // Validate and build the value
+            var error: Option[String] = None
+            val builder =
+                SortedMap.newBuilder[builtin.ByteString, SortedMap[builtin.ByteString, BigInt]]
+
+            for (currency, tokens) <- entries if error.isEmpty do
+                if currency.size > maxKeyLen then
+                    error = Some(s"Currency symbol exceeds max length of $maxKeyLen bytes")
+                else
+                    var innerBuilder = SortedMap.empty[builtin.ByteString, BigInt]
+                    for (token, amount) <- tokens if error.isEmpty do
+                        if token.size > maxKeyLen then
+                            error = Some(s"Token name exceeds max length of $maxKeyLen bytes")
+                        else if amount < quantityMin || amount > quantityMax then
+                            error = Some(s"Quantity $amount out of signed 128-bit range")
+                        else
+                            // Merge duplicates by summing
+                            val existing = innerBuilder.getOrElse(token, BigInt(0))
+                            val merged = existing + amount
+                            if merged != BigInt(0) then
+                                innerBuilder = innerBuilder.updated(token, merged)
+                            else innerBuilder = innerBuilder.removed(token)
+                    // Remove empty inner maps
+                    if error.isEmpty && innerBuilder.nonEmpty then
+                        builder += (currency -> innerBuilder)
+
+            error match
+                case Some(msg) => P.failWith(msg)
+                case None =>
+                    P.pure(
+                      Constant.BuiltinValue(
+                        builtin.BuiltinValue.unsafeFromInner(builder.result())
+                      )
+                    )
+        }
+    }
+
     def conPairOf(a: DefaultUni, b: DefaultUni): P[Constant] =
         inParens((constantOf(a) <* symbol(",")) ~ constantOf(b)) map { p =>
             Constant.Pair(p._1, p._2)
@@ -275,6 +333,7 @@ object UplcParser:
             lexeme(conG1Element.map(bs => Constant.BLS12_381_G1_Element(bs)))
         case DefaultUni.BLS12_381_G2_Element =>
             lexeme(conG2Element.map(bs => Constant.BLS12_381_G2_Element(bs)))
+        case DefaultUni.BuiltinValue => conValue
         case DefaultUni.BLS12_381_MlResult =>
             sys.error("Constants of type bls12_381_mlresult are not supported")
         case _ => sys.error("not implemented")

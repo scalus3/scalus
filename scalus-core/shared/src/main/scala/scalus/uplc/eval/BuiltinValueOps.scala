@@ -31,6 +31,18 @@ object BuiltinValueOps:
         if v.inner.isEmpty then 0 else v.inner.values.map(_.size).max
     def negativeCount(v: BuiltinValue): Int = v.inner.values.flatMap(_.values).count(_ < 0)
 
+    /** Memory usage based on log of outer and max inner map sizes.
+      *
+      * Matches Plutus ValueMaxDepth: log2(outerSize) + 1 + log2(maxInnerSize) + 1
+      */
+    def valueMaxDepth(v: BuiltinValue): CostingInteger = {
+        val outer = outerSize(v)
+        val inner = maxInnerSize(v)
+        val logOuter = if outer > 0 then 32 - Integer.numberOfLeadingZeros(outer) else 0
+        val logInner = if inner > 0 then 32 - Integer.numberOfLeadingZeros(inner) else 0
+        CostingInteger((logOuter + logInner).toLong)
+    }
+
     /** Insert or update a token amount in a value.
       *
       * If amount is 0, the token is removed. If the inner map becomes empty, the currency is
@@ -45,15 +57,11 @@ object BuiltinValueOps:
         amount: BigInt,
         value: BuiltinValue
     ): BuiltinValue = {
-        if !isValidKey(currency) then
-            throw new BuiltinException(s"Currency symbol exceeds max length of $maxKeyLen bytes")
-        if !isValidKey(token) then
-            throw new BuiltinException(s"Token name exceeds max length of $maxKeyLen bytes")
         if !isValidQuantity(amount) then
             throw new BuiltinException(s"Quantity $amount out of 128-bit signed integer range")
 
         if amount == BigInt(0) then
-            // Remove token
+            // Remove token - long keys are allowed when amount is 0
             value.inner.get(currency) match {
                 case None => value
                 case Some(tokens) =>
@@ -62,7 +70,13 @@ object BuiltinValueOps:
                     else BuiltinValue.unsafeFromInner(value.inner.updated(currency, newTokens))
             }
         else
-            // Insert/update token
+            // Insert/update token - validate keys only for non-zero amounts
+            if !isValidKey(currency) then
+                throw new BuiltinException(
+                  s"Currency symbol exceeds max length of $maxKeyLen bytes"
+                )
+            if !isValidKey(token) then
+                throw new BuiltinException(s"Token name exceeds max length of $maxKeyLen bytes")
             val tokens = value.inner.getOrElse(currency, SortedMap.empty[ByteString, BigInt])
             val newTokens = tokens.updated(token, amount)
             BuiltinValue.unsafeFromInner(value.inner.updated(currency, newTokens))
@@ -114,19 +128,29 @@ object BuiltinValueOps:
 
     /** Check if v1 contains at least the amounts in v2.
       *
-      * For each token in v2, check that v1 has at least that amount.
+      * For each token in v2, check that v1 has at least that amount. Both values must not contain
+      * negative amounts.
+      *
+      * @throws BuiltinException
+      *   if either value contains negative amounts
       */
     def valueContains(v1: BuiltinValue, v2: BuiltinValue): Boolean = {
-        v2.inner.forall { case (currency, tokens2) =>
-            v1.inner.get(currency) match {
-                case None => tokens2.values.forall(_ <= 0)
-                case Some(tokens1) =>
-                    tokens2.forall { case (token, amount2) =>
-                        val amount1 = tokens1.getOrElse(token, BigInt(0))
-                        amount1 >= amount2
-                    }
+        if negativeCount(v1) > 0 then
+            throw new BuiltinException("valueContains: first value contains negative amounts")
+        if negativeCount(v2) > 0 then
+            throw new BuiltinException("valueContains: second value contains negative amounts")
+        if totalSize(v1) < totalSize(v2) then false
+        else
+            v2.inner.forall { case (currency, tokens2) =>
+                v1.inner.get(currency) match {
+                    case None => false
+                    case Some(tokens1) =>
+                        tokens2.forall { case (token, amount2) =>
+                            val amount1 = tokens1.getOrElse(token, BigInt(0))
+                            amount1 >= amount2
+                        }
+                }
             }
-        }
     }
 
     /** Multiply all amounts in a value by a scalar.

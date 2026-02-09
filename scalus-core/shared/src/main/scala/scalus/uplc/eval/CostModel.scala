@@ -677,6 +677,26 @@ case class DefaultCostingFun[+M <: CostModel](cpu: M, memory: M) extends Costing
     }
 }
 
+/** CostingFun wrapper that uses ValueMaxDepth memory for BuiltinValue at a specific argument
+  * position. Matches Plutus ValueMaxDepth costing wrapper for insertCoin/lookupCoin.
+  */
+class ValueMaxDepthCostingFun[+M <: CostModel](delegate: DefaultCostingFun[M], valueArgIndex: Int)
+    extends CostingFun {
+    def calculateCost(args: CekValue*): ExUnits = {
+        val argsMem = args.zipWithIndex.map { case (arg, i) =>
+            if i == valueArgIndex then
+                arg match
+                    case CekValue.VCon(Constant.BuiltinValue(v)) =>
+                        BuiltinValueOps.valueMaxDepth(v)
+                    case _ => MemoryUsage.memoryUsage(arg)
+            else MemoryUsage.memoryUsage(arg)
+        }
+        val cpu = delegate.cpu.calculateCost(argsMem)
+        val mem = delegate.memory.calculateCost(argsMem)
+        ExUnits(mem.toLong, cpu.toLong)
+    }
+}
+
 case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends CostingFun {
 
     def calculateCost(args: CekValue*): ExUnits = {

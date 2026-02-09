@@ -68,7 +68,17 @@ object PrettyPrinter:
             case BLS12_381_G2_Element(value) => text(s"0x${value.toCompressedByteString.toHex}")
             case BLS12_381_MlResult(_) =>
                 throw new IllegalArgumentException("Cannot print to BLS12_381_MlResult")
-            case Constant.BuiltinValue(value) => text(s"BuiltinValue(${value.toString})")
+            case Constant.BuiltinValue(value) =>
+                val entries = value.inner.toList.map { case (currency, tokens) =>
+                    val tokenEntries = tokens.toList.map { case (token, amount) =>
+                        inParens(text("#" + token.toHex) + text(", ") + str(amount))
+                    }
+                    inParens(
+                      text("#" + currency.toHex) + text(", ") +
+                          text("[") + intercalate(text(", "), tokenEntries) + text("]")
+                    )
+                }
+                text("[") + intercalate(text(", "), entries) + text("]")
 
     def pretty(d: Data): Doc =
         d match
@@ -108,6 +118,7 @@ object PrettyPrinter:
         case DefaultUni.Data                 => text("data")
         case DefaultUni.BLS12_381_G1_Element => text("bls12_381_G1_element")
         case DefaultUni.BLS12_381_G2_Element => text("bls12_381_G2_element")
+        case DefaultUni.BuiltinValue         => text("value")
         case _                               => sys.error(s"Unexpected default uni: $du")
 
     def pretty(sir: SIR, style: PrettyStyle): Doc =

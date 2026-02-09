@@ -756,16 +756,16 @@
         "pre-commit-hooks": "pre-commit-hooks"
       },
       "locked": {
-        "lastModified": 1765366102,
-        "narHash": "sha256-n2/1Lh4QkqjW4H3ZD7WoknfQz6LxW/0cMX5JS3KTQ5A=",
+        "lastModified": 1770334607,
+        "narHash": "sha256-gPrtTaRNblDexGnVrC72b3Mrswq0+tOm7uU+QfhhTcs=",
         "owner": "IntersectMBO",
         "repo": "plutus",
-        "rev": "e75d9d7777a31c7da3e5c3be39fd0501a592dbe1",
+        "rev": "b7e75c98073093eae53b3a030231a8f0a56f1f5d",
         "type": "github"
       },
       "original": {
         "owner": "IntersectMBO",
-        "ref": "1.56.0.0",
+        "ref": "1.58.0.0",
         "repo": "plutus",
         "type": "github"
       }
