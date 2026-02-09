@@ -91,7 +91,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/constant/unit/unit-fail-1/unit-fail-1")
     check("builtin/constant/unit/unit-fail-2/unit-fail-2")
     check("builtin/constant/unit/unit/unit")
-    // TODO: Plutus 1.53 - Value type constant tests (not yet implemented)
+    // TODO: enable when UPLC parser supports `(con value ...)` syntax
     ignore("builtin/constant/value/duplicate-keys/duplicate-keys")(())
     ignore("builtin/constant/value/empty-tokens/empty-tokens")(())
     ignore("builtin/constant/value/empty/empty")(())
@@ -529,7 +529,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/indexByteString/indexByteString-01/indexByteString-01")
     check("builtin/semantics/indexByteString/indexByteStringOOB/indexByteStringOOB")
     check("builtin/semantics/indexByteString/indexByteStringOverflow/indexByteStringOverflow")
-    // TODO: Plutus 1.53 - insertCoin builtin (not yet implemented)
+    // TODO: enable when UPLC parser supports `(con value ...)` syntax
     ignore("builtin/semantics/insertCoin/key-too-long-1/key-too-long-1")(())
     ignore("builtin/semantics/insertCoin/key-too-long-2/key-too-long-2")(())
     ignore("builtin/semantics/insertCoin/long-key-zero-1/long-key-zero-1")(())
@@ -607,7 +607,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/listOfPair/listOfPair")
     check("builtin/semantics/listToArray/listToArray-01/listToArray-01")
     check("builtin/semantics/listToArray/listToArray-02/listToArray-02")
-    // TODO: Plutus 1.53 - lookupCoin builtin (not yet implemented)
+    // TODO: enable when UPLC parser supports `(con value ...)` syntax
     ignore("builtin/semantics/lookupCoin/absent/absent")(())
     ignore("builtin/semantics/lookupCoin/present/present")(())
     check("builtin/semantics/mapData/mapData")
@@ -715,7 +715,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/sha2_256/sha2_256-length-200/sha2_256-length-200")
     check("builtin/semantics/sha3_256/sha3_256-empty/sha3_256-empty")
     check("builtin/semantics/sha3_256/sha3_256-length-200/sha3_256-length-200")
-    // TODO: Plutus 1.53 - scaleValue builtin (not yet implemented)
+    // TODO: enable when UPLC parser supports `(con value ...)` syntax
     ignore("builtin/semantics/scaleValue/by-neg/by-neg")(())
     ignore("builtin/semantics/scaleValue/by-pos/by-pos")(())
     ignore("builtin/semantics/scaleValue/by-zero/by-zero")(())
@@ -762,7 +762,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     check("builtin/semantics/unListData/unListData-fail/unListData-fail")
     check("builtin/semantics/unMapData/unMapData-01/unMapData-01")
     check("builtin/semantics/unMapData/unMapData-fail/unMapData-fail")
-    // TODO: Plutus 1.53 - unionValue builtin (not yet implemented)
+    // TODO: enable when UPLC parser supports `(con value ...)` syntax
     ignore("builtin/semantics/unionValue/cancel-01/cancel-01")(())
     ignore("builtin/semantics/unionValue/cancel-02/cancel-02")(())
     ignore("builtin/semantics/unionValue/combine/combine")(())
@@ -772,7 +772,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
     ignore("builtin/semantics/unionValue/underflow/underflow")(())
     ignore("builtin/semantics/unionValue/unitl/unitl")(())
     ignore("builtin/semantics/unionValue/unitr/unitr")(())
-    // TODO: Plutus 1.53 - valueContains builtin (not yet implemented)
+    // TODO: enable when UPLC parser supports `(con value ...)` syntax
     ignore("builtin/semantics/valueContains/ccy-missing/ccy-missing")(())
     ignore("builtin/semantics/valueContains/multi-insufficient/multi-insufficient")(())
     ignore("builtin/semantics/valueContains/multi-sufficient/multi-sufficient")(())

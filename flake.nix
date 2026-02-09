@@ -2,7 +2,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
-    plutus.url = "github:IntersectMBO/plutus/1.56.0.0";
+    plutus.url = "github:IntersectMBO/plutus/1.58.0.0";
     # cardano-node-flake.url = "github:input-output-hk/cardano-node/9.1.1";
   };
 
