@@ -130,29 +130,72 @@ case class BuiltinCostModel(
     indexArray: DefaultCostingFun[TwoArguments],
     multiIndexArray: DefaultCostingFun[TwoArguments],
     // MaryEraValue builtins (CIP-0153) - from Plutus builtinCostModelC.json
-    // insertCoin, unionValue, scaleValue use placeholder costing in Haskell (unimplementedCostingFun)
-    insertCoin: ConstCostingFun = ConstCostingFun(CostingInteger(300000000L), CostingInteger(1L)),
+    insertCoin: DefaultCostingFun[FourArguments] = DefaultCostingFun(
+      FourArguments.LinearInU(
+        OneVariableLinearFunction(CostingInteger(356924L), CostingInteger(18413L))
+      ),
+      FourArguments.LinearInU(
+        OneVariableLinearFunction(CostingInteger(45L), CostingInteger(21L))
+      )
+    ),
     lookupCoin: DefaultCostingFun[ThreeArguments] = DefaultCostingFun(
       ThreeArguments.LinearInZ(
         OneVariableLinearFunction(CostingInteger(219951L), CostingInteger(9444L))
       ),
       ThreeArguments.ConstantCost(CostingInteger(1L))
     ),
-    unionValue: ConstCostingFun = ConstCostingFun(CostingInteger(300000000L), CostingInteger(1L)),
+    unionValue: DefaultCostingFun[TwoArguments] = DefaultCostingFun(
+      TwoArguments.WithInteractionInXAndY(
+        TwoVariableWithInteractionFunction(
+          CostingInteger(1000L),
+          CostingInteger(172116L),
+          CostingInteger(183150L),
+          CostingInteger(6L)
+        )
+      ),
+      TwoArguments.AddedSizes(
+        OneVariableLinearFunction(CostingInteger(24L), CostingInteger(21L))
+      )
+    ),
     valueContains: DefaultCostingFun[TwoArguments] = DefaultCostingFun(
-      TwoArguments.MultipliedSizes(
-        OneVariableLinearFunction(CostingInteger(1163050L), CostingInteger(1470L))
+      TwoArguments.ConstAboveDiagonal(
+        ConstantOrTwoArguments(
+          CostingInteger(213283L),
+          TwoArguments.LinearInXAndY(
+            TwoVariableLinearFunction(
+              CostingInteger(618401L),
+              CostingInteger(1998L),
+              CostingInteger(28258L)
+            )
+          )
+        )
       ),
       TwoArguments.ConstantCost(CostingInteger(1L))
     ),
-    valueData: ConstCostingFun = ConstCostingFun(CostingInteger(194713L), CostingInteger(1L)),
-    unValueData: DefaultCostingFun[OneArgument] = DefaultCostingFun(
+    valueData: DefaultCostingFun[OneArgument] = DefaultCostingFun(
       OneArgument.LinearInX(
-        OneVariableLinearFunction(CostingInteger(1000L), CostingInteger(43200L))
+        OneVariableLinearFunction(CostingInteger(1000L), CostingInteger(38159L))
       ),
-      OneArgument.ConstantCost(CostingInteger(1L))
+      OneArgument.LinearInX(
+        OneVariableLinearFunction(CostingInteger(2L), CostingInteger(22L))
+      )
     ),
-    scaleValue: ConstCostingFun = ConstCostingFun(CostingInteger(300000000L), CostingInteger(1L))
+    unValueData: DefaultCostingFun[OneArgument] = DefaultCostingFun(
+      OneArgument.QuadraticInX(
+        OneVariableQuadraticFunction(CostingInteger(1000L), CostingInteger(95933L), CostingInteger(1L))
+      ),
+      OneArgument.LinearInX(
+        OneVariableLinearFunction(CostingInteger(11L), CostingInteger(1L))
+      )
+    ),
+    scaleValue: DefaultCostingFun[TwoArguments] = DefaultCostingFun(
+      TwoArguments.LinearInY(
+        OneVariableLinearFunction(CostingInteger(1000L), CostingInteger(277577L))
+      ),
+      TwoArguments.LinearInY(
+        OneVariableLinearFunction(CostingInteger(12L), CostingInteger(21L))
+      )
+    )
 ) {
 
     /** Convert a [[BuiltinCostModel]] to a flat map of cost parameters
@@ -329,7 +372,15 @@ object BuiltinCostModel {
             "lengthOfArray" -> writeJs(model.lengthOfArray),
             "listToArray" -> writeJs(model.listToArray),
             "indexArray" -> writeJs(model.indexArray),
-            "multiIndexArray" -> writeJs(model.multiIndexArray)
+            "multiIndexArray" -> writeJs(model.multiIndexArray),
+            // MaryEraValue builtins (CIP-0153)
+            "insertCoin" -> writeJs(model.insertCoin),
+            "lookupCoin" -> writeJs(model.lookupCoin),
+            "unionValue" -> writeJs(model.unionValue),
+            "valueContains" -> writeJs(model.valueContains),
+            "valueData" -> writeJs(model.valueData),
+            "unValueData" -> writeJs(model.unValueData),
+            "scaleValue" -> writeJs(model.scaleValue)
           ),
       json =>
           BuiltinCostModel(
@@ -557,7 +608,106 @@ object BuiltinCostModel {
             multiIndexArray =
                 if json.obj.keySet.contains("multiIndexArray") then
                     read[DefaultCostingFun[TwoArguments]](json("multiIndexArray"))
-                else null
+                else null,
+            // MaryEraValue builtins (CIP-0153)
+            insertCoin =
+                if json.obj.keySet.contains("insertCoin") then
+                    read[DefaultCostingFun[FourArguments]](json("insertCoin"))
+                else
+                    DefaultCostingFun(
+                      FourArguments.LinearInU(
+                        OneVariableLinearFunction(CostingInteger(356924L), CostingInteger(18413L))
+                      ),
+                      FourArguments.LinearInU(
+                        OneVariableLinearFunction(CostingInteger(45L), CostingInteger(21L))
+                      )
+                    ),
+            lookupCoin =
+                if json.obj.keySet.contains("lookupCoin") then
+                    read[DefaultCostingFun[ThreeArguments]](json("lookupCoin"))
+                else
+                    DefaultCostingFun(
+                      ThreeArguments.LinearInZ(
+                        OneVariableLinearFunction(CostingInteger(219951L), CostingInteger(9444L))
+                      ),
+                      ThreeArguments.ConstantCost(CostingInteger(1L))
+                    ),
+            unionValue =
+                if json.obj.keySet.contains("unionValue") then
+                    read[DefaultCostingFun[TwoArguments]](json("unionValue"))
+                else
+                    DefaultCostingFun(
+                      TwoArguments.WithInteractionInXAndY(
+                        TwoVariableWithInteractionFunction(
+                          CostingInteger(1000L),
+                          CostingInteger(172116L),
+                          CostingInteger(183150L),
+                          CostingInteger(6L)
+                        )
+                      ),
+                      TwoArguments.AddedSizes(
+                        OneVariableLinearFunction(CostingInteger(24L), CostingInteger(21L))
+                      )
+                    ),
+            valueContains =
+                if json.obj.keySet.contains("valueContains") then
+                    read[DefaultCostingFun[TwoArguments]](json("valueContains"))
+                else
+                    DefaultCostingFun(
+                      TwoArguments.ConstAboveDiagonal(
+                        ConstantOrTwoArguments(
+                          CostingInteger(213283L),
+                          TwoArguments.LinearInXAndY(
+                            TwoVariableLinearFunction(
+                              CostingInteger(618401L),
+                              CostingInteger(1998L),
+                              CostingInteger(28258L)
+                            )
+                          )
+                        )
+                      ),
+                      TwoArguments.ConstantCost(CostingInteger(1L))
+                    ),
+            valueData =
+                if json.obj.keySet.contains("valueData") then
+                    read[DefaultCostingFun[OneArgument]](json("valueData"))
+                else
+                    DefaultCostingFun(
+                      OneArgument.LinearInX(
+                        OneVariableLinearFunction(CostingInteger(1000L), CostingInteger(38159L))
+                      ),
+                      OneArgument.LinearInX(
+                        OneVariableLinearFunction(CostingInteger(2L), CostingInteger(22L))
+                      )
+                    ),
+            unValueData =
+                if json.obj.keySet.contains("unValueData") then
+                    read[DefaultCostingFun[OneArgument]](json("unValueData"))
+                else
+                    DefaultCostingFun(
+                      OneArgument.QuadraticInX(
+                        OneVariableQuadraticFunction(
+                          CostingInteger(1000L),
+                          CostingInteger(95933L),
+                          CostingInteger(1L)
+                        )
+                      ),
+                      OneArgument.LinearInX(
+                        OneVariableLinearFunction(CostingInteger(11L), CostingInteger(1L))
+                      )
+                    ),
+            scaleValue =
+                if json.obj.keySet.contains("scaleValue") then
+                    read[DefaultCostingFun[TwoArguments]](json("scaleValue"))
+                else
+                    DefaultCostingFun(
+                      TwoArguments.LinearInY(
+                        OneVariableLinearFunction(CostingInteger(1000L), CostingInteger(277577L))
+                      ),
+                      TwoArguments.LinearInY(
+                        OneVariableLinearFunction(CostingInteger(12L), CostingInteger(21L))
+                      )
+                    )
           )
     )
 
