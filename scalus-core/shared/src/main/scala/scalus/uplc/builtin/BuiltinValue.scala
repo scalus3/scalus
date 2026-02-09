@@ -1,6 +1,11 @@
 package scalus.uplc.builtin
 
-/** MaryEraValue (CIP-0153) - multi-asset value representation for Cardano.
+/** MaryValue - multi-asset value representation for Cardano, introduced in the Mary era.
+  *
+  * Corresponds to `Value` in Plutus Core (`PlutusCore.Value`).
+  *
+  * @see
+  *   [[https://cips.cardano.org/cip/CIP-0153 CIP-0153: Plutus Core Builtin Type - MaryEraValue]]
   *
   * This is a primitive opaque type in UPLC. The inner representation is hidden - use builtin
   * operations to work with values:
