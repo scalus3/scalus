@@ -23,6 +23,7 @@
     "build:browser-tests": "esbuild __tests__/shared-tests.ts --bundle --outfile=shared-tests-bundle.js --format=iife --global-name=SharedTests"
   },
   "devDependencies": {
+    "@meshsdk/core": "^1.9.0-beta.98",
     "@types/node": "^22.0.0",
     "cbor-x": "^1.6.0",
     "esbuild": "^0.27.2",
