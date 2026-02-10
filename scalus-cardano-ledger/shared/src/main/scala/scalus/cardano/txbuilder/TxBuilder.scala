@@ -1420,7 +1420,14 @@ case class TxBuilder(
       */
     def sign(signer: TransactionSigner): TxBuilder = {
         val signedTx = signer.sign(transaction)
-        copy(context = context.copy(transaction = signedTx))
+        // Filter witnesses to only include expected signers.
+        // Extra signatures would make the tx larger than the fee estimate accounts for.
+        val expectedHashes = context.expectedSigners.map(_.hash)
+        val filteredWitnesses = TaggedSortedSet(
+          signedTx.witnessSet.vkeyWitnesses.toSet.filter(w => expectedHashes.contains(w.vkeyHash))
+        )
+        val filteredTx = signedTx.withWitness(_.copy(vkeyWitnesses = filteredWitnesses))
+        copy(context = context.copy(transaction = filteredTx))
     }
 
     /** Returns the current transaction.

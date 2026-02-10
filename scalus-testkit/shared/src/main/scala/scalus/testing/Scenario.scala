@@ -8,6 +8,7 @@ import scalus.cardano.node.*
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
 
 /** State threaded through Scenario computations.
   *
@@ -113,7 +114,9 @@ object Scenario {
     def eval[A](scenario: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)] =
         scenario match
             case Done(s, a)          => LogicStreamT.Pure((s, a))
-            case Leaf(s, run)        => eval(run(s))
+            case Leaf(s, run) =>
+                try eval(run(s))
+                catch case NonFatal(e) => LogicStreamT.Error(e)
             case Branches(streams)   => streams.flatMap(branch => eval(branch))
             case WaitFuture(fut)     => LogicStreamT.WaitF(fut.map(sc => eval(sc)))
             case ScenarioError(_, e) => LogicStreamT.Error(e)
@@ -133,7 +136,9 @@ object Scenario {
             Done(ScenarioState.empty, a)
 
         override def map[A, B](fa: Scenario[A])(f: A => B): Scenario[B] = fa match
-            case Done(s, a)          => Done(s, f(a))
+            case Done(s, a) =>
+                try Done(s, f(a))
+                catch case NonFatal(e) => ScenarioError(s, e)
             case Leaf(s, run)        => Leaf(s, state => map(run(state))(f))
             case Branches(streams)   => Branches(streams.map(branch => map(branch)(f)))
             case WaitFuture(fut)     => WaitFuture(fut.map(sc => map(sc)(f)))
@@ -141,7 +146,9 @@ object Scenario {
             case FromStream(stream)  => FromStream(stream.map { case (s, a) => (s, f(a)) })
 
         override def flatMap[A, B](fa: Scenario[A])(f: A => Scenario[B]): Scenario[B] = fa match
-            case Done(s, a)   => injectState(s, f(a))
+            case Done(s, a) =>
+                try injectState(s, f(a))
+                catch case NonFatal(e) => ScenarioError(s, e)
             case Leaf(s, run) => Leaf(s, state => flatMap(run(state))(f))
             case Branches(streams) =>
                 Branches(streams.map(branch => flatMap(branch)(f)))
@@ -152,9 +159,13 @@ object Scenario {
 
         override def flatMapTry[A, B](fa: Scenario[A])(f: Try[A] => Scenario[B]): Scenario[B] =
             fa match
-                case Done(s, a)          => injectState(s, f(Success(a)))
-                case ScenarioError(s, e) => injectState(s, f(Failure(e)))
-                case Leaf(s, run)        => Leaf(s, state => flatMapTry(run(state))(f))
+                case Done(s, a) =>
+                    try injectState(s, f(Success(a)))
+                    catch case NonFatal(e) => ScenarioError(s, e)
+                case ScenarioError(s, e) =>
+                    try injectState(s, f(Failure(e)))
+                    catch case NonFatal(e2) => ScenarioError(s, e2)
+                case Leaf(s, run) => Leaf(s, state => flatMapTry(run(state))(f))
                 case Branches(streams) =>
                     Branches(streams.map(branch => flatMapTry(branch)(f)))
                 case WaitFuture(fut) =>
@@ -433,37 +444,44 @@ object Scenario {
     // =========================================================================
 
     /** Run a scenario from an Emulator, collecting all successful results (up to maxResults). */
-    def runAll[A](emulator: Emulator, maxResults: Int = 1000)(
+    def runAll[A](
+        emulator: Emulator,
+        maxResults: Int = 1000,
+        seed: org.scalacheck.rng.Seed = org.scalacheck.rng.Seed(0L)
+    )(
         s: Scenario[A]
     ): Future[IndexedSeq[(ScenarioState, A)]] =
         continueAll(
-          ScenarioState(ImmutableEmulator.fromEmulator(emulator), org.scalacheck.rng.Seed(0L)),
+          ScenarioState(ImmutableEmulator.fromEmulator(emulator), seed),
           maxResults
         )(s)
 
     /** Run a scenario from an Emulator, returning the first successful result. */
-    def runFirst[A](emulator: Emulator)(
+    def runFirst[A](
+        emulator: Emulator,
+        seed: org.scalacheck.rng.Seed = org.scalacheck.rng.Seed(0L)
+    )(
         s: Scenario[A]
     ): Future[Option[(ScenarioState, A)]] =
         continueFirst(
-          ScenarioState(ImmutableEmulator.fromEmulator(emulator), org.scalacheck.rng.Seed(0L))
+          ScenarioState(ImmutableEmulator.fromEmulator(emulator), seed)
         )(s)
 
     /** Continue a scenario from an existing ScenarioState, returning the raw LogicStreamT. */
-    def continue[A](state: ScenarioState)(
+    private[testing] def continue[A](state: ScenarioState)(
         s: Scenario[A]
     ): LogicStreamT[Future, (ScenarioState, A)] =
         eval(injectState(state, s))
 
     /** Continue a scenario from an existing ScenarioState, collecting all successful results. */
-    def continueAll[A](state: ScenarioState, maxResults: Int = 1000)(
+    private[testing] def continueAll[A](state: ScenarioState, maxResults: Int = 1000)(
         s: Scenario[A]
     ): Future[IndexedSeq[(ScenarioState, A)]] =
         logicStreamMonad.mObserveN(eval(injectState(state, s)), maxResults)
 
     /** Continue a scenario from an existing ScenarioState, returning the first successful result.
       */
-    def continueFirst[A](state: ScenarioState)(
+    private[testing] def continueFirst[A](state: ScenarioState)(
         s: Scenario[A]
     ): Future[Option[(ScenarioState, A)]] =
         logicStreamMonad.mObserveOne(eval(injectState(state, s)))
@@ -484,7 +502,12 @@ object Scenario {
       */
     given futureToScenarioConversion: CpsMonadConversion[Future, Scenario] with {
         def apply[A](fa: Future[A]): Scenario[A] =
-            leaf(state => WaitFuture(fa.map(a => Done(state, a))(ExecutionContext.parasitic)))
+            leaf(state =>
+                WaitFuture(fa.transform {
+                    case Success(a) => Success(Done(state, a))
+                    case Failure(e) => Success(ScenarioError(state, e))
+                }(ExecutionContext.parasitic))
+            )
     }
 
     /** Enables implicit conversion from ScalaCheck Gen to Scenario.
