@@ -178,6 +178,14 @@ object CrowdfundingScenarioTest {
     private def computeDonationPolicyId(campaignId: ByteString): ByteString =
         getDonationScript(campaignId).scriptHash
 
+    private def hasCampaignNft(output: TransactionOutput, nftAsset: AssetName): Boolean =
+        output.value.assets.assets
+            .get(crowdfundingPolicyId)
+            .exists(_.get(nftAsset).exists(_ > 0))
+
+    private def findCampaignOutputIdx(tx: Transaction, nftAsset: AssetName): Int =
+        tx.body.value.outputs.indexWhere(sized => hasCampaignNft(sized.value, nftAsset))
+
     private def findCampaignUtxo(
         reader: BlockchainReader,
         campaignId: ByteString
@@ -186,12 +194,8 @@ object CrowdfundingScenarioTest {
         val nftAsset = AssetName(campaignId)
         reader.findUtxos(scriptAddress).map(_.getOrElse(Map.empty)).map { utxos =>
             utxos
-                .find { case (_, output) =>
-                    output.value.assets.assets
-                        .get(crowdfundingPolicyId)
-                        .exists(_.get(nftAsset).exists(_ > 0))
-                }
-                .map { case (input, output) => Utxo(input, output) }
+                .find((_, output) => hasCampaignNft(output, nftAsset))
+                .map((input, output) => Utxo(input, output))
         }
     }
 
@@ -204,17 +208,13 @@ object CrowdfundingScenarioTest {
         val nftAsset = AssetName(campaignId)
         reader.findUtxos(scriptAddress).map(_.getOrElse(Map.empty)).map { utxos =>
             utxos
-                .filterNot { case (_, output) =>
-                    output.value.assets.assets
-                        .get(crowdfundingPolicyId)
-                        .exists(_.get(nftAsset).exists(_ > 0))
-                }
+                .filterNot((_, output) => hasCampaignNft(output, nftAsset))
                 .filter { case (_, output) =>
                     output.value.assets.assets
                         .get(donationPolicyId)
                         .exists(_.nonEmpty)
                 }
-                .map { case (input, output) => Utxo(input, output) }
+                .map((input, output) => Utxo(input, output))
                 .toSeq
         }
     }
@@ -228,6 +228,40 @@ object CrowdfundingScenarioTest {
           _.flatMap(u => u.output.inlineDatum.map(_.to[CampaignDatum]))
         )
     }
+
+    private def submitOrFail(tx: Transaction, actionName: String): Scenario[Unit] =
+        async[Scenario] {
+            Scenario.submit(tx).await match
+                case Right(_)  => ()
+                case Left(err) => throw RuntimeException(s"Failed to $actionName: $err")
+        }
+
+    private def spendCampaignAndDonations(
+        cardanoInfo: CardanoInfo,
+        campaignUtxo: Utxo,
+        donationUtxos: Seq[Utxo],
+        redeemer: Transaction => Data,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder =
+        donationUtxos.foldLeft(
+          TxBuilder(cardanoInfo)
+              .spend(campaignUtxo, redeemer, crowdfundingScript, requiredSigners)
+        ) { (b, utxo) =>
+            b.spend(utxo, redeemer, crowdfundingScript, Set.empty)
+        }
+
+    private def withUpdatedCampaign(
+        builder: TxBuilder,
+        currentDatum: CampaignDatum,
+        nftAsset: AssetName,
+        newWithdrawn: BigInt,
+        isFull: Boolean
+    ): TxBuilder =
+        if isFull then builder
+        else
+            val nftVal = Value.asset(crowdfundingPolicyId, nftAsset, 1L)
+            val newDatum = currentDatum.copy(withdrawn = newWithdrawn)
+            builder.payTo(scriptAddress, Value.lovelace(2_000_000L) + nftVal, newDatum)
 
     // =========================================================================
     // Base actions
@@ -283,10 +317,8 @@ object CrowdfundingScenarioTest {
             .sign(recipient.signer)
             .transaction
 
-        val result = Scenario.submit(tx).await
-        result match
-            case Right(_)  => campaignId
-            case Left(err) => throw RuntimeException(s"Failed to create campaign: $err")
+        submitOrFail(tx, "create campaign").await
+        campaignId
     }
 
     private def donateS(
@@ -305,6 +337,7 @@ object CrowdfundingScenarioTest {
         val donationPolicyId = ScriptHash.fromByteString(currentDatum.donationPolicyId)
         val donationScript = getDonationScript(campaignId)
 
+        // can't use currentDatum.copy() inside async block (dotty-cps-async macro bug)
         val newDatum = CampaignDatum(
           totalSum = currentDatum.totalSum + BigInt(amount),
           goal = currentDatum.goal,
@@ -327,17 +360,9 @@ object CrowdfundingScenarioTest {
 
         val donateRedeemer: Transaction => Data = { (tx: Transaction) =>
             val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
-            val campaignOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                sized.value.address == scriptAddress &&
-                sized.value.value.assets.assets
-                    .get(crowdfundingPolicyId)
-                    .exists(_.get(nftAsset).exists(_ > 0))
-            }
+            val campaignOutputIdx = findCampaignOutputIdx(tx, nftAsset)
             val donationOutputIdx = tx.body.value.outputs.indexWhere { sized =>
-                sized.value.address == scriptAddress &&
-                !sized.value.value.assets.assets
-                    .get(crowdfundingPolicyId)
-                    .exists(_.get(nftAsset).exists(_ > 0))
+                sized.value.address == scriptAddress && !hasCampaignNft(sized.value, nftAsset)
             }
             Action
                 .Donate(
@@ -360,10 +385,7 @@ object CrowdfundingScenarioTest {
             .sign(donor.signer)
             .transaction
 
-        val result = Scenario.submit(tx).await
-        result match
-            case Right(_)  => ()
-            case Left(err) => throw RuntimeException(s"Failed to donate: $err")
+        submitOrFail(tx, "donate").await
     }
 
     private def withdrawS(campaignId: ByteString): Scenario[Unit] = async[Scenario] {
@@ -398,13 +420,7 @@ object CrowdfundingScenarioTest {
             val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
             val campaignOutputIdx =
                 if isFullWithdrawal then -1
-                else
-                    tx.body.value.outputs.indexWhere { sized =>
-                        sized.value.address == scriptAddress &&
-                        sized.value.value.assets.assets
-                            .get(crowdfundingPolicyId)
-                            .exists(_.get(nftAsset).exists(_ > 0))
-                    }
+                else findCampaignOutputIdx(tx, nftAsset)
             val recipientOutputIdx = tx.body.value.outputs.indexWhere { sized =>
                 sized.value.address == recipientAddress
             }
@@ -421,46 +437,22 @@ object CrowdfundingScenarioTest {
                 .toData
         }
 
-        val withDonations = donationUtxos.foldLeft(
-          TxBuilder(reader.cardanoInfo)
-              .spend(campaignUtxo, withdrawRedeemer, crowdfundingScript, Set(recipientKeyHash))
-        ) { (b, utxo) =>
-            b.spend(utxo, withdrawRedeemer, crowdfundingScript, Set.empty)
-        }
-
-        val withRecipient = withDonations
-            .mint(donationScript, burnMap, withdrawRedeemer)
+        val withRecipient = spendCampaignAndDonations(
+          reader.cardanoInfo, campaignUtxo, donationUtxos,
+          withdrawRedeemer, Set(recipientKeyHash)
+        ).mint(donationScript, burnMap, withdrawRedeemer)
             .payTo(recipientAddress, Value.lovelace(totalWithdrawAmount.toLong))
 
-        val finalBuilder =
-            if isFullWithdrawal then withRecipient
-            else
-                val nftVal = Value.asset(crowdfundingPolicyId, nftAsset, 1L)
-                val newDatum = CampaignDatum(
-                  totalSum = currentDatum.totalSum,
-                  goal = currentDatum.goal,
-                  recipient = currentDatum.recipient,
-                  deadline = currentDatum.deadline,
-                  withdrawn = newWithdrawn,
-                  donationPolicyId = currentDatum.donationPolicyId
-                )
-                withRecipient.payTo(
-                  scriptAddress,
-                  Value.lovelace(2_000_000L) + nftVal,
-                  newDatum
-                )
-
-        val tx = finalBuilder
+        val tx = withUpdatedCampaign(
+          withRecipient, currentDatum, nftAsset, newWithdrawn, isFullWithdrawal
+        )
             .validFrom(Instant.ofEpochMilli(currentDatum.deadline.toLong + 1000))
             .complete(reader, recipientAddress)
             .await
             .sign(recipient.signer)
             .transaction
 
-        val result = Scenario.submit(tx).await
-        result match
-            case Right(_)  => ()
-            case Left(err) => throw RuntimeException(s"Failed to withdraw: $err")
+        submitOrFail(tx, "withdraw").await
     }
 
     private def reclaimS(campaignId: ByteString): Scenario[Unit] = async[Scenario] {
@@ -498,13 +490,7 @@ object CrowdfundingScenarioTest {
             val inputIdx = tx.body.value.inputs.toSeq.indexOf(campaignUtxo.input)
             val campaignOutputIdx =
                 if isFullReclaim then -1
-                else
-                    tx.body.value.outputs.indexWhere { sized =>
-                        sized.value.address == scriptAddress &&
-                        sized.value.value.assets.assets
-                            .get(crowdfundingPolicyId)
-                            .exists(_.get(nftAsset).exists(_ > 0))
-                    }
+                else findCampaignOutputIdx(tx, nftAsset)
             val sortedPairs = donationUtxos
                 .zip(donorInfos)
                 .map { case (utxo, (donorAddr, _, _, _)) =>
@@ -525,122 +511,106 @@ object CrowdfundingScenarioTest {
                 .toData
         }
 
-        val withDonations = donationUtxos.foldLeft(
-          TxBuilder(reader.cardanoInfo)
-              .spend(campaignUtxo, reclaimRedeemer, crowdfundingScript, donorKeyHashes)
-        ) { (b, utxo) =>
-            b.spend(utxo, reclaimRedeemer, crowdfundingScript, Set.empty)
-        }
-
         val withPayments = donorInfos.foldLeft(
-          withDonations.mint(donationScript, burnMap, reclaimRedeemer)
+          spendCampaignAndDonations(
+            reader.cardanoInfo, campaignUtxo, donationUtxos,
+            reclaimRedeemer, donorKeyHashes
+          ).mint(donationScript, burnMap, reclaimRedeemer)
         ) { case (b, (donorAddr, _, _, utxoLovelace)) =>
             b.payTo(donorAddr, Value.lovelace(utxoLovelace))
         }
-
-        val finalBuilder =
-            if isFullReclaim then withPayments
-            else
-                val nftVal = Value.asset(crowdfundingPolicyId, nftAsset, 1L)
-                val newDatum = CampaignDatum(
-                  totalSum = currentDatum.totalSum,
-                  goal = currentDatum.goal,
-                  recipient = currentDatum.recipient,
-                  deadline = currentDatum.deadline,
-                  withdrawn = newWithdrawn,
-                  donationPolicyId = currentDatum.donationPolicyId
-                )
-                withPayments.payTo(
-                  scriptAddress,
-                  Value.lovelace(2_000_000L) + nftVal,
-                  newDatum
-                )
 
         val feePayerAddr = donorInfos.head._1
         val allSigners = new TransactionSigner(
           Set(donor1.account.paymentKeyPair, donor2.account.paymentKeyPair)
         )
 
-        val tx = finalBuilder
+        val tx = withUpdatedCampaign(
+          withPayments, currentDatum, nftAsset, newWithdrawn, isFullReclaim
+        )
             .validFrom(Instant.ofEpochMilli(currentDatum.deadline.toLong + 1000))
             .complete(reader, feePayerAddr)
             .await
             .sign(allSigners)
             .transaction
 
-        val result = Scenario.submit(tx).await
-        result match
-            case Right(_)  => ()
-            case Left(err) => throw RuntimeException(s"Failed to reclaim: $err")
+        submitOrFail(tx, "reclaim").await
     }
 
     // =========================================================================
     // Try actions with precondition/postcondition checks
     // =========================================================================
 
+    /** Wraps an action with precondition checking via flatMapTry. */
+    private def tryActionS(
+        actionName: String,
+        shouldSucceed: Scenario[Boolean],
+        action: Scenario[Unit]
+    ): Scenario[Unit] = async[Scenario] {
+        val expected = shouldSucceed.await
+        Scenario.scenarioLogicMonad
+            .flatMapTry(action) {
+                case Success(_) =>
+                    Scenario.check(expected, s"$actionName succeeded but preconditions not met")
+                case Failure(_) =>
+                    Scenario.check(!expected, s"$actionName failed but preconditions were met")
+            }
+            .await
+    }
+
+    private def hasDonationsS(
+        reader: BlockchainReader,
+        campaignId: ByteString,
+        datum: CampaignDatum
+    ): Future[Boolean] = {
+        given scala.concurrent.ExecutionContext = reader.executionContext
+        val dpId = ScriptHash.fromByteString(datum.donationPolicyId)
+        findDonationUtxos(reader, campaignId, dpId).map(_.nonEmpty)
+    }
+
     private def tryDonateS(
         campaignId: ByteString,
         donorAddress: ShelleyAddress,
         amount: Long,
         donor: Party
-    ): Scenario[Unit] = async[Scenario] {
-        val reader = Scenario.snapshotReader.await
-        val maybeDatum = tryGetCampaignDatum(reader, campaignId).await
-        val slotTime = reader.cardanoInfo.slotConfig.slotToTime(reader.currentSlot.await)
-        val shouldSucceed = maybeDatum.exists(d => slotTime < d.deadline.toLong)
+    ): Scenario[Unit] = tryActionS(
+      "donate",
+      shouldSucceed = async[Scenario] {
+          val reader = Scenario.snapshotReader.await
+          val maybeDatum = tryGetCampaignDatum(reader, campaignId).await
+          val slotTime = reader.cardanoInfo.slotConfig.slotToTime(reader.currentSlot.await)
+          maybeDatum.exists(d => slotTime < d.deadline.toLong)
+      },
+      action = donateS(campaignId, donorAddress, amount, donor)
+    )
 
-        Scenario.scenarioLogicMonad
-            .flatMapTry(donateS(campaignId, donorAddress, amount, donor)) {
-                case Success(_) =>
-                    Scenario.check(shouldSucceed, "donate succeeded but deadline has passed")
-                case Failure(_) =>
-                    Scenario.check(!shouldSucceed, "donate failed but should have succeeded")
-            }
-            .await
-    }
+    private def tryWithdrawS(campaignId: ByteString): Scenario[Unit] = tryActionS(
+      "withdraw",
+      shouldSucceed = async[Scenario] {
+          val reader = Scenario.snapshotReader.await
+          val maybeDatum = tryGetCampaignDatum(reader, campaignId).await
+          val slotTime = reader.cardanoInfo.slotConfig.slotToTime(reader.currentSlot.await)
+          maybeDatum match
+              case Some(d) =>
+                  hasDonationsS(reader, campaignId, d).await &&
+                  slotTime > d.deadline.toLong && d.totalSum >= d.goal
+              case None => false
+      },
+      action = withdrawS(campaignId)
+    )
 
-    private def tryWithdrawS(campaignId: ByteString): Scenario[Unit] = async[Scenario] {
-        val reader = Scenario.snapshotReader.await
-        val maybeDatum = tryGetCampaignDatum(reader, campaignId).await
-        val slotTime = reader.cardanoInfo.slotConfig.slotToTime(reader.currentSlot.await)
-        val shouldSucceed = maybeDatum match
-            case Some(d) =>
-                val dpId = ScriptHash.fromByteString(d.donationPolicyId)
-                val hasDonations = findDonationUtxos(reader, campaignId, dpId).await.nonEmpty
-                slotTime > d.deadline.toLong && d.totalSum >= d.goal && hasDonations
-            case None => false
-
-        Scenario.scenarioLogicMonad
-            .flatMapTry(withdrawS(campaignId)) {
-                case Success(_) =>
-                    Scenario.check(shouldSucceed, "withdraw succeeded but preconditions not met")
-                case Failure(_) =>
-                    Scenario.check(!shouldSucceed, "withdraw failed but preconditions were met")
-            }
-            .await
-    }
-
-    private def tryReclaimS(campaignId: ByteString): Scenario[Unit] = async[Scenario] {
-        val reader = Scenario.snapshotReader.await
-        val maybeDatum = tryGetCampaignDatum(reader, campaignId).await
-        val slotTime = reader.cardanoInfo.slotConfig.slotToTime(reader.currentSlot.await)
-        val hasDonations = maybeDatum match
-            case Some(d) =>
-                val dpId = ScriptHash.fromByteString(d.donationPolicyId)
-                findDonationUtxos(reader, campaignId, dpId).await.nonEmpty
-            case None => false
-        val shouldSucceed = maybeDatum match
-            case Some(d) =>
-                slotTime > d.deadline.toLong && d.totalSum < d.goal && hasDonations
-            case None => false
-
-        Scenario.scenarioLogicMonad
-            .flatMapTry(reclaimS(campaignId)) {
-                case Success(_) =>
-                    Scenario.check(shouldSucceed, "reclaim succeeded but preconditions not met")
-                case Failure(_) =>
-                    Scenario.check(!shouldSucceed, "reclaim failed but preconditions were met")
-            }
-            .await
-    }
+    private def tryReclaimS(campaignId: ByteString): Scenario[Unit] = tryActionS(
+      "reclaim",
+      shouldSucceed = async[Scenario] {
+          val reader = Scenario.snapshotReader.await
+          val maybeDatum = tryGetCampaignDatum(reader, campaignId).await
+          val slotTime = reader.cardanoInfo.slotConfig.slotToTime(reader.currentSlot.await)
+          maybeDatum match
+              case Some(d) =>
+                  hasDonationsS(reader, campaignId, d).await &&
+                  slotTime > d.deadline.toLong && d.totalSum < d.goal
+              case None => false
+      },
+      action = reclaimS(campaignId)
+    )
 }

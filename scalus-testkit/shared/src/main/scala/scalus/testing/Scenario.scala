@@ -113,7 +113,7 @@ object Scenario {
     /** Evaluate a Scenario tree to a LogicStreamT of (state, value) pairs. */
     def eval[A](scenario: Scenario[A]): LogicStreamT[Future, (ScenarioState, A)] =
         scenario match
-            case Done(s, a)          => LogicStreamT.Pure((s, a))
+            case Done(s, a) => LogicStreamT.Pure((s, a))
             case Leaf(s, run) =>
                 try eval(run(s))
                 catch case NonFatal(e) => LogicStreamT.Error(e)
