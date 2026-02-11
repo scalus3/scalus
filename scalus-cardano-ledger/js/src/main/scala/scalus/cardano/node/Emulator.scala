@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, PlutusScriptsTransactionMutator, STS, State}
+import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
 import scalus.cardano.ledger.*
 
 /** An in-memory bare-bones node implementation (JS version with single-threaded state).
@@ -72,7 +72,7 @@ object Emulator {
         Emulator(
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
-          mutators = Set(PlutusScriptsTransactionMutator)
+          mutators = defaultMutators
         )
     }
 }

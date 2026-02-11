@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, PlutusScriptsTransactionMutator, STS, State}
+import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
 import scalus.cardano.ledger.*
 
 import java.util.concurrent.atomic.AtomicReference
@@ -83,7 +83,7 @@ object Emulator {
         Emulator(
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
-          mutators = Set(PlutusScriptsTransactionMutator)
+          mutators = defaultMutators
         )
     }
 }
