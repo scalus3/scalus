@@ -285,16 +285,11 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
     override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
         constr.name match
-            case "scalus.cardano.onchain.plutus.prelude.List$.Nil" |
-                "scalus.uplc.builtin.BuiltinList$.Nil" =>
+            case SIRType.List.NilConstr.name |
+                SIRType.BuiltinList.Nil.name =>
                 genNil(constr.tp, constr.anns.pos)
-                // lvBuiltinApply0(
-                //  SIRBuiltins.mkNilData,
-                //  SIRType.List.Nil,
-                //  SumCaseClassRepresentation.SumDataList,
-                //  constr.anns.pos
-                // )
-            case "scalus.cardano.onchain.plutus.prelude.List$.Cons" =>
+            case SIRType.List.Cons.name |
+                SIRType.BuiltinList.Cons.name =>
                 if constr.args.size != 2 then
                     throw LoweringException(
                       s"Constr construnctor with ${constr.args.size} args, should be 2",
@@ -358,7 +353,8 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         SIRType.retrieveConstrDecl(tp) match {
             case Left(r) => false
             case Right(constrDecl) =>
-                constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
+                constrDecl.name == SIRType.List.NilConstr.name
+                    || constrDecl.name == SIRType.BuiltinList.Nil.name
         }
     }
 
@@ -423,10 +419,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 typeArgs.head
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
-                if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" then
-                    SIRType.FreeUnificator
-                else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" then
-                    typeArgs.head
+                if constrDecl.name == SIRType.List.NilConstr.name
+                    || constrDecl.name == SIRType.BuiltinList.Nil.name
+                then SIRType.FreeUnificator
+                else if constrDecl.name == SIRType.List.Cons.name
+                    || constrDecl.name == SIRType.BuiltinList.Cons.name
+                then typeArgs.head
                 else
                     throw LoweringException(
                       s"Unknown case class ${constrDecl.name} for List",
@@ -471,10 +469,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         matchData.cases.foreach { cs =>
             cs.pattern match
                 case SIR.Pattern.Constr(constrDecl, _, _)
-                    if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" =>
+                    if constrDecl.name == SIRType.List.NilConstr.name
+                        || constrDecl.name == SIRType.BuiltinList.Nil.name =>
                     optNilCase = Some(cs)
                 case SIR.Pattern.Constr(constrDecl, _, _)
-                    if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" =>
+                    if constrDecl.name == SIRType.List.Cons.name
+                        || constrDecl.name == SIRType.BuiltinList.Cons.name =>
                     optConsCase = Some(cs)
                 case SIR.Pattern.Wildcard =>
                     optWildcardCase = Some(cs)
@@ -482,56 +482,44 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     throw LoweringException(s"Unknown pattern ${cs.pattern}", cs.anns.pos)
         }
         val isUnchecked = matchData.anns.data.contains("unchecked")
-        val nilCase = optNilCase
+        val optEffectiveNilCase = optNilCase
             .orElse(optWildcardCase)
-            .getOrElse(
+            .orElse(
               if !isUnchecked then {
                   println("debug: no Nil case in List match")
                   println("annotation keys: " + matchData.anns.data.keys.mkString(", "))
                   throw LoweringException("No Nil case in match", matchData.anns.pos)
-              } else {
-                  SIR.Case(
-                    SIR.Pattern.Wildcard,
-                    SIR.Error(
-                      s"Unexpected case at ${matchData.anns.pos.show} ",
-                      AnnotationsDecl(matchData.anns.pos)
-                    ),
-                    AnnotationsDecl(matchData.anns.pos)
-                  )
-              }
+              } else None
             )
-        val consCase = optConsCase
+        val optEffectiveConsCase = optConsCase
             .orElse(optWildcardCase)
-            .getOrElse(
+            .orElse(
               if !isUnchecked then
                   throw LoweringException("No Cons case in match", matchData.anns.pos)
-              else {
-                  SIR.Case(
-                    SIR.Pattern.Wildcard,
-                    SIR.Error(
-                      s"Unexpected case at ${matchData.anns.pos.show} ",
-                      AnnotationsDecl(matchData.anns.pos)
-                    ),
-                    AnnotationsDecl(matchData.anns.pos)
-                  )
-              }
+              else None
             )
+        // At least one case must be present
+        if optEffectiveNilCase.isEmpty && optEffectiveConsCase.isEmpty then
+            throw LoweringException("Match must have at least one case", matchData.anns.pos)
+        val nilCase = optEffectiveNilCase
+        val consCase = optEffectiveConsCase
 
-        val (consHeadName, consTailName) = consCase.pattern match
-            case SIR.Pattern.Constr(constrDecl, List(h, t), _) =>
-                (h, t)
-            case SIR.Pattern.Constr(_, _, _) =>
-                throw LoweringException(
-                  s"Cons case should have two bindings, but found ${consCase.pattern}",
-                  consCase.anns.pos
-                )
-            case SIR.Pattern.Const(_) =>
-                throw LoweringException(
-                  s"Constant pattern not supported for list matching",
-                  consCase.anns.pos
-                )
-            case SIR.Pattern.Wildcard =>
-                ("_head", "_tail")
+        val (consHeadName, consTailName) = consCase match
+            case Some(cs) =>
+                cs.pattern match
+                    case SIR.Pattern.Constr(_, List(h, t), _) => (h, t)
+                    case SIR.Pattern.Constr(_, _, _) =>
+                        throw LoweringException(
+                          s"Cons case should have two bindings, but found ${cs.pattern}",
+                          cs.anns.pos
+                        )
+                    case SIR.Pattern.Const(_) =>
+                        throw LoweringException(
+                          s"Constant pattern not supported for list matching",
+                          cs.anns.pos
+                        )
+                    case SIR.Pattern.Wildcard => ("_head", "_tail")
+            case None => ("_head", "_tail")
 
         val listInputId = lctx.uniqueVarName("listInput")
         val listType = matchData.scrutinee.tp
@@ -613,15 +601,15 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
         val resType = optTargetType.getOrElse(matchData.tp)
 
-        val loweredConsBody = lctx
-            .lower(consCase.body, Some(resType))
-            .maybeUpcast(resType, consCase.anns.pos)
+        val optLoweredConsBody = consCase.map { cs =>
+            lctx.lower(cs.body, Some(resType)).maybeUpcast(resType, cs.anns.pos)
+        }
 
         lctx.scope = prevScope
 
-        val loweredNilBody = lctx
-            .lower(nilCase.body, Some(resType))
-            .maybeUpcast(resType, nilCase.anns.pos)
+        val optLoweredNilBody = nilCase.map { cs =>
+            lctx.lower(cs.body, Some(resType)).maybeUpcast(resType, cs.anns.pos)
+        }
 
         if SIRType.isProd(loweredScrutinee.sirType) then
             val constrDecl = SIRType
@@ -632,35 +620,41 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     matchData.anns.pos
                   )
                 )
-            if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil" then {
-                // we can generate only Nil case.
+            if constrDecl.name == SIRType.List.NilConstr.name
+                || constrDecl.name == SIRType.BuiltinList.Nil.name
+            then {
                 println("info: unused case Cons in List match will be removed")
-                loweredNilBody
-            } else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" then {
+                optLoweredNilBody.getOrElse(
+                  throw LoweringException("Nil case required for Nil-typed scrutinee", matchData.anns.pos)
+                )
+            } else if constrDecl.name == SIRType.List.Cons.name
+                || constrDecl.name == SIRType.BuiltinList.Cons.name
+            then {
                 println("info: unused case Nil in List match will be removed")
-                loweredConsBody
+                optLoweredConsBody.getOrElse(
+                  throw LoweringException("Cons case required for Cons-typed scrutinee", matchData.anns.pos)
+                )
             } else
                 throw LoweringException(
                   s"Unknown list constructior ${constrDecl.name}",
                   matchData.anns.pos
                 )
         else
+            // Need at least the Cons branch for Case on List / ChooseList
+            val loweredConsBody = optLoweredConsBody.getOrElse(
+              throw LoweringException("Cons case is required for list match", matchData.anns.pos)
+            )
 
+            val allBranches = Seq(loweredConsBody) ++ optLoweredNilBody.toSeq
             val resRepr = LoweredValue.chooseCommonRepresentation(
-              Seq(loweredConsBody, loweredNilBody),
+              allBranches,
               resType,
               matchData.anns.pos
             )
             val loweredConsBodyR =
-                loweredConsBody.toRepresentation(resRepr, consCase.anns.pos)
-            val loweredNilBodyR =
-                loweredNilBody.toRepresentation(resRepr, nilCase.anns.pos)
-
-            if resType == SIRType.FreeUnificator then
-                throw LoweringException(
-                  s"match branches return unrelated types: ${loweredConsBody.sirType.show} and ${loweredNilBody.sirType.show}",
-                  matchData.anns.pos
-                )
+                loweredConsBody.toRepresentation(resRepr, consCase.get.anns.pos)
+            val optLoweredNilBodyR =
+                optLoweredNilBody.map(nb => nb.toRepresentation(resRepr, nilCase.get.anns.pos))
 
             // For PlutusV4, use Case on list; otherwise use ChooseList builtin
             val retval =
@@ -670,7 +664,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       consHead,
                       consTail,
                       loweredConsBodyR,
-                      loweredNilBodyR,
+                      optLoweredNilBodyR,
                       resType,
                       resRepr,
                       matchData.anns.pos
@@ -681,7 +675,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       consHead,
                       consTail,
                       loweredConsBodyR,
-                      loweredNilBodyR,
+                      optLoweredNilBodyR.getOrElse(
+                        throw LoweringException(
+                          "Nil case is required for ChooseList (V3). Use @unchecked only with PlutusV4",
+                          matchData.anns.pos
+                        )
+                      ),
                       resType,
                       resRepr,
                       matchData.anns.pos

@@ -479,7 +479,7 @@ object ScalusRuntime {
               headVal,
               tailVal,
               consBody,
-              nilBody,
+              Some(nilBody),
               outType,
               outRepresentation,
               AnnotationsDecl.empty.pos

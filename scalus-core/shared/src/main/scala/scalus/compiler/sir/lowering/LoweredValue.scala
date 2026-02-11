@@ -1095,11 +1095,14 @@ case class CaseListLoweredValue(
     consHead: IdentifiableLoweredValue,
     consTail: IdentifiableLoweredValue,
     consBranch: LoweredValue,
-    nilBranch: LoweredValue,
+    optNilBranch: Option[LoweredValue],
     tp: SIRType,
     repr: LoweredValueRepresentation,
     inPos: SIRPosition
-) extends ComplexLoweredValue(Set(consHead, consTail), scrutinee, consBranch, nilBranch) {
+) extends ComplexLoweredValue(
+      Set(consHead, consTail),
+      (Seq(scrutinee, consBranch) ++ optNilBranch.toSeq)*
+    ) {
 
     override def sirType: SIRType = tp
 
@@ -1110,29 +1113,31 @@ case class CaseListLoweredValue(
     override def termInternal(gctx: TermGenerationContext): Term = {
         // Case(scrutinee, [λhead.λtail.consBranch, nilBranch])
         // Cons = 0 (with head, tail args), Nil = 1 (no args)
-        // Add consHead and consTail to generatedVars so they're recognized as lambda-bound
+        // When nilBranch is None (@unchecked), generate only the Cons branch --
+        // VM throws CaseListBranchError on Nil automatically.
         val consCtx = gctx.copy(generatedVars = gctx.generatedVars + consHead.id + consTail.id)
-        Term.Case(
-          scrutinee.termWithNeededVars(gctx),
-          scala.collection.immutable.List(
-            Term.LamAbs(
-              consHead.id,
-              Term.LamAbs(consTail.id, consBranch.termWithNeededVars(consCtx))
-            ),
-            nilBranch.termWithNeededVars(gctx)
-          )
+        val consTerm = Term.LamAbs(
+          consHead.id,
+          Term.LamAbs(consTail.id, consBranch.termWithNeededVars(consCtx))
         )
+        val branches = optNilBranch match
+            case Some(nilBranch) =>
+                scala.collection.immutable.List(consTerm, nilBranch.termWithNeededVars(gctx))
+            case None =>
+                scala.collection.immutable.List(consTerm)
+        Term.Case(scrutinee.termWithNeededVars(gctx), branches)
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         import Doc.*
+        val consDoc = (line + text("Cons") + space + consHead.docRef(ctx) + space + consTail
+            .docRef(ctx) + text(" ->") + (lineOrSpace + consBranch.docRef(ctx)).nested(2)).grouped
+        val nilDoc = optNilBranch match
+            case Some(nilBranch) =>
+                (line + text("Nil ->") + (lineOrSpace + nilBranch.docRef(ctx)).nested(2)).grouped
+            case None => Doc.empty
         ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
-            + (line + text("Cons") + space + consHead.docRef(ctx) + space + consTail.docRef(
-              ctx
-            ) + text(" ->") + (lineOrSpace + consBranch.docRef(ctx)).nested(2)).grouped
-            + (line + text("Nil ->") + (lineOrSpace + nilBranch.docRef(ctx)).nested(
-              2
-            )).grouped).aligned
+            + consDoc + nilDoc).aligned
     }
 
 }
@@ -1570,48 +1575,51 @@ object LoweredValue {
             consHead: IdentifiableLoweredValue,
             consTail: IdentifiableLoweredValue,
             consBranch: LoweredValue,
-            nilBranch: LoweredValue,
+            optNilBranch: Option[LoweredValue],
             inPos: SIRPosition,
             optTargetType: Option[SIRType] = None
         )(using lctx: LoweringContext): LoweredValue = {
 
             val resType = optTargetType.getOrElse(
-              SIRUnify.topLevelUnifyType(
-                consBranch.sirType,
-                nilBranch.sirType,
-                SIRUnify.Env.empty.withUpcasting
-              ) match {
-                  case SIRUnify.UnificationSuccess(_, tp) =>
-                      if tp == SIRType.FreeUnificator then
-                          throw LoweringException(
-                            s"case branches return unrelated types: ${consBranch.sirType.show} and ${nilBranch.sirType.show}",
-                            inPos
-                          )
-                      tp
-                  case failure @ SIRUnify.UnificationFailure(path, l, r) =>
-                      lctx.warn("Unification failure: " + failure, inPos)
-                      SIRType.FreeUnificator
-              }
+              optNilBranch match
+                  case Some(nilBranch) =>
+                      SIRUnify.topLevelUnifyType(
+                        consBranch.sirType,
+                        nilBranch.sirType,
+                        SIRUnify.Env.empty.withUpcasting
+                      ) match {
+                          case SIRUnify.UnificationSuccess(_, tp) =>
+                              if tp == SIRType.FreeUnificator then
+                                  throw LoweringException(
+                                    s"case branches return unrelated types: ${consBranch.sirType.show} and ${nilBranch.sirType.show}",
+                                    inPos
+                                  )
+                              tp
+                          case failure @ SIRUnify.UnificationFailure(path, l, r) =>
+                              lctx.warn("Unification failure: " + failure, inPos)
+                              SIRType.FreeUnificator
+                      }
+                  case None => consBranch.sirType
             )
 
             val consBranchUpcasted = consBranch.maybeUpcast(resType, inPos)
-            val nilBranchUpcasted = nilBranch.maybeUpcast(resType, inPos)
+            val optNilBranchUpcasted = optNilBranch.map(_.maybeUpcast(resType, inPos))
 
             val targetRepresentation = chooseCommonRepresentation(
-              Seq(consBranchUpcasted, nilBranchUpcasted),
+              Seq(consBranchUpcasted) ++ optNilBranchUpcasted.toSeq,
               resType,
               inPos
             )
 
             val consBranchR = consBranchUpcasted.toRepresentation(targetRepresentation, inPos)
-            val nilBranchR = nilBranchUpcasted.toRepresentation(targetRepresentation, inPos)
+            val optNilBranchR = optNilBranchUpcasted.map(_.toRepresentation(targetRepresentation, inPos))
 
             CaseListLoweredValue(
               scrutinee,
               consHead,
               consTail,
               consBranchR,
-              nilBranchR,
+              optNilBranchR,
               resType,
               targetRepresentation,
               inPos

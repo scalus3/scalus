@@ -35,9 +35,9 @@ import scala.collection.immutable
   *   V1
   */
 enum BuiltinList[+A]:
-    private case Nil extends BuiltinList[Nothing]
+    case Nil extends BuiltinList[Nothing]
 
-    private case Cons(h: A, tl: BuiltinList[A]) extends BuiltinList[A]
+    case Cons(h: A, tl: BuiltinList[A]) extends BuiltinList[A]
 
     /** Checks if the list is empty.
       *
