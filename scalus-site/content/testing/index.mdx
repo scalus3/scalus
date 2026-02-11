@@ -16,6 +16,7 @@ Scalus provides comprehensive testing tools for Cardano smart contracts — unit
 | Tool | Purpose | Best For |
 |------|---------|----------|
 | **[Unit Testing](/docs/testing/unit-testing)** | Property-based tests with ScalaCheck | Validator logic verification |
+| **[Testkit](/docs/testing/testkit)** | Boundary testing & attack simulation | Finding vulnerabilities via transaction variations |
 | **[Debugging](/docs/testing/debugging)** | IDE debugging, logging, error traces | Finding and fixing bugs |
 | **[Emulator](/docs/testing/emulator)** | In-memory Cardano node | Fast iteration, CI/CD |
 | **[JS/TS Emulator](/docs/testing/js-emulator)** | Emulator for JavaScript/TypeScript | Browser DApps, Node.js tooling |
@@ -36,6 +37,25 @@ class MyValidatorTest extends AnyFunSuite with ScalusTest {
 ```
 
 See [Unit Testing](/docs/testing/unit-testing) for complete guide.
+
+## Testkit — Boundary & Attack Testing
+
+The [Testkit](/docs/testing/testkit) explores transaction variations around boundary values to find vulnerabilities. Define observable state, a happy-path transaction, and variations — then run with ScalaCheck or exhaustive Scenario exploration:
+
+```scala
+object AuctionStep extends ContractStepVariations[AuctionState] {
+    def extractState(reader: BlockchainReader)(using ExecutionContext) = ...
+    def makeBaseTx(reader: BlockchainReader, state: AuctionState)(using ExecutionContext) = ...
+    def variations = TxVariations.standard.default[AuctionState](
+        extractUtxo = _.auctionUtxo,
+        extractDatum = s => updatedDatum(s.currentBid + 1, Alice),
+        redeemer = _ => BidRedeemer.toData,
+        script = auctionScript
+    )
+}
+```
+
+Includes pre-built attack patterns: steal, partial theft, corrupted datum, double satisfaction, and more. See [Testkit](/docs/testing/testkit) for the full guide.
 
 ## Debugging
 
@@ -110,6 +130,7 @@ Pre-deployment:
 ## See Also
 
 - [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck
+- [Testkit](/docs/testing/testkit) — Boundary testing and attack simulation
 - [Debugging](/docs/testing/debugging) — IDE debugging and logging
 - [Emulator](/docs/testing/emulator) — In-memory testing with instant feedback
 - [JS/TS Emulator](/docs/testing/js-emulator) — Emulator for JavaScript and TypeScript

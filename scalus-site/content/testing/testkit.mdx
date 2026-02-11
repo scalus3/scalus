@@ -1,4 +1,12 @@
-# Boundary Testing Guide
+---
+title: Testkit - Boundary & Property Testing for Smart Contracts
+sidebarTitle: Boundary Testing
+description: Test Cardano smart contracts by exploring transaction variations around boundary values. Use ScalaCheck, Scenario exploration, and standard attack patterns to find vulnerabilities.
+---
+
+import { Callout } from 'nextra/components'
+
+# Boundary Testing
 
 ## The Idea
 
@@ -11,7 +19,7 @@ Boundary testing automates this. The approach is:
 3. **Mutate it** — systematically vary amounts, timings, outputs, and recipients around boundary values. Also apply known attack patterns (steal outputs, corrupt datums, double satisfaction)
 4. **Submit each variation** and check that valid transactions succeed and invalid ones are rejected
 
-The testkit includes pre-built attack patterns covering common vulnerabilities — you get broad security coverage with minimal setup.
+The testkit includes pre-built attack patterns covering [common vulnerabilities](/docs/security/common-vulnerabilities) — you get broad security coverage with minimal setup.
 
 You can run boundary tests in three modes:
 - **ScalaCheck forAll** — random sampling with shrinking, single step
@@ -128,7 +136,9 @@ object AuctionStep extends ContractStepVariations[AuctionState] {
 }
 ```
 
-Note: `makeBaseTx` returns `Future[TxTemplate]` which bundles the builder with sponsor and signer. `variations` returns a value (not a method taking state) — state is passed to individual variation methods at enumerate time.
+<Callout type="info">
+`makeBaseTx` returns `Future[TxTemplate]` which bundles the builder with sponsor and signer. `variations` returns a value (not a method taking state) — state is passed to individual variation methods at enumerate time.
+</Callout>
 
 ### 4. Run Tests
 
@@ -416,7 +426,7 @@ new MyStep {
 }
 ```
 
-### Standard Variations
+## Standard Variations
 
 Use `TxVariations.standard` to access pre-built attack patterns. The `default` method combines common attack vectors with minimal configuration:
 
@@ -444,19 +454,26 @@ val extendedVariations = TxVariations.standard.defaultExtended[ContractState](
 )
 ```
 
-Individual variations available via `TxVariations.standard`:
-- `removeContractOutput` — steal attack (no output)
-- `stealPartialValue` — return less value than expected
-- `corruptDatum` — wrong datum in output
-- `wrongOutputAddress` — send to wrong recipient
-- `duplicateOutput` — split into two outputs
-- `unauthorizedMint` — mint without authorization
-- `mintExtra` — mint more than allowed
-- `aroundDeadline` — test timing boundaries
-- `wrongRedeemer` — use invalid redeemer
-- `doubleSatisfaction` — satisfy one validator, steal from another
+### Available Attack Patterns
 
-See [tx-variations.md](tx-variations.md) for detailed documentation of each variation.
+Individual variations available via `TxVariations.standard`:
+
+| Variation | Description |
+|-----------|-------------|
+| `removeContractOutput` | Steal attack — no output back to script |
+| `stealPartialValue` | Return less value than expected |
+| `corruptDatum` | Wrong datum in output |
+| `wrongOutputAddress` | Send to wrong recipient |
+| `duplicateOutput` | Split into two outputs |
+| `unauthorizedMint` | Mint without authorization |
+| `mintExtra` | Mint more than allowed |
+| `aroundDeadline` | Test timing boundaries |
+| `wrongRedeemer` | Use invalid redeemer |
+| `doubleSatisfaction` | Satisfy one validator, steal from another |
+
+<Callout type="info">
+These patterns correspond to [common Cardano vulnerabilities](/docs/security/common-vulnerabilities). Using `default` or `defaultExtended` is the easiest way to get broad coverage.
+</Callout>
 
 ## ContractStepVariations
 
@@ -524,14 +541,16 @@ new HtlcStep {
 ## Complexity Control
 
 With `C` categories per dimension, `D` dimensions, and depth `N`:
-- Per step: `C^D` combinations (e.g., 3×3×3 = 27)
-- Multi-step: up to `(C^D)^N` total paths
+- Per step: C^D combinations (e.g., 3x3x3 = 27)
+- Multi-step: up to (C^D)^N total paths
 
-Keep categories at 2–4 per dimension. Use `guard` to prune impossible branches and `once` to stop at first violation in Scenario mode.
+<Callout type="warning">
+Keep categories at 2-4 per dimension. Use `guard` to prune impossible branches and `once` to stop at first violation in Scenario mode.
+</Callout>
 
 ## Testing Patterns
 
-### Pattern: Single Action Boundaries
+### Single Action Boundaries
 
 Test one contract action with all boundary combinations:
 
@@ -544,7 +563,7 @@ test("bid boundaries") {
 }
 ```
 
-### Pattern: Multi-Step State Exploration
+### Multi-Step State Exploration
 
 Test sequences of actions where each step changes the state:
 
@@ -572,7 +591,7 @@ val violations = results.flatMap(_._2)
 assert(violations.isEmpty)
 ```
 
-### Pattern: Attack Simulation
+### Attack Simulation
 
 Add malicious variations alongside standard ones:
 
@@ -600,7 +619,7 @@ val customAttack: TxVariations[MyState] = new TxVariations[MyState] {
 val allAttacks = standardAttacks ++ customAttack
 ```
 
-### Pattern: Multi-UTXO State (Double Satisfaction Testing)
+### Multi-UTXO State (Double Satisfaction)
 
 As described in [Define Observable State](#1-define-observable-state), the state type `S` should capture everything you need from the blockchain. When a contract can have multiple UTXOs at the same address (which is common — any contract that processes multiple independent interactions), model state as a collection of all open UTXOs. This naturally enables testing double satisfaction attacks where one transaction spends multiple UTXOs while only satisfying one validator:
 
@@ -608,7 +627,7 @@ As described in [Define Observable State](#1-define-observable-state), the state
 // State includes all open UTXOs at the contract address
 case class MultiUtxoState(
     openUtxos: Seq[Utxo],
-    datums: Seq[MyDatum]  // parsed datums for each UTXO
+    datums: Seq[MyDatum]
 )
 
 object MultiUtxoStep extends ContractStepVariations[MultiUtxoState] {
@@ -621,7 +640,6 @@ object MultiUtxoStep extends ContractStepVariations[MultiUtxoState] {
         }
 
     def makeBaseTx(reader: BlockchainReader, state: MultiUtxoState)(using ExecutionContext) = {
-        // Normal case: spend first UTXO only
         val utxo = state.openUtxos.head
         Future.successful(
             TxTemplate(
@@ -652,16 +670,14 @@ val doubleSatisfactionVariation: TxVariations[MultiUtxoState] = new TxVariations
     )(using ExecutionContext): Future[Seq[Transaction]] = {
         if state.openUtxos.size < 2 then Future.successful(Seq.empty)
         else {
-            // Spend two UTXOs, but only create output satisfying one
             val (utxo1, utxo2) = (state.openUtxos(0), state.openUtxos(1))
-            val totalValue = utxo1.output.value + utxo2.output.value
 
             val tx = TxBuilder(reader.cardanoInfo)
                 .spend(utxo1, myRedeemer, script)
                 .spend(utxo2, myRedeemer, script)
                 // Only one output - steals from second UTXO
                 .payToScript(scriptAddress, state.datums.head.toData, utxo1.output.value)
-                .payTo(attackerAddress, utxo2.output.value)  // steal second
+                .payTo(attackerAddress, utxo2.output.value)
 
             tx.complete(reader, txTemplate.sponsor).map { completedTx =>
                 Seq(completedTx.sign(txTemplate.signer).transaction)
@@ -673,7 +689,7 @@ val doubleSatisfactionVariation: TxVariations[MultiUtxoState] = new TxVariations
 
 This pattern tests that contracts correctly enforce independent validation of each UTXO spend, even when multiple UTXOs are consumed in one transaction.
 
-### Pattern: Time-Dependent Behavior
+### Time-Dependent Behavior
 
 Test behavior before and after deadlines:
 
@@ -769,10 +785,15 @@ val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
 
         // Future[Seq[Transaction]] -> Scenario[Seq[Transaction]]
         val txs = step.allVariations(reader, state).await
-
-        // ... use values
     }
 }
 ```
 
 This works via `CpsMonadConversion[Future, Scenario]` which wraps the `Future` in a `Scenario.WaitFuture` node, preserving state correctly.
+
+## See Also
+
+- [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck
+- [Emulator](/docs/testing/emulator) — In-memory testing with instant feedback
+- [Common Vulnerabilities](/docs/security/common-vulnerabilities) — Vulnerability patterns the testkit helps detect
+- [Security](/docs/security) — Security principles for smart contracts
