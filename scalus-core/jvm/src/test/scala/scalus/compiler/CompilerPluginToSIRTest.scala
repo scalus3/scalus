@@ -7,7 +7,7 @@ import scalus.uplc.builtin.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.*
 import scalus.compiler.sir.SIRType.{Boolean, Fun, TypeVar}
-import scalus.compiler.{compile, fieldAsData, Options}
+import scalus.compiler.{compile, fieldAsData, offsetOf, Options}
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
@@ -555,6 +555,42 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
                 assert(flatBytesLength == 170)
             case _ =>
                 assert(flatBytesLength == 348)
+    }
+
+    test("offsetOf macro returns correct field index") {
+        // V1 types
+        {
+            import scalus.cardano.onchain.plutus.v1.*
+            assert(offsetOf[ScriptContext](_.txInfo) == BigInt(0))
+            assert(offsetOf[ScriptContext](_.purpose) == BigInt(1))
+            assert(offsetOf[TxInfo](_.inputs) == BigInt(0))
+            assert(offsetOf[TxInfo](_.fee) == BigInt(2))
+            assert(offsetOf[TxInfo](_.signatories) == BigInt(7))
+            assert(offsetOf[TxInfo](_.id) == BigInt(9))
+        }
+        // V2 types -- referenceInputs shifts later fields
+        {
+            import scalus.cardano.onchain.plutus.v2.*
+            assert(offsetOf[TxInfo](_.inputs) == BigInt(0))
+            assert(offsetOf[TxInfo](_.referenceInputs) == BigInt(1))
+            assert(offsetOf[TxInfo](_.fee) == BigInt(3))
+            assert(offsetOf[TxInfo](_.signatories) == BigInt(8))
+            assert(offsetOf[TxInfo](_.id) == BigInt(11))
+        }
+        // V3 types -- additional governance fields
+        {
+            import scalus.cardano.onchain.plutus.v3.*
+            assert(offsetOf[TxInfo](_.inputs) == BigInt(0))
+            assert(offsetOf[TxInfo](_.signatories) == BigInt(8))
+            assert(offsetOf[TxInfo](_.votes) == BigInt(12))
+            assert(offsetOf[TxInfo](_.treasuryDonation) == BigInt(15))
+        }
+        // Tuples
+        assert(offsetOf[(Int, String)](_._1) == BigInt(0))
+        assert(offsetOf[(Int, String)](_._2) == BigInt(1))
+        // Custom case class
+        assert(offsetOf[CompilerPluginToSIRSpecScope.ThreeInts](_.a) == BigInt(0))
+        assert(offsetOf[CompilerPluginToSIRSpecScope.ThreeInts](_.c) == BigInt(2))
     }
 
     test("@Ignore annotation") {

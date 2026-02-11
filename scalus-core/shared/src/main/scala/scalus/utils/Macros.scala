@@ -175,6 +175,43 @@ object Macros {
         import quotes.reflect.*
         fieldAsDataMacroTerm(e.asTerm)
 
+    /** Compute the 0-based field index of a case-class field at compile time.
+      *
+      * Given a single-level field selector such as `_.signatories`, this macro resolves the position
+      * of that field in the case class and returns a literal `BigInt` value.
+      *
+      * @param e
+      *   quoted single-level selection `A => Any`
+      * @tparam A
+      *   the case class type
+      * @return
+      *   `Expr[BigInt]` with the compile-time constant field index
+      */
+    def fieldOffsetMacro[A: Type](e: Expr[A => Any])(using Quotes): Expr[BigInt] = {
+        import quotes.reflect.*
+        def impl(term: Term): Expr[BigInt] = term match {
+            case Inlined(_, _, inner) => impl(inner)
+            case Block(List(DefDef(_, _, _, Some(Select(ident @ Ident(_), fieldName)))), _) =>
+                val typeSymbolOfA = ident.tpe.widen.dealias.typeSymbol
+                val fields = typeSymbolOfA.caseFields.filter(_.isValDef)
+                fields.zipWithIndex.find(_._1.name.stripTrailing == fieldName) match {
+                    case Some((_, idx)) =>
+                        val idxExpr = Expr(idx)
+                        '{ BigInt($idxExpr) }
+                    case None =>
+                        report.errorAndAbort(
+                          s"""offsetOf: field `$fieldName` not found in $typeSymbolOfA.
+                          |Available fields: ${fields.map(s => s"'${s.name}'")}""".stripMargin
+                        )
+                }
+            case x =>
+                report.errorAndAbort(
+                  s"offsetOf supports only single-level _.field form, but got: ${x.show}"
+                )
+        }
+        impl(e.asTerm)
+    }
+
     /** Term-level implementation of the field-as-Data getter macro.
       *
       * This function performs the reflection on the quoted Term and builds an Expr[Data => Data]

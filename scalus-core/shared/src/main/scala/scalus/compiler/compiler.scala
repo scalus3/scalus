@@ -38,6 +38,25 @@ inline def fieldAsData[A](inline expr: A => Any): Data => Data = ${
     Macros.fieldAsDataMacro('expr)
 }
 
+/** Returns the 0-based field index of a case-class field at compile time.
+  *
+  * Useful in assembler mode with `dropList` to avoid hardcoding field offsets:
+  * {{{
+  * dropList(offsetOf[TxInfo](_.signatories), txInfoFields)
+  * // expands to: dropList(BigInt(8), txInfoFields)
+  * }}}
+  *
+  * @tparam A
+  *   the case class type
+  * @param expr
+  *   a single-level field selector, e.g. `_.signatories`
+  * @return
+  *   the field index as `BigInt`
+  */
+inline def offsetOf[A](inline expr: A => Any): BigInt = ${
+    Macros.fieldOffsetMacro('expr)
+}
+
 /** Compiles the given expression to a [[scalus.compiler.sir.SIR]] at compile time using the Scalus
   * compiler plugin.
   *
