@@ -438,13 +438,20 @@ object CrowdfundingScenarioTest {
         }
 
         val withRecipient = spendCampaignAndDonations(
-          reader.cardanoInfo, campaignUtxo, donationUtxos,
-          withdrawRedeemer, Set(recipientKeyHash)
+          reader.cardanoInfo,
+          campaignUtxo,
+          donationUtxos,
+          withdrawRedeemer,
+          Set(recipientKeyHash)
         ).mint(donationScript, burnMap, withdrawRedeemer)
             .payTo(recipientAddress, Value.lovelace(totalWithdrawAmount.toLong))
 
         val tx = withUpdatedCampaign(
-          withRecipient, currentDatum, nftAsset, newWithdrawn, isFullWithdrawal
+          withRecipient,
+          currentDatum,
+          nftAsset,
+          newWithdrawn,
+          isFullWithdrawal
         )
             .validFrom(Instant.ofEpochMilli(currentDatum.deadline.toLong + 1000))
             .complete(reader, recipientAddress)
@@ -513,8 +520,11 @@ object CrowdfundingScenarioTest {
 
         val withPayments = donorInfos.foldLeft(
           spendCampaignAndDonations(
-            reader.cardanoInfo, campaignUtxo, donationUtxos,
-            reclaimRedeemer, donorKeyHashes
+            reader.cardanoInfo,
+            campaignUtxo,
+            donationUtxos,
+            reclaimRedeemer,
+            donorKeyHashes
           ).mint(donationScript, burnMap, reclaimRedeemer)
         ) { case (b, (donorAddr, _, _, utxoLovelace)) =>
             b.payTo(donorAddr, Value.lovelace(utxoLovelace))
@@ -526,7 +536,11 @@ object CrowdfundingScenarioTest {
         )
 
         val tx = withUpdatedCampaign(
-          withPayments, currentDatum, nftAsset, newWithdrawn, isFullReclaim
+          withPayments,
+          currentDatum,
+          nftAsset,
+          newWithdrawn,
+          isFullReclaim
         )
             .validFrom(Instant.ofEpochMilli(currentDatum.deadline.toLong + 1000))
             .complete(reader, feePayerAddr)

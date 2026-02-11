@@ -20,8 +20,8 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 /** ScalaCheck Commands property-based test for crowdfunding contract with many participants.
   *
   * Creates 200 participants (1 recipient + 199 donors) and uses ContractScalaCheckCommands to
-  * generate random sequences of actions (donate, wait, withdraw, reclaim), verifying invariants hold
-  * after each successful transaction.
+  * generate random sequences of actions (donate, wait, withdraw, reclaim), verifying invariants
+  * hold after each successful transaction.
   */
 class CrowdfundingScalaCheckCommandTest extends AnyFunSuite {
     import CrowdfundingScalaCheckCommandTest.*
@@ -46,10 +46,10 @@ class CrowdfundingScalaCheckCommandTest extends AnyFunSuite {
         }
 
         val result = org.scalacheck.Test.check(
-            org.scalacheck.Test.Parameters.default
-                .withMinSuccessfulTests(10)
-                .withMaxDiscardRatio(20),
-            commands.property()
+          org.scalacheck.Test.Parameters.default
+              .withMinSuccessfulTests(10)
+              .withMaxDiscardRatio(20),
+          commands.property()
         )
 
         assert(result.passed, s"Property test failed: $result")
