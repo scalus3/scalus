@@ -82,6 +82,7 @@ class AuctionTestKitTest extends AnyFunSuite {
           instance.bid(
             bidderAddress = bidder1Address,
             bidAmount = 3_000_000L,
+            itemId = itemId,
             signer = bidder1Party.signer
           ),
           Duration.Inf

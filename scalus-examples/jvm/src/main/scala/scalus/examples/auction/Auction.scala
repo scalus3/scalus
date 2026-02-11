@@ -606,13 +606,12 @@ class AuctionInstance(
 
     /** Places a bid on this auction.
       *
-      * Since each auction instance has a unique policyId, we can directly query by script address
-      * without risk of UTXO discovery confusion.
-      *
       * @param bidderAddress
       *   The bidder's address
       * @param bidAmount
       *   The bid amount in lovelace
+      * @param itemId
+      *   The auction item identifier (token name of the auction NFT)
       * @param signer
       *   Transaction signer with bidder's keys
       * @return
@@ -621,12 +620,13 @@ class AuctionInstance(
     def bid(
         bidderAddress: ShelleyAddress,
         bidAmount: Long,
+        itemId: ByteString,
         signer: TransactionSigner
     ): Future[Transaction] =
         given scala.concurrent.ExecutionContext = provider.executionContext
         val bidderPkh = extractPkh(bidderAddress)
         for
-            auctionUtxo <- findAuctionUtxo().map(
+            auctionUtxo <- findAuctionUtxo(itemId).map(
               _.getOrElse(throw RuntimeException(s"No active auction found at $scriptAddress"))
             )
             currentDatum = auctionUtxo.output.inlineDatum
@@ -705,11 +705,10 @@ class AuctionInstance(
       * Transfers the NFT to the winner and funds to the seller. If no bids were placed, the seller
       * reclaims the NFT (seller must sign).
       *
-      * Since each auction instance has a unique policyId, we can directly query by script address
-      * without risk of UTXO discovery confusion.
-      *
       * @param sponsorAddress
       *   Address to pay transaction fees from
+      * @param itemId
+      *   The auction item identifier (token name of the auction NFT)
       * @param signer
       *   Transaction signer (seller must sign if no bids)
       * @return
@@ -717,11 +716,12 @@ class AuctionInstance(
       */
     def endAuction(
         sponsorAddress: ShelleyAddress,
+        itemId: ByteString,
         signer: TransactionSigner
     ): Future[Transaction] =
         given scala.concurrent.ExecutionContext = provider.executionContext
         for
-            auctionUtxo <- findAuctionUtxo().map(
+            auctionUtxo <- findAuctionUtxo(itemId).map(
               _.getOrElse(throw RuntimeException(s"No active auction found at $scriptAddress"))
             )
             currentDatum = auctionUtxo.output.inlineDatum
@@ -795,20 +795,23 @@ class AuctionInstance(
             }
         yield tx
 
-    /** Finds the auction UTxO at this auction's script address.
+    /** Finds the auction UTxO at this auction's script address by filtering for the auction NFT.
       *
-      * Since each auction instance has a unique policyId (derived from the one-shot UTxO), there
-      * can only be one active UTxO at this script address. This eliminates UTXO discovery
-      * confusion.
+      * Filters by both the script address and the auction NFT asset to avoid picking up spam UTxOs
+      * that anyone could send to the script address. On Blockfrost, this uses the optimized
+      * `/addresses/{addr}/utxos/{asset}` endpoint.
       *
+      * @param itemId
+      *   The auction item identifier (token name of the auction NFT)
       * @return
       *   The auction UTxO if found
       */
-    def findAuctionUtxo(): Future[scala.Option[Utxo]] =
+    def findAuctionUtxo(itemId: ByteString): Future[scala.Option[Utxo]] =
         given scala.concurrent.ExecutionContext = provider.executionContext
+        val nftAsset = AssetName(itemId)
         provider
             .queryUtxos { u =>
-                u.output.address == scriptAddress
+                u.output.address == scriptAddress && u.output.value.hasAsset(scriptHash, nftAsset)
             }
             .limit(1)
             .execute()

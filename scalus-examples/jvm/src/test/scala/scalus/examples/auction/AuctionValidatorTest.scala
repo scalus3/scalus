@@ -248,6 +248,7 @@ object AuctionValidatorTest extends ScalusTest {
                     .bid(
                       bidderAddress = bidder1Address,
                       bidAmount = bidAmount,
+                      itemId = itemId,
                       signer = bidder1Party.signer
                     )
                     .await()
@@ -280,6 +281,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .bid(
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
+                  itemId = itemId,
                   signer = bidder1Party.signer
                 )
                 .await()
@@ -290,6 +292,7 @@ object AuctionValidatorTest extends ScalusTest {
                     .bid(
                       bidderAddress = bidder2Address,
                       bidAmount = newBidAmount,
+                      itemId = itemId,
                       signer = bidder2Party.signer
                     )
                     .await()
@@ -321,6 +324,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .bid(
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
+                  itemId = itemId,
                   signer = bidder1Party.signer
                 )
                 .await()
@@ -331,6 +335,7 @@ object AuctionValidatorTest extends ScalusTest {
                 auction
                     .endAuction(
                       sponsorAddress = sellerAddress,
+                      itemId = itemId,
                       signer = sellerParty.signer
                     )
                     .await()
@@ -363,6 +368,7 @@ object AuctionValidatorTest extends ScalusTest {
                 auction
                     .endAuction(
                       sponsorAddress = sellerAddress,
+                      itemId = itemId,
                       signer = sellerParty.signer
                     )
                     .await()
@@ -433,6 +439,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .bid(
                   bidderAddress = bidder1Address,
                   bidAmount = bidAmount,
+                  itemId = itemId,
                   signer = bidder1Party.signer
                 )
                 .await()
@@ -462,6 +469,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .bid(
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
+                  itemId = itemId,
                   signer = bidder1Party.signer
                 )
                 .await()
@@ -478,6 +486,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .bid(
                   bidderAddress = bidder2Address,
                   bidAmount = newBidAmount,
+                  itemId = itemId,
                   signer = bidder2Party.signer
                 )
                 .await()
@@ -512,6 +521,7 @@ object AuctionValidatorTest extends ScalusTest {
                 .bid(
                   bidderAddress = bidder1Address,
                   bidAmount = 3_000_000L,
+                  itemId = itemId,
                   signer = bidder1Party.signer
                 )
                 .await()
@@ -528,6 +538,7 @@ object AuctionValidatorTest extends ScalusTest {
             val tx = auction
                 .endAuction(
                   sponsorAddress = sellerAddress,
+                  itemId = itemId,
                   signer = sellerParty.signer
                 )
                 .await()
@@ -570,6 +581,7 @@ object AuctionValidatorTest extends ScalusTest {
             val tx = auction
                 .endAuction(
                   sponsorAddress = sellerAddress,
+                  itemId = itemId,
                   signer = sellerParty.signer
                 )
                 .await()
