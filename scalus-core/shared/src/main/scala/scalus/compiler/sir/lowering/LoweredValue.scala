@@ -1612,7 +1612,8 @@ object LoweredValue {
             )
 
             val consBranchR = consBranchUpcasted.toRepresentation(targetRepresentation, inPos)
-            val optNilBranchR = optNilBranchUpcasted.map(_.toRepresentation(targetRepresentation, inPos))
+            val optNilBranchR =
+                optNilBranchUpcasted.map(_.toRepresentation(targetRepresentation, inPos))
 
             CaseListLoweredValue(
               scrutinee,

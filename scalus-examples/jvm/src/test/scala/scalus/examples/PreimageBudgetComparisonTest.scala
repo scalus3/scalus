@@ -14,7 +14,7 @@ import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.uplc.*
 import scalus.uplc.eval.*
-import scalus.cardano.ledger.{ExUnits, ExUnitPrices, NonNegativeInterval}
+import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
 import scala.language.implicitConversions
 
 /** Low-level assembler variant using dropList (V4 builtin) instead of the field macro's chained
@@ -39,8 +39,8 @@ object OptimizedPreimageValidatorV4 {
     }
 }
 
-/** Low-level assembler using dropList (V4) and BuiltinList pattern match (Case on List).
-  * Uses @unchecked to omit the Nil branch -- VM throws CaseListBranchError on empty list.
+/** Low-level assembler using dropList (V4) and BuiltinList pattern match (Case on List). Uses @unchecked
+  * to omit the Nil branch -- VM throws CaseListBranchError on empty list.
   */
 @Compile
 object PreimageValidatorWithListMatch {
@@ -61,9 +61,9 @@ object PreimageValidatorWithListMatch {
     }
 }
 
-/** Assembler with signatory index in redeemer -- O(1) lookup instead of linear search.
-  * Redeemer = Constr(0, [B(preimage), I(signatoryIndex)])
-  * New TxBuilder can set the index when building the transaction.
+/** Assembler with signatory index in redeemer -- O(1) lookup instead of linear search. Redeemer =
+  * Constr(0, [B(preimage), I(signatoryIndex)]) New TxBuilder can set the index when building the
+  * transaction.
   */
 @Compile
 object PreimageValidatorWithSigIndex {
@@ -82,52 +82,66 @@ object PreimageValidatorWithSigIndex {
     }
 }
 
-/** Direct UPLC construction -- no compiler plugin, maximum control.
-  * Uses V4 Case on List (Cons-only) and Case on Bool.
+/** Direct UPLC construction -- no compiler plugin, maximum control. Uses V4 Case on List
+  * (Cons-only) and Case on Bool.
   */
 object DirectPreimageValidator {
     import scalus.uplc.Term
     import scalus.uplc.Term.{asTerm, λ}
     import scalus.uplc.TermDSL.given
     import scalus.uplc.DefaultFun.*
-    import scalus.uplc.{Constant => C}
+    import scalus.uplc.Constant as C
 
     private def pfix(f: Term => Term): Term = λ { r => r $ r } $ λ { r => f(r $ r) }
 
-    val preimageValidator: Term = λ { datum => λ { redeemer => λ { ctxData =>
-        // let pair = snd(unConstr(datum))
-        (λ { pair =>
-            // let pkh = head(tail(pair)) — kept as Data for equalsData
-            (λ { pkh =>
-                // sigs = unListData(head(dropList(8, snd(unConstr(head(snd(unConstr(ctxData))))))))
-                val txInfoFields = !(!SndPair) $ (UnConstrData $ (!(HeadList) $ (!(!SndPair) $ (UnConstrData $ ctxData))))
-                val sigs = UnListData $ (!(HeadList) $ (!(DropList) $ BigInt(8).asTerm $ txInfoFields))
-                // recursive signatory check: Case on List (Cons-only), Case on Bool
-                val checkSigs = pfix { recur =>
-                    λ { s =>
-                        Term.Case(s, scala.List(
-                            λ { h => λ { t =>
-                                Term.Case(EqualsData $ h $ pkh, scala.List(
-                                    recur $ t,             // False(0): keep searching
-                                    Term.Const(C.Unit)     // True(1): found
-                                ))
-                            }}
-                        ))
-                    }
-                }
-                // checkSigs(sigs); then hash check
-                (λ { _ =>
-                    Term.Case(
-                        EqualsByteString $ (Sha2_256 $ (UnBData $ redeemer)) $ (UnBData $ (!(HeadList) $ pair)),
-                        scala.List(
-                            Term.Error,            // False(0): wrong preimage
-                            Term.Const(C.Unit)     // True(1): success
-                        )
-                    )
-                }) $ (checkSigs $ sigs)
-            }) $ (!(HeadList) $ (!(TailList) $ pair))  // pkh
-        }) $ (!(!SndPair) $ (UnConstrData $ datum))     // pair
-    }}}
+    val preimageValidator: Term = λ { datum =>
+        λ { redeemer =>
+            λ { ctxData =>
+                // let pair = snd(unConstr(datum))
+                (λ { pair =>
+                    // let pkh = head(tail(pair)) — kept as Data for equalsData
+                    (λ { pkh =>
+                        // sigs = unListData(head(dropList(8, snd(unConstr(head(snd(unConstr(ctxData))))))))
+                        val txInfoFields =
+                            !(!SndPair) $ (UnConstrData $ (!HeadList $ (!(!SndPair) $ (UnConstrData $ ctxData))))
+                        val sigs =
+                            UnListData $ (!HeadList $ (!DropList $ BigInt(8).asTerm $ txInfoFields))
+                        // recursive signatory check: Case on List (Cons-only), Case on Bool
+                        val checkSigs = pfix { recur =>
+                            λ { s =>
+                                Term.Case(
+                                  s,
+                                  scala.List(
+                                    λ { h =>
+                                        λ { t =>
+                                            Term.Case(
+                                              EqualsData $ h $ pkh,
+                                              scala.List(
+                                                recur $ t, // False(0): keep searching
+                                                Term.Const(C.Unit) // True(1): found
+                                              )
+                                            )
+                                        }
+                                    }
+                                  )
+                                )
+                            }
+                        }
+                        // checkSigs(sigs); then hash check
+                        (λ { _ =>
+                            Term.Case(
+                              EqualsByteString $ (Sha2_256 $ (UnBData $ redeemer)) $ (UnBData $ (!HeadList $ pair)),
+                              scala.List(
+                                Term.Error, // False(0): wrong preimage
+                                Term.Const(C.Unit) // True(1): success
+                              )
+                            )
+                        }) $ (checkSigs $ sigs)
+                    }) $ (!HeadList $ (!TailList $ pair)) // pkh
+                }) $ (!(!SndPair) $ (UnConstrData $ datum)) // pair
+            }
+        }
+    }
 }
 
 /** Budget comparison of three PreimageValidator variants:
@@ -183,16 +197,23 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             case Result.Success(_, budget, _, _) =>
                 val flatSize = program.flatEncoded.length
                 val fee = ExUnits(budget.memory, budget.steps).fee(exPrices)
-                info(f"$name%-50s flat=$flatSize%4d bytes  cpu=${budget.steps}%,12d  mem=${budget.memory}%,10d  fee=${fee.value}%,8d lovelace")
+                info(
+                  f"$name%-50s flat=$flatSize%4d bytes  cpu=${budget.steps}%,12d  mem=${budget.memory}%,10d  fee=${fee.value}%,8d lovelace"
+                )
             case Result.Failure(err, budget, _, logs) =>
                 fail(s"$name failed: ${err.getMessage}\nLogs: ${logs.mkString("\n")}")
     }
 
     // 10 signatories, target at index 9 (last)
     private val dummyPkh = (1 to 9).map(i =>
-        PubKeyHash(hex"00000000000000000000000000000000000000000000000000000000" ++ ByteString.fromArray(Array(i.toByte)))
+        PubKeyHash(
+          hex"00000000000000000000000000000000000000000000000000000000" ++ ByteString.fromArray(
+            Array(i.toByte)
+          )
+        )
     )
-    private val manySignatories = scalus.cardano.onchain.plutus.prelude.List.from(dummyPkh :+ pubKeyHash)
+    private val manySignatories =
+        scalus.cardano.onchain.plutus.prelude.List.from(dummyPkh :+ pubKeyHash)
     private val scriptContext10 = ScriptContext(
       TxInfo(
         inputs = scalus.cardano.onchain.plutus.prelude.List.Nil,
@@ -230,7 +251,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV4VM()
             val compiled = compile(PreimageValidatorWithListMatch.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
-            evalAndReport("5. ListMatch, 10 sigs, search", program $ datum $ redeemer $ ctxData10, summon[PlutusVM])
+            evalAndReport(
+              "5. ListMatch, 10 sigs, search",
+              program $ datum $ redeemer $ ctxData10,
+              summon[PlutusVM]
+            )
         }
 
         // Variant 6: direct index lookup
@@ -244,7 +269,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV4VM()
             val compiled = compile(PreimageValidatorWithSigIndex.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
-            evalAndReport("6. sigIndex, 10 sigs, index=9", program $ datum $ redeemerWithIndex9 $ ctxData10, summon[PlutusVM])
+            evalAndReport(
+              "6. sigIndex, 10 sigs, index=9",
+              program $ datum $ redeemerWithIndex9 $ ctxData10,
+              summon[PlutusVM]
+            )
         }
     }
 
@@ -259,7 +288,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV3VM()
             val compiled = compile(OptimizedPreimageValidator.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
-            evalAndReport("1. Assembler + field macro (ScottEncoding, V3)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "1. Assembler + field macro (ScottEncoding, V3)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 2. Low-level assembler with dropList (SirToUplcV3Lowering + PlutusV4)
@@ -274,7 +307,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             val compiled = compile(OptimizedPreimageValidatorV4.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
             info("V2 UPLC:\n" + program.term.pretty.render(120))
-            evalAndReport("2. Assembler + dropList (V3Lowering, V4)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "2. Assembler + dropList (V3Lowering, V4)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 3. High-level style (SirToUplcV3Lowering, V3)
@@ -287,7 +324,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV3VM()
             val compiled = compile(PreimageValidator.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV2
-            evalAndReport("3. High-level (V3Lowering, V3)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "3. High-level (V3Lowering, V3)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 4. High-level style (SirToUplcV3Lowering, V4)
@@ -301,7 +342,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV4VM()
             val compiled = compile(PreimageValidator.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV2
-            evalAndReport("4. High-level (V3Lowering, V4)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "4. High-level (V3Lowering, V4)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 5. Low-level assembler with dropList + BuiltinList match (V4 Case on List)
@@ -315,7 +360,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV4VM()
             val compiled = compile(PreimageValidatorWithListMatch.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
-            evalAndReport("5. Assembler + dropList + ListMatch (V4)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "5. Assembler + dropList + ListMatch (V4)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 6. Low-level assembler with signatory index in redeemer (V4, no search)
@@ -329,7 +378,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV4VM()
             val compiled = compile(PreimageValidatorWithSigIndex.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
-            evalAndReport("6. Assembler + sigIndex in redeemer (V4)", program $ datum $ redeemerWithIndex $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "6. Assembler + sigIndex in redeemer (V4)",
+              program $ datum $ redeemerWithIndex $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 7. Direct UPLC construction (V4, no compiler plugin)
@@ -337,15 +390,24 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
             given PlutusVM = PlutusVM.makePlutusV4VM()
             val program = DirectPreimageValidator.preimageValidator.plutusV3
             info("V7 UPLC:\n" + program.term.pretty.render(120))
-            evalAndReport("7. Direct UPLC (V4)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "7. Direct UPLC (V4)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
 
         // 7b. Direct UPLC with CaseConstrApply optimization
         locally {
             given PlutusVM = PlutusVM.makePlutusV4VM()
-            val optimized = scalus.uplc.transform.CaseConstrApply(DirectPreimageValidator.preimageValidator)
+            val optimized =
+                scalus.uplc.transform.CaseConstrApply(DirectPreimageValidator.preimageValidator)
             val program = optimized.plutusV3
-            evalAndReport("7b. Direct UPLC + CaseConstrApply (V4)", program $ datum $ redeemer $ ctxData, summon[PlutusVM])
+            evalAndReport(
+              "7b. Direct UPLC + CaseConstrApply (V4)",
+              program $ datum $ redeemer $ ctxData,
+              summon[PlutusVM]
+            )
         }
     }
 }

@@ -285,11 +285,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
     override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
         constr.name match
-            case SIRType.List.NilConstr.name |
-                SIRType.BuiltinList.Nil.name =>
+            case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name =>
                 genNil(constr.tp, constr.anns.pos)
-            case SIRType.List.Cons.name |
-                SIRType.BuiltinList.Cons.name =>
+            case SIRType.List.Cons.name | SIRType.BuiltinList.Cons.name =>
                 if constr.args.size != 2 then
                     throw LoweringException(
                       s"Constr construnctor with ${constr.args.size} args, should be 2",
@@ -354,7 +352,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             case Left(r) => false
             case Right(constrDecl) =>
                 constrDecl.name == SIRType.List.NilConstr.name
-                    || constrDecl.name == SIRType.BuiltinList.Nil.name
+                || constrDecl.name == SIRType.BuiltinList.Nil.name
         }
     }
 
@@ -625,14 +623,20 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             then {
                 println("info: unused case Cons in List match will be removed")
                 optLoweredNilBody.getOrElse(
-                  throw LoweringException("Nil case required for Nil-typed scrutinee", matchData.anns.pos)
+                  throw LoweringException(
+                    "Nil case required for Nil-typed scrutinee",
+                    matchData.anns.pos
+                  )
                 )
             } else if constrDecl.name == SIRType.List.Cons.name
                 || constrDecl.name == SIRType.BuiltinList.Cons.name
             then {
                 println("info: unused case Nil in List match will be removed")
                 optLoweredConsBody.getOrElse(
-                  throw LoweringException("Cons case required for Cons-typed scrutinee", matchData.anns.pos)
+                  throw LoweringException(
+                    "Cons case required for Cons-typed scrutinee",
+                    matchData.anns.pos
+                  )
                 )
             } else
                 throw LoweringException(

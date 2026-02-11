@@ -177,8 +177,8 @@ object Macros {
 
     /** Compute the 0-based field index of a case-class field at compile time.
       *
-      * Given a single-level field selector such as `_.signatories`, this macro resolves the position
-      * of that field in the case class and returns a literal `BigInt` value.
+      * Given a single-level field selector such as `_.signatories`, this macro resolves the
+      * position of that field in the case class and returns a literal `BigInt` value.
       *
       * @param e
       *   quoted single-level selection `A => Any`
