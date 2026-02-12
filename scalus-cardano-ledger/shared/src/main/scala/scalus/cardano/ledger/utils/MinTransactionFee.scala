@@ -1,7 +1,6 @@
 package scalus.cardano.ledger
 package utils
 
-import io.bullet.borer.Cbor
 import monocle.{Focus, Lens}
 import monocle.Focus.refocus
 
@@ -88,7 +87,7 @@ object MinTransactionFee {
 
             val refScriptsSize = scripts.foldLeft(0) { case (length, script) =>
                 val scripLength = script match
-                    case s: Script.Native => Cbor.encode(s).toByteArray.length
+                    case s: Script.Native => s.script.toCbor.length
                     case s: PlutusScript  => s.script.size
 
                 length + scripLength

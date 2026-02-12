@@ -1,7 +1,6 @@
 package scalus.cardano.ledger
 package utils
 
-import io.bullet.borer.Cbor
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.address.Address.addr
@@ -45,7 +44,7 @@ class NativeRefScriptMinFeeTest extends AnyFunSuite {
     /** The CBOR-encoded size of the native script, as would be counted by the Haskell
       * implementation's `originalBytesSize`.
       */
-    private val nativeScriptCborSize: Int = Cbor.encode(nativeScript).toByteArray.length
+    private val nativeScriptCborSize: Int = nativeScript.script.toCbor.length
 
     test("native reference script has non-zero CBOR size") {
         assert(
@@ -167,8 +166,8 @@ class NativeRefScriptMinFeeTest extends AnyFunSuite {
           )
         )
 
-        val smallSize = Cbor.encode(smallScript).toByteArray.length
-        val largeSize = Cbor.encode(largeScript).toByteArray.length
+        val smallSize = smallScript.script.toCbor.length
+        val largeSize = largeScript.script.toCbor.length
 
         System.err.println(s"Small native script size: $smallSize bytes")
         System.err.println(s"Large native script size: $largeSize bytes")
