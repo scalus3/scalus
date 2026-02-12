@@ -12,9 +12,9 @@ import scala.collection.immutable.SortedSet
 
 /** Test for GitHub issue #207: Native reference scripts should count towards minFee.
   *
-  * The Haskell cardano-ledger implementation counts ALL reference scripts (including native/timelock
-  * scripts) towards the minimum fee calculation via `txNonDistinctRefScriptsSize`. The current
-  * Scalus implementation incorrectly treats native scripts as size 0.
+  * The Haskell cardano-ledger implementation counts ALL reference scripts (including
+  * native/timelock scripts) towards the minimum fee calculation via `txNonDistinctRefScriptsSize`.
+  * The current Scalus implementation incorrectly treats native scripts as size 0.
   *
   * @see
   *   https://github.com/scalus3/scalus/issues/207
@@ -89,7 +89,9 @@ class NativeRefScriptMinFeeTest extends AnyFunSuite {
 
         System.err.println(s"Fee with native ref script: ${feeWithNativeRef.value}")
         System.err.println(s"Fee without ref script:     ${feeWithoutRef.value}")
-        System.err.println(s"Difference:                 ${feeWithNativeRef.value - feeWithoutRef.value}")
+        System.err.println(
+          s"Difference:                 ${feeWithNativeRef.value - feeWithoutRef.value}"
+        )
 
         assert(
           feeWithNativeRef > feeWithoutRef,
