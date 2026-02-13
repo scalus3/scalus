@@ -33,4 +33,10 @@ object SampleValidator {
             (lst: @unchecked) match
                 case scalus.cardano.onchain.plutus.prelude.List.Cons(h, _) => h
     }
+
+    /** A validator that uses require to check a condition. */
+    val requirePositive: SIR = compile { (x: BigInt) =>
+        scalus.cardano.onchain.plutus.prelude.require(x > BigInt(0), "input must be positive")
+        x
+    }
 }

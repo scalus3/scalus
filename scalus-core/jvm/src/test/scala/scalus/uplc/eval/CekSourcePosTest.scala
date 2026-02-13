@@ -278,4 +278,32 @@ class CekSourcePosTest extends AnyFunSuite {
                 fail(s"Expected EvaluationFailure, got: ${ex.getClass.getName}: ${ex.getMessage}")
             case _ => fail("Expected failure result")
     }
+
+    test("require failure reports position with inlinedFrom pointing to call site") {
+        val uplc = SampleValidator.requirePositive.toUplc()
+        val applied = Term.Apply(uplc, Term.Const(scalus.uplc.Constant.Integer(BigInt(-1))))
+        val debruijned = DeBruijn.deBruijnTerm(applied)
+
+        val result = debruijned.evaluateDebug
+        assert(result.isFailure, s"Expected failure for negative input, got: $result")
+        result match
+            case Result.Failure(ex: EvaluationFailure, _, _, _) =>
+                assert(
+                  !ex.sourcePos.isEmpty,
+                  "sourcePos should not be empty for require failure"
+                )
+                // The error position points to the throw inside the inline require
+                assert(
+                  ex.sourcePos.file.contains("Prelude.scala"),
+                  s"sourcePos should point to Prelude.scala, got: ${ex.sourcePos.file}"
+                )
+                // inlinedFrom should contain the call site in SampleValidator.scala
+                assert(
+                  ex.sourcePos.inlinedFrom.exists(_.file.contains("SampleValidator.scala")),
+                  s"inlinedFrom should reference SampleValidator.scala, got: ${ex.sourcePos.show}"
+                )
+            case Result.Failure(ex, _, _, _) =>
+                fail(s"Expected EvaluationFailure, got: ${ex.getClass.getName}: ${ex.getMessage}")
+            case _ => fail("Expected failure result")
+    }
 }

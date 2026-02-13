@@ -2293,7 +2293,7 @@ final class SIRCompiler(
       * }}}
       */
     private def compileThrowException(env: Env, ex: Tree): AnnotatedSIR =
-        val ann = AnnotationsDecl.fromSrcPos(ex.srcPos)
+        val ann = mkAnns(ex.srcPos, env)
         val msg = ex match
             case SkipInline(
                   Apply(
@@ -3009,6 +3009,10 @@ final class SIRCompiler(
                         )
                     SIR.Cast(term, tp, AnnotationsDecl.fromSrcPos(tree.srcPos))
             case Inlined(call, bindings, expr) =>
+                if env.debug then
+                    println(
+                      s"Inlined: call=$call, call.isEmpty=${call.isEmpty}, call.srcPos=${call.srcPos}, tree.srcPos=${tree.srcPos}"
+                    )
                 val newEnv =
                     if call.isEmpty then env
                     else env.pushInlineCall(SIRPosition.fromSrcPos(call.srcPos))
