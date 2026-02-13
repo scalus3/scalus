@@ -35,10 +35,10 @@ object TermAnalysis:
             args: List[Term]
         ): Option[(DefaultFun, Int, Int, List[Term])] =
             t match
-                case Builtin(bn)   => Some((bn, forces, applies, args.reverse))
-                case Force(inner)  => go(inner, forces + 1, applies, args)
-                case Apply(f, arg) => go(f, forces, applies + 1, arg :: args)
-                case _             => None
+                case Builtin(bn, _)   => Some((bn, forces, applies, args.reverse))
+                case Force(inner, _)  => go(inner, forces + 1, applies, args)
+                case Apply(f, arg, _) => go(f, forces, applies + 1, arg :: args)
+                case _                => None
         go(term, 0, 0, List.empty)
 
     extension (term: Term)
@@ -137,9 +137,9 @@ object TermAnalysis:
           *   [[https://github.com/IntersectMBO/plutus/blob/441b76d9e9745dfedb2afc29920498bdf632f162/plutus-core/plutus-ir/src/PlutusIR/Purity.hs#L272 Plutus IR Purity]]
           */
         def isPure: Boolean = term match
-            case Apply(LamAbs(_, body), a) if a.isPure && body.isPure => true
+            case Apply(LamAbs(_, body, _), a, _) if a.isPure && body.isPure => true
             // Check if this is a partially applied builtin with pure arguments
-            case app @ Apply(_, _) =>
+            case app @ Apply(_, _, _) =>
                 extractBuiltinInfo(app) match
                     case Some((bn, numForces, numApplies, appliedArgs)) =>
                         val meaning = Meaning.allBuiltins.getBuiltinRuntime(bn)
@@ -152,29 +152,29 @@ object TermAnalysis:
                         !isSaturated && appliedArgs.forall(_.isPure)
                     case None => false
             // (lam x [(lam ...) x]) can be eta-reduced to (lam ...)
-            case LamAbs(_, _) => true
+            case LamAbs(_, _, _) => true
             // we had (lam x [(delay t) x]), it can be eta-reduced to (delay t)
-            case Delay(_) => true
+            case Delay(_, _) => true
             // (lam x [(const ..) x]) can be eta-reduced to (const ..)
-            case Const(_) => true
+            case Const(_, _) => true
             // (lam x [(var f) x]) can be eta-reduced to (var f)
-            case Var(_) => true // variables are pure
+            case Var(_, _) => true // variables are pure
             // (lam x [(error) x]) can't be eta-reduced to (error)
-            case Error => false
-            case Force(Force(Builtin(bn)))
+            case Error(_) => false
+            case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 2 =>
                 true // this is pure
-            case Force(Builtin(bn))
+            case Force(Builtin(bn, _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 1 =>
                 true // this is pure
             // Force(Delay(x)) is pure - it's essentially a no-op that evaluates to x
-            case Force(Delay(_)) => true
+            case Force(Delay(_, _), _) => true
             // force can halt the evaluation if the argument is not delayed
             // (lam x [(force t) x]) can't be eta-reduced in general
             // e.g. (lam x [(force (error)) x]) can't be eta-reduced to (force (error))
             // because (force (error)) will halt the evaluation and (lam x [(force (error)) x]) will not
-            case Force(_) => false
+            case Force(_, _) => false
             // (lam x [(builtin ..) x]) can be eta-reduced to (builtin ..)
-            case Builtin(_)         => true
-            case Constr(_, args)    => args.forall(_.isPure)
-            case Case(scrut, cases) => scrut.isPure && cases.forall(_.isPure)
+            case Builtin(_, _)         => true
+            case Constr(_, args, _)    => args.forall(_.isPure)
+            case Case(scrut, cases, _) => scrut.isPure && cases.forall(_.isPure)

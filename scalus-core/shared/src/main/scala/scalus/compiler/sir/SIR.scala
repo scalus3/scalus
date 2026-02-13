@@ -2,6 +2,7 @@ package scalus.compiler.sir
 
 //import scalus.uplc.Constant.Integer
 import scalus.uplc.{Constant, DefaultFun}
+import scalus.utils.ScalusSourcePos
 
 val SIRVersion: (Int, Int) = (4, 0)
 
@@ -25,41 +26,9 @@ case class TypeBinding(name: String, tp: SIRType) {
     override def toString: String = s"TypeBinding(\"$name\" : ${tp.show})"
 }
 
-/** SIR Position - position in Scala source code.
-  * @param file
-  *   -- fiel of position. Empty file ("") means that position is unknown.
-  * @param startLine
-  * @param startColumn
-  * @param endLine
-  * @param endColumn
-  */
-case class SIRPosition(
-    file: String,
-    startLine: Int,
-    startColumn: Int,
-    endLine: Int,
-    endColumn: Int,
-    inlinedFrom: List[SIRPosition] = Nil
-) {
-
-    def show: String = {
-        val basePos = s"$file:${startLine + 1}:${startColumn} - ${endLine + 1}:${endColumn}"
-        if inlinedFrom.isEmpty then basePos
-        else s"$basePos\n  inlined from: ${inlinedFrom.map(_.showSingle).mkString(" -> ")}"
-    }
-
-    def showSingle: String = s"$file:${startLine + 1}:${startColumn}"
-
-    def isEmpty: Boolean = file.isEmpty && startLine == 0 && startColumn == 0 &&
-        endLine == 0 && endColumn == 0
-
-}
-
-object SIRPosition {
-
-    val empty: SIRPosition = SIRPosition("", 0, 0, 0, 0, Nil)
-
-}
+/** SIR Position - position in Scala source code. Now a type alias for ScalusSourcePos. */
+type SIRPosition = ScalusSourcePos
+val SIRPosition = ScalusSourcePos
 
 case class AnnotationsDecl(
     pos: SIRPosition,

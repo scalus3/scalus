@@ -132,7 +132,7 @@ object DirectPreimageValidator {
                             Term.Case(
                               EqualsByteString $ (Sha2_256 $ (UnBData $ redeemer)) $ (UnBData $ (!HeadList $ pair)),
                               scala.List(
-                                Term.Error, // False(0): wrong preimage
+                                Term.Error(), // False(0): wrong preimage
                                 Term.Const(C.Unit) // True(1): success
                               )
                             )

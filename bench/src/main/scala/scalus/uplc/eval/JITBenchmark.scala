@@ -108,16 +108,16 @@ private object Test {
     private val program = DeBruijnedProgram.fromFlatEncoded(bytes).toProgram
 
     private def collect(t: Term): Set[DefaultFun] = t match
-        case Term.Var(name)          => Set()
-        case Term.LamAbs(name, term) => collect(term)
-        case Term.Apply(f, arg)      => collect(f) ++ collect(arg)
-        case Term.Force(term)        => collect(term)
-        case Term.Delay(term)        => collect(term)
-        case Term.Const(const)       => Set()
-        case Term.Builtin(bn)        => Set(bn)
-        case Term.Error              => Set()
-        case Term.Constr(tag, args)  => args.flatMap(collect).toSet
-        case Term.Case(arg, cases)   => collect(arg) ++ cases.flatMap(collect)
+        case Term.Var(_, _)           => Set()
+        case Term.LamAbs(_, term, _)  => collect(term)
+        case Term.Apply(f, arg, _)    => collect(f) ++ collect(arg)
+        case Term.Force(term, _)      => collect(term)
+        case Term.Delay(term, _)      => collect(term)
+        case Term.Const(_, _)         => Set()
+        case Term.Builtin(bn, _)      => Set(bn)
+        case _: Term.Error            => Set()
+        case Term.Constr(_, args, _)  => args.flatMap(collect).toSet
+        case Term.Case(arg, cases, _) => collect(arg) ++ cases.flatMap(collect)
 
     private val builtins = collect(program.term).toSeq.sorted
 

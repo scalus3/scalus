@@ -27,10 +27,10 @@ class EtaReduceTest extends AnyFunSuite:
         assert(etaReduce(λ("x", "y")(vr"f" $ vr"x" $ vr"y")) == λ("x", "y")(vr"f" $ vr"x" $ vr"y"))
 
     test("(lam x [(error) x]) does not reduce"):
-        assert(etaReduce(λ("x")(Error $ vr"x")) == λ("x")(Error $ vr"x"))
+        assert(etaReduce(λ("x")(Error() $ vr"x")) == λ("x")(Error() $ vr"x"))
 
     test("(lam x [(delay error) x]) reduces to (delay error)"):
-        assert(etaReduce(λ("x")(Delay(Error) $ vr"x")) == Delay(Error))
+        assert(etaReduce(λ("x")(Delay(Error()) $ vr"x")) == Delay(Error()))
 
     test("(lam x [(force f) x]) does not reduce"):
         assert(etaReduce(λ("x")(Force(vr"f") $ vr"x")) == λ("x")(Force(vr"f") $ vr"x"))
@@ -133,8 +133,8 @@ class EtaReduceTest extends AnyFunSuite:
     // Impure arguments
     test("(lam x [(builtin addInteger) error x]) does not reduce due to impure argument"):
         assert(
-          etaReduce(λ("x")(Builtin(AddInteger) $ Error $ vr"x")) == λ("x")(
-            Builtin(AddInteger) $ Error $ vr"x"
+          etaReduce(λ("x")(Builtin(AddInteger) $ Error() $ vr"x")) == λ("x")(
+            Builtin(AddInteger) $ Error() $ vr"x"
           )
         )
 
@@ -142,8 +142,8 @@ class EtaReduceTest extends AnyFunSuite:
       "(lam x [(builtin addInteger) (force error) x]) does not reduce due to impure argument"
     ):
         assert(
-          etaReduce(λ("x")(Builtin(AddInteger) $ Force(Error) $ vr"x")) == λ("x")(
-            Builtin(AddInteger) $ Force(Error) $ vr"x"
+          etaReduce(λ("x")(Builtin(AddInteger) $ Force(Error()) $ vr"x")) == λ("x")(
+            Builtin(AddInteger) $ Force(Error()) $ vr"x"
           )
         )
 

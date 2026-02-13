@@ -11,7 +11,7 @@ import scalus.serialization.flat
 import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.eval.*
-import scalus.utils.{Macros, Pretty, Style}
+import scalus.utils.{Macros, Pretty, ScalusSourcePos, Style}
 
 import scala.annotation.targetName
 import scala.collection.immutable
@@ -22,16 +22,38 @@ case class NamedDeBruijn(name: String, index: Int = 0):
         else s"NamedDeBruijn(\"$name\", $index)"
 
 enum Term:
-    case Var(name: NamedDeBruijn) extends Term
-    case LamAbs(name: String, term: Term) extends Term
-    case Apply(f: Term, arg: Term) extends Term
-    case Force(term: Term) extends Term
-    case Delay(term: Term) extends Term
-    case Const(const: Constant) extends Term
-    case Builtin(bn: DefaultFun) extends Term
-    case Error extends Term
-    case Constr(tag: Word64, args: immutable.List[Term])
-    case Case(arg: Term, cases: immutable.List[Term])
+    case Var(name: NamedDeBruijn, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case LamAbs(name: String, term: Term, sourcePos: ScalusSourcePos = ScalusSourcePos.empty)
+        extends Term
+    case Apply(f: Term, arg: Term, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case Force(term: Term, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case Delay(term: Term, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case Const(const: Constant, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case Builtin(bn: DefaultFun, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case Error(sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
+    case Constr(
+        tag: Word64,
+        args: immutable.List[Term],
+        sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    )
+    case Case(
+        arg: Term,
+        cases: immutable.List[Term],
+        sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    )
+
+    /** Returns a copy of this term with the given source position. */
+    def withPos(pos: ScalusSourcePos): Term = this match
+        case t: Var     => t.copy(sourcePos = pos)
+        case t: LamAbs  => t.copy(sourcePos = pos)
+        case t: Apply   => t.copy(sourcePos = pos)
+        case t: Force   => t.copy(sourcePos = pos)
+        case t: Delay   => t.copy(sourcePos = pos)
+        case t: Const   => t.copy(sourcePos = pos)
+        case t: Builtin => t.copy(sourcePos = pos)
+        case t: Error   => t.copy(sourcePos = pos)
+        case t: Constr  => t.copy(sourcePos = pos)
+        case t: Case    => t.copy(sourcePos = pos)
 
     /** Applies the argument to the term. */
     infix def $(rhs: Term): Term = Term.Apply(this, rhs)
@@ -44,36 +66,36 @@ enum Term:
 
     def applyToList: (Term, immutable.List[Term]) =
         this match
-            case Term.Apply(f, arg) =>
+            case Term.Apply(f, arg, _) =>
                 val (f1, args) = f.applyToList
                 (f1, args :+ arg)
             case f => (f, Nil)
 
     def collectBuiltins: Set[DefaultFun] = {
         this match
-            case Term.Builtin(bn)                         => Set(bn)
-            case Term.Var(_) | Term.Const(_) | Term.Error => Set.empty
-            case Term.LamAbs(_, body)                     => body.collectBuiltins
-            case Term.Force(body)                         => body.collectBuiltins
-            case Term.Delay(body)                         => body.collectBuiltins
-            case Term.Apply(f, arg) => f.collectBuiltins ++ arg.collectBuiltins
-            case Term.Constr(_, args) =>
+            case Term.Builtin(bn, _)                               => Set(bn)
+            case Term.Var(_, _) | Term.Const(_, _) | _: Term.Error => Set.empty
+            case Term.LamAbs(_, body, _)                           => body.collectBuiltins
+            case Term.Force(body, _)                               => body.collectBuiltins
+            case Term.Delay(body, _)                               => body.collectBuiltins
+            case Term.Apply(f, arg, _) => f.collectBuiltins ++ arg.collectBuiltins
+            case Term.Constr(_, args, _) =>
                 args.foldLeft(Set.empty[DefaultFun])((acc, x) => acc ++ x.collectBuiltins)
-            case Term.Case(arg, cases) =>
+            case Term.Case(arg, cases, _) =>
                 cases.foldLeft(arg.collectBuiltins)((acc, x) => acc ++ x.collectBuiltins)
     }
 
     override def toString: String = this match
-        case Var(name)          => s"Var(NamedDeBruijn(\"${name.name}\"))"
-        case LamAbs(name, term) => s"LamAbs(\"$name\", $term)"
-        case Apply(f, arg)      => s"Apply($f, $arg)"
-        case Force(term)        => s"Force($term)"
-        case Delay(term)        => s"Delay($term)"
-        case Const(const)       => s"Const($const)"
-        case Builtin(bn)        => s"Builtin($bn)"
-        case Error              => "Error"
-        case Constr(tag, args)  => s"Constr($tag, ${args.mkString(", ")})"
-        case Case(arg, cases)   => s"Case($arg, ${cases.mkString(", ")})"
+        case Var(name, _)          => s"Var(NamedDeBruijn(\"${name.name}\"))"
+        case LamAbs(name, term, _) => s"LamAbs(\"$name\", $term)"
+        case Apply(f, arg, _)      => s"Apply($f, $arg)"
+        case Force(term, _)        => s"Force($term)"
+        case Delay(term, _)        => s"Delay($term)"
+        case Const(const, _)       => s"Const($const)"
+        case Builtin(bn, _)        => s"Builtin($bn)"
+        case Error(_)              => "Error"
+        case Constr(tag, args, _)  => s"Constr($tag, ${args.mkString(", ")})"
+        case Case(arg, cases, _)   => s"Case($arg, ${cases.mkString(", ")})"
 
     /** Alpha-equivalence check between two terms.
       *
@@ -89,19 +111,19 @@ enum Term:
             n1.index == n2.index
 
         def equals(self: Term, other: Term): Boolean = (self, other) match
-            case (Var(n1), Var(n2))               => eqName(n1, n2)
-            case (LamAbs(n1, t1), LamAbs(n2, t2)) => equals(t1, t2)
-            case (Apply(f1, a1), Apply(f2, a2))   => equals(f1, f2) && equals(a1, a2)
-            case (Force(t1), Force(t2))           => equals(t1, t2)
-            case (Delay(t1), Delay(t2))           => equals(t1, t2)
-            case (Const(c1), Const(c2))           => c1 == c2
-            case (Builtin(b1), Builtin(b2))       => b1 == b2
-            case (Error, Error)                   => true
-            case (Constr(tag1, args1), Constr(tag2, args2)) =>
+            case (Var(n1, _), Var(n2, _))               => eqName(n1, n2)
+            case (LamAbs(n1, t1, _), LamAbs(n2, t2, _)) => equals(t1, t2)
+            case (Apply(f1, a1, _), Apply(f2, a2, _))   => equals(f1, f2) && equals(a1, a2)
+            case (Force(t1, _), Force(t2, _))           => equals(t1, t2)
+            case (Delay(t1, _), Delay(t2, _))           => equals(t1, t2)
+            case (Const(c1, _), Const(c2, _))           => c1 == c2
+            case (Builtin(b1, _), Builtin(b2, _))       => b1 == b2
+            case (Error(_), Error(_))                   => true
+            case (Constr(tag1, args1, _), Constr(tag2, args2, _)) =>
                 tag1 == tag2 && args1.size == args2.size && args1
                     .zip(args2)
                     .forall((t1, t2) => equals(t1, t2))
-            case (Case(arg1, cases1), Case(arg2, cases2)) =>
+            case (Case(arg1, cases1, _), Case(arg2, cases2, _)) =>
                 equals(arg1, arg2) && cases1.size == cases2.size && cases1
                     .zip(cases2)
                     .forall((t1, t2) => equals(t1, t2))
@@ -109,6 +131,22 @@ enum Term:
 
         equals(this, that)
     }
+
+    /** Position-ignoring structural equality. Like `α_==` but works on named terms too and ignores
+      * sourcePos fields.
+      */
+    infix def ~=~(that: Term): Boolean = (this, that) match
+        case (Var(n1, _), Var(n2, _))               => n1 == n2
+        case (LamAbs(n1, t1, _), LamAbs(n2, t2, _)) => n1 == n2 && (t1 ~=~ t2)
+        case (Apply(f1, a1, _), Apply(f2, a2, _))   => (f1 ~=~ f2) && (a1 ~=~ a2)
+        case (Force(t1, _), Force(t2, _))           => t1 ~=~ t2
+        case (Delay(t1, _), Delay(t2, _))           => t1 ~=~ t2
+        case (Const(c1, _), Const(c2, _))           => c1 == c2
+        case (Builtin(b1, _), Builtin(b2, _))       => b1 == b2
+        case (Error(_), Error(_))                   => true
+        case (Constr(t1, a1, _), Constr(t2, a2, _)) => t1 == t2 && a1.zip(a2).forall(_ ~=~ _)
+        case (Case(a1, c1, _), Case(a2, c2, _))     => (a1 ~=~ a2) && c1.zip(c2).forall(_ ~=~ _)
+        case _                                      => false
 
     /** Pretty-print the term. */
     def pretty: Doc = Pretty[Term].pretty(this, Style.Normal)
@@ -228,7 +266,7 @@ object Term {
     given Flat[Term] with
         val termTagWidth = 4
         def bitSize(a: Term): Int = a match
-            case Var(name) =>
+            case Var(name, _) =>
                 // in Plutus See Note [Index (Word64) (de)serialized through Natural]
                 if name.index < 0 then
                     throw new IllegalArgumentException(
@@ -237,22 +275,22 @@ object Term {
                           s"This usually means the variable is not properly bound in the scope."
                     )
                 termTagWidth + summon[Flat[Word64]].bitSize(Word64(name.index))
-            case Const(c)     => termTagWidth + flatConstant.bitSize(c)
-            case Apply(f, x)  => termTagWidth + bitSize(f) + bitSize(x)
-            case LamAbs(x, t) => termTagWidth + bitSize(t)
-            case Force(term)  => termTagWidth + bitSize(term)
-            case Delay(term)  => termTagWidth + bitSize(term)
-            case Builtin(bn)  => termTagWidth + summon[Flat[DefaultFun]].bitSize(bn)
-            case Error        => termTagWidth
-            case Constr(tag, args) =>
+            case Const(c, _)     => termTagWidth + flatConstant.bitSize(c)
+            case Apply(f, x, _)  => termTagWidth + bitSize(f) + bitSize(x)
+            case LamAbs(x, t, _) => termTagWidth + bitSize(t)
+            case Force(term, _)  => termTagWidth + bitSize(term)
+            case Delay(term, _)  => termTagWidth + bitSize(term)
+            case Builtin(bn, _)  => termTagWidth + summon[Flat[DefaultFun]].bitSize(bn)
+            case Error(_)        => termTagWidth
+            case Constr(tag, args, _) =>
                 termTagWidth + summon[Flat[Word64]].bitSize(tag) + summon[Flat[List[Term]]]
                     .bitSize(args)
-            case Case(arg, cases) =>
+            case Case(arg, cases, _) =>
                 termTagWidth + bitSize(arg) + summon[Flat[List[Term]]].bitSize(cases)
 
         def encode(a: Term, enc: EncoderState): Unit =
             a match
-                case Term.Var(name) =>
+                case Term.Var(name, _) =>
                     if name.index < 0 then
                         throw new IllegalArgumentException(
                           s"Cannot serialize UPLC Var with negative de Bruijn index. " +
@@ -261,31 +299,31 @@ object Term {
                         )
                     enc.bits(termTagWidth, 0)
                     summon[Flat[Word64]].encode(Word64(name.index), enc)
-                case Term.Delay(term) =>
+                case Term.Delay(term, _) =>
                     enc.bits(termTagWidth, 1)
                     encode(term, enc)
-                case Term.LamAbs(name, term) =>
+                case Term.LamAbs(name, term, _) =>
                     enc.bits(termTagWidth, 2)
                     encode(term, enc)
-                case Term.Apply(f, arg) =>
+                case Term.Apply(f, arg, _) =>
                     enc.bits(termTagWidth, 3)
                     encode(f, enc); encode(arg, enc)
-                case Term.Const(const) =>
+                case Term.Const(const, _) =>
                     enc.bits(termTagWidth, 4)
                     flatConstant.encode(const, enc)
-                case Term.Force(term) =>
+                case Term.Force(term, _) =>
                     enc.bits(termTagWidth, 5)
                     encode(term, enc)
-                case Term.Error =>
+                case Term.Error(_) =>
                     enc.bits(termTagWidth, 6)
-                case Term.Builtin(bn) =>
+                case Term.Builtin(bn, _) =>
                     enc.bits(termTagWidth, 7)
                     flat.encode(bn, enc)
-                case Constr(tag, args) =>
+                case Constr(tag, args, _) =>
                     enc.bits(termTagWidth, 8)
                     flat.encode(tag, enc)
                     flat.encode(args, enc)
-                case Case(arg, cases) =>
+                case Case(arg, cases, _) =>
                     enc.bits(termTagWidth, 9)
                     flat.encode(arg, enc)
                     flat.encode(cases, enc)
@@ -315,7 +353,7 @@ object Term {
                     val term = decode(decoder)
                     Term.Force(term)
                 case 6 =>
-                    Term.Error
+                    Term.Error()
                 case 7 =>
                     Term.Builtin(flat.decode(decoder))
                 case 8 =>
@@ -340,9 +378,9 @@ object Term {
                     if style == Style.XTerm then d.style(s) else d
 
             term match
-                case Var(name) => text(name.name)
+                case Var(name, _) => text(name.name)
 
-                case LamAbs(name, body) =>
+                case LamAbs(name, body, _) =>
                     // (lam name body) with rainbow parens at current depth
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)
@@ -351,7 +389,7 @@ object Term {
                         .nested(2)
                         .grouped + closeP).grouped
 
-                case a @ Apply(f, arg) =>
+                case a @ Apply(_, _, _) =>
                     // [f arg1 arg2 ...] with rainbow brackets
                     val (t, args) = a.applyToList
                     val openB = rainbowChar('[', depth, style)
@@ -360,7 +398,7 @@ object Term {
                     val body = intercalate(lineOrSpace, allTerms)
                     ((openB + body).nested(2).grouped + closeB).grouped
 
-                case Force(t) =>
+                case Force(t, _) =>
                     // (force term)
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)
@@ -370,7 +408,7 @@ object Term {
                       depth + 1
                     )).grouped + closeP
 
-                case Delay(t) =>
+                case Delay(t, _) =>
                     // (delay term)
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)
@@ -380,23 +418,23 @@ object Term {
                       depth + 1
                     )).grouped + closeP
 
-                case Const(const) =>
+                case Const(const, _) =>
                     // (con type value) - no depth increase, leaf node
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)
                     openP + kw("con", style) & const.pretty.styled(Fg.colorCode(64)) + closeP
 
-                case Builtin(bn) =>
+                case Builtin(bn, _) =>
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)
                     openP + kw("builtin", style) & PrettyPrinter
                         .pretty(bn)
                         .styled(Fg.colorCode(176)) + closeP
 
-                case Error =>
+                case Error(_) =>
                     kw("(error)", style)
 
-                case Constr(tag, args) =>
+                case Constr(tag, args, _) =>
                     // (constr tag arg1 arg2 ...)
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)
@@ -408,7 +446,7 @@ object Term {
                             .nested(2)
                             .grouped + closeP).grouped
 
-                case Case(arg, cases) =>
+                case Case(arg, cases, _) =>
                     // (case scrutinee branch1 branch2 ...)
                     val openP = rainbowChar('(', depth, style)
                     val closeP = rainbowChar(')', depth, style)

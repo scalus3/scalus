@@ -48,9 +48,9 @@ class UplcParser(initialVersion: (Int, Int, Int) = (1, 1, 0)):
         def appTerm = inBrackets(self ~ self.rep).map { case (f, args) =>
             args.foldLeft(f) { case (acc, arg) => Apply(acc, arg) }
         }
-        def forceTerm = inParens(symbol("force") *> self).map(Force.apply)
-        def delayTerm = inParens(symbol("delay") *> self).map(Delay.apply)
-        def errorTerm = inParens(symbol("error")).map(_ => Error)
+        def forceTerm = inParens(symbol("force") *> self).map(t => Force(t))
+        def delayTerm = inParens(symbol("delay") *> self).map(t => Delay(t))
+        def errorTerm = inParens(symbol("error")).map(_ => Error())
         def constrTerm: P[Term] =
             inParens(symbol("constr") *> lexeme(word64) ~ self.rep0).map((tag, args) =>
                 Constr(tag, args)

@@ -205,7 +205,7 @@ class UplcParserTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbi
         val r = parser.parseProgram("(program 1.0.0 (force (delay (error))))")
         assert(
           r == Right(
-            Program(version = (1, 0, 0), term = Force(Delay(Error)))
+            Program(version = (1, 0, 0), term = Force(Delay(Error())))
           )
         )
     }

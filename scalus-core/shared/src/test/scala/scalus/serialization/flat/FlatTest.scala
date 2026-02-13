@@ -297,7 +297,7 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
     test("encode/decode Term") {
         import scalus.uplc.builtin.Data.toData
         val fl = summon[Flat[Term]]
-        assert(fl.bitSize(Term.Error) == 4)
+        assert(fl.bitSize(Term.Error()) == 4)
         assert(fl.bitSize(Term.Var(NamedDeBruijn("any name", 12))) == 12)
         // 4 bits for Const tag + 1 bit Cons of type tags list + 4 bits for Unit tag + 1 bit for Nil
         assert(fl.bitSize(().asTerm) == 10)

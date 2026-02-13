@@ -127,9 +127,9 @@ class PlutusVM(
       *   [CIP-117](https://cips.cardano.org/cip/CIP-0117/)
       */
     private def isResultValid(res: Term): Boolean = (language, res) match
-        case (Language.PlutusV1 | Language.PlutusV2, _)                         => true
-        case (Language.PlutusV3 | Language.PlutusV4, Term.Const(Constant.Unit)) => true
-        case _                                                                  => false
+        case (Language.PlutusV1 | Language.PlutusV2, _)                            => true
+        case (Language.PlutusV3 | Language.PlutusV4, Term.Const(Constant.Unit, _)) => true
+        case _                                                                     => false
 }
 
 /** Companion object for PlutusVM that provides factory methods for creating VM instances for

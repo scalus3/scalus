@@ -58,13 +58,13 @@ class SirToUplcSmLoweringTest
     }
 
     test("lower error") {
-        SIR.Error("error", ae) lowersTo Term.Error
+        SIR.Error("error", ae) lowersTo Term.Error()
         assert(
           SIR.Error("error", ae)
               .toUplc(
                 generateErrorTraces = true,
                 optimizeUplc = false
-              ) == !(!Trace $ "error" $ ~Term.Error)
+              ) ~=~ !(!Trace $ "error" $ ~Term.Error())
         )
     }
 
@@ -236,11 +236,11 @@ class SirToUplcSmLoweringTest
                     .empty[scalus.uplc.builtin.Data]
                     .toData
                 val termValue = term match {
-                    case Term.Const(Constant.List(DefaultUni.Data, value)) => value
+                    case Term.Const(Constant.List(DefaultUni.Data, value), _) => value
                     case _ => fail(s"Expected a List constant, got: ${term}")
                 }
                 /// assert(termValue == nilData)
-                assert(term == Term.Const(Constant.List(scalus.uplc.DefaultUni.Data, List())))
+                assert(term ~=~ Term.Const(Constant.List(scalus.uplc.DefaultUni.Data, List())))
             case _ =>
                 fail(s"Expected success, got: ${result1}")
         }

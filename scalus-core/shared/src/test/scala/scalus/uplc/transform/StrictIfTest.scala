@@ -107,12 +107,12 @@ class StrictIfTest extends AnyFunSuite:
     }
 
     test("does not transform if with Error in then branch") {
-        val input = lazyIf(true, Error, 100)
+        val input = lazyIf(true, Error(), 100)
         assert(StrictIf(input) == input)
     }
 
     test("does not transform if with Error in else branch") {
-        val input = lazyIf(false, 42, Error)
+        val input = lazyIf(false, 42, Error())
         assert(StrictIf(input) == input)
     }
 
@@ -297,7 +297,7 @@ class StrictIfTest extends AnyFunSuite:
     }
 
     test("preserves Error") {
-        val input = Error
+        val input = Error()
         assert(StrictIf(input) == input)
     }
 
@@ -357,7 +357,7 @@ class StrictIfTest extends AnyFunSuite:
         var loggedMessages = List.empty[String]
         val logger = (msg: String) => loggedMessages = loggedMessages :+ msg
 
-        val input = lazyIf(true, Error, 100)
+        val input = lazyIf(true, Error(), 100)
         StrictIf(input, logger)
 
         assert(loggedMessages.isEmpty)

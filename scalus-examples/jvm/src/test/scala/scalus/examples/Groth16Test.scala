@@ -277,7 +277,7 @@ class Groth16Test extends AnyFunSuite:
             val applied =
                 validator $ vk.toData $ proof.toData $ public.toData
             applied.evaluate
-        val Term.Const(Constant.Bool(onchainResult)) = onchainResultTerm: @unchecked
+        val Term.Const(Constant.Bool(onchainResult), _) = onchainResultTerm: @unchecked
         assert(
           onchainResult == offchainResult,
           s"Offchain: $offchainResult, Onchain: $onchainResult"

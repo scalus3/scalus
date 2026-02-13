@@ -5,6 +5,7 @@ import com.bloxbean.cardano.client.plutus.spec.PlutusData;
 import scalus.uplc.Constant;
 import scalus.uplc.Program;
 import scalus.uplc.Term;
+import scalus.utils.ScalusSourcePos;
 
 public class ScalusScriptUtils {
     /**
@@ -29,7 +30,7 @@ public class ScalusScriptUtils {
         var program = Program.fromDoubleCborHex(serializedPlutusProgram);
         for (var p : params) {
             var scalusData = Interop.toScalusData(p);
-            var term = Term.Const.apply(Constant.Data.apply(scalusData));
+            var term = Term.Const.apply(Constant.Data.apply(scalusData), ScalusSourcePos.empty());
             program = program.applyArg(term);
         }
         return program.doubleCborHex();

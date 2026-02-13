@@ -266,6 +266,7 @@ lazy val scalusPlugin = project
             "scalus/uplc/DefaultUni.scala",
             "scalus/uplc/TypeScheme.scala",
             "scalus/utils/Hex.scala",
+            "scalus/utils/ScalusSourcePos.scala",
           )
 
           val baseDir =

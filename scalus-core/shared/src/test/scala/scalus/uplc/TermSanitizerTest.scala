@@ -109,9 +109,9 @@ class TermSanitizerTest extends AnyFunSuite:
     }
 
     test("Preserve Error") {
-        val term = Error
+        val term = Error()
         val sanitized = sanitizeNames(term)
-        assert(sanitized == Error)
+        assert(sanitized == Error())
     }
 
     test("Handle multiple occurrences of same invalid name") {

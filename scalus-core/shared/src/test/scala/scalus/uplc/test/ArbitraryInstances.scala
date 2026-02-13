@@ -257,7 +257,7 @@ trait ArbitraryInstances:
         def sizedTermGen(sz: Int, env: immutable.List[String]): Gen[Term] =
             val maybeVarTerm = if env.isEmpty then Seq.empty else Seq(varGen(env))
             val simple = Gen.oneOf(
-              Gen.const(Term.Error),
+              Gen.const(Term.Error()),
               builtinGen,
               Seq(constGen) ++ maybeVarTerm*
             )
@@ -304,16 +304,16 @@ trait ArbitraryInstances:
     given TermShrink: Shrink[Term] =
         given Shrink[Term] = TermShrink
         Shrink {
-            case Term.Error        => Stream.empty
-            case Term.Builtin(_)   => Stream.empty
-            case Term.Const(const) => Shrink.shrink(const).map(Term.Const.apply)
-            case Term.Var(_)       => Stream.empty
-            case Term.Force(t)     => Shrink.shrink(t).map(Term.Force.apply)
-            case Term.Delay(t)     => Shrink.shrink(t).map(Term.Delay.apply)
-            case Term.LamAbs(n, t) =>
+            case _: Term.Error        => Stream.empty
+            case Term.Builtin(_, _)   => Stream.empty
+            case Term.Const(const, _) => Shrink.shrink(const).map(Term.Const(_))
+            case Term.Var(_, _)       => Stream.empty
+            case Term.Force(t, _)     => Shrink.shrink(t).map(Term.Force(_))
+            case Term.Delay(t, _)     => Shrink.shrink(t).map(Term.Delay(_))
+            case Term.LamAbs(n, t, _) =>
                 val tShrunk = Shrink.shrink(t).map(Term.LamAbs(n, _))
                 tShrunk
-            case Term.Apply(t1, t2) =>
+            case Term.Apply(t1, t2, _) =>
                 val t1Shrunk = Shrink.shrink(t1).map(Term.Apply(_, t2))
                 val t2Shrunk = Shrink.shrink(t2).map(Term.Apply(t1, _))
                 t1Shrunk ++ t2Shrunk

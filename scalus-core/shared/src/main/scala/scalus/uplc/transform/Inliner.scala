@@ -75,17 +75,17 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *   Number of free occurrences of the variable
       */
     private def countOccurrences(term: Term, name: String): Int = term match
-        case Var(NamedDeBruijn(n, _)) => if n == name then 1 else 0
-        case LamAbs(n, body) =>
+        case Var(NamedDeBruijn(n, _), _) => if n == name then 1 else 0
+        case LamAbs(n, body, _) =>
             if n == name then 0 // Stop counting if shadowed
             else countOccurrences(body, name)
-        case Apply(f, arg)   => countOccurrences(f, name) + countOccurrences(arg, name)
-        case Force(t)        => countOccurrences(t, name)
-        case Delay(t)        => countOccurrences(t, name)
-        case Constr(_, args) => args.map(countOccurrences(_, name)).sum
-        case Case(scrutinee, cases) =>
+        case Apply(f, arg, _)   => countOccurrences(f, name) + countOccurrences(arg, name)
+        case Force(t, _)        => countOccurrences(t, name)
+        case Delay(t, _)        => countOccurrences(t, name)
+        case Constr(_, args, _) => args.map(countOccurrences(_, name)).sum
+        case Case(scrutinee, cases, _) =>
             countOccurrences(scrutinee, name) + cases.map(countOccurrences(_, name)).sum
-        case Const(_) | Builtin(_) | Error => 0
+        case _: Const | _: Builtin | _: Error => 0
 
     /** Determines if a term is safe to inline based on its type and occurrence count.
       *
@@ -108,12 +108,12 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       */
     def inlineConstVarBuiltin(name: String, body: Term, inlining: Term, occurrences: Int): Boolean =
         inlining match
-            case Var(_) => true // Variables are safe to duplicate
-            case Const(c) =>
+            case Var(_, _) => true // Variables are safe to duplicate
+            case Const(c, _) =>
                 if occurrences == 1 then true
                 else flatConstant.bitSize(c) <= 64 // Small constants are safe
-            case Builtin(_) => true
-            case _          => false
+            case Builtin(_, _) => true
+            case _             => false
 
     /** Performs capture-avoiding substitution `[x → s]t`.
       *
@@ -150,15 +150,15 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
     def substitute(term: Term, name: String, replacement: Term): Term =
         // Get all free variables in the replacement term
         def freeVars(t: Term): Set[String] = t match
-            case Var(NamedDeBruijn(n, _)) => Set(n)
-            case LamAbs(n, body)          => freeVars(body) - n
-            case Apply(f, a)              => freeVars(f) ++ freeVars(a)
-            case Force(t)                 => freeVars(t)
-            case Delay(t)                 => freeVars(t)
-            case Constr(_, args)          => args.flatMap(freeVars).toSet
-            case Case(scrutinee, cases) =>
+            case Var(NamedDeBruijn(n, _), _) => Set(n)
+            case LamAbs(n, body, _)          => freeVars(body) - n
+            case Apply(f, a, _)              => freeVars(f) ++ freeVars(a)
+            case Force(t, _)                 => freeVars(t)
+            case Delay(t, _)                 => freeVars(t)
+            case Constr(_, args, _)          => args.flatMap(freeVars).toSet
+            case Case(scrutinee, cases, _) =>
                 freeVars(scrutinee) ++ cases.flatMap(freeVars)
-            case Const(_) | Builtin(_) | Error => Set.empty
+            case _: Const | _: Builtin | _: Error => Set.empty
 
         // Generate a fresh name that doesn't clash with any names in the set
         def freshName(base: String, avoid: Set[String]): String =
@@ -175,35 +175,37 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
         lazy val replacementFreeVars = freeVars(replacement)
 
         def go(t: Term, boundVars: Set[String]): Term = t match
-            case Var(NamedDeBruijn(n, _)) =>
+            case Var(NamedDeBruijn(n, _), _) =>
                 if n == name && !boundVars.contains(n) then replacement
                 else t
 
-            case LamAbs(n, body) =>
+            case LamAbs(n, body, pos) =>
                 if n == name then t
                 else if replacementFreeVars.contains(n) then
                     val freshN = freshName(n, boundVars ++ replacementFreeVars)
                     LamAbs(
                       freshN,
-                      go(substitute(body, n, Var(NamedDeBruijn(freshN))), boundVars + freshN)
+                      go(substitute(body, n, Var(NamedDeBruijn(freshN))), boundVars + freshN),
+                      pos
                     )
-                else LamAbs(n, go(body, boundVars + n))
+                else LamAbs(n, go(body, boundVars + n), pos)
 
-            case Apply(f, arg) => Apply(go(f, boundVars), go(arg, boundVars))
+            case Apply(f, arg, pos) => Apply(go(f, boundVars), go(arg, boundVars), pos)
 
-            case Force(t) => Force(go(t, boundVars))
-            case Delay(t) => Delay(go(t, boundVars))
+            case Force(t, pos) => Force(go(t, boundVars), pos)
+            case Delay(t, pos) => Delay(go(t, boundVars), pos)
 
-            case Constr(tag, args) =>
-                Constr(tag, args.map(arg => go(arg, boundVars)))
+            case Constr(tag, args, pos) =>
+                Constr(tag, args.map(arg => go(arg, boundVars)), pos)
 
-            case Case(scrutinee, cases) =>
+            case Case(scrutinee, cases, pos) =>
                 Case(
                   go(scrutinee, boundVars),
-                  cases.map(c => go(c, boundVars))
+                  cases.map(c => go(c, boundVars)),
+                  pos
                 )
 
-            case t @ (Const(_) | Builtin(_) | Error) => t
+            case _: Const | _: Builtin | _: Error => t
 
         go(term, Set.empty)
 
@@ -239,21 +241,21 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
         term: Term
     ): Term =
         def go(term: Term, env: Map[String, Term]): Term = term match
-            case Var(NamedDeBruijn(name, _)) =>
+            case Var(NamedDeBruijn(name, _), _) =>
                 env.get(name) match
                     case Some(value) => value
                     case _           => term
 
-            case Apply(f, arg) =>
+            case Apply(f, arg, pos) =>
                 val inlinedF = go(f, env)
                 val inlinedArg = go(arg, env)
                 // Try beta reduction if possible
                 inlinedF match
                     // Inline identity functions
-                    case LamAbs(name, Var(NamedDeBruijn(vname, _))) if name == vname =>
+                    case LamAbs(name, Var(NamedDeBruijn(vname, _), _), _) if name == vname =>
                         logger.log(s"Inlining identity function: $name")
                         inlinedArg
-                    case LamAbs(name, body) =>
+                    case LamAbs(name, body, _) =>
                         // Count occurrences to decide if we should inline
                         val occurrences = countOccurrences(body, name)
                         if occurrences == 0 && inlinedArg.isPure then
@@ -265,25 +267,26 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                             go(substitute(body, name, inlinedArg), env)
                         else
                             // non-safe term - keep the lambda
-                            Apply(inlinedF, inlinedArg)
+                            Apply(inlinedF, inlinedArg, pos)
                     case _ =>
-                        Apply(inlinedF, inlinedArg)
+                        Apply(inlinedF, inlinedArg, pos)
 
-            case LamAbs(name, body) => LamAbs(name, go(body, env - name))
-            case Force(Delay(t)) =>
+            case LamAbs(name, body, pos) => LamAbs(name, go(body, env - name), pos)
+            case Force(Delay(t, _), _) =>
                 logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
                 go(t, env)
-            case Force(t)          => Force(go(t, env))
-            case Delay(t)          => Delay(go(t, env))
-            case Constr(tag, args) => Constr(tag, args.map(arg => go(arg, env)))
+            case Force(t, pos)          => Force(go(t, env), pos)
+            case Delay(t, pos)          => Delay(go(t, env), pos)
+            case Constr(tag, args, pos) => Constr(tag, args.map(arg => go(arg, env)), pos)
 
-            case Case(scrutinee, cases) =>
+            case Case(scrutinee, cases, pos) =>
                 Case(
                   go(scrutinee, env),
-                  cases.map(c => go(c, env))
+                  cases.map(c => go(c, env)),
+                  pos
                 )
 
-            case t @ (Const(_) | Builtin(_) | Error) => t
+            case _: Const | _: Builtin | _: Error => term
 
         go(term, Map.empty)
 

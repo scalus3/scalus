@@ -208,7 +208,7 @@ object PlutusScriptEvaluator {
             args: Data*
         ): Result = {
             Result.Success(
-              Term.Error,
+              Term.Error(),
               evalBudget(
                 redeemer,
                 txhash,

@@ -44,7 +44,7 @@ class TermAnalysisTest extends AnyFunSuite:
 
     // Impure terms - basic cases
     test("Error is impure") {
-        assert(!Error.isPure)
+        assert(!Error().isPure)
     }
 
     test("Force of constant is impure") {
@@ -65,7 +65,7 @@ class TermAnalysisTest extends AnyFunSuite:
         // Force(Delay(x)) is pure - it's a no-op that evaluates to x
         assert(Force(Delay(Const(Constant.Integer(1)))).isPure)
         assert(Force(Delay(vr"x")).isPure)
-        assert(Force(Delay(Error)).isPure) // Even Error inside Delay is fine
+        assert(Force(Delay(Error())).isPure) // Even Error inside Delay is fine
     }
 
     // Builtins with Force - polymorphic builtins
@@ -133,7 +133,7 @@ class TermAnalysisTest extends AnyFunSuite:
 
     test("Beta-redex with impure argument is impure") {
         // (λx. x) Error - argument impure
-        assert(!(λ("x")(vr"x") $ Error).isPure)
+        assert(!(λ("x")(vr"x") $ Error()).isPure)
 
         // (λx. x) (Force 1) - argument impure
         assert(!(λ("x")(vr"x") $ Force(Const(Constant.Integer(1)))).isPure)
@@ -141,7 +141,7 @@ class TermAnalysisTest extends AnyFunSuite:
 
     test("Beta-redex with impure body is impure") {
         // (λx. Error) 42 - body impure
-        assert(!(λ("x")(Error) $ 42).isPure)
+        assert(!(λ("x")(Error()) $ 42).isPure)
 
         // (λx. Force x) y - body impure (Force is impure)
         assert(!(λ("x")(Force(vr"x")) $ vr"y").isPure)
@@ -149,7 +149,7 @@ class TermAnalysisTest extends AnyFunSuite:
 
     test("Beta-redex with both parts impure is impure") {
         // (λx. Error) Error - both impure
-        assert(!(λ("x")(Error) $ Error).isPure)
+        assert(!(λ("x")(Error()) $ Error()).isPure)
     }
 
     // Constructors
@@ -160,8 +160,8 @@ class TermAnalysisTest extends AnyFunSuite:
     }
 
     test("Constructor with impure argument is impure") {
-        assert(!Constr(Word64.Zero, List(Error)).isPure)
-        assert(!Constr(Word64.Zero, List[Term](42, Error, vr"x")).isPure)
+        assert(!Constr(Word64.Zero, List(Error())).isPure)
+        assert(!Constr(Word64.Zero, List[Term](42, Error(), vr"x")).isPure)
         assert(!Constr(Word64.One, List(Force(Const(Constant.Integer(1))))).isPure)
     }
 
@@ -177,20 +177,20 @@ class TermAnalysisTest extends AnyFunSuite:
     }
 
     test("Case with impure scrutinee is impure") {
-        val scrut = Error
+        val scrut = Error()
         val cases = List(vr"x", vr"y")
         assert(!Case(scrut, cases).isPure)
     }
 
     test("Case with impure case is impure") {
         val scrut = Constr(Word64.Zero, List[Term](42))
-        val cases = List(vr"x", Error, vr"z")
+        val cases = List(vr"x", Error(), vr"z")
         assert(!Case(scrut, cases).isPure)
     }
 
     test("Case with all impure is impure") {
-        val scrut = Error
-        val cases = List(Error, Force(vr"x"))
+        val scrut = Error()
+        val cases = List(Error(), Force(vr"x"))
         assert(!Case(scrut, cases).isPure)
     }
 
@@ -212,13 +212,13 @@ class TermAnalysisTest extends AnyFunSuite:
 
     test("Nested impure terms are impure") {
         // (λx. (λy. Error)) 1 2
-        val term = λ("x", "y")(Error) $ 1 $ 2
+        val term = λ("x", "y")(Error()) $ 1 $ 2
         assert(!term.isPure)
     }
 
     test("Delay of impure term is still pure (lazy)") {
         // Delay suspends computation, so even Error is fine inside Delay
-        assert(Delay(Error).isPure)
+        assert(Delay(Error()).isPure)
         assert(Delay(Force(vr"x")).isPure)
     }
 
@@ -250,7 +250,7 @@ class TermAnalysisTest extends AnyFunSuite:
 
     test("Any impure term makes Apply impure") {
         val impureTerms = List(
-          Error,
+          Error(),
           Force(Const(Constant.Integer(1))),
           Force(vr"x"),
           AddInteger $ 1 $ 2 // saturated

@@ -63,7 +63,7 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // Verify structure: should be ((\x -> (\y -> x + y)) (1 + 2))
         // x should be bound outside the lambda
         term match
-            case Term.Apply(Term.LamAbs("x", lambdaBody), rhs) =>
+            case Term.Apply(Term.LamAbs("x", lambdaBody, _), rhs, _) =>
                 // x is bound outside lambda - correct!
                 assert(lambdaBody.isInstanceOf[Term.LamAbs])
                 assert(rhs.isInstanceOf[Term.Apply]) // 1 + 2
@@ -108,7 +108,7 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // Verify structure: effortless constant is inlined inside lambda
         // Should be: \y -> (42 + y)
         term match
-            case Term.LamAbs(yName, body) =>
+            case Term.LamAbs(yName, body, _) =>
                 // c is effortless, so it's inlined (42 appears directly in body)
                 assert(body.toString.contains("42"))
             case _ =>
@@ -160,7 +160,7 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // inner->outer chain gets inlined to just the constant 10
         // Should be: \y -> (10 + y)
         term match
-            case Term.LamAbs(yName, body) =>
+            case Term.LamAbs(yName, body, _) =>
                 // Both inner and outer are effortless, so they're inlined to 10
                 assert(body.toString.contains("10"))
             case _ =>
@@ -230,10 +230,10 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // Verify: x should be outside lambda (non-effortless), c is inlined inside (effortless)
         // Should be: (\x -> \y -> x + 42 + y) (1 + 2)
         term match
-            case Term.Apply(Term.LamAbs("x", lambdaBody), _) =>
+            case Term.Apply(Term.LamAbs("x", lambdaBody, _), _, _) =>
                 // x is bound outside - correct!
                 lambdaBody match
-                    case Term.LamAbs(yName, body) =>
+                    case Term.LamAbs(yName, body, _) =>
                         // c is effortless, so 42 should appear directly in body
                         assert(body.toString.contains("42"))
                         // x is used as Var in body
@@ -306,13 +306,13 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // Verify: x should be bound outside both lambdas
         // Should be: (\x -> \a -> \b -> x + a + b) (1 + 2)
         term match
-            case Term.Apply(Term.LamAbs("x", lambdaBody), rhs) =>
+            case Term.Apply(Term.LamAbs("x", lambdaBody, _), rhs, _) =>
                 // x is bound outside both lambdas - correct!
                 assert(rhs.isInstanceOf[Term.Apply]) // 1 + 2
                 lambdaBody match
-                    case Term.LamAbs(aName, innerLambda) =>
+                    case Term.LamAbs(aName, innerLambda, _) =>
                         innerLambda match
-                            case Term.LamAbs(bName, body) =>
+                            case Term.LamAbs(bName, body, _) =>
                                 // x should be used as Var in innermost body
                                 assert(body.toString.contains("x"))
                             case _ =>
@@ -387,11 +387,11 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // a and b are effortless (variable references) and get inlined
         // Should be: (\c -> \y -> c + y) (1 + 2)
         term match
-            case Term.Apply(Term.LamAbs("c", lambdaBody), rhs) =>
+            case Term.Apply(Term.LamAbs("c", lambdaBody, _), rhs, _) =>
                 // c (the non-effortless computation) is bound outside - correct!
                 assert(rhs.isInstanceOf[Term.Apply]) // 1 + 2
                 lambdaBody match
-                    case Term.LamAbs(yName, body) =>
+                    case Term.LamAbs(yName, body, _) =>
                         // Body should use c (a and b were inlined to c)
                         assert(body.toString.contains("c"))
                     case _ =>
@@ -459,7 +459,7 @@ class LambdaBarrierLoweringTest extends AnyFunSuite:
         // f (lambda) is effortless, gets inlined inside outer lambda
         // Should be: \y -> (\x -> x + 1) y  (inline application)
         term match
-            case Term.LamAbs(yName, body) =>
+            case Term.LamAbs(yName, body, _) =>
                 // f is effortless lambda, so it's inlined in the body
                 // The body should be an application
                 assert(body.isInstanceOf[Term.Apply])

@@ -103,13 +103,13 @@ object JIT extends JitRunner {
             nativeStackContext: Expr[NativeStackContext]
         ): Expr[Any] = {
             term match
-                case Term.Var(name) =>
+                case Term.Var(name, _) =>
                     val vr = env.find(_._1 == name.name).get._2.asExprOf[Any]
                     '{
                         $budget.spendBudget(Step(StepKind.Var), $params.machineCosts.varCost, Nil)
                         $vr
                     }
-                case Term.LamAbs(name, term) =>
+                case Term.LamAbs(name, term, _) =>
                     val mtpe =
                         MethodType(List(name))(_ => List(TypeRepr.of[Any]), _ => TypeRepr.of[Any])
                     val lambda = Lambda(
@@ -135,11 +135,11 @@ object JIT extends JitRunner {
                         )
                         $lambda
                     }
-                case Term.Apply(f, arg) =>
+                case Term.Apply(f, arg, _) =>
                     // Optimize: detect fully-applied 1-argument builtins with simple arg
                     if UplcTermHelper.isApplyBuiltin1WithSimpleArg(term) then {
                         f match
-                            case Term.Builtin(bn) if BuiltinAppliedGenerator.isSupported1(bn) =>
+                            case Term.Builtin(bn, _) if BuiltinAppliedGenerator.isSupported1(bn) =>
                                 val argCode =
                                     genCode(arg, env, logger, budget, params, nativeStackContext)
                                 // Generate inline code for one-argument builtins
@@ -152,7 +152,7 @@ object JIT extends JitRunner {
                     // Optimize: detect fully-applied 2-argument builtins with simple args
                     else if UplcTermHelper.isApplyBuiltin2WithSimpleArgs(term) then {
                         f match
-                            case Term.Apply(Term.Builtin(bn), arg1) =>
+                            case Term.Apply(Term.Builtin(bn, _), arg1, _) =>
                                 val arg1Code =
                                     genCode(arg1, env, logger, budget, params, nativeStackContext)
                                 val arg2Code =
@@ -195,7 +195,7 @@ object JIT extends JitRunner {
                             }
                     }
 
-                case Term.Force(term) =>
+                case Term.Force(term, _) =>
                     val expr = genCode(term, env, logger, budget, params, nativeStackContext)
                     '{
                         val forceTerm = ${ expr }.asInstanceOf[() => Any]
@@ -206,7 +206,7 @@ object JIT extends JitRunner {
                         )
                         forceTerm.apply()
                     }
-                case Term.Delay(term) =>
+                case Term.Delay(term, _) =>
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Delay),
@@ -215,7 +215,7 @@ object JIT extends JitRunner {
                         )
                         () => ${ genCode(term, env, logger, budget, params, nativeStackContext) }
                     }
-                case Term.Const(const) =>
+                case Term.Const(const, _) =>
                     val expr = constantToExpr(const)
                     '{
                         $budget.spendBudget(
@@ -225,11 +225,11 @@ object JIT extends JitRunner {
                         )
                         $expr
                     }
-                case Term.Builtin(bn) =>
+                case Term.Builtin(bn, _) =>
                     BuiltinEmitter.emitBuiltin(bn, logger, budget, params)
-                case Term.Error =>
+                case _: Term.Error =>
                     '{ throw new JitEvaluationFailure("UPLC Error term evaluated") }
-                case Term.Constr(tag, args) =>
+                case Term.Constr(tag, args, _) =>
                     val expr = Expr.ofTuple(
                       Expr(tag.value) -> Expr.ofList(
                         args.map(a => genCode(a, env, logger, budget, params, nativeStackContext))
@@ -243,7 +243,7 @@ object JIT extends JitRunner {
                         )
                         $expr
                     }
-                case Term.Case(arg, cases) =>
+                case Term.Case(arg, cases, _) =>
                     val scrutinee =
                         genCode(arg, env, logger, budget, params, nativeStackContext)
                     val branchExprs: List[Expr[Any]] =

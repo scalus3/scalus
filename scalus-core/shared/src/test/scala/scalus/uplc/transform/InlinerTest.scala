@@ -67,7 +67,7 @@ class InlinerTest extends AnyFunSuite {
 
         // The result should be λy_1. y where y_1 is a fresh name
         result match
-            case LamAbs(newName, Var(NamedDeBruijn("y", 0))) =>
+            case LamAbs(newName, Var(NamedDeBruijn("y", 0), _), _) =>
                 assert(newName != "y")
             case _ =>
                 fail(s"Unexpected result: $result")
@@ -98,7 +98,7 @@ class InlinerTest extends AnyFunSuite {
 
     test("should not inline non-pure terms") {
         // (λx. x + x) Error => (λx. x + x) Error
-        val termWithError = λ("x")(AddInteger $ vr"x" $ vr"x") $ Error
+        val termWithError = λ("x")(AddInteger $ vr"x" $ vr"x") $ Error()
         assert(Inliner(termWithError) == termWithError)
     }
 
@@ -115,7 +115,7 @@ class InlinerTest extends AnyFunSuite {
         val result = Inliner(term)
 
         result match
-            case LamAbs(newName, Var(NamedDeBruijn("y", 0))) =>
+            case LamAbs(newName, Var(NamedDeBruijn("y", 0), _), _) =>
                 assert(newName != "y") // Should be renamed to avoid capture
             case _ => fail(s"Unexpected result: $result")
     }
@@ -126,7 +126,11 @@ class InlinerTest extends AnyFunSuite {
         val result = Inliner(term)
 
         result match
-            case LamAbs(newName, Apply(Var(NamedDeBruijn("y", 0)), Var(NamedDeBruijn(y2, 0)))) =>
+            case LamAbs(
+                  newName,
+                  Apply(Var(NamedDeBruijn("y", 0), _), Var(NamedDeBruijn(y2, 0), _), _),
+                  _
+                ) =>
                 assert(newName != "y") // Should be renamed
                 assert(y2 == newName) // The bound y should refer to the new name
             case _ => fail(s"Unexpected result: $result")

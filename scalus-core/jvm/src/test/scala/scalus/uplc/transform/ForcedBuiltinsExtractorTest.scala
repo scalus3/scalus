@@ -112,14 +112,22 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
                   Apply(
                     Apply(
                       Apply(
-                        LamAbs(name1, LamAbs(name2, LamAbs(name3, LamAbs(name4, body)))),
-                        Force(Force(Builtin(DefaultFun.FstPair)))
+                        LamAbs(
+                          name1,
+                          LamAbs(name2, LamAbs(name3, LamAbs(name4, body, _), _), _),
+                          _
+                        ),
+                        Force(Force(Builtin(DefaultFun.FstPair, _), _), _),
+                        _
                       ),
-                      Force(Builtin(DefaultFun.HeadList))
+                      Force(Builtin(DefaultFun.HeadList, _), _),
+                      _
                     ),
-                    Force(Force(Builtin(DefaultFun.SndPair)))
+                    Force(Force(Builtin(DefaultFun.SndPair, _), _), _),
+                    _
                   ),
-                  Force(Builtin(DefaultFun.TailList))
+                  Force(Builtin(DefaultFun.TailList, _), _),
+                  _
                 ) =>
                 // Verify the order of extracted builtins is sorted
                 assert(name1 == "__builtin_FstPair")

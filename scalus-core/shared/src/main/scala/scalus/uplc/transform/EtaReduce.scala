@@ -41,26 +41,26 @@ class EtaReduce(logger: Logger = new Log()) extends Optimizer:
 
     /** Performs eta-reduction on a term. */
     private def etaReduce(term: Term): Term = term match
-        case LamAbs(name1, Term.Apply(f, Term.Var(name2)))
+        case LamAbs(name1, Term.Apply(f, Term.Var(name2, _), _), pos)
             if name1 == name2.name && !freeNames(f).contains(name1) && f.isPure =>
             logger.log(s"Eta-reducing term: ${f.show}")
             etaReduce(f)
-        case LamAbs(name, body) =>
+        case LamAbs(name, body, pos) =>
             val body1 = etaReduce(body)
-            if body != body1 then etaReduce(LamAbs(name, body1)) else term
-        case Apply(f, arg) => Apply(etaReduce(f), etaReduce(arg))
-        case Force(term)   => Force(etaReduce(term))
-        case Delay(term)   => Delay(etaReduce(term))
-        case _             => term
+            if body != body1 then etaReduce(LamAbs(name, body1, pos)) else term
+        case Apply(f, arg, pos) => Apply(etaReduce(f), etaReduce(arg), pos)
+        case Force(term, pos)   => Force(etaReduce(term), pos)
+        case Delay(term, pos)   => Delay(etaReduce(term), pos)
+        case _                  => term
 
     /** Returns the set of free names in a term */
     private def freeNames(term: Term): Set[String] = term match
-        case Var(NamedDeBruijn(name, _)) => Set(name)
-        case LamAbs(name, body)          => freeNames(body) - name
-        case Apply(f, arg)               => freeNames(f) ++ freeNames(arg)
-        case Force(term)                 => freeNames(term)
-        case Delay(term)                 => freeNames(term)
-        case _                           => Set.empty
+        case Var(NamedDeBruijn(name, _), _) => Set(name)
+        case LamAbs(name, body, _)          => freeNames(body) - name
+        case Apply(f, arg, _)               => freeNames(f) ++ freeNames(arg)
+        case Force(term, _)                 => freeNames(term)
+        case Delay(term, _)                 => freeNames(term)
+        case _                              => Set.empty
 
 object EtaReduce:
     def apply(term: Term): Term = new EtaReduce().apply(term)

@@ -220,12 +220,12 @@ class DropListTest extends AnyFunSuite {
 
         // Helper to check if term contains DropList
         def containsDropList(term: Term): Boolean = term match
-            case Builtin(DefaultFun.DropList) => true
-            case Apply(f, arg)                => containsDropList(f) || containsDropList(arg)
-            case LamAbs(_, body)              => containsDropList(body)
-            case Force(t)                     => containsDropList(t)
-            case Delay(t)                     => containsDropList(t)
-            case _                            => false
+            case Builtin(DefaultFun.DropList, _) => true
+            case Apply(f, arg, _)                => containsDropList(f) || containsDropList(arg)
+            case LamAbs(_, body, _)              => containsDropList(body)
+            case Force(t, _)                     => containsDropList(t)
+            case Delay(t, _)                     => containsDropList(t)
+            case _                               => false
 
         assert(
           containsDropList(uplc),

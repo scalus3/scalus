@@ -5,6 +5,7 @@ import cats.syntax.group.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
+import scalus.utils.ScalusSourcePos
 
 import scala.annotation.{switch, tailrec, threadUnsafe}
 import scala.collection.immutable.ArraySeq
@@ -279,84 +280,149 @@ object MachineParams {
 
 class MachineError(msg: String) extends RuntimeException(msg)
 
-class StackTraceMachineError(msg: String, val env: CekValEnv) extends MachineError(msg) {
+class StackTraceMachineError(
+    msg: String,
+    val env: CekValEnv,
+    val sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends MachineError(
+      if sourcePos.isEmpty then msg else s"$msg at ${sourcePos.show}"
+    ) {
     def getCekStack: Array[String] = env.view.reverse.map(_._1).toArray
 }
 
-class NonPolymorphicInstantiationMachineError(value: CekValue, env: CekValEnv)
-    extends StackTraceMachineError(s"Non-polymorphic instantiation: $value", env)
+class NonPolymorphicInstantiationMachineError(
+    value: CekValue,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(s"Non-polymorphic instantiation: $value", env, sourcePos)
 
-class NonFunctionalApplicationMachineError(arg: CekValue, env: CekValEnv)
-    extends StackTraceMachineError(s"Non-functional application: $arg", env)
+class NonFunctionalApplicationMachineError(
+    arg: CekValue,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(s"Non-functional application: $arg", env, sourcePos)
 
-class OpenTermEvaluatedMachineError(name: NamedDeBruijn, env: CekValEnv)
-    extends StackTraceMachineError(
+class OpenTermEvaluatedMachineError(
+    name: NamedDeBruijn,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(
       s"Variable ${name.name}@${name.index} not found in environment: ${env.reverse.map(_._1).mkString(", ")}",
-      env
+      env,
+      sourcePos
     )
 
-class BuiltinTermArgumentExpectedMachineError(term: Term, env: CekValEnv)
-    extends StackTraceMachineError(s"Expected builtin term argument, got $term", env)
+class BuiltinTermArgumentExpectedMachineError(
+    term: Term,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(s"Expected builtin term argument, got $term", env, sourcePos)
 
-class UnexpectedBuiltinTermArgumentMachineError(term: Term, env: CekValEnv)
-    extends StackTraceMachineError(s"Unexpected builtin term argument: $term", env)
+class UnexpectedBuiltinTermArgumentMachineError(
+    term: Term,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(s"Unexpected builtin term argument: $term", env, sourcePos)
 
-class UnknownBuiltin(builtin: DefaultFun, env: CekValEnv)
-    extends StackTraceMachineError(s"Unknown builtin: $builtin", env)
+class UnknownBuiltin(
+    builtin: DefaultFun,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(s"Unknown builtin: $builtin", env, sourcePos)
 
-class EvaluationFailure(env: CekValEnv) extends StackTraceMachineError("Error evaluated", env)
+class EvaluationFailure(
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError("Error evaluated", env, sourcePos)
 
-class MissingCaseBranch(val tag: Word64, env: CekValEnv)
-    extends StackTraceMachineError(
+class MissingCaseBranch(
+    val tag: Word64,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(
       s"Case expression missing the branch required by the scrutinee tag: $tag",
-      env
+      env,
+      sourcePos
     )
-class NonConstrScrutinized(val value: CekValue, env: CekValEnv)
-    extends StackTraceMachineError(
+class NonConstrScrutinized(
+    val value: CekValue,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(
       s"A non-constructor value was scrutinized in a case expression: $value",
-      env
+      env,
+      sourcePos
     )
 
 /** Base class for case-on-builtin errors (PlutusV4+) */
-abstract class CaseOnBuiltinError(msg: String, env: CekValEnv)
-    extends StackTraceMachineError(msg, env)
+abstract class CaseOnBuiltinError(
+    msg: String,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(msg, env, sourcePos)
 
-class CaseIndexOutOfBounds(val index: BigInt, val branchCount: Int, env: CekValEnv)
-    extends CaseOnBuiltinError(
+class CaseIndexOutOfBounds(
+    val index: BigInt,
+    val branchCount: Int,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
       s"Case index $index out of bounds for $branchCount branches",
-      env
+      env,
+      sourcePos
     )
 
-class CaseBoolBranchMissing(val value: Boolean, val branchCount: Int, env: CekValEnv)
-    extends CaseOnBuiltinError(
+class CaseBoolBranchMissing(
+    val value: Boolean,
+    val branchCount: Int,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
       s"Case on boolean $value requires ${
               if value then 2 else 1
           } branches, but only $branchCount provided",
-      env
+      env,
+      sourcePos
     )
 
-class CaseUnitBranchMissing(val branchCount: Int, env: CekValEnv)
-    extends CaseOnBuiltinError(
+class CaseUnitBranchMissing(
+    val branchCount: Int,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
       s"Case on unit requires exactly 1 branch, but $branchCount provided",
-      env
+      env,
+      sourcePos
     )
 
-class CaseListBranchError(val branchCount: Int, env: CekValEnv)
-    extends CaseOnBuiltinError(
+class CaseListBranchError(
+    val branchCount: Int,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
       s"Case on list requires 1 or 2 branches (cons, nil), but $branchCount provided",
-      env
+      env,
+      sourcePos
     )
 
-class CaseDataBranchError(val branchCount: Int, env: CekValEnv)
-    extends CaseOnBuiltinError(
+class CaseDataBranchError(
+    val branchCount: Int,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
       s"Case on data requires 1 to 5 branches (Constr, Map, List, I, B), but $branchCount provided",
-      env
+      env,
+      sourcePos
     )
 
-class CasePairBranchError(val branchCount: Int, env: CekValEnv)
-    extends CaseOnBuiltinError(
+class CasePairBranchError(
+    val branchCount: Int,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends CaseOnBuiltinError(
       s"Case on pair requires exactly 1 branch, but $branchCount provided",
-      env
+      env,
+      sourcePos
     )
 
 class InvalidReturnValue(val value: Term)
@@ -374,11 +440,19 @@ class BuiltinError(
     val builtin: DefaultFun,
     val term: Term,
     val cause: Throwable,
-    env: CekValEnv
-) extends StackTraceMachineError(s"Builtin error: $builtin $term, caused by $cause", env)
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(
+      s"Builtin error: $builtin $term, caused by $cause",
+      env,
+      sourcePos
+    )
 
-class OutOfExBudgetError(budget: ExUnits, env: CekValEnv)
-    extends StackTraceMachineError(s"Out of budget: $budget", env)
+class OutOfExBudgetError(
+    budget: ExUnits,
+    env: CekValEnv,
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+) extends StackTraceMachineError(s"Out of budget: $budget", env, sourcePos)
 
 type CekValEnv = immutable.Seq[(String, CekValue)]
 
@@ -726,6 +800,21 @@ class CekMachine(
     private var value: CekValue | Null = null
     private var term: Term | Null = null
 
+    /** Returns the source position of the last term being computed, or empty if unavailable. */
+    private def lastSourcePos: ScalusSourcePos =
+        this.term match
+            case null              => ScalusSourcePos.empty
+            case Var(_, pos)       => pos
+            case LamAbs(_, _, pos) => pos
+            case Apply(_, _, pos)  => pos
+            case Force(_, pos)     => pos
+            case Delay(_, pos)     => pos
+            case Const(_, pos)     => pos
+            case Builtin(_, pos)   => pos
+            case Error(pos)        => pos
+            case Constr(_, _, pos) => pos
+            case Case(_, _, pos)   => pos
+
     /** Evaluates a UPLC term.
       *
       * @param term
@@ -767,39 +856,39 @@ class CekMachine(
     private final def computeCek(ctx: Context, env: CekValEnv, term: Term): CekState = {
         val costs = params.machineCosts
         term match
-            case Var(name) =>
+            case Var(name, pos) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Var), costs.varCost, env)
-                Return(ctx, env, lookupVarName(env, name))
-            case LamAbs(name, term) =>
+                Return(ctx, env, lookupVarName(env, name, pos))
+            case LamAbs(name, term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.LamAbs), costs.lamCost, env)
                 Return(ctx, env, VLamAbs(name, term, env))
-            case Apply(fun, arg) =>
+            case Apply(fun, arg, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Apply), costs.applyCost, env)
                 Compute(FrameAwaitFunTerm(env, arg, ctx), env, fun)
-            case Force(term) =>
+            case Force(term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Force), costs.forceCost, env)
                 Compute(FrameForce(ctx), env, term)
-            case Delay(term) =>
+            case Delay(term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Delay), costs.delayCost, env)
                 Return(ctx, env, VDelay(term, env))
-            case Const(const) =>
+            case Const(const, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Const), costs.constCost, env)
                 Return(ctx, env, VCon(const))
-            case Builtin(bn) =>
+            case Builtin(bn, pos) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Builtin), costs.builtinCost, env)
                 // The @term@ is a 'Builtin', so it's fully discharged.
                 try
                     val meaning = getBuiltinRuntime(bn)
                     Return(ctx, env, VBuiltin(bn, () => term, meaning))
-                catch case _: Exception => throw new UnknownBuiltin(bn, env)
-            case Error => throw new EvaluationFailure(env)
-            case Constr(tag, args) =>
+                catch case _: Exception => throw new UnknownBuiltin(bn, env, pos)
+            case Error(pos) => throw new EvaluationFailure(env, pos)
+            case Constr(tag, args, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Constr), costs.constrCost, env)
                 args match
                     case arg :: rest =>
                         Compute(FrameConstr(env, tag, rest, ArraySeq.empty, ctx), env, arg)
                     case Nil => Return(ctx, env, VConstr(tag, Nil))
-            case Case(scrut, cases) =>
+            case Case(scrut, cases, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Case), costs.caseCost, env)
                 Compute(FrameCases(env, cases, ctx), env, scrut)
     }
@@ -824,30 +913,47 @@ class CekMachine(
                         val index = tag.value.toInt
                         if index < cases.size then
                             Compute(transferArgStack(args, ctx), env, cases(index))
-                        else throw new MissingCaseBranch(tag, env)
+                        else throw new MissingCaseBranch(tag, env, lastSourcePos)
                     case VCon(const) if caseOnBuiltinsEnabled =>
                         const match
                             case Constant.Integer(i) =>
                                 if i >= 0 && i < cases.size then Compute(ctx, env, cases(i.toInt))
-                                else throw new CaseIndexOutOfBounds(i, cases.size, env)
+                                else
+                                    throw new CaseIndexOutOfBounds(
+                                      i,
+                                      cases.size,
+                                      env,
+                                      lastSourcePos
+                                    )
                             case Constant.Bool(b) =>
                                 // Bool has exactly 2 constructors (False=0, True=1)
                                 // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
                                 if cases.size == 0 || cases.size > 2 then
-                                    throw new CaseBoolBranchMissing(b, cases.size, env)
+                                    throw new CaseBoolBranchMissing(
+                                      b,
+                                      cases.size,
+                                      env,
+                                      lastSourcePos
+                                    )
                                 val index = if b then 1 else 0
                                 if index < cases.size then Compute(ctx, env, cases(index))
-                                else throw new CaseBoolBranchMissing(b, cases.size, env)
+                                else
+                                    throw new CaseBoolBranchMissing(
+                                      b,
+                                      cases.size,
+                                      env,
+                                      lastSourcePos
+                                    )
                             case Constant.Unit =>
                                 // Unit has exactly 1 constructor (Unit=0)
                                 // Valid: exactly 1 branch
                                 if cases.size == 1 then Compute(ctx, env, cases(0))
-                                else throw new CaseUnitBranchMissing(cases.size, env)
+                                else throw new CaseUnitBranchMissing(cases.size, env, lastSourcePos)
                             case list @ Constant.List(elemType, elements) =>
                                 // List has 2 constructors: Cons=0 (head, tail), Nil=1
                                 // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
                                 if cases.size == 0 || cases.size > 2 then
-                                    throw new CaseListBranchError(cases.size, env)
+                                    throw new CaseListBranchError(cases.size, env, lastSourcePos)
                                 elements match
                                     case head :: tail =>
                                         // Non-empty list -> Cons branch (index 0)
@@ -863,19 +969,27 @@ class CekMachine(
                                     case Nil =>
                                         // Empty list -> Nil branch (index 1), no arguments
                                         if cases.size < 2 then
-                                            throw new CaseListBranchError(cases.size, env)
+                                            throw new CaseListBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
                                         Compute(ctx, env, cases(1))
                             case Constant.Data(data) =>
                                 // Data has 5 constructors:
                                 // Constr=0 (tag, args), Map=1, List=2, I=3, B=4
                                 // Each branch receives the inner value(s) as arguments
                                 if cases.size == 0 || cases.size > 5 then
-                                    throw new CaseDataBranchError(cases.size, env)
+                                    throw new CaseDataBranchError(cases.size, env, lastSourcePos)
                                 data match
                                     case Data.Constr(tag, args) =>
                                         // Constr branch (index 0) receives tag (as Integer) and args (as list of Data)
                                         if cases.size < 1 then
-                                            throw new CaseDataBranchError(cases.size, env)
+                                            throw new CaseDataBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
                                         val tagVal = VCon(Constant.Integer(tag))
                                         val argsVal = VCon(
                                           Constant.List(
@@ -891,7 +1005,11 @@ class CekMachine(
                                     case Data.Map(entries) =>
                                         // Map branch (index 1) receives entries as list of pairs
                                         if cases.size < 2 then
-                                            throw new CaseDataBranchError(cases.size, env)
+                                            throw new CaseDataBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
                                         val entriesVal = VCon(
                                           Constant.List(
                                             DefaultUni.Apply(
@@ -911,7 +1029,11 @@ class CekMachine(
                                     case Data.List(elements) =>
                                         // List branch (index 2) receives elements as list of Data
                                         if cases.size < 3 then
-                                            throw new CaseDataBranchError(cases.size, env)
+                                            throw new CaseDataBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
                                         val elementsVal = VCon(
                                           Constant.List(
                                             DefaultUni.Data,
@@ -923,21 +1045,29 @@ class CekMachine(
                                     case Data.I(integer) =>
                                         // I branch (index 3) receives the integer value
                                         if cases.size < 4 then
-                                            throw new CaseDataBranchError(cases.size, env)
+                                            throw new CaseDataBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
                                         val intVal = VCon(Constant.Integer(integer))
                                         val newCtx = FrameAwaitFunValue(intVal, ctx)
                                         Compute(newCtx, env, cases(3))
                                     case Data.B(bs) =>
                                         // B branch (index 4) receives the bytestring value
                                         if cases.size < 5 then
-                                            throw new CaseDataBranchError(cases.size, env)
+                                            throw new CaseDataBranchError(
+                                              cases.size,
+                                              env,
+                                              lastSourcePos
+                                            )
                                         val bsVal = VCon(Constant.ByteString(bs))
                                         val newCtx = FrameAwaitFunValue(bsVal, ctx)
                                         Compute(newCtx, env, cases(4))
                             case Constant.Pair(left, right) =>
                                 // Pair has exactly 1 constructor that receives both elements
                                 if cases.size != 1 then
-                                    throw new CasePairBranchError(cases.size, env)
+                                    throw new CasePairBranchError(cases.size, env, lastSourcePos)
                                 val leftVal = VCon(left)
                                 val rightVal = VCon(right)
                                 val newCtx = FrameAwaitFunValue(
@@ -945,21 +1075,25 @@ class CekMachine(
                                   FrameAwaitFunValue(rightVal, ctx)
                                 )
                                 Compute(newCtx, env, cases(0))
-                            case _ => throw new NonConstrScrutinized(value, env)
-                    case _ => throw new NonConstrScrutinized(value, env)
+                            case _ => throw new NonConstrScrutinized(value, env, lastSourcePos)
+                    case _ => throw new NonConstrScrutinized(value, env, lastSourcePos)
     }
 
     private def transferArgStack(args: ArgStack, ctx: Context): Context = {
         args.foldRight(ctx) { (arg, c) => FrameAwaitFunValue(arg, c) }
     }
 
-    private def lookupVarName(env: CekValEnv, name: NamedDeBruijn): CekValue = {
+    private def lookupVarName(
+        env: CekValEnv,
+        name: NamedDeBruijn,
+        sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    ): CekValue = {
         if name.index == 0 then
             throw MachineError(
               s"Got a de Bruijn index 0: $name, it should be > 0. Run `DeBruijn.deBruijnTerm(term)` first."
             )
         if name.index <= 0 || env.size < name.index then
-            throw new OpenTermEvaluatedMachineError(name, env)
+            throw new OpenTermEvaluatedMachineError(name, env, sourcePos)
         else env(env.size - name.index)._2
     }
 
@@ -978,9 +1112,14 @@ class CekMachine(
                         val runtime1 = runtime.copy(args = runtime.args :+ arg, typeScheme = rest)
                         val res = evalBuiltinApp(env, fun, term1, runtime1)
                         Return(ctx, env, res)
-                    case _ => throw new UnexpectedBuiltinTermArgumentMachineError(term1(), env)
+                    case _ =>
+                        throw new UnexpectedBuiltinTermArgumentMachineError(
+                          term1(),
+                          env,
+                          lastSourcePos
+                        )
             case _ =>
-                throw new NonFunctionalApplicationMachineError(fun, env)
+                throw new NonFunctionalApplicationMachineError(fun, env, lastSourcePos)
     }
 
     /** `force` a term and proceed.
@@ -1005,9 +1144,14 @@ class CekMachine(
                         // application.
                         val res = evalBuiltinApp(env, bn, term1, runtime1)
                         Return(ctx, env, res)
-                    case _ => throw new BuiltinTermArgumentExpectedMachineError(term1(), env)
+                    case _ =>
+                        throw new BuiltinTermArgumentExpectedMachineError(
+                          term1(),
+                          env,
+                          lastSourcePos
+                        )
             case _ =>
-                throw new NonPolymorphicInstantiationMachineError(value, env)
+                throw new NonPolymorphicInstantiationMachineError(value, env, lastSourcePos)
     }
 
     private def evalBuiltinApp(
@@ -1023,7 +1167,9 @@ class CekMachine(
                 try {
                     // eval builtin when it's fully saturated, i.e. when all arguments were applied
                     runtime.apply(logger)
-                } catch case NonFatal(e) => throw new BuiltinError(builtinName, term(), e, env)
+                } catch
+                    case NonFatal(e) =>
+                        throw new BuiltinError(builtinName, term(), e, env, lastSourcePos)
             case _ => VBuiltin(builtinName, term, runtime)
     }
 
@@ -1034,7 +1180,7 @@ class CekMachine(
         def dischargeCekValEnv(env: CekValEnv, term: Term): Term = {
             def go(lamCnt: Int, term: Term): Term = {
                 term match
-                    case Var(name) =>
+                    case Var(name, _) =>
                         if lamCnt >= name.index
                         // the index n is less-than-or-equal than the number of lambdas we have descended
                         // this means that n points to a bound variable, so we don't discharge it.
@@ -1049,11 +1195,11 @@ class CekMachine(
                                 // var is free, leave it alone
                                 term
 
-                    case LamAbs(name, body) => LamAbs(name, go(lamCnt + 1, body))
-                    case Apply(fun, arg)    => Apply(go(lamCnt, fun), go(lamCnt, arg))
-                    case Force(term)        => Force(go(lamCnt, term))
-                    case Delay(term)        => Delay(go(lamCnt, term))
-                    case _                  => term
+                    case LamAbs(name, body, pos) => LamAbs(name, go(lamCnt + 1, body), pos)
+                    case Apply(fun, arg, pos)    => Apply(go(lamCnt, fun), go(lamCnt, arg), pos)
+                    case Force(term, pos)        => Force(go(lamCnt, term), pos)
+                    case Delay(term, pos)        => Delay(go(lamCnt, term), pos)
+                    case _                       => term
             }
 
             go(0, term)
@@ -1070,7 +1216,11 @@ class CekMachine(
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
     }
 
-    private def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
+    private def spendBudget(
+        cat: ExBudgetCategory,
+        budget: ExUnits,
+        env: CekValEnv
+    ): Unit = {
         budgetSpender.spendBudget(cat, budget, env)
     }
 }

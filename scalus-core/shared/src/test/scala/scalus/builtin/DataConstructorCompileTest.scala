@@ -21,7 +21,7 @@ class DataConstructorCompileTest extends AnyFunSuite {
     // Helper to extract Data from evaluation result
     def evalToData(term: Term)(using vm: PlutusVM): Data = {
         term.evaluateDebug match {
-            case Result.Success(Term.Const(Constant.Data(d)), _, _, _) => d
+            case Result.Success(Term.Const(Constant.Data(d), _), _, _, _) => d
             case Result.Success(other, _, _, _) =>
                 fail(s"Expected Const(Data), got: $other")
             case Result.Failure(err, _, _, _) =>
@@ -36,7 +36,7 @@ class DataConstructorCompileTest extends AnyFunSuite {
         val uplc = sir.toUplc()
         // Should compile to a constant Data value
         val expected = Term.Const(Constant.Data(Data.Constr(0, PList.Nil)))
-        assert(uplc == expected)
+        assert(uplc ~=~ expected)
     }
 
     test("Data.unit evaluates correctly") {

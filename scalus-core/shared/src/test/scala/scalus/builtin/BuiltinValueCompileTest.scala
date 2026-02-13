@@ -25,7 +25,7 @@ class BuiltinValueCompileTest extends AnyFunSuite {
     // Helper to extract BuiltinValue from evaluation result
     def evalToBuiltinValue(term: Term)(using vm: PlutusVM): BuiltinValue = {
         term.evaluateDebug match {
-            case Result.Success(Term.Const(Constant.BuiltinValue(v)), _, _, _) => v
+            case Result.Success(Term.Const(Constant.BuiltinValue(v), _), _, _, _) => v
             case Result.Success(other, _, _, _) =>
                 fail(s"Expected Const(BuiltinValue), got: $other")
             case Result.Failure(err, _, _, _) =>
@@ -36,7 +36,7 @@ class BuiltinValueCompileTest extends AnyFunSuite {
     // Helper to extract Boolean from evaluation result
     def evalToBool(term: Term)(using vm: PlutusVM): Boolean = {
         term.evaluateDebug match {
-            case Result.Success(Term.Const(Constant.Bool(b)), _, _, _) => b
+            case Result.Success(Term.Const(Constant.Bool(b), _), _, _, _) => b
             case Result.Success(other, _, _, _) =>
                 fail(s"Expected Const(Bool), got: $other")
             case Result.Failure(err, _, _, _) =>
@@ -47,7 +47,7 @@ class BuiltinValueCompileTest extends AnyFunSuite {
     // Helper to extract Data from evaluation result
     def evalToData(term: Term)(using vm: PlutusVM): Data = {
         term.evaluateDebug match {
-            case Result.Success(Term.Const(Constant.Data(d)), _, _, _) => d
+            case Result.Success(Term.Const(Constant.Data(d), _), _, _, _) => d
             case Result.Success(other, _, _, _) =>
                 fail(s"Expected Const(Data), got: $other")
             case Result.Failure(err, _, _, _) =>
@@ -65,7 +65,7 @@ class BuiltinValueCompileTest extends AnyFunSuite {
           Term.Builtin(DefaultFun.UnValueData),
           Term.Const(Constant.Data(Data.Map(PList.Nil)))
         )
-        assert(uplc == expected)
+        assert(uplc ~=~ expected)
     }
 
     test("BuiltinValue.empty evaluates to empty value") {
@@ -457,7 +457,7 @@ class BuiltinValueCompileTest extends AnyFunSuite {
     // Helper to extract BigInt from evaluation result
     def evalToInteger(term: Term)(using vm: PlutusVM): BigInt = {
         term.evaluateDebug match {
-            case Result.Success(Term.Const(Constant.Integer(i)), _, _, _) => i
+            case Result.Success(Term.Const(Constant.Integer(i), _), _, _, _) => i
             case Result.Success(other, _, _, _) =>
                 fail(s"Expected Const(Integer), got: $other")
             case Result.Failure(err, _, _, _) =>

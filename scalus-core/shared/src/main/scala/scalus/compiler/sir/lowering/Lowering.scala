@@ -23,8 +23,8 @@ object Lowering {
         if lctx.generateErrorTraces then
             !(DefaultFun.Trace.tpf $ Term.Const(
               Constant.String(msg)
-            ) $ ~Term.Error)
-        else Term.Error
+            ) $ ~Term.Error())
+        else Term.Error()
 
     private lazy val builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
@@ -332,7 +332,7 @@ object Lowering {
                         )
                     val loweredMsg = lowerSIR(msg, Some(SIRType.String))
                     val errorTerm =
-                        ErrorLoweredValue(sirError, ~Term.Error)
+                        ErrorLoweredValue(sirError, ~Term.Error(anns.pos))
                     lvForce(
                       lvBuiltinApply2(
                         SIRBuiltins.trace,
@@ -344,7 +344,7 @@ object Lowering {
                       ),
                       anns.pos
                     )
-                else ErrorLoweredValue(sirError, Term.Error)
+                else ErrorLoweredValue(sirError, Term.Error(anns.pos))
         lctx.nestingLevel -= 1
         retval
     }
@@ -627,11 +627,19 @@ object Lowering {
             )
             v match
                 case dv: DependendVariableLoweredValue =>
-                    Term.Apply(Term.LamAbs(dv.id, term), dv.rhs.termWithNeededVars(nGctx))
+                    Term.Apply(
+                      Term.LamAbs(dv.id, term, dv.pos),
+                      dv.rhs.termWithNeededVars(nGctx),
+                      dv.pos
+                    )
                 case v: VariableLoweredValue =>
                     v.optRhs match
                         case Some(rhs) =>
-                            Term.Apply(Term.LamAbs(v.id, term), rhs.termWithNeededVars(nGctx))
+                            Term.Apply(
+                              Term.LamAbs(v.id, term, v.pos),
+                              rhs.termWithNeededVars(nGctx),
+                              v.pos
+                            )
                         case None =>
                             throw LoweringException(
                               s"Unexpected variable $v is not in scope",
@@ -666,11 +674,19 @@ object Lowering {
                 )
                 v match
                     case dv: DependendVariableLoweredValue =>
-                        Term.Apply(Term.LamAbs(dv.id, term), dv.rhs.termWithNeededVars(nGctx))
+                        Term.Apply(
+                          Term.LamAbs(dv.id, term, dv.pos),
+                          dv.rhs.termWithNeededVars(nGctx),
+                          dv.pos
+                        )
                     case v: VariableLoweredValue =>
                         v.optRhs match
                             case Some(rhs) =>
-                                Term.Apply(Term.LamAbs(v.id, term), rhs.termWithNeededVars(nGctx))
+                                Term.Apply(
+                                  Term.LamAbs(v.id, term, v.pos),
+                                  rhs.termWithNeededVars(nGctx),
+                                  v.pos
+                                )
                             case None =>
                                 throw LoweringException(
                                   s"Unexpected variable $v is not in scope",

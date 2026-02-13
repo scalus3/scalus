@@ -135,25 +135,25 @@ object JIT extends JitRunner {
                 case other     => other
             }
             val result = term match
-                case Term.Var(name) =>
+                case Term.Var(name, _) =>
                     val vr = env.find(_._1 == name.name).get._2.asExprOf[Any]
                     '{
                         $budget.spendBudget(Step(StepKind.Var), $params.machineCosts.varCost, Nil)
                         Return($vr)
                     }
 
-                case Term.LamAbs(name, term) =>
+                case Term.LamAbs(name, term, _) =>
                     '{
                         Return((arg: Any) =>
                             ${ genCode(term, (name -> 'arg.asTerm) :: env, logger, budget, params) }
                         )
                     }
 
-                case Term.Apply(fun, arg) =>
+                case Term.Apply(fun, arg, _) =>
                     // Optimize: detect fully-applied 1-argument builtins with simple arg
                     if UplcTermHelper.isApplyBuiltin1WithSimpleArg(term) then {
                         fun match
-                            case Term.Builtin(bn) if BuiltinAppliedGenerator.isSupported1(bn) =>
+                            case Term.Builtin(bn, _) if BuiltinAppliedGenerator.isSupported1(bn) =>
                                 val argCode = genCode(arg, env, logger, budget, params)
                                 // Generate inline code for one-argument builtins
                                 val result = BuiltinEmitter.emitAppliedBuiltin1(
@@ -193,7 +193,7 @@ object JIT extends JitRunner {
                     } else if UplcTermHelper.isApplyBuiltin2WithSimpleArgs(term) then {
                         val argCode = genCode(arg, env, logger, budget, params)
                         fun match
-                            case Term.Apply(Term.Builtin(bn), arg1)
+                            case Term.Apply(Term.Builtin(bn, _), arg1, _)
                                 if BuiltinAppliedGenerator.isSupported(bn) =>
                                 val arg1Code = genCode(arg1, env, logger, budget, params)
                                 '{
@@ -226,7 +226,7 @@ object JIT extends JitRunner {
                         }
                     }
 
-                case Term.Force(term) =>
+                case Term.Force(term, _) =>
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Force),
@@ -236,7 +236,7 @@ object JIT extends JitRunner {
                         Force(${ genCode(term, env, logger, budget, params) })
                     }
 
-                case Term.Delay(term) =>
+                case Term.Delay(term, _) =>
                     '{
                         $budget.spendBudget(
                           Step(StepKind.Delay),
@@ -246,7 +246,7 @@ object JIT extends JitRunner {
                         Return.delayed(${ genCode(term, env, logger, budget, params) })
                     }
 
-                case Term.Const(const) =>
+                case Term.Const(const, _) =>
                     val expr = constantToExpr(const)
                     '{
                         $budget.spendBudget(
@@ -256,11 +256,11 @@ object JIT extends JitRunner {
                         )
                         Return($expr)
                     }
-                case Term.Builtin(bn) =>
+                case Term.Builtin(bn, _) =>
                     '{ Return(${ BuiltinEmitter.emitBuiltin(bn, logger, budget, params) }) }
-                case Term.Error =>
+                case _: Term.Error =>
                     '{ throw new JitEvaluationFailure("UPLC Error term evaluated") }
-                case Term.Constr(tag, args) =>
+                case Term.Constr(tag, args, _) =>
                     // TODO: Implement Constr with continuation support
                     // For now, fall back to simple evaluation
                     val argsExprs = args.map(a => genCode(a, env, logger, budget, params))
@@ -276,7 +276,7 @@ object JIT extends JitRunner {
                         }*)
                         Return((${ Expr(tag.value) }, evaluatedArgs))
                     }
-                case Term.Case(arg, cases) =>
+                case Term.Case(arg, cases, _) =>
                     val scrutineeCont = genCode(arg, env, logger, budget, params)
                     val branchExprs: List[Expr[ContinuationJitRepr]] =
                         cases.map(c => genCode(c, env, logger, budget, params))

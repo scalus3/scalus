@@ -643,7 +643,7 @@ abstract class BaseSimpleLowering(
             case SIR.Cast(term, tp, anns) =>
                 lowerInner(term)
             case SIR.Builtin(bn, _, _) => builtinTerms(bn)
-            case SIR.Error(msg, _, _) =>
+            case SIR.Error(msg, anns, _) =>
                 if generateErrorTraces
-                then !(builtinTerms(DefaultFun.Trace) $ lowerInner(msg) $ ~Term.Error)
-                else Term.Error
+                then !(builtinTerms(DefaultFun.Trace) $ lowerInner(msg) $ ~Term.Error(anns.pos))
+                else Term.Error(anns.pos)

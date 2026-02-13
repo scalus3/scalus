@@ -45,10 +45,10 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
     }
 
     test("lower error") {
-        SIR.Error("error", ae) lowersTo Term.Error
+        SIR.Error("error", ae) lowersTo Term.Error()
         assert(
           SIR.Error("error", ae)
-              .toUplc(generateErrorTraces = true) == !(!Trace $ "error" $ ~Term.Error)
+              .toUplc(generateErrorTraces = true) ~=~ !(!Trace $ "error" $ ~Term.Error())
         )
     }
 

@@ -34,35 +34,35 @@ object TermSanitizer:
             )
 
         def sanitizeTerm(t: Term): Term = t match
-            case Var(name) =>
+            case Var(name, pos) =>
                 val sanitizedName = getSanitizedName(name.name)
-                Var(name.copy(name = sanitizedName))
+                Var(name.copy(name = sanitizedName), pos)
 
-            case LamAbs(name, body) =>
+            case LamAbs(name, body, pos) =>
                 val sanitizedName = getSanitizedName(name)
                 usedNames.add(sanitizedName)
-                LamAbs(sanitizedName, sanitizeTerm(body))
+                LamAbs(sanitizedName, sanitizeTerm(body), pos)
 
-            case Apply(f, arg) =>
-                Apply(sanitizeTerm(f), sanitizeTerm(arg))
+            case Apply(f, arg, pos) =>
+                Apply(sanitizeTerm(f), sanitizeTerm(arg), pos)
 
-            case Force(term) =>
-                Force(sanitizeTerm(term))
+            case Force(term, pos) =>
+                Force(sanitizeTerm(term), pos)
 
-            case Delay(term) =>
-                Delay(sanitizeTerm(term))
+            case Delay(term, pos) =>
+                Delay(sanitizeTerm(term), pos)
 
-            case Const(_) => t
+            case _: Const => t
 
-            case Builtin(_) => t
+            case _: Builtin => t
 
-            case Error => t
+            case _: Error => t
 
-            case Constr(tag, args) =>
-                Constr(tag, args.map(sanitizeTerm))
+            case Constr(tag, args, pos) =>
+                Constr(tag, args.map(sanitizeTerm), pos)
 
-            case Case(scrutinee, cases) =>
-                Case(sanitizeTerm(scrutinee), cases.map(sanitizeTerm))
+            case Case(scrutinee, cases, pos) =>
+                Case(sanitizeTerm(scrutinee), cases.map(sanitizeTerm), pos)
 
         sanitizeTerm(term)
 

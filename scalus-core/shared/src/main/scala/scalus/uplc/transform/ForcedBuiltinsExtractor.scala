@@ -36,29 +36,30 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
         val extracted = mutable.Map.empty[Term, String]
 
         def go(term: Term, env: Map[String, Term]): Term = term match
-            case Apply(f, arg)      => Apply(go(f, env), go(arg, env))
-            case LamAbs(name, body) => LamAbs(name, go(body, env - name))
-            case Force(Force(Builtin(bn)))
+            case Apply(f, arg, pos)      => Apply(go(f, env), go(arg, env), pos)
+            case LamAbs(name, body, pos) => LamAbs(name, go(body, env - name), pos)
+            case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
                     && !exceptBuiltins.contains(bn) =>
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
-            case Force(Builtin(bn))
+            case Force(Builtin(bn, _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1
                     && !exceptBuiltins.contains(bn) =>
                 val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
-            case Force(t)          => Force(go(t, env))
-            case Delay(t)          => Delay(go(t, env))
-            case Constr(tag, args) => Constr(tag, args.map(arg => go(arg, env)))
-            case Case(scrutinee, cases) =>
+            case Force(t, pos)          => Force(go(t, env), pos)
+            case Delay(t, pos)          => Delay(go(t, env), pos)
+            case Constr(tag, args, pos) => Constr(tag, args.map(arg => go(arg, env)), pos)
+            case Case(scrutinee, cases, pos) =>
                 Case(
                   go(scrutinee, env),
-                  cases.map(c => go(c, env))
+                  cases.map(c => go(c, env)),
+                  pos
                 )
-            case _: Var | _: Const | _: Builtin | Error => term
+            case _: Var | _: Const | _: Builtin | _: Error => term
 
         val term1 = go(term, Map.empty)
         // optimization should be deterministic, so we sort the extracted terms by name

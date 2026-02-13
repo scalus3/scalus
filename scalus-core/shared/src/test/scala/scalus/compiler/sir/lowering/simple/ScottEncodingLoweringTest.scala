@@ -27,7 +27,7 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
     // Extension for structural comparison tests
     extension (sir: SIR)
         infix def lowersTo(r: Term): Unit =
-            assert(ScottEncodingLowering(sir, generateErrorTraces = false).lower() == r)
+            assert(ScottEncodingLowering(sir, generateErrorTraces = false).lower() ~=~ r)
 
     test("lower constant") {
         forAll { (c: Constant) =>
@@ -36,13 +36,13 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
     }
 
     test("lower error") {
-        SIR.Error("error", ae) lowersTo Term.Error
+        SIR.Error("error", ae) lowersTo Term.Error()
         assert(
           SIR.Error("error", ae)
               .toUplc(
                 generateErrorTraces = true,
                 optimizeUplc = false
-              ) == !(!Trace $ "error" $ ~Term.Error)
+              ) ~=~ !(!Trace $ "error" $ ~Term.Error())
         )
     }
 

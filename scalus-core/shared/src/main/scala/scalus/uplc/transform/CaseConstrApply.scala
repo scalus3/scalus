@@ -30,16 +30,17 @@ class CaseConstrApply(logger: Logger = new Log()) extends Optimizer {
                         Case(Constr(Word64.Zero, args.map(go)), go(f) :: Nil)
                     case (f, args) =>
                         args.foldLeft(go(f)) { case (acc, arg) => Apply(acc, go(arg)) }
-            case LamAbs(name, body) => LamAbs(name, go(body))
-            case Force(t)           => Force(go(t))
-            case Delay(t)           => Delay(go(t))
-            case Constr(tag, args)  => Constr(tag, args.map(arg => go(arg)))
-            case Case(scrutinee, cases) =>
+            case LamAbs(name, body, pos) => LamAbs(name, go(body), pos)
+            case Force(t, pos)           => Force(go(t), pos)
+            case Delay(t, pos)           => Delay(go(t), pos)
+            case Constr(tag, args, pos)  => Constr(tag, args.map(arg => go(arg)), pos)
+            case Case(scrutinee, cases, pos) =>
                 Case(
                   go(scrutinee),
-                  cases.map(go)
+                  cases.map(go),
+                  pos
                 )
-            case _: Var | _: Const | _: Builtin | Error => term
+            case _: Var | _: Const | _: Builtin | _: Error => term
         go(term)
 }
 

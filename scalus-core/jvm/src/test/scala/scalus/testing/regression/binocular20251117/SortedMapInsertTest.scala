@@ -180,7 +180,7 @@ class SortedMapInsertTest extends AnyFunSuite {
             case scalus.uplc.eval.Result.Success(result, budget, costs, logs) =>
                 // Extract integer result
                 val resultInt = result match {
-                    case scalus.uplc.Term.Const(scalus.uplc.Constant.Integer(v)) => v
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.Integer(v), _) => v
                     case _ =>
                         throw new RuntimeException(s"Expected Integer Const term, got: $result")
                 }

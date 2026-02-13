@@ -28,7 +28,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
         forAll { (a: Term, b: Term) =>
             (a, b) match
-                case (Const(Constant.Integer(aa)), Const(Constant.Integer(bb))) =>
+                case (Const(Constant.Integer(aa), _), Const(Constant.Integer(bb), _)) =>
                     val r = aa + bb
                     assertTermEvalEq(AddInteger $ a $ b, Const(Constant.Integer(r)))
                 case _ => assertTermEvalThrows[Exception](AddInteger $ a $ b)
@@ -42,7 +42,7 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
         forAll { (a: Term, b: Term) =>
             (a, b) match
-                case (Const(Constant.Integer(aa)), Const(Constant.Integer(bb))) =>
+                case (Const(Constant.Integer(aa), _), Const(Constant.Integer(bb), _)) =>
                     val r = aa - bb
                     assertTermEvalEq(SubtractInteger $ a $ b, Const(Constant.Integer(r)))
                 case _ => assertTermEvalThrows[Exception](AddInteger $ a $ b)
