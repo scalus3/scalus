@@ -128,11 +128,11 @@ class CekSourcePosTest extends AnyFunSuite {
                   ex.getMessage.contains("SampleValidator.scala"),
                   s"Error message should reference SampleValidator.scala, got: ${ex.getMessage}"
                 )
-                // The throw is on line 18 of SampleValidator.scala
+                // The throw is on line 17 of SampleValidator.scala
                 val line1Based = ex.sourcePos.startLine + 1
                 assert(
-                  line1Based == 18,
-                  s"Expected line 18 for positiveValidator throw, got: $line1Based"
+                  line1Based == 17,
+                  s"Expected line 17 for positiveValidator throw, got: $line1Based"
                 )
             case Result.Failure(ex, _, _, _) =>
                 fail(s"Expected EvaluationFailure, got: ${ex.getClass.getName}: ${ex.getMessage}")
@@ -151,11 +151,11 @@ class CekSourcePosTest extends AnyFunSuite {
                   ex.sourcePos.file.contains("SampleValidator.scala"),
                   s"sourcePos file should point to SampleValidator.scala, got: ${ex.sourcePos.file}"
                 )
-                // The throw is on line 23 of SampleValidator.scala
+                // The throw is on line 22 of SampleValidator.scala
                 val line1Based = ex.sourcePos.startLine + 1
                 assert(
-                  line1Based == 23,
-                  s"Expected line 23 for alwaysFails throw, got: $line1Based"
+                  line1Based == 22,
+                  s"Expected line 22 for alwaysFails throw, got: $line1Based"
                 )
             case Result.Failure(ex, _, _, _) =>
                 fail(s"Expected EvaluationFailure, got: ${ex.getClass.getName}: ${ex.getMessage}")
