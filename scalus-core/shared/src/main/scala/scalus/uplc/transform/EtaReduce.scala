@@ -47,7 +47,7 @@ class EtaReduce(logger: Logger = new Log()) extends Optimizer:
             etaReduce(f)
         case LamAbs(name, body, pos) =>
             val body1 = etaReduce(body)
-            if body != body1 then etaReduce(LamAbs(name, body1, pos)) else term
+            if body ~!=~ body1 then etaReduce(LamAbs(name, body1, pos)) else term
         case Apply(f, arg, pos) => Apply(etaReduce(f), etaReduce(arg), pos)
         case Force(term, pos)   => Force(etaReduce(term), pos)
         case Delay(term, pos)   => Delay(etaReduce(term), pos)

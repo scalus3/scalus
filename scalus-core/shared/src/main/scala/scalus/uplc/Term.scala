@@ -177,6 +177,9 @@ enum Term:
         case (Case(a1, c1, _), Case(a2, c2, _))     => (a1 ~=~ a2) && c1.zip(c2).forall(_ ~=~ _)
         case _                                      => false
 
+    /** Position-ignoring structural inequality. Negation of `~=~`. */
+    infix def ~!=~(that: Term): Boolean = !(this ~=~ that)
+
     /** Pretty-print the term. */
     def pretty: Doc = Pretty[Term].pretty(this, Style.Normal)
 

@@ -33,7 +33,7 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
                 counter += 1
             name
 
-        val extracted = mutable.Map.empty[Term, String]
+        val extracted = mutable.Map.empty[DefaultFun, (Term, String)]
 
         def go(term: Term, env: Map[String, Term]): Term = term match
             case Apply(f, arg, pos)      => Apply(go(f, env), go(arg, env), pos)
@@ -41,13 +41,15 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
             case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
                     && !exceptBuiltins.contains(bn) =>
-                val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
+                val (_, name) =
+                    extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(Builtin(bn, _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1
                     && !exceptBuiltins.contains(bn) =>
-                val name = extracted.getOrElseUpdate(term, freshName(s"__builtin_$bn", env))
+                val (_, name) =
+                    extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(t, pos)          => Force(go(t, env), pos)
@@ -64,11 +66,11 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
         val term1 = go(term, Map.empty)
         // optimization should be deterministic, so we sort the extracted terms by name
         // to have a lambdas in a deterministic order.
-        val sortedExtracted = extracted.toArray.sortBy(_._2)
-        val lams = sortedExtracted.foldRight(term1) { case ((_, name), acc) =>
+        val sortedExtracted = extracted.toArray.sortBy(_._2._2)
+        val lams = sortedExtracted.foldRight(term1) { case ((_, (_, name)), acc) =>
             LamAbs(name, acc)
         }
-        val withVars = sortedExtracted.foldLeft(lams) { case (acc, (term, _)) =>
+        val withVars = sortedExtracted.foldLeft(lams) { case (acc, (_, (term, _))) =>
             acc $ term
         }
         withVars
