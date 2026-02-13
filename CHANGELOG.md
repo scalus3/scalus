@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.15.1 (2026-02-13)
+
+### Added
+
+- Merkle Patricia Forestry data structure for on-chain Merkle proofs
+- variadic `log` function with auto-show for trace diagnostics
+- `offsetOf[A]` compile-time macro for case class field indices
+- `BuiltinList` pattern matching and optional Nil branch in `CaseList`
+- `(con value ...)` syntax support in UPLC parser/printer
+- `Future`/`Scenario` conversion and `EmulatorBase` API
+
+### Changed
+
+- simplified `Scenario` and `ContractScalaCheckCommands` APIs
+- updated MaryEraValue builtin cost models to match Plutus 1.58.0.0 reference
+- extracted dependency versions into build.sbt variables and bumped dependencies
+
+### Fixed
+
+- count native reference scripts towards minFee calculation
+- use `Timelock.toCbor` for native ref script size instead of `Cbor.encode(Script)`
+- account for sponsor VKey witness in fee estimation
+- handle exceptions in `Scenario` monad and filter extra VKey witnesses in `TxBuilder.sign`
+- filter auction UTxO by NFT asset to prevent spam UTxO attacks
+- fix MaryEraValue builtins and pool retirement validation
+
 ## 0.15.0 (2026-02-05)
 
 ### Added
