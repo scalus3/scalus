@@ -1,7 +1,5 @@
 import sbt.internal.util.ManagedLogger
 import sbtwelcome.*
-import com.typesafe.tools.mima.core.*
-
 import java.net.URI
 import scala.scalanative.build.*
 
@@ -12,13 +10,21 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.14.0"
+val scalusStableVersion = "0.15.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
 val cardanoClientLibVersion = "0.7.1"
-val yaciVersion = "0.3.8"
+val yaciVersion = "0.4.0"
 val yaciCardanoTestVersion = "0.1.0"
+val nobleCurvesVersion = "1.9.7"
+val scalatestVersion = "3.2.19"
+val scalatestPlusScalacheckVersion = "3.2.19.0"
+val borerVersion = "1.16.2"
+val slf4jVersion = "2.0.17"
+val magnoliaVersion = "1.3.18"
+val pprintVersion = "0.9.6"
+val monocleVersion = "3.3.0"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
@@ -220,8 +226,8 @@ lazy val scalusPlugin = project
       // COMMENT THIS LINE when doing plugin development
       // UPDATE VERSION after changes to the plugin
       // version := "0.13.0+597-4eafe96f+20251217-1256-SNAPSHOT",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
     )
     .settings(
@@ -294,8 +300,8 @@ lazy val scalusPluginTests = project
       name := "scalus-plugin-tests",
       publish / skip := true,
       PluginDependency,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test"
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test"
     )
 
 // Scalus Core and Standard Library for JVM and JS
@@ -324,19 +330,19 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.typelevel" %%% "cats-core" % "2.13.0",
       libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
       libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
-      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.1",
+      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.2",
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.8",
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.8" % "compile",
       libraryDependencies ++= Seq(
-        "io.bullet" %%% "borer-core" % "1.16.2",
-        "io.bullet" %%% "borer-derivation" % "1.16.2"
+        "io.bullet" %%% "borer-core" % borerVersion,
+        "io.bullet" %%% "borer-derivation" % borerVersion
       ),
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
+      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies ++= Seq(
-        "dev.optics" %%% "monocle-core" % "3.3.0",
-        "dev.optics" %%% "monocle-macro" % "3.3.0",
+        "dev.optics" %%% "monocle-core" % monocleVersion,
+        "dev.optics" %%% "monocle-macro" % monocleVersion,
       ),
       buildInfoKeys ++= Seq[BuildInfoKey](
         "scalusVersion" -> scalusStableVersion
@@ -352,7 +358,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / baseDirectory := (LocalRootProject / baseDirectory).value,
       // Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-S", "-8077211454138081902"),
       Test / testOptions += Tests.Argument("-oF"),
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % Test,
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test,
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0"
@@ -362,8 +368,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Disable doc due to scaladoc NPE bug on JS platform
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
-      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
-      Test / npmDependencies += "@noble/curves" -> "1.9.1",
+      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
+      Test / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
           // Use .mjs extension.
@@ -417,7 +423,7 @@ lazy val scalusUplcJitCompiler = project
       scalusPlugin / Compile / skip := sys.props.get("skipScalusRecompile").contains("true"),
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
-      libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.19" % "test",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       inConfig(Test)(PluginDependency),
       publish / skip := true
     )
@@ -469,9 +475,9 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           }
       }.taskValue,
       PluginDependency,
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19",
+      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
       libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.0",
       libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.0",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
@@ -501,11 +507,11 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.14",
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % Test
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.15",
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
+      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
       },
@@ -521,11 +527,11 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
+      libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion,
+      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Exclude integration tests from default test runs (require external services)
       Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest")
     )
@@ -537,7 +543,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion
     )
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
+      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
       Test / envVars := sys.env.toMap, // for HTLC integration tests
       scalaJSUseMainModuleInitializer := false,
       scalaJSLinkerConfig ~= {
@@ -554,8 +560,8 @@ lazy val scalusDesignPatterns = project
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       Test / fork := true
       //// enable if need speedup
       // trackInternalDependencies := TrackLevel.TrackIfMissing,
@@ -569,24 +575,15 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        // Removed deprecated SlotConfig type alias and value from package level (v0.12.0)
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$package$"),
-        // Package reorganization (v0.15.0): return types changed from old package names to new
-        // e.g., scalus.ledger.api.v2.TxInfo -> scalus.cardano.onchain.plutus.v2.TxInfo
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.bloxbean.Interop.*"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.bloxbean.Interop.*")
-      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "org.slf4j" % "slf4j-api" % "2.0.17",
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
+      libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2",
+      libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       Test / fork := true, // needed for BlocksValidation to run in sbt
       inConfig(Test)(PluginDependency)
     )
@@ -635,11 +632,11 @@ lazy val bench = project
       // Fix JMH compilation issues - disable incremental compilation
       Jmh / incOptions := (Jmh / incOptions).value.withEnabled(false),
       run / fork := true,
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17",
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.20.2",
-      libraryDependencies += "io.bullet" %%% "borer-core" % "1.16.2",
-      libraryDependencies += "io.bullet" %%% "borer-derivation" % "1.16.2"
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.0",
+      libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
+      libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
 
 // Cardano Ledger domain model and CBOR serialization
@@ -652,22 +649,21 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       libraryDependencies ++= Seq(
-        "io.bullet" %%% "borer-core" % "1.16.2",
-        "io.bullet" %%% "borer-derivation" % "1.16.2"
+        "io.bullet" %%% "borer-core" % borerVersion,
+        "io.bullet" %%% "borer-derivation" % borerVersion
       ),
       // For tx builder
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.outr" %%% "scribe" % "3.17.0", // logging
       libraryDependencies ++= Seq(
-        "dev.optics" %%% "monocle-core" % "3.3.0",
-        "dev.optics" %%% "monocle-macro" % "3.3.0",
+        "dev.optics" %%% "monocle-core" % monocleVersion,
+        "dev.optics" %%% "monocle-macro" % monocleVersion,
       ),
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion % "test",
-      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.18" % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % "3.2.19.0" % "test",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.14",
+      libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.15",
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
@@ -676,8 +672,8 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.apache.commons" % "commons-compress" % "1.28.0" % "test"
     )
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> "1.9.1",
-      Test / npmDependencies += "@noble/curves" -> "1.9.1",
+      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
+      Test / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
       // Lucid Evolution and CML for transaction signing
       Compile / npmDependencies += "@lucid-evolution/wallet" -> "0.1.72",
       Compile / npmDependencies += "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3",
@@ -747,14 +743,14 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
-      libraryDependencies += "org.scalatest" %%% "scalatest" % "3.2.19" % "test",
-      libraryDependencies += "org.slf4j" % "slf4j-simple" % "2.0.17" % "test",
-      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.3.0" % "test",
-      libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.0" % "test",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
+      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.2" % "test",
+      libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
-      libraryDependencies += "com.lihaoyi" %%% "pprint" % "0.9.6" % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Testcontainers for Yaci DevKit integration tests
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-core" % "0.44.1" % "test",
       libraryDependencies += "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.44.1" % "test",

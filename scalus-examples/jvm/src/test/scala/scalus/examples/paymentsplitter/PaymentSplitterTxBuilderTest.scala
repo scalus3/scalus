@@ -6,7 +6,6 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.{TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.cardano.onchain.plutus.v1.PubKeyHash

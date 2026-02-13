@@ -10,7 +10,6 @@ import scalus.cardano.ledger.TransactionException.*
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicInteger
 import scala.util.Try
-import scala.util.chaining.*
 
 class LedgerRulesValidationTest extends AnyFunSuite {
 

@@ -375,9 +375,9 @@ class AuctionTestKitTest extends AnyFunSuite {
           commands.property()
         )
 
-        System.err.println(
-          s"  tests: ${result.succeeded}, variations: ${txVariationCount.get()}, time: ${System.currentTimeMillis() - t0}ms"
-        )
+//        System.err.println(
+//          s"  tests: ${result.succeeded}, variations: ${txVariationCount.get()}, time: ${System.currentTimeMillis() - t0}ms"
+//        )
 
         // For the VULNERABLE contract, we expect the test to FAIL because
         // the attack variation succeeds but violates the invariant
@@ -385,7 +385,7 @@ class AuctionTestKitTest extends AnyFunSuite {
           !result.passed,
           "Checker should detect vulnerability: expected property failure but all passed"
         )
-        System.err.println(s"  VULNERABILITY DETECTED: ${result.status}")
+//        System.err.println(s"  VULNERABILITY DETECTED: ${result.status}")
     }
 
     test("ScenarioExplorer finds double satisfaction vulnerability in UnfixedAuction") {

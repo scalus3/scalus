@@ -5,7 +5,6 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
-import scalus.serialization.cbor.Cbor
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.utils.await
 
