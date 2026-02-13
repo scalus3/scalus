@@ -124,8 +124,8 @@ package object prelude {
         scalus.cardano.onchain.plutus.prelude.impossible()
 
     @deprecated(s"Use $pkg.log instead", version)
-    inline def log(inline msg: String): Unit =
-        scalus.cardano.onchain.plutus.prelude.log(msg)
+    inline def log(inline args: Any*): Unit =
+        scalus.cardano.onchain.plutus.prelude.log(args*)
 
     @deprecated(s"Use $pkg.??? instead", version)
     inline def ??? : Nothing =

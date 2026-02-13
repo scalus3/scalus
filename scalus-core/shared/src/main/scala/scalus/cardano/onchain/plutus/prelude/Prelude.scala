@@ -35,7 +35,7 @@ extension (self: BigInt)
 
 extension (self: BigInt.type) def unapply(value: BigInt): scala.Option[BigInt] = scala.Some(value)
 
-inline def log(inline msg: String): Unit = trace(msg)(())
+inline def log(inline args: Any*): Unit = ${ LogMacros.logMacro('args) }
 inline def identity[A](inline value: A): A = value
 
 @Compile
