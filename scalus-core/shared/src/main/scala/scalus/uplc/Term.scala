@@ -22,6 +22,7 @@ case class NamedDeBruijn(name: String, index: Int = 0):
         else s"NamedDeBruijn(\"$name\", $index)"
 
 enum Term:
+    def sourcePos: ScalusSourcePos
     case Var(name: NamedDeBruijn, sourcePos: ScalusSourcePos = ScalusSourcePos.empty) extends Term
     case LamAbs(name: String, term: Term, sourcePos: ScalusSourcePos = ScalusSourcePos.empty)
         extends Term
@@ -54,6 +55,34 @@ enum Term:
         case t: Error   => t.copy(sourcePos = pos)
         case t: Constr  => t.copy(sourcePos = pos)
         case t: Case    => t.copy(sourcePos = pos)
+
+    /** Sets the source position on this term and recursively on subterms, but only where the
+      * position is currently empty. Recursion stops at terms that already have a position.
+      */
+    def withPosIfEmpty(pos: ScalusSourcePos): Term =
+        if !sourcePos.isEmpty then this
+        else
+            this match
+                case t: Var    => t.copy(sourcePos = pos)
+                case t: LamAbs => t.copy(term = t.term.withPosIfEmpty(pos), sourcePos = pos)
+                case t: Apply =>
+                    t.copy(
+                      f = t.f.withPosIfEmpty(pos),
+                      arg = t.arg.withPosIfEmpty(pos),
+                      sourcePos = pos
+                    )
+                case t: Force   => t.copy(term = t.term.withPosIfEmpty(pos), sourcePos = pos)
+                case t: Delay   => t.copy(term = t.term.withPosIfEmpty(pos), sourcePos = pos)
+                case t: Const   => t.copy(sourcePos = pos)
+                case t: Builtin => t.copy(sourcePos = pos)
+                case t: Error   => t.copy(sourcePos = pos)
+                case t: Constr  => t.copy(args = t.args.map(_.withPosIfEmpty(pos)), sourcePos = pos)
+                case t: Case =>
+                    t.copy(
+                      arg = t.arg.withPosIfEmpty(pos),
+                      cases = t.cases.map(_.withPosIfEmpty(pos)),
+                      sourcePos = pos
+                    )
 
     /** Applies the argument to the term. */
     infix def $(rhs: Term): Term = Term.Apply(this, rhs)

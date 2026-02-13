@@ -1339,7 +1339,7 @@ case class ChooseListLoweredValue(
         import scalus.compiler.sir.lowering.Lowering.tpf
         (!(DefaultFun.ChooseList.tpf $ listInput.termWithNeededVars(gctx)
             $ ~nilBody.termWithNeededVars(gctx)
-            $ ~consBody.termWithNeededVars(gctx))).withPos(pos)
+            $ ~consBody.termWithNeededVars(gctx))).withPosIfEmpty(pos)
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {

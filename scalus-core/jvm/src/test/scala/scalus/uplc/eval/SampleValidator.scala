@@ -3,7 +3,6 @@ package scalus.uplc.eval
 import scalus.compiler.compile
 import scalus.compiler.sir.SIR
 import scalus.uplc.builtin.Builtins.*
-import scalus.uplc.builtin.{BuiltinList, Data}
 
 /** A sample validator defined in a separate file.
   *
