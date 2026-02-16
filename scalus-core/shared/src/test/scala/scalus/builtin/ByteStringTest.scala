@@ -9,17 +9,17 @@ import scalus.uplc.eval.BuiltinException
 class ByteStringTest extends AnyFunSuite with EvalTestKit:
 
     test("fromBigIntBigEndian"):
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           fromBigIntBigEndian(1_000_000, 3),
           hex"0f4240",
           ExUnits(memory = 1401, steps = 1530707)
         )
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           fromBigIntBigEndian(1_000_000, 5),
           hex"00000f4240",
           ExUnits(memory = 1401, steps = 1530707)
         )
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           fromBigIntBigEndian(0, 8),
           hex"0000000000000000",
           ExUnits(memory = 1401, steps = 1530707)
@@ -27,17 +27,17 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
         assertEvalFails[BuiltinException](fromBigIntBigEndian(1_000_000, 1))
 
     test("fromBigIntLittleEndian"):
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           fromBigIntLittleEndian(1_000_000, 3),
           hex"40420f",
           ExUnits(memory = 1401, steps = 1530707)
         )
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           fromBigIntLittleEndian(1_000_000, 5),
           hex"40420f0000",
           ExUnits(memory = 1401, steps = 1530707)
         )
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           fromBigIntLittleEndian(0, 8),
           hex"0000000000000000",
           ExUnits(memory = 1401, steps = 1530707)
@@ -46,32 +46,32 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
 
     test("utf8 string interpolator"):
         // Test simple ASCII string
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           utf8"hello",
           fromString("hello"),
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 200, steps = 16100)
         )
 
         // Test with special characters
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           utf8"Hello, World!",
           fromString("Hello, World!"),
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 200, steps = 16100)
         )
 
         // Test with Unicode
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           utf8"Hello, 世界",
           fromString("Hello, 世界"),
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 200, steps = 16100)
         )
 
         // Test empty string
-        assertEvalWithinBudget(utf8"", fromString(""), ExUnits(memory = 1401, steps = 1530707))
+        assertEvalWithBudget(utf8"", fromString(""), ExUnits(memory = 200, steps = 16100))
 
         // Test numbers and symbols
-        assertEvalWithinBudget(
+        assertEvalWithBudget(
           utf8"123!@#$$%^&*()",
           fromString("123!@#$%^&*()"),
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 200, steps = 16100)
         )

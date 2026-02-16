@@ -7,8 +7,6 @@ import scalus.uplc.builtin.Builtins.integerToByteString
 import scalus.uplc.builtin.Builtins.shiftByteString
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex
-import scalus.cardano.onchain.plutus.prelude.Option.None
-import scalus.cardano.onchain.plutus.prelude.Option.Some
 
 import scala.annotation.tailrec
 
@@ -96,33 +94,31 @@ object Math:
             if b == BigInt(0) then a else go(b, a % b)
         go(x, y).absolute
 
-    /** Calculates the square root of an integer using the babylonian method.
+    /** Calculates the integer square root using the Babylonian method with a near-exact initial
+      * guess computed via `log2`/`exp2`.
       *
       * @see
       *   [[https://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method Babylonian method]].
       *
-      * @note
-      *   This function can be quite expensive to perform on-chain. Prefer using
-      *   [[scalus.cardano.onchain.plutus.prelude.isSqrt]] whenever possible.
-      *
       * @param radicand
-      *   The number to take the square root of
+      *   The number to take the square root of. Must be non-negative.
       *
       * @example
       *   {{{
-      *   sqrt(0) == Some(0)
-      *   sqrt(25) == Some(5)
-      *   sqrt(44203) == Some(210)
-      *   sqrt(-42) == None
+      *   sqrt(0) == 0
+      *   sqrt(25) == 5
+      *   sqrt(44203) == 210
       *   }}}
       * @return
-      *   The exact result or the smallest integer nearest to the square root. `None` for negative
-      *   values.
+      *   The exact result or the smallest integer nearest to the square root.
       */
-    def sqrt(radicand: BigInt): Option[BigInt] =
-        if radicand < 0 then None
-        else if radicand <= 1 then Some(radicand)
-        else Some(sqrtBabylonian(radicand, radicand, (radicand + 1) / 2))
+    def sqrt(radicand: BigInt): BigInt =
+        require(radicand >= 0, "sqrt: negative radicand")
+        if radicand <= 1 then radicand
+        else
+            val bits = log2(radicand)
+            val guess = exp2((bits + 2) / 2) // 2^⌈(bits+1)/2⌉, always >= sqrt(radicand)
+            sqrtBabylonian(radicand, guess, (guess + radicand / guess) / 2)
 
     /** Babylonian (Heron) method for integer square root.
       *
@@ -341,7 +337,7 @@ extension (self: BigInt)
       * @see
       *   [[scalus.cardano.onchain.plutus.prelude.Math.sqrt]]
       */
-    inline def sqRoot: Option[BigInt] = Math.sqrt(self)
+    inline def sqRoot: BigInt = Math.sqrt(self)
 
     /** Checks if this integer has a given integer square root `x`.
       *

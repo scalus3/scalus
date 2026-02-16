@@ -84,7 +84,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
           s"Expected term $expectedTerm, but got $codeTerm"
         )
 
-    /** Assert that code evaluates to expected value with budget limit check. */
+    /** Assert that code evaluates to expected value with budget limit check (upper bound). */
     protected final inline def assertEvalWithinBudget[T: Eq](
         inline code: T,
         inline expected: T,
@@ -110,6 +110,40 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         then
             fail:
                 s"""Performance regression,
+                |expected: $budget,
+                |but got: ${spender.getSpentBudget};
+                |costs: ${spender.costs.toMap}""".stripMargin
+
+        val expectedTerm = compiledExpected.program.term.evaluate
+        assert(
+          codeTerm α_== expectedTerm,
+          s"Expected term $expectedTerm, but got $codeTerm"
+        )
+
+    /** Assert that code evaluates to expected value with exact budget match. */
+    protected final inline def assertEvalWithBudget[T: Eq](
+        inline code: T,
+        inline expected: T,
+        budget: ExUnits
+    )(using vm: PlutusVM): Unit =
+        val compiled = PlutusV3.compile(code)
+        val compiledExpected = PlutusV3.compile(expected)
+
+        assert(
+          compiled.code === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${compiled.code}"
+        )
+
+        val spender = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+
+        val codeTerm = vm.evaluateDeBruijnedTerm(
+          DeBruijn.deBruijnTerm(compiled.program.term),
+          budgetSpender = spender
+        )
+
+        if spender.getSpentBudget != budget then
+            fail:
+                s"""Budget mismatch,
                 |expected: $budget,
                 |but got: ${spender.getSpentBudget};
                 |costs: ${spender.costs.toMap}""".stripMargin
