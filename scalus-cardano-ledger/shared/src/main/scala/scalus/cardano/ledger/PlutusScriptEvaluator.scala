@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{platform, Data}
+import scalus.uplc.CompiledPlutus
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.Language.*
 import scalus.cardano.ledger.LedgerToPlutusTranslation.*
@@ -22,7 +23,8 @@ enum EvaluatorMode extends Enum[EvaluatorMode] {
 class PlutusScriptEvaluationException(
     message: String,
     cause: Throwable,
-    val logs: Array[String]
+    val logs: Array[String],
+    val failedScriptHash: ScriptHash
 ) extends RuntimeException(s"$message\nlogs: ${logs.mkString("\n")}", cause)
 
 /** Evaluates Plutus V1, V2 or V3 scripts using the provided transaction and UTxO set.
@@ -53,11 +55,13 @@ trait PlutusScriptEvaluator {
     def evalPlutusScripts(
         tx: Transaction,
         utxos: Utxos,
-    ): Seq[Redeemer] = evalPlutusScriptsWithContexts(tx, utxos).map(_._1)
+        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+    ): Seq[Redeemer] = evalPlutusScriptsWithContexts(tx, utxos, debugScripts).map(_._1)
 
     def evalPlutusScriptsWithContexts(
         tx: Transaction,
         utxos: Utxos,
+        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
     ): Seq[(Redeemer, ScriptContext, ScriptHash)]
 }
 
@@ -143,7 +147,8 @@ object PlutusScriptEvaluator {
     @threadUnsafe lazy val noop: PlutusScriptEvaluator = new PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
-            utxos: Utxos
+            utxos: Utxos,
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = Seq.empty
     }
 
@@ -205,6 +210,7 @@ object PlutusScriptEvaluator {
             txhash: String,
             vm: PlutusVM,
             plutusScript: PlutusScript,
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]],
             args: Data*
         ): Result = {
             Result.Success(
@@ -319,6 +325,7 @@ object PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
             utxos: Utxos,
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = {
             log.debug(s"Starting Phase 2 evaluation for transaction: ${tx.id}")
 
@@ -382,13 +389,13 @@ object PlutusScriptEvaluator {
                     val (evaluatedRedeemer, sc) = {
                         val result = plutusScript match
                             case ps: Script.PlutusV1 =>
-                                evalPlutusV1Script(tx, txInfoV1, redeemer, ps, datum)
+                                evalPlutusV1Script(tx, txInfoV1, redeemer, ps, datum, debugScripts)
 
                             case ps: Script.PlutusV2 =>
-                                evalPlutusV2Script(tx, txInfoV2, redeemer, ps, datum)
+                                evalPlutusV2Script(tx, txInfoV2, redeemer, ps, datum, debugScripts)
 
                             case ps: Script.PlutusV3 =>
-                                evalPlutusV3Script(tx, txInfoV3, redeemer, ps, datum)
+                                evalPlutusV3Script(tx, txInfoV3, redeemer, ps, datum, debugScripts)
 
                         val cost = result._1.budget
                         log.debug(s"Evaluation result: $result")
@@ -442,7 +449,8 @@ object PlutusScriptEvaluator {
             txInfoV1: v1.TxInfo,
             redeemer: Redeemer,
             plutusScript: PlutusScript,
-            datum: Option[Data]
+            datum: Option[Data],
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
         ): (Result, v1.ScriptContext) = {
             // Build V1 script context using pre-computed TxInfo
             val purpose = getScriptPurposeV1(tx, redeemer)
@@ -461,6 +469,7 @@ object PlutusScriptEvaluator {
               txhash,
               plutusV1VM,
               plutusScript,
+              debugScripts,
               datum.toSeq :+ redeemer.data :+ ctxData*
             ) -> scriptContext
         }
@@ -483,7 +492,8 @@ object PlutusScriptEvaluator {
             txInfoV2: v2.TxInfo,
             redeemer: Redeemer,
             plutusScript: PlutusScript,
-            datum: Option[Data]
+            datum: Option[Data],
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
         ): (Result, v2.ScriptContext) = {
             // Build V2 script context using pre-computed TxInfo
             val purpose = getScriptPurposeV2(tx, redeemer)
@@ -502,6 +512,7 @@ object PlutusScriptEvaluator {
               txhash,
               plutusV2VM,
               plutusScript,
+              debugScripts,
               datum.toSeq :+ redeemer.data :+ ctxData*
             ) -> scriptContext
         }
@@ -524,7 +535,8 @@ object PlutusScriptEvaluator {
             txInfoV3: v3.TxInfo,
             redeemer: Redeemer,
             plutusScript: PlutusScript,
-            datum: Option[Data]
+            datum: Option[Data],
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
         ): (Result, v3.ScriptContext) = {
             // Build V3 script context using pre-computed TxInfo
             val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
@@ -538,7 +550,14 @@ object PlutusScriptEvaluator {
             log.debug(s"Script context: ${ctxData.toJson}")
 
             // V3 scripts only take the script context as argument
-            evalScript(redeemer, txhash, plutusV3VM, plutusScript, ctxData) -> scriptContext
+            evalScript(
+              redeemer,
+              txhash,
+              plutusV3VM,
+              plutusScript,
+              debugScripts,
+              ctxData
+            ) -> scriptContext
         }
 
         /** Execute a UPLC script with the given arguments.
@@ -555,6 +574,7 @@ object PlutusScriptEvaluator {
             txhash: String,
             vm: PlutusVM,
             plutusScript: PlutusScript,
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]],
             args: Data*
         ): Result = {
             // Parse UPLC program from CBOR
@@ -580,18 +600,69 @@ object PlutusScriptEvaluator {
                     RestrictingBudgetSpenderWithScriptDump(budget, debugDumpFilesForTesting)
 
             val logger = Log()
+            val hash = plutusScript.scriptHash
             // Execute the script
             try
                 val resultTerm = vm.evaluateScript(applied, spender, logger)
                 Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
             catch
                 case e: StackTraceMachineError =>
-//                    println()
-//                    println(s"Script ${vm.language} ${redeemer.tag} evaluation failed: ${e.getMessage}")
-//                    println(e.env.view.reverse.take(20).mkString("\n"))
-                    throw new PlutusScriptEvaluationException(e.getMessage, e, logger.getLogs)
+                    val logs = logger.getLogs
+                    val finalLogs =
+                        if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                        else logs
+                    throw new PlutusScriptEvaluationException(
+                      e.getMessage,
+                      e,
+                      finalLogs,
+                      hash
+                    )
                 case NonFatal(e) =>
-                    throw new PlutusScriptEvaluationException(e.getMessage, e, logger.getLogs)
+                    val logs = logger.getLogs
+                    val finalLogs =
+                        if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                        else logs
+                    throw new PlutusScriptEvaluationException(
+                      e.getMessage,
+                      e,
+                      finalLogs,
+                      hash
+                    )
+        }
+
+        /** Replay a failed script with error traces enabled to collect diagnostic logs.
+          *
+          * When a release script (no traces) fails with empty logs, this method recompiles the
+          * script from SIR with error traces and replays it to produce diagnostic output.
+          */
+        private def replayWithDiagnostics(
+            debugScripts: Map[ScriptHash, CompiledPlutus[?]],
+            hash: ScriptHash,
+            args: Seq[Data]
+        ): Array[String] = {
+            debugScripts.get(hash) match
+                case None => Array.empty
+                case Some(compiled) =>
+                    try
+                        val debugScript = compiled.withErrorTraces.script
+                        val debugProgram = debugScript.deBruijnedProgram
+                        val debugApplied = args.foldLeft(debugProgram): (acc, arg) =>
+                            acc $ arg
+                        val debugVm = debugScript match
+                            case _: Script.PlutusV1 => plutusV1VM
+                            case _: Script.PlutusV2 => plutusV2VM
+                            case _: Script.PlutusV3 => plutusV3VM
+                        val replaySpender = CountingBudgetSpender()
+                        val replayLogger = Log()
+                        var replayFailed = false
+                        try debugVm.evaluateScript(debugApplied, replaySpender, replayLogger)
+                        catch case NonFatal(_) => replayFailed = true
+                        val logs = replayLogger.getLogs
+                        if replayFailed then logs
+                        else logs :+ "[diagnostic replay: debug script succeeded unexpectedly]"
+                    catch
+                        case NonFatal(e) =>
+                            Array(s"[diagnostic replay failed: ${e.getMessage}]")
         }
 
         /** Dump script information for debugging purposes.

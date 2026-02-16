@@ -114,11 +114,22 @@ object MyValidator extends Validator:
 
 ## Where Do Logs Appear?
 
-When scripts are evaluated (on-chain or via `PlutusScriptEvaluator`), logs are collected and included in:
+**Local evaluation** (via `PlutusScriptEvaluator` or `evaluateDebug`): logs are always collected and included in:
 - The `Result.Success` object (when evaluation succeeds)
 - The `PlutusScriptEvaluationException` (when evaluation fails)
 
-Off-chain, you can access logs through the evaluation result to understand what happened during script execution. This is particularly useful when debugging why a transaction failed validation.
+This is the most reliable way to see trace output. Use `evaluateDebug` or the Emulator
+to inspect logs during development.
+
+**Node-side** (when submitting to a Cardano node): trace logs from failed scripts
+appear in the node error response as `"Script debugging logs: ..."`, but **only when
+the node runs in Verbose mode**. Yaci DevKit defaults to Quiet mode where trace output
+is not included in error responses. Blockfrost-connected nodes (Preprod, Mainnet)
+typically run in Verbose mode.
+
+To see trace logs from a Yaci DevKit node, the node must be configured with
+`VerboseMode = Verbose`. Note that successful script evaluations never expose
+trace output on-chain — only failures include logs in the error response.
 
 ## Evaluating with Error Traces
 
@@ -140,6 +151,57 @@ val result = compiled.toUplc(generateErrorTraces = true).evaluateDebug
 **The `generateErrorTraces` flag:**
 - `true`: Adds error location information (useful for debugging, but increases script size)
 - `false`: Minimal script size (for production deployment)
+
+## Diagnostic Replay for Release Scripts
+
+When deploying to production, you typically compile scripts with `Options.release` (no error traces) to minimize script size and execution costs. However, if a release script fails, the error logs will be empty — making it hard to diagnose the issue.
+
+**Diagnostic replay** solves this: when you use `CompiledPlutus` (e.g., `PlutusV3.compile(...)`) with `TxBuilder`, the builder automatically registers the compiled script for replay. If the release script fails with empty logs, the evaluator:
+
+1. Recompiles the script from SIR with error traces enabled
+2. Replays the failing evaluation with the same arguments
+3. Collects the diagnostic logs from the replay
+4. Includes them in the `PlutusScriptEvaluationException`
+
+### Using Diagnostic Replay with TxBuilder
+
+Pass `CompiledPlutus` (the result of `PlutusV3.compile(...)`) instead of `PlutusScript` to `spend` or `mint`:
+
+```scala
+given Options = Options.release  // no traces for production
+
+val validator = PlutusV3.compile { (sc: Data) =>
+  // your validator code
+  require(someCondition, "Condition failed")
+}
+
+// Using CompiledPlutus enables automatic diagnostic replay
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, redeemer, validator)   // not validator.script!
+  .payTo(recipient, Value.ada(10))
+  .build(changeTo = changeAddress)
+```
+
+For reference scripts, use the `references` overload:
+
+```scala
+val tx = TxBuilder(env)
+  .references(scriptRefUtxo, validator)  // registers for replay
+  .spend(scriptUtxo, redeemer)
+  .build(changeTo = changeAddress)
+```
+
+When the script fails, the exception will contain diagnostic logs even though the on-chain script has no traces:
+
+```scala
+try {
+  builder.build(changeTo = changeAddress)
+} catch {
+  case e: TxBuilderException.BalancingException =>
+    e.scriptLogs.foreach(logs => println(logs.mkString("\n")))
+    // Prints: "Condition failed" (from diagnostic replay)
+}
+```
 
 ## Debugging with IDE
 

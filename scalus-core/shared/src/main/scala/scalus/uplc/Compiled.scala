@@ -98,6 +98,16 @@ sealed abstract class CompiledPlutus[A](
     /** Creates the script with the appropriate version. */
     protected def makeScript(program: Program): PlutusScript
 
+    /** Returns a copy of this compiled script with error traces enabled.
+      *
+      * Error traces provide detailed error messages during script evaluation, useful for debugging.
+      * This increases script size and execution cost.
+      *
+      * @return
+      *   a new [[CompiledPlutus]] with `generateErrorTraces = true`
+      */
+    def withErrorTraces: CompiledPlutus[A]
+
     /** Lowers the SIR to UPLC using the configured backend and applies optimization if enabled. */
     protected def toUplc: Term = {
         val backend = options.targetLoweringBackend
