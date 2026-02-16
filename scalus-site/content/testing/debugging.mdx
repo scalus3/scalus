@@ -18,10 +18,74 @@ Before compiling to UPLC, you can debug your validator as regular Scala code:
 
 ## Using `log` for Script Logging
 
-You can add log messages to your validator using the `log` function:
+The `log` function accepts **variadic arguments** of any type that has a `Show` or `ToData` instance. All arguments are converted to strings and concatenated into a single trace entry, separated by spaces.
 
 ```scala
-import scalus.prelude.log
+inline def log(inline args: Any*): Unit
+```
+
+### Basic Usage
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.log
+
+// Simple message
+log("Starting validation")
+
+// Label with a value — uses Show[BigInt]
+log("count", BigInt(42))
+// trace output: "count 42"
+
+// Multiple values
+log("values", BigInt(1), BigInt(2), BigInt(3))
+// trace output: "values 1 2 3"
+
+// Mixed types — uses Show[Boolean] and Show[BigInt]
+log("mixed", true, BigInt(42))
+// trace output: "mixed True 42"
+```
+
+### How Arguments Are Converted
+
+The `log` macro resolves each argument at compile time:
+
+1. **String literals** — passed through as-is (unquoted), useful as labels
+2. **Types with a `Show` instance** — converted via `Show[T]`. Built-in instances exist for `BigInt`, `Boolean`, `String`, `Data`, and `Unit`
+3. **Types with a `ToData` instance** (fallback) — converted to `Data` first, then displayed via `Show[Data]`. This works for any case class or enum that `derives ToData`
+4. **No instance found** — compilation error
+
+```scala
+// String literal vs string expression
+val s: String = "hello"
+log("label", s)
+// trace output: label "hello"
+// ↑ literal (unquoted)  ↑ expression (quoted via Show[String])
+```
+
+### Logging Custom Types
+
+Any case class or enum with a `ToData` instance can be logged:
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.*
+
+case class Point(x: BigInt, y: BigInt) derives ToData
+
+enum Color derives ToData:
+    case Red, Green, Blue
+
+// In your validator:
+log("point", Point(BigInt(1), BigInt(2)))
+// trace output: "point <0, [1, 2]>"  (Data representation)
+
+log("color", Color.Red)
+// trace output: "color <0, []>"
+```
+
+### Validator Example
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.log
 
 @Compile
 object MyValidator extends Validator:
@@ -33,14 +97,20 @@ object MyValidator extends Validator:
   ): Unit = {
     log("Starting validation")
     val myDatum = datum.getOrFail("Datum required").to[MyDatum]
-    log(s"Validating for owner: ${myDatum.owner}")
+    log("owner", myDatum.owner)
 
     val isValid = tx.isSignedBy(myDatum.owner)
-    log(s"Signature check: $isValid")
+    log("signed", isValid)
 
     require(isValid, "Must be signed by owner")
   }
 ```
+
+### Notes
+
+- `log()` with no arguments is a no-op
+- Each `log(...)` call produces exactly **one** trace entry
+- `log` compiles to `Builtins.trace`, so it consumes execution units on-chain. Remove or minimize logging for production deployments
 
 ## Where Do Logs Appear?
 
