@@ -7,6 +7,7 @@ import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.pretty
 import scalus.uplc.*
+import scalus.uplc.UplcAnnotation
 
 import scala.annotation.unused
 import scala.util.control.NonFatal
@@ -332,7 +333,7 @@ object Lowering {
                         )
                     val loweredMsg = lowerSIR(msg, Some(SIRType.String))
                     val errorTerm =
-                        ErrorLoweredValue(sirError, ~Term.Error(anns.pos))
+                        ErrorLoweredValue(sirError, ~Term.Error(UplcAnnotation(anns.pos)))
                     lvForce(
                       lvBuiltinApply2(
                         SIRBuiltins.trace,
@@ -344,7 +345,7 @@ object Lowering {
                       ),
                       anns.pos
                     )
-                else ErrorLoweredValue(sirError, Term.Error(anns.pos))
+                else ErrorLoweredValue(sirError, Term.Error(UplcAnnotation(anns.pos)))
         lctx.nestingLevel -= 1
         retval
     }
@@ -628,17 +629,17 @@ object Lowering {
             v match
                 case dv: DependendVariableLoweredValue =>
                     Term.Apply(
-                      Term.LamAbs(dv.id, term, dv.pos),
+                      Term.LamAbs(dv.id, term, UplcAnnotation(dv.pos)),
                       dv.rhs.termWithNeededVars(nGctx),
-                      dv.pos
+                      UplcAnnotation(dv.pos)
                     )
                 case v: VariableLoweredValue =>
                     v.optRhs match
                         case Some(rhs) =>
                             Term.Apply(
-                              Term.LamAbs(v.id, term, v.pos),
+                              Term.LamAbs(v.id, term, UplcAnnotation(v.pos)),
                               rhs.termWithNeededVars(nGctx),
-                              v.pos
+                              UplcAnnotation(v.pos)
                             )
                         case None =>
                             throw LoweringException(
@@ -675,17 +676,17 @@ object Lowering {
                 v match
                     case dv: DependendVariableLoweredValue =>
                         Term.Apply(
-                          Term.LamAbs(dv.id, term, dv.pos),
+                          Term.LamAbs(dv.id, term, UplcAnnotation(dv.pos)),
                           dv.rhs.termWithNeededVars(nGctx),
-                          dv.pos
+                          UplcAnnotation(dv.pos)
                         )
                     case v: VariableLoweredValue =>
                         v.optRhs match
                             case Some(rhs) =>
                                 Term.Apply(
-                                  Term.LamAbs(v.id, term, v.pos),
+                                  Term.LamAbs(v.id, term, UplcAnnotation(v.pos)),
                                   rhs.termWithNeededVars(nGctx),
-                                  v.pos
+                                  UplcAnnotation(v.pos)
                                 )
                             case None =>
                                 throw LoweringException(

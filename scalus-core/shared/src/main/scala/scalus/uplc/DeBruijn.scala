@@ -25,7 +25,7 @@ object DeBruijn:
 
         def process(term: Term, env: List[String]): Term =
             term match
-                case Var(name, pos) =>
+                case Var(name, ann) =>
                     val idx = env.indexOf(name.name)
                     if idx == -1 then
                         if throwOnFreeVariable then
@@ -34,15 +34,15 @@ object DeBruijn:
                             )
                         else
                             unique -= 1
-                            Var(name.copy(index = unique), pos) // free variable
-                    else Var(name.copy(index = idx + 1), pos) // 1-based index
-                case LamAbs(name, term, pos) => LamAbs(name, process(term, name :: env), pos)
-                case Apply(f, arg, pos)      => Apply(process(f, env), process(arg, env), pos)
-                case Force(term, pos)        => Force(process(term, env), pos)
-                case Delay(term, pos)        => Delay(process(term, env), pos)
-                case Constr(tag, args, pos)  => Constr(tag, args.map(process(_, env)), pos)
-                case Case(arg, cases, pos) =>
-                    Case(process(arg, env), cases.map(process(_, env)), pos)
+                            Var(name.copy(index = unique), ann) // free variable
+                    else Var(name.copy(index = idx + 1), ann) // 1-based index
+                case LamAbs(name, term, ann) => LamAbs(name, process(term, name :: env), ann)
+                case Apply(f, arg, ann)      => Apply(process(f, env), process(arg, env), ann)
+                case Force(term, ann)        => Force(process(term, env), ann)
+                case Delay(term, ann)        => Delay(process(term, env), ann)
+                case Constr(tag, args, ann)  => Constr(tag, args.map(process(_, env)), ann)
+                case Case(arg, cases, ann) =>
+                    Case(process(arg, env), cases.map(process(_, env)), ann)
                 case _: Const   => term
                 case _: Builtin => term
                 case _: Error   => term
@@ -52,21 +52,21 @@ object DeBruijn:
     def fromDeBruijnTerm(term: Term): Term =
         var idx = 0
         def go(term: Term, env: List[String]): Term = term match
-            case Var(name, pos) =>
+            case Var(name, ann) =>
                 val binderName =
                     if name.index < 0 then name.name else env(name.index - 1) // 1-based index
-                Var(name.copy(name = binderName), pos)
-            case LamAbs(_, term, pos) =>
+                Var(name.copy(name = binderName), ann)
+            case LamAbs(_, term, ann) =>
                 val binderName = s"i$idx"
                 idx += 1
-                LamAbs(binderName, go(term, binderName :: env), pos)
-            case Apply(f, arg, pos) => Apply(go(f, env), go(arg, env), pos)
-            case Force(term, pos)   => Force(go(term, env), pos)
-            case Delay(term, pos)   => Delay(go(term, env), pos)
-            case Constr(tag, args, pos) =>
-                Constr(tag, args.map(go(_, env)), pos)
-            case Case(arg, cases, pos) =>
-                Case(go(arg, env), cases.map(go(_, env)), pos)
+                LamAbs(binderName, go(term, binderName :: env), ann)
+            case Apply(f, arg, ann) => Apply(go(f, env), go(arg, env), ann)
+            case Force(term, ann)   => Force(go(term, env), ann)
+            case Delay(term, ann)   => Delay(go(term, env), ann)
+            case Constr(tag, args, ann) =>
+                Constr(tag, args.map(go(_, env)), ann)
+            case Case(arg, cases, ann) =>
+                Case(go(arg, env), cases.map(go(_, env)), ann)
             case _: Const   => term
             case _: Builtin => term
             case _: Error   => term

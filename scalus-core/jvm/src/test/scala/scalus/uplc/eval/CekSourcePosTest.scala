@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile
 import scalus.compiler.sir.{AnnotationsDecl, SIR}
-import scalus.uplc.{DeBruijn, Term}
+import scalus.uplc.{DeBruijn, Term, UplcAnnotation}
 import scalus.utils.ScalusSourcePos
 
 /** Tests that CEK machine errors include source position information.
@@ -18,7 +18,7 @@ class CekSourcePosTest extends AnyFunSuite {
 
     test("EvaluationFailure includes source position from Error term with explicit pos") {
         val pos = ScalusSourcePos("MyValidator.scala", 41, 4, 41, 30)
-        val errorTerm = Term.Error(pos)
+        val errorTerm = Term.Error(UplcAnnotation(pos))
         val debruijned = DeBruijn.deBruijnTerm(errorTerm)
 
         val ex = intercept[EvaluationFailure] {
@@ -73,7 +73,10 @@ class CekSourcePosTest extends AnyFunSuite {
         // In Apply(f, arg), the arg is the last computed term before the builtin fires,
         // so we attach the position to the arg (emptyList) to test this.
         val pos = ScalusSourcePos("Contract.scala", 24, 8, 24, 40)
-        val emptyList = Term.Const(scalus.uplc.Constant.List(scalus.uplc.DefaultUni.Data, Nil), pos)
+        val emptyList = Term.Const(
+          scalus.uplc.Constant.List(scalus.uplc.DefaultUni.Data, Nil),
+          UplcAnnotation(pos)
+        )
         val headListTerm = Term.Force(Term.Builtin(scalus.uplc.DefaultFun.HeadList))
         val term = Term.Apply(headListTerm, emptyList)
         val debruijned = DeBruijn.deBruijnTerm(term)
@@ -90,7 +93,7 @@ class CekSourcePosTest extends AnyFunSuite {
 
     test("evaluateDebug Failure result preserves source position in exception") {
         val pos = ScalusSourcePos("Script.scala", 5, 0, 5, 15)
-        val errorTerm = Term.Error(pos)
+        val errorTerm = Term.Error(UplcAnnotation(pos))
         val debruijned = DeBruijn.deBruijnTerm(errorTerm)
 
         val result = debruijned.evaluateDebug

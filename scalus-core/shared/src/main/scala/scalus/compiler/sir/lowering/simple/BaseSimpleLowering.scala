@@ -5,6 +5,7 @@ import scalus.showShort
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
 import scalus.uplc.*
+import scalus.uplc.UplcAnnotation
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -645,5 +646,8 @@ abstract class BaseSimpleLowering(
             case SIR.Builtin(bn, _, _) => builtinTerms(bn)
             case SIR.Error(msg, anns, _) =>
                 if generateErrorTraces
-                then !(builtinTerms(DefaultFun.Trace) $ lowerInner(msg) $ ~Term.Error(anns.pos))
-                else Term.Error(anns.pos)
+                then
+                    !(builtinTerms(DefaultFun.Trace) $ lowerInner(msg) $ ~Term.Error(
+                      UplcAnnotation(anns.pos)
+                    ))
+                else Term.Error(UplcAnnotation(anns.pos))

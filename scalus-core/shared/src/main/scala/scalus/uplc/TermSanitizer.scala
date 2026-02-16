@@ -34,23 +34,23 @@ object TermSanitizer:
             )
 
         def sanitizeTerm(t: Term): Term = t match
-            case Var(name, pos) =>
+            case Var(name, ann) =>
                 val sanitizedName = getSanitizedName(name.name)
-                Var(name.copy(name = sanitizedName), pos)
+                Var(name.copy(name = sanitizedName), ann)
 
-            case LamAbs(name, body, pos) =>
+            case LamAbs(name, body, ann) =>
                 val sanitizedName = getSanitizedName(name)
                 usedNames.add(sanitizedName)
-                LamAbs(sanitizedName, sanitizeTerm(body), pos)
+                LamAbs(sanitizedName, sanitizeTerm(body), ann)
 
-            case Apply(f, arg, pos) =>
-                Apply(sanitizeTerm(f), sanitizeTerm(arg), pos)
+            case Apply(f, arg, ann) =>
+                Apply(sanitizeTerm(f), sanitizeTerm(arg), ann)
 
-            case Force(term, pos) =>
-                Force(sanitizeTerm(term), pos)
+            case Force(term, ann) =>
+                Force(sanitizeTerm(term), ann)
 
-            case Delay(term, pos) =>
-                Delay(sanitizeTerm(term), pos)
+            case Delay(term, ann) =>
+                Delay(sanitizeTerm(term), ann)
 
             case _: Const => t
 
@@ -58,11 +58,11 @@ object TermSanitizer:
 
             case _: Error => t
 
-            case Constr(tag, args, pos) =>
-                Constr(tag, args.map(sanitizeTerm), pos)
+            case Constr(tag, args, ann) =>
+                Constr(tag, args.map(sanitizeTerm), ann)
 
-            case Case(scrutinee, cases, pos) =>
-                Case(sanitizeTerm(scrutinee), cases.map(sanitizeTerm), pos)
+            case Case(scrutinee, cases, ann) =>
+                Case(sanitizeTerm(scrutinee), cases.map(sanitizeTerm), ann)
 
         sanitizeTerm(term)
 

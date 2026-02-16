@@ -131,16 +131,16 @@ class StrictIf(logger: Logger = new Log()) extends Optimizer {
                     )
 
             // Recursively optimize subterms
-            case Apply(f, a, pos)        => Apply(go(f), go(a), pos)
-            case LamAbs(name, body, pos) => LamAbs(name, go(body), pos)
-            case Force(t, pos)           => Force(go(t), pos)
-            case Delay(t, pos)           => Delay(go(t), pos)
-            case Constr(tag, args, pos)  => Constr(tag, args.map(arg => go(arg)), pos)
-            case Case(scrutinee, cases, pos) =>
+            case Apply(f, a, ann)        => Apply(go(f), go(a), ann)
+            case LamAbs(name, body, ann) => LamAbs(name, go(body), ann)
+            case Force(t, ann)           => Force(go(t), ann)
+            case Delay(t, ann)           => Delay(go(t), ann)
+            case Constr(tag, args, ann)  => Constr(tag, args.map(arg => go(arg)), ann)
+            case Case(scrutinee, cases, ann) =>
                 Case(
                   go(scrutinee),
                   cases.map(go),
-                  pos
+                  ann
                 )
 
             // Atomic terms: no transformation needed

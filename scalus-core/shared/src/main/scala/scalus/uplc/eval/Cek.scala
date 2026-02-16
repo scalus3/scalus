@@ -802,18 +802,8 @@ class CekMachine(
 
     /** Returns the source position of the last term being computed, or empty if unavailable. */
     private def lastSourcePos: ScalusSourcePos =
-        this.term match
-            case null              => ScalusSourcePos.empty
-            case Var(_, pos)       => pos
-            case LamAbs(_, _, pos) => pos
-            case Apply(_, _, pos)  => pos
-            case Force(_, pos)     => pos
-            case Delay(_, pos)     => pos
-            case Const(_, pos)     => pos
-            case Builtin(_, pos)   => pos
-            case Error(pos)        => pos
-            case Constr(_, _, pos) => pos
-            case Case(_, _, pos)   => pos
+        val t = this.term
+        if t == null then ScalusSourcePos.empty else t.sourcePos
 
     /** Evaluates a UPLC term.
       *
@@ -856,9 +846,9 @@ class CekMachine(
     private final def computeCek(ctx: Context, env: CekValEnv, term: Term): CekState = {
         val costs = params.machineCosts
         term match
-            case Var(name, pos) =>
+            case Var(name, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Var), costs.varCost, env)
-                Return(ctx, env, lookupVarName(env, name, pos))
+                Return(ctx, env, lookupVarName(env, name, term.sourcePos))
             case LamAbs(name, term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.LamAbs), costs.lamCost, env)
                 Return(ctx, env, VLamAbs(name, term, env))
@@ -874,14 +864,14 @@ class CekMachine(
             case Const(const, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Const), costs.constCost, env)
                 Return(ctx, env, VCon(const))
-            case Builtin(bn, pos) =>
+            case Builtin(bn, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Builtin), costs.builtinCost, env)
                 // The @term@ is a 'Builtin', so it's fully discharged.
                 try
                     val meaning = getBuiltinRuntime(bn)
                     Return(ctx, env, VBuiltin(bn, () => term, meaning))
-                catch case _: Exception => throw new UnknownBuiltin(bn, env, pos)
-            case Error(pos) => throw new EvaluationFailure(env, pos)
+                catch case _: Exception => throw new UnknownBuiltin(bn, env, term.sourcePos)
+            case Error(_) => throw new EvaluationFailure(env, term.sourcePos)
             case Constr(tag, args, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Constr), costs.constrCost, env)
                 args match
@@ -1195,10 +1185,10 @@ class CekMachine(
                                 // var is free, leave it alone
                                 term
 
-                    case LamAbs(name, body, pos) => LamAbs(name, go(lamCnt + 1, body), pos)
-                    case Apply(fun, arg, pos)    => Apply(go(lamCnt, fun), go(lamCnt, arg), pos)
-                    case Force(term, pos)        => Force(go(lamCnt, term), pos)
-                    case Delay(term, pos)        => Delay(go(lamCnt, term), pos)
+                    case LamAbs(name, body, ann) => LamAbs(name, go(lamCnt + 1, body), ann)
+                    case Apply(fun, arg, ann)    => Apply(go(lamCnt, fun), go(lamCnt, arg), ann)
+                    case Force(term, ann)        => Force(go(lamCnt, term), ann)
+                    case Delay(term, ann)        => Delay(go(lamCnt, term), ann)
                     case _                       => term
             }
 

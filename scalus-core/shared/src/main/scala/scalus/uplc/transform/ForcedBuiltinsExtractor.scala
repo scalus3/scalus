@@ -36,8 +36,8 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
         val extracted = mutable.Map.empty[DefaultFun, (Term, String)]
 
         def go(term: Term, env: Map[String, Term]): Term = term match
-            case Apply(f, arg, pos)      => Apply(go(f, env), go(arg, env), pos)
-            case LamAbs(name, body, pos) => LamAbs(name, go(body, env - name), pos)
+            case Apply(f, arg, ann)      => Apply(go(f, env), go(arg, env), ann)
+            case LamAbs(name, body, ann) => LamAbs(name, go(body, env - name), ann)
             case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
                     && !exceptBuiltins.contains(bn) =>
@@ -52,14 +52,14 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
                     extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
-            case Force(t, pos)          => Force(go(t, env), pos)
-            case Delay(t, pos)          => Delay(go(t, env), pos)
-            case Constr(tag, args, pos) => Constr(tag, args.map(arg => go(arg, env)), pos)
-            case Case(scrutinee, cases, pos) =>
+            case Force(t, ann)          => Force(go(t, env), ann)
+            case Delay(t, ann)          => Delay(go(t, env), ann)
+            case Constr(tag, args, ann) => Constr(tag, args.map(arg => go(arg, env)), ann)
+            case Case(scrutinee, cases, ann) =>
                 Case(
                   go(scrutinee, env),
                   cases.map(c => go(c, env)),
-                  pos
+                  ann
                 )
             case _: Var | _: Const | _: Builtin | _: Error => term
 

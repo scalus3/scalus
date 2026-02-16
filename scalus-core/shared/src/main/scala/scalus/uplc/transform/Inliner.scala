@@ -179,30 +179,30 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                 if n == name && !boundVars.contains(n) then replacement
                 else t
 
-            case LamAbs(n, body, pos) =>
+            case LamAbs(n, body, ann) =>
                 if n == name then t
                 else if replacementFreeVars.contains(n) then
                     val freshN = freshName(n, boundVars ++ replacementFreeVars)
                     LamAbs(
                       freshN,
                       go(substitute(body, n, Var(NamedDeBruijn(freshN))), boundVars + freshN),
-                      pos
+                      ann
                     )
-                else LamAbs(n, go(body, boundVars + n), pos)
+                else LamAbs(n, go(body, boundVars + n), ann)
 
-            case Apply(f, arg, pos) => Apply(go(f, boundVars), go(arg, boundVars), pos)
+            case Apply(f, arg, ann) => Apply(go(f, boundVars), go(arg, boundVars), ann)
 
-            case Force(t, pos) => Force(go(t, boundVars), pos)
-            case Delay(t, pos) => Delay(go(t, boundVars), pos)
+            case Force(t, ann) => Force(go(t, boundVars), ann)
+            case Delay(t, ann) => Delay(go(t, boundVars), ann)
 
-            case Constr(tag, args, pos) =>
-                Constr(tag, args.map(arg => go(arg, boundVars)), pos)
+            case Constr(tag, args, ann) =>
+                Constr(tag, args.map(arg => go(arg, boundVars)), ann)
 
-            case Case(scrutinee, cases, pos) =>
+            case Case(scrutinee, cases, ann) =>
                 Case(
                   go(scrutinee, boundVars),
                   cases.map(c => go(c, boundVars)),
-                  pos
+                  ann
                 )
 
             case _: Const | _: Builtin | _: Error => t
@@ -246,7 +246,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     case Some(value) => value
                     case _           => term
 
-            case Apply(f, arg, pos) =>
+            case Apply(f, arg, ann) =>
                 val inlinedF = go(f, env)
                 val inlinedArg = go(arg, env)
                 // Try beta reduction if possible
@@ -267,23 +267,23 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                             go(substitute(body, name, inlinedArg), env)
                         else
                             // non-safe term - keep the lambda
-                            Apply(inlinedF, inlinedArg, pos)
+                            Apply(inlinedF, inlinedArg, ann)
                     case _ =>
-                        Apply(inlinedF, inlinedArg, pos)
+                        Apply(inlinedF, inlinedArg, ann)
 
-            case LamAbs(name, body, pos) => LamAbs(name, go(body, env - name), pos)
+            case LamAbs(name, body, ann) => LamAbs(name, go(body, env - name), ann)
             case Force(Delay(t, _), _) =>
                 logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
                 go(t, env)
-            case Force(t, pos)          => Force(go(t, env), pos)
-            case Delay(t, pos)          => Delay(go(t, env), pos)
-            case Constr(tag, args, pos) => Constr(tag, args.map(arg => go(arg, env)), pos)
+            case Force(t, ann)          => Force(go(t, env), ann)
+            case Delay(t, ann)          => Delay(go(t, env), ann)
+            case Constr(tag, args, ann) => Constr(tag, args.map(arg => go(arg, env)), ann)
 
-            case Case(scrutinee, cases, pos) =>
+            case Case(scrutinee, cases, ann) =>
                 Case(
                   go(scrutinee, env),
                   cases.map(c => go(c, env)),
-                  pos
+                  ann
                 )
 
             case _: Const | _: Builtin | _: Error => term
