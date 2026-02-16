@@ -1,5 +1,6 @@
 package scalus.cardano.node
 
+import scalus.uplc.DebugScript
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
@@ -43,6 +44,28 @@ trait EmulatorBase extends BlockchainProvider {
 
     def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
         Future.successful(submitSync(transaction))
+
+    /** Submit a transaction with debug scripts for diagnostic replay.
+      *
+      * When a release script fails with empty logs, the evaluator replays it using the debug script
+      * to produce diagnostic output.
+      *
+      * @param transaction
+      *   the transaction to submit
+      * @param debugScripts
+      *   map from release script hash to debug script for diagnostic replay
+      */
+    def submit(
+        transaction: Transaction,
+        debugScripts: Map[ScriptHash, DebugScript]
+    ): Future[Either[SubmitError, TransactionHash]] =
+        Future.successful(submitSync(transaction, debugScripts))
+
+    /** Synchronously submit a transaction with debug scripts for diagnostic replay. */
+    def submitSync(
+        transaction: Transaction,
+        debugScripts: Map[ScriptHash, DebugScript]
+    ): Either[SubmitError, TransactionHash]
 
     def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
         Future.successful(Right(EmulatorBase.evalQuery(utxos, query)))

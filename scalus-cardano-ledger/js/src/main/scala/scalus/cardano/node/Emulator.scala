@@ -1,5 +1,6 @@
 package scalus.cardano.node
 
+import scalus.uplc.DebugScript
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
 import scalus.cardano.ledger.*
@@ -28,6 +29,20 @@ class Emulator(
 
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         processTransaction(context, state, transaction) match {
+            case Right(newState) =>
+                state = newState
+                Right(transaction.id)
+            case Left(t: TransactionException) =>
+                Left(SubmitError.fromException(t))
+        }
+    }
+
+    def submitSync(
+        transaction: Transaction,
+        debugScripts: Map[ScriptHash, DebugScript]
+    ): Either[SubmitError, TransactionHash] = {
+        val ctxWithDebug = context.copy(debugScripts = debugScripts)
+        processTransaction(ctxWithDebug, state, transaction) match {
             case Right(newState) =>
                 state = newState
                 Right(transaction.id)

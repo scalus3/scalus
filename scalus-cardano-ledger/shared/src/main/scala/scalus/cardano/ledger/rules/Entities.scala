@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 package rules
 
 import scalus.cardano.address.Network
+import scalus.uplc.DebugScript
 
 import scala.annotation.threadUnsafe
 
@@ -14,7 +15,9 @@ case class Context(
       *   - `Validate`: Enforce budget limits (default, production mode)
       *   - `EvaluateAndComputeCost`: Ignore budget limits, just compute costs (for testing)
       */
-    evaluatorMode: EvaluatorMode = EvaluatorMode.Validate
+    evaluatorMode: EvaluatorMode = EvaluatorMode.Validate,
+    /** Debug scripts for diagnostic replay when release scripts fail with empty logs. */
+    debugScripts: Map[ScriptHash, DebugScript] = Map.empty
 )
 
 object Context {

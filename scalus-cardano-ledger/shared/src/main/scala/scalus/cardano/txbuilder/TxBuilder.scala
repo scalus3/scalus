@@ -1,6 +1,6 @@
 package scalus.cardano.txbuilder
 
-import scalus.uplc.CompiledPlutus
+import scalus.uplc.{CompiledPlutus, DebugScript}
 import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{Data, ToData}
@@ -181,7 +181,7 @@ case class TxBuilder(
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
     changeOutputIndex: Option[Int] = None,
-    debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+    debugScripts: Map[ScriptHash, DebugScript] = Map.empty
 ) {
 
     /** Spends a UTXO with an explicit witness.
@@ -1889,6 +1889,25 @@ case class TxBuilder(
         ctx.copy(transaction = updatedTx)
     }
 
+    /** Registers a debug script for diagnostic replay.
+      *
+      * When a release script (compiled without error traces) fails during evaluation with empty
+      * logs, the evaluator will use the registered debug script to replay the failing evaluation,
+      * producing diagnostic logs.
+      *
+      * This overload accepts a [[DebugScript]] directly, which can wrap either a pre-compiled debug
+      * [[scalus.cardano.ledger.PlutusScript]] (for external builders) or a lazy recompilation from
+      * [[CompiledPlutus]].
+      *
+      * @param scriptHash
+      *   the script hash of the release script (used for lookup)
+      * @param debugScript
+      *   the debug script to use for replay
+      */
+    def withDebugScript(scriptHash: ScriptHash, debugScript: DebugScript): TxBuilder = {
+        copy(debugScripts = debugScripts + (scriptHash -> debugScript))
+    }
+
     /** Registers a compiled script for diagnostic replay.
       *
       * When a release script (compiled without error traces) fails during evaluation with empty
@@ -1907,7 +1926,9 @@ case class TxBuilder(
     }
 
     private def registerDebugScript(compiled: CompiledPlutus[?]): TxBuilder = {
-        copy(debugScripts = debugScripts + (compiled.script.scriptHash -> compiled))
+        copy(debugScripts =
+            debugScripts + (compiled.script.scriptHash -> DebugScript.fromCompiled(compiled))
+        )
     }
 
     /** Appends transaction building steps to this builder.

@@ -400,7 +400,8 @@ object TransactionException {
     final case class PlutusScriptValidationException(
         transactionId: TransactionHash,
         message: String,
-        logs: Seq[String]
+        logs: Seq[String],
+        scriptHash: Option[ScriptHash] = None
     ) extends TransactionException(
           s"Plutus script validation failed for transactionId $transactionId: $message"
         )

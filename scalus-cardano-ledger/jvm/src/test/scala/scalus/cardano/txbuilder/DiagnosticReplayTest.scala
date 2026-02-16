@@ -1,16 +1,17 @@
 package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.uplc.{DebugScript, PlutusV3}
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
+import scalus.cardano.node.{Emulator, NodeSubmitError}
 import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
-import scalus.uplc.PlutusV3
 
 class DiagnosticReplayTest extends AnyFunSuite {
 
@@ -213,5 +214,86 @@ class DiagnosticReplayTest extends AnyFunSuite {
         // Options differ only in generateErrorTraces
         assert(withTraces.options.generateErrorTraces)
         assert(!release.options.generateErrorTraces)
+    }
+
+    test("DebugScript from raw PlutusScript via TxBuilder withDebugScript") {
+        val scriptUtxo = createScriptLockedUtxo(failingScriptRelease.script)
+        val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
+
+        // Use raw PlutusScript for debug (the version with traces)
+        val debugPlutusScript = failingScriptWithTraces.script
+        val releaseHash = failingScriptRelease.script.scriptHash
+
+        val ex = intercept[TxBuilderException.BalancingException] {
+            TxBuilder(env)
+                .spend(paymentUtxo)
+                .collaterals(collateralUtxo)
+                // Spend with raw PlutusScript (no CompiledPlutus)
+                .spend(scriptUtxo, Data.unit, failingScriptRelease.script)
+                // Register debug script from raw PlutusScript
+                .withDebugScript(releaseHash, DebugScript(debugPlutusScript))
+                .payTo(Bob.address, Value.ada(1))
+                .build(changeTo = Alice.address)
+        }
+
+        assert(ex.isScriptFailure)
+        val logs = ex.scriptLogs.get
+        assert(
+          logs.nonEmpty,
+          "DebugScript from raw PlutusScript should produce diagnostic logs via replay"
+        )
+        assert(
+          logs.exists(_.contains("expected failure")),
+          s"Diagnostic replay logs should contain error message, got: $logs"
+        )
+    }
+
+    test("DebugScript from raw PlutusScript via Emulator submitSync") {
+        val scriptUtxo = createScriptLockedUtxo(failingScriptRelease.script)
+        val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
+
+        // Create emulator with the UTXOs
+        val emulator = Emulator(
+          initialUtxos = Map(
+            scriptUtxo.input -> scriptUtxo.output,
+            paymentUtxo.input -> paymentUtxo.output,
+            collateralUtxo.input -> collateralUtxo.output
+          )
+        )
+
+        // Build tx with noop evaluator (so build doesn't fail on script eval)
+        // and sign with Alice's key
+        val tx = TxBuilder(env, PlutusScriptEvaluator.noop)
+            .spend(paymentUtxo)
+            .collaterals(collateralUtxo)
+            .spend(scriptUtxo, Data.unit, failingScriptRelease.script)
+            .payTo(Bob.address, Value.ada(1))
+            .build(changeTo = Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        // Submit with debug scripts
+        val debugPlutusScript = failingScriptWithTraces.script
+        val releaseHash = failingScriptRelease.script.scriptHash
+        val debugScripts = Map(releaseHash -> DebugScript(debugPlutusScript))
+
+        val result = emulator.submitSync(tx, debugScripts)
+
+        assert(result.isLeft, "Transaction should fail")
+        result.left.foreach {
+            case NodeSubmitError.ScriptFailure(_, _, logs) =>
+                assert(
+                  logs.nonEmpty,
+                  "Emulator submitSync with debug scripts should produce diagnostic logs"
+                )
+                assert(
+                  logs.exists(_.contains("expected failure")),
+                  s"Diagnostic logs should contain error message, got: $logs"
+                )
+            case other =>
+                fail(s"Expected ScriptFailure, got: $other")
+        }
     }
 }

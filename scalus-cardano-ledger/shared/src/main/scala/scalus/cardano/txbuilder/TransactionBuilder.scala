@@ -9,7 +9,7 @@ package scalus.cardano.txbuilder
 import io.bullet.borer.Encoder
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
-import scalus.uplc.CompiledPlutus
+import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.*
@@ -580,7 +580,7 @@ object TransactionBuilder {
             diffHandler: DiffHandler,
             protocolParams: ProtocolParams,
             evaluator: PlutusScriptEvaluator,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Either[TxBalancingError, Context] = {
             // println(s"txWithDummySignatures=${HexUtil.encodeHexString(txWithDummySignatures.toCbor)}")
 
@@ -646,7 +646,7 @@ object TransactionBuilder {
             protocolParams: ProtocolParams,
             diffHandler: DiffHandler,
             evaluator: PlutusScriptEvaluator,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Either[SomeBuildError, Context] = {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
@@ -744,7 +744,7 @@ object TransactionBuilder {
             validators: Seq[Validator],
             slot: Long = 1L,
             certState: CertState = CertState.empty,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Either[SomeBuildError, Context] = {
             for {
                 balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator, debugScripts)
@@ -995,7 +995,7 @@ object TransactionBuilder {
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
-        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     ): Either[TxBalancingError, Transaction] = {
         balanceFeeAndChangeWithTokens(
           initial,
@@ -1022,7 +1022,7 @@ object TransactionBuilder {
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
-        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0
 
@@ -1062,7 +1062,7 @@ object TransactionBuilder {
         utxos: Utxos,
         evaluator: PlutusScriptEvaluator,
         protocolParams: ProtocolParams,
-        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     )(tx: Transaction): Either[TxBalancingError, Transaction] = Try {
         val redeemers = evaluator.evalPlutusScripts(tx, utxos, debugScripts)
         setupRedeemers(protocolParams, tx, utxos, redeemers)

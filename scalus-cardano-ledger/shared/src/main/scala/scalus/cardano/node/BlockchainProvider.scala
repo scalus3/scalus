@@ -509,7 +509,7 @@ object SubmitError {
         case e: TransactionException.NativeScriptsException =>
             ScriptFailure(e.explain)
         case e: TransactionException.PlutusScriptValidationException =>
-            ScriptFailure(e.explain, logs = e.logs)
+            ScriptFailure(e.explain, scriptHash = e.scriptHash, logs = e.logs)
         case e =>
             ValidationError(e.explain)
 }

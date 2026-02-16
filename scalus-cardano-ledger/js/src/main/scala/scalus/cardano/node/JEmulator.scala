@@ -1,9 +1,12 @@
 package scalus.cardano.node
 
 import io.bullet.borer.Cbor
+import scalus.uplc.DebugScript
+import scalus.uplc.builtin.ByteString
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.utils.AllResolvedScripts
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
@@ -40,7 +43,54 @@ class JEmulator(
       */
     def submitTx(txCborBytes: Uint8Array): js.Dynamic = {
         val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
-        emulator.submitSync(tx) match {
+        formatSubmitResult(emulator.submitSync(tx))
+    }
+
+    /** Submit a transaction with debug scripts for diagnostic replay.
+      *
+      * Debug scripts are provided as a dictionary mapping script hash hex to double-CBOR hex of the
+      * debug-compiled script. The language version is resolved from the release script in the
+      * transaction.
+      *
+      * @param txCborBytes
+      *   CBOR-encoded transaction bytes
+      * @param debugScripts
+      *   dictionary mapping scriptHashHex to doubleCborHex of debug script
+      * @return
+      *   Object with isSuccess, txHash (on success), or error and logs (on failure)
+      */
+    def submitTx(txCborBytes: Uint8Array, debugScripts: js.Dictionary[String]): js.Dynamic = {
+        val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
+
+        // Resolve scripts from the transaction to determine language versions
+        val resolvedScripts = AllResolvedScripts.allResolvedScriptsMap(tx, emulator.utxos) match
+            case Right(map)  => map
+            case Left(error) => Map.empty[ScriptHash, Script]
+
+        // Parse debug scripts dictionary
+        val debugScriptsMap: Map[ScriptHash, DebugScript] = debugScripts.flatMap {
+            case (hashHex, doubleCborHex) =>
+                val hash = ScriptHash.fromHex(hashHex)
+                val doubleCbor = ByteString.fromHex(doubleCborHex)
+                // Determine language from the release script in the transaction
+                val languageOpt = resolvedScripts.get(hash).collect { case ps: PlutusScript =>
+                    ps.language
+                }
+                languageOpt.map { language =>
+                    val plutusScript: PlutusScript = language match
+                        case Language.PlutusV1 => Script.PlutusV1(doubleCbor)
+                        case Language.PlutusV2 => Script.PlutusV2(doubleCbor)
+                        case Language.PlutusV3 => Script.PlutusV3(doubleCbor)
+                        case _                 => Script.PlutusV3(doubleCbor)
+                    hash -> DebugScript(plutusScript)
+                }
+        }.toMap
+
+        formatSubmitResult(emulator.submitSync(tx, debugScriptsMap))
+    }
+
+    private def formatSubmitResult(result: Either[SubmitError, TransactionHash]): js.Dynamic =
+        result match {
             case Right(txHash) =>
                 js.Dynamic.literal(isSuccess = true, txHash = txHash.toHex)
             case Left(submitError) =>
@@ -55,7 +105,6 @@ class JEmulator(
                         js.Dynamic.literal(isSuccess = false, error = submitError.message)
                 }
         }
-    }
 
     /** Get all UTxOs as CBOR. */
     def getUtxosCbor(): Uint8Array = {

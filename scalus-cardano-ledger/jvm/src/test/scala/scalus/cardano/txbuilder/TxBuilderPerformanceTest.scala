@@ -280,7 +280,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
             override def evalPlutusScriptsWithContexts(
                 tx: Transaction,
                 utxos: Utxos,
-                debugScripts: Map[ScriptHash, scalus.uplc.CompiledPlutus[?]]
+                debugScripts: Map[ScriptHash, scalus.uplc.DebugScript]
             ): Seq[(Redeemer, scalus.cardano.onchain.plutus.ScriptContext, ScriptHash)] = {
                 evaluationCount += 1
                 delegate.evalPlutusScriptsWithContexts(tx, utxos, debugScripts)

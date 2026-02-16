@@ -2,7 +2,7 @@ package scalus.cardano.ledger
 
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{platform, Data}
-import scalus.uplc.CompiledPlutus
+import scalus.uplc.DebugScript
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.Language.*
 import scalus.cardano.ledger.LedgerToPlutusTranslation.*
@@ -55,13 +55,13 @@ trait PlutusScriptEvaluator {
     def evalPlutusScripts(
         tx: Transaction,
         utxos: Utxos,
-        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     ): Seq[Redeemer] = evalPlutusScriptsWithContexts(tx, utxos, debugScripts).map(_._1)
 
     def evalPlutusScriptsWithContexts(
         tx: Transaction,
         utxos: Utxos,
-        debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     ): Seq[(Redeemer, ScriptContext, ScriptHash)]
 }
 
@@ -148,7 +148,7 @@ object PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
             utxos: Utxos,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
+            debugScripts: Map[ScriptHash, DebugScript]
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = Seq.empty
     }
 
@@ -210,7 +210,7 @@ object PlutusScriptEvaluator {
             txhash: String,
             vm: PlutusVM,
             plutusScript: PlutusScript,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]],
+            debugScripts: Map[ScriptHash, DebugScript],
             args: Data*
         ): Result = {
             Result.Success(
@@ -325,7 +325,7 @@ object PlutusScriptEvaluator {
         override def evalPlutusScriptsWithContexts(
             tx: Transaction,
             utxos: Utxos,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]] = Map.empty
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = {
             log.debug(s"Starting Phase 2 evaluation for transaction: ${tx.id}")
 
@@ -450,7 +450,7 @@ object PlutusScriptEvaluator {
             redeemer: Redeemer,
             plutusScript: PlutusScript,
             datum: Option[Data],
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
+            debugScripts: Map[ScriptHash, DebugScript]
         ): (Result, v1.ScriptContext) = {
             // Build V1 script context using pre-computed TxInfo
             val purpose = getScriptPurposeV1(tx, redeemer)
@@ -493,7 +493,7 @@ object PlutusScriptEvaluator {
             redeemer: Redeemer,
             plutusScript: PlutusScript,
             datum: Option[Data],
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
+            debugScripts: Map[ScriptHash, DebugScript]
         ): (Result, v2.ScriptContext) = {
             // Build V2 script context using pre-computed TxInfo
             val purpose = getScriptPurposeV2(tx, redeemer)
@@ -536,7 +536,7 @@ object PlutusScriptEvaluator {
             redeemer: Redeemer,
             plutusScript: PlutusScript,
             datum: Option[Data],
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]]
+            debugScripts: Map[ScriptHash, DebugScript]
         ): (Result, v3.ScriptContext) = {
             // Build V3 script context using pre-computed TxInfo
             val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
@@ -574,7 +574,7 @@ object PlutusScriptEvaluator {
             txhash: String,
             vm: PlutusVM,
             plutusScript: PlutusScript,
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]],
+            debugScripts: Map[ScriptHash, DebugScript],
             args: Data*
         ): Result = {
             // Parse UPLC program from CBOR
@@ -636,15 +636,15 @@ object PlutusScriptEvaluator {
           * script from SIR with error traces and replays it to produce diagnostic output.
           */
         private def replayWithDiagnostics(
-            debugScripts: Map[ScriptHash, CompiledPlutus[?]],
+            debugScripts: Map[ScriptHash, DebugScript],
             hash: ScriptHash,
             args: Seq[Data]
         ): Array[String] = {
             debugScripts.get(hash) match
                 case None => Array.empty
-                case Some(compiled) =>
+                case Some(ds) =>
                     try
-                        val debugScript = compiled.withErrorTraces.script
+                        val debugScript = ds.plutusScript
                         val debugProgram = debugScript.deBruijnedProgram
                         val debugApplied = args.foldLeft(debugProgram): (acc, arg) =>
                             acc $ arg
