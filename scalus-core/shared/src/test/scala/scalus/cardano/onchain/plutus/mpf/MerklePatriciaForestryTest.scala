@@ -112,6 +112,166 @@ class MerklePatriciaForestryTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
+    test("insert with Leaf neighbor skip > 0: nibble must be at fork point, not prefix start") {
+        val proof: List[ProofStep] = List.Cons(
+          Branch(
+            0,
+            hex"d0feb802cc999c500ec58b8e78bdb1b11bcb8e217d404c2cfb416669a6b2c240cd0c58152bf064f0c7834dd72f69d12651739b32caaa3c986a87937f125b500f1426fccf2a456bce3c25b43206d9b429d56515580d086a959ca730325411b3aada6ac4d7221f787b97e1ce677fdadc412e824a9816281b1259b91addeb37bb2c"
+          ),
+          List.Cons(
+            Branch(
+              0,
+              hex"098745f495c99b7627f559ac8ed8165e2392e2261ef8990291f13705adf78fcf3dcca881d4b45aabe746e7041f743baaa831029e7890df9587858d8be5dce648e02f31fe2936417a393df8def15d7d0c021a66cdb33c3fdda941ae70614913cb116fd5e6c499b71e229b88f5106975cbe83a8c44d3619541d7ddd7eae0a355bc"
+            ),
+            List.Cons(
+              Branch(
+                0,
+                hex"9732c3266e468dd27c4bd16af5a6e60c1f556bf91700f51554cfa33aa26b8d30f33c27ab7c5c85ef006c78f56ecd7e8c77c5fadd7910e9b178801d554f244977026104fc4aede0864d405db792691c4e4534b06ae7f58366b640f13ecfa549afa046a157d2e9b6c0793a506942eb8ff50dfeb7c5e7a2a51814c4b3a4d6af6fa0"
+              ),
+              List.Cons(
+                Branch(
+                  0,
+                  hex"5f3065e998b5fa89bb33d9204546c5dba2b075adc542688dcc1773a490fa739ac69ff52c5f575e9f1912664c1ebef2f9498775350b0077a6b59fe012861c3715657146a239aaea12b3091054e5846771bba6f721b1835d025fa08d1fc5c9b1c40000000000000000000000000000000000000000000000000000000000000000"
+                ),
+                List.Cons(
+                  Leaf(
+                    1,
+                    hex"2b5b0ba7a99e17d9fde58f14dee61cccda9e3e9627b2ba2732ebed551ea9eaa4",
+                    hex"3657998959985b7b75c734eb5b49d18cae9b353d00d811cb2c24ed6ed17b23d9"
+                  ),
+                  List.Cons(
+                    Leaf(
+                      0,
+                      hex"2b5b063719f4b7644c71adef1439c9aa78d34e684677dd61db0adffcc21797ec",
+                      hex"4e397303e05277d98701446ee62f6f02bc013721fc12efba7300fb51ea935f9f"
+                    ),
+                    List.Nil
+                  )
+                )
+              )
+            )
+          )
+        )
+
+        val trie = MerklePatriciaForestry(
+          hex"409bc367bec001f8c8af45fb86239d1f69763cb86e8e134c66bba15426cf176e"
+        )
+        assert(
+          trie
+              .insert(
+                hex"198d70e41146654a69e08c6682310a8c35816c8584431915a0eee4a62d39eda0",
+                hex"9e36f867a374be",
+                proof
+              )
+              .root ==
+              hex"f19b7893c0ec34703790dadb8e3257196dcf7aabfa9426d68adf36a31a94ad9a"
+        )
+    }
+
+    test("insert with terminal Fork skip > 0: shared prefix nibbles must be included") {
+        // Regression: doExcluding terminal Fork case omitted the shared prefix nibbles
+        // when skip > 0, producing a wrong subtree hash for the remaining neighbor.
+        val proof: List[ProofStep] = List.Cons(
+          Branch(
+            0,
+            hex"6da036230d1cdb614137b0d5a94bfe0350eae80a7a6228e1ada0025b3c4f7b7b5527cc2fa7d7d50e6059ef33bb9d71f4135265d016affaaebc48465275528b4cc47a765a2d0a90fa7efe6c4c2afb227f8fafa193d16b98afd8e0536d8f07beef9c989638ac0ebb91ce40562b449f66d80119354630bfbd3d1f51db2369a10c7b"
+          ),
+          List.Cons(
+            Branch(
+              0,
+              hex"d1672f79764d1e73c9784121bfcc4b77a043dd07d5769c9a041b04f421572cddb53b70e36b1ae1568c438bdd94eb7d209973e669639bf970b2356b98f4f23bbc66a5aeefc3e6796bd5559a1eba9e61a86eab048c18ec8f93a787c8ea7893c010828b7a5a3d83c8f64471a9a93a606591c3823f9b718870d1bb30f99e38cbac9b"
+            ),
+            List.Cons(
+              Branch(
+                0,
+                hex"dca400d830a111355a23e3c85ebccb507a7150bc26a259fce184ce63b0ec917ce2d43e656aafa0f3de6381d4c0ef65a76c263598eaf76156819bd2c321504d808b0dbee17ff39324bb913eecd66b8f49238000c1d0c22af719d51fe0f676d23e0000000000000000000000000000000000000000000000000000000000000000"
+              ),
+              List.Cons(
+                Leaf(
+                  1,
+                  hex"5080c2f95315f3ef1f89304d94651f0f8ae2f80daa5cff26b9a7fd27813eae0b",
+                  hex"0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"
+                ),
+                List.Cons(
+                  Leaf(
+                    0,
+                    hex"508010f4051f83d17de96eab544cd32a977e88fbe5a4b3b1274b11cce8aaf642",
+                    hex"0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8"
+                  ),
+                  List.Nil
+                )
+              )
+            )
+          )
+        )
+
+        val trie = MerklePatriciaForestry(
+          hex"08b05f422582a099e63646ccf6ed5993c1718d0279a3269c140c1daed29f0f4b"
+        )
+        assert(
+          trie
+              .insert(
+                hex"3fe6f46456b9c223116533d90f9b0bf7c5da095e0c1d68af297a2a3c9709bfa7",
+                hex"",
+                proof
+              )
+              .root ==
+              hex"ff55eab671a6e5618b10bb8702e3e5e6ab2491d50e4a93dd5255d8666a8d4e9a"
+        )
+    }
+
+    test("insert with terminal Fork skip > 0 and non-empty neighbor prefix") {
+        val proof: List[ProofStep] = List.Cons(
+          Branch(
+            0,
+            hex"7391436705a8141e333c007c5ea3e046f9b6ce3200988f4323b337f1eb4e476e300fc77899d6c430dc56965b5171ed48ae947e00cf886ed36bd508f01ecdcfd0a61383bae3451edfa124b8b4a0d6a36f9634c9dcdb9684492bc1f1962a38247ba4ea8e58b84473436d6b6fc5fd47a3abef4959544f8e57bc62ba48131198e476"
+          ),
+          List.Cons(
+            Branch(
+              0,
+              hex"a8c0876243c8203192c45e572b91b84654915f3015e99fbf2a50d2d48bbdacf73a1077fa66a5e7159d0971ce3192d128158480293bd98923ea6614f444c91684b55f810f03a8a710183c7ffff4272817d630c6ffae2600accdedc9f656fa9283571838701edb01d0ec362c174d12243a426af448fb909d32ed51d8641c3a43b0"
+            ),
+            List.Cons(
+              Branch(
+                0,
+                hex"72302f4a439c2294ba4f6bef321f0f7bf497bb5c24335f2e1c8d0b49237410297674c4a5f9437696d4ed2145aad20cc0ef39bc139574941c9f24a4023706e7720d1a0c3d36e6748cabab8c24cb83a17b4a771f536a9fd361e1416f673ed43708b61ff685cecf3bd4a6118e3994e36e41e8dcaee8b47b2ea947968c0afca65b6e"
+              ),
+              List.Cons(
+                Branch(
+                  0,
+                  hex"f226865e02694067e1d0a17b3cb0f6c3d7e5186642a3ff1d8299573e3cac04673fced676fe9af960d3ed3d1e6138952993109b7ec62a3f38eae39fb89a06f04436b86983490a9c2488d8b690074fb3b6a487049f21b6de07dd27b8cfb6243fc3ab5d438a30e24aee9016ffb83a2c23ed7f316efac775c6c2eec64f41967e63c2"
+                ),
+                List.Cons(
+                  Fork(
+                    1,
+                    Neighbor(
+                      11,
+                      hex"0e",
+                      hex"8ffc29f174b749ee61bc9048cb600b4b7b9379227cf690a9268ffa26c5973738"
+                    )
+                  ),
+                  List.Nil
+                )
+              )
+            )
+          )
+        )
+
+        val trie = MerklePatriciaForestry(
+          hex"5032a544857633269c915dd4fb665d79a041d6d75ca795e24fc17a285cc1dece"
+        )
+        assert(
+          trie
+              .insert(
+                hex"daa708d4b3fcf81fdfb8fce2ec5ff61fa38ff02fb4f4d9a218c158b2de170b20",
+                hex"9fb48cf6f576d74b1d7d8917",
+                proof
+              )
+              .root ==
+              hex"b4b1446e07f17da9643a597e5b3a805bc75307aec8a40edde1e41b22ffb90442"
+        )
+    }
+
     import Fruits.*
 
     // Convert the string literals to ByteStrings.

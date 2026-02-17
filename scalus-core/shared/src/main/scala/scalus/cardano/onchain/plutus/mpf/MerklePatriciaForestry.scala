@@ -13,7 +13,7 @@ import scalus.uplc.builtin.ByteString
   * This means that each level in the trie has up to 16 branches.
   *
   * An MPF allows for checking membership, insertion and deletion in the trie using only root hashes
-  * and a succinct proofs. They are quite efficient in both cpu and mem units. And they also provide
+  * and succinct proofs. They are quite efficient in both cpu and mem units. And they also provide
   * proofs that are a / lot smaller than traditional Merkle Patricia Trie; proofs remain however the
   * / main limiting factor.
   */
@@ -153,8 +153,15 @@ object MerklePatriciaForestry:
                 case ProofStep.Fork(skip, neighbor) =>
                     steps match
                         case List.Nil =>
-                            val prefix = consByteString(neighbor.nibble, neighbor.prefix)
-                            combine(prefix, neighbor.root)
+                            if skip == BigInt(0) then
+                                val prefix = consByteString(neighbor.nibble, neighbor.prefix)
+                                combine(prefix, neighbor.root)
+                            else
+                                val originalPrefix = appendByteString(
+                                  nibbles(path, cursor, cursor + skip),
+                                  consByteString(neighbor.nibble, neighbor.prefix)
+                                )
+                                combine(originalPrefix, neighbor.root)
                         case _ =>
                             val nextCursor = cursor + 1 + skip
                             val root = doExcluding(path, nextCursor, steps)
@@ -167,7 +174,7 @@ object MerklePatriciaForestry:
                             val nextCursor = cursor + 1 + skip
                             val root = doExcluding(path, nextCursor, steps)
                             val neighbor = Neighbor(
-                              nibble = nibble(key, cursor),
+                              nibble = nibble(key, nextCursor - 1),
                               prefix = suffix(key, nextCursor),
                               root = value
                             )
