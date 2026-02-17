@@ -214,6 +214,11 @@ class DiagnosticReplayTest extends AnyFunSuite {
         // Options differ only in generateErrorTraces
         assert(withTraces.options.generateErrorTraces)
         assert(!release.options.generateErrorTraces)
+        // Script hashes are different because the UPLC bytecode differs
+        assert(
+          release.script.scriptHash != withTraces.script.scriptHash,
+          "Debug script should have a different hash than the release script"
+        )
     }
 
     test("DebugScript from raw PlutusScript via TxBuilder withDebugScript") {
@@ -283,7 +288,7 @@ class DiagnosticReplayTest extends AnyFunSuite {
 
         assert(result.isLeft, "Transaction should fail")
         result.left.foreach {
-            case NodeSubmitError.ScriptFailure(_, _, logs) =>
+            case NodeSubmitError.ScriptFailure(_, logs, _) =>
                 assert(
                   logs.nonEmpty,
                   "Emulator submitSync with debug scripts should produce diagnostic logs"

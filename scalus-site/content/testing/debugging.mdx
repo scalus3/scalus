@@ -154,14 +154,18 @@ val result = compiled.toUplc(generateErrorTraces = true).evaluateDebug
 
 ## Diagnostic Replay for Release Scripts
 
-When deploying to production, you typically compile scripts with `Options.release` (no error traces) to minimize script size and execution costs. However, if a release script fails, the error logs will be empty — making it hard to diagnose the issue.
+When deploying to production, you typically compile scripts with `Options.release` (which sets `removeTraces = true` and `generateErrorTraces = false`) to minimize script size and execution costs. This means both trace logs and detailed error traces (e.g., `require` messages) are omitted in release scripts, so if a release script fails, you will not see useful error information in the logs — making it hard to diagnose the issue.
 
-**Diagnostic replay** solves this: when you use `CompiledPlutus` (e.g., `PlutusV3.compile(...)`) with `TxBuilder`, the builder automatically registers the compiled script for replay. If the release script fails with empty logs, the evaluator:
+**Diagnostic replay** solves this: when you use `CompiledPlutus` (e.g., `PlutusV3.compile(...)`) with `TxBuilder`, the builder automatically registers the compiled script for replay. The `CompiledPlutus` object retains the SIR, so it can recompile a debug version on demand. If the release script fails with empty logs, the evaluator:
 
 1. Recompiles the script from SIR with error traces enabled
 2. Replays the failing evaluation with the same arguments
 3. Collects the diagnostic logs from the replay
 4. Includes them in the `PlutusScriptEvaluationException`
+
+> **Note:** Automatic replay requires `CompiledPlutus` (which keeps the SIR). If you use an external
+> tx builder (e.g., meshJS or Bloxbean CCL), you won't have a `CompiledPlutus` object — instead,
+> use the `DebugScript` API to provide a pre-compiled debug script. See [DebugScript API](#debugscript-api-for-external-builders) below.
 
 ### Using Diagnostic Replay with TxBuilder
 

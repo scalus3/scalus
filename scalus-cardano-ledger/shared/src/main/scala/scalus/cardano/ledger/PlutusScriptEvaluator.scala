@@ -659,10 +659,20 @@ object PlutusScriptEvaluator {
                         catch case NonFatal(_) => replayFailed = true
                         val logs = replayLogger.getLogs
                         if replayFailed then logs
-                        else logs :+ "[diagnostic replay: debug script succeeded unexpectedly]"
+                        else
+                            log.warn(
+                              s"Diagnostic replay: debug script succeeded unexpectedly for script hash $hash"
+                            )
+                            logs :+ "[diagnostic replay: debug script succeeded unexpectedly]"
                     catch
                         case NonFatal(e) =>
-                            Array(s"[diagnostic replay failed: ${e.getMessage}]")
+                            log.error(
+                              s"Diagnostic replay failed for script hash $hash",
+                              e
+                            )
+                            Array(
+                              s"[diagnostic replay failed: ${e.getClass.getName}: ${e.getMessage}]"
+                            )
         }
 
         /** Dump script information for debugging purposes.

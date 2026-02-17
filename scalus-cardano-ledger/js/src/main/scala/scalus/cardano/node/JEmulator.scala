@@ -64,8 +64,12 @@ class JEmulator(
 
         // Resolve scripts from the transaction to determine language versions
         val resolvedScripts = AllResolvedScripts.allResolvedScriptsMap(tx, emulator.utxos) match
-            case Right(map)  => map
-            case Left(error) => Map.empty[ScriptHash, Script]
+            case Right(map) => map
+            case Left(error) =>
+                js.Dynamic.global.console.error(
+                  s"Emulator.submitTx(debugScripts): failed to resolve scripts: $error"
+                )
+                Map.empty[ScriptHash, Script]
 
         // Parse debug scripts dictionary
         val debugScriptsMap: Map[ScriptHash, DebugScript] = debugScripts.flatMap {
@@ -76,6 +80,10 @@ class JEmulator(
                 val languageOpt = resolvedScripts.get(hash).collect { case ps: PlutusScript =>
                     ps.language
                 }
+                if languageOpt.isEmpty then
+                    js.Dynamic.global.console.warn(
+                      s"Debug script for hash $hashHex was provided but no matching Plutus script was found in the transaction."
+                    )
                 languageOpt.map { language =>
                     val plutusScript: PlutusScript = language match
                         case Language.PlutusV1 => Script.PlutusV1(doubleCbor)
@@ -95,7 +103,7 @@ class JEmulator(
                 js.Dynamic.literal(isSuccess = true, txHash = txHash.toHex)
             case Left(submitError) =>
                 submitError match {
-                    case NodeSubmitError.ScriptFailure(msg, _, logs) if logs.nonEmpty =>
+                    case NodeSubmitError.ScriptFailure(msg, logs, _) if logs.nonEmpty =>
                         js.Dynamic.literal(
                           isSuccess = false,
                           error = msg,

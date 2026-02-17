@@ -39,7 +39,10 @@ object RemoveTraces {
         case SIR.Let(bindings, body, flags, anns) =>
             val newBindings = bindings.map(transformBinding)
             val newBody = transform(body)
-            // Remove dead bindings: those whose RHS is Const(Unit) and whose name is unused
+            // Remove dead bindings: those whose RHS is Const(Unit) and whose name is unused.
+            // This is conservative — only targets the common `log("msg")` pattern where
+            // trace removal leaves `let _ = () in body`. Other trivial pure expressions
+            // are kept as-is.
             val (liveBindings, _) =
                 newBindings.foldRight((List.empty[Binding], newBody)) {
                     case (b, (acc, bodyAndTail)) =>

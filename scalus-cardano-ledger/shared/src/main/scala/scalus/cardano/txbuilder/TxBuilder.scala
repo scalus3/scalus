@@ -1918,6 +1918,10 @@ case class TxBuilder(
       * [[CompiledPlutus]]. Use this method directly for reference-script use cases where the script
       * is not attached to the transaction but you still want diagnostic replay.
       *
+      * '''Migration note:''' If you previously used `validator.script` (a `PlutusScript`) with
+      * `spend` or `mint`, pass `validator` (a `CompiledPlutus`) directly instead to enable
+      * automatic diagnostic replay.
+      *
       * @param compiled
       *   the compiled Plutus script to register for diagnostic replay
       */
