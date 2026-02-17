@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
@@ -378,7 +378,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val orderedCases = prepareCases(matchData, loweredScrutinee)
 
         // For PlutusV4, use Case on integer directly since orderedCases are already 0..n-1
-        val body = if lctx.targetLanguage == Language.PlutusV4 then {
+        val body = if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             val branches = orderedCases.map { preparedCase =>
                 genMatchDataConstrCase(preparedCase.sirCase, dataListVar, optTargetType, false)
             }

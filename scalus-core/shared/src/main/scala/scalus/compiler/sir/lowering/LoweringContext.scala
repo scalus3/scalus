@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 
@@ -12,6 +12,7 @@ class LoweringContext(
     var varIdSeq: Int = 0,
     var scope: LocalScope = LocalScope.empty,
     val targetLanguage: Language = Language.PlutusV3,
+    val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
     val uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) =>
         SirTypeUplcGenerator(tp, lctx.debugLevel > 30),

@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.showShort
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
@@ -27,8 +27,14 @@ import scala.collection.mutable
 abstract class BaseSimpleLowering(
     sir: SIR,
     generateErrorTraces: Boolean = false,
-    protected val targetLanguage: Language = Language.PlutusV3
+    protected val targetLanguage: Language = Language.PlutusV3,
+    private val _targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
 ) extends DataLowering:
+
+    // Backward compat: if targetLanguage == PlutusV4, force vanRossemPV
+    protected val targetProtocolVersion: MajorProtocolVersion =
+        if targetLanguage == Language.PlutusV4 then MajorProtocolVersion.vanRossemPV
+        else _targetProtocolVersion
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
@@ -205,7 +211,7 @@ abstract class BaseSimpleLowering(
         anns: AnnotationsDecl
     ): Term = {
         // For PlutusV4+, use Case on builtins directly
-        if targetLanguage == Language.PlutusV4 then {
+        if targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             lowerBooleanMatchV4(scrutineeTerm, cases, isUnchecked, anns)
         } else {
             lowerBooleanMatchLegacy(scrutineeTerm, cases, isUnchecked, anns)
@@ -364,7 +370,7 @@ abstract class BaseSimpleLowering(
         anns: AnnotationsDecl
     ): Term = {
         // For PlutusV4, try to use Case on integer if cases form a contiguous sequence from 0
-        if targetLanguage == Language.PlutusV4 then {
+        if targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             tryLowerIntegerMatchV4(scrutineeTerm, cases, anns)
                 .getOrElse(lowerIntegerMatchLegacy(scrutineeTerm, cases, isUnchecked, anns))
         } else {
@@ -637,7 +643,7 @@ abstract class BaseSimpleLowering(
                 val thenTerm = lowerInner(t)
                 val elseTerm = lowerInner(f)
                 // For PlutusV4+, use Case on boolean which is more efficient
-                if targetLanguage == Language.PlutusV4 then
+                if targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                     // Case(cond, [falseBranch, trueBranch]) - False=0, True=1
                     Term.Case(condTerm, List(elseTerm, thenTerm))
                 else !(builtinTerms(DefaultFun.IfThenElse) $ condTerm $ ~thenTerm $ ~elseTerm)

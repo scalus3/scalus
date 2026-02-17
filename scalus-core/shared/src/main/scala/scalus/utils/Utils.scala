@@ -45,7 +45,7 @@ object Utils:
             case PlutusV1 => "PlutusScriptV1"
             case PlutusV2 => "PlutusScriptV2"
             case PlutusV3 => "PlutusScriptV3"
-            case PlutusV4 => "PlutusScriptV4"
+            case PlutusV4 => "PlutusScriptV3"
         write(PlutusTextEnvelope(`type`, "", program.doubleCborHex))
 
     def readPlutusFileContent(content: String): Program =

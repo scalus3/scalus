@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.PrimitiveRepresentation
@@ -163,7 +163,7 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
           pos
         )
         // For PlutusV4, use Case on integer: index 0 -> false, index 1 -> true
-        if lctx.targetLanguage == Language.PlutusV4 then
+        if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
             lvCaseInteger(
               asInt,
               scala.collection.immutable.List(
@@ -198,7 +198,7 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
         )
 
         // For PlutusV4+, use Case on builtins directly
-        if lctx.targetLanguage == Language.PlutusV4 then {
+        if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             genMatchV4(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
         } else {
             genMatchLegacy(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
@@ -411,7 +411,7 @@ object SIRTypeUplcIntegerGenerator extends PrimitiveSirTypeGenerator {
         )
 
         // For PlutusV4, try to use Case on integer if cases form a contiguous sequence from 0
-        if lctx.targetLanguage == Language.PlutusV4 then {
+        if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             tryGenMatchV4(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)
                 .getOrElse(
                   genMatchLegacy(matchData, scrutineeInConstRepr, optTargetType, isUnchecked)

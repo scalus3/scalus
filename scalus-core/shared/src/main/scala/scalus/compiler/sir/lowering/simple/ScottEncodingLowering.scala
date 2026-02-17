@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.{AnnotationsDecl, DataDecl, SIR, SIRType}
 import scalus.uplc.*
@@ -25,8 +25,9 @@ type SimpleSirToUplcLowering = ScottEncodingLowering
 class ScottEncodingLowering(
     sir: SIR,
     generateErrorTraces: Boolean = false,
-    targetLanguage: Language = Language.PlutusV3
-) extends BaseSimpleLowering(sir, generateErrorTraces, targetLanguage):
+    targetLanguage: Language = Language.PlutusV3,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
+) extends BaseSimpleLowering(sir, generateErrorTraces, targetLanguage, targetProtocolVersion):
 
     override protected def lowerConstr(
         name: String,

@@ -344,7 +344,12 @@ enum Language extends java.lang.Enum[Language] {
     /** Plutus V3, introduced in Conway hard fork */
     case PlutusV3
 
-    /** Plutus V4, introduced in protocol version 11 */
+    /** Plutus V4, introduced in protocol version 11.
+      * @deprecated
+      *   There is no PlutusV4 in Cardano. Use PlutusV3 with targetProtocolVersion >= vanRossemPV
+      *   instead. Note: @deprecated on enum case isn't supported in Scala 3, deprecation enforced
+      *   at usage sites.
+      */
     case PlutusV4
 
     def languageId: Int = this.ordinal
@@ -369,7 +374,7 @@ object Language {
             case Language.PlutusV1 => MajorProtocolVersion.alonzoPV
             case Language.PlutusV2 => MajorProtocolVersion.vasilPV
             case Language.PlutusV3 => MajorProtocolVersion.changPV
-            case Language.PlutusV4 => MajorProtocolVersion.dijkstraPV
+            case Language.PlutusV4 => MajorProtocolVersion.vanRossemPV
         }
     }
 

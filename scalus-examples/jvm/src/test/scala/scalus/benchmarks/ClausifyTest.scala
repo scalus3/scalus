@@ -2,7 +2,7 @@ package scalus.benchmarks
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.ledger.{ExUnits, Language}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
 import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.cardano.onchain.plutus.prelude.*
@@ -17,13 +17,14 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
     inline val isAlwaysPrintComparison = true
 
-    // Use PlutusV4 VM to evaluate code compiled with PlutusV4 features (case on booleans)
-    override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV4VM()
+    // Use vanRossemPV VM to evaluate code compiled with protocol version 11 features (case on booleans)
+    override protected def plutusVM: PlutusVM =
+        PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
 
     @Ignore
     given Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      targetLanguage = Language.PlutusV4,
+      targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
       generateErrorTraces = true,
       optimizeUplc = false,
       debug = false
@@ -42,7 +43,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 38414376L, steps = 10585218745L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 75014277L, steps = 22595514040L)
@@ -75,7 +76,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 47984596L, steps = 13164068261L)
             else
                 options.targetLoweringBackend match {
@@ -111,7 +112,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 127400838L, steps = 34890849819L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 248968345L, steps = 74900219564L)
@@ -1083,7 +1084,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 180742722L, steps = 46259878217L)
             else ExUnits(memory = 344589971L, steps = 100725854354L)
         // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
@@ -1110,7 +1111,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 608492502L, steps = 166680757721L)
             else ExUnits(memory = 1205574641L, steps = 363306861308L)
         // val scalusBudget = ExUnits(memory = 736503639L, steps = 127163562591L)

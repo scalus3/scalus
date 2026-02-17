@@ -2,7 +2,7 @@ package scalus.compiler
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
 import scalus.compiler.{compile, Options}
 import scalus.cardano.onchain.plutus.prelude.List as PList
@@ -35,8 +35,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
         )
 
     test("Pattern match on Data.Constr - extract constructor tag") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         // Compile the pattern matching function
         val sirFun = compile { (d: Data) =>
@@ -53,8 +54,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Pattern match on Data.I - extract integer") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile { (d: Data) =>
             d match
@@ -69,8 +71,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Pattern match on Data - type discrimination") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile { (d: Data) =>
             d match
@@ -88,8 +91,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Pattern match on Data in V4 generates Case instruction") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile { (d: Data) =>
             d match
@@ -111,8 +115,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     // ============================================================================
 
     test("Construct Data.I inside compile block") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         // Use a function to construct Data.I from an Integer parameter
         val sirFun = compile { (i: BigInt) =>
@@ -126,8 +131,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Construct Data.B inside compile block") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         // Use a function to construct Data.B from a ByteString parameter
         val sirFun = compile { (bs: ByteString) =>
@@ -146,8 +152,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Construct Data.List inside compile block") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         // Use a function to construct Data.List from a list parameter
         val sirFun = compile { (elements: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
@@ -166,8 +173,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Construct Data.Map inside compile block") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         // Use a function to construct Data.Map from a list of pairs parameter
         val sirFun = compile {
@@ -199,8 +207,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Construct Data.Constr inside compile block") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         // Use a function to construct Data.Constr from tag and args parameters
         val sirFun = compile {
@@ -226,8 +235,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Construct and immediately match on Data.I") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile { (i: BigInt) =>
             val d: Data = Data.I(i)
@@ -243,8 +253,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Construct and immediately match on Data.B") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val testBytes = ByteString.fromHex("CAFE")
         val sirFun = compile { (bs: ByteString) =>
@@ -269,8 +280,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     // ============================================================================
 
     test("Select value field from Data.I") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile { (i: BigInt) =>
             val x = Data.I(i)
@@ -284,8 +296,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Select value field from Data.B") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val testBytes = ByteString.fromHex("DEADBEEF")
         val sirFun = compile { (bs: ByteString) =>
@@ -304,8 +317,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Select values field from Data.List") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val inputList =
             scalus.cardano.onchain.plutus.prelude.List[Data](Data.I(BigInt(1)), Data.I(BigInt(2)))
@@ -323,8 +337,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Select values field from Data.Map") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val inputPairs = List(
           (Data.I(BigInt(1)), Data.I(BigInt(10))),
@@ -362,8 +377,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Select constr field from Data.Constr") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile {
             (tag: BigInt, args: scalus.cardano.onchain.plutus.prelude.List[Data]) =>
@@ -386,8 +402,9 @@ class DataPatternMatchingTest extends AnyFunSuite:
     }
 
     test("Select args field from Data.Constr") {
-        given PlutusVM = PlutusVM.makePlutusV4VM()
-        given Options = Options.default.copy(targetLanguage = Language.PlutusV4)
+        given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+        given Options =
+            Options.default.copy(targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
 
         val sirFun = compile {
             (tag: BigInt, args: scalus.cardano.onchain.plutus.prelude.List[Data]) =>

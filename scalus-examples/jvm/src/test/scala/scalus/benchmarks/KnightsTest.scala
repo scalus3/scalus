@@ -3,7 +3,7 @@ package scalus.benchmarks
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
-import scalus.cardano.ledger.{ExUnits, Language}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.cardano.onchain.plutus.prelude.*
@@ -13,12 +13,13 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     import KnightsTest.{*, given}
     import scalus.uplc.eval.PlutusVM
 
-    // Use PlutusV4 VM to evaluate code compiled with PlutusV4 features (case on booleans)
-    override protected def plutusVM: PlutusVM = PlutusVM.makePlutusV4VM()
+    // Use vanRossemPV VM to evaluate code compiled with protocol version 11 features (case on booleans)
+    override protected def plutusVM: PlutusVM =
+        PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
 
     given Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      targetLanguage = Language.PlutusV4,
+      targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
@@ -38,7 +39,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 229_244333L, steps = 59313_036614L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
@@ -138,7 +139,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 611_419070L, steps = 151964_569078L)
             else
                 options.targetLoweringBackend match
@@ -240,7 +241,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         val options = summon[Options]
         val scalusBudget =
-            if options.targetLanguage == Language.PlutusV4 then
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ExUnits(memory = 1233_662109L, steps = 302928_599877L)
             else
                 options.targetLoweringBackend match {

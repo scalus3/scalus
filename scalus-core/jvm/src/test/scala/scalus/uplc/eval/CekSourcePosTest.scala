@@ -204,7 +204,7 @@ class CekSourcePosTest extends AnyFunSuite {
         // which gives proper MissingCaseBranch errors with source positions.
         import scalus.compiler.sir.lowering.simple.SumOfProductsLowering
         import scalus.cardano.ledger.Word64
-        val v4vm = PlutusVM.makePlutusV4VM()
+        val v4vm = PlutusVM.makePlutusV3VM(scalus.cardano.ledger.MajorProtocolVersion.vanRossemPV)
         val sir = SampleValidator.incompleteCaseMatch
         val uplc = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
         // Apply the function to Nil (Constr tag 0 = Nil in SumOfProducts encoding)

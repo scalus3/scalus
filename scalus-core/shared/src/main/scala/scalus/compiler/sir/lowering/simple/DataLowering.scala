@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering.simple
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
 import scalus.uplc.*
@@ -156,7 +156,7 @@ trait DataLowering { self: BaseSimpleLowering =>
             .orElse(wildcardCase)
             .getOrElse(SIR.Case(Pattern.Wildcard, errorBranch("Unmatched Data.B"), anns))
 
-        if self.targetLanguage == Language.PlutusV4 then
+        if self.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
             // For PlutusV4: Case on Data with 5 branches in order: Constr, Map, List, I, B
             // Branches are lambdas that receive the inner values
             val constrBranch = lowerDataCaseBranchV4(constrCase, SIRType.Data.Constr.name)

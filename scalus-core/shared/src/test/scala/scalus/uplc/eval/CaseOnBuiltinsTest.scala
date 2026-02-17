@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{ExUnits, Word64}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion, Word64}
 import scalus.uplc.*
 import scalus.uplc.Term.*
 
@@ -9,7 +9,7 @@ import scala.language.implicitConversions
 
 class CaseOnBuiltinsTest extends AnyFunSuite:
 
-    val v4vm: PlutusVM = PlutusVM.makePlutusV4VM()
+    val v4vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
     val v3vm: PlutusVM = PlutusVM.makePlutusV3VM()
 
     def evalV4(term: Term): Term =

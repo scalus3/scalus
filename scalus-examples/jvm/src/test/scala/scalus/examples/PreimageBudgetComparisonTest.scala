@@ -8,7 +8,7 @@ import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.compiler.{compile, offsetOf, Options}
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.cardano.onchain.plutus.v1.{PubKeyHash, TxId}
 import scalus.cardano.onchain.plutus.v2.*
 import scalus.cardano.onchain.plutus.prelude.List
@@ -244,11 +244,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
         locally {
             given Options = Options(
               targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-              targetLanguage = Language.PlutusV4,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
               generateErrorTraces = false,
               optimizeUplc = true
             )
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val compiled = compile(PreimageValidatorWithListMatch.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
             evalAndReport(
@@ -262,11 +262,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
         locally {
             given Options = Options(
               targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-              targetLanguage = Language.PlutusV4,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
               generateErrorTraces = false,
               optimizeUplc = true
             )
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val compiled = compile(PreimageValidatorWithSigIndex.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
             evalAndReport(
@@ -299,11 +299,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
         locally {
             given Options = Options(
               targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-              targetLanguage = Language.PlutusV4,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
               generateErrorTraces = false,
               optimizeUplc = true
             )
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val compiled = compile(OptimizedPreimageValidatorV4.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
             info("V2 UPLC:\n" + program.term.pretty.render(120))
@@ -335,11 +335,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
         locally {
             given Options = Options(
               targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-              targetLanguage = Language.PlutusV4,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
               generateErrorTraces = false,
               optimizeUplc = true
             )
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val compiled = compile(PreimageValidator.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV2
             evalAndReport(
@@ -353,11 +353,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
         locally {
             given Options = Options(
               targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-              targetLanguage = Language.PlutusV4,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
               generateErrorTraces = false,
               optimizeUplc = true
             )
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val compiled = compile(PreimageValidatorWithListMatch.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
             evalAndReport(
@@ -371,11 +371,11 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
         locally {
             given Options = Options(
               targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-              targetLanguage = Language.PlutusV4,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
               generateErrorTraces = false,
               optimizeUplc = true
             )
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val compiled = compile(PreimageValidatorWithSigIndex.preimageValidator)
             val program = compiled.toUplc(generateErrorTraces = false).plutusV3
             evalAndReport(
@@ -387,7 +387,7 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
 
         // 7. Direct UPLC construction (V4, no compiler plugin)
         locally {
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val program = DirectPreimageValidator.preimageValidator.plutusV3
             info("V7 UPLC:\n" + program.term.pretty.render(120))
             evalAndReport(
@@ -399,7 +399,7 @@ class PreimageBudgetComparisonTest extends AnyFunSuite {
 
         // 7b. Direct UPLC with CaseConstrApply optimization
         locally {
-            given PlutusVM = PlutusVM.makePlutusV4VM()
+            given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
             val optimized =
                 scalus.uplc.transform.CaseConstrApply(DirectPreimageValidator.preimageValidator)
             val program = optimized.plutusV3

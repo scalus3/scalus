@@ -20,11 +20,11 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
         val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
         val baseParams = MachineParams.fromCostModels(
           CardanoInfo.mainnet.protocolParams.costModels,
-          Language.PlutusV4,
-          MajorProtocolVersion.dijkstraPV
+          Language.PlutusV3,
+          MajorProtocolVersion.vanRossemPV
         )
         val params = MachineParams(baseParams.machineCosts, builtinCostModel)
-        PlutusVM.makePlutusV4VM(params)
+        PlutusVM.makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
     }
 
     protected given PlutusVM = plutusVM

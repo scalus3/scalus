@@ -33,11 +33,21 @@ object ProtocolVersion {
     val vasilPV = ProtocolVersion(7, 0)
     val valentinePV = ProtocolVersion(8, 0)
     val conwayPV = ProtocolVersion(9, 0)
+    val vanRossemPV = ProtocolVersion(11, 0)
     val futurePV = ProtocolVersion(Int.MaxValue, 0)
 
     // Known protocol versions
     val knownPVs: SortedSet[ProtocolVersion] =
-        SortedSet(shelleyPV, allegraPV, maryPV, alonzoPV, vasilPV, valentinePV, conwayPV)
+        SortedSet(
+          shelleyPV,
+          allegraPV,
+          maryPV,
+          alonzoPV,
+          vasilPV,
+          valentinePV,
+          conwayPV,
+          vanRossemPV
+        )
 }
 
 case class MajorProtocolVersion(version: Int) extends Ordered[MajorProtocolVersion]
@@ -55,7 +65,9 @@ object MajorProtocolVersion {
     val valentinePV = MajorProtocolVersion(8)
     val changPV = MajorProtocolVersion(9)
     val plominPV = MajorProtocolVersion(10)
-    val dijkstraPV = MajorProtocolVersion(11)
+    val vanRossemPV = MajorProtocolVersion(11)
+    @deprecated("Use vanRossemPV instead", "0.8.0")
+    val dijkstraPV: MajorProtocolVersion = vanRossemPV
     val futurePV = MajorProtocolVersion(Int.MaxValue)
 
     // Known protocol versions
@@ -69,6 +81,6 @@ object MajorProtocolVersion {
           valentinePV,
           changPV,
           plominPV,
-          dijkstraPV
+          vanRossemPV
         )
 }

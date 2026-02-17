@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
 import scalus.compiler.sir.{SIR, SIRType}
 import scalus.uplc.*
@@ -13,7 +13,8 @@ class SirToUplcV3Lowering(
     upcastTo: SIRType = SIRType.FreeUnificator,
     representation: LoweredValueRepresentation = TypeVarRepresentation(true),
     debug: Boolean = false,
-    targetLanguage: Language = Language.PlutusV3
+    targetLanguage: Language = Language.PlutusV3,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
 ) {
 
     private var _lastLoweredValue: Option[LoweredValue] = None
@@ -76,10 +77,15 @@ class SirToUplcV3Lowering(
     def lastLoweredValue: Option[LoweredValue] = _lastLoweredValue
 
     def newLoweringContext: LoweringContext = {
+        // Backward compat: if targetLanguage == PlutusV4, force vanRossemPV
+        val effectivePV =
+            if targetLanguage == Language.PlutusV4 then MajorProtocolVersion.vanRossemPV
+            else targetProtocolVersion
         val retval = LoweringContext(
           zCombinatorNeeded = false,
           decls = MutableMap.empty,
           targetLanguage = targetLanguage,
+          targetProtocolVersion = effectivePV,
           generateErrorTraces = generateErrorTraces,
           debug = debug
         )

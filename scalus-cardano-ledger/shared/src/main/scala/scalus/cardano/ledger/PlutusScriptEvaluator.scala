@@ -313,7 +313,8 @@ object PlutusScriptEvaluator {
                 costModels,
                 PlutusV3,
                 protocolMajorVersion
-              )
+              ),
+              protocolMajorVersion
             )
 
         override def evalPlutusScriptsWithContexts(

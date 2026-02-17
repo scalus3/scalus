@@ -1,7 +1,7 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
@@ -542,7 +542,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
         val consHeadRepresentation = defaultElementRepresentation(elementType, matchData.anns.pos)
 
-        val useCaseOnList = lctx.targetLanguage == Language.PlutusV4
+        val useCaseOnList = lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV
 
         // For PlutusV4 Case on list, head/tail are lambda parameters (no optRhs)
         // For ChooseList, they're derived from headList/tailList builtins
@@ -681,7 +681,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       loweredConsBodyR,
                       optLoweredNilBodyR.getOrElse(
                         throw LoweringException(
-                          "Nil case is required for ChooseList (V3). Use @unchecked only with PlutusV4",
+                          "Nil case is required for ChooseList (V3). Use @unchecked only with targetProtocolVersion >= vanRossemPV",
                           matchData.anns.pos
                         )
                       ),

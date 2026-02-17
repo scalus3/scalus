@@ -17,8 +17,8 @@ import scala.language.implicitConversions
 
 /** Tests for SumOfProductsLowering backend.
   *
-  * Extends SimpleLoweringTestBase to inherit evaluation-based Data tests. Uses PlutusV4 which
-  * supports Constr/Case instructions and Case on Data.
+  * Extends SimpleLoweringTestBase to inherit evaluation-based Data tests. Uses PlutusV3 which
+  * supports Constr/Case instructions.
   */
 class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
 
@@ -26,8 +26,8 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
     override def lower(sir: SIR): Term =
         SumOfProductsLowering(sir, generateErrorTraces = false).lower()
 
-    // Provide PlutusVM for evaluation (V4 for Constr/Case support)
-    override given vm: PlutusVM = PlutusVM.makePlutusV4VM()
+    // Provide PlutusVM for evaluation (V3 for Constr/Case support)
+    override given vm: PlutusVM = PlutusVM.makePlutusV3VM()
 
     // Extension for structural comparison tests (uses alpha-equivalence)
     extension (sir: SIR)

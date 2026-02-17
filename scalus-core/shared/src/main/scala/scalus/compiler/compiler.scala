@@ -1,13 +1,14 @@
 package scalus.compiler
 
 import scalus.uplc.builtin.Data
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType, TargetLoweringBackend}
 import scalus.utils.Macros
 
 case class Options(
     targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
     targetLanguage: Language = Language.PlutusV3,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
@@ -29,6 +30,13 @@ object Options {
       generateErrorTraces = false,
       optimizeUplc = true,
       debug = false
+    )
+
+    /** Preset for van Rossem hard fork (protocol version 11) features. Enables case-on-builtins,
+      * batch6 builtins, and dropList field access.
+      */
+    val vanRossem: Options = Options(
+      targetProtocolVersion = MajorProtocolVersion.vanRossemPV
     )
 }
 

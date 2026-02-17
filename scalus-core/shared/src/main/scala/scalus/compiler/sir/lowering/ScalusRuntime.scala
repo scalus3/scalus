@@ -1,6 +1,6 @@
 package scalus.compiler.sir.lowering
 
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
@@ -227,7 +227,7 @@ object ScalusRuntime {
                 )
             }
 
-            if lctx.targetLanguage == Language.PlutusV4 then {
+            if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
                 // For PlutusV4: use Case on Pair
                 val fstVarId = lctx.uniqueVarName("pair_fst")
                 val fstVar = new VariableLoweredValue(
@@ -455,7 +455,7 @@ object ScalusRuntime {
         outType: SIRType,
         outRepresentation: LoweredValueRepresentation
     )(using lctx: LoweringContext): LoweredValue = {
-        if lctx.targetLanguage == Language.PlutusV4 then {
+        if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             // For PlutusV4: use Case on list with head/tail as lambda parameters
             val headValId = lctx.uniqueVarName("headVal")
             val headVal = new VariableLoweredValue(

@@ -48,15 +48,24 @@ package object scalus {
             val backend = options.targetLoweringBackend
             val uplc = backend match
                 case TargetLoweringBackend.ScottEncodingLowering =>
-                    ScottEncodingLowering(sir, generateErrorTraces).lower()
+                    ScottEncodingLowering(
+                      sir,
+                      generateErrorTraces,
+                      targetProtocolVersion = options.targetProtocolVersion
+                    ).lower()
                 case TargetLoweringBackend.SumOfProductsLowering =>
-                    SumOfProductsLowering(sir, generateErrorTraces).lower()
+                    SumOfProductsLowering(
+                      sir,
+                      generateErrorTraces,
+                      targetProtocolVersion = options.targetProtocolVersion
+                    ).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
                     SirToUplcV3Lowering(
                       sir,
                       generateErrorTraces = generateErrorTraces,
                       debug = debug,
-                      targetLanguage = options.targetLanguage
+                      targetLanguage = options.targetLanguage,
+                      targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
             val retval =
                 if optimizeUplc then
@@ -91,7 +100,8 @@ package object scalus {
               sir,
               generateErrorTraces = options.generateErrorTraces,
               debug = options.debug,
-              targetLanguage = options.targetLanguage
+              targetLanguage = options.targetLanguage,
+              targetProtocolVersion = options.targetProtocolVersion
             ).toLoweredValue()
             retval
         }
@@ -100,15 +110,24 @@ package object scalus {
             val backend = options.targetLoweringBackend
             val uplc = backend match
                 case TargetLoweringBackend.ScottEncodingLowering =>
-                    ScottEncodingLowering(sir, options.generateErrorTraces).lower()
+                    ScottEncodingLowering(
+                      sir,
+                      options.generateErrorTraces,
+                      targetProtocolVersion = options.targetProtocolVersion
+                    ).lower()
                 case TargetLoweringBackend.SumOfProductsLowering =>
-                    SumOfProductsLowering(sir, options.generateErrorTraces).lower()
+                    SumOfProductsLowering(
+                      sir,
+                      options.generateErrorTraces,
+                      targetProtocolVersion = options.targetProtocolVersion
+                    ).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
                     SirToUplcV3Lowering(
                       sir,
                       generateErrorTraces = options.generateErrorTraces,
                       debug = options.debug,
-                      targetLanguage = options.targetLanguage
+                      targetLanguage = options.targetLanguage,
+                      targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
             val retval =
                 if options.optimizeUplc then

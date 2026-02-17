@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import org.typelevel.paiges.Doc
-import scalus.cardano.ledger.Language
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
@@ -229,7 +229,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                           other,
                           pos
                         )
-                if lctx.targetLanguage == Language.PlutusV4 then {
+                if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
                     // For PlutusV4: use Case on Pair
                     val frsVarId = lctx.uniqueVarName("pair_frs")
                     val frsVar = new VariableLoweredValue(
@@ -444,7 +444,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val scopeVars0: Set[IdentifiableLoweredValue] =
             if addList0ToScope then Set(list0) else Set.empty
         val (selHeadList, scopeVars) =
-            if lctx.targetLanguage == Language.PlutusV4 && fieldIndex >= 2 then
+            if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV && fieldIndex >= 2
+            then
                 // dropList(fieldIndex, list) is more efficient for n >= 2
                 val droppedId = list0id + s"_drop_$fieldIndex"
                 val droppedList = lctx.scope.getById(droppedId) match
@@ -694,7 +695,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val frsRepr = lctx.typeGenerator(frsTp).defaultDataRepresentation(frsTp)
         val sndRepr = lctx.typeGenerator(sndTp).defaultDataRepresentation(sndTp)
 
-        if lctx.targetLanguage == Language.PlutusV4 then {
+        if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             // For PlutusV4: use Case on Pair - frs and snd are lambda parameters
             val frsVarId = lctx.uniqueVarName(frsName)
             val frsVar = new VariableLoweredValue(

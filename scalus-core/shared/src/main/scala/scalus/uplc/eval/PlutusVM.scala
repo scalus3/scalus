@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import scalus.uplc.builtin.{platform, PlatformSpecific, given}
-import scalus.cardano.ledger.{CardanoInfo, Language}
+import scalus.cardano.ledger.{CardanoInfo, Language, MajorProtocolVersion}
 import scalus.uplc.*
 
 /** Plutus VM facade.
@@ -26,7 +26,8 @@ class PlutusVM(
     val language: Language,
     val machineParams: MachineParams,
     val semanticVariant: BuiltinSemanticsVariant,
-    platformSpecific: PlatformSpecific
+    platformSpecific: PlatformSpecific,
+    val protocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
 ) {
     private val builtins = new CardanoBuiltins(
       machineParams.builtinCostModel,
@@ -34,7 +35,8 @@ class PlutusVM(
       semanticVariant
     )
 
-    private val caseOnBuiltinsEnabled: Boolean = language == Language.PlutusV4
+    private val caseOnBuiltinsEnabled: Boolean =
+        protocolVersion >= MajorProtocolVersion.vanRossemPV || language == Language.PlutusV4
 
     /** Evaluates a Plutus script according to the Plutus specification.
       *
@@ -236,41 +238,66 @@ object PlutusVM {
         makePlutusV3VM(params)
     }
 
-    /** Creates a Plutus V4 VM with custom parameters.
+    /** Creates a Plutus V3 VM with a specific protocol version.
+      *
+      * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
+      * (case-on-builtins, batch6 builtins like ExpModInteger).
       *
       * @param params
       *   Custom machine parameters to use for the VM
+      * @param protocolVersion
+      *   The target protocol version
       * @return
-      *   A configured Plutus V4 VM instance
+      *   A configured Plutus V3 VM instance
       */
-    def makePlutusV4VM(params: MachineParams): PlutusVM = {
-        import scalus.cardano.ledger.MajorProtocolVersion
-        // PlutusV4 requires protocol version 11 (dijkstraPV)
+    def makePlutusV3VM(params: MachineParams, protocolVersion: MajorProtocolVersion): PlutusVM = {
         val semanticVariant = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
-          MajorProtocolVersion.dijkstraPV,
-          Language.PlutusV4
+          protocolVersion,
+          Language.PlutusV3
         )
         new PlutusVM(
-          Language.PlutusV4,
+          Language.PlutusV3,
           params,
           semanticVariant,
-          platform
+          platform,
+          protocolVersion
         )
+    }
+
+    /** Creates a Plutus V3 VM with default parameters and a specific protocol version.
+      *
+      * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
+      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      *
+      * @param protocolVersion
+      *   The target protocol version
+      * @return
+      *   A Plutus V3 VM instance with default parameters
+      */
+    def makePlutusV3VM(protocolVersion: MajorProtocolVersion): PlutusVM = {
+        val params = MachineParams.defaultParamsFor(Language.PlutusV3, protocolVersion)
+        makePlutusV3VM(params, protocolVersion)
+    }
+
+    /** Creates a Plutus V4 VM with custom parameters.
+      *
+      * @deprecated
+      *   Use makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV) instead. There is no PlutusV4
+      *   in Cardano.
+      */
+    @deprecated("Use makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV) instead", "0.8.0")
+    def makePlutusV4VM(params: MachineParams): PlutusVM = {
+        makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
     }
 
     /** Creates a Plutus V4 VM with default parameters.
       *
-      * @return
-      *   A Plutus V4 VM instance with default parameters
+      * @deprecated
+      *   Use makePlutusV3VM(MajorProtocolVersion.vanRossemPV) instead. There is no PlutusV4 in
+      *   Cardano.
       */
+    @deprecated("Use makePlutusV3VM(MajorProtocolVersion.vanRossemPV) instead", "0.8.0")
     def makePlutusV4VM(): PlutusVM = {
-        import scalus.cardano.ledger.MajorProtocolVersion
-        // PlutusV4 requires protocol version 11 (dijkstraPV)
-        val params = MachineParams.fromCostModels(
-          CardanoInfo.mainnet.protocolParams.costModels,
-          Language.PlutusV4,
-          MajorProtocolVersion.dijkstraPV
-        )
-        makePlutusV4VM(params)
+        makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
     }
 }
