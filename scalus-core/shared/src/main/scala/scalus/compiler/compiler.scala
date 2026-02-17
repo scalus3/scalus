@@ -9,6 +9,7 @@ case class Options(
     targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
     targetLanguage: Language = Language.PlutusV3,
     generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
+    removeTraces: Boolean = SIRDefaultOptions.removeTraces,
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
     debug: Boolean = false
@@ -27,6 +28,7 @@ object Options {
     val release: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = false,
+      removeTraces = true,
       optimizeUplc = true,
       debug = false
     )
