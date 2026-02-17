@@ -31,6 +31,15 @@ trait BlockchainReaderTF[F[_]] {
     /** Returns the current slot number.
       */
     def currentSlot: F[SlotNo]
+
+    /** Check the status of a transaction on the blockchain.
+      *
+      * @param txHash
+      *   the transaction hash to check
+      * @return
+      *   the current status of the transaction
+      */
+    def checkTransaction(txHash: TransactionHash): F[TransactionStatus]
 }
 
 /** Trait for blockchain providers with generic effect type. (TF is for "tagless final" style, often
@@ -43,6 +52,44 @@ trait BlockchainProviderTF[F[_]] extends BlockchainReaderTF[F] {
     /** Submits a transaction to the network.
       */
     def submit(transaction: Transaction): F[Either[SubmitError, TransactionHash]]
+
+    /** Poll for transaction confirmation, checking periodically until confirmed or max attempts
+      * reached.
+      *
+      * @param txHash
+      *   the transaction hash to poll for
+      * @param maxAttempts
+      *   maximum number of polling attempts (default 60)
+      * @param delayMs
+      *   delay between attempts in milliseconds (default 1000)
+      * @return
+      *   the last observed transaction status
+      */
+    def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int = 60,
+        delayMs: Long = 1000
+    ): F[TransactionStatus]
+
+    /** Submit a transaction and poll until confirmed.
+      *
+      * Composes [[submit]] and [[pollForConfirmation]]: submits the transaction, then polls until
+      * it is confirmed or the maximum number of attempts is reached.
+      *
+      * @param transaction
+      *   the transaction to submit
+      * @param maxAttempts
+      *   maximum number of polling attempts (default 60)
+      * @param delayMs
+      *   delay between attempts in milliseconds (default 1000)
+      * @return
+      *   Right(txHash) if confirmed, Left(error) if submission failed or not confirmed
+      */
+    def submitAndPoll(
+        transaction: Transaction,
+        maxAttempts: Int = 60,
+        delayMs: Long = 1000
+    ): F[Either[SubmitError, TransactionHash]]
 
 }
 
@@ -135,6 +182,17 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
       */
     def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]]
 
+    /** Check the status of a transaction on the blockchain.
+      *
+      * Default implementation checks for UTxOs from the transaction. For emulators without a
+      * mempool concept, this returns either Confirmed or NotFound.
+      */
+    def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
+        findUtxos(UtxoQuery(UtxoSource.FromTransaction(txHash))).map {
+            case Right(_) => TransactionStatus.Confirmed
+            case Left(_)  => TransactionStatus.NotFound
+        }(executionContext)
+
     /** Query UTxOs using lambda DSL.
       *
       * This method translates a lambda expression to a UtxoQuery at compile time and returns a
@@ -225,6 +283,41 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainRea
     // - queryUtxos (returns UtxoQueryWithReader)
 
     def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]]
+
+    /** Poll for transaction confirmation.
+      *
+      * Default implementation for emulators: a single check is sufficient since confirmation is
+      * instant.
+      */
+    def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int = 60,
+        delayMs: Long = 1000
+    ): Future[TransactionStatus] =
+        checkTransaction(txHash)
+
+    /** Submit a transaction and poll until confirmed.
+      *
+      * Default implementation composes [[submit]] and [[pollForConfirmation]].
+      */
+    def submitAndPoll(
+        transaction: Transaction,
+        maxAttempts: Int = 60,
+        delayMs: Long = 1000
+    ): Future[Either[SubmitError, TransactionHash]] =
+        submit(transaction).flatMap {
+            case Left(err) => Future.successful(Left(err))
+            case Right(txHash) =>
+                pollForConfirmation(txHash, maxAttempts, delayMs).map {
+                    case TransactionStatus.Confirmed => Right(txHash)
+                    case status =>
+                        Left(
+                          NetworkSubmitError.ConnectionError(
+                            s"Transaction ${txHash.toHex} not confirmed, last status: $status"
+                          )
+                        )
+                }(executionContext)
+        }(executionContext)
 
     /** Find a single UTxO by address and optional filters.
       *

@@ -345,6 +345,34 @@ object Scenario {
 
             override def currentSlot: Scenario[SlotNo] =
                 Scenario.now
+
+            override def checkTransaction(
+                txHash: TransactionHash
+            ): Scenario[TransactionStatus] =
+                leaf { s =>
+                    Done(
+                      s,
+                      s.emulator.findUtxos(
+                        UtxoQuery(UtxoSource.FromTransaction(txHash))
+                      ) match
+                          case Right(_) => TransactionStatus.Confirmed
+                          case Left(_)  => TransactionStatus.NotFound
+                    )
+                }
+
+            override def pollForConfirmation(
+                txHash: TransactionHash,
+                maxAttempts: Int,
+                delayMs: Long
+            ): Scenario[TransactionStatus] =
+                checkTransaction(txHash) // emulator is instant
+
+            override def submitAndPoll(
+                transaction: Transaction,
+                maxAttempts: Int,
+                delayMs: Long
+            ): Scenario[Either[SubmitError, TransactionHash]] =
+                Scenario.submit(transaction) // emulator is instant, no polling needed
         }
         scenarioLogicMonad.pure(p)
     }

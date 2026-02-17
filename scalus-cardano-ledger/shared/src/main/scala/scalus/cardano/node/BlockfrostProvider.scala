@@ -35,6 +35,8 @@ class BlockfrostProvider(
     ec: ExecutionContext
 ) extends BlockchainProvider {
 
+    private val log = scribe.Logger[BlockfrostProvider]
+
     override def executionContext: ExecutionContext = ec
 
     @volatile private var _cardanoInfo: CardanoInfo = initialCardanoInfo
@@ -83,6 +85,7 @@ class BlockfrostProvider(
     ): Future[Either[SubmitError, TransactionHash]] = {
         val url = s"$baseUrl/tx/submit"
         val txCbor = tx.toCbor
+        log.info(s"Submitting tx ${tx.id.toHex} (${txCbor.length} bytes CBOR)")
 
         rateLimited(
           basicRequest
@@ -92,7 +95,9 @@ class BlockfrostProvider(
               .send(backend)
         ).map { response =>
             response.code.code match {
-                case c if c >= 200 && c < 300 => Right(tx.id)
+                case c if c >= 200 && c < 300 =>
+                    log.info(s"Tx ${tx.id.toHex} submitted successfully")
+                    Right(tx.id)
                 case c =>
                     val errorMsg = response.body.left.getOrElse(response.body.toString)
                     // Try to extract the message from Blockfrost JSON error response
@@ -103,11 +108,87 @@ class BlockfrostProvider(
                         } catch {
                             case _: Exception => errorMsg
                         }
-                    Left(SubmitError.fromHttpResponse(c, message))
+                    val error = SubmitError.fromHttpResponse(c, message)
+                    log.warn(s"Tx ${tx.id.toHex} rejected (HTTP $c): $message")
+                    Left(error)
             }
         }.recover { case exception =>
+            log.warn(s"Tx ${tx.id.toHex} submit exception: ${exception.getMessage}")
             Left(SubmitError.ConnectionError(s"Blockfrost submit exception", Some(exception)))
         }
+    }
+
+    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
+        checkTransactionHex(txHash.toHex)
+
+    /** Internal implementation with precomputed hex hash to avoid repeated conversions during
+      * polling.
+      */
+    private def checkTransactionHex(hexHash: String): Future[TransactionStatus] = {
+        val txUrl = s"$baseUrl/txs/$hexHash"
+        rateLimited(
+          basicRequest.get(uri"$txUrl").headers(headers).send(backend)
+        ).flatMap { response =>
+            if response.code.isSuccess then {
+                log.debug(s"checkTransaction($hexHash): Confirmed")
+                Future.successful(TransactionStatus.Confirmed)
+            } else if response.code == StatusCode.NotFound then {
+                // Not confirmed yet — check mempool
+                val mempoolUrl = s"$baseUrl/mempool/$hexHash"
+                rateLimited(
+                  basicRequest.get(uri"$mempoolUrl").headers(headers).send(backend)
+                ).map { mempoolResponse =>
+                    if mempoolResponse.code.isSuccess then {
+                        log.debug(s"checkTransaction($hexHash): Pending (in mempool)")
+                        TransactionStatus.Pending
+                    } else {
+                        log.debug(s"checkTransaction($hexHash): NotFound")
+                        TransactionStatus.NotFound
+                    }
+                }
+            } else {
+                log.debug(s"checkTransaction($hexHash): NotFound (HTTP ${response.code})")
+                Future.successful(TransactionStatus.NotFound)
+            }
+        }.recover { case scala.util.control.NonFatal(e) =>
+            log.debug(s"checkTransaction($hexHash): NotFound (error: ${e.getMessage})")
+            TransactionStatus.NotFound
+        }
+    }
+
+    override def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int = 60,
+        delayMs: Long = 1000
+    ): Future[TransactionStatus] = {
+        val hexHash = txHash.toHex
+
+        def poll(attempt: Int, lastStatus: TransactionStatus): Future[TransactionStatus] =
+            if attempt >= maxAttempts then {
+                log.warn(
+                  s"pollForConfirmation($hexHash): not confirmed after $maxAttempts attempts, last status: $lastStatus"
+                )
+                Future.successful(lastStatus)
+            } else {
+                checkTransactionHex(hexHash).flatMap { status =>
+                    status match
+                        case TransactionStatus.Confirmed =>
+                            log.info(
+                              s"pollForConfirmation($hexHash): Confirmed (attempt ${attempt + 1}/$maxAttempts)"
+                            )
+                            Future.successful(TransactionStatus.Confirmed)
+                        case other =>
+                            if (attempt + 1) % 10 == 0 then
+                                log.debug(
+                                  s"pollForConfirmation($hexHash): $other (attempt ${attempt + 1}/$maxAttempts)"
+                                )
+                            BlockfrostProviderPlatform.delayFuture(delayMs).flatMap { _ =>
+                                poll(attempt + 1, other)
+                            }
+                }
+            }
+
+        poll(0, TransactionStatus.NotFound)
     }
 
     override def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] = {
