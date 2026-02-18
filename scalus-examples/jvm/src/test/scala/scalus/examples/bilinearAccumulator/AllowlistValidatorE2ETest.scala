@@ -6,7 +6,6 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
-import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.builtin.{Builtins, Data}
 import scalus.uplc.builtin.Builtins.bls12_381_G2_compress
 import scalus.utils.await
@@ -50,9 +49,9 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         val script = Script.PlutusV3(applied.program.cborByteString)
         val scriptAddress = scriptAddr(script.scriptHash)
 
-        // Build redeemer: (memberPkh, compressed proof)
+        // Redeemer is just the compressed proof; member identity comes from tx.signatories
         val compressedProof = bls12_381_G2_compress(proof)
-        val redeemer = Data.Constr(0, PList(Data.B(alicePkh), Data.B(compressedProof)))
+        val redeemer = Data.B(compressedProof)
 
         // Create initial UTXOs
         val scriptUtxoEntry = TransactionInput(genesisHash, 0) ->
@@ -64,7 +63,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
 
         val emulator = Emulator(Map(scriptUtxoEntry, feePayerUtxo, collateralUtxo))
 
-        // Build, sign, and submit transaction — Alice must be a required signer
+        // Alice must be a required signer so her pkh appears in tx.signatories
         val tx = TxBuilder(summon[CardanoInfo])
             .spend(Utxo(scriptUtxoEntry), redeemer, script, Set(alicePkh))
             .spend(Utxo(feePayerUtxo))
@@ -79,7 +78,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         assert(result.isRight, s"Transaction should succeed: ${result.left.toOption.getOrElse("")}")
     }
 
-    test("invalid proof rejects spending") {
+    test("non-member cannot spend with a copied proof") {
         val alicePkh = Party.Alice.addrKeyHash
         val bobPkh = Party.Bob.addrKeyHash
         val charlesPkh = Party.Charles.addrKeyHash
@@ -87,7 +86,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
 
         val setup = BilinearAccumulatorProver.trustedSetup(tau, fullSet.size)
         val acc = BilinearAccumulatorProver.accumulate(setup, fullSet)
-        // Proof is for Alice, but redeemer claims Bob's PubKeyHash
+        // Proof is for Alice's pkh
         val proof = BilinearAccumulatorProver.membershipProof(
           setup,
           fullSet,
@@ -99,26 +98,28 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         val script = Script.PlutusV3(applied.program.cborByteString)
         val scriptAddress = scriptAddr(script.scriptHash)
 
-        // Redeemer has Bob's PubKeyHash but Alice's proof — membership check fails
+        // Dave (non-member) copies Alice's proof from the mempool
+        // tx.signatories.head = Dave's pkh, which doesn't match Alice's proof element
         val compressedProof = bls12_381_G2_compress(proof)
-        val redeemer = Data.Constr(0, PList(Data.B(bobPkh), Data.B(compressedProof)))
+        val redeemer = Data.B(compressedProof)
+        val davePkh = Party.Dave.addrKeyHash
 
         val scriptUtxoEntry = TransactionInput(genesisHash, 0) ->
             TransactionOutput(scriptAddress, Value.lovelace(10_000_000L), Data.unit)
         val feePayerUtxo = TransactionInput(genesisHash, 1) ->
-            TransactionOutput(Party.Bob.address, Value.lovelace(100_000_000L))
+            TransactionOutput(Party.Dave.address, Value.lovelace(100_000_000L))
         val collateralUtxo = TransactionInput(genesisHash, 2) ->
-            TransactionOutput(Party.Bob.address, Value.lovelace(50_000_000L))
+            TransactionOutput(Party.Dave.address, Value.lovelace(50_000_000L))
 
         val emulator = Emulator(Map(scriptUtxoEntry, feePayerUtxo, collateralUtxo))
 
         assertThrows[scalus.cardano.txbuilder.TxBuilderException.BalancingException] {
             TxBuilder(summon[CardanoInfo])
-                .spend(Utxo(scriptUtxoEntry), redeemer, script, Set(bobPkh))
+                .spend(Utxo(scriptUtxoEntry), redeemer, script, Set(davePkh))
                 .spend(Utxo(feePayerUtxo))
                 .payTo(Party.Alice.address, Value.lovelace(10_000_000L))
-                .changeTo(TransactionOutput(Party.Bob.address, Value.lovelace(0L)))
-                .complete(emulator, Party.Bob.address)
+                .changeTo(TransactionOutput(Party.Dave.address, Value.lovelace(0L)))
+                .complete(emulator, Party.Dave.address)
                 .await()
         }
     }
