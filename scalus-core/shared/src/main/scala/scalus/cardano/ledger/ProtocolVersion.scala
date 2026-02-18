@@ -8,7 +8,7 @@ import scala.collection.immutable.SortedSet
 
 /** Represents a Cardano protocol version */
 case class ProtocolVersion(
-    /** Major version (1-10) */
+    /** Major version */
     major: Int,
 
     /** Minor version */
@@ -33,6 +33,7 @@ object ProtocolVersion {
     val vasilPV = ProtocolVersion(7, 0)
     val valentinePV = ProtocolVersion(8, 0)
     val conwayPV = ProtocolVersion(9, 0)
+    val plominPV = ProtocolVersion(10, 0)
     val vanRossemPV = ProtocolVersion(11, 0)
     val futurePV = ProtocolVersion(Int.MaxValue, 0)
 
@@ -46,6 +47,7 @@ object ProtocolVersion {
           vasilPV,
           valentinePV,
           conwayPV,
+          plominPV,
           vanRossemPV
         )
 }
@@ -66,7 +68,7 @@ object MajorProtocolVersion {
     val changPV = MajorProtocolVersion(9)
     val plominPV = MajorProtocolVersion(10)
     val vanRossemPV = MajorProtocolVersion(11)
-    @deprecated("Use vanRossemPV instead", "0.8.0")
+    @deprecated("Use vanRossemPV instead", "0.15.1")
     val dijkstraPV: MajorProtocolVersion = vanRossemPV
     val futurePV = MajorProtocolVersion(Int.MaxValue)
 
