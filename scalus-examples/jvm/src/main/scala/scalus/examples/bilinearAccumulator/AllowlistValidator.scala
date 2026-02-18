@@ -3,12 +3,12 @@ package scalus.examples.bilinearAccumulator
 import scalus.Compile
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.uplc.builtin.bls12_381.G1Element
 import scalus.uplc.builtin.bls12_381.G1Element.g1
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
-import scalus.cardano.onchain.plutus.v3.{ParameterizedValidator, TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{ParameterizedValidator, PubKeyHash, TxInfo, TxOutRef}
 
 /** Hardcoded CRS (Common Reference String) for the allowlist validator.
   *
@@ -34,7 +34,11 @@ object AllowlistCRS {
   * compatible with the Plutus flat serialization (which doesn't support direct BLS element
   * encoding).
   *
-  * Redeemer: (BigInt, ByteString) — (element, compressed G2 proof)
+  * The accumulated elements are public key hashes (as big-endian integers). The validator requires
+  * the transaction to be signed by the corresponding key, preventing front-running attacks where an
+  * observer replays a valid proof from the mempool.
+  *
+  * Redeemer: (ByteString, ByteString) — (member's PubKeyHash, compressed G2 proof)
   */
 @Compile
 object AllowlistValidator extends ParameterizedValidator[ByteString] {
@@ -47,13 +51,15 @@ object AllowlistValidator extends ParameterizedValidator[ByteString] {
         ownRef: TxOutRef
     ): Unit = {
         val acc = G2.uncompress(compressedAcc)
-        val (element, proofBytes) = redeemer.to[(BigInt, ByteString)]
+        val (memberPkh, proofBytes) = redeemer.to[(ByteString, ByteString)]
         val proof = G2.uncompress(proofBytes)
+        val element = Builtins.byteStringToInteger(true, memberPkh)
         val subset = List.single(element)
         require(
           BilinearAccumulator.checkMembership(AllowlistCRS.powersOfTau, acc, subset, proof),
           "Membership proof verification failed"
         )
+        require(tx.isSignedBy(PubKeyHash(memberPkh)), "Transaction must be signed by the member")
     }
 }
 

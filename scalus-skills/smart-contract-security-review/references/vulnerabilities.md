@@ -786,6 +786,14 @@ def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo) = {
 }
 ```
 
+### False Positive: Scalus Validator Framework
+In Scalus, the compiler plugin automatically generates default `fail` implementations for all
+script purposes (spend, mint, reward, certify, vote, propose) that the validator does not
+explicitly override. This means a validator that only implements `spend` will automatically
+reject all other invocations. **V010 is always a false positive for Scalus validators** that
+extend `Validator`, `ParameterizedValidator`, or `DataParameterizedValidator` — unless the
+validator explicitly implements multiple purposes with inconsistent authorization checks.
+
 ---
 
 ## V011: Other Token Name Attack

@@ -53,7 +53,7 @@ For detailed patterns and code examples, see `references/vulnerabilities.md`.
 | V007 | Self-Dealing/Shill Bidding | Price manipulation | No seller/bidder separation |
 | V008 | Double Spend via Index | Same UTxO processed twice | Index lists without uniqueness |
 | V009 | Inexact Refund Amount | Fund manipulation | `>=` for refunds instead of `===` |
-| V010 | Other Redeemer Attack | Bypass via different redeemer | Multiple script purposes |
+| V010 | Other Redeemer Attack | Bypass via different redeemer | Multiple script purposes (always false positive for single-purpose Scalus validators — compiler plugin adds default fail for unimplemented purposes) |
 | V011 | Other Token Name Attack | Unauthorized token minting | Policy doesn't check all tokens |
 | V012 | Missing UTxO Authentication | Fake UTxO injection | No auth token verification |
 | V025 | Oracle Data Validation | Price manipulation, stale data | Oracle data without signature/freshness |
