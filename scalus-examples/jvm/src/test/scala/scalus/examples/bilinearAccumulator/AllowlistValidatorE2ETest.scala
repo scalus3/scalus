@@ -15,6 +15,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
 
     given CardanoInfo = CardanoInfo.mainnet
 
+    // Test-only tau. In production, tau must be random and destroyed after setup.
     private val tau = BigInt("12345678901234567890")
     private val genesisHash = TestUtil.genesisHash
 

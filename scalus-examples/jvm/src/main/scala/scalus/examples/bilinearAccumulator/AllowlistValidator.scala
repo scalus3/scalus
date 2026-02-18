@@ -13,6 +13,10 @@ import scalus.cardano.onchain.plutus.v3.{ParameterizedValidator, TxInfo, TxOutRe
 /** Hardcoded CRS (Common Reference String) for the allowlist validator.
   *
   * Uses tau = 12345678901234567890 with maxDegree = 1 (supports single-element membership proofs).
+  *
+  * WARNING: This is a test-only CRS with a known tau. In a real deployment, tau must be a
+  * cryptographically random 256-bit value, securely destroyed after setup ("toxic waste" ceremony).
+  * Anyone who knows tau can forge arbitrary membership proofs and bypass the validator.
   */
 @Compile
 object AllowlistCRS {

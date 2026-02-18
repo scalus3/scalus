@@ -13,6 +13,7 @@ import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 
 class BilinearAccumulatorE2ETest extends AnyFunSuite, EvalTestKit {
 
+    // Test-only tau. In production, tau must be random and destroyed after setup.
     val tau: BigInt = BigInt("12345678901234567890")
 
     // -- Polynomial arithmetic tests --
