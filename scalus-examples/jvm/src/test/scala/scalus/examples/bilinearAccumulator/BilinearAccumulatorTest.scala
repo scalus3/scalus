@@ -1,13 +1,13 @@
-package scalus
-package examples
+package scalus.examples.bilinearAccumulator
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.Compile
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.examples.BilinearAccumulator.{checkMembership, checkNonMembership, getFinalPoly}
+import scalus.examples.bilinearAccumulator.BilinearAccumulator.{checkMembership, checkNonMembership, getFinalPoly}
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.PlutusV3
 import scalus.uplc.Term.asTerm

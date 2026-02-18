@@ -43,6 +43,17 @@ object Constant {
         def lift(a: Unit): Constant = Unit
     }
 
+    // Note: BLS12-381 elements can be lifted to UPLC constants for in-memory evaluation,
+    // but cannot be serialized to flat/CBOR format (matching the Plutus specification).
+    // For on-chain scripts, use compressed ByteString parameters with uncompress builtins instead.
+    given LiftValue[scalus.uplc.builtin.bls12_381.G1Element] with {
+        def lift(a: scalus.uplc.builtin.bls12_381.G1Element): Constant = BLS12_381_G1_Element(a)
+    }
+
+    given LiftValue[scalus.uplc.builtin.bls12_381.G2Element] with {
+        def lift(a: scalus.uplc.builtin.bls12_381.G2Element): Constant = BLS12_381_G2_Element(a)
+    }
+
     given LiftValueData[A <: scalus.uplc.builtin.Data]: LiftValue[A] = new LiftValue[A] {
         def lift(a: A): Constant = Data(a)
     }

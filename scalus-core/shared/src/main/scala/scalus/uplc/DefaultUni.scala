@@ -64,6 +64,13 @@ object DefaultUni:
     given Lift[scalus.uplc.builtin.Data] with
         def defaultUni: DefaultUni = DefaultUni.Data
 
+    given Lift[scalus.uplc.builtin.bls12_381.G1Element] with {
+        def defaultUni = BLS12_381_G1_Element
+    }
+    given Lift[scalus.uplc.builtin.bls12_381.G2Element] with {
+        def defaultUni = BLS12_381_G2_Element
+    }
+
     def Pair(a: DefaultUni, b: DefaultUni): DefaultUni = Apply(Apply(ProtoPair, a), b)
     def List(a: DefaultUni): DefaultUni = Apply(ProtoList, a)
     def Array(a: DefaultUni): DefaultUni = Apply(ProtoArray, a)
@@ -83,7 +90,15 @@ object DefaultUni:
             case Apply(Apply(ProtoPair, a), b) =>
                 pairFlat(using flatForUni(a), flatForUni(b)).asInstanceOf[Flat[Any]]
             case BuiltinValue => builtinValueFlat.asInstanceOf[Flat[Any]]
-            case _            => throw new Exception(s"Unsupported uni: $uni")
+            case BLS12_381_G1_Element =>
+                throw new Exception(
+                  "Flat encoding is not supported for bls12_381_G1_element: use bls12_381_G1_compress to obtain a bytestring instead"
+                )
+            case BLS12_381_G2_Element =>
+                throw new Exception(
+                  "Flat encoding is not supported for bls12_381_G2_element: use bls12_381_G2_compress to obtain a bytestring instead"
+                )
+            case _ => throw new Exception(s"Unsupported uni: $uni")
 
     // Flat instance for BuiltinValue - serializes through Data encoding
     private def builtinValueFlat(using Flat[builtin.Data]): Flat[builtin.BuiltinValue] =

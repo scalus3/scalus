@@ -1,4 +1,4 @@
-package scalus.examples
+package scalus.examples.bilinearAccumulator
 import scalus.Compile
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.uplc.builtin.Builtins.*
