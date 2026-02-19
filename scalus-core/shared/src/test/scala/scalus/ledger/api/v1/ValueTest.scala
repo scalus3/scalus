@@ -1497,16 +1497,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ExUnits(memory = 562746, steps = 159290864)
         )
         assertEvalWithBudget(
-          Value.fromList(
-            List(
-              (
-                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
-                List((utf8"TOKEN1", BigInt(1000)))
-              ),
-              (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
-            )
-          ).toData ==
-              Value.fromList(
+          Value
+              .fromList(
                 List(
                   (
                     hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
@@ -1514,7 +1506,19 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
                 )
-              ).toData,
+              )
+              .toData ==
+              Value
+                  .fromList(
+                    List(
+                      (
+                        hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
+                        List((utf8"TOKEN1", BigInt(1000)))
+                      ),
+                      (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
+                    )
+                  )
+                  .toData,
           true,
           ExUnits(memory = 451265, steps = 128722025)
         )
@@ -1557,23 +1561,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ExUnits(memory = 1035349, steps = 300427324)
         )
         assertEvalWithBudget(
-          Value.fromList(
-            List(
-              (
-                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
-                List(
-                  (utf8"TOKEN1", BigInt(100)),
-                  (utf8"TOKEN2", BigInt(200))
-                )
-              ),
-              (
-                hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678",
-                List((utf8"TOKEN3", BigInt(300)))
-              ),
-              (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
-            )
-          ).toData ==
-              Value.fromList(
+          Value
+              .fromList(
                 List(
                   (
                     hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
@@ -1588,7 +1577,26 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
                 )
-              ).toData,
+              )
+              .toData ==
+              Value
+                  .fromList(
+                    List(
+                      (
+                        hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
+                        List(
+                          (utf8"TOKEN1", BigInt(100)),
+                          (utf8"TOKEN2", BigInt(200))
+                        )
+                      ),
+                      (
+                        hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678",
+                        List((utf8"TOKEN3", BigInt(300)))
+                      ),
+                      (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
+                    )
+                  )
+                  .toData,
           true,
           ExUnits(memory = 850989, steps = 248574095)
         )
