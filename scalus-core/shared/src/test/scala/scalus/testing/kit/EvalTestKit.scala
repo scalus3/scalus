@@ -58,7 +58,9 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     // ----- Inline Compilation Assertions -----
 
     /** Assert that code evaluates to true on both JVM and PlutusVM. */
-    protected final inline def assertEval(inline code: Boolean)(using vm: PlutusVM): Unit =
+    protected final inline def assertEval(
+        inline code: Boolean
+    )(using vm: PlutusVM, options: Options): Unit =
         val compiled = PlutusV3.compile(code)
         assert(compiled.code)
         val codeTerm = compiled.program.term.evaluate
@@ -68,7 +70,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     protected final inline def assertEvalEq[T: Eq](
         inline code: T,
         inline expected: T
-    )(using vm: PlutusVM): Unit =
+    )(using vm: PlutusVM, options: Options): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
 
@@ -89,7 +91,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         inline code: T,
         inline expected: T,
         budget: ExUnits
-    )(using vm: PlutusVM): Unit =
+    )(using vm: PlutusVM, options: Options): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
 
@@ -98,34 +100,27 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
           s"Expected ${compiledExpected.code}, but got ${compiled.code}"
         )
 
-        val spender = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+        compiled.program.term.evaluateDebug match
+            case Result.Success(term, exunits, costs, logs) =>
+                if exunits.steps > budget.steps || exunits.memory > budget.memory then
+                    fail(s"""Performance regression,
+                           |expected: $budget,
+                           |but got: $exunits;
+                           |costs: ${costs.toMap}""".stripMargin)
 
-        val codeTerm = vm.evaluateDeBruijnedTerm(
-          DeBruijn.deBruijnTerm(compiled.program.term),
-          budgetSpender = spender
-        )
-
-        if spender.getSpentBudget.steps > budget.steps ||
-            spender.getSpentBudget.memory > budget.memory
-        then
-            fail:
-                s"""Performance regression,
-                |expected: $budget,
-                |but got: ${spender.getSpentBudget};
-                |costs: ${spender.costs.toMap}""".stripMargin
-
-        val expectedTerm = compiledExpected.program.term.evaluate
-        assert(
-          codeTerm α_== expectedTerm,
-          s"Expected term $expectedTerm, but got $codeTerm"
-        )
+                val expectedTerm = compiledExpected.program.term.evaluate
+                assert(term α_== expectedTerm, s"Expected term $expectedTerm, but got ${term.show}")
+            case Result.Failure(exception, budget, costs, logs) =>
+                fail(s"""Expected success, but got failure: $exception;
+                       |budget: $budget;
+                       |costs: ${costs.toMap}""".stripMargin)
 
     /** Assert that code evaluates to expected value with exact budget match. */
     protected final inline def assertEvalWithBudget[T: Eq](
         inline code: T,
         inline expected: T,
         budget: ExUnits
-    )(using vm: PlutusVM, o: Options): Unit =
+    )(using vm: PlutusVM, options: Options): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
 
@@ -134,31 +129,25 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
           s"Expected ${compiledExpected.code}, but got ${compiled.code}"
         )
 
-        val spender = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+        compiled.program.term.evaluateDebug match
+            case Result.Success(term, exunits, costs, logs) =>
+                if exunits != budget then fail(s"""Budget mismatch,
+                           |expected: $budget,
+                           |but got: $exunits;
+                           |costs: ${costs.toMap}""".stripMargin)
 
-        val codeTerm = vm.evaluateDeBruijnedTerm(
-          DeBruijn.deBruijnTerm(compiled.program.term),
-          budgetSpender = spender
-        )
-
-        if spender.getSpentBudget != budget then
-            fail:
-                s"""Budget mismatch,
-                |expected: $budget,
-                |but got: ${spender.getSpentBudget};
-                |costs: ${spender.costs.toMap}""".stripMargin
-
-        val expectedTerm = compiledExpected.program.term.evaluate
-        assert(
-          codeTerm α_== expectedTerm,
-          s"Expected term $expectedTerm, but got $codeTerm"
-        )
+                val expectedTerm = compiledExpected.program.term.evaluate
+                assert(term α_== expectedTerm, s"Expected term $expectedTerm, but got ${term.show}")
+            case Result.Failure(exception, budget, costs, logs) =>
+                fail(s"""Expected success, but got failure: $exception;
+                       |budget: $budget;
+                       |costs: ${costs.toMap}""".stripMargin)
 
     /** Assert that code evaluates to different value than expected. */
     protected final inline def assertEvalNotEq[T: Eq](
         inline code: T,
         inline expected: T
-    )(using vm: PlutusVM): Unit =
+    )(using vm: PlutusVM, options: Options): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
 
@@ -177,7 +166,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     /** Assert that code evaluation fails with expected exception type. */
     protected final inline def assertEvalFails[E <: Throwable: ClassTag](
         inline code: Any
-    )(using vm: PlutusVM): Unit =
+    )(using vm: PlutusVM, options: Options): Unit =
         var isExceptionThrown = false
 
         val _ =
@@ -212,7 +201,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     /** Assert that code evaluation fails with specific error message. */
     protected final inline def assertEvalFailsWithMessage[E <: Throwable: ClassTag](
         expectedMessage: String
-    )(inline code: Any)(using vm: PlutusVM): Unit =
+    )(inline code: Any)(using vm: PlutusVM, options: Options): Unit =
         var isExceptionThrown = false
 
         val _ =
@@ -251,7 +240,9 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
             fail(s"Expected exception of type ${summon[ClassTag[E]]}, but got success: $code")
 
     /** Assert code evaluates successfully (no exception). */
-    protected final inline def assertEvalSuccess(inline code: Any)(using vm: PlutusVM): Unit =
+    protected final inline def assertEvalSuccess(
+        inline code: Any
+    )(using vm: PlutusVM, options: Options): Unit =
         val _ =
             try code
             catch
@@ -284,7 +275,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         inline f: A1 => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
     )(using
-        vm: PlutusVM
+        vm: PlutusVM,
+        options: Options
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -308,7 +300,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         inline f: (A1, A2) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
     )(using
-        vm: PlutusVM
+        vm: PlutusVM,
+        options: Options
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
@@ -339,7 +332,8 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         inline f: (A1, A2, A3) => Boolean,
         configParams: org.scalatestplus.scalacheck.Checkers.PropertyCheckConfigParam*
     )(using
-        vm: PlutusVM
+        vm: PlutusVM,
+        options: Options
     )(implicit
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1],
