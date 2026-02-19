@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.ExUnits
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.ByteString.utf8
 import scalus.cardano.ledger.LedgerToPlutusTranslation
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
@@ -1413,6 +1414,216 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         val ledgerOrdered = orderedValue.toLedgerValue
         val policyIds = ledgerOrdered.assets.assets.keys.toSeq
         assert(policyIds.size == 2)
+    }
+
+    test("Eq vs toData equality budget comparison") {
+        // Using realistic 28-byte PolicyIds (ScriptHash) and utf8 TokenNames
+        // With optimizeUplc = true
+        given scalus.compiler.Options = compilerOptions.copy(optimizeUplc = true)
+
+        // zero: Eq 2.9x more mem, 1.7x more steps
+        assertEvalWithBudget(
+          Value.zero === Value.zero,
+          true,
+          ExUnits(memory = 18056, steps = 3614562)
+        )
+        assertEvalWithBudget(
+          Value.zero.toData == Value.zero.toData,
+          true,
+          ExUnits(memory = 6165, steps = 2168604)
+        )
+
+        // lovelace: Eq 2.2x more mem, 2.0x more steps
+        assertEvalWithBudget(
+          Value.lovelace(BigInt(1000)) === Value.lovelace(BigInt(1000)),
+          true,
+          ExUnits(memory = 115381, steps = 32349217)
+        )
+        assertEvalWithBudget(
+          Value.lovelace(BigInt(1000)).toData == Value.lovelace(BigInt(1000)).toData,
+          true,
+          ExUnits(memory = 53495, steps = 16268957)
+        )
+
+        // single native asset (28-byte policyId): Eq 2.2x more mem, 2.0x more steps
+        assertEvalWithBudget(
+          Value(
+            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            utf8"TOKEN1",
+            BigInt(1000)
+          ) ===
+              Value(
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                utf8"TOKEN1",
+                BigInt(1000)
+              ),
+          true,
+          ExUnits(memory = 114481, steps = 32205331)
+        )
+        assertEvalWithBudget(
+          Value(
+            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            utf8"TOKEN1",
+            BigInt(1000)
+          ).toData ==
+              Value(
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                utf8"TOKEN1",
+                BigInt(1000)
+              ).toData,
+          true,
+          ExUnits(memory = 52595, steps = 16206794)
+        )
+
+        // lovelace + native asset (2 policies): Eq 1.25x more mem, 1.24x more steps
+        assertEvalWithBudget(
+          Value.fromList(
+            List(
+              (
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                List((utf8"TOKEN1", BigInt(1000)))
+              ),
+              (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
+            )
+          ) ===
+              Value.fromList(
+                List(
+                  (
+                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    List((utf8"TOKEN1", BigInt(1000)))
+                  ),
+                  (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
+                )
+              ),
+          true,
+          ExUnits(memory = 562746, steps = 159290864)
+        )
+        assertEvalWithBudget(
+          Value.fromList(
+            List(
+              (
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                List((utf8"TOKEN1", BigInt(1000)))
+              ),
+              (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
+            )
+          ).toData ==
+              Value.fromList(
+                List(
+                  (
+                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    List((utf8"TOKEN1", BigInt(1000)))
+                  ),
+                  (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
+                )
+              ).toData,
+          true,
+          ExUnits(memory = 451265, steps = 128722025)
+        )
+
+        // 3 policies, multiple tokens: Eq 1.22x more mem, 1.21x more steps
+        assertEvalWithBudget(
+          Value.fromList(
+            List(
+              (
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                List(
+                  (utf8"TOKEN1", BigInt(100)),
+                  (utf8"TOKEN2", BigInt(200))
+                )
+              ),
+              (
+                ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                List((utf8"TOKEN3", BigInt(300)))
+              ),
+              (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
+            )
+          ) ===
+              Value.fromList(
+                List(
+                  (
+                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    List(
+                      (utf8"TOKEN1", BigInt(100)),
+                      (utf8"TOKEN2", BigInt(200))
+                    )
+                  ),
+                  (
+                    ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                    List((utf8"TOKEN3", BigInt(300)))
+                  ),
+                  (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
+                )
+              ),
+          true,
+          ExUnits(memory = 1035349, steps = 300427324)
+        )
+        assertEvalWithBudget(
+          Value.fromList(
+            List(
+              (
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                List(
+                  (utf8"TOKEN1", BigInt(100)),
+                  (utf8"TOKEN2", BigInt(200))
+                )
+              ),
+              (
+                ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                List((utf8"TOKEN3", BigInt(300)))
+              ),
+              (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
+            )
+          ).toData ==
+              Value.fromList(
+                List(
+                  (
+                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    List(
+                      (utf8"TOKEN1", BigInt(100)),
+                      (utf8"TOKEN2", BigInt(200))
+                    )
+                  ),
+                  (
+                    ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                    List((utf8"TOKEN3", BigInt(300)))
+                  ),
+                  (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
+                )
+              ).toData,
+          true,
+          ExUnits(memory = 850989, steps = 248574095)
+        )
+
+        // not equal: different amounts: Eq 2.0x more mem, 1.9x more steps
+        assertEvalWithBudget(
+          Value(
+            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            utf8"TOKEN1",
+            BigInt(1000)
+          ) !==
+              Value(
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                utf8"TOKEN1",
+                BigInt(2000)
+              ),
+          true,
+          ExUnits(memory = 107726, steps = 30382752)
+        )
+        assertEvalWithBudget(
+          Value(
+            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            utf8"TOKEN1",
+            BigInt(1000)
+          ).toData !=
+              Value(
+                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                utf8"TOKEN1",
+                BigInt(2000)
+              ).toData,
+          true,
+          ExUnits(memory = 53096, steps = 16362843)
+        )
     }
 
     test("toLedgerValue roundtrip property") {

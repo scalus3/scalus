@@ -125,7 +125,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
         inline code: T,
         inline expected: T,
         budget: ExUnits
-    )(using vm: PlutusVM): Unit =
+    )(using vm: PlutusVM, o: Options): Unit =
         val compiled = PlutusV3.compile(code)
         val compiledExpected = PlutusV3.compile(expected)
 
