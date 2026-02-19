@@ -5,6 +5,7 @@ import scalus.cardano.address.*
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.crypto.accumulator.BilinearAccumulatorProver
 import scalus.testing.kit.{Party, ScalusTest, TestUtil}
 import scalus.uplc.builtin.{Builtins, Data}
 import scalus.uplc.builtin.Builtins.bls12_381_G2_compress
@@ -36,8 +37,8 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         val fullSet = Vector(pkhToElement(alicePkh), pkhToElement(bobPkh), pkhToElement(charlesPkh))
 
         val setup = BilinearAccumulatorProver.trustedSetup(tau, fullSet.size)
-        val acc = BilinearAccumulatorProver.accumulate(setup, fullSet)
-        val proof = BilinearAccumulatorProver.membershipProof(
+        val acc = BilinearAccumulatorProver.accumulateG2(setup, fullSet)
+        val proof = BilinearAccumulatorProver.membershipProofG2(
           setup,
           fullSet,
           Vector(pkhToElement(alicePkh))
@@ -85,9 +86,9 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         val fullSet = Vector(pkhToElement(alicePkh), pkhToElement(bobPkh), pkhToElement(charlesPkh))
 
         val setup = BilinearAccumulatorProver.trustedSetup(tau, fullSet.size)
-        val acc = BilinearAccumulatorProver.accumulate(setup, fullSet)
+        val acc = BilinearAccumulatorProver.accumulateG2(setup, fullSet)
         // Proof is for Alice's pkh
-        val proof = BilinearAccumulatorProver.membershipProof(
+        val proof = BilinearAccumulatorProver.membershipProofG2(
           setup,
           fullSet,
           Vector(pkhToElement(alicePkh))

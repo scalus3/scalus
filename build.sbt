@@ -359,6 +359,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / baseDirectory := (LocalRootProject / baseDirectory).value,
       // Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-S", "-8077211454138081902"),
       Test / testOptions += Tests.Argument("-oF"),
+      Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test,
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
