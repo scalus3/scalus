@@ -43,13 +43,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).toSortedMap,
           SortedMap.singleton(
-            ByteString.fromString("PolicyId"),
-            SortedMap.singleton(ByteString.fromString("TokenName"), BigInt(1000))
+            utf8"PolicyId",
+            SortedMap.singleton(utf8"TokenName", BigInt(1000))
           ),
           ExUnits(memory = 30179, steps = 8008366)
         )
@@ -78,21 +78,21 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1)
           ).toSortedMap,
           SortedMap.singleton(
-            ByteString.fromString("PolicyId"),
-            SortedMap.singleton(ByteString.fromString("TokenName"), BigInt(1))
+            utf8"PolicyId",
+            SortedMap.singleton(utf8"TokenName", BigInt(1))
           ),
           ExUnits(memory = 30179, steps = 8008366)
         )
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(0)
           ),
           Value.zero,
@@ -267,20 +267,20 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value
               .unsafeFromList(
                 List(
-                  (ByteString.fromString("CS1"), List((ByteString.fromString("TN1"), BigInt(10)))),
-                  (ByteString.fromString("CS2"), List((ByteString.fromString("TN2"), BigInt(20))))
+                  (utf8"CS1", List((utf8"TN1", BigInt(10)))),
+                  (utf8"CS2", List((utf8"TN2", BigInt(20))))
                 )
               )
               .toSortedMap,
           SortedMap.unsafeFromList(
             List(
               (
-                ByteString.fromString("CS1"),
-                SortedMap.unsafeFromList(List((ByteString.fromString("TN1"), BigInt(10))))
+                utf8"CS1",
+                SortedMap.unsafeFromList(List((utf8"TN1", BigInt(10))))
               ),
               (
-                ByteString.fromString("CS2"),
-                SortedMap.unsafeFromList(List((ByteString.fromString("TN2"), BigInt(20))))
+                utf8"CS2",
+                SortedMap.unsafeFromList(List((utf8"TN2", BigInt(20))))
               )
             )
           ),
@@ -307,28 +307,28 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               .fromList(
                 List(
                   (
-                    ByteString.fromString("CS1"),
+                    utf8"CS1",
                     List(
-                      (ByteString.fromString("TN1"), BigInt(10)),
-                      (ByteString.fromString("TN1"), BigInt(20)),
-                      (ByteString.fromString("TN2"), BigInt(0)),
+                      (utf8"TN1", BigInt(10)),
+                      (utf8"TN1", BigInt(20)),
+                      (utf8"TN2", BigInt(0)),
                     )
                   ),
-                  (ByteString.fromString("CS2"), List((ByteString.fromString("TN2"), BigInt(20)))),
-                  (ByteString.fromString("CS2"), List((ByteString.fromString("TN2"), BigInt(30)))),
-                  (ByteString.fromString("CS3"), List((ByteString.fromString("TN3"), BigInt(0))))
+                  (utf8"CS2", List((utf8"TN2", BigInt(20)))),
+                  (utf8"CS2", List((utf8"TN2", BigInt(30)))),
+                  (utf8"CS3", List((utf8"TN3", BigInt(0))))
                 )
               )
               .toSortedMap,
           SortedMap.fromList(
             List(
               (
-                ByteString.fromString("CS1"),
-                SortedMap.fromList(List((ByteString.fromString("TN1"), BigInt(10))))
+                utf8"CS1",
+                SortedMap.fromList(List((utf8"TN1", BigInt(10))))
               ),
               (
-                ByteString.fromString("CS2"),
-                SortedMap.fromList(List((ByteString.fromString("TN2"), BigInt(20))))
+                utf8"CS2",
+                SortedMap.fromList(List((utf8"TN2", BigInt(20))))
               )
             )
           ),
@@ -362,20 +362,20 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value
               .fromStrictlyAscendingListWithNonZeroAmounts(
                 List(
-                  (ByteString.fromString("CS1"), List((ByteString.fromString("TN1"), BigInt(10)))),
-                  (ByteString.fromString("CS2"), List((ByteString.fromString("TN2"), BigInt(20))))
+                  (utf8"CS1", List((utf8"TN1", BigInt(10)))),
+                  (utf8"CS2", List((utf8"TN2", BigInt(20))))
                 )
               )
               .toSortedMap,
           SortedMap.unsafeFromList(
             List(
               (
-                ByteString.fromString("CS1"),
-                SortedMap.unsafeFromList(List((ByteString.fromString("TN1"), BigInt(10))))
+                utf8"CS1",
+                SortedMap.unsafeFromList(List((utf8"TN1", BigInt(10))))
               ),
               (
-                ByteString.fromString("CS2"),
-                SortedMap.unsafeFromList(List((ByteString.fromString("TN2"), BigInt(20))))
+                utf8"CS2",
+                SortedMap.unsafeFromList(List((utf8"TN2", BigInt(20))))
               )
             )
           ),
@@ -402,22 +402,22 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     test("equalsAssets") {
         assertEval(
           Value.equalsAssets(
-            SortedMap.singleton(ByteString.fromString("TokenName"), BigInt(1)),
-            SortedMap.singleton(ByteString.fromString("TokenName"), BigInt(1))
+            SortedMap.singleton(utf8"TokenName", BigInt(1)),
+            SortedMap.singleton(utf8"TokenName", BigInt(1))
           )
         )
 
         assertEval(
           !Value.equalsAssets(
-            SortedMap.singleton(ByteString.fromString("TokenName1"), BigInt(1)),
-            SortedMap.singleton(ByteString.fromString("TokenName2"), BigInt(1))
+            SortedMap.singleton(utf8"TokenName1", BigInt(1)),
+            SortedMap.singleton(utf8"TokenName2", BigInt(1))
           )
         )
 
         assertEval(
           !Value.equalsAssets(
-            SortedMap.singleton(ByteString.fromString("TokenName"), BigInt(1)),
-            SortedMap.singleton(ByteString.fromString("TokenName"), BigInt(-1))
+            SortedMap.singleton(utf8"TokenName", BigInt(1)),
+            SortedMap.singleton(utf8"TokenName", BigInt(-1))
           )
         )
     }
@@ -429,60 +429,60 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEval(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(0)
           ) === Value.zero
         )
 
         assertEval(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1)
           ) ===
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(1)
               )
         )
 
         assertEval(
           Value(
-            ByteString.fromString("CurrencySymbol1"),
-            ByteString.fromString("TokenName"),
+            utf8"CurrencySymbol1",
+            utf8"TokenName",
             BigInt(1)
           ) !==
               Value(
-                ByteString.fromString("CurrencySymbol2"),
-                ByteString.fromString("TokenName"),
+                utf8"CurrencySymbol2",
+                utf8"TokenName",
                 BigInt(1)
               )
         )
 
         assertEval(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName1"),
+            utf8"PolicyId",
+            utf8"TokenName1",
             BigInt(1)
           ) !==
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName2"),
+                utf8"PolicyId",
+                utf8"TokenName2",
                 BigInt(1)
               )
         )
 
         assertEval(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1)
           ) !==
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(2)
               )
         )
@@ -513,7 +513,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         //
         //    val invalidValue = Value.unsafeFromList(
         //      List(
-        //        (ByteString.fromString("CS1"), List((ByteString.fromString("TN1"), BigInt(0))))
+        //        (utf8"CS1", List((utf8"TN1", BigInt(0))))
         //      )
         //    )
         //
@@ -537,13 +537,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           -Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(-1000)
           ),
           ExUnits(memory = 89961, steps = 24275771)
@@ -588,18 +588,18 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) +
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(2000)
               ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(3000)
           ),
           ExUnits(memory = 191337, steps = 56415523)
@@ -607,14 +607,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) +
               Value.zero,
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 136389, steps = 38044271)
@@ -623,13 +623,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero +
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(1000)
               ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 134925, steps = 37554283)
@@ -655,16 +655,16 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) +
               Value.lovelace(BigInt(1000)),
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -674,13 +674,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) +
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(-1000)
               ),
           Value.zero,
@@ -697,8 +697,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -706,8 +706,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromString("PolicyId"),
-                    List((ByteString.fromString("TokenName"), BigInt(-1000)))
+                    utf8"PolicyId",
+                    List((utf8"TokenName", BigInt(-1000)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(-1000))))
                 )
@@ -720,8 +720,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -729,8 +729,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromString("PolicyId"),
-                    List((ByteString.fromString("TokenName"), BigInt(-1000)))
+                    utf8"PolicyId",
+                    List((utf8"TokenName", BigInt(-1000)))
                   )
                 )
               ),
@@ -742,8 +742,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -754,8 +754,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 533854, steps = 152678104)
@@ -794,18 +794,18 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) -
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(2000)
               ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(-1000)
           ),
           ExUnits(memory = 191337, steps = 56415523)
@@ -813,14 +813,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) -
               Value.zero,
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 136389, steps = 38044271)
@@ -829,13 +829,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero -
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(1000)
               ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(-1000)
           ),
           ExUnits(memory = 134925, steps = 37554283)
@@ -861,16 +861,16 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) -
               Value.lovelace(BigInt(1000)),
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(-1000))))
             )
@@ -880,13 +880,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) -
               Value(
-                ByteString.fromString("PolicyId"),
-                ByteString.fromString("TokenName"),
+                utf8"PolicyId",
+                utf8"TokenName",
                 BigInt(1000)
               ),
           Value.zero,
@@ -903,8 +903,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -912,8 +912,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromString("PolicyId"),
-                    List((ByteString.fromString("TokenName"), BigInt(1000)))
+                    utf8"PolicyId",
+                    List((utf8"TokenName", BigInt(1000)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
                 )
@@ -926,8 +926,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -935,8 +935,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromString("PolicyId"),
-                    List((ByteString.fromString("TokenName"), BigInt(1000)))
+                    utf8"PolicyId",
+                    List((utf8"TokenName", BigInt(1000)))
                   )
                 )
               ),
@@ -948,8 +948,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromString("PolicyId"),
-                List((ByteString.fromString("TokenName"), BigInt(1000)))
+                utf8"PolicyId",
+                List((utf8"TokenName", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
@@ -960,8 +960,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 533854, steps = 152678104)
@@ -993,13 +993,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) * BigInt(2),
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(2000)
           ),
           ExUnits(memory = 92164, steps = 24821947)
@@ -1007,8 +1007,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ) * BigInt(0),
           Value.zero,
@@ -1041,8 +1041,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   ),
                   List.Cons(
                     (
-                      ByteString.fromString("ff"),
-                      List.Cons((ByteString.fromString("TOKEN"), BigInt(100)), List.Nil)
+                      utf8"ff",
+                      List.Cons((utf8"TOKEN", BigInt(100)), List.Nil)
                     ),
                     List.Nil
                   )
@@ -1075,8 +1075,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).getLovelace,
           BigInt(0),
@@ -1085,8 +1085,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(0)
           ).getLovelace,
           BigInt(0),
@@ -1107,16 +1107,16 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEval(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(0)
           ).isZero
         )
 
         assertEval(
           !Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).isZero
         )
@@ -1139,16 +1139,16 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEval(
           !Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(0)
           ).nonZero
         )
 
         assertEval(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).nonZero
         )
@@ -1170,7 +1170,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
 
         assertEvalWithBudget(
-          Value.zero.quantityOf(ByteString.fromString("CS"), ByteString.fromString("TN")),
+          Value.zero.quantityOf(utf8"CS", utf8"TN"),
           BigInt(0),
           ExUnits(memory = 17090, steps = 3492150)
         )
@@ -1184,15 +1184,15 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value
               .lovelace(BigInt(1000))
-              .quantityOf(ByteString.fromString("CS"), ByteString.fromString("TN")),
+              .quantityOf(utf8"CS", utf8"TN"),
           BigInt(0),
           ExUnits(memory = 58513, steps = 15534808)
         )
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).quantityOf(Value.adaPolicyId, Value.adaTokenName),
           BigInt(0),
@@ -1201,10 +1201,10 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
-          ).quantityOf(ByteString.fromString("PolicyId"), ByteString.fromString("TokenName")),
+          ).quantityOf(utf8"PolicyId", utf8"TokenName"),
           BigInt(1000),
           ExUnits(memory = 125135, steps = 35276196)
         )
@@ -1229,13 +1229,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).withoutLovelace,
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 49315, steps = 13187273)
@@ -1246,16 +1246,16 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               .fromList(
                 List(
                   (
-                    ByteString.fromString("PolicyId"),
-                    List((ByteString.fromString("TokenName"), BigInt(1000)))
+                    utf8"PolicyId",
+                    List((utf8"TokenName", BigInt(1000)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
                 )
               )
               .withoutLovelace,
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ),
           ExUnits(memory = 262886, steps = 73837952)
@@ -1284,14 +1284,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
         assertEvalWithBudget(
           Value(
-            ByteString.fromString("PolicyId"),
-            ByteString.fromString("TokenName"),
+            utf8"PolicyId",
+            utf8"TokenName",
             BigInt(1000)
           ).flatten,
           List(
             (
-              ByteString.fromString("PolicyId"),
-              ByteString.fromString("TokenName"),
+              utf8"PolicyId",
+              utf8"TokenName",
               BigInt(1000)
             )
           ),
@@ -1303,8 +1303,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               .fromList(
                 List(
                   (
-                    ByteString.fromString("PolicyId"),
-                    List((ByteString.fromString("TokenName"), BigInt(1000)))
+                    utf8"PolicyId",
+                    List((utf8"TokenName", BigInt(1000)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
                 )
@@ -1313,8 +1313,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           List(
             (Value.adaPolicyId, Value.adaTokenName, BigInt(1000)),
             (
-              ByteString.fromString("PolicyId"),
-              ByteString.fromString("TokenName"),
+              utf8"PolicyId",
+              utf8"TokenName",
               BigInt(1000)
             )
           ),
@@ -1345,7 +1345,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         // Test value with single native asset
         val singleAssetValue = Value(
           policyId1,
-          ByteString.fromString("assetName1"),
+          utf8"assetName1",
           BigInt(100)
         )
         val ledgerSingleAsset = singleAssetValue.toLedgerValue
@@ -1356,12 +1356,12 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         val mixedValue = Value.lovelace(BigInt(2000000)) +
             Value(
               policyId1,
-              ByteString.fromString("assetName1"),
+              utf8"assetName1",
               BigInt(100)
             ) +
             Value(
               policyId2,
-              ByteString.fromString("assetName2"),
+              utf8"assetName2",
               BigInt(200)
             )
         val ledgerMixed = mixedValue.toLedgerValue
@@ -1374,8 +1374,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             (
               policyId1,
               List(
-                (ByteString.fromString("asset1"), BigInt(100)),
-                (ByteString.fromString("asset2"), BigInt(200))
+                (utf8"asset1", BigInt(100)),
+                (utf8"asset2", BigInt(200))
               )
             )
           )
@@ -1389,7 +1389,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         val originalValue = Value.lovelace(BigInt(5000000)) +
             Value(
               policyId3,
-              ByteString.fromString("token1"),
+              utf8"token1",
               BigInt(150)
             )
         val ledgerVal = originalValue.toLedgerValue
@@ -1403,11 +1403,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           List(
             (
               policyId3,
-              List((ByteString.fromString("token1"), BigInt(10)))
+              List((utf8"token1", BigInt(10)))
             ),
             (
               policyId4,
-              List((ByteString.fromString("token2"), BigInt(20)))
+              List((utf8"token2", BigInt(20)))
             )
           )
         )
