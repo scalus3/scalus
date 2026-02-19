@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.ExUnits
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.uplc.builtin.ByteString.utf8
+import scalus.uplc.builtin.ByteString.{hex, utf8}
 import scalus.cardano.ledger.LedgerToPlutusTranslation
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
@@ -1326,10 +1326,10 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         import scalus.cardano.ledger.Coin
 
         // Create valid 28-byte PolicyIds (ScriptHash) for testing
-        val policyId1 = ByteString.fromHex("a" * 56) // 28 bytes
-        val policyId2 = ByteString.fromHex("b" * 56) // 28 bytes
-        val policyId3 = ByteString.fromHex("1" * 56) // 28 bytes
-        val policyId4 = ByteString.fromHex("f" * 56) // 28 bytes
+        val policyId1 = hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        val policyId2 = hex"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        val policyId3 = hex"11111111111111111111111111111111111111111111111111111111"
+        val policyId4 = hex"ffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 
         // Test zero value conversion
         val ledgerZero = Value.zero.toLedgerValue
@@ -1446,12 +1446,12 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         // single native asset (28-byte policyId): Eq 2.2x more mem, 2.0x more steps
         assertEvalWithBudget(
           Value(
-            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
             utf8"TOKEN1",
             BigInt(1000)
           ) ===
               Value(
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 utf8"TOKEN1",
                 BigInt(1000)
               ),
@@ -1460,12 +1460,12 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
         assertEvalWithBudget(
           Value(
-            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
             utf8"TOKEN1",
             BigInt(1000)
           ).toData ==
               Value(
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 utf8"TOKEN1",
                 BigInt(1000)
               ).toData,
@@ -1478,7 +1478,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 List((utf8"TOKEN1", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
@@ -1487,7 +1487,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                     List((utf8"TOKEN1", BigInt(1000)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
@@ -1500,7 +1500,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 List((utf8"TOKEN1", BigInt(1000)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
@@ -1509,7 +1509,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                     List((utf8"TOKEN1", BigInt(1000)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(2000))))
@@ -1524,14 +1524,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 List(
                   (utf8"TOKEN1", BigInt(100)),
                   (utf8"TOKEN2", BigInt(200))
                 )
               ),
               (
-                ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678",
                 List((utf8"TOKEN3", BigInt(300)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
@@ -1540,14 +1540,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                     List(
                       (utf8"TOKEN1", BigInt(100)),
                       (utf8"TOKEN2", BigInt(200))
                     )
                   ),
                   (
-                    ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                    hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678",
                     List((utf8"TOKEN3", BigInt(300)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
@@ -1560,14 +1560,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.fromList(
             List(
               (
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 List(
                   (utf8"TOKEN1", BigInt(100)),
                   (utf8"TOKEN2", BigInt(200))
                 )
               ),
               (
-                ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678",
                 List((utf8"TOKEN3", BigInt(300)))
               ),
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
@@ -1576,14 +1576,14 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               Value.fromList(
                 List(
                   (
-                    ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                    hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                     List(
                       (utf8"TOKEN1", BigInt(100)),
                       (utf8"TOKEN2", BigInt(200))
                     )
                   ),
                   (
-                    ByteString.fromHex("1234567890abcdef1234567890abcdef1234567890abcdef12345678"),
+                    hex"1234567890abcdef1234567890abcdef1234567890abcdef12345678",
                     List((utf8"TOKEN3", BigInt(300)))
                   ),
                   (Value.adaPolicyId, List((Value.adaTokenName, BigInt(5000))))
@@ -1596,12 +1596,12 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         // not equal: different amounts: Eq 2.0x more mem, 1.9x more steps
         assertEvalWithBudget(
           Value(
-            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
             utf8"TOKEN1",
             BigInt(1000)
           ) !==
               Value(
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 utf8"TOKEN1",
                 BigInt(2000)
               ),
@@ -1610,12 +1610,12 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
         assertEvalWithBudget(
           Value(
-            ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+            hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
             utf8"TOKEN1",
             BigInt(1000)
           ).toData !=
               Value(
-                ByteString.fromHex("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8"),
+                hex"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8",
                 utf8"TOKEN1",
                 BigInt(2000)
               ).toData,
