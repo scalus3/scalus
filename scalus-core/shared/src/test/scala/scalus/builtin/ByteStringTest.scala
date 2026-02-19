@@ -12,17 +12,17 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
         assertEvalWithBudget(
           fromBigIntBigEndian(1_000_000, 3),
           hex"0f4240",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 701, steps = 1418707)
         )
         assertEvalWithBudget(
           fromBigIntBigEndian(1_000_000, 5),
           hex"00000f4240",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 701, steps = 1418707)
         )
         assertEvalWithBudget(
           fromBigIntBigEndian(0, 8),
           hex"0000000000000000",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 701, steps = 1418707)
         )
         assertEvalFails[BuiltinException](fromBigIntBigEndian(1_000_000, 1))
 
@@ -30,17 +30,17 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
         assertEvalWithBudget(
           fromBigIntLittleEndian(1_000_000, 3),
           hex"40420f",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 701, steps = 1418707)
         )
         assertEvalWithBudget(
           fromBigIntLittleEndian(1_000_000, 5),
           hex"40420f0000",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 701, steps = 1418707)
         )
         assertEvalWithBudget(
           fromBigIntLittleEndian(0, 8),
           hex"0000000000000000",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 701, steps = 1418707)
         )
         assertEvalFails[BuiltinException](fromBigIntLittleEndian(1_000_000, 1))
 

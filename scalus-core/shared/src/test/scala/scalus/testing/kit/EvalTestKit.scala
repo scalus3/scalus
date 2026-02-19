@@ -39,7 +39,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     given compilerOptions: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
-      optimizeUplc = false,
+      optimizeUplc = true,
       debug = false
     )
 
