@@ -18,6 +18,7 @@ object SIRDefaultOptions {
 
     val targetLoweringBackend: TargetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering
     val generateErrorTraces: Boolean = true
+    val removeTraces: Boolean = false
     val optimizeUplc: Boolean = false
 
     // debugging options

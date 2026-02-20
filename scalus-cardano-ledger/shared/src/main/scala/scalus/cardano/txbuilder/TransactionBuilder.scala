@@ -9,6 +9,7 @@ package scalus.cardano.txbuilder
 import io.bullet.borer.Encoder
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
+import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.*
@@ -578,7 +579,8 @@ object TransactionBuilder {
             // into a DiffHandler
             diffHandler: DiffHandler,
             protocolParams: ProtocolParams,
-            evaluator: PlutusScriptEvaluator
+            evaluator: PlutusScriptEvaluator,
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Either[TxBalancingError, Context] = {
             // println(s"txWithDummySignatures=${HexUtil.encodeHexString(txWithDummySignatures.toCbor)}")
 
@@ -588,7 +590,8 @@ object TransactionBuilder {
                   diffHandler = diffHandler,
                   protocolParams = protocolParams,
                   resolvedUtxo = this.getUtxos,
-                  evaluator = evaluator
+                  evaluator = evaluator,
+                  debugScripts = debugScripts
                 )
 
                 // _ = println(HexUtil.encodeHexString(txWithoutDummySignatures.toCbor))
@@ -642,7 +645,8 @@ object TransactionBuilder {
         def balanceContext(
             protocolParams: ProtocolParams,
             diffHandler: DiffHandler,
-            evaluator: PlutusScriptEvaluator
+            evaluator: PlutusScriptEvaluator,
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Either[SomeBuildError, Context] = {
             val txWithDummySignatures: Transaction =
                 addDummySignatures(this.expectedSigners.size, this.transaction)
@@ -666,7 +670,7 @@ object TransactionBuilder {
             for {
                 balancedCtx <- contextWithSignatures
                     .ensureMinAdaAll(protocolParams)
-                    .balance(combinedDiffHandler, protocolParams, evaluator)
+                    .balance(combinedDiffHandler, protocolParams, evaluator, debugScripts)
                     .left
                     .map(BalancingError(_, this))
 
@@ -739,10 +743,11 @@ object TransactionBuilder {
             evaluator: PlutusScriptEvaluator,
             validators: Seq[Validator],
             slot: Long = 1L,
-            certState: CertState = CertState.empty
+            certState: CertState = CertState.empty,
+            debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Either[SomeBuildError, Context] = {
             for {
-                balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator)
+                balancedCtx <- balanceContext(protocolParams, diffHandler, evaluator, debugScripts)
                 validatedCtx <- balancedCtx.validateContext(
                   validators,
                   protocolParams,
@@ -990,13 +995,15 @@ object TransactionBuilder {
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     ): Either[TxBalancingError, Transaction] = {
         balanceFeeAndChangeWithTokens(
           initial,
           Change.changeOutputDiffHandler(_, _, protocolParams, changeOutputIdx),
           protocolParams,
           resolvedUtxo,
-          evaluator
+          evaluator,
+          debugScripts
         )
     }
 
@@ -1015,6 +1022,7 @@ object TransactionBuilder {
         protocolParams: ProtocolParams,
         resolvedUtxo: Utxos,
         evaluator: PlutusScriptEvaluator,
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     ): Either[TxBalancingError, Transaction] = {
         var iteration = 0
 
@@ -1024,7 +1032,12 @@ object TransactionBuilder {
                 return Left(TxBalancingError.BalanceDidNotConverge(iteration))
 
             val eTrialTx = for {
-                txWithExUnits <- computeScriptsWitness(resolvedUtxo, evaluator, protocolParams)(tx)
+                txWithExUnits <- computeScriptsWitness(
+                  resolvedUtxo,
+                  evaluator,
+                  protocolParams,
+                  debugScripts
+                )(tx)
                 minFee <- MinTransactionFee
                     .ensureMinFee(txWithExUnits, resolvedUtxo, protocolParams)
                     .left
@@ -1048,9 +1061,10 @@ object TransactionBuilder {
     private[txbuilder] def computeScriptsWitness(
         utxos: Utxos,
         evaluator: PlutusScriptEvaluator,
-        protocolParams: ProtocolParams
+        protocolParams: ProtocolParams,
+        debugScripts: Map[ScriptHash, DebugScript] = Map.empty
     )(tx: Transaction): Either[TxBalancingError, Transaction] = Try {
-        val redeemers = evaluator.evalPlutusScripts(tx, utxos)
+        val redeemers = evaluator.evalPlutusScripts(tx, utxos, debugScripts)
         setupRedeemers(protocolParams, tx, utxos, redeemers)
     }.toEither.left.map {
         case psee: PlutusScriptEvaluationException => TxBalancingError.EvaluationFailed(psee)

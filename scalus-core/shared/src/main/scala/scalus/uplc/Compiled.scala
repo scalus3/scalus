@@ -5,7 +5,7 @@ import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler
 import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType, TargetLoweringBackend}
+import scalus.compiler.sir.{AnnotationsDecl, RemoveTraces, SIR, SIRType, TargetLoweringBackend}
 import scalus.compiler.{compileInlineWithOptions, Options}
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.transform.*
@@ -98,17 +98,28 @@ sealed abstract class CompiledPlutus[A](
     /** Creates the script with the appropriate version. */
     protected def makeScript(program: Program): PlutusScript
 
+    /** Returns a copy of this compiled script with error traces enabled.
+      *
+      * Error traces provide detailed error messages during script evaluation, useful for debugging.
+      * This increases script size and execution cost.
+      *
+      * @return
+      *   a new [[CompiledPlutus]] with `generateErrorTraces = true`
+      */
+    def withErrorTraces: CompiledPlutus[A]
+
     /** Lowers the SIR to UPLC using the configured backend and applies optimization if enabled. */
     protected def toUplc: Term = {
+        val sirToLower = if options.removeTraces then RemoveTraces.transform(sir) else sir
         val backend = options.targetLoweringBackend
         val uplc = backend match
             case TargetLoweringBackend.ScottEncodingLowering =>
-                ScottEncodingLowering(sir, options.generateErrorTraces).lower()
+                ScottEncodingLowering(sirToLower, options.generateErrorTraces).lower()
             case TargetLoweringBackend.SumOfProductsLowering =>
-                SumOfProductsLowering(sir, options.generateErrorTraces).lower()
+                SumOfProductsLowering(sirToLower, options.generateErrorTraces).lower()
             case TargetLoweringBackend.SirToUplcV3Lowering =>
                 SirToUplcV3Lowering(
-                  sir,
+                  sirToLower,
                   generateErrorTraces = options.generateErrorTraces,
                   debug = options.debug,
                   targetLanguage = language
@@ -168,7 +179,8 @@ final case class PlutusV1[A] private[uplc] (
       * @return
       *   a new [[PlutusV1]] with `generateErrorTraces = true`
       */
-    def withErrorTraces: PlutusV1[A] = copy(options = options.copy(generateErrorTraces = true))
+    def withErrorTraces: PlutusV1[A] =
+        copy(options = options.copy(generateErrorTraces = true, removeTraces = false))
 }
 
 /** Factory methods for creating compiled Plutus V1 scripts. */
@@ -283,7 +295,8 @@ final case class PlutusV2[A] private[uplc] (
       * @return
       *   a new [[PlutusV2]] with `generateErrorTraces = true`
       */
-    def withErrorTraces: PlutusV2[A] = copy(options = options.copy(generateErrorTraces = true))
+    def withErrorTraces: PlutusV2[A] =
+        copy(options = options.copy(generateErrorTraces = true, removeTraces = false))
 }
 
 /** Factory methods for creating compiled Plutus V2 scripts. */
@@ -403,7 +416,8 @@ final case class PlutusV3[A] private[uplc] (
       * @return
       *   a new [[PlutusV3]] with `generateErrorTraces = true`
       */
-    def withErrorTraces: PlutusV3[A] = copy(options = options.copy(generateErrorTraces = true))
+    def withErrorTraces: PlutusV3[A] =
+        copy(options = options.copy(generateErrorTraces = true, removeTraces = false))
 }
 
 /** Factory methods for creating compiled Plutus V3 scripts. */

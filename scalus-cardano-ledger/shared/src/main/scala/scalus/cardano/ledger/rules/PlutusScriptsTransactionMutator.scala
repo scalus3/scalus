@@ -30,7 +30,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
               protocolMajorVersion = protocolVersion.toMajor,
               costModels = protocolParameters.costModels,
               mode = context.evaluatorMode
-            ).evalPlutusScripts(event, utxo)
+            ).evalPlutusScripts(event, utxo, context.debugScripts)
 
             if event.isValid then
                 val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
@@ -60,7 +60,8 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                       TransactionException.PlutusScriptValidationException(
                         event.id,
                         e.getMessage,
-                        e.logs.toSeq
+                        e.logs.toSeq,
+                        Some(e.failedScriptHash)
                       )
                     )
                 else

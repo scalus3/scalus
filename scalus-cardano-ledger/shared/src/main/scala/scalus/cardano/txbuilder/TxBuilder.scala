@@ -1,5 +1,6 @@
 package scalus.cardano.txbuilder
 
+import scalus.uplc.{CompiledPlutus, DebugScript}
 import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{Data, ToData}
@@ -179,7 +180,8 @@ case class TxBuilder(
     evaluator: PlutusScriptEvaluator,
     steps: Seq[TransactionBuilderStep] = Seq.empty,
     attachedData: Map[DataHash, Data] = Map.empty,
-    changeOutputIndex: Option[Int] = None
+    changeOutputIndex: Option[Int] = None,
+    debugScripts: Map[ScriptHash, DebugScript] = Map.empty
 ) {
 
     /** Spends a UTXO with an explicit witness.
@@ -399,12 +401,108 @@ case class TxBuilder(
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
 
+    /** Spends a script-protected UTXO using a [[CompiledPlutus]] script.
+      *
+      * The compiled script is used both for the on-chain script (via `.script`) and registered as a
+      * debug script for diagnostic replay. If the script was compiled with `Options.release` (no
+      * traces) and fails, the evaluator will automatically recompile from SIR with error traces and
+      * replay to produce diagnostic logs.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param redeemer
+      *   redeemer to pass to the script
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      */
+    def spend[T: ToData](
+        utxo: Utxo,
+        redeemer: T,
+        compiled: CompiledPlutus[?]
+    ): TxBuilder = {
+        registerDebugScript(compiled).spend(utxo, redeemer, compiled.script)
+    }
+
+    /** Spends a script-protected UTXO using a [[CompiledPlutus]] script with required signers.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param redeemer
+      *   redeemer to pass to the script
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      */
+    def spend[T: ToData](
+        utxo: Utxo,
+        redeemer: T,
+        compiled: CompiledPlutus[?],
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
+        registerDebugScript(compiled).spend(utxo, redeemer, compiled.script, requiredSigners)
+    }
+
+    /** Spends a script-protected UTXO with a delayed redeemer using a [[CompiledPlutus]] script.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      */
+    def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data,
+        compiled: CompiledPlutus[?]
+    ): TxBuilder = {
+        registerDebugScript(compiled).spend(utxo, redeemerBuilder, compiled.script)
+    }
+
+    /** Spends a script-protected UTXO with a delayed redeemer using a [[CompiledPlutus]] script
+      * with required signers.
+      *
+      * @param utxo
+      *   the UTXO to spend
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      */
+    def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data,
+        compiled: CompiledPlutus[?],
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
+        registerDebugScript(compiled).spend(utxo, redeemerBuilder, compiled.script, requiredSigners)
+    }
+
     /** Adds the specified utxos to the list of reference inputs.
       *
       * Reference inputs allow scripts to read UTXOs without consuming them.
       */
     def references(utxo: Utxo, rest: Utxo*): TxBuilder =
         addSteps((utxo :: rest.toList).map(TransactionBuilderStep.ReferenceOutput.apply)*)
+
+    /** Adds the specified utxo to the list of reference inputs and registers the compiled script
+      * for diagnostic replay.
+      *
+      * Use this overload when the reference UTXO contains a script and you want diagnostic replay
+      * support. The compiled script is registered so that if the release script fails with empty
+      * logs, the evaluator can recompile from SIR with error traces.
+      *
+      * @param utxo
+      *   the reference UTXO
+      * @param compiled
+      *   the compiled Plutus script for diagnostic replay
+      */
+    def references(utxo: Utxo, compiled: CompiledPlutus[?]): TxBuilder =
+        registerDebugScript(compiled)
+            .addSteps(TransactionBuilderStep.ReferenceOutput(utxo))
 
     /** Adds the specified utxos to the list of collateral inputs.
       *
@@ -655,6 +753,63 @@ case class TxBuilder(
         }.toSeq
 
         addSteps(mintSteps*)
+    }
+
+    /** Mints or burns native tokens using a [[CompiledPlutus]] script.
+      *
+      * The compiled script is used both for the on-chain script and registered as a debug script
+      * for diagnostic replay.
+      *
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      */
+    def mint[T: ToData](
+        compiled: CompiledPlutus[?],
+        assets: collection.Map[AssetName, Long],
+        redeemer: T
+    ): TxBuilder = {
+        registerDebugScript(compiled).mint(compiled.script, assets, redeemer)
+    }
+
+    /** Mints or burns native tokens using a [[CompiledPlutus]] script with required signers.
+      *
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemer
+      *   redeemer to pass to the minting policy script
+      * @param requiredSigners
+      *   set of public key hashes that must sign the transaction
+      */
+    def mint[T: ToData](
+        compiled: CompiledPlutus[?],
+        assets: collection.Map[AssetName, Long],
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = {
+        registerDebugScript(compiled).mint(compiled.script, assets, redeemer, requiredSigners)
+    }
+
+    /** Mints or burns native tokens with a delayed redeemer using a [[CompiledPlutus]] script.
+      *
+      * @param compiled
+      *   compiled Plutus script (carries SIR for diagnostic replay)
+      * @param assets
+      *   map of asset names to amounts (positive for minting, negative for burning)
+      * @param redeemerBuilder
+      *   function that computes the redeemer from the assembled transaction
+      */
+    def mint(
+        compiled: CompiledPlutus[?],
+        assets: collection.Map[AssetName, Long],
+        redeemerBuilder: Transaction => Data
+    ): TxBuilder = {
+        registerDebugScript(compiled).mint(compiled.script, assets, redeemerBuilder)
     }
 
     /** Mints or burns native tokens with a delayed redeemer and attached script.
@@ -1338,7 +1493,7 @@ case class TxBuilder(
         val balancedContext = for {
             built <- TransactionBuilder.modify(context, steps)
             withAttachments = addAttachmentsToContext(built)
-            balanced <- withAttachments.balanceContext(params, diffHandler, evaluator)
+            balanced <- withAttachments.balanceContext(params, diffHandler, evaluator, debugScripts)
         } yield balanced
 
         balancedContext match {
@@ -1590,7 +1745,8 @@ case class TxBuilder(
                 ctxWithSponsor.balanceContext(
                   env.protocolParams,
                   diffHandler,
-                  evaluator
+                  evaluator,
+                  debugScripts
                 ) match {
                     case Right(balancedCtx) =>
                         if balancedCtx.transaction.body.value.inputs.toSeq.isEmpty && pool.remainingForInputs.nonEmpty
@@ -1731,6 +1887,52 @@ case class TxBuilder(
         val allData = currentData ++ attachedData.view.map((k, v) => k -> KeepRaw(v))
         updatedTx = updatedTx.withWitness(_.copy(plutusData = KeepRaw(TaggedSortedMap(allData))))
         ctx.copy(transaction = updatedTx)
+    }
+
+    /** Registers a debug script for diagnostic replay.
+      *
+      * When a release script (compiled without error traces) fails during evaluation with empty
+      * logs, the evaluator will use the registered debug script to replay the failing evaluation,
+      * producing diagnostic logs.
+      *
+      * This overload accepts a [[DebugScript]] directly, which can wrap either a pre-compiled debug
+      * [[scalus.cardano.ledger.PlutusScript]] (for external builders) or a lazy recompilation from
+      * [[CompiledPlutus]].
+      *
+      * @param scriptHash
+      *   the script hash of the release script (used for lookup)
+      * @param debugScript
+      *   the debug script to use for replay
+      */
+    def withDebugScript(scriptHash: ScriptHash, debugScript: DebugScript): TxBuilder = {
+        copy(debugScripts = debugScripts + (scriptHash -> debugScript))
+    }
+
+    /** Registers a compiled script for diagnostic replay.
+      *
+      * When a release script (compiled without error traces) fails during evaluation with empty
+      * logs, the evaluator will use the registered compiled script to recompile from SIR with error
+      * traces and replay the failing evaluation, producing diagnostic logs.
+      *
+      * This is automatically called by the `spend` and `mint` overloads that accept
+      * [[CompiledPlutus]]. Use this method directly for reference-script use cases where the script
+      * is not attached to the transaction but you still want diagnostic replay.
+      *
+      * '''Migration note:''' If you previously used `validator.script` (a `PlutusScript`) with
+      * `spend` or `mint`, pass `validator` (a `CompiledPlutus`) directly instead to enable
+      * automatic diagnostic replay.
+      *
+      * @param compiled
+      *   the compiled Plutus script to register for diagnostic replay
+      */
+    def withDebugScript(compiled: CompiledPlutus[?]): TxBuilder = {
+        registerDebugScript(compiled)
+    }
+
+    private def registerDebugScript(compiled: CompiledPlutus[?]): TxBuilder = {
+        copy(debugScripts =
+            debugScripts + (compiled.script.scriptHash -> DebugScript.fromCompiled(compiled))
+        )
     }
 
     /** Appends transaction building steps to this builder.
