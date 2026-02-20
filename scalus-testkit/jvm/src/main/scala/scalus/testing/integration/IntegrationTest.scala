@@ -111,16 +111,10 @@ trait IntegrationTest extends BeforeAndAfterAll with ScalusTest { self: Suite =>
           throw new IllegalStateException("YaciDevKit container not started")
         )
         val baseUrl = container.getYaciStoreApiUrl.stripSuffix("/")
+        val adminUrl = container.getLocalClusterApiUrl.stripSuffix("/")
 
-        // Yaci DevKit uses slot length of 1 second and start time of 0
-        val yaciSlotConfig = SlotConfig(
-          zeroTime = 0L,
-          zeroSlot = 0L,
-          slotLength = 1000
-        )
-
-        // Create provider (async) - fetches protocol params during construction
-        val provider = BlockfrostProvider.localYaci(baseUrl, 5, yaciSlotConfig).await()
+        // Create provider (async) - fetches protocol params and slot config during construction
+        val provider = BlockfrostProvider.localYaci(baseUrl, adminUrl).await()
 
         val parties = Party.values.toIndexedSeq.map(p =>
             TestParty(

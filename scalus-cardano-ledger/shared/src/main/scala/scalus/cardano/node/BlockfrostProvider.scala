@@ -541,6 +541,9 @@ object BlockfrostProvider {
     /** Local Yaci DevKit API URL */
     val localUrl = "http://localhost:8080/api/v1"
 
+    /** Local Yaci DevKit admin API URL */
+    val localAdminUrl = "http://localhost:10000/local-cluster/api"
+
     @deprecated("Use mainnetUrl instead", "0.14.1")
     val MainnetUrl: String = mainnetUrl
 
@@ -625,23 +628,69 @@ object BlockfrostProvider {
 
     /** Create a BlockfrostProvider for local Yaci DevKit.
       *
-      * Fetches protocol parameters during construction.
+      * Fetches protocol parameters and slot configuration during construction. The slot config is
+      * fetched from the Yaci admin API (`/admin/devnet`) to get the correct `startTime`.
       *
       * @param baseUrl
       *   API base URL (default: http://localhost:8080/api/v1)
+      * @param adminUrl
+      *   Yaci admin API URL (default: http://localhost:10000/local-cluster/api)
       * @param maxConcurrentRequests
       *   Maximum concurrent HTTP requests (default 5)
-      * @param slotConfig
-      *   Slot configuration (default: Yaci DevKit config with 1s slots)
       * @return
       *   Future containing the configured BlockfrostProvider
       */
     def localYaci(
         baseUrl: String = localUrl,
-        maxConcurrentRequests: Int = 5,
-        slotConfig: SlotConfig = SlotConfig(0L, 0L, 1000)
-    )(using ec: ExecutionContext): Future[BlockfrostProvider] =
-        create("", baseUrl, Network.Testnet, slotConfig, maxConcurrentRequests)
+        adminUrl: String = localAdminUrl,
+        maxConcurrentRequests: Int = 5
+    )(using ec: ExecutionContext): Future[BlockfrostProvider] = {
+        given backend: Backend[Future] = BlockfrostProviderPlatform.defaultBackend
+        val paramsFuture = fetchProtocolParams("", baseUrl)
+        val slotConfigFuture = fetchYaciSlotConfig(adminUrl)
+        paramsFuture.zip(slotConfigFuture).map { case (params, slotConfig) =>
+            new BlockfrostProvider(
+              "",
+              baseUrl,
+              maxConcurrentRequests,
+              CardanoInfo(params, Network.Testnet, slotConfig)
+            )
+        }
+    }
+
+    /** Fetch slot configuration from a Yaci DevKit admin API.
+      *
+      * Calls `GET {adminUrl}/admin/devnet` and extracts `startTime` (epoch seconds) and
+      * `slotLength` (seconds as double) from the response JSON.
+      *
+      * @param adminUrl
+      *   Yaci admin API base URL (e.g. http://localhost:10000/local-cluster/api)
+      * @return
+      *   Future containing the SlotConfig
+      */
+    def fetchYaciSlotConfig(adminUrl: String)(using
+        backend: Backend[Future],
+        ec: ExecutionContext
+    ): Future[SlotConfig] = {
+        val url = s"${adminUrl.stripSuffix("/")}/admin/devnet"
+        basicRequest.get(uri"$url").send(backend).map { response =>
+            if response.code == StatusCode.Ok then
+                response.body match
+                    case Right(body) =>
+                        val json = ujson.read(body, trace = false)
+                        val startTime = json("startTime").num.toLong
+                        val slotLength = json("slotLength").num
+                        SlotConfig(startTime * 1000, 0L, (slotLength * 1000).toLong)
+                    case Left(error) =>
+                        throw RuntimeException(
+                          s"Failed to fetch Yaci slot config. Status: ${response.code}, Body: $error"
+                        )
+            else
+                throw RuntimeException(
+                  s"Failed to fetch Yaci slot config. Status: ${response.code}, Body: ${response.body}"
+                )
+        }
+    }
 
     /** Create a BlockfrostProvider with custom configuration.
       *
