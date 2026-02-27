@@ -41,14 +41,6 @@ class MerklingTest extends AnyFunSuite with EvalTestKit {
         }
     }
 
-    test("nibbles extracts correct sequences for specific examples") {
-        assert(nibbles(hex"0123456789", 2, 2) == ByteString.empty)
-        assert(nibbles(hex"0123456789", 2, 3) == hex"02")
-        assert(nibbles(hex"0123456789", 4, 8) == hex"04050607")
-        assert(nibbles(hex"0123456789", 3, 6) == hex"030405")
-        assert(nibbles(hex"0123456789", 1, 7) == hex"010203040506")
-    }
-
     test("nibble extracts correct values for specific examples") {
         assert(nibble(hex"ab", 0) == BigInt(10)) // 'a' high nibble
         assert(nibble(hex"ab", 1) == BigInt(11)) // 'b' low nibble

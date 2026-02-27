@@ -1,18 +1,18 @@
-package scalus.cardano.offchain.mpf
+package scalus.cardano.offchain.mpfo
 
-import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry as OnChainForestry
-import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry.{Neighbor, Proof, ProofStep}
-import scalus.cardano.onchain.plutus.mpf.Merkling.*
+import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry as OnChainForestry
+import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry.{Neighbor, Proof, ProofStep}
+import scalus.cardano.onchain.plutus.mpfo.Merkling.*
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 
-private[mpf] sealed trait Node {
+private[mpfo] sealed trait Node {
     def hash: ByteString
     def size: Int
 }
 
-private[mpf] object Node {
+private[mpfo] object Node {
 
     case object Empty extends Node {
         val hash: ByteString = NullHash
@@ -40,7 +40,7 @@ private[mpf] object Node {
     ) extends Node
 }
 
-/** Off-chain Merkle Patricia Forestry implementation.
+/** Off-chain original Merkle Patricia Forestry implementation (full nibble prefix encoding).
   *
   * Allows lookup, insertion, deletion, and generation of succinct and on-chain MPF compatible
   * inclusion/exclusion proofs.
@@ -102,22 +102,6 @@ case class MerklePatriciaForestry(root: Node) {
         expanded.proveExists(key)
     }
 
-    /** Creates a binary-encoded proof of inclusion, suitable for the `mpfb` on-chain verifier. */
-    def proveExistsBinary(key: ByteString): ByteString = {
-        val path = blake2b_256(key)
-        val (found, steps) = MerklePatriciaForestry.doProve(root, path, 0)
-        if !found then throw new NoSuchElementException(s"Key not in trie: ${key.toHex}")
-        MerklePatriciaForestry.proofToBinary(steps)
-    }
-
-    /** Creates a binary-encoded proof of exclusion, suitable for the `mpfb` on-chain verifier. */
-    def proveMissingBinary(key: ByteString): ByteString = {
-        if get(key).isDefined then
-            throw new IllegalArgumentException(s"Key already in trie: ${key.toHex}")
-        val expanded = insert(key, ByteString.empty)
-        expanded.proveExistsBinary(key)
-    }
-
     /** Wrap the root hash as an on-chain [[OnChainForestry]] value. */
     def toOnChain: OnChainForestry = OnChainForestry(rootHash)
 }
@@ -132,34 +116,28 @@ object MerklePatriciaForestry {
     def fromList(entries: Iterable[(ByteString, ByteString)]): MerklePatriciaForestry =
         entries.foldLeft(empty) { case (trie, (k, v)) => trie.insert(k, v) }
 
-    private def combine3(a: ByteString, b: ByteString, c: ByteString): ByteString =
-        blake2b_256(appendByteString(a, appendByteString(b, c)))
-
     /** Leaf hash: `combine(suffix(path, cursor), blake2b_256(value))` */
     private def leafHash(fullPath: ByteString, cursor: Int, value: ByteString): ByteString =
         combine(suffix(fullPath, cursor), blake2b_256(value))
 
-    /** Branch hash: `combine3(prefix, halfLeft, halfRight)` — matches on-chain doBranch. */
-    private def branchHash(skip: Vector[Int], children: Vector[Node]): ByteString = {
-        val prefix = consByteString(skip.length, ByteString.empty)
-        val (hL, hR) = merkleHalves(children.map(_.hash))
-        combine3(prefix, hL, hR)
-    }
+    /** Branch hash: `combine(nibblesAsBytes(skip), merkleRoot16(children))` */
+    private def branchHash(skip: Vector[Int], children: Vector[Node]): ByteString =
+        combine(nibblesAsBytes(skip), merkleRoot16(children))
 
-    /** Compute merkle root from pre-computed hashes using binary tree reduction. */
-    private def merkleRootFromHashes(hashes: Vector[ByteString]): ByteString = {
-        var current = hashes
-        while current.length > 1 do
-            current = current.grouped(2).map { pair => combine(pair(0), pair(1)) }.toVector
-        current.head
-    }
+    /** Encode a nibble vector as a ByteString (one byte per nibble, 0x00..0x0F). Matches on-chain
+      * `Merkling.nibbles` output format.
+      */
+    private def nibblesAsBytes(nibbles: Vector[Int]): ByteString =
+        ByteString.unsafeFromArray(nibbles.map(_.toByte).toArray)
 
-    /** Reduce hashes to two halves (left and right subtree roots). */
-    private def merkleHalves(hashes: Vector[ByteString]): (ByteString, ByteString) = {
-        var current = hashes
-        while current.length > 2 do
-            current = current.grouped(2).map { pair => combine(pair(0), pair(1)) }.toVector
-        (current(0), current(1))
+    /** Compute the merkle root of 16 child hashes using the same binary tree structure as on-chain
+      * `Merkling.merkle16`.
+      */
+    private def merkleRoot16(children: Vector[Node]): ByteString = {
+        var hashes = children.map(_.hash)
+        while hashes.length > 1 do
+            hashes = hashes.grouped(2).map { pair => combine(pair(0), pair(1)) }.toVector
+        hashes.head
     }
 
     /** Extract the 4 sibling hashes needed for a [[ProofStep.Branch]] step. These are the
@@ -385,16 +363,13 @@ object MerklePatriciaForestry {
                     // The on-chain verifier uses sparseMerkle16 to place both entries.
                     ProofStep.Leaf(skip, leaf.fullPath, blake2b_256(leaf.value))
                 case inner: Node.Branch =>
-                    // Sibling is a branch: record its index, skip prefix length,
-                    // and the two merkle halves (64 bytes).
-                    val (hL, hR) = merkleHalves(inner.children.map(_.hash))
+                    // Sibling is a branch: record its index, skip prefix, and merkle root.
                     ProofStep.Fork(
                       skip,
                       Neighbor(
                         nibble = neighborIdx,
-                        prefixLen = inner.skip.length,
-                        halfLeft = hL,
-                        halfRight = hR
+                        prefix = nibblesAsBytes(inner.skip),
+                        root = merkleRoot16(inner.children)
                       )
                     )
                 case Node.Empty =>
@@ -404,28 +379,4 @@ object MerklePatriciaForestry {
 
     private def toProof(steps: scala.List[ProofStep]): Proof =
         steps.foldRight(PList.Nil: Proof) { (step, acc) => PList.Cons(step, acc) }
-
-    /** Serialize proof steps into the compact binary format used by `mpfb`. */
-    private def proofToBinary(steps: scala.List[ProofStep]): ByteString = {
-        val buf = new java.io.ByteArrayOutputStream()
-        for step <- steps do
-            step match
-                case ProofStep.Branch(skip, neighbors) =>
-                    buf.write(0)
-                    buf.write(skip.toInt)
-                    buf.write(neighbors.bytes)
-                case ProofStep.Fork(skip, Neighbor(nibble, prefixLen, halfLeft, halfRight)) =>
-                    buf.write(1)
-                    buf.write(skip.toInt)
-                    buf.write(nibble.toInt)
-                    buf.write(prefixLen.toInt)
-                    buf.write(halfLeft.bytes)
-                    buf.write(halfRight.bytes)
-                case ProofStep.Leaf(skip, key, value) =>
-                    buf.write(2)
-                    buf.write(skip.toInt)
-                    buf.write(key.bytes)
-                    buf.write(value.bytes)
-        ByteString.unsafeFromArray(buf.toByteArray)
-    }
 }

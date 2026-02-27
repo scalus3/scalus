@@ -1,21 +1,15 @@
-package scalus.cardano.onchain.plutus.mpf
+package scalus.cardano.onchain.plutus.mpfo
 
 import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{require, List}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{ByteString, FromData, ToData}
 
-/** A Merkle Patricia Forestry (MPF) is a key:value structure which stores elements in a radix trie
-  * following a key, and where nodes also contains a cryptographic hash digest of the sub-trie or
-  * value they hold.
+/** Original Merkle Patricia Forestry (MPF16) with full nibble prefix encoding.
   *
-  * This library enforces (through hashing) that we use trie of radix 16 (hexadecimal alphabet).
-  * This means that each level in the trie has up to 16 branches.
-  *
-  * An MPF allows for checking membership, insertion and deletion in the trie using only root hashes
-  * and succinct proofs. They are quite efficient in both cpu and mem units. And they also provide
-  * proofs that are a / lot smaller than traditional Merkle Patricia Trie; proofs remain however the
-  * / main limiting factor.
+  * This is the Aiken-compatible version that encodes the full nibble values in branch prefix
+  * hashes, as opposed to the optimized version in the `mpf` package which only encodes the skip
+  * length.
   */
 case class MerklePatriciaForestry(root: ByteString)
 
@@ -29,9 +23,8 @@ object MerklePatriciaForestry:
     /** A neighbor node used in a proof */
     case class Neighbor(
         nibble: BigInt,
-        prefixLen: BigInt,
-        halfLeft: ByteString,
-        halfRight: ByteString
+        prefix: ByteString,
+        root: ByteString
     ) derives FromData,
           ToData
 
@@ -123,19 +116,17 @@ object MerklePatriciaForestry:
                 case ProofStep.Fork(skip, neighbor) =>
                     val nextCursor = cursor + 1 + skip
                     val root = doIncluding(path, value, nextCursor, steps)
-                    val neighborHash = combine3(
-                      consByteString(neighbor.prefixLen, ByteString.empty),
-                      neighbor.halfLeft,
-                      neighbor.halfRight
-                    )
-                    doFork(path, cursor, nextCursor, root, neighbor.nibble, neighborHash)
+                    doFork(path, cursor, nextCursor, root, neighbor)
 
                 case ProofStep.Leaf(skip, key, neighborValue) =>
                     val nextCursor = cursor + 1 + skip
                     val root = doIncluding(path, value, nextCursor, steps)
-                    val neighborNibble = nibble(key, nextCursor - 1)
-                    val neighborHash = combine(suffix(key, nextCursor), neighborValue)
-                    doFork(path, cursor, nextCursor, root, neighborNibble, neighborHash)
+                    val neighbor = Neighbor(
+                      nibble = nibble(key, nextCursor - 1),
+                      prefix = suffix(key, nextCursor),
+                      root = neighborValue
+                    )
+                    doFork(path, cursor, nextCursor, root, neighbor)
 
     /** Compute root hash excluding element */
     private def excluding(key: ByteString, proof: Proof): ByteString =
@@ -157,23 +148,19 @@ object MerklePatriciaForestry:
                 case ProofStep.Fork(skip, neighbor) =>
                     steps match
                         case List.Nil =>
-                            combine3(
-                              consByteString(
-                                skip + 1 + neighbor.prefixLen,
-                                ByteString.empty
-                              ),
-                              neighbor.halfLeft,
-                              neighbor.halfRight
-                            )
+                            if skip == BigInt(0) then
+                                val prefix = consByteString(neighbor.nibble, neighbor.prefix)
+                                combine(prefix, neighbor.root)
+                            else
+                                val originalPrefix = appendByteString(
+                                  nibbles(path, cursor, cursor + skip),
+                                  consByteString(neighbor.nibble, neighbor.prefix)
+                                )
+                                combine(originalPrefix, neighbor.root)
                         case _ =>
                             val nextCursor = cursor + 1 + skip
                             val root = doExcluding(path, nextCursor, steps)
-                            val neighborHash = combine3(
-                              consByteString(neighbor.prefixLen, ByteString.empty),
-                              neighbor.halfLeft,
-                              neighbor.halfRight
-                            )
-                            doFork(path, cursor, nextCursor, root, neighbor.nibble, neighborHash)
+                            doFork(path, cursor, nextCursor, root, neighbor)
 
                 case ProofStep.Leaf(skip, key, value) =>
                     steps match
@@ -181,9 +168,12 @@ object MerklePatriciaForestry:
                         case _ =>
                             val nextCursor = cursor + 1 + skip
                             val root = doExcluding(path, nextCursor, steps)
-                            val neighborNibble = nibble(key, nextCursor - 1)
-                            val neighborHash = combine(suffix(key, nextCursor), value)
-                            doFork(path, cursor, nextCursor, root, neighborNibble, neighborHash)
+                            val neighbor = Neighbor(
+                              nibble = nibble(key, nextCursor - 1),
+                              prefix = suffix(key, nextCursor),
+                              root = value
+                            )
+                            doFork(path, cursor, nextCursor, root, neighbor)
 
     private def doBranch(
         path: ByteString,
@@ -193,45 +183,38 @@ object MerklePatriciaForestry:
         neighbors: ByteString
     ): ByteString =
         val branch = nibble(path, nextCursor - 1)
-        val prefix = consByteString(nextCursor - 1 - cursor, ByteString.empty)
-        val n8 = sliceByteString(0, Blake2b256DigestSize, neighbors)
-        val n4 = sliceByteString(32, Blake2b256DigestSize, neighbors)
-        val n2 = sliceByteString(64, Blake2b256DigestSize, neighbors)
-        val n1 = sliceByteString(96, Blake2b256DigestSize, neighbors)
-        if branch <= 7 then combine3(prefix, merkle8(branch, root, n4, n2, n1), n8)
-        else combine3(prefix, n8, merkle8(branch - 8, root, n4, n2, n1))
+        val prefix = nibbles(path, cursor, nextCursor - 1)
+
+        combine(
+          prefix,
+          merkle16(
+            branch,
+            root,
+            sliceByteString(0, Blake2b256DigestSize, neighbors),
+            sliceByteString(32, Blake2b256DigestSize, neighbors),
+            sliceByteString(64, Blake2b256DigestSize, neighbors),
+            sliceByteString(96, Blake2b256DigestSize, neighbors)
+          )
+        )
 
     private def doFork(
         path: ByteString,
         cursor: BigInt,
         nextCursor: BigInt,
         root: ByteString,
-        neighborNibble: BigInt,
-        neighborHash: ByteString
+        neighbor: Neighbor
     ): ByteString =
         val branch = nibble(path, nextCursor - 1)
-        val prefix = consByteString(nextCursor - 1 - cursor, ByteString.empty)
+        val prefix = nibbles(path, cursor, nextCursor - 1)
 
-        require(branch != neighborNibble)
+        require(branch != neighbor.nibble)
 
-        if branch < 8 then
-            if neighborNibble < 8 then
-                combine3(prefix, sparseMerkle8(branch, root, neighborNibble, neighborHash), NullHash8)
-            else
-                combine3(
-                  prefix,
-                  merkle8(branch, root, NullHash4, NullHash2, NullHash),
-                  merkle8(neighborNibble - 8, neighborHash, NullHash4, NullHash2, NullHash)
-                )
-        else if neighborNibble >= 8 then
-            combine3(
-              prefix,
-              NullHash8,
-              sparseMerkle8(branch - 8, root, neighborNibble - 8, neighborHash)
-            )
-        else
-            combine3(
-              prefix,
-              merkle8(neighborNibble, neighborHash, NullHash4, NullHash2, NullHash),
-              merkle8(branch - 8, root, NullHash4, NullHash2, NullHash)
-            )
+        combine(
+          prefix,
+          sparseMerkle16(
+            branch,
+            root,
+            neighbor.nibble,
+            combine(neighbor.prefix, neighbor.root)
+          )
+        )

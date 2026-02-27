@@ -1,14 +1,14 @@
-package scalus.cardano.onchain.plutus.mpf
+package scalus.cardano.onchain.plutus.mpq
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.offchain.mpf.MerklePatriciaForestry as OffChainMpf
+import scalus.cardano.offchain.mpq.MerklePatriciaQuad as OffChainMpq
 import scalus.cardano.onchain.RequirementError
 import scalus.uplc.builtin.ByteString
 
 import scala.language.implicitConversions
 
-/** On-chain MPF verifier tests using dynamically generated proofs from the off-chain MPF. */
-class MerklePatriciaForestryTest extends AnyFunSuite {
+/** On-chain MPQ verifier tests using dynamically generated proofs from the off-chain MPQ. */
+class MerklePatriciaQuadTest extends AnyFunSuite {
 
     private implicit inline def toByteString(inline s: String): ByteString =
         ByteString.fromString(s)
@@ -50,7 +50,7 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         (ByteString.fromString(k), ByteString.fromString(v))
     }
 
-    private val offChainTrie = OffChainMpf.fromList(fruitBs)
+    private val offChainTrie = OffChainMpq.fromList(fruitBs)
     private val trie = offChainTrie.toOnChain
     private val expectedRoot = offChainTrie.rootHash
 
@@ -176,7 +176,7 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         val v1 = ByteString.fromString("v1")
         val v2 = ByteString.fromString("v2")
 
-        val smallTrie = OffChainMpf.empty.insert(k1, v1).insert(k2, v2)
+        val smallTrie = OffChainMpq.empty.insert(k1, v1).insert(k2, v2)
         val onChain = smallTrie.toOnChain
 
         val proof1 = smallTrie.proveExists(k1)
@@ -203,7 +203,7 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         val v2 = ByteString.fromString("v2")
         val v3 = ByteString.fromString("v3")
 
-        val smallTrie = OffChainMpf.empty.insert(k1, v1).insert(k2, v2).insert(k3, v3)
+        val smallTrie = OffChainMpq.empty.insert(k1, v1).insert(k2, v2).insert(k3, v3)
         val onChain = smallTrie.toOnChain
 
         for (k, v) <- Seq((k1, v1), (k2, v2), (k3, v3)) do

@@ -1,13 +1,11 @@
-package scalus.cardano.offchain.mpf
+package scalus.cardano.offchain.mpt
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.mpf.Merkling
-import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry as OnChainBinary
+import scalus.cardano.onchain.plutus.mpt.BinaryMerkling
 import scalus.uplc.builtin.ByteString
 
-class MerklePatriciaForestryTest extends AnyFunSuite {
+class MerklePatriciaTrieTest extends AnyFunSuite {
 
-    // The fruit dataset from the on-chain MerklePatriciaForestryTest
     private val fruitEntries: Seq[(String, String)] = Seq(
       "apple[uid: 58]" -> "🍎",
       "apricot[uid: 0]" -> "🤷",
@@ -45,27 +43,23 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         (ByteString.fromString(k), ByteString.fromString(v))
     }
 
-    private val fullTrie = MerklePatriciaForestry.fromList(fruitBs)
+    private val fullTrie = MerklePatriciaTrie.fromList(fruitBs)
     private val expectedRoot = fullTrie.rootHash
 
     test("empty trie has null hash") {
-        val trie = MerklePatriciaForestry.empty
-        assert(trie.rootHash == Merkling.NullHash)
+        val trie = MerklePatriciaTrie.empty
+        assert(trie.rootHash == BinaryMerkling.NullHash)
         assert(trie.size == 0)
         assert(trie.isEmpty)
     }
 
     test("single element trie") {
-        val trie = MerklePatriciaForestry.empty
+        val trie = MerklePatriciaTrie.empty
             .insert(ByteString.fromString("hello"), ByteString.fromString("world"))
         assert(trie.size == 1)
         assert(!trie.isEmpty)
         assert(trie.get(ByteString.fromString("hello")).contains(ByteString.fromString("world")))
         assert(trie.get(ByteString.fromString("other")).isEmpty)
-    }
-
-    test("fruit trie root hash matches expected") {
-        assert(fullTrie.rootHash == expectedRoot, s"got ${fullTrie.rootHash.toHex}")
     }
 
     test("fruit trie has correct size") {
@@ -95,7 +89,7 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         var trie = fullTrie
         for (key, _) <- fruitBs do trie = trie.delete(key)
         assert(trie.isEmpty)
-        assert(trie.rootHash == Merkling.NullHash)
+        assert(trie.rootHash == BinaryMerkling.NullHash)
     }
 
     test("delete missing key throws") {
@@ -186,7 +180,7 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         val v1 = ByteString.fromString("v1")
         val v2 = ByteString.fromString("v2")
 
-        val trie = MerklePatriciaForestry.empty.insert(k1, v1).insert(k2, v2)
+        val trie = MerklePatriciaTrie.empty.insert(k1, v1).insert(k2, v2)
         assert(trie.size == 2)
         assert(trie.get(k1).contains(v1))
         assert(trie.get(k2).contains(v2))
@@ -204,74 +198,7 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
 
     test("insertion order does not affect root hash") {
         val shuffled = scala.util.Random(42).shuffle(fruitBs)
-        val trie = MerklePatriciaForestry.fromList(shuffled)
+        val trie = MerklePatriciaTrie.fromList(shuffled)
         assert(trie.rootHash == expectedRoot)
-    }
-
-    // --- Binary proof tests (mpfb) ---
-
-    test("binary proofs verify membership via mpfb on-chain") {
-        val onChain = OnChainBinary(fullTrie.rootHash)
-        for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
-            assert(
-              onChain.has(key, value, proof),
-              s"binary on-chain has() failed for ${key.toHex}"
-            )
-    }
-
-    test("binary proofs support on-chain delete via mpfb") {
-        val onChain = OnChainBinary(fullTrie.rootHash)
-        for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
-            val without = fullTrie.delete(key)
-            val deleted = onChain.delete(key, value, proof)
-            assert(
-              deleted.root == without.rootHash,
-              s"binary on-chain delete root mismatch for ${key.toHex}"
-            )
-    }
-
-    test("binary proofs support on-chain insert via mpfb") {
-        for (key, value) <- fruitBs do
-            val without = fullTrie.delete(key)
-            val proof = without.proveMissingBinary(key)
-            val onChainWithout = OnChainBinary(without.rootHash)
-            val inserted = onChainWithout.insert(key, value, proof)
-            assert(
-              inserted.root == expectedRoot,
-              s"binary on-chain insert root mismatch for ${key.toHex}"
-            )
-    }
-
-    test("binary proofs support on-chain update via mpfb") {
-        val onChain = OnChainBinary(fullTrie.rootHash)
-        val newValue = ByteString.fromString("updated")
-        for (key, oldValue) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
-            val updated = onChain.update(key, proof, oldValue, newValue)
-            assert(updated.has(key, newValue, proof))
-    }
-
-    test("binary proveMissing for absent key via mpfb") {
-        val key = ByteString.fromString("nonexistent")
-        val value = ByteString.fromString("somevalue")
-        val proof = fullTrie.proveMissingBinary(key)
-        val onChain = OnChainBinary(fullTrie.rootHash)
-        val inserted = onChain.insert(key, value, proof)
-        val offChainInserted = fullTrie.insert(key, value)
-        assert(inserted.root == offChainInserted.rootHash)
-    }
-
-    test("binary proof is compact") {
-        for (key, _) <- fruitBs.take(5) do
-            val binaryProof = fullTrie.proveExistsBinary(key)
-            // Binary proofs should be non-empty
-            assert(binaryProof.length > 0, s"empty proof for ${key.toHex}")
-            // Each step is at most 130 bytes (Branch), with at most ~16 steps for a 30-element trie
-            assert(
-              binaryProof.length < 2000,
-              s"unexpectedly large proof (${binaryProof.length}B) for ${key.toHex}"
-            )
     }
 }

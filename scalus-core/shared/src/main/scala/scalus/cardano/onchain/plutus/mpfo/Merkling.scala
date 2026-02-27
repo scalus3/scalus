@@ -1,4 +1,4 @@
-package scalus.cardano.onchain.plutus.mpf
+package scalus.cardano.onchain.plutus.mpfo
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.*
@@ -21,42 +21,63 @@ object Merkling:
     def combine(left: ByteString, right: ByteString): ByteString =
         blake2b_256(appendByteString(left, right))
 
-    /** Combines three ByteStrings by concatenating them and taking their Blake2b hash */
-    def combine3(a: ByteString, b: ByteString, c: ByteString): ByteString =
-        blake2b_256(appendByteString(a, appendByteString(b, c)))
-
-    /** Creates a suffix path based on cursor position. */
+    /** Creates a suffix path based on cursor position
+      *
+      * @param path
+      *   The original path
+      * @param cursor
+      *   Position in the path
+      * @return
+      *   A new path with suffix appended according to cursor position
+      */
     def suffix(path: ByteString, cursor: BigInt): ByteString =
-        if modInteger(cursor, 2) == BigInt(0) then
-            // Even cursor: drop cursor/2 bytes and prepend 0xff
+        if cursor % 2 == BigInt(0) then
+            // Even cursor: drop cursor/2 bytes and append 0xff
             val dropped = sliceByteString(cursor / 2, lengthOfByteString(path), path)
             consByteString(0xff, dropped)
         else
-            // Odd cursor: drop (cursor+1)/2 bytes, prepend low nibble and 0x00
+            // Odd cursor: drop (cursor+1)/2 bytes, append nibble and 0
             val dropped = sliceByteString((cursor + 1) / 2, lengthOfByteString(path), path)
-            consByteString(0, consByteString(nibble(path, cursor), dropped))
+            val withNibble = consByteString(nibble(path, cursor), dropped)
+            consByteString(0, withNibble)
 
-    /** Extracts a nibble (4-bit value) from a specific position in the ByteString. */
+    /** Computes nibbles for a given branch node between start and end positions
+      *
+      * @param path
+      *   The source ByteString to extract nibbles from
+      * @param start
+      *   Starting position
+      * @param end
+      *   Ending position (exclusive)
+      * @return
+      *   ByteString containing the extracted nibbles
+      */
+    def nibbles(path: ByteString, start: BigInt, end: BigInt): ByteString =
+        if start >= end then ByteString.empty
+        else
+            consByteString(
+              nibble(path, start),
+              nibbles(path, addInteger(start, 1), end)
+            )
+
+    /** Extracts a nibble (4-bit value) from a specific position in the ByteString
+      *
+      * @param self
+      *   Source ByteString
+      * @param index
+      *   Position to extract nibble from
+      * @return
+      *   The nibble value as BigInt (0-15)
+      */
     def nibble(self: ByteString, index: BigInt): BigInt =
         if modInteger(index, 2) == BigInt(0) then
+            // Even index: take high nibble (divide by 16)
             quotientInteger(indexByteString(self, index / 2), 16)
-        else modInteger(indexByteString(self, index / 2), 16)
+        else
+            // Odd index: take low nibble (modulo 16)
+            modInteger(indexByteString(self, index / 2), 16)
 
-    /** Calculates Merkle root for 16 elements
-      *
-      * @param branch
-      *   Branch index (0-15)
-      * @param root
-      *   Current node hash
-      * @param neighbor_8
-      *   8-element neighbor hash
-      * @param neighbor_4
-      *   4-element neighbor hash
-      * @param neighbor_2
-      *   2-element neighbor hash
-      * @param neighbor_1
-      *   1-element neighbor hash
-      */
+    /** Calculates Merkle root for 16 elements */
     def merkle16(
         branch: BigInt,
         root: ByteString,
@@ -98,7 +119,7 @@ object Merkling:
         else combine(neighbor2, merkle2(branch - 2, root, neighbor1))
 
     /** Calculates Merkle root for 2 elements */
-    inline def merkle2(
+    def merkle2(
         branch: BigInt,
         root: ByteString,
         neighbor: ByteString
