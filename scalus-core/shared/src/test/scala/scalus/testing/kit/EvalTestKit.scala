@@ -104,11 +104,10 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
         compiled.program.term.evaluateDebug match
             case Result.Success(term, exunits, costs, logs) =>
-                if exunits.steps > budget.steps || exunits.memory > budget.memory then
-                    fail(s"""Performance regression,
-                           |expected: $budget,
-                           |but got: $exunits;
-                           |costs: ${costs.toMap}""".stripMargin)
+                assert(
+                  exunits.memory <= budget.memory && exunits.steps <= budget.steps,
+                  s"Budget exceeded: got $exunits, but expected at most $budget"
+                )
 
                 val expectedTerm = compiledExpected.program.term.evaluate
                 assert(term α_== expectedTerm, s"Expected term $expectedTerm, but got ${term.show}")
@@ -133,10 +132,10 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
         compiled.program.term.evaluateDebug match
             case Result.Success(term, exunits, costs, logs) =>
-                if exunits != budget then fail(s"""Budget mismatch,
-                           |expected: $budget,
-                           |but got: $exunits;
-                           |costs: ${costs.toMap}""".stripMargin)
+                assert(
+                  exunits == budget,
+                  s"Budget mismatch: got $exunits, but expected $budget"
+                )
 
                 val expectedTerm = compiledExpected.program.term.evaluate
                 assert(term α_== expectedTerm, s"Expected term $expectedTerm, but got ${term.show}")

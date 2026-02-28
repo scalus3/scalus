@@ -313,18 +313,17 @@ class InlinerTest extends AnyFunSuite {
     // BUG: When shouldInline returns false, the Apply is returned without
     // calling tryPartialEval, even though the whole term may be closed.
     test("should partially evaluate non-inlinable closed Apply") {
-        pendingUntilFixed {
-            val longA: Term = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-            val longB: Term = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            val arg = AppendString $ longA $ longB
-            // After go(arg), arg folds to a large string constant.
-            // shouldInline(largeConst, 2) = false, Apply returned without tryPartialEval.
-            val term = λ("x")(Constr(Word64.Zero, List(vr"x", vr"x"))) $ arg
-            val result = Inliner(term)
-            result match
-                case Constr(_, _, _) => succeed
-                case _               => fail(s"Expected Constr, got: ${result.show}")
-        }
+        val longA: Term = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        val longB: Term = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        val arg = AppendString $ longA $ longB
+        // After go(arg), arg folds to a large string constant (>64 bits).
+        // shouldInline(largeConst, 2) = false, but tryPartialEval should fold the Apply
+        // since the whole expression is closed and evaluates to a Const.
+        val term = λ("x")(AppendString $ vr"x" $ vr"x") $ arg
+        val result = Inliner(term)
+        result match
+            case Const(_, _) => succeed
+            case _           => fail(s"Expected Const, got: ${result.show}")
     }
 
     // ========================================================================

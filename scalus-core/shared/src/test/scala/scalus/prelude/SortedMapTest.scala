@@ -70,7 +70,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .toList,
           List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil)),
-          ExUnits(memory = 129044, steps = 39_394050)
+          ExUnits(memory = 200, steps = 16100)
         )
     }
 
