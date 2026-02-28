@@ -292,24 +292,18 @@ class InlinerTest extends AnyFunSuite {
     // shouldInline: single-occurrence non-trivial terms
     // ========================================================================
 
-    // BUG: shouldInline returns false for Delay/LamAbs even at 1 occurrence.
-    // Since UPLC is strict, single-use inlining is always semantics-preserving.
     test("should inline single-occurrence Delay argument") {
-        pendingUntilFixed {
-            val term = λ("x")(AddInteger $ vr"x" $ 1) $ Delay(42.asTerm)
-            val expected =
-                AddInteger $ Delay(42.asTerm) $ 1.asTerm
-            assert(Inliner(term) == expected)
-        }
+        // x used once, UPLC is strict so inlining is safe regardless of term type
+        val term = λ("x")(AddInteger $ vr"x" $ 1) $ Delay(42.asTerm)
+        val expected = AddInteger $ Delay(42.asTerm) $ 1.asTerm
+        assert(Inliner(term) == expected)
     }
 
     test("should inline single-occurrence LamAbs argument") {
-        pendingUntilFixed {
-            // (λf. f 1) (λy. addInteger y 2)
-            // f used once, should be inlined then reduced: (λy. addInteger y 2) 1 => 3
-            val term = λ("f")(vr"f" $ 1) $ λ("y")(AddInteger $ vr"y" $ 2)
-            assert(Inliner(term) == 3.asTerm)
-        }
+        // (λf. f 1) (λy. addInteger y 2)
+        // f used once, should be inlined then reduced: (λy. addInteger y 2) 1 => 3
+        val term = λ("f")(vr"f" $ 1) $ λ("y")(AddInteger $ vr"y" $ 2)
+        assert(Inliner(term) == 3.asTerm)
     }
 
     // ========================================================================

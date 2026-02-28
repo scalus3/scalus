@@ -53,7 +53,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
-        assert(joinResult.budget == ExUnits(memory = 284935, steps = 82_097336))
+        assert(joinResult.budget == ExUnits(memory = 248139, steps = 76_407968))
     }
 
     test("Doesn't allow double join") {
@@ -127,7 +127,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
-        assert(winResult.budget == ExUnits(memory = 131852, steps = 42_456894))
+        assert(winResult.budget == ExUnits(memory = 112752, steps = 39_400894))
     }
 
     test("Fails to win with a low rate") {
@@ -186,7 +186,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
-        assert(timeoutResult.budget == ExUnits(memory = 71873, steps = 22_114262))
+        assert(timeoutResult.budget == ExUnits(memory = 59273, steps = 20_098262))
     }
 
     test("Cannot timeout before deadline") {
@@ -228,7 +228,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
-        assert(updateResult.budget == ExUnits(memory = 119021, steps = 37_219189))
+        assert(updateResult.budget == ExUnits(memory = 103917, steps = 35_036919))
     }
 
     test("Oracle forbids unauthorized price updates") {

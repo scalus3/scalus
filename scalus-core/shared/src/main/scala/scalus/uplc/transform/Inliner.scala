@@ -81,19 +81,20 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
 
     /** Determines if a term is safe to inline based on its type and occurrence count.
       *
-      *   - '''Variables''': Always safe to inline (no duplication cost)
-      *   - '''Small constants''': Safe if ≤64 bits or used once
-      *   - '''Builtins''': Always safe (just references)
-      *   - '''Everything else''': Not safe to inline
+      *   - '''Single occurrence''': Always safe (UPLC is strict, no duplication)
+      *   - '''Variables''': Always safe to duplicate (no cost)
+      *   - '''Small constants''': Safe if ≤64 bits flat-encoded
+      *   - '''Builtins''': Always safe to duplicate (just references)
+      *   - '''Everything else with multiple occurrences''': Not safe (code size increase)
       */
     private def shouldInline(inlining: Term, occurrences: Int): Boolean =
-        inlining match
-            case Var(_, _) => true // Variables are safe to duplicate
-            case Const(c, _) =>
-                if occurrences == 1 then true
-                else flatConstant.bitSize(c) <= 64 // Small constants are safe
-            case Builtin(_, _) => true
-            case _             => false
+        if occurrences == 1 then true
+        else
+            inlining match
+                case Var(_, _)     => true
+                case Const(c, _)   => flatConstant.bitSize(c) <= 64
+                case Builtin(_, _) => true
+                case _             => false
 
     /** Performs capture-avoiding substitution `[x → s]t`.
       *
