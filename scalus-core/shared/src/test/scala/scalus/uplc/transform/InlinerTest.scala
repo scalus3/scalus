@@ -4,13 +4,17 @@ package transform
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
 import scalus.uplc.Constant.given
+import scalus.uplc.transform.TermAnalysis.freeVars
 import DefaultFun.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.Word64
+import scalus.uplc.eval.PlutusVM
 
 import scala.language.implicitConversions
 
 class InlinerTest extends AnyFunSuite {
+    private given PlutusVM = PlutusVM.makePlutusV3VM()
+
     test("inliner should inline identity Var") {
         val term = LamAbs("x", vr"x" $ vr"x") $ vr"y"
         val expected = vr"y" $ vr"y"
@@ -36,17 +40,17 @@ class InlinerTest extends AnyFunSuite {
     test("identity function should be eliminated") {
         // (λx.x) 42 => 42
         val term = λ("x")(vr"x") $ 42
-        assert(Inliner(term) == Const(Constant.Integer(42)))
+        assert(Inliner(term) == 42.asTerm)
 
         // (λx.x) "hello" => "hello"
         val strTerm = λ("x")(vr"x") $ "hello"
-        assert(Inliner(strTerm) == Const(Constant.String("hello")))
+        assert(Inliner(strTerm) == "hello".asTerm)
     }
 
     test("nested identity functions should all be eliminated") {
         // (λx.x) ((λy.y) 42) => 42
         val term = λ("x")(vr"x") $ (λ("y")(vr"y") $ 42)
-        assert(Inliner(term) == Const(Constant.Integer(42)))
+        assert(Inliner(term) == 42.asTerm)
     }
 
     test("variable substitution should work correctly") {
@@ -170,8 +174,8 @@ class InlinerTest extends AnyFunSuite {
         // (λx. 42) (Force (Const 1))
         // Force of non-delayed term errors at runtime, must be preserved
         // TermAnalysis.isPure correctly identifies Force(Const) as impure
-        val term = λ("x")(42) $ Force(Const(Constant.Integer(1)))
-        val expected = λ("x")(42) $ Force(Const(Constant.Integer(1)))
+        val term = λ("x")(42) $ Force(1.asTerm)
+        val expected = λ("x")(42) $ Force(1.asTerm)
         assert(Inliner(term) == expected)
     }
 
@@ -197,7 +201,7 @@ class InlinerTest extends AnyFunSuite {
         // (λx. x + x) 42 => 42 + 42
         // Small integer (≤64 bits flat-encoded) is safe to duplicate
         val term = λ("x")(AddInteger $ vr"x" $ vr"x") $ 42
-        val expected = Const(Constant.Integer(84))
+        val expected = 84.asTerm
         assert(Inliner(term) == expected)
     }
 
@@ -231,8 +235,218 @@ class InlinerTest extends AnyFunSuite {
         // (λx. 42) (Delay (Const 1))
         // Delay IS pure - can be safely eliminated
         // TermAnalysis.isPure correctly identifies Delay as pure
-        val term = λ("x")(42) $ Delay(Const(Constant.Integer(1)))
-        val expected = Const(Constant.Integer(42))
+        val term = λ("x")(42) $ Delay(1.asTerm)
+        val expected = 42.asTerm
         assert(Inliner(term) == expected)
+    }
+
+    // ========================================================================
+    // Partial evaluation integration
+    // ========================================================================
+
+    test("should partially evaluate closed builtin application") {
+        // addInteger 2 3 => 5 (closed term, folded by tryPartialEval)
+        val term = AddInteger $ 2 $ 3
+        assert(Inliner(term) == 5.asTerm)
+    }
+
+    test("should partially evaluate Case on known Constr") {
+        // case (constr 0 [1, 2]) of [λa.λb. addInteger a b] => 3
+        val term = Case(
+          Constr(Word64.Zero, List(1, 2)),
+          List(λ("a", "b")(AddInteger $ vr"a" $ vr"b"))
+        )
+        assert(Inliner(term) == 3.asTerm)
+    }
+
+    test("should optimize subexpressions inside Constr args") {
+        // Constr(0, [(λx.x) 42]) => Constr(0, [42])
+        val term = Constr(Word64.Zero, List(λ("x")(vr"x") $ 42))
+        val expected = Constr(Word64.Zero, List[Term](42))
+        assert(Inliner(term) == expected)
+    }
+
+    test("should cascade optimizations after substitution") {
+        // (λf. f 2 3) addInteger => addInteger 2 3 => 5
+        val term = λ("f")(vr"f" $ 2 $ 3) $ AddInteger
+        assert(Inliner(term) == 5.asTerm)
+    }
+
+    // ========================================================================
+    // Force/Delay interactions
+    // ========================================================================
+
+    test("should eliminate nested Force(Delay)") {
+        // Force(Force(Delay(Delay(42)))) => 42
+        val term = Force(Force(Delay(Delay(42.asTerm))))
+        assert(Inliner(term) == 42.asTerm)
+    }
+
+    // BUG: Force(Delay) revealed after inner optimization is not re-matched.
+    // The inner Apply is optimized to Delay(y), producing Force(Delay(y)),
+    // but the Force case doesn't check for Delay after go(t).
+    test("Force(Delay) revealed after optimization should be eliminated") {
+        pendingUntilFixed {
+            val term = Force(λ("x")(Delay(vr"x")) $ vr"y")
+            assert(Inliner(term) == vr"y")
+        }
+    }
+
+    // ========================================================================
+    // shouldInline: single-occurrence non-trivial terms
+    // ========================================================================
+
+    // BUG: shouldInline returns false for Delay/LamAbs even at 1 occurrence.
+    // Since UPLC is strict, single-use inlining is always semantics-preserving.
+    test("should inline single-occurrence Delay argument") {
+        pendingUntilFixed {
+            val term = λ("x")(AddInteger $ vr"x" $ 1) $ Delay(42.asTerm)
+            val expected =
+                AddInteger $ Delay(42.asTerm) $ 1.asTerm
+            assert(Inliner(term) == expected)
+        }
+    }
+
+    test("should inline single-occurrence LamAbs argument") {
+        pendingUntilFixed {
+            // (λf. f 1) (λy. addInteger y 2)
+            // f used once, should be inlined then reduced: (λy. addInteger y 2) 1 => 3
+            val term = λ("f")(vr"f" $ 1) $ λ("y")(AddInteger $ vr"y" $ 2)
+            assert(Inliner(term) == 3.asTerm)
+        }
+    }
+
+    // ========================================================================
+    // Non-inlinable Apply not passed to tryPartialEval
+    // ========================================================================
+
+    // BUG: When shouldInline returns false, the Apply is returned without
+    // calling tryPartialEval, even though the whole term may be closed.
+    test("should partially evaluate non-inlinable closed Apply") {
+        pendingUntilFixed {
+            val longA: Term = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            val longB: Term = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            val arg = AppendString $ longA $ longB
+            // After go(arg), arg folds to a large string constant.
+            // shouldInline(largeConst, 2) = false, Apply returned without tryPartialEval.
+            val term = λ("x")(Constr(Word64.Zero, List(vr"x", vr"x"))) $ arg
+            val result = Inliner(term)
+            result match
+                case Constr(_, _, _) => succeed
+                case _               => fail(s"Expected Constr, got: ${result.show}")
+        }
+    }
+
+    // ========================================================================
+    // Substitute correctness: freshName collision with body free vars
+    // ========================================================================
+
+    // BUG: freshName avoidance set doesn't include body.freeVars.
+    // When body has free var "y_0" and we alpha-rename "y" to "y_0", the
+    // existing free "y_0" gets captured by the new binder.
+    test("substitute should not capture body free vars during alpha-renaming") {
+        pendingUntilFixed {
+            val inliner = new Inliner()
+            // substitute(λy. (y_0, x), "x", y)
+            // replacement = Var("y"), so alpha-rename "y" → freshName avoids {"y"}
+            // freshName picks "y_0", but "y_0" is free in body — capture!
+            val term = LamAbs("y", Constr(Word64.Zero, List(vr"y_0", vr"x")))
+            val result = inliner.substitute(term, "x", vr"y")
+            val freeVarsResult = result.freeVars
+            assert(
+              freeVarsResult.contains("y_0"),
+              s"Free variable y_0 was captured! Result: $result, freeVars: $freeVarsResult"
+            )
+        }
+    }
+
+    // ========================================================================
+    // Substitution into Constr and Case
+    // ========================================================================
+
+    test("should substitute into Constr arguments") {
+        // (λx. constr 0 [x, 1]) y => constr 0 [y, 1]
+        val term = λ("x")(Constr(Word64.Zero, List(vr"x", 1))) $ vr"y"
+        val expected = Constr(Word64.Zero, List(vr"y", 1.asTerm))
+        assert(Inliner(term) == expected)
+    }
+
+    test("should substitute into Case branches") {
+        // (λx. case scrutinee of [x, 0]) y => case scrutinee of [y, 0]
+        val term = λ("x")(Case(vr"scrutinee", List(vr"x", 0))) $ vr"y"
+        val expected = Case(vr"scrutinee", List(vr"y", 0.asTerm))
+        assert(Inliner(term) == expected)
+    }
+
+    // ========================================================================
+    // Semantic preservation for closed terms
+    // ========================================================================
+
+    test("optimization preserves semantics of closed arithmetic") {
+        val terms = List(
+          AddInteger $ 10 $ (MultiplyInteger $ 3 $ 4),
+          λ("x")(AddInteger $ vr"x" $ vr"x") $ 21,
+          λ("x", "y")(MultiplyInteger $ vr"x" $ vr"y") $ 6 $ 7,
+          Case(
+            Constr(Word64.Zero, List[Term](5, 10)),
+            List(λ("a", "b")(AddInteger $ vr"a" $ vr"b"))
+          )
+        )
+        terms.foreach { term =>
+            val optimized = Inliner(term)
+            val origResult = term.evaluate
+            val optResult = optimized.evaluate
+            assert(
+              origResult α_== optResult,
+              s"Semantics differ for ${term.show}: original=$origResult, optimized=$optResult"
+            )
+        }
+    }
+
+    test("optimization is idempotent") {
+        val terms = List[Term](
+          AddInteger $ 2 $ 3,
+          λ("x")(vr"x") $ 42,
+          λ("x")(AddInteger $ vr"x" $ vr"x") $ vr"y",
+          Force(Delay(1.asTerm)),
+          Case(Constr(Word64.Zero, List[Term](1)), List(λ("a")(vr"a"))),
+          λ("x")(Constr(Word64.Zero, List(vr"x", vr"x"))) $ vr"z"
+        )
+        terms.foreach { term =>
+            val once = Inliner(term)
+            val twice = Inliner(once)
+            assert(once == twice, s"Not idempotent for ${term.show}: once=$once, twice=$twice")
+        }
+    }
+
+    test("optimization does not introduce new free variables") {
+        val terms = List[Term](
+          λ("x")(vr"x") $ vr"y",
+          λ("x")(AddInteger $ vr"x" $ vr"z") $ vr"y",
+          λ("x", "y")(vr"x") $ vr"y",
+          Force(Delay(vr"a")),
+          Case(vr"s", List(λ("x")(vr"x") $ vr"b", vr"c"))
+        )
+        terms.foreach { term =>
+            val optimized = Inliner(term)
+            val origFree = term.freeVars
+            val optFree = optimized.freeVars
+            assert(
+              optFree.subsetOf(origFree),
+              s"New free vars ${optFree -- origFree} in ${term.show} => ${optimized.show}"
+            )
+        }
+    }
+
+    // ========================================================================
+    // Logging
+    // ========================================================================
+
+    test("should produce log entries for optimizations") {
+        val inliner = new Inliner()
+        inliner(λ("x")(vr"x") $ (AddInteger $ 1 $ 2))
+        val logs = inliner.logs
+        assert(logs.nonEmpty, "Expected log entries for optimizations")
+        assert(logs.exists(_.contains("Inlining identity function")))
     }
 }
