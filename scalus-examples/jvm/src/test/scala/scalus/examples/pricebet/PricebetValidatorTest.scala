@@ -53,7 +53,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
-        assert(joinResult.budget == ExUnits(memory = 290523, steps = 83_156396))
+        assert(joinResult.budget == ExUnits(memory = 284935, steps = 82_097336))
     }
 
     test("Doesn't allow double join") {
@@ -127,7 +127,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
-        assert(winResult.budget == ExUnits(memory = 132484, steps = 42_575045))
+        assert(winResult.budget == ExUnits(memory = 131852, steps = 42_456894))
     }
 
     test("Fails to win with a low rate") {

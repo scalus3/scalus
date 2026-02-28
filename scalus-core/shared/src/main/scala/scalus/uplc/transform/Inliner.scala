@@ -4,7 +4,7 @@ import scalus.*
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.Term.*
 import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.transform.TermAnalysis.isPure
+import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
 import scalus.uplc.{NamedDeBruijn, Term}
 
 /** Optimizer that performs function inlining, beta-reduction, and dead code elimination.
@@ -15,6 +15,8 @@ import scalus.uplc.{NamedDeBruijn, Term}
   *   - '''Dead code elimination''': Removes unused lambda parameters when the argument is pure
   *   - '''Small value inlining''': Inlines variables, small constants, and builtins
   *   - '''Force/Delay elimination''': Simplifies `Force(Delay(t))` to `t`
+  *   - '''Partial evaluation''': Evaluates closed subexpressions at compile time via the CEK
+  *     machine (e.g., `addInteger 2 3` → `5`, `(λx. addInteger x 1) 2` → `3`)
   *
   * ==Inlining Strategy==
   *
@@ -148,18 +150,6 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *   The term with all free occurrences of `name` replaced by `replacement`
       */
     def substitute(term: Term, name: String, replacement: Term): Term =
-        // Get all free variables in the replacement term
-        def freeVars(t: Term): Set[String] = t match
-            case Var(NamedDeBruijn(n, _), _) => Set(n)
-            case LamAbs(n, body, _)          => freeVars(body) - n
-            case Apply(f, a, _)              => freeVars(f) ++ freeVars(a)
-            case Force(t, _)                 => freeVars(t)
-            case Delay(t, _)                 => freeVars(t)
-            case Constr(_, args, _)          => args.flatMap(freeVars).toSet
-            case Case(scrutinee, cases, _) =>
-                freeVars(scrutinee) ++ cases.flatMap(freeVars)
-            case _: Const | _: Builtin | _: Error => Set.empty
-
         // Generate a fresh name that doesn't clash with any names in the set
         def freshName(base: String, avoid: Set[String]): String =
             if !avoid.contains(base) then base
@@ -172,7 +162,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                 fresh
 
         // Compute free variables of replacement term once
-        lazy val replacementFreeVars = freeVars(replacement)
+        lazy val replacementFreeVars = replacement.freeVars
 
         def go(t: Term, boundVars: Set[String]): Term = t match
             case Var(NamedDeBruijn(n, _), _) =>
@@ -208,6 +198,18 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
             case _: Const | _: Builtin | _: Error => t
 
         go(term, Set.empty)
+
+    /** Attempts to partially evaluate a term using the CEK machine.
+      *
+      * If the term is a closed, reducible expression that evaluates to a constant, returns that
+      * constant. Otherwise returns the term unchanged.
+      */
+    private def tryPartialEval(term: Term): Term =
+        PartialEvaluator.tryEval(term) match
+            case Some(result) =>
+                logger.log(s"Partial evaluation: ${term.showShort} => ${result.showShort}")
+                result
+            case None => term
 
     /** Main inlining pass that recursively optimizes the term tree.
       *
@@ -269,21 +271,24 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                             // non-safe term - keep the lambda
                             Apply(inlinedF, inlinedArg, ann)
                     case _ =>
-                        Apply(inlinedF, inlinedArg, ann)
+                        tryPartialEval(Apply(inlinedF, inlinedArg, ann))
 
             case LamAbs(name, body, ann) => LamAbs(name, go(body, env - name), ann)
             case Force(Delay(t, _), _) =>
                 logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
                 go(t, env)
-            case Force(t, ann)          => Force(go(t, env), ann)
+            case Force(t, ann) =>
+                tryPartialEval(Force(go(t, env), ann))
             case Delay(t, ann)          => Delay(go(t, env), ann)
             case Constr(tag, args, ann) => Constr(tag, args.map(arg => go(arg, env)), ann)
 
             case Case(scrutinee, cases, ann) =>
-                Case(
-                  go(scrutinee, env),
-                  cases.map(c => go(c, env)),
-                  ann
+                tryPartialEval(
+                  Case(
+                    go(scrutinee, env),
+                    cases.map(c => go(c, env)),
+                    ann
+                  )
                 )
 
             case _: Const | _: Builtin | _: Error => term

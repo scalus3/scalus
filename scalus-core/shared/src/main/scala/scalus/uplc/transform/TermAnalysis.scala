@@ -1,6 +1,6 @@
 package scalus.uplc.transform
 
-import scalus.uplc.{DefaultFun, Meaning, Term}
+import scalus.uplc.{DefaultFun, Meaning, NamedDeBruijn, Term}
 import scalus.uplc.Term.*
 
 /** Static analysis utilities for UPLC terms.
@@ -42,6 +42,25 @@ object TermAnalysis:
         go(term, 0, 0, List.empty)
 
     extension (term: Term)
+        /** Returns the set of free variable names in a term.
+          *
+          * A variable is free if it is not bound by an enclosing lambda abstraction. This is used
+          * by the partial evaluator to determine if a term is closed (has no free variables) and
+          * can therefore be evaluated at compile time.
+          *
+          * @return
+          *   the set of free variable names
+          */
+        def freeVars: Set[String] = term match
+            case Var(NamedDeBruijn(n, _), _)      => Set(n)
+            case LamAbs(n, body, _)               => body.freeVars - n
+            case Apply(f, a, _)                   => f.freeVars ++ a.freeVars
+            case Force(t, _)                      => t.freeVars
+            case Delay(t, _)                      => t.freeVars
+            case Constr(_, args, _)               => args.flatMap(_.freeVars).toSet
+            case Case(scrut, cases, _)            => scrut.freeVars ++ cases.flatMap(_.freeVars)
+            case _: Const | _: Builtin | _: Error => Set.empty
+
         /** Checks if this term is pure (guaranteed not to fail during evaluation).
           *
           * A term is pure if evaluating it cannot produce an error or halt evaluation. Pure terms

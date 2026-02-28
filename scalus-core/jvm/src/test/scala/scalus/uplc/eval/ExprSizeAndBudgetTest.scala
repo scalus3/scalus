@@ -12,7 +12,6 @@ import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.serialization.flat.Flat
 import scalus.uplc.Term.*
-import scalus.uplc.transform.Inliner
 import scalus.uplc.{Constant, NamedDeBruijn, Term}
 
 import scala.math.Ordering.Implicits.*
@@ -120,7 +119,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(eqInteger.budget < eqData.budget)
     }
 
-    test("2nd bytestring in a list fee = 105") {
+    test("2nd bytestring in a list fee = 126") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
@@ -133,16 +132,16 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val sir = compile { (d: Data) =>
             unBData(headList(tailList(unListData(d))))
         }
-        val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
+        val uplc = sir.toUplc() $ data.asTerm
         val result = uplc.evaluateDebug
 
         assert(result.success.term == bs2.asTerm)
-        assert(result.budget.memory == 1328)
-        assert(result.budget.steps == 386988)
-        assert(result.budget.fee(prices).value == 105)
+        assert(result.budget.memory == 1628)
+        assert(result.budget.steps == 434988)
+        assert(result.budget.fee(prices).value == 126)
     }
 
-    test("2nd bytestring in a packed bytestring fee = 74") {
+    test("2nd bytestring in a packed bytestring fee = 94") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
@@ -155,16 +154,16 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val sir = compile { (d: Data) =>
             sliceByteString(1, 1, unBData(d))
         }
-        val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
+        val uplc = sir.toUplc() $ packed.asTerm
         val result = uplc.evaluateDebug
 
         assert(result.success.term == bs2.asTerm)
-        assert(result.budget.memory == 1036)
-        assert(result.budget.steps == 184710)
-        assert(result.budget.fee(prices).value == 74)
+        assert(result.budget.memory == 1336)
+        assert(result.budget.steps == 232710)
+        assert(result.budget.fee(prices).value == 94)
     }
 
-    test("5th bytestring in a list fee = 191") {
+    test("5th bytestring in a list fee = 211") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
@@ -177,16 +176,16 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val sir = compile { (d: Data) =>
             unBData(headList(tailList(tailList(tailList(tailList(unListData(d)))))))
         }
-        val uplc = (sir.toUplc() $ data.asTerm) |> Inliner.apply
+        val uplc = sir.toUplc() $ data.asTerm
         val result = uplc.evaluateDebug
 
         assert(result.success.term == bs5.asTerm)
-        assert(result.budget.memory == 2324)
-        assert(result.budget.steps == 775977)
-        assert(result.budget.fee(prices).value == 191)
+        assert(result.budget.memory == 2624)
+        assert(result.budget.steps == 823977)
+        assert(result.budget.fee(prices).value == 211)
     }
 
-    test("5th bytestring in a packed bytestring fee = 74") {
+    test("5th bytestring in a packed bytestring fee = 94") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
@@ -199,16 +198,16 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val sir = compile { (d: Data) =>
             sliceByteString(4, 1, unBData(d))
         }
-        val uplc = (sir.toUplc() $ packed.asTerm) |> Inliner.apply
+        val uplc = sir.toUplc() $ packed.asTerm
         val result = uplc.evaluateDebug
 
         assert(result.success.term == bs5.asTerm)
-        assert(result.budget.memory == 1036)
-        assert(result.budget.steps == 184710)
-        assert(result.budget.fee(prices).value == 74)
+        assert(result.budget.memory == 1336)
+        assert(result.budget.steps == 232710)
+        assert(result.budget.fee(prices).value == 94)
     }
 
-    test("2nd int in a list of ints fee = 105") {
+    test("2nd int in a list of ints fee = 126") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val i1 = BigInt(0)
@@ -218,16 +217,16 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val sir = compile { (d: Data) =>
             unIData(headList(tailList(unListData(d))))
         }
-        val uplc = (sir.toUplc() $ intData.asTerm) |> Inliner.apply
+        val uplc = sir.toUplc() $ intData.asTerm
         val result = uplc.evaluateDebug
 
         assert(result.success.term == i2.asTerm)
-        assert(result.budget.memory == 1328)
-        assert(result.budget.steps == 387590)
-        assert(result.budget.fee(prices).value == 105)
+        assert(result.budget.memory == 1628)
+        assert(result.budget.steps == 435590)
+        assert(result.budget.fee(prices).value == 126)
     }
 
-    test("2nd int in a bytestring of 64bit packed ints fee = 177") {
+    test("2nd int in a bytestring of 64bit packed ints fee = 198") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
         val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val i1 = BigInt(0)
@@ -238,13 +237,13 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         val sir = compile { (d: Data) =>
             byteStringToInteger(true, sliceByteString(8, 8, unBData(d)))
         }
-        val uplc = (sir.toUplc() $ packedInts.asTerm) |> Inliner.apply
+        val uplc = sir.toUplc() $ packedInts.asTerm
         val result = uplc.evaluateDebug
 
         assert(result.success.term == i2.asTerm)
-        assert(result.budget.memory == 1437)
-        assert(result.budget.steps == 1298626)
-        assert(result.budget.fee(prices).value == 177)
+        assert(result.budget.memory == 1737)
+        assert(result.budget.steps == 1346626)
+        assert(result.budget.fee(prices).value == 198)
     }
 
 }

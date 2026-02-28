@@ -3,26 +3,37 @@ package scalus.builtin
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.ledger.ExUnits
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.eval.BuiltinException
 
 class ByteStringTest extends AnyFunSuite with EvalTestKit:
 
+    // Disable optimizer: partial evaluation folds these closed builtin applications
+    // to constants, making budget assertions meaningless (just measuring startup cost).
+    override protected def compilerOptions: Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+      generateErrorTraces = true,
+      optimizeUplc = false,
+      debug = false
+    )
+
     test("fromBigIntBigEndian"):
         assertEvalWithBudget(
           fromBigIntBigEndian(1_000_000, 3),
           hex"0f4240",
-          ExUnits(memory = 701, steps = 1418707)
+          ExUnits(memory = 1401, steps = 1530707)
         )
         assertEvalWithBudget(
           fromBigIntBigEndian(1_000_000, 5),
           hex"00000f4240",
-          ExUnits(memory = 701, steps = 1418707)
+          ExUnits(memory = 1401, steps = 1530707)
         )
         assertEvalWithBudget(
           fromBigIntBigEndian(0, 8),
           hex"0000000000000000",
-          ExUnits(memory = 701, steps = 1418707)
+          ExUnits(memory = 1401, steps = 1530707)
         )
         assertEvalFails[BuiltinException](fromBigIntBigEndian(1_000_000, 1))
 
@@ -30,17 +41,17 @@ class ByteStringTest extends AnyFunSuite with EvalTestKit:
         assertEvalWithBudget(
           fromBigIntLittleEndian(1_000_000, 3),
           hex"40420f",
-          ExUnits(memory = 701, steps = 1418707)
+          ExUnits(memory = 1401, steps = 1530707)
         )
         assertEvalWithBudget(
           fromBigIntLittleEndian(1_000_000, 5),
           hex"40420f0000",
-          ExUnits(memory = 701, steps = 1418707)
+          ExUnits(memory = 1401, steps = 1530707)
         )
         assertEvalWithBudget(
           fromBigIntLittleEndian(0, 8),
           hex"0000000000000000",
-          ExUnits(memory = 701, steps = 1418707)
+          ExUnits(memory = 1401, steps = 1530707)
         )
         assertEvalFails[BuiltinException](fromBigIntLittleEndian(1_000_000, 1))
 

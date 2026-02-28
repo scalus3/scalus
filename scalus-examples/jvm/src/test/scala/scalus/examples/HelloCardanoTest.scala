@@ -16,7 +16,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
     private val contract = HelloCardanoContract.withErrorTraces
 
     test(s"Hello Cardano script size is ${contract.script.script.size} bytes") {
-        assert(contract.script.script.size == 625)
+        assert(contract.script.script.size == 624)
     }
 
     test("Hello Cardano") {

@@ -36,12 +36,14 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     export org.scalacheck.{Arbitrary, Gen, Shrink}
     export scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===}
 
-    protected given compilerOptions: Options = Options(
+    protected def compilerOptions: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false
     )
+
+    protected given Options = compilerOptions
 
     /** Default PlutusVM - can be overridden by subclasses */
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()

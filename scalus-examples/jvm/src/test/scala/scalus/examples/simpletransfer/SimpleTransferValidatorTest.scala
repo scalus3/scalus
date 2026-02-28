@@ -39,7 +39,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
             )
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
-        assert(res.budget == ExUnits(memory = 366297, steps = 105_621473))
+        assert(res.budget == ExUnits(memory = 363405, steps = 104_951967))
     }
 
     test("deposit wrong signed") {
@@ -86,7 +86,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         )
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
-        assert(res.budget == ExUnits(memory = 607707, steps = 180_358633))
+        assert(res.budget == ExUnits(memory = 600923, steps = 178_975213))
     }
 
     test("withdraw wrong signed") {
@@ -114,7 +114,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         )
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
-        assert(res.budget == ExUnits(memory = 215620, steps = 60_723702))
+        assert(res.budget == ExUnits(memory = 214556, steps = 60_495998))
     }
 
     test("withdraw more") {

@@ -29,7 +29,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero.toSortedMap,
           SortedMap.empty,
-          ExUnits(memory = 432, steps = 116346)
+          ExUnits(memory = 200, steps = 16100)
         )
 
         assertEvalWithBudget(
@@ -38,7 +38,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             Value.adaPolicyId,
             SortedMap.singleton(Value.adaTokenName, BigInt(1000))
           ),
-          ExUnits(memory = 14443, steps = 3_592124)
+          ExUnits(memory = 13911, steps = 3_443878)
         )
 
         assertEvalWithBudget(
@@ -51,7 +51,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"PolicyId",
             SortedMap.singleton(utf8"TokenName", BigInt(1000))
           ),
-          ExUnits(memory = 13843, steps = 3_496124)
+          ExUnits(memory = 13311, steps = 3_347878)
         )
     }
 
@@ -59,7 +59,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero.toSortedMap,
           SortedMap.empty[PolicyId, SortedMap[TokenName, BigInt]],
-          ExUnits(memory = 432, steps = 116346)
+          ExUnits(memory = 200, steps = 16100)
         )
     }
 
@@ -86,7 +86,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"PolicyId",
             SortedMap.singleton(utf8"TokenName", BigInt(1))
           ),
-          ExUnits(memory = 13843, steps = 3_496124)
+          ExUnits(memory = 13311, steps = 3_347878)
         )
 
         assertEvalWithBudget(
@@ -96,7 +96,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(0)
           ),
           Value.zero,
-          ExUnits(memory = 6199, steps = 1_255143)
+          ExUnits(memory = 5667, steps = 1_106897)
         )
     }
 
@@ -119,13 +119,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             Value.adaPolicyId,
             SortedMap.singleton(Value.adaTokenName, BigInt(1000))
           ),
-          ExUnits(memory = 14443, steps = 3_592124)
+          ExUnits(memory = 13911, steps = 3_443878)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(0)),
           Value.zero,
-          ExUnits(memory = 6799, steps = 1_351143)
+          ExUnits(memory = 6267, steps = 1_202897)
         )
     }
 
@@ -172,7 +172,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
           ),
-          ExUnits(memory = 60388, steps = 17167813)
+          ExUnits(memory = 56400, steps = 16_063487)
         )
 
     }
@@ -220,7 +220,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
           ),
-          ExUnits(memory = 464346, steps = 131_588135)
+          ExUnits(memory = 446230, steps = 127_033290)
         )
     }
 
@@ -267,7 +267,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
           ),
-          ExUnits(memory = 117035, steps = 31913761)
+          ExUnits(memory = 112615, steps = 30_723284)
         )
     }
 
@@ -420,7 +420,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           -Value.zero,
           Value.zero,
-          ExUnits(memory = 7828, steps = 1510209)
+          ExUnits(memory = 7596, steps = 1_409963)
         )
 
         assertEvalWithBudget(
@@ -434,13 +434,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(-1000)
           ),
-          ExUnits(memory = 55431, steps = 15_503417)
+          ExUnits(memory = 54899, steps = 15_355171)
         )
 
         assertEvalWithBudget(
           -Value.lovelace(BigInt(1000)),
           Value.lovelace(BigInt(-1000)),
-          ExUnits(memory = 56031, steps = 15_599417)
+          ExUnits(memory = 55499, steps = 15_451171)
         )
     }
 
@@ -471,7 +471,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero + Value.zero,
           Value.zero,
-          ExUnits(memory = 28812, steps = 5881360)
+          ExUnits(memory = 27216, steps = 5_505410)
         )
 
         assertEvalWithBudget(
@@ -490,7 +490,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(3000)
           ),
-          ExUnits(memory = 167897, steps = 48_996033)
+          ExUnits(memory = 164505, steps = 48_269929)
         )
 
         assertEvalWithBudget(
@@ -505,7 +505,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 122821, steps = 33_847035)
+          ExUnits(memory = 120461, steps = 33_256987)
         )
 
         assertEvalWithBudget(
@@ -520,25 +520,25 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 121357, steps = 33_357047)
+          ExUnits(memory = 118997, steps = 32_766999)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) + Value.lovelace(BigInt(2000)),
           Value.lovelace(BigInt(3000)),
-          ExUnits(memory = 168797, steps = 49_139921)
+          ExUnits(memory = 165405, steps = 48_413817)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) + Value.zero,
           Value.lovelace(BigInt(1000)),
-          ExUnits(memory = 123421, steps = 33_943035)
+          ExUnits(memory = 121061, steps = 33_352987)
         )
 
         assertEvalWithBudget(
           Value.zero + Value.lovelace(BigInt(1000)),
           Value.lovelace(BigInt(1000)),
-          ExUnits(memory = 121957, steps = 33_453047)
+          ExUnits(memory = 119597, steps = 32_862999)
         )
 
         assertEvalWithBudget(
@@ -557,7 +557,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
           ),
-          ExUnits(memory = 272268, steps = 79_270875)
+          ExUnits(memory = 267748, steps = 78_134480)
         )
 
         assertEvalWithBudget(
@@ -572,13 +572,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 BigInt(-1000)
               ),
           Value.zero,
-          ExUnits(memory = 130377, steps = 36_948410)
+          ExUnits(memory = 126985, steps = 36_222306)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) + Value.lovelace(BigInt(-1000)),
           Value.zero,
-          ExUnits(memory = 131277, steps = 37_092298)
+          ExUnits(memory = 127885, steps = 36_366194)
         )
 
         assertEvalWithBudget(
@@ -601,7 +601,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           Value.zero,
-          ExUnits(memory = 596918, steps = 170_510468)
+          ExUnits(memory = 577174, steps = 165_890250)
         )
 
         assertEvalWithBudget(
@@ -623,7 +623,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           Value.lovelace(BigInt(1000)),
-          ExUnits(memory = 538860, steps = 153_645226)
+          ExUnits(memory = 522640, steps = 149_756273)
         )
 
         assertEvalWithBudget(
@@ -646,7 +646,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 505262, steps = 143_548990)
+          ExUnits(memory = 489774, steps = 139_873920)
         )
     }
 
@@ -677,7 +677,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero - Value.zero,
           Value.zero,
-          ExUnits(memory = 28812, steps = 5881360)
+          ExUnits(memory = 27216, steps = 5_505410)
         )
 
         assertEvalWithBudget(
@@ -696,7 +696,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(-1000)
           ),
-          ExUnits(memory = 167897, steps = 48_996033)
+          ExUnits(memory = 164505, steps = 48_269929)
         )
 
         assertEvalWithBudget(
@@ -711,7 +711,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 122821, steps = 33_847035)
+          ExUnits(memory = 120461, steps = 33_256987)
         )
 
         assertEvalWithBudget(
@@ -726,25 +726,25 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(-1000)
           ),
-          ExUnits(memory = 121357, steps = 33_357047)
+          ExUnits(memory = 118997, steps = 32_766999)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) - Value.lovelace(BigInt(2000)),
           Value.lovelace(BigInt(-1000)),
-          ExUnits(memory = 168797, steps = 49_139921)
+          ExUnits(memory = 165405, steps = 48_413817)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) - Value.zero,
           Value.lovelace(BigInt(1000)),
-          ExUnits(memory = 123421, steps = 33_943035)
+          ExUnits(memory = 121061, steps = 33_352987)
         )
 
         assertEvalWithBudget(
           Value.zero - Value.lovelace(BigInt(1000)),
           Value.lovelace(BigInt(-1000)),
-          ExUnits(memory = 121957, steps = 33_453047)
+          ExUnits(memory = 119597, steps = 32_862999)
         )
 
         assertEvalWithBudget(
@@ -763,7 +763,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(-1000))))
             )
           ),
-          ExUnits(memory = 272268, steps = 79_270875)
+          ExUnits(memory = 267748, steps = 78_134480)
         )
 
         assertEvalWithBudget(
@@ -778,13 +778,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 BigInt(1000)
               ),
           Value.zero,
-          ExUnits(memory = 130377, steps = 36_948410)
+          ExUnits(memory = 126985, steps = 36_222306)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) - Value.lovelace(BigInt(1000)),
           Value.zero,
-          ExUnits(memory = 131277, steps = 37_092298)
+          ExUnits(memory = 127885, steps = 36_366194)
         )
 
         assertEvalWithBudget(
@@ -807,7 +807,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           Value.zero,
-          ExUnits(memory = 596918, steps = 170_510468)
+          ExUnits(memory = 577174, steps = 165_890250)
         )
 
         assertEvalWithBudget(
@@ -829,7 +829,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           Value.lovelace(BigInt(1000)),
-          ExUnits(memory = 538860, steps = 153_645226)
+          ExUnits(memory = 522640, steps = 149_756273)
         )
 
         assertEvalWithBudget(
@@ -852,7 +852,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 505262, steps = 143_548990)
+          ExUnits(memory = 489774, steps = 139_873920)
         )
     }
 
@@ -870,13 +870,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero * BigInt(0),
           Value.zero,
-          ExUnits(memory = 7635, steps = 1472777)
+          ExUnits(memory = 7103, steps = 1_324531)
         )
 
         assertEvalWithBudget(
           Value.zero * BigInt(1),
           Value.zero,
-          ExUnits(memory = 10331, steps = 2114640)
+          ExUnits(memory = 9799, steps = 1_966394)
         )
 
         assertEvalWithBudget(
@@ -890,7 +890,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(2000)
           ),
-          ExUnits(memory = 57634, steps = 16_018828)
+          ExUnits(memory = 57102, steps = 15_870582)
         )
 
         assertEvalWithBudget(
@@ -900,19 +900,19 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ) * BigInt(0),
           Value.zero,
-          ExUnits(memory = 19646, steps = 4_628555)
+          ExUnits(memory = 19114, steps = 4_480309)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) * BigInt(2),
           Value.lovelace(BigInt(2000)),
-          ExUnits(memory = 58234, steps = 16_114828)
+          ExUnits(memory = 57702, steps = 15_966582)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) * BigInt(0),
           Value.zero,
-          ExUnits(memory = 20246, steps = 4_724555)
+          ExUnits(memory = 19714, steps = 4_576309)
         )
     }
 
@@ -952,13 +952,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero.getLovelace,
           BigInt(0),
-          ExUnits(memory = 12326, steps = 2474162)
+          ExUnits(memory = 11662, steps = 2_287765)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)).getLovelace,
           BigInt(1000),
-          ExUnits(memory = 80923, steps = 20_981998)
+          ExUnits(memory = 77863, steps = 20_361148)
         )
 
         assertEvalWithBudget(
@@ -968,7 +968,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ).getLovelace,
           BigInt(0),
-          ExUnits(memory = 30465, steps = 7_261407)
+          ExUnits(memory = 29069, steps = 6_940859)
         )
 
         assertEvalWithBudget(
@@ -978,7 +978,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(0)
           ).getLovelace,
           BigInt(0),
-          ExUnits(memory = 16693, steps = 3_388959)
+          ExUnits(memory = 15729, steps = 3_154562)
         )
     }
 
@@ -987,7 +987,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)).lovelaceAmount,
           BigInt(1000),
-          ExUnits(memory = 24115, steps = 6_887550)
+          ExUnits(memory = 23583, steps = 6_739304)
         )
         // returns correct lovelace for value with lovelace + native asset
         assertEvalWithBudget(
@@ -1003,7 +1003,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
               .lovelaceAmount,
           BigInt(2000),
-          ExUnits(memory = 222398, steps = 61_864765)
+          ExUnits(memory = 214854, steps = 60_018662)
         )
 
         // fails on Value.zero (empty list)
@@ -1084,19 +1084,19 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           BigInt(0),
-          ExUnits(memory = 12026, steps = 2426162)
+          ExUnits(memory = 11062, steps = 2_191765)
         )
 
         assertEvalWithBudget(
           Value.zero.quantityOf(utf8"CS", utf8"TN"),
           BigInt(0),
-          ExUnits(memory = 12026, steps = 2426162)
+          ExUnits(memory = 11062, steps = 2_191765)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)).quantityOf(Value.adaPolicyId, Value.adaTokenName),
           BigInt(1000),
-          ExUnits(memory = 80323, steps = 20_885998)
+          ExUnits(memory = 77263, steps = 20_265148)
         )
 
         assertEvalWithBudget(
@@ -1104,7 +1104,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               .lovelace(BigInt(1000))
               .quantityOf(utf8"CS", utf8"TN"),
           BigInt(0),
-          ExUnits(memory = 35065, steps = 8_571926)
+          ExUnits(memory = 33469, steps = 8_219378)
         )
 
         assertEvalWithBudget(
@@ -1114,7 +1114,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ).quantityOf(Value.adaPolicyId, Value.adaTokenName),
           BigInt(0),
-          ExUnits(memory = 29865, steps = 7_165407)
+          ExUnits(memory = 28469, steps = 6_844859)
         )
 
         assertEvalWithBudget(
@@ -1124,7 +1124,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ).quantityOf(utf8"PolicyId", utf8"TokenName"),
           BigInt(1000),
-          ExUnits(memory = 79723, steps = 20_790110)
+          ExUnits(memory = 76663, steps = 20_169260)
         )
     }
 
@@ -1136,13 +1136,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero.withoutLovelace,
           Value.zero,
-          ExUnits(memory = 8460, steps = 1617392)
+          ExUnits(memory = 7396, steps = 1_377963)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)).withoutLovelace,
           Value.zero,
-          ExUnits(memory = 29867, steps = 7_374162)
+          ExUnits(memory = 27871, steps = 6_968582)
         )
 
         assertEvalWithBudget(
@@ -1156,7 +1156,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 26599, steps = 6_404637)
+          ExUnits(memory = 24803, steps = 6_031057)
         )
 
         assertEvalWithBudget(
@@ -1176,7 +1176,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             utf8"TokenName",
             BigInt(1000)
           ),
-          ExUnits(memory = 227950, steps = 62_319377)
+          ExUnits(memory = 218942, steps = 60_215940)
         )
     }
 
@@ -1191,13 +1191,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero.flatten,
           List.empty,
-          ExUnits(memory = 9060, steps = 1693748)
+          ExUnits(memory = 8296, steps = 1_479650)
         )
 
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)).flatten,
           List((Value.adaPolicyId, Value.adaTokenName, BigInt(1000))),
-          ExUnits(memory = 53687, steps = 14_392883)
+          ExUnits(memory = 52623, steps = 14_130785)
         )
 
         assertEvalWithBudget(
@@ -1213,7 +1213,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               BigInt(1000)
             )
           ),
-          ExUnits(memory = 53087, steps = 14_296883)
+          ExUnits(memory = 52023, steps = 14_034785)
         )
 
         assertEvalWithBudget(
@@ -1236,7 +1236,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               BigInt(1000)
             )
           ),
-          ExUnits(memory = 283386, steps = 78_721455)
+          ExUnits(memory = 275310, steps = 76_761500)
         )
     }
 
@@ -1341,24 +1341,24 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.zero === Value.zero,
           true,
-          ExUnits(memory = 15224, steps = 3033568)
+          ExUnits(memory = 14692, steps = 2_885322)
         )
         assertEvalWithBudget(
           Value.zero.toData == Value.zero.toData,
           true,
-          ExUnits(memory = 1133, steps = 1235610)
+          ExUnits(memory = 200, steps = 16100)
         )
 
         // lovelace: Eq 2.2x more mem, 2.0x more steps
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)) === Value.lovelace(BigInt(1000)),
           true,
-          ExUnits(memory = 89241, steps = 24_497727)
+          ExUnits(memory = 88709, steps = 24_349481)
         )
         assertEvalWithBudget(
           Value.lovelace(BigInt(1000)).toData == Value.lovelace(BigInt(1000)).toData,
           true,
-          ExUnits(memory = 26255, steps = 8_241467)
+          ExUnits(memory = 25723, steps = 8_093221)
         )
 
         // single native asset (28-byte policyId): Eq 2.2x more mem, 2.0x more steps
@@ -1374,7 +1374,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 BigInt(1000)
               ),
           true,
-          ExUnits(memory = 88341, steps = 24_353841)
+          ExUnits(memory = 87809, steps = 24_205595)
         )
         assertEvalWithBudget(
           Value(
@@ -1388,7 +1388,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 BigInt(1000)
               ).toData,
           true,
-          ExUnits(memory = 25355, steps = 8_179304)
+          ExUnits(memory = 24823, steps = 8_031058)
         )
 
         // lovelace + native asset (2 policies): Eq 1.25x more mem, 1.24x more steps
@@ -1412,7 +1412,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           true,
-          ExUnits(memory = 529734, steps = 148_697120)
+          ExUnits(memory = 514646, steps = 145_004914)
         )
         assertEvalWithBudget(
           Value
@@ -1438,7 +1438,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   )
                   .toData,
           true,
-          ExUnits(memory = 418253, steps = 118_128281)
+          ExUnits(memory = 403165, steps = 114_436075)
         )
 
         // 3 policies, multiple tokens: Eq 1.22x more mem, 1.21x more steps
@@ -1476,7 +1476,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
               ),
           true,
-          ExUnits(memory = 980529, steps = 282_803084)
+          ExUnits(memory = 954273, steps = 276_265918)
         )
         assertEvalWithBudget(
           Value
@@ -1516,7 +1516,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   )
                   .toData,
           true,
-          ExUnits(memory = 796169, steps = 230_949855)
+          ExUnits(memory = 769913, steps = 224_412689)
         )
 
         // not equal: different amounts: Eq 2.0x more mem, 1.9x more steps
@@ -1532,7 +1532,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 BigInt(2000)
               ),
           true,
-          ExUnits(memory = 81586, steps = 22_531262)
+          ExUnits(memory = 81054, steps = 22_383016)
         )
         assertEvalWithBudget(
           Value(
@@ -1546,7 +1546,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 BigInt(2000)
               ).toData,
           true,
-          ExUnits(memory = 25856, steps = 8_335353)
+          ExUnits(memory = 25324, steps = 8_187107)
         )
     }
 

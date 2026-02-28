@@ -50,10 +50,10 @@ class InlinerTest extends AnyFunSuite {
     }
 
     test("variable substitution should work correctly") {
-        // (λx. x + x) 42 => 42 + 42
-        val term = λ("x")(AddInteger $ vr"x" $ vr"x") $ 42
+        // (λx. x + x) y => y + y (free variable prevents constant folding, tests pure substitution)
+        val term = λ("x")(AddInteger $ vr"x" $ vr"x") $ vr"y"
 
-        val expected = AddInteger $ 42 $ 42
+        val expected = AddInteger $ vr"y" $ vr"y"
 
         assert(Inliner(term) == expected)
     }
@@ -103,9 +103,9 @@ class InlinerTest extends AnyFunSuite {
     }
 
     test("should handle complex arithmetic expressions") {
-        // (λx. λy. x + y) 42 21
-        val term = λ("x", "y")(AddInteger $ vr"x" $ vr"y") $ 42 $ 21
-        val expected = AddInteger $ 42 $ 21
+        // (λx. λy. x + y) a b => a + b (tests multi-arg substitution without constant folding)
+        val term = λ("x", "y")(AddInteger $ vr"x" $ vr"y") $ vr"a" $ vr"b"
+        val expected = AddInteger $ vr"a" $ vr"b"
         assert(Inliner(term) == expected)
     }
 
@@ -147,12 +147,12 @@ class InlinerTest extends AnyFunSuite {
     }
 
     test("should handle multiple variable references") {
-        // (λx. x + (x * x)) 42 => 42 + (42 * 42)
+        // (λx. x + (x * x)) y => y + (y * y) (tests duplicating a variable reference)
         val term = λ("x")(
           AddInteger $ vr"x" $ (MultiplyInteger $ vr"x" $ vr"x")
-        ) $ 42
+        ) $ vr"y"
 
-        val expected = AddInteger $ 42 $ (MultiplyInteger $ 42 $ 42)
+        val expected = AddInteger $ vr"y" $ (MultiplyInteger $ vr"y" $ vr"y")
         assert(Inliner(term) == expected)
     }
 
