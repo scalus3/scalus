@@ -341,23 +341,17 @@ class InlinerTest extends AnyFunSuite {
     // Substitute correctness: freshName collision with body free vars
     // ========================================================================
 
-    // BUG: freshName avoidance set doesn't include body.freeVars.
-    // When body has free var "y_0" and we alpha-rename "y" to "y_0", the
-    // existing free "y_0" gets captured by the new binder.
     test("substitute should not capture body free vars during alpha-renaming") {
-        pendingUntilFixed {
-            val inliner = new Inliner()
-            // substitute(λy. (y_0, x), "x", y)
-            // replacement = Var("y"), so alpha-rename "y" → freshName avoids {"y"}
-            // freshName picks "y_0", but "y_0" is free in body — capture!
-            val term = LamAbs("y", Constr(Word64.Zero, List(vr"y_0", vr"x")))
-            val result = inliner.substitute(term, "x", vr"y")
-            val freeVarsResult = result.freeVars
-            assert(
-              freeVarsResult.contains("y_0"),
-              s"Free variable y_0 was captured! Result: $result, freeVars: $freeVarsResult"
-            )
-        }
+        val inliner = new Inliner()
+        // substitute(λy. (y_0, x), "x", y)
+        // replacement = Var("y"), so alpha-rename "y" must avoid both {"y"} and {"y_0"}
+        val term = LamAbs("y", Constr(Word64.Zero, List(vr"y_0", vr"x")))
+        val result = inliner.substitute(term, "x", vr"y")
+        val freeVarsResult = result.freeVars
+        assert(
+          freeVarsResult.contains("y_0"),
+          s"Free variable y_0 was captured! Result: $result, freeVars: $freeVarsResult"
+        )
     }
 
     // ========================================================================

@@ -150,7 +150,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
             case LamAbs(n, body, ann) =>
                 if n == name then t
                 else if replacementFreeVars.contains(n) then
-                    val freshN = freshName(n, boundVars ++ replacementFreeVars)
+                    val freshN = freshName(n, boundVars ++ replacementFreeVars ++ body.freeVars)
                     LamAbs(
                       freshN,
                       go(substitute(body, n, Var(NamedDeBruijn(freshN))), boundVars + freshN),
