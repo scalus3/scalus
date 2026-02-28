@@ -282,14 +282,10 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(term) == 42.asTerm)
     }
 
-    // BUG: Force(Delay) revealed after inner optimization is not re-matched.
-    // The inner Apply is optimized to Delay(y), producing Force(Delay(y)),
-    // but the Force case doesn't check for Delay after go(t).
     test("Force(Delay) revealed after optimization should be eliminated") {
-        pendingUntilFixed {
-            val term = Force(λ("x")(Delay(vr"x")) $ vr"y")
-            assert(Inliner(term) == vr"y")
-        }
+        // Force((λx. Delay(x)) y) => after go: Force(Delay(y)) => y
+        val term = Force(λ("x")(Delay(vr"x")) $ vr"y")
+        assert(Inliner(term) == vr"y")
     }
 
     // ========================================================================

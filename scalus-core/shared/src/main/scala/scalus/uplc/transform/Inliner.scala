@@ -229,7 +229,12 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
             logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
             go(t)
         case Force(t, ann) =>
-            tryPartialEval(Force(go(t), ann))
+            go(t) match
+                case Delay(inner, _) =>
+                    logger.log(s"Eliminating Force(Delay(t)) after optimization")
+                    inner
+                case optimized =>
+                    tryPartialEval(Force(optimized, ann))
         case Delay(t, ann)          => Delay(go(t), ann)
         case Constr(tag, args, ann) => Constr(tag, args.map(go), ann)
 
