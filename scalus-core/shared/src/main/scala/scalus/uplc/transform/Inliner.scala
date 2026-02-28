@@ -41,8 +41,7 @@ import scalus.uplc.{NamedDeBruijn, Term}
   * ==Implementation Details==
   *
   * The inliner performs capture-avoiding substitution to prevent variable capture during
-  * beta-reduction. It maintains an environment of inlined bindings and recursively processes the
-  * term tree.
+  * beta-reduction.
   *
   * @param logger
   *   Logger for tracking inlining operations (defaults to new Log())
@@ -53,9 +52,7 @@ import scalus.uplc.{NamedDeBruijn, Term}
   *   [[Optimizer]] for the base optimizer trait
   */
 class Inliner(logger: Logger = new Log()) extends Optimizer:
-    def apply(term: Term): Term =
-        val inlined = inlinePass(inlineConstVarBuiltin)(term)
-        inlined
+    def apply(term: Term): Term = go(term)
 
     def logs: Seq[String] = logger.getLogs.toSeq
 
@@ -68,13 +65,6 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *
       * The count stops when the variable is shadowed by a lambda binding, as those occurrences
       * refer to a different binding.
-      *
-      * @param term
-      *   The term to search
-      * @param name
-      *   The variable name to count
-      * @return
-      *   Number of free occurrences of the variable
       */
     private def countOccurrences(term: Term, name: String): Int = term match
         case Var(NamedDeBruijn(n, _), _) => if n == name then 1 else 0
@@ -91,24 +81,12 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
 
     /** Determines if a term is safe to inline based on its type and occurrence count.
       *
-      * This is the default inlining policy used by the Inliner. It follows these rules:
       *   - '''Variables''': Always safe to inline (no duplication cost)
       *   - '''Small constants''': Safe if ≤64 bits or used once
       *   - '''Builtins''': Always safe (just references)
       *   - '''Everything else''': Not safe to inline
-      *
-      * @param name
-      *   The variable name being inlined
-      * @param body
-      *   The lambda body where the variable appears
-      * @param inlining
-      *   The term being inlined in place of the variable
-      * @param occurrences
-      *   Number of times the variable appears in the body
-      * @return
-      *   `true` if the term should be inlined, `false` otherwise
       */
-    def inlineConstVarBuiltin(name: String, body: Term, inlining: Term, occurrences: Int): Boolean =
+    private def shouldInline(inlining: Term, occurrences: Int): Boolean =
         inlining match
             case Var(_, _) => true // Variables are safe to duplicate
             case Const(c, _) =>
@@ -211,89 +189,61 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                 result
             case None => term
 
-    /** Main inlining pass that recursively optimizes the term tree.
+    /** Main optimization pass that recursively optimizes the term tree.
       *
-      * This method performs a bottom-up traversal of the term, applying various optimizations:
-      *
-      * '''Beta-reduction optimizations:'''
-      *   - Identity functions `λx.x` are eliminated
-      *   - Lambda applications are reduced when the inlining policy allows it
-      *   - Dead code elimination removes unused pure arguments
-      *
-      * '''Other optimizations:'''
-      *   - `Force(Delay(t))` is simplified to `t`
-      *   - Variable substitution based on the environment
-      *
-      * The method uses the provided `shouldInline` predicate to decide which terms can be safely
-      * inlined. It maintains an environment of inlined bindings and performs capture-avoiding
-      * substitution when beta-reducing.
-      *
-      * @param shouldInline
-      *   Predicate that determines if a term should be inlined. Takes (variable name, lambda body,
-      *   term to inline, occurrence count) and returns true if inlining is safe.
-      * @param term
-      *   The term to optimize
-      * @return
-      *   The optimized term
+      * Performs a bottom-up traversal applying:
+      *   - Identity function elimination: `(λx.x) t` → `t`
+      *   - Dead code elimination: `(λx. body) arg` → `body` when `x` unused and `arg` is pure
+      *   - Beta-reduction: `(λx. body) arg` → `body[x := arg]` for safe-to-inline terms
+      *   - Force/Delay cancellation: `Force(Delay(t))` → `t`
+      *   - Partial evaluation: closed reducible subexpressions are evaluated via the CEK machine
       *
       * @see
       *   [[TermAnalysis.isPure]] for purity analysis used in dead code elimination
       */
-    private def inlinePass(shouldInline: (String, Term, Term, Int) => Boolean)(
-        term: Term
-    ): Term =
-        def go(term: Term, env: Map[String, Term]): Term = term match
-            case Var(NamedDeBruijn(name, _), _) =>
-                env.get(name) match
-                    case Some(value) => value
-                    case _           => term
+    private def go(term: Term): Term = term match
+        case _: Var => term
 
-            case Apply(f, arg, ann) =>
-                val inlinedF = go(f, env)
-                val inlinedArg = go(arg, env)
-                // Try beta reduction if possible
-                inlinedF match
-                    // Inline identity functions
-                    case LamAbs(name, Var(NamedDeBruijn(vname, _), _), _) if name == vname =>
-                        logger.log(s"Inlining identity function: $name")
-                        inlinedArg
-                    case LamAbs(name, body, _) =>
-                        // Count occurrences to decide if we should inline
-                        val occurrences = countOccurrences(body, name)
-                        if occurrences == 0 && inlinedArg.isPure then
-                            // Dead code elimination - variable is never used
-                            logger.log(s"Eliminating dead code: $name")
-                            go(body, env)
-                        else if shouldInline(name, body, inlinedArg, occurrences) then
-                            logger.log(s"Inlining $name with ${inlinedArg.show}")
-                            go(substitute(body, name, inlinedArg), env)
-                        else
-                            // non-safe term - keep the lambda
-                            Apply(inlinedF, inlinedArg, ann)
-                    case _ =>
-                        tryPartialEval(Apply(inlinedF, inlinedArg, ann))
+        case Apply(f, arg, ann) =>
+            val inlinedF = go(f)
+            val inlinedArg = go(arg)
+            inlinedF match
+                // Inline identity functions
+                case LamAbs(name, Var(NamedDeBruijn(vname, _), _), _) if name == vname =>
+                    logger.log(s"Inlining identity function: $name")
+                    inlinedArg
+                case LamAbs(name, body, _) =>
+                    val occurrences = countOccurrences(body, name)
+                    if occurrences == 0 && inlinedArg.isPure then
+                        logger.log(s"Eliminating dead code: $name")
+                        go(body)
+                    else if shouldInline(inlinedArg, occurrences) then
+                        logger.log(s"Inlining $name with ${inlinedArg.show}")
+                        go(substitute(body, name, inlinedArg))
+                    else
+                        Apply(inlinedF, inlinedArg, ann)
+                case _ =>
+                    tryPartialEval(Apply(inlinedF, inlinedArg, ann))
 
-            case LamAbs(name, body, ann) => LamAbs(name, go(body, env - name), ann)
-            case Force(Delay(t, _), _) =>
-                logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
-                go(t, env)
-            case Force(t, ann) =>
-                tryPartialEval(Force(go(t, env), ann))
-            case Delay(t, ann)          => Delay(go(t, env), ann)
-            case Constr(tag, args, ann) => Constr(tag, args.map(arg => go(arg, env)), ann)
+        case LamAbs(name, body, ann) => LamAbs(name, go(body), ann)
+        case Force(Delay(t, _), _) =>
+            logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
+            go(t)
+        case Force(t, ann) =>
+            tryPartialEval(Force(go(t), ann))
+        case Delay(t, ann)          => Delay(go(t), ann)
+        case Constr(tag, args, ann) => Constr(tag, args.map(go), ann)
 
-            case Case(scrutinee, cases, ann) =>
-                tryPartialEval(
-                  Case(
-                    go(scrutinee, env),
-                    cases.map(c => go(c, env)),
-                    ann
-                  )
-                )
+        case Case(scrutinee, cases, ann) =>
+            tryPartialEval(
+              Case(
+                go(scrutinee),
+                cases.map(go),
+                ann
+              )
+            )
 
-            case _: Const | _: Builtin | _: Error => term
-
-        go(term, Map.empty)
+        case _: Const | _: Builtin | _: Error => term
 
 /** Companion object providing convenient factory methods for the Inliner. */
 object Inliner:
