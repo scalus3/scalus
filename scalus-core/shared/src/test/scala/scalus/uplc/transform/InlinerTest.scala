@@ -193,6 +193,40 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(term) == expected)
     }
 
+    test("should inline small constant with multiple occurrences") {
+        // (λx. x + x) 42 => 42 + 42
+        // Small integer (≤64 bits flat-encoded) is safe to duplicate
+        val term = λ("x")(AddInteger $ vr"x" $ vr"x") $ 42
+        val expected = Const(Constant.Integer(84))
+        assert(Inliner(term) == expected)
+    }
+
+    test("should not inline large constant with multiple occurrences") {
+        // (λx. pair x x) "a long string..." => (λx. pair x x) "a long string..."
+        // Large constant (>64 bits) should not be duplicated
+        val largeStr: Term = "this is a long string that exceeds 64 bits in flat encoding"
+        val term = λ("x")(Constr(Word64.Zero, List(vr"x", vr"x"))) $ largeStr
+        assert(Inliner(term) == term)
+    }
+
+    test("should inline large constant with single occurrence") {
+        // (λx. x) "a long string..." => "a long string..."
+        // Even large constants are safe when used only once (identity is a special case,
+        // so use a non-identity single-occurrence body)
+        val largeStr: Term = "this is a long string that exceeds 64 bits in flat encoding"
+        val term = λ("x")(Constr(Word64.Zero, List(vr"x"))) $ largeStr
+        val expected = Constr(Word64.Zero, List(largeStr))
+        assert(Inliner(term) == expected)
+    }
+
+    test("should inline builtin with multiple occurrences") {
+        // (λx. x y (x z)) AddInteger => AddInteger y (AddInteger z)
+        // Builtins are always safe to duplicate
+        val term = λ("x")(vr"x" $ vr"y" $ (vr"x" $ vr"z")) $ AddInteger
+        val expected = AddInteger $ vr"y" $ (AddInteger $ vr"z")
+        assert(Inliner(term) == expected)
+    }
+
     test("should eliminate unused pure Delay as dead code") {
         // (λx. 42) (Delay (Const 1))
         // Delay IS pure - can be safely eliminated

@@ -220,8 +220,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     else if shouldInline(inlinedArg, occurrences) then
                         logger.log(s"Inlining $name with ${inlinedArg.show}")
                         go(substitute(body, name, inlinedArg))
-                    else
-                        Apply(inlinedF, inlinedArg, ann)
+                    else Apply(inlinedF, inlinedArg, ann)
                 case _ =>
                     tryPartialEval(Apply(inlinedF, inlinedArg, ann))
 
