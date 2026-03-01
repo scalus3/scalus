@@ -60,7 +60,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *
       * This is used to determine if inlining a value is safe:
       *   - 0 occurrences: dead code, can be eliminated if argument is pure
-      *   - 1 occurrence: safe to inline any value
+      *   - 1 occurrence: safe to inline constants; other terms go through cheapness check
       *   - Multiple occurrences: only inline if the value is small/cheap
       *
       * The count stops when the variable is shadowed by a lambda binding, as those occurrences
@@ -81,20 +81,20 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
 
     /** Determines if a term is safe to inline based on its type and occurrence count.
       *
-      *   - '''Single occurrence''': Always safe (UPLC is strict, no duplication)
       *   - '''Variables''': Always safe to duplicate (no cost)
-      *   - '''Small constants''': Safe if ≤64 bits flat-encoded
+      *   - '''Constants''': Always safe with single occurrence; safe to duplicate if ≤64 bits
       *   - '''Builtins''': Always safe to duplicate (just references)
-      *   - '''Everything else with multiple occurrences''': Not safe (code size increase)
+      *   - '''Everything else''': Not safe to inline (may change semantics under Delay/Case, or
+      *     cause code size blowup under LamAbs)
       */
     private def shouldInline(inlining: Term, occurrences: Int): Boolean =
-        if occurrences == 1 then true
-        else
-            inlining match
-                case Var(_, _)     => true
-                case Const(c, _)   => flatConstant.bitSize(c) <= 64
-                case Builtin(_, _) => true
-                case _             => false
+        inlining match
+            case Var(_, _) => true
+            case Const(c, _) =>
+                if occurrences == 1 then true
+                else flatConstant.bitSize(c) <= 64
+            case Builtin(_, _) => true
+            case _             => false
 
     /** Performs capture-avoiding substitution `[x → s]t`.
       *

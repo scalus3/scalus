@@ -292,16 +292,19 @@ class InlinerTest extends AnyFunSuite {
     // shouldInline: single-occurrence non-trivial terms
     // ========================================================================
 
-    test("should inline single-occurrence Delay argument") {
-        // x used once, UPLC is strict so inlining is safe regardless of term type
+    test("should not inline single-occurrence Delay argument") {
+        // Delay is not a value (Var/Const/Builtin), so shouldInline returns false.
+        // Inlining non-values under Delay/Case branches could change semantics
+        // (deferring or eliminating argument errors). tryPartialEval also cannot
+        // fold this because addInteger(Delay(42), 1) would error.
         val term = λ("x")(AddInteger $ vr"x" $ 1) $ Delay(42.asTerm)
-        val expected = AddInteger $ Delay(42.asTerm) $ 1.asTerm
-        assert(Inliner(term) == expected)
+        assert(Inliner(term) == term)
     }
 
-    test("should inline single-occurrence LamAbs argument") {
+    test("should partially evaluate single-occurrence LamAbs argument") {
         // (λf. f 1) (λy. addInteger y 2)
-        // f used once, should be inlined then reduced: (λy. addInteger y 2) 1 => 3
+        // LamAbs is not inlined (not a Var/Const/Builtin), but the whole term is closed,
+        // so tryPartialEval folds it to 3 via CEK evaluation.
         val term = λ("f")(vr"f" $ 1) $ λ("y")(AddInteger $ vr"y" $ 2)
         assert(Inliner(term) == 3.asTerm)
     }

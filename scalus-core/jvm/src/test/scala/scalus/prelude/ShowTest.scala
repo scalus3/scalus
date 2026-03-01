@@ -54,7 +54,7 @@ class ShowTest extends AnyFunSuite with EvalTestKit {
         val uplc = sir.toUplc(optimizeUplc = true)
         val result = uplc.evaluateDebug
         assert(result.success.term == "{0: \"0011\"}".asTerm)
-        assert(result.budget == ExUnits(memory = 56489, steps = 13_384573))
+        assert(result.budget == ExUnits(memory = 70169, steps = 15_532373))
         assertEvalEq(
           Rational(1, 2).toData.show,
           "<0, [1, 2]>" // Rational is represented as a pair of BigInts

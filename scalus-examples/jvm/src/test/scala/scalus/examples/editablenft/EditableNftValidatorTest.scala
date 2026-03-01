@@ -303,7 +303,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        assertResult(ExUnits(memory = 182300, steps = 54_364760)):
+        assertResult(ExUnits(memory = 208160, steps = 59_003196)):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()
         assert(burnResult.isRight, s"Burn should succeed: $burnResult")

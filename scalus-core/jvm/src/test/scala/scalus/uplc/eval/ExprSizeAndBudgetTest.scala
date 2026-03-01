@@ -62,7 +62,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
             scalus.cardano.onchain.plutus.prelude.List.Nil
           )
         ).toUplcOptimized()
-        assert(encoder.bitSize(uplc) == 63)
+        assert(encoder.bitSize(uplc) == 83)
     }
 
     test(
@@ -70,13 +70,13 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     ) {
         val uplc =
             compile(scalus.cardano.onchain.plutus.prelude.List.single(true)).toUplcOptimized()
-        assert(encoder.bitSize(uplc) == 63)
+        assert(encoder.bitSize(uplc) == 83)
     }
 
     test("scalus.cardano.onchain.plutus.prelude.List.single(true) size is 63") {
         val uplc =
             compile(scalus.cardano.onchain.plutus.prelude.List.single(true)).toUplcOptimized()
-        assert(encoder.bitSize(uplc) == 63)
+        assert(encoder.bitSize(uplc) == 83)
     }
 
     test("Recursion cost") {
