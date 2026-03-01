@@ -158,8 +158,6 @@ object TwoPartyEscrowValidator {
                     case Option.Some(value) =>
                         fail("Multiple script outputs found, expected only one")
                     case Option.None => go(tail, Option.Some(head))
-            case List.Cons(head, tail) =>
-                go(tail, found)
             case List.Cons(head, tail) => go(tail, found)
             case List.Nil              => found.getOrFail("Not found")
         }

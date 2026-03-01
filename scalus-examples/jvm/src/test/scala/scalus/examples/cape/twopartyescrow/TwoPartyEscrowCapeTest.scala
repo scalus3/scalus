@@ -2,7 +2,7 @@ package scalus.examples.cape.twopartyescrow
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption}
@@ -21,6 +21,7 @@ import scalus.uplc.eval.*
   */
 class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
+    private given CardanoInfo = CardanoInfo.mainnet
     private val compiled = TwoPartyEscrowContract.compiled
     private val program = compiled.program
 
@@ -68,6 +69,20 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
       "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 278926, steps = 80089649)
     )
 
+    // Expected execution fees for success tests
+    private val expectedFees: Map[String, Coin] = Map(
+      "deposit_successful" -> Coin(6839),
+      "accept_successful" -> Coin(13107),
+      "accept_with_multiple_inputs" -> Coin(13895),
+      "accept_with_datum_attached" -> Coin(13107),
+      "accept_with_multiple_outputs_to_seller" -> Coin(20643),
+      "refund_successful" -> Coin(14334),
+      "refund_after_exact_deadline" -> Coin(14334),
+      "refund_with_multiple_inputs" -> Coin(15121),
+      "refund_with_datum_attached" -> Coin(14334),
+      "refund_with_multiple_outputs_to_buyer" -> Coin(21869)
+    )
+
     // Generate test cases from the JSON
     private val tests: Seq[ujson.Value] = testsJson("tests").arr.toSeq
 
@@ -104,10 +119,17 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
                     result match {
                         case Result.Success(term, budget, _, logs) =>
                             val actual = ExUnits(memory = budget.memory, steps = budget.steps)
+                            val fee = actual.fee
                             expectedBudgets.get(testName).foreach { expected =>
                                 assert(
                                   actual == expected,
                                   s"$testName: expected $expected but got $actual"
+                                )
+                            }
+                            expectedFees.get(testName).foreach { expected =>
+                                assert(
+                                  fee == expected,
+                                  s"$testName: expected fee $expected but got $fee"
                                 )
                             }
                         case Result.Failure(ex, budget, _, logs) =>
