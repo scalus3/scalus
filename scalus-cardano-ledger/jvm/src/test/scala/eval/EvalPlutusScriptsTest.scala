@@ -4,7 +4,6 @@ import io.bullet.borer.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
-import scalus.uplc.eval.*
 
 class EvalPlutusScriptsTest extends AnyFunSuite {
 

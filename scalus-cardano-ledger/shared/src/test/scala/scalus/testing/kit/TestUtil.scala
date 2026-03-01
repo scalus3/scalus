@@ -2,7 +2,6 @@ package scalus.testing.kit
 
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.uplc.builtin.Builtins.{appendByteString, blake2b_224, blake2b_256}
-import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
@@ -11,8 +10,6 @@ import scalus.cardano.txbuilder.{RedeemerManagement, RedeemerPurpose, Transactio
 import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef, ValidatorHash}
 import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
-import scalus.uplc.Program
-import scalus.uplc.eval.PlutusVM
 
 object TestUtil {
     import scalus.uplc.builtin.ByteString.*

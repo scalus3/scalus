@@ -7,6 +7,7 @@ import scalus.utils.Hex.hexToBytes
 import sttp.client4.*
 import sttp.model.StatusCode
 
+import scala.annotation.nowarn
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -668,6 +669,7 @@ object BlockfrostProvider {
       * @return
       *   Future containing the SlotConfig
       */
+    @nowarn("msg=long2double")
     def fetchYaciSlotConfig(adminUrl: String)(using
         backend: Backend[Future],
         ec: ExecutionContext

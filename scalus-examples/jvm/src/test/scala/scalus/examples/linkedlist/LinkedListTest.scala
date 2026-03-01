@@ -7,7 +7,6 @@ import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.given
 import scalus.uplc.builtin.Builtins.appendByteString
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.EvaluatorMode
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}

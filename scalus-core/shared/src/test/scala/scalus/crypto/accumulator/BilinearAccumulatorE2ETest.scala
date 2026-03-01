@@ -1,6 +1,7 @@
 package scalus.crypto.accumulator
 
 import org.scalatest.funsuite.AnyFunSuite
+import scala.annotation.nowarn
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.EvalTestKit
 
@@ -146,7 +147,7 @@ class BilinearAccumulatorE2ETest extends AnyFunSuite, EvalTestKit {
     test("legacy accumulate delegates to G2") {
         val fullSet = Vector(BigInt(10), BigInt(20), BigInt(30))
         val setup = trustedSetup(tau, fullSet.size)
-        val acc = accumulate(setup, fullSet)
+        @nowarn("msg=deprecated") val acc = accumulate(setup, fullSet)
         val accG2 = accumulateG2(setup, fullSet)
         // Both should produce the same G2 element
         assert(acc == accG2)

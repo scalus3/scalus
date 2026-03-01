@@ -93,9 +93,9 @@ class SumTypeFieldAccessTest extends AnyFunSuite {
         }
 
         // Print SIR to debug what types are being assigned
-        println("=== SIR for eqDirectFieldAccess ===")
-        println(sir.pretty.render(120))
-        println("=== END SIR ===")
+//        println("=== SIR for eqDirectFieldAccess ===")
+//        println(sir.pretty.render(120))
+//        println("=== END SIR ===")
 
         val program = sir.toUplcOptimized(false).plutusV3
         val result = (program $ BigInt(42).asTerm $ BigInt(42).asTerm).term.evaluateDebug
@@ -133,15 +133,15 @@ class SumTypeFieldAccessTest extends AnyFunSuite {
         assert(resultBinders.isSuccess, s"Binders failed: $resultBinders")
         assert(resultDirect.isSuccess, s"Direct failed: $resultDirect")
 
-        println(s"Sum type field access budget comparison (Failed variant):")
-        println(
-          s"  With binders:        memory=${resultBinders.budget.memory}, steps=${resultBinders.budget.steps}"
-        )
-        println(
-          s"  Direct field access: memory=${resultDirect.budget.memory}, steps=${resultDirect.budget.steps}"
-        )
-        println(
-          s"  Difference:          memory=${resultBinders.budget.memory - resultDirect.budget.memory}, steps=${resultBinders.budget.steps - resultDirect.budget.steps}"
-        )
+//        println(s"Sum type field access budget comparison (Failed variant):")
+//        println(
+//          s"  With binders:        memory=${resultBinders.budget.memory}, steps=${resultBinders.budget.steps}"
+//        )
+//        println(
+//          s"  Direct field access: memory=${resultDirect.budget.memory}, steps=${resultDirect.budget.steps}"
+//        )
+//        println(
+//          s"  Difference:          memory=${resultBinders.budget.memory - resultDirect.budget.memory}, steps=${resultBinders.budget.steps - resultDirect.budget.steps}"
+//        )
     }
 }
