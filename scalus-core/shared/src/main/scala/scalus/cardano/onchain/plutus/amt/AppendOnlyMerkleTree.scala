@@ -43,22 +43,25 @@ object AppendOnlyMerkleTree {
       *
       * At each level, if the current node is a left child (slot is even), the sibling is on the
       * right; otherwise it's on the left.
+      *
+      * Uses offset tracking (offset increments by 32) instead of level * 32 multiplication
+      * to reduce per-level overhead.
       */
     def merkleUp(
         siblings: ByteString,
         slot: BigInt,
         hash: ByteString,
-        level: BigInt,
-        depth: BigInt
+        offset: BigInt,
+        endOffset: BigInt
     ): ByteString =
-        if level == depth then hash
+        if offset == endOffset then hash
         else
-            val sibling = sliceByteString(level * 32, 32, siblings)
+            val sibling = sliceByteString(offset, 32, siblings)
             val parentSlot = quotientInteger(slot, 2)
             val parentHash =
                 if modInteger(slot, 2) == BigInt(0) then combine(hash, sibling)
                 else combine(sibling, hash)
-            merkleUp(siblings, parentSlot, parentHash, level + 1, depth)
+            merkleUp(siblings, parentSlot, parentHash, offset + 32, endOffset)
 
     /** Verify that `key` is a member of the tree at the given `slot`.
       *
@@ -72,7 +75,7 @@ object AppendOnlyMerkleTree {
         siblings: ByteString
     ): Unit =
         val leafHash = blake2b_256(key)
-        val computedRoot = merkleUp(siblings, slot, leafHash, BigInt(0), depth)
+        val computedRoot = merkleUp(siblings, slot, leafHash, BigInt(0), depth * 32)
         require(computedRoot == root, "AMT: not a member")
 
     /** Append a new key at position `size`, returning the new root hash.
@@ -91,27 +94,28 @@ object AppendOnlyMerkleTree {
         siblings: ByteString
     ): ByteString =
         val leafHash = blake2b_256(key)
-        appendUp(siblings, size, EmptyLeafHash, leafHash, BigInt(0), depth, root)
+        appendUp(siblings, size, EmptyLeafHash, leafHash, BigInt(0), depth * 32, root)
 
     /** Combined single-pass: verify empty slot and compute new root simultaneously.
       *
       * Carries both `oldHash` (expected empty path) and `newHash` (new key path) up the tree in a
-      * single recursive walk.
+      * single recursive walk. Uses offset tracking (offset increments by 32) instead of
+      * level * 32 multiplication.
       */
     private def appendUp(
         siblings: ByteString,
         slot: BigInt,
         oldHash: ByteString,
         newHash: ByteString,
-        level: BigInt,
-        depth: BigInt,
+        offset: BigInt,
+        endOffset: BigInt,
         expectedRoot: ByteString
     ): ByteString =
-        if level == depth then
+        if offset == endOffset then
             require(oldHash == expectedRoot, "AMT: slot not empty")
             newHash
         else
-            val sibling = sliceByteString(level * 32, 32, siblings)
+            val sibling = sliceByteString(offset, 32, siblings)
             val parentSlot = quotientInteger(slot, 2)
             if modInteger(slot, 2) == BigInt(0) then
                 appendUp(
@@ -119,8 +123,8 @@ object AppendOnlyMerkleTree {
                   parentSlot,
                   combine(oldHash, sibling),
                   combine(newHash, sibling),
-                  level + 1,
-                  depth,
+                  offset + 32,
+                  endOffset,
                   expectedRoot
                 )
             else
@@ -129,8 +133,8 @@ object AppendOnlyMerkleTree {
                   parentSlot,
                   combine(sibling, oldHash),
                   combine(sibling, newHash),
-                  level + 1,
-                  depth,
+                  offset + 32,
+                  endOffset,
                   expectedRoot
                 )
 }
